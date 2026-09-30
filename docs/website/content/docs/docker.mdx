@@ -6,7 +6,7 @@ description: "Run Nakama in a single Docker container with persistent data volum
 ## Requirements
 
 One container, one process tree. Measured on `ghcr.io/ahmadrosid/nakama:latest`
-(v0.4.20) with no LLM provider and no channel workers:
+(v0.4.31) with no LLM provider and no channel workers:
 
 | | |
 | --- | --- |
@@ -54,9 +54,31 @@ From the repository root:
 
 The script uses `docker buildx` (default `linux/amd64`), then starts the container.
 
+The build helper reads these optional environment variables:
+
+- `NAKAMA_CONTAINER_NAME` sets the container name. The default is `nakama`.
+- `NAKAMA_IMAGE_NAME` sets the local image name. The default is `nakama`.
+- `NAKAMA_HOST_PORT` sets the published host port. The default is `4310`.
+- `NAKAMA_DATA_VOLUME` sets the Docker volume name. The default is
+  `nakama-data`.
+
+For example, this builds and starts an isolated local install on port 4311:
+
+```bash
+NAKAMA_CONTAINER_NAME=nakama-dev \
+NAKAMA_IMAGE_NAME=nakama-dev \
+NAKAMA_HOST_PORT=4311 \
+NAKAMA_DATA_VOLUME=nakama-dev-data \
+./scripts/docker-build-run.sh
+```
+
 ## Configuration
 
-The data root follows `NAKAMA_CONFIG_DIR` when set. By default it is `/nakama/data` in the container (mapped to your Docker volume).
+The data root follows `NAKAMA_CONFIG_DIR` when set. If you set it, use an
+absolute path. Nakama rejects relative paths because they depend on the process
+working directory and can break profile isolation. The default inside the
+container is `/nakama/data`, which maps to the `nakama-data` volume. The build
+helper always mounts its data volume at `/nakama/data`.
 
 On first run, complete the setup wizard in the browser and add your LLM provider. See [Providers](/providers) and [First-time setup](/first-time-setup).
 
@@ -92,12 +114,22 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data \
 
 ## Reset a local Docker install
 
-To remove the container, volume, and image and start fresh:
+To remove the default local resources and start fresh:
 
 ```bash
 ./scripts/docker-destroy.sh
 ./scripts/docker-build-run.sh
 ```
+
+The reset script removes the container named `nakama`, every container that
+publishes port `4310` (including unrelated containers), the `nakama-data` and
+`nakama-config` volumes, and the local image named `nakama`. Stop any unrelated
+containers before running it if you still need them.
+
+The script does not remove the cached
+`ghcr.io/ahmadrosid/nakama:latest` image. It also uses the default names, so
+custom names set through the build helper can remain unless you remove them
+yourself.
 
 ## Optional: CloakBrowser with agent-browser
 

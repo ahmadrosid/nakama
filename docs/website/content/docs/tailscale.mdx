@@ -9,19 +9,28 @@ Tailscale stays an operator concern. Nakama does not embed it and has no Tailsca
 
 ## Host install
 
-Install Tailscale on the machine running Nakama, then join your tailnet:
+A host install binds to `127.0.0.1`, so `tailscale up` alone doesn't expose it to
+your tailnet. To reach Nakama through the machine's Tailscale IPv4 address,
+install Tailscale, join your tailnet, and start Nakama on that address:
 
 ```bash
 tailscale up
+NAKAMA_HOST="$(tailscale ip -4)" bun run dev:server
 ```
 
-Leave Nakama on its default port and let Tailscale carry the traffic. With MagicDNS on, the dashboard is reachable from any device in the tailnet:
+Leave Nakama on its default port. With MagicDNS on, the dashboard is reachable
+from any device in the tailnet:
 
 ```
 http://<machine-name>:4310
 ```
 
-If Nakama runs in Docker, keep the published port bound to the host only, not to every interface:
+Binding to the Tailscale address keeps Nakama off public network interfaces. If
+you set `NAKAMA_HOST=0.0.0.0` instead, use a host firewall to block untrusted
+interfaces.
+
+If Nakama runs in Docker, keep the published port bound to the host only, not
+to every interface:
 
 ```bash
 docker run -d -p 127.0.0.1:4310:4310 -v nakama-data:/nakama/data \
@@ -32,7 +41,9 @@ docker run -d -p 127.0.0.1:4310:4310 -v nakama-data:/nakama/data \
 
 ## HTTPS with Tailscale Serve
 
-MagicDNS over plain HTTP works, but Serve gives you an HTTPS origin with a real certificate, which the browser and any OAuth flow prefer:
+MagicDNS over plain HTTP works, but Serve gives you an HTTPS origin with a real
+certificate, which the browser and any OAuth flow prefer. Serve proxies the
+loopback port, so you don't need to change Nakama's default binding:
 
 ```bash
 tailscale serve --bg 4310
