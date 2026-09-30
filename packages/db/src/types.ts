@@ -499,6 +499,7 @@ export interface PublishOrgPluginReleaseInput {
 }
 
 export interface StoredOrganizationRecord {
+  allowedInviteDomains?: string[];
   archivedAt?: string | null;
   createdAt: string;
   id: string;

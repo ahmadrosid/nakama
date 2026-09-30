@@ -565,6 +565,7 @@ export type OrgRole = "admin" | "member" | "viewer";
 export type ChannelType = "telegram" | "whatsapp" | "discord";
 
 export interface OrganizationSummary {
+  allowedInviteDomains?: string[];
   archivedAt?: string | null;
   createdAt: string;
   id: string;
@@ -594,6 +595,7 @@ export interface CreateOrganizationRequest {
 }
 
 export interface UpdateOrganizationRequest {
+  allowedInviteDomains?: string[];
   monthlyLlmTokenLimit?: number;
   monthlyLlmTurnLimit?: number;
   monthlyLlmWarningPercent?: number;

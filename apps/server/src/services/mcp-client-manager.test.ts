@@ -161,5 +161,4 @@ describe("McpClientManager", () => {
     expect(manager.getConnectedCount()).toBe(1);
     expect(clientConnectCount).toBe(2);
   });
-
 });

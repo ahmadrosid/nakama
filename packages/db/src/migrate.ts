@@ -35,6 +35,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateSkillProposalsTable);
   atomic(migrateSkillSuggestionsTable);
   atomic(migrateSkillsWriteApprovalColumns);
+  atomic(migrateOrganizationAllowedInviteDomains);
   atomic(migrateSkillsPostTurnReviewColumns);
   atomic(migrateAutomationsEnabledColumn);
   atomic(migrateSkillsCuratorColumns);
@@ -770,6 +771,17 @@ function migrateSkillsWriteApprovalColumns(db: Database): void {
     )
   ) {
     db.exec("ALTER TABLE profiles ADD COLUMN skills_write_approval INTEGER;");
+  }
+}
+
+function migrateOrganizationAllowedInviteDomains(db: Database): void {
+  const columns = db
+    .prepare("PRAGMA table_info(organizations)")
+    .all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === "allowed_invite_domains")) {
+    db.exec(
+      "ALTER TABLE organizations ADD COLUMN allowed_invite_domains TEXT NOT NULL DEFAULT '[]';"
+    );
   }
 }
 
