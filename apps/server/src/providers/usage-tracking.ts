@@ -207,6 +207,7 @@ export function wrapProviderWithUsageTracking(
   provider: ProviderClient,
   tracker: LlmUsageTracker,
   modelId: string,
+  orgId: string,
   pricingContext: PricingContext = {}
 ): ProviderClient {
   function withRecordedUsage(
@@ -219,13 +220,11 @@ export function wrapProviderWithUsageTracking(
     const outputTokens =
       result.usage?.outputTokens ?? estimateChatOutputTokens(result);
     const cachedInputTokens = result.usage?.cachedInputTokens;
-    const costUsd = tracker.record(
-      modelId,
-      inputTokens,
-      outputTokens,
-      cachedInputTokens ?? 0,
-      pricingContext
-    );
+    const costUsd = tracker.record(modelId, inputTokens, outputTokens, {
+      cachedInputTokens: cachedInputTokens ?? 0,
+      orgId,
+      pricingContext,
+    });
 
     return {
       ...result,
@@ -256,7 +255,7 @@ export function wrapProviderWithUsageTracking(
         result.usage?.inputTokens ?? estimateTextInputTokens(input);
       const outputTokens =
         result.usage?.outputTokens ?? estimateTokens(result.content);
-      tracker.record(modelId, inputTokens, outputTokens, 0, pricingContext);
+      tracker.record(modelId, inputTokens, outputTokens, { orgId, pricingContext });
       return result;
     },
     async streamChat(

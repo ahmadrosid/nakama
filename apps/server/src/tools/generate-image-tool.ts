@@ -75,7 +75,8 @@ export interface GenerateImageToolDeps {
   recordUsage?: (
     modelId: string,
     inputTokens: number,
-    outputTokens: number
+    outputTokens: number,
+    orgId: string
   ) => void;
 }
 
@@ -241,7 +242,8 @@ export async function runGenerateImageTool(
     deps.recordUsage(
       result.model,
       result.usage.inputTokens,
-      result.usage.outputTokens
+      result.usage.outputTokens,
+      orgId
     );
   }
 

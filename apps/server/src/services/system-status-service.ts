@@ -1,5 +1,6 @@
 import type {
   HealthResponse,
+  LlmUsageStats,
   LlmUsageStatus,
   SystemStatusResponse,
   WorkerProcessInfo,
@@ -39,6 +40,14 @@ export class SystemStatusService {
     const providerConfigured = this.agent.providerConfigured;
     const models = await this.agent.getModels();
     const usageFields = this.agent.getUsageStatusFields();
+
+    // Usage is a tenant ledger: read it with the same scope the request
+    // already resolved, never install-wide, or one org reads another's spend.
+    const usageOrgId = typeof orgId === "string" ? orgId : (orgId?.orgId ?? null);
+    const [usageStats, usageByModel] = await Promise.all([
+      this.agent.getLlmUsageStats(usageOrgId),
+      this.agent.getLlmUsageStatsByModel(usageOrgId),
+    ]);
 
     const statuses = await this.workerManager.getAllWorkerStatuses(orgId);
     const automationProcess = statuses.automation ?? null;
@@ -81,7 +90,8 @@ export class SystemStatusService {
         usageFields.currentModel,
         providerConfigured,
         usageFields,
-        this.agent.getLlmUsageStatsByModel()
+        usageByModel,
+        usageStats
       ),
       mcp: this.mcpService
         ? await this.mcpService.getStatusSummary()
@@ -152,10 +162,11 @@ export class SystemStatusService {
     currentModel: string | null,
     providerConfigured: boolean,
     usageFields: { displayName: string | null; costEstimated: boolean },
-    models: LlmUsageStatus["models"]
+    models: LlmUsageStatus["models"],
+    stats: LlmUsageStats
   ): LlmUsageStatus {
     return {
-      ...this.agent.getLlmUsageStats(),
+      ...stats,
       costEstimated: usageFields.costEstimated,
       currentModel,
       displayName: usageFields.displayName,
