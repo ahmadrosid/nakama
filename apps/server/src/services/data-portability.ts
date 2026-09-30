@@ -204,8 +204,39 @@ export async function createNakamaDataExport(
             "utf8"
           );
 
+          let entryCount = 0;
+          let uncompressedTotal = 0;
+          try {
+            for (const [name, entry] of Object.entries(entries)) {
+              entryCount += 1;
+              uncompressedTotal += entry.byteLength;
+              validateArchiveEntryLimits(
+                name,
+                entry.byteLength,
+                entryCount,
+                uncompressedTotal
+              );
+            }
+          } catch (error) {
+            if (error instanceof NakamaApiError) {
+              throw new NakamaApiError(
+                `Cannot export a restorable backup: ${error.message} Use a filesystem or volume backup instead.`,
+                413
+              );
+            }
+            throw error;
+          }
+
+          const archive = zipSync(entries);
+          if (archive.byteLength > MAX_IMPORT_ARCHIVE_BYTES) {
+            throw new NakamaApiError(
+              `Cannot export a restorable backup: ZIP exceeds the ${megabytes(MAX_IMPORT_ARCHIVE_BYTES)} import limit. Use a filesystem or volume backup instead.`,
+              413
+            );
+          }
+
           return {
-            data: Buffer.from(zipSync(entries)),
+            data: Buffer.from(archive),
             filename: `nakama-export-${createdAt.replace(/[:.]/g, "-")}.zip`,
             manifest,
           };
@@ -764,6 +795,34 @@ async function writeRestoredEntry(
   await writeFile(targetPath, entry.data, { mode: 0o600 });
 }
 
+function validateArchiveEntryLimits(
+  name: string,
+  size: number,
+  entryCount: number,
+  uncompressedTotal: number
+): void {
+  if (entryCount > MAX_IMPORT_ENTRIES) {
+    throw new NakamaApiError(
+      `Archive exceeds the ${MAX_IMPORT_ENTRIES} entry limit.`,
+      400
+    );
+  }
+
+  if (size > MAX_IMPORT_ENTRY_BYTES) {
+    throw new NakamaApiError(
+      `Archive entry ${name} exceeds the ${megabytes(MAX_IMPORT_ENTRY_BYTES)} limit.`,
+      400
+    );
+  }
+
+  if (uncompressedTotal > MAX_IMPORT_UNCOMPRESSED_BYTES) {
+    throw new NakamaApiError(
+      `Archive exceeds the ${megabytes(MAX_IMPORT_UNCOMPRESSED_BYTES)} uncompressed limit.`,
+      400
+    );
+  }
+}
+
 function readZip(buffer: Buffer): ZipEntry[] {
   let entryCount = 0;
   let uncompressedTotal = 0;
@@ -771,28 +830,8 @@ function readZip(buffer: Buffer): ZipEntry[] {
   // size, so refusing here is what stops a bomb from being inflated at all.
   const admitEntry = (name: string, size: number): boolean => {
     entryCount += 1;
-    if (entryCount > MAX_IMPORT_ENTRIES) {
-      throw new NakamaApiError(
-        `Archive exceeds the ${MAX_IMPORT_ENTRIES} entry limit.`,
-        400
-      );
-    }
-
-    if (size > MAX_IMPORT_ENTRY_BYTES) {
-      throw new NakamaApiError(
-        `Archive entry ${name} exceeds the ${megabytes(MAX_IMPORT_ENTRY_BYTES)} limit.`,
-        400
-      );
-    }
-
     uncompressedTotal += size;
-    if (uncompressedTotal > MAX_IMPORT_UNCOMPRESSED_BYTES) {
-      throw new NakamaApiError(
-        `Archive exceeds the ${megabytes(MAX_IMPORT_UNCOMPRESSED_BYTES)} uncompressed limit.`,
-        400
-      );
-    }
-
+    validateArchiveEntryLimits(name, size, entryCount, uncompressedTotal);
     return true;
   };
 
