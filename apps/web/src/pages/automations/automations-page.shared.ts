@@ -90,10 +90,6 @@ export function formatRunDayLabel(value: string): string {
 }
 
 export function runPreviewText(run: AutomationRunRecord): string | null {
-  if (run.status === "running" && !run.output?.trim() && !run.error?.trim()) {
-    return "Run in progress…";
-  }
-
   if (run.status === "failed" && run.error?.trim()) {
     return run.error.trim();
   }

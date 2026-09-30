@@ -600,10 +600,6 @@ function runExpandedRangeLabel(run: AutomationRunRecord): string {
     return `${started} → ${formatSessionTimestamp(run.completedAt)}`;
   }
 
-  if (run.status === "running") {
-    return `${started} · running`;
-  }
-
   return started;
 }
 
@@ -611,7 +607,7 @@ function runHasExpandableBody(run: AutomationRunRecord): boolean {
   return Boolean(
     run.output?.trim() ||
       run.error?.trim() ||
-      run.status === "running" ||
+      run.deliveryError?.trim() ||
       run.status === "failed"
   );
 }
@@ -761,15 +757,6 @@ function RunHistoryOutput({ run }: { run: AutomationRunRecord }) {
   const isRunning = run.status === "running";
   const hasOutput = Boolean(run.output?.trim());
   const hasError = Boolean(run.error?.trim());
-
-  if (isRunning && !hasOutput && !hasError) {
-    return (
-      <div className="flex items-center gap-2 text-muted-foreground text-sm">
-        <Loading03Icon aria-hidden className="size-4 animate-spin" />
-        Run in progress…
-      </div>
-    );
-  }
 
   if (hasError && hasOutput) {
     return (
