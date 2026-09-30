@@ -79,11 +79,6 @@ export interface CreateUserDataExportResult {
   filename: string;
 }
 
-export interface CreateOrgDataExportResult {
-  data: Buffer;
-  filename: string;
-}
-
 export interface PreviewDataImportOptions {
   rootDir?: string;
 }
@@ -344,7 +339,7 @@ export async function createNakamaOrgDataExport(
   databaseAdapter: DatabaseAdapter,
   orgId: string,
   options: { now?: Date } = {}
-): Promise<CreateOrgDataExportResult> {
+): Promise<CreateUserDataExportResult> {
   const organization = await databaseAdapter.getOrganizationById(orgId);
   if (!organization) {
     throw new NakamaApiError("Not found", 404);
