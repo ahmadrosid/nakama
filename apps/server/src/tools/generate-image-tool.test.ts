@@ -240,6 +240,45 @@ describe("generate_image tool persistence (U4)", () => {
     expect(seen).toBe(turn.signal);
   });
 
+  test("sends the provider call to the compatible provider's baseUrl", async () => {
+    await setupWorkspace();
+    let seenBaseUrl: string | undefined;
+
+    await runGenerateImageTool(
+      { prompt: "a cat" },
+      { orgId: "org_1", profileId: "profile_1", workspaceRoot },
+      {
+        db: createInMemoryDatabaseAdapter(),
+        ensureSettingsLoaded: async () => {},
+        generateImage: async (input) => {
+          seenBaseUrl = input.baseUrl;
+          return {
+            data: PNG_BYTES,
+            mediaType: "image/png",
+            model: "gpt-image-2",
+            size: "1024x1024",
+          };
+        },
+        getUserConfig: () => ({
+          defaultProviderId: "p-local",
+          imageModel: "openai_compatible::gpt-image-2",
+          providers: [
+            {
+              apiKey: "local-key",
+              baseUrl: "http://127.0.0.1:8000/v1",
+              createdAt: "2026-01-01T00:00:00.000Z",
+              id: "p-local",
+              label: "Local",
+              type: "openai_compatible",
+            },
+          ],
+        }),
+      }
+    );
+
+    expect(seenBaseUrl).toBe("http://127.0.0.1:8000/v1");
+  });
+
   test("prompt saves only the image and returns an attachmentId", async () => {
     await setupWorkspace();
     const db = createInMemoryDatabaseAdapter();

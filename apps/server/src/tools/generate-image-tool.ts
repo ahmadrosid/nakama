@@ -164,6 +164,7 @@ export async function runGenerateImageTool(
   try {
     result = await generate({
       apiKey: selection.apiKey,
+      baseUrl: selection.baseUrl,
       model: selection.model,
       prompt,
       signal: context.signal,
