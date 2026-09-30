@@ -1,94 +1,11 @@
 import type { CachedMcpToolSummary } from "@nakama/core/contract";
 import { Input } from "@nakama/ui/input";
-import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
 import { ArrowRight01Icon, Search01Icon } from "hugeicons-react";
 import { useMemo, useState } from "react";
-import { useMcpServerDetailQuery } from "@/hooks/use-app-queries";
 import { parseMcpToolParameters } from "@/lib/mcp-tool-schema";
 
-const maxVisibleToolLabels = 12;
 const searchThreshold = 4;
-
-interface McpToolLabelsProps {
-  className?: string;
-  connected: boolean;
-  onShowAll?: () => void;
-  serverId: string;
-  toolCount: number;
-}
-
-export function McpToolLabels({
-  serverId,
-  toolCount,
-  connected,
-  className,
-  onShowAll,
-}: McpToolLabelsProps) {
-  const { data: server, isLoading } = useMcpServerDetailQuery(
-    toolCount > 0 ? serverId : null
-  );
-  const tools = server?.cachedTools ?? [];
-
-  if (toolCount === 0) {
-    return null;
-  }
-
-  if (isLoading && tools.length === 0) {
-    return (
-      <div className={cn("mt-2 flex items-center gap-2", className)}>
-        <Spinner className="size-3.5" />
-        <span className="text-muted-foreground text-xs">Loading tools…</span>
-      </div>
-    );
-  }
-
-  if (tools.length === 0) {
-    return (
-      <p className={cn("mt-2 text-muted-foreground text-xs", className)}>
-        {connected
-          ? "No tools discovered yet. Try Sync."
-          : "Connect and sync to discover tools."}
-      </p>
-    );
-  }
-
-  const visibleTools = tools.slice(0, maxVisibleToolLabels);
-  const hiddenCount = tools.length - visibleTools.length;
-
-  return (
-    <div className={cn("mt-2 space-y-2", className)}>
-      <p className="text-muted-foreground text-xs">
-        {tools.length} exposed tool{tools.length === 1 ? "" : "s"}
-      </p>
-      <div className="flex flex-wrap gap-1.5">
-        {visibleTools.map((tool) => (
-          <McpToolLabel key={tool.name} tool={tool} />
-        ))}
-        {hiddenCount > 0 ? (
-          <button
-            className="rounded-full border border-border border-dashed px-2.5 py-0.5 font-mono text-2xs text-muted-foreground transition-colors hover:bg-muted/50"
-            onClick={onShowAll}
-            type="button"
-          >
-            +{hiddenCount} more
-          </button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function McpToolLabel({ tool }: { tool: CachedMcpToolSummary }) {
-  return (
-    <span
-      className="inline-flex max-w-full items-center truncate rounded-full border border-border bg-muted/40 px-2.5 py-0.5 font-mono text-2xs text-muted-foreground"
-      title={tool.description || tool.name}
-    >
-      {tool.name}
-    </span>
-  );
-}
 
 interface McpToolListProps {
   className?: string;
@@ -136,6 +53,7 @@ export function McpToolList({
             className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
           />
           <Input
+            aria-label="Search tools"
             className="h-8 border-border/60 bg-muted/20 pl-8 text-sm shadow-none focus-visible:border-foreground/20 focus-visible:bg-background focus-visible:ring-1 focus-visible:ring-foreground/10 dark:bg-muted/15 dark:focus-visible:bg-background/60"
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search tools…"

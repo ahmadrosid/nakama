@@ -42,6 +42,7 @@ import {
 } from "@/lib/chat-artifacts";
 import { client, formatError } from "@/lib/client";
 import {
+  canPreviewWorkspaceEntry,
   type FilesViewMode,
   getStoredFilesViewMode,
   resolveFilesProfileId,
@@ -558,9 +559,14 @@ function WorkspaceFilePreview({
     isTextArtifactMimeType(entry.mimeType) ||
     isWordDocument ||
     artifactCodeLanguage(entry.filename) !== null;
-  const canPreview =
-    entry.sizeBytes <= 10 * 1024 * 1024 &&
-    (isImage || isVideo || isPdf || isText);
+  const canPreview = canPreviewWorkspaceEntry({
+    isImage,
+    isPdf,
+    isText,
+    isVideo,
+    isWordDocument,
+    sizeBytes: entry.sizeBytes,
+  });
   const { data, isLoading, error } = useQuery({
     enabled: canPreview,
     queryFn: async () => {
@@ -631,6 +637,7 @@ function WorkspaceFilePreview({
           downloadUrl={downloadUrl}
           entry={entry}
           error={error}
+          isMarkdown={isMarkdown}
           loading={isLoading}
           objectUrl={objectUrl}
           previewMode={previewMode}
@@ -698,6 +705,7 @@ function WorkspacePreviewBody({
   error,
   canPreview,
   downloadUrl,
+  isMarkdown,
 }: {
   entry: WorkspaceEntry;
   objectUrl: string | null;
@@ -706,6 +714,7 @@ function WorkspacePreviewBody({
   error: unknown;
   canPreview: boolean;
   downloadUrl: string;
+  isMarkdown: boolean;
   previewMode: ArtifactPreviewMode;
 }) {
   if (!canPreview) {
@@ -782,7 +791,7 @@ function WorkspacePreviewBody({
     <ArtifactAttachmentPanelBody
       {...shared}
       content={content}
-      format={isMarkdownArtifactMimeType(entry.mimeType) ? "markdown" : "plain"}
+      format={isMarkdown ? "markdown" : "plain"}
       kind="text"
       language={artifactCodeLanguage(entry.filename)}
     />

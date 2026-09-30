@@ -99,6 +99,7 @@ A skill can also include a local tool module in the same directory:
 
 - `tool.ts`
 - `tool.js`
+- `tool.py`
 
 When present, the dashboard shows the skill as **includes tool**.
 
@@ -106,6 +107,90 @@ This is useful when the workflow needs both:
 
 - Instructions in `SKILL.md`
 - A small custom tool that the skill can use
+
+`tool.ts` and `tool.js` are imported into the server process. `tool.py` runs as
+a separate process instead: Nakama spawns `python3 <file>`, writes the call
+arguments to stdin as JSON, and reads one JSON value back from stdout. It gets a
+trimmed environment (`PATH`, `NAKAMA_WORKSPACE_ROOT`, and `NAKAMA_CONFIG_DIR`
+only for server-shipped skills) and 30 seconds to answer.
+
+```python
+# tool.py
+import json
+import sys
+
+
+def run(input, context):
+    return {"total": input["quantity"] * input["price"]}
+
+
+if __name__ == "__main__":
+    print(json.dumps(run(json.loads(sys.stdin.read() or "{}"), {})))
+```
+
+### More than one script
+
+A skill often outgrows a single file. List the extra scripts in the
+frontmatter and each one becomes its own tool, named after the skill and the
+file:
+
+```markdown
+---
+name: invoicing
+description: Price an order and write the invoice.
+scripts: scripts/pricing.py, scripts/invoice.py
+---
+```
+
+Paths are relative to the skill directory, separated by commas, and only `.py`
+is accepted today. Each script needs the same `run(input, context)` and
+`__main__` block as `tool.py` above. A script that is in the skill but not
+declared, and is not named `tool.py`, is reported in the dashboard as not
+runnable rather than silently ignored.
+
+A script can import its siblings by bare name. Python puts the running script's
+own directory first on `sys.path`, so `scripts/invoice.py` can `import pricing`
+with no packaging.
+
+### Whose code runs
+
+A skill's tool module and scripts are host code: `tool.py` and every declared
+script are spawned as a process, and `tool.ts` / `tool.js` are imported into the
+server. A skill that ships with Nakama, or that an operator installed globally,
+always runs.
+
+A skill written into a profile's own skills directory — by hand, or by an
+organization member asking the agent to create one with `skill_manage` — does
+not, until the org reviews its writes. Turn on **Skill write approval** for the
+profile in **Agent → Profiles** and every write to that profile's skills is
+staged for an admin to approve. Code already in the skill stays blocked until
+reviewed: ask the agent to use `skill_manage` with `action: approve_code`, the
+skill name, and the code file path, then approve its proposal. Each code file
+must match what the admin approved; changing it blocks the skill's code again.
+With approval off, the skill still reads as instructions, and calling its tool
+returns an error saying the code is not runnable here.
+
+Python skill processes for member-authored skills are spawned without
+`NAKAMA_CONFIG_DIR`, so they are not told where the deployment keeps its
+configuration and API keys.
+
+### What Python is available
+
+The published image ships `python3` and the standard library. There is no pip
+and no third-party package, so a script that imports one fails on its first call
+with `ModuleNotFoundError`.
+
+To add packages, build a virtualenv on the host and point Nakama at its
+interpreter before starting the server:
+
+```bash
+python3 -m venv /opt/nakama-python
+/opt/nakama-python/bin/pip install matplotlib
+export NAKAMA_PYTHON_BIN=/opt/nakama-python/bin/python3
+```
+
+This is install-wide: every Python tool and every skill script in every
+organization uses that interpreter.
 
 ## How skills are used at runtime
 

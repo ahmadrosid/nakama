@@ -893,11 +893,23 @@ describe("organization schema migration", () => {
         .prepare("PRAGMA table_info(organizations)")
         .all() as Array<{ name: string }>;
       expect(columns.map((column) => column.name)).toContain("archived_at");
+      expect(columns.map((column) => column.name)).toContain(
+        "allowed_invite_domains"
+      );
 
       const row = db
         .prepare("SELECT archived_at FROM organizations WHERE id = ?")
         .get("org_legacy") as { archived_at: string | null };
       expect(row.archived_at).toBeNull();
+      expect(
+        (
+          db
+            .prepare(
+              "SELECT allowed_invite_domains FROM organizations WHERE id = ?"
+            )
+            .get("org_legacy") as { allowed_invite_domains: string }
+        ).allowed_invite_domains
+      ).toBe("[]");
     } finally {
       db.close();
     }

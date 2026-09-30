@@ -5,6 +5,10 @@ const HIDDEN_SCROLLBAR_STYLE =
 export const ARTIFACT_HTML_IFRAME_SANDBOX =
   "allow-scripts allow-forms allow-popups";
 
+/** Served by the API with its own CSP; see `ARTIFACT_FRAME_HTML` on the server. */
+export const ARTIFACT_FRAME_URL = "/artifact-frame";
+export const ARTIFACT_FRAME_READY = "nakama-artifact-frame-ready";
+
 export function htmlForArtifactPreview(html: string): string {
   if (/<head[\s>]/i.test(html)) {
     return html.replace(

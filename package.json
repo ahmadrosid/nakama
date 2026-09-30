@@ -1,6 +1,6 @@
 {
   "name": "nakama",
-  "version": "0.4.27",
+  "version": "0.4.33",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -22,13 +22,15 @@
     "dev:discord": "bun run --filter @nakama/discord dev",
     "dev:docs": "bun run --cwd docs/website dev",
     "dev:server": "bun run apps/server/src/dev.ts",
+    "dev:slack": "bun run --filter @nakama/slack dev",
     "dev:telegram": "bun run --filter @nakama/telegram dev",
     "dev:web": "bun run --filter @nakama/web dev",
     "dev:whatsapp": "bun run --filter @nakama/whatsapp dev",
-    "doctor": "npx react-doctor@latest",
-    "dupes": "bunx jscpd@4 --format typescript,tsx",
+    "docs:install": "bun install --cwd docs/website --frozen-lockfile --ignore-scripts",
+    "doctor": "bun x react-doctor",
+    "dupes": "bun x jscpd --format typescript,tsx .",
     "fix": "ultracite fix",
-    "postinstall": "bun install --cwd docs/website",
+    "postinstall": "bun run docs:install",
     "knip": "knip",
     "prepare": "husky",
     "preview:docs": "bun run --cwd docs/website preview",
@@ -37,13 +39,19 @@
     "view:cassettes": "bun run apps/server/src/testing/cassettes/serve.ts"
   },
   "overrides": {
+    "@peculiar/asn1-schema": "2.9.5",
     "libsignal": "6.0.0"
   },
+  "dependencies": {
+    "@simplewebauthn/server": "^14.0.2"
+  },
   "devDependencies": {
-    "@biomejs/biome": "2.5.12",
+    "@biomejs/biome": "2.5.14",
     "@types/bun": "^1.4.2",
     "husky": "^9.1.7",
+    "jscpd": "4.3.0",
     "knip": "6.32.2",
+    "react-doctor": "0.9.14",
     "ultracite": "7.11.0"
   },
   "patchedDependencies": {

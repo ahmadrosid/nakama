@@ -26,7 +26,7 @@ const whatsappAuth: AuthContextValue = {
   createOrg: async () => {},
   isAuthenticated: true,
   isLoading: false,
-  login: async () => {},
+  login: async () => ({ email: "admin@example.com", id: "admin" }),
   logout: async () => {},
   orgs: [],
   refreshSession: async () => {},

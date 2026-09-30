@@ -22,6 +22,7 @@ describe("buildCreateProviderRequest", () => {
     ["openai_compatible", true, true],
     ["openrouter", true, false],
     ["xai_oauth", true, false],
+    ["chatgpt", true, false],
     ["cerebras", true, false],
     ["fireworks", true, false],
     ["ollama", true, false],

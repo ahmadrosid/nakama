@@ -221,7 +221,12 @@ test("workspace rename requires platform admin access and updates pins for every
 });
 
 function createApp() {
-  const readCalls: Array<{ render?: "markdown" }> = [];
+  const listCalls: Array<{ appUserId?: string }> = [];
+  const readCalls: Array<{
+    appUserId?: string;
+    headOnly?: boolean;
+    render?: "markdown";
+  }> = [];
   const writeCalls: Array<{ content: string; filename: string }> = [];
   const agent = {
     getProfile: async (_orgId: string, profileId: string) => {
@@ -235,19 +240,33 @@ function createApp() {
       filename: "report.md",
       profileId: "profile_1",
     }),
-    listProfileArtifacts: async () => ({
-      artifacts: [],
-      directory: "/tmp/artifacts",
-      profileId: "profile_1",
-      total: 0,
-    }),
+    listProfileArtifacts: async (
+      _orgId: string,
+      _profileId: string,
+      options: { appUserId?: string } = {}
+    ) => {
+      listCalls.push(options);
+      return {
+        artifacts: [],
+        directory: "/tmp/artifacts",
+        profileId: "profile_1",
+        total: 0,
+      };
+    },
     readProfileArtifact: async (
       _orgId: string,
       _profileId: string,
-      _filename: string,
-      options: { render?: "markdown" } = {}
+      filename: string,
+      options: {
+        appUserId?: string;
+        headOnly?: boolean;
+        render?: "markdown";
+      } = {}
     ) => {
       readCalls.push(options);
+      if (filename === "missing.md") {
+        throw new NakamaApiError(`Artifact not found: ${filename}`, 404);
+      }
       return {
         bytes: new TextEncoder().encode("# Report"),
         contentType: "text/markdown",
@@ -272,6 +291,7 @@ function createApp() {
   return {
     ...createMinimalHonoApp({ agent }),
     readCalls,
+    listCalls,
     writeCalls,
   };
 }
@@ -301,6 +321,89 @@ describe("profile artifact content auth", () => {
     expect(await response.text()).toBe("# Report");
   });
 
+  test("app-user artifact content is API-key-only", async () => {
+    const { app, authService, databaseAdapter, readCalls } = createApp();
+    const memberSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "app-user-artifact@example.com",
+      "member"
+    );
+    const url =
+      "http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=report.md";
+    const browserResponse = await app.fetch(
+      new Request(url, {
+        headers: memberSession.headers(
+          { "X-Nakama-App-User-Id": "alice" },
+          memberSession.orgId
+        ),
+      })
+    );
+
+    expect(browserResponse.status).toBe(400);
+    expect(readCalls).toEqual([]);
+
+    const owner = await databaseAdapter.getUserByEmail(
+      "app-user-artifact@example.com"
+    );
+    if (!(owner && memberSession.orgId)) {
+      throw new Error("Expected artifact test owner");
+    }
+    const secret = `nk_live_${"2".repeat(64)}`;
+    await databaseAdapter.createApiKey({
+      createdAt: new Date().toISOString(),
+      createdByUserId: owner.id,
+      environment: "live",
+      expiresAt: null,
+      id: "key_artifact_app_user_test",
+      keyPrefix: secret.slice(0, 20),
+      lastUsedAt: null,
+      name: "Artifact app user test",
+      orgId: memberSession.orgId,
+      revokedAt: null,
+      secretHash: authService.hashToken(secret),
+    });
+    const apiKeyResponse = await app.fetch(
+      new Request(url, {
+        headers: {
+          Authorization: `Bearer ${secret}`,
+          "X-Nakama-App-User-Id": "alice",
+          "X-Org-Id": memberSession.orgId,
+        },
+      })
+    );
+
+    expect(apiKeyResponse.status).toBe(200);
+    expect(readCalls).toEqual([{ appUserId: "alice", render: undefined }]);
+  });
+
+  test("serves artifact content with a Unicode filename", async () => {
+    const { app, databaseAdapter } = createApp();
+    const memberSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "unicode@example.com",
+      "member"
+    );
+    const filename = "Pastry Box Claims Review — Synthetic Demo.md";
+    const url = new URL(
+      "http://localhost:4310/v1/profiles/profile_1/artifacts/content"
+    );
+    url.searchParams.set("path", filename);
+    url.searchParams.set("inline", "1");
+
+    const response = await app.fetch(
+      new Request(url, {
+        headers: memberSession.headers({}, memberSession.orgId),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Disposition")).toBe(
+      `inline; filename*=UTF-8''${encodeURIComponent(filename)}`
+    );
+  });
+
   test("org viewer can read artifact content", async () => {
     const { app, databaseAdapter } = createApp();
     const viewerSession = await setupFreshInstallSession(
@@ -321,6 +424,35 @@ describe("profile artifact content auth", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Disposition")).toContain("attachment");
+  });
+
+  test("org viewer can check with HEAD whether an artifact still exists", async () => {
+    const { app, databaseAdapter, readCalls } = createApp();
+    const viewerSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "viewer-head@example.com",
+      "viewer"
+    );
+    const head = (path: string) =>
+      app.fetch(
+        new Request(
+          `http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=${path}`,
+          {
+            headers: viewerSession.headers({}, viewerSession.orgId),
+            method: "HEAD",
+          }
+        )
+      );
+
+    const present = await head("report.md");
+    expect(present.status).toBe(200);
+    expect(await present.text()).toBe("");
+    expect((await head("missing.md")).status).toBe(404);
+    expect(readCalls).toEqual([
+      { appUserId: undefined, headOnly: true, render: undefined },
+      { appUserId: undefined, headOnly: true, render: undefined },
+    ]);
   });
 
   test("forwards render=markdown so a .docx is converted for preview", async () => {
@@ -434,6 +566,23 @@ describe("profile artifact content auth", () => {
     );
 
     expect(response.status).toBe(200);
+  });
+
+  test("platform admin browser sessions cannot select an app-user artifact scope", async () => {
+    const { app, databaseAdapter, listCalls } = createApp();
+    const adminSession = await setupFreshInstallSession(app, databaseAdapter);
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/profiles/profile_1/artifacts", {
+        headers: adminSession.headers(
+          { "X-Nakama-App-User-Id": "alice" },
+          adminSession.orgId
+        ),
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(listCalls).toEqual([]);
   });
 });
 

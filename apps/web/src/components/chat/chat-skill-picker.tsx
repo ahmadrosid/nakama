@@ -1,12 +1,12 @@
 import type { SkillSummary } from "@nakama/core/contract";
 import { cn } from "@nakama/ui/utils";
-import { CheckmarkCircle01Icon, SparklesIcon } from "hugeicons-react";
-import type { ComposerSlashSuggestion } from "@/lib/chat-composer-skills";
+import { useEffect, useRef } from "react";
+import type { ComposerSuggestion } from "@/lib/chat-composer-skills";
 
 interface ChatSkillPickerProps {
   activeIndex: number;
-  onSelect: (suggestion: ComposerSlashSuggestion) => void;
-  suggestions: ComposerSlashSuggestion[];
+  onSelect: (suggestion: ComposerSuggestion) => void;
+  suggestions: ComposerSuggestion[];
 }
 
 function skillDescription(skill: SkillSummary): string | null {
@@ -18,8 +18,8 @@ function skillDescription(skill: SkillSummary): string | null {
   return trimmed;
 }
 
-function skillMeta(skill: SkillSummary): string | null {
-  const parts: string[] = [];
+function skillMeta(skill: SkillSummary): string {
+  const parts = ["skill"];
 
   if (skill.hasTool) {
     parts.push("tool");
@@ -29,24 +29,34 @@ function skillMeta(skill: SkillSummary): string | null {
     parts.push("explicit");
   }
 
-  return parts.join(" · ") || null;
+  return parts.join(" · ");
 }
 
-function suggestionKey(suggestion: ComposerSlashSuggestion): string {
+function suggestionKey(suggestion: ComposerSuggestion): string {
+  if (suggestion.kind === "mention") {
+    return `mention:${suggestion.mention.name}`;
+  }
+
   return suggestion.kind === "command"
     ? `command:${suggestion.command.name}`
     : `skill:${suggestion.skill.id}`;
 }
 
-function suggestionTitle(suggestion: ComposerSlashSuggestion): string {
+function suggestionTitle(suggestion: ComposerSuggestion): string {
+  if (suggestion.kind === "mention") {
+    return `@${suggestion.mention.name}`;
+  }
+
   return suggestion.kind === "command"
     ? `/${suggestion.command.name}`
     : suggestion.skill.name;
 }
 
-function suggestionDescription(
-  suggestion: ComposerSlashSuggestion
-): string | null {
+function suggestionDescription(suggestion: ComposerSuggestion): string | null {
+  if (suggestion.kind === "mention") {
+    return suggestion.mention.description;
+  }
+
   if (suggestion.kind === "command") {
     return suggestion.command.description;
   }
@@ -54,15 +64,29 @@ function suggestionDescription(
   return skillDescription(suggestion.skill);
 }
 
+function suggestionMeta(suggestion: ComposerSuggestion): string {
+  if (suggestion.kind === "skill") {
+    return skillMeta(suggestion.skill);
+  }
+
+  return suggestion.kind === "mention" ? "tool" : "command";
+}
+
 export function ChatSkillPicker({
   suggestions,
   activeIndex,
   onSelect,
 }: ChatSkillPickerProps) {
+  const activeOptionRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    activeOptionRef.current?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex, suggestions]);
+
   return (
     <div
-      aria-label="Available slash commands and skills"
-      className="absolute bottom-full left-0 z-30 mb-2 w-full max-w-md overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-sm"
+      aria-label="Available commands, skills and tools"
+      className="absolute bottom-full left-0 z-30 mb-2 max-h-[min(20rem,40dvh)] w-full max-w-md overflow-y-auto overscroll-contain rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-sm"
       role="listbox"
     >
       {suggestions.length === 0 ? (
@@ -73,16 +97,13 @@ export function ChatSkillPicker({
         suggestions.map((suggestion, index) => {
           const active = index === activeIndex;
           const description = suggestionDescription(suggestion);
-          const meta =
-            suggestion.kind === "skill"
-              ? skillMeta(suggestion.skill)
-              : "command";
+          const meta = suggestionMeta(suggestion);
 
           return (
             <button
               aria-selected={active}
               className={cn(
-                "flex w-full min-w-0 items-center gap-3 rounded-sm px-3 py-2 text-left text-sm outline-none",
+                "flex w-full min-w-0 items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none",
                 active ? "bg-muted text-foreground" : "hover:bg-muted/70"
               )}
               key={suggestionKey(suggestion)}
@@ -90,33 +111,24 @@ export function ChatSkillPicker({
                 event.preventDefault();
                 onSelect(suggestion);
               }}
+              ref={active ? activeOptionRef : undefined}
               role="option"
               type="button"
             >
-              <SparklesIcon
-                aria-hidden
-                className="size-4 shrink-0 text-muted-foreground"
-              />
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium leading-tight">
                   {suggestionTitle(suggestion)}
                 </span>
                 {description ? (
-                  <span className="mt-0.5 line-clamp-1 text-muted-foreground text-xs leading-snug">
+                  <span className="line-clamp-1 text-muted-foreground text-xs leading-tight">
                     {description}
                   </span>
                 ) : null}
               </span>
               {meta ? (
-                <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-medium text-2xs text-muted-foreground uppercase">
+                <span className="shrink-0 rounded bg-muted px-1 font-medium text-2xs text-muted-foreground uppercase">
                   {meta}
                 </span>
-              ) : null}
-              {active ? (
-                <CheckmarkCircle01Icon
-                  aria-hidden
-                  className="size-4 shrink-0"
-                />
               ) : null}
             </button>
           );

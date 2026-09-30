@@ -143,7 +143,15 @@ export const MAX_URL_CHAT_DRAFT_LENGTH = 1500;
 
 export function chatProfileIdFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/chat\/([^/]+)\//);
-  return match?.[1] ? decodeURIComponent(match[1]) : null;
+  if (!match?.[1]) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
 }
 
 export function isChatSessionPath(pathname: string): boolean {
@@ -491,6 +499,7 @@ const HISTORY_SESSION_CHANNEL = {
   automation: false,
   cli: false,
   discord: true,
+  slack: true,
   subagent: false,
   task: false,
   telegram: true,
@@ -509,6 +518,7 @@ const READ_ONLY_SESSION_CHANNEL = {
   automation: false,
   cli: false,
   discord: true,
+  slack: true,
   subagent: false,
   task: false,
   telegram: true,
@@ -546,6 +556,8 @@ export function formatSessionChannelLabel(channel: AgentChannel): string {
       return "WhatsApp";
     case "discord":
       return "Discord";
+    case "slack":
+      return "Slack";
     case "web":
       return "Web";
     default:

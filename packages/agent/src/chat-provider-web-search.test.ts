@@ -1,36 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type {
-  ChatCompletionResult,
-  GenerateChatInput,
-  ProviderClient,
-  ToolDefinition,
-} from "@nakama/core";
+import type { ProviderClient, ToolDefinition } from "@nakama/core";
 import { webSearchTool } from "@nakama/core";
 import { createAgentChatSession } from "./index";
-
-function createCapturingProvider(
-  response: ChatCompletionResult,
-  name: ProviderClient["name"] = "anthropic"
-): ProviderClient & { lastInput?: GenerateChatInput } {
-  const provider: ProviderClient & { lastInput?: GenerateChatInput } = {
-    generateChat(input) {
-      provider.lastInput = input;
-      return Promise.resolve(response);
-    },
-    generateText() {
-      return Promise.resolve({ content: "{}" });
-    },
-    name,
-    streamChat(input, handlers) {
-      provider.lastInput = input;
-      if (response.content) {
-        handlers.onChunk(response.content);
-      }
-      return Promise.resolve(response);
-    },
-  };
-  return provider;
-}
+import { createCapturingProvider } from "./test-helpers";
 
 const done = {
   assistantMessage: { content: "Done", role: "assistant" as const },
@@ -50,7 +22,7 @@ async function turn(
   tools: ToolDefinition[],
   name: ProviderClient["name"] = "anthropic"
 ) {
-  const provider = createCapturingProvider(done, name);
+  const provider = createCapturingProvider(done, { name });
   const session = createAgentChatSession({ provider, tools }, { tools });
   await session.send("hello");
   return provider.lastInput;

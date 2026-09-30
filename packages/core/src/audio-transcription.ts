@@ -9,7 +9,14 @@ export async function transcribeAudio(options: {
   signal?: AbortSignal;
 }): Promise<string> {
   const { provider, model, audio, signal } = options;
-  if (provider.type !== "openai") {
+  // Self-hosted backends that speak the OpenAI-compatible transcriptions API
+  // surface as `openai_compatible` with a baseUrl (e.g. local Whisper),
+  // alongside first-party `openai`. Other types are not supported and stay
+  // rejected even when they carry an apiKey.
+  if (
+    provider.type !== "openai" &&
+    (provider.type !== "openai_compatible" || !provider.baseUrl?.trim())
+  ) {
     throw new NakamaApiError(
       `Transcription is not supported for provider ${provider.type}.`,
       400

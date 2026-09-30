@@ -17,9 +17,10 @@ describe("openAIModelSupportsThinking", () => {
     expect(openAIModelSupportsThinking("gpt-4o-mini")).toBe(false);
   });
 
-  test("allows gpt-5 models", () => {
+  test("allows gpt-5 and gpt-6 models", () => {
     expect(openAIModelSupportsThinking("gpt-5.4")).toBe(true);
     expect(openAIModelSupportsThinking("gpt-5.3-codex")).toBe(true);
+    expect(openAIModelSupportsThinking("gpt-6-future")).toBe(true);
   });
 
   test("denies gpt-4o variants by prefix", () => {
@@ -44,10 +45,12 @@ describe("openAIModelRequiresResponsesApi", () => {
 });
 
 describe("openAIModelRejectsChatToolsWithReasoning", () => {
-  test("flags gpt-5.4+ chat completions tool restriction", () => {
+  test("flags models that can set reasoning_effort to none for chat tools", () => {
     expect(openAIModelRejectsChatToolsWithReasoning("gpt-5.4")).toBe(true);
     expect(openAIModelRejectsChatToolsWithReasoning("gpt-5.6-luna")).toBe(true);
     expect(openAIModelRejectsChatToolsWithReasoning("GPT-5.6-Sol")).toBe(true);
+    expect(openAIModelRejectsChatToolsWithReasoning("gpt-6-astra")).toBe(false);
+    expect(openAIModelRejectsChatToolsWithReasoning("gpt-6-future")).toBe(true);
     expect(openAIModelRejectsChatToolsWithReasoning("gpt-5.3")).toBe(false);
     expect(openAIModelRejectsChatToolsWithReasoning("gpt-4o-mini")).toBe(false);
   });
@@ -108,6 +111,128 @@ describe("OpenAI codex vision routing", () => {
 });
 
 describe("OpenAI tools + reasoning routing", () => {
+  test.each(["gpt-6-sol", "gpt-6-luna", "gpt-6-astra"])(
+    "%s keeps no-tool chat on Chat Completions without forcing none",
+    async (model) => {
+      const requests: Array<{ url: string; body: Record<string, unknown> }> =
+        [];
+      globalThis.fetch = (async (
+        url: RequestInfo | URL,
+        init?: RequestInit
+      ) => {
+        requests.push({
+          body: JSON.parse(String(init?.body)),
+          url: String(url),
+        });
+        return Response.json({ choices: [{ message: { content: "Done." } }] });
+      }) as typeof fetch;
+      const provider = createOpenAIProvider({ apiKey: "sk-test", model });
+      expect(
+        (
+          await provider.generateChat({
+            messages: [{ content: "Hello", role: "user" }],
+            system: "Be helpful.",
+          })
+        ).content
+      ).toBe("Done.");
+      expect(requests[0]?.url).toBe(
+        "https://api.openai.com/v1/chat/completions"
+      );
+      expect(requests[0]?.body.reasoning_effort).toBeUndefined();
+      expect(requests[0]?.body.tools).toBeUndefined();
+    }
+  );
+
+  test("rejects Astra tools on a custom Chat Completions endpoint before HTTP", async () => {
+    const fetchMock = mock(async () => Response.json({}));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const provider = createOpenAIProvider({
+      apiKey: "sk-test",
+      baseUrl: "https://custom.example/v1",
+      model: "gpt-6-astra",
+    });
+    await expect(
+      provider.generateChat({
+        messages: [{ content: "Search", role: "user" }],
+        system: "Be helpful.",
+        tools: [
+          {
+            description: "Search",
+            name: "search",
+            parameters: { properties: {}, type: "object" },
+          },
+        ],
+      })
+    ).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test.each(["gpt-6-sol", "gpt-6-luna", "gpt-6-astra"])(
+    "%s routes tools through Responses with or without explicit reasoning",
+    async (model) => {
+      const requests: Array<{ url: string; body: Record<string, unknown> }> =
+        [];
+      globalThis.fetch = (async (
+        url: RequestInfo | URL,
+        init?: RequestInit
+      ) => {
+        requests.push({
+          body: JSON.parse(String(init?.body)),
+          url: String(url),
+        });
+        return Response.json({
+          output: [
+            {
+              content: [{ text: "Done.", type: "output_text" }],
+              type: "message",
+            },
+          ],
+        });
+      }) as typeof fetch;
+
+      const provider = createOpenAIProvider({ apiKey: "sk-test", model });
+      for (const thinking of [
+        undefined,
+        { effort: "high" as const, enabled: true },
+      ]) {
+        expect(
+          (
+            await provider.generateChat({
+              messages: [{ content: "Search", role: "user" }],
+              providerOptions: thinking ? { thinking } : undefined,
+              system: "Be helpful.",
+              tools: [
+                {
+                  description: "Search files",
+                  name: "search_files",
+                  parameters: { properties: {}, type: "object" },
+                },
+              ],
+            })
+          ).content
+        ).toBe("Done.");
+      }
+
+      expect(requests.map(({ url }) => url)).toEqual([
+        "https://api.openai.com/v1/responses",
+        "https://api.openai.com/v1/responses",
+      ]);
+      expect(requests[0]?.body.tools).toEqual([
+        {
+          description: "Search files",
+          name: "search_files",
+          parameters: { properties: {}, type: "object" },
+          type: "function",
+        },
+      ]);
+      expect(requests[0]?.body.reasoning).toBeUndefined();
+      expect(requests[1]?.body.reasoning).toEqual({
+        effort: "high",
+        summary: "auto",
+      });
+    }
+  );
+
   test("routes gpt-5.6-luna tool calls through responses even without thinking", async () => {
     const fetchMock = mock(
       async (input: RequestInfo | URL, init?: RequestInit) => {

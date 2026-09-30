@@ -6,26 +6,27 @@
     "build": "bun run generate-mirrors && next build",
     "dev": "bun run generate-mirrors && next dev -p 3004",
     "generate-mirrors": "bun run scripts/postbuild.ts",
-    "preview": "bunx serve out -p 3004 -c serve.json",
+    "preview": "serve out -p 3004 -c serve.json",
     "screenshots": "./scripts/capture-setup-screenshots.sh",
     "screenshots:chat": "./scripts/capture-chat-screenshots.sh",
     "screenshots:self-improving-skills": "./scripts/capture-self-improving-skills-screenshots.sh",
     "screenshots:telegram": "./scripts/capture-telegram-screenshots.sh"
   },
   "dependencies": {
-    "fumadocs-core": "^16.15.10",
-    "fumadocs-mdx": "^15.4.0",
-    "fumadocs-ui": "^16.15.10",
+    "fumadocs-core": "^16.15.14",
+    "fumadocs-mdx": "^15.4.5",
+    "fumadocs-ui": "^16.15.14",
     "hugeicons-react": "^0.4.0",
-    "next": "^16.3.5",
+    "next": "^16.3.6",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
-    "@types/node": "^26.5.0",
+    "@types/node": "^26.6.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "serve": "14.2.6",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.0.0"
   }

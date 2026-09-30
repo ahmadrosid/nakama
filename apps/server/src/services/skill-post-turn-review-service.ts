@@ -24,6 +24,7 @@ const POST_TURN_REVIEW_CHANNELS = {
   automation: false,
   cli: true,
   discord: true,
+  slack: true,
   subagent: false,
   task: false,
   telegram: true,

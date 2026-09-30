@@ -1,25 +1,20 @@
 import type { McpServerSummary } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@nakama/ui/dropdown-menu";
 import { Spinner } from "@nakama/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
 import {
   Add01Icon,
+  ArrowRight01Icon,
   Delete02Icon,
-  EyeIcon,
-  MoreVerticalIcon,
+  Loading03Icon as LoaderIcon,
   PencilIcon,
   Plug01Icon,
   RefreshIcon,
 } from "hugeicons-react";
-import { McpToolLabels } from "@/components/soul-tools/McpToolList";
+import { useId } from "react";
+import { McpServerTools } from "@/components/soul-tools/mcp-tab/McpServerTools";
 import { mcpServerDeleteBlockReason } from "@/components/soul-tools/mcp-tab/mcp-server-delete-block-reason";
 
 export function McpPageState({
@@ -42,57 +37,10 @@ export function McpPageState({
   );
 }
 
-function McpServerDeleteButton({
-  server,
-  busy,
-  onDelete,
-}: {
-  server: McpServerSummary;
-  busy: boolean;
-  onDelete: () => void;
-}) {
-  const deleteBlockReason = mcpServerDeleteBlockReason(server);
-  const label = `Delete ${server.name}`;
-
-  if (deleteBlockReason) {
-    return (
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              aria-label={label}
-              disabled
-              size="icon-sm"
-              type="button"
-              variant="ghost"
-            />
-          }
-        >
-          <Delete02Icon aria-hidden className="size-4" />
-        </TooltipTrigger>
-        <TooltipContent side="left">{deleteBlockReason}</TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  return (
-    <Button
-      aria-label={label}
-      disabled={busy}
-      onClick={onDelete}
-      size="icon-sm"
-      type="button"
-      variant="ghost"
-    >
-      <Delete02Icon aria-hidden className="size-4" />
-    </Button>
-  );
-}
-
 function McpServerActions({
   server,
   busy,
-  onViewTools,
+  syncing,
   onEdit,
   onConnect,
   onTestConnection,
@@ -101,7 +49,7 @@ function McpServerActions({
 }: {
   server: McpServerSummary;
   busy: boolean;
-  onViewTools: () => void;
+  syncing: boolean;
   onEdit: () => void;
   onConnect: () => void;
   onTestConnection: () => void;
@@ -109,91 +57,86 @@ function McpServerActions({
   onDelete: () => void;
 }) {
   const deleteBlockReason = mcpServerDeleteBlockReason(server);
+  const deleteReasonId = useId();
 
   return (
-    <div className="flex shrink-0 items-center gap-1">
-      {server.status === "needs_auth" ? (
-        <Button
-          disabled={busy}
-          onClick={onConnect}
-          size="sm"
-          type="button"
-          variant="default"
-        >
-          Sign in
+    <div className="flex items-center gap-1 overflow-x-auto py-1 [&_button]:min-h-8 pointer-coarse:[&_button]:min-h-11">
+      {server.status === "connected" ? null : (
+        <Button disabled={busy} onClick={onConnect} size="sm" type="button">
+          <Plug01Icon aria-hidden />
+          {server.status === "needs_auth" ? "Sign in" : "Connect"}
         </Button>
-      ) : null}
-
+      )}
       <Button
-        aria-label={`View tools for ${server.name}`}
-        onClick={onViewTools}
-        size="icon-sm"
+        disabled={busy}
+        onClick={onTestConnection}
+        size="sm"
         type="button"
         variant="ghost"
       >
-        <EyeIcon aria-hidden className="size-4" />
+        <Plug01Icon aria-hidden />
+        Test connection
       </Button>
-
-      <McpServerDeleteButton busy={busy} onDelete={onDelete} server={server} />
-
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              aria-label={`Actions for ${server.name}`}
-              disabled={busy}
-              size="icon-sm"
-              type="button"
-              variant="ghost"
-            />
-          }
-        >
-          <MoreVerticalIcon aria-hidden className="size-4" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-40">
-          {server.status === "connected" ||
-          server.status === "needs_auth" ? null : (
-            <DropdownMenuItem disabled={busy} onClick={onConnect}>
-              <Plug01Icon aria-hidden />
-              Connect
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem disabled={busy} onClick={onTestConnection}>
-            <Plug01Icon aria-hidden />
-            Test connection
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={busy} onClick={onEdit}>
-            <PencilIcon aria-hidden />
-            Edit
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={busy} onClick={onSync}>
-            <RefreshIcon aria-hidden />
-            Sync tools
-          </DropdownMenuItem>
-          {deleteBlockReason ? (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <DropdownMenuItem disabled variant="destructive">
-                    <Delete02Icon aria-hidden />
-                    Delete
-                  </DropdownMenuItem>
-                }
+      <Button
+        disabled={busy}
+        onClick={onEdit}
+        size="sm"
+        type="button"
+        variant="ghost"
+      >
+        <PencilIcon aria-hidden />
+        Edit
+      </Button>
+      <Button
+        aria-busy={syncing}
+        disabled={busy}
+        onClick={onSync}
+        size="sm"
+        type="button"
+        variant="ghost"
+      >
+        {syncing ? (
+          <LoaderIcon aria-hidden className="motion-safe:animate-spin" />
+        ) : (
+          <RefreshIcon aria-hidden />
+        )}
+        {syncing ? "Syncing…" : "Sync tools"}
+      </Button>
+      {deleteBlockReason ? (
+        <Tooltip>
+          <TooltipTrigger
+            aria-describedby={deleteReasonId}
+            render={
+              <Button
+                className="text-muted-foreground opacity-50"
+                disabled
+                focusableWhenDisabled
+                size="sm"
+                type="button"
+                variant="ghost"
               />
-              <TooltipContent side="left">{deleteBlockReason}</TooltipContent>
-            </Tooltip>
-          ) : (
-            <DropdownMenuItem
-              disabled={busy}
-              onClick={onDelete}
-              variant="destructive"
-            >
-              <Delete02Icon aria-hidden />
-              Delete
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+            }
+          >
+            <Delete02Icon aria-hidden />
+            Delete
+          </TooltipTrigger>
+          <TooltipContent id={deleteReasonId} role="tooltip">
+            {deleteBlockReason}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <Button
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          disabled={busy}
+          onClick={onDelete}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          <Delete02Icon aria-hidden />
+          Delete
+        </Button>
+      )}
     </div>
   );
 }
@@ -201,9 +144,11 @@ function McpServerActions({
 export function McpServersSection({
   servers,
   busy,
+  syncingServerId = null,
   embedded = false,
+  expandedServerId,
+  onToggleServer,
   onAddServer,
-  onViewTools,
   onEdit,
   onConnect,
   onTestConnection,
@@ -212,9 +157,11 @@ export function McpServersSection({
 }: {
   servers: McpServerSummary[];
   busy: boolean;
+  syncingServerId?: string | null;
   embedded?: boolean;
   onAddServer: () => void;
-  onViewTools: (serverId: string) => void;
+  expandedServerId: string | null;
+  onToggleServer: (serverId: string | null) => void;
   onEdit: (serverId: string) => void;
   onConnect: (serverId: string) => void;
   onTestConnection: (serverId: string) => void;
@@ -264,59 +211,75 @@ export function McpServersSection({
                 const assignedProfileCount = server.assignedProfileCount ?? 0;
 
                 return (
-                  <li className="px-4 py-3" key={server.id}>
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-normal text-foreground text-sm">
+                  <li key={server.id}>
+                    <button
+                      aria-controls={`mcp-tools-${server.id}`}
+                      aria-expanded={expandedServerId === server.id}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring focus-visible:-outline-offset-2"
+                      onClick={() =>
+                        onToggleServer(
+                          expandedServerId === server.id ? null : server.id
+                        )
+                      }
+                      type="button"
+                    >
+                      <ArrowRight01Icon
+                        aria-hidden
+                        className={cn(
+                          "size-4 shrink-0 text-muted-foreground",
+                          expandedServerId === server.id && "rotate-90"
+                        )}
+                      />
+                      <span className="min-w-0 flex-1 space-y-1">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="break-all text-foreground text-sm">
                             {server.name}
-                          </p>
+                          </span>
+                          {assignedProfileCount > 0 ? (
+                            <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-muted-foreground text-xs">
+                              {assignedProfileCount} profile
+                              {assignedProfileCount === 1 ? "" : "s"}
+                            </span>
+                          ) : null}
                           {server.status === "needs_auth" ? (
                             <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-amber-700 text-xs dark:text-amber-300">
                               Sign-in required
                             </span>
                           ) : null}
-                          {assignedProfileCount > 0 ? (
-                            <Tooltip>
-                              <TooltipTrigger
-                                render={
-                                  <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-muted-foreground text-xs">
-                                    {assignedProfileCount} profile
-                                    {assignedProfileCount === 1 ? "" : "s"}
-                                  </span>
-                                }
-                              />
-                              <TooltipContent side="top">
-                                Assigned to {assignedProfileCount} profile
-                                {assignedProfileCount === 1 ? "" : "s"}.
-                                Unassign on the Profiles page before deleting.
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : null}
-                        </div>
+                        </span>
+                        <span className="block text-muted-foreground text-xs">
+                          {server.toolCount} tool
+                          {server.toolCount === 1 ? "" : "s"}
+                          {server.status === "needs_auth"
+                            ? ""
+                            : ` · ${server.status === "connected" ? "Connected" : server.status === "error" ? "Error" : "Disconnected"}`}
+                        </span>
                         {server.lastError ? (
-                          <p className="mt-1 text-destructive text-xs">
+                          <span className="block break-words text-destructive text-xs">
                             {server.lastError}
-                          </p>
+                          </span>
                         ) : null}
-                        <McpToolLabels
-                          connected={server.status === "connected"}
-                          onShowAll={() => onViewTools(server.id)}
-                          serverId={server.id}
-                          toolCount={server.toolCount}
-                        />
-                      </div>
-
-                      <McpServerActions
-                        busy={busy}
-                        onConnect={() => onConnect(server.id)}
-                        onDelete={() => onDelete(server)}
-                        onEdit={() => onEdit(server.id)}
-                        onSync={() => onSync(server.id)}
-                        onTestConnection={() => onTestConnection(server.id)}
-                        onViewTools={() => onViewTools(server.id)}
-                        server={server}
-                      />
+                      </span>
+                    </button>
+                    <div
+                      hidden={expandedServerId !== server.id}
+                      id={`mcp-tools-${server.id}`}
+                    >
+                      {expandedServerId === server.id ? (
+                        <div className="space-y-3 border-border border-t bg-muted/10 p-4">
+                          <McpServerActions
+                            busy={busy}
+                            onConnect={() => onConnect(server.id)}
+                            onDelete={() => onDelete(server)}
+                            onEdit={() => onEdit(server.id)}
+                            onSync={() => onSync(server.id)}
+                            onTestConnection={() => onTestConnection(server.id)}
+                            server={server}
+                            syncing={syncingServerId === server.id}
+                          />
+                          <McpServerTools server={server} />
+                        </div>
+                      ) : null}
                     </div>
                   </li>
                 );

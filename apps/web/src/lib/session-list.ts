@@ -1,4 +1,9 @@
-import type { SessionSummary } from "@nakama/core/contract";
+import {
+  type ListSessionsResponse,
+  MAX_SESSION_SEARCH_LENGTH,
+  type SessionSummary,
+} from "@nakama/core/contract";
+import type { InfiniteData } from "@tanstack/react-query";
 
 const POLL_MS = 2000;
 /**
@@ -35,4 +40,28 @@ export function sessionListPollInterval(
   );
 
   return waiting ? POLL_MS : false;
+}
+
+/**
+ * The loaded list with `head`, a fresh first page, in place of the first page,
+ * or `null` when a chat crossed the end of the first page since the second page
+ * was asked for: the pages after it then no longer follow on from it.
+ */
+export function withFirstPage(
+  data: InfiniteData<ListSessionsResponse, string | null>,
+  head: ListSessionsResponse
+): InfiniteData<ListSessionsResponse, string | null> | null {
+  if (data.pages.length > 1 && data.pageParams[1] !== head.nextCursor) {
+    return null;
+  }
+  return { ...data, pages: [head, ...data.pages.slice(1)] };
+}
+
+/**
+ * The `q` to send for what is in the search field: trimmed, and cut at the
+ * length the server accepts, so a paste that got past `maxLength` still
+ * searches instead of answering 400.
+ */
+export function sessionSearchQuery(input: string): string {
+  return input.trim().slice(0, MAX_SESSION_SEARCH_LENGTH).trimEnd();
 }

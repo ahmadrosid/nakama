@@ -376,6 +376,51 @@ test("no app user still resolves the shared profile folder", async () => {
   expect(names).not.toContain("owned.md");
 });
 
+test("a path outside the caller's folder is a 404, not a guard error", async () => {
+  await writeArtifact("shared.md", "shared folder");
+  await writeAppUserArtifact("user-1", "owned.md", "owned");
+
+  const absoluteShared = path.join(
+    getProfileArtifactsDir(ORG_ID, PROFILE_ID),
+    "shared.md"
+  );
+
+  // An absolute path into the shared folder used to pass, because allowedDirs
+  // was always that folder. Now it reads as an escape, and the guard message
+  // talks about SOUL.md, which means nothing to an API caller.
+  const failure = await readArtifactFile({
+    appUserId: "user-1",
+    filename: absoluteShared,
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  })
+    .then(() => null)
+    .catch((error: unknown) => error);
+
+  expect((failure as { status?: number }).status).toBe(404);
+  expect((failure as Error).message).not.toContain("allowed directories");
+
+  // Traversal gets the same answer, so an attempt is not told it hit a guard.
+  const traversal = await readArtifactFile({
+    appUserId: "user-1",
+    filename: "../../../../etc/passwd",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  })
+    .then(() => null)
+    .catch((error: unknown) => error);
+  expect((traversal as { status?: number }).status).toBe(404);
+
+  // The caller's own file is untouched by the mapping.
+  const owned = await readArtifactFile({
+    appUserId: "user-1",
+    filename: "owned.md",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+  expect(owned.bytes.toString("utf8")).toBe("owned");
+});
+
 beforeEach(async () => {
   previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
   configDir = await mkdtemp(path.join(tmpdir(), "nakama-artifacts-"));
@@ -416,6 +461,15 @@ test("serves a markdown artifact without a sidecar as text/markdown", async () =
 
   expect(artifact.contentType).toBe("text/markdown");
   expect(artifact.bytes.toString("utf8")).toBe("# Title\n");
+
+  const head = await readArtifactFile({
+    filename: "report.md",
+    headOnly: true,
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+  expect(head.contentType).toBe("text/markdown");
+  expect(head.bytes).toHaveLength(0);
 });
 
 test("prefers the sidecar mime type when present", async () => {
@@ -765,4 +819,49 @@ test("workspace paths reject traversal and symlinks outside the profile", async 
     readWorkspaceFile(ORG_ID, PROFILE_ID, "artifacts")
   ).rejects.toMatchObject({ status: 404 });
   expect((await listWorkspaceFiles(ORG_ID, "new_profile")).entries).toEqual([]);
+});
+
+test("an app user still reads a document written before per-user folders", async () => {
+  // Every artifact the agent produced before the write side learned about app
+  // users is in the shared folder. Dropping that fallback strands them.
+  await writeArtifact("legacy.docx", "written the old way");
+  await writeAppUserArtifact("user-1", "owned.md", "owned");
+
+  const legacy = await readArtifactFile({
+    appUserId: "user-1",
+    filename: "legacy.docx",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+  expect(legacy.bytes.toString("utf8")).toBe("written the old way");
+
+  // Their own copy of a name still wins over the shared one.
+  await writeAppUserArtifact("user-1", "legacy.docx", "written for this user");
+  const owned = await readArtifactFile({
+    appUserId: "user-1",
+    filename: "legacy.docx",
+    orgId: ORG_ID,
+    profileId: PROFILE_ID,
+  });
+  expect(owned.bytes.toString("utf8")).toBe("written for this user");
+});
+
+test("the shared fallback does not accept a path that reaches out of the folder", async () => {
+  await writeArtifact("shared.md", "shared folder");
+
+  for (const filename of [
+    path.join(getProfileArtifactsDir(ORG_ID, PROFILE_ID), "shared.md"),
+    "../artifacts/shared.md",
+    "../../../../etc/passwd",
+  ]) {
+    const failure = await readArtifactFile({
+      appUserId: "user-1",
+      filename,
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
+    })
+      .then(() => null)
+      .catch((error: unknown) => error);
+    expect((failure as { status?: number } | null)?.status).toBe(404);
+  }
 });

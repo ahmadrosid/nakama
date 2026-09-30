@@ -235,7 +235,8 @@ export function pluginActorFromContext(
   const messagingChannel =
     context.channel === "telegram" ||
     context.channel === "whatsapp" ||
-    context.channel === "discord";
+    context.channel === "discord" ||
+    context.channel === "slack";
   return {
     id: context.userId?.trim() ?? "",
     role: messagingChannel

@@ -28,6 +28,7 @@ import { ensureLocalClientAccess } from "@nakama/db";
 import type { Context } from "hono";
 import type { ZodType } from "zod";
 import type { AuthService } from "../services/auth-service";
+import { loadMfaPolicy } from "../services/mfa-config";
 import { sessionTurnRegistry } from "../services/session-turn-registry";
 import type { AppEnv } from "./types";
 
@@ -150,6 +151,84 @@ export function getRequestAuth(c: Context<AppEnv>): RequestAuthContext {
   }
 
   return auth;
+}
+
+export function getRequestAppUserScope(c: Context<AppEnv>): {
+  appUserId?: string;
+  auth: RequestAuthContext;
+} {
+  const auth = getRequestAuth(c);
+  const header = c.req.header("X-Nakama-App-User-Id");
+
+  if (auth.mode !== "api-key") {
+    if (header !== undefined) {
+      throw new NakamaApiError(
+        "X-Nakama-App-User-Id is only available to API-key requests.",
+        400
+      );
+    }
+    return { auth };
+  }
+
+  return { appUserId: header?.trim() || undefined, auth };
+}
+
+export function isPendingMfaAllowedRequest(
+  method: string,
+  pathname: string
+): boolean {
+  return (
+    (method === "GET" &&
+      (pathname === "/v1/auth/me" ||
+        pathname === "/v1/auth/orgs" ||
+        pathname === "/v1/auth/sessions" ||
+        pathname === "/v1/settings/mfa")) ||
+    (method === "POST" &&
+      (pathname === "/v1/auth/logout" ||
+        pathname === "/v1/auth/mfa/totp/start" ||
+        pathname === "/v1/auth/mfa/totp/verify" ||
+        pathname === "/v1/auth/mfa/passkey/start" ||
+        pathname === "/v1/auth/mfa/passkey/verify"))
+  );
+}
+
+export async function isPendingBrowserMfa(
+  auth: RequestAuthContext,
+  databaseAdapter: DatabaseAdapter,
+  orgId?: string | null
+): Promise<boolean> {
+  if (auth.mode !== "browser-session") {
+    return false;
+  }
+
+  const activeOrgId =
+    orgId?.trim() ||
+    auth.activeOrgId?.trim() ||
+    auth.session?.activeOrgId?.trim();
+  if (!activeOrgId) {
+    return false;
+  }
+
+  const user = await databaseAdapter.getUserById(auth.user.id);
+  if (
+    !user ||
+    (user.mfaEnabled && user.mfaTotpSecretEnc) ||
+    (await databaseAdapter.listPasskeys(user.id)).length > 0
+  ) {
+    return false;
+  }
+
+  const role =
+    auth.orgRole ??
+    (await databaseAdapter.getOrgMember(activeOrgId, auth.user.id))?.role;
+  if (!role) {
+    return false;
+  }
+
+  const policy = await loadMfaPolicy();
+  return (
+    policy.enabled && policy.required && policy.enforcedRoles.includes(role)
+  );
 }
 
 export async function authenticateRequest(

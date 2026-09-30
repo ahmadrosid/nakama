@@ -43,6 +43,7 @@ export const SKILL_MANAGE_CHANNELS = {
   automation: false,
   cli: true,
   discord: false,
+  slack: false,
   subagent: false,
   task: false,
   telegram: false,
@@ -100,7 +101,7 @@ function readString(input: unknown, key: string): string | null {
 function readAction(input: unknown): SkillManageAction {
   if (typeof input !== "object" || input === null || !("action" in input)) {
     throw new Error(
-      "action is required (create | patch | edit | delete | write_file | remove_file)."
+      "action is required (create | patch | edit | delete | write_file | remove_file | approve_code)."
     );
   }
   const value = (input as Record<string, unknown>).action;
@@ -110,12 +111,13 @@ function readAction(input: unknown): SkillManageAction {
     value === "edit" ||
     value === "delete" ||
     value === "write_file" ||
-    value === "remove_file"
+    value === "remove_file" ||
+    value === "approve_code"
   ) {
     return value;
   }
   throw new Error(
-    "action must be create, patch, edit, delete, write_file, or remove_file."
+    "action must be create, patch, edit, delete, write_file, remove_file, or approve_code."
   );
 }
 
@@ -186,7 +188,7 @@ export function createSkillManageTools(
         properties: {
           action: {
             description:
-              "install = fetch a public GitHub skill directory including supporting files and create/adopt it; create = new/adopt skill; patch = targeted edit; edit = full SKILL.md replace; delete = remove profile-owned skill; write_file/remove_file = supporting files under the skill dir.",
+              "install = fetch a public GitHub skill directory including supporting files and create/adopt it; create = new/adopt skill; patch = targeted edit; edit = full SKILL.md replace; delete = remove profile-owned skill; write_file/remove_file = supporting files; approve_code = request admin review of an existing code file.",
             enum: [
               "install",
               "create",
@@ -195,6 +197,7 @@ export function createSkillManageTools(
               "delete",
               "write_file",
               "remove_file",
+              "approve_code",
             ],
             type: "string",
           },
@@ -205,7 +208,7 @@ export function createSkillManageTools(
           },
           name: {
             description:
-              "Skill name (kebab-case). Required for patch, edit, delete, write_file, and remove_file.",
+              "Skill name (kebab-case). Required for patch, edit, delete, write_file, remove_file, and approve_code.",
             type: "string",
           },
           new_string: {
@@ -220,7 +223,7 @@ export function createSkillManageTools(
           },
           path: {
             description:
-              "Relative path under the skill directory. Required for write_file and remove_file (not SKILL.md or tool.ts/tool.js).",
+              "Relative path under the skill directory. Required for write_file, remove_file, and approve_code. approve_code may name tool.py/tool.ts/tool.js.",
             type: "string",
           },
           url: {
@@ -426,6 +429,31 @@ export function createSkillManageTools(
             });
           }
 
+          if (action === "approve_code") {
+            const name = readString(input, "name");
+            const relativePath = readString(input, "path");
+            if (!(name && relativePath)) {
+              throw new Error("name and path are required for approve_code.");
+            }
+            const staged = await skillProposalService.stageProposal({
+              action: "approve_code",
+              orgId,
+              profileId,
+              proposedByUserId: context.userId ?? null,
+              relativePath,
+              sessionId: context.sessionId ?? null,
+              skillName: name,
+            });
+            return stagedSkillManageResult({
+              action: "approve_code",
+              message: staged.message,
+              name,
+              outcome: staged.outcome,
+              path: staged.relativePath ?? relativePath,
+              proposalId: staged.proposalId,
+            });
+          }
+
           const name = readString(input, "name");
           if (!name) {
             throw new Error("name is required for delete.");
@@ -447,6 +475,12 @@ export function createSkillManageTools(
             outcome: staged.outcome,
             proposalId: staged.proposalId,
           });
+        }
+
+        if (action === "approve_code") {
+          throw new Error(
+            "Enable skill write approval before requesting code review."
+          );
         }
 
         if (action === "create") {

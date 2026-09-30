@@ -28,6 +28,14 @@ describe("mcpServerDeleteBlockReason", () => {
     ).toBeNull();
   });
 
+  test("allows deleting the retired currency server", () => {
+    expect(
+      mcpServerDeleteBlockReason(
+        summary({ id: "mcp_currency_conversion", name: "currency-conversion" })
+      )
+    ).toBeNull();
+  });
+
   test("blocks preinstalled servers", () => {
     expect(
       mcpServerDeleteBlockReason(

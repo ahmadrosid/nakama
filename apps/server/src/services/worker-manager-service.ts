@@ -42,6 +42,7 @@ import type { DatabaseAdapter } from "@nakama/db";
 const WORKER_SCRIPTS: Record<string, string> = {
   automation: "apps/platform/automation/src/index.ts",
   discord: "apps/platform/discord/src/index.ts",
+  slack: "apps/platform/slack/src/index.ts",
   telegram: "apps/platform/telegram/src/index.ts",
   whatsapp: "apps/platform/whatsapp/src/index.ts",
 };
@@ -49,6 +50,7 @@ const WORKER_SCRIPTS: Record<string, string> = {
 const WORKER_DIST_SCRIPTS: Partial<Record<string, string>> = {
   automation: "apps/platform/automation/dist/index.js",
   discord: "apps/platform/discord/dist/index.js",
+  slack: "apps/platform/slack/dist/index.js",
   telegram: "apps/platform/telegram/dist/index.js",
   whatsapp: "apps/platform/whatsapp/dist/index.js",
 };
@@ -422,7 +424,12 @@ export class WorkerManagerService {
   async disableProfileChannels(owner: ChannelOwner, remove = false) {
     this.disabledOwners.add(JSON.stringify(owner));
     return this.queueChannelChange(async () => {
-      for (const platform of ["telegram", "discord", "whatsapp"] as const) {
+      for (const platform of [
+        "telegram",
+        "discord",
+        "whatsapp",
+        "slack",
+      ] as const) {
         if (
           !existsSync(join(getChannelConfigDir(platform, owner), "config.ini"))
         ) {
@@ -926,7 +933,12 @@ export class WorkerManagerService {
   }
 
   async recoverDesiredWorkers(): Promise<void> {
-    for (const platform of ["telegram", "discord", "whatsapp"] as const) {
+    for (const platform of [
+      "telegram",
+      "discord",
+      "whatsapp",
+      "slack",
+    ] as const) {
       for (const owner of await listChannelOwners(platform)) {
         if (!(await readWorkerDesiredState(owner))[platform]) {
           continue;
@@ -934,6 +946,12 @@ export class WorkerManagerService {
         if (
           (await this.getWorkerStatus(platform, owner))?.status === "online"
         ) {
+          continue;
+        }
+        const heartbeat = await createWorkerHeartbeatStore({
+          getDir: () => getChannelConfigDir(platform, owner),
+        }).read();
+        if (heartbeat && isProcessAlive(heartbeat.pid)) {
           continue;
         }
         try {

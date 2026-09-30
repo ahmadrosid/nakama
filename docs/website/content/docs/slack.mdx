@@ -1,0 +1,222 @@
+---
+title: "Slack"
+description: "Chat with Nakama from Slack DMs and channel threads, with no public URL needed."
+---
+
+Nakama can run as a Slack app so your team can talk to the same agent from a DM or from any channel the app is in.
+
+The mental model is simple:
+
+- Slack is a **channel** for Nakama, like Telegram or Discord
+- A Slack connection belongs to **one agent**: each agent connects its own Slack app, and that app always answers as that agent
+- The bridge talks to the same Nakama server as the web app
+- Pairing links a real Slack member to your Nakama access
+
+## Why Slack
+
+- **Works on a local or private server.** The bridge uses Slack Socket Mode: Nakama opens the connection to Slack, so you do not need a public URL, a webhook, or a tunnel.
+- **No app review.** An app you install in your own workspace is ready to use right away. Slack only reviews apps listed in the Slack Marketplace.
+- **Stays out of the way in channels.** The app only answers when someone mentions it, and then keeps the conversation in a thread.
+
+## What Slack supports
+
+With Slack enabled, linked members can:
+
+- chat with a Nakama profile in a DM with the app
+- `@mention` the app in a channel, which opens a thread the app keeps following
+- keep every conversation attached to the connection's agent
+- stop, clear, or restart conversations
+
+While the agent is working, Nakama adds an 👀 reaction to your message and removes it when the reply is posted.
+
+Slack replies are text only for now. Images, files, and saved artifacts are not sent to or from Slack yet.
+
+## Step 1: Create the Slack app
+
+Nakama gives you an app manifest so you do not have to set scopes and events by hand.
+
+1. Open **Agents → your agent → Connections → Slack** for the agent that should answer in Slack (you need to be an org admin)
+2. Click **Copy manifest**
+3. Open [Slack apps](https://api.slack.com/apps?new_app=1), choose **From a manifest**, pick your workspace, and paste the manifest
+4. Review the summary and click **Create**
+
+The manifest turns on Socket Mode, the app's **Messages** tab, and these bot scopes:
+
+| Scope | Why Nakama needs it |
+| --- | --- |
+| `chat:write` | Post replies |
+| `im:history` | Read DMs sent to the app |
+| `channels:history` | Read public channel messages that mention the app, and its threads |
+| `groups:history` | The same for private channels the app is invited to |
+| `reactions:write` | Show the 👀 working reaction |
+| `users:read` | Tell full members apart from guests for **Everyone in the workspace** |
+
+## Step 2: Copy the two tokens
+
+Slack Socket Mode needs two different tokens:
+
+| Token | Where in the Slack app settings | Starts with |
+| --- | --- | --- |
+| **Bot token** | **Install App → Install to Workspace**, then copy **Bot User OAuth Token** | `xoxb-` |
+| **App token** | **Basic Information → App-Level Tokens → Generate Token and Scopes**, add the `connections:write` scope | `xapp-` |
+
+If your workspace requires admin approval for new apps, the install step sends a request to a workspace admin first.
+
+## Step 3: Save in Nakama
+
+On **Agents → your agent → Connections → Slack**:
+
+1. Paste the bot token and the app token
+2. Click **Save**. Nakama checks both tokens with Slack before saving, including that both come from the same Slack app, and shows Slack's error if one is wrong.
+
+After the first save, Nakama generates a pairing code on the same page.
+
+These settings belong to this agent. Another agent sees Slack as not connected until it connects a Slack app of its own. One Slack app cannot serve two connections, because Slack would split its messages between them, so Nakama refuses to save an app another agent already uses.
+
+## Step 4: Start the Slack bridge
+
+Use the worker controls on **Agents → your agent → Connections → Slack** to start the worker. The agent's Connections list shows Slack as **Connected** once the bridge is running and at least one member can chat.
+
+For local development only, you can instead run `bun run dev:slack` from the repo root.
+
+If you change a token later, restart the bridge worker so it picks up the new one.
+
+## Step 5: Pair your Slack account
+
+Pairing links your Slack member to Nakama so people who are not linked cannot use the app.
+
+1. **Open Nakama in Slack.** In the Slack sidebar, open **Nakama** under **Apps**. If it is not listed, search for Nakama at the top of Slack and open the app.
+2. **Send the code in the DM.** Go to its **Messages** tab and send the pairing code from the agent's Slack settings as a normal message. Only this DM works: a code posted in a channel, or sent with an `@mention`, is not accepted.
+3. **Wait for the reply.** Nakama answers "Linked successfully" and the member shows up under **Allowed users**.
+
+A code works once. Click **New code** for the next person; the card updates by itself when someone links.
+
+## Optional: Let everyone in the workspace chat
+
+Pairing members one by one does not scale to a whole team. Turn on **Everyone in the workspace** on **Agents → your agent → Connections → Slack** and click **Save**: every full member of your Slack workspace can then use the app with no pairing.
+
+What members do: nothing to set up. They open **Nakama** under **Apps** and send a message, or `@mention` Nakama in a channel the app was added to.
+
+These people are still left out and need pairing or **Allowed users**:
+
+- guests (single-channel and multi-channel)
+- people from other organizations in shared (Slack Connect) channels
+- other bots and deactivated accounts
+
+If Slack cannot confirm who someone is, Nakama treats them as not allowed.
+
+This option needs the `users:read` scope. The manifest from Nakama includes it. If your app was created before, add `users:read` under **OAuth & Permissions → Bot Token Scopes** and reinstall the app first; Nakama refuses to save the toggle until the scope is there.
+
+Everyone who can chat reaches this agent and its tools like a paired member does, so check what the agent can do before opening it to the whole workspace.
+
+## Optional: Allow members directly
+
+Instead of pairing, you can allow Slack members up front:
+
+1. In Slack, open the member's profile, click **⋯**, and choose **Copy member ID**
+2. On **Agents → your agent → Connections → Slack**, paste the ID into **Allowed users** and press **Enter**. It turns into a badge; paste several IDs at once and each becomes its own badge. Click **×** on a badge to remove it.
+3. Click **Save**
+
+Member IDs start with `U` or `W`, for example `U01ABCDEF`. Display names do not work here.
+
+**Allowed users** is the full access list, including members who paired. To revoke someone, remove their ID and click **Save**.
+
+## DM behavior
+
+Once a member is paired or allowed:
+
+- every message in the DM goes to the Nakama agent
+- the DM keeps its own Nakama conversation until you send `!new`
+
+If a member who is not linked messages the app, Nakama asks for the pairing code instead of passing the message to the agent.
+
+## Channel behavior
+
+Invite the app to a channel first (for example, type `/invite @Nakama` in that channel). Then:
+
+- `@mention` the app to start a conversation. Nakama replies in a thread under your message.
+- Keep chatting in that thread without mentioning the app again. Each thread is its own conversation.
+- Messages in the channel that do not mention the app are ignored.
+- Only linked members can start or continue a conversation. Messages from other members are ignored.
+
+Replies in channels are visible to everyone in the channel, and Nakama tells the agent so.
+
+## Commands
+
+Slack treats any message that starts with `/` as a Slack command, so Nakama commands start with `!`. They work in DMs and in threads.
+
+| Command | What it does |
+| --- | --- |
+| `!help` | Show command help |
+| `!new` | Start a new conversation |
+| `!clear` | Clear this conversation's history |
+| `!stop` | Stop the reply that is in progress |
+| `!status` | Show server, profile, and model status |
+
+The connection always answers as its agent, in that agent's organization; `!profile` and `!org` only say so. To reach another agent from Slack, that agent connects its own Slack app.
+
+## Reply formatting
+
+Agents write normal Markdown. Nakama sends it as a Slack Markdown block, so bold, italics, links, lists, and code blocks show up as intended. Long replies are split into several messages.
+
+## Configuration notes
+
+Nakama stores each agent's Slack settings under its local config directory (default `~/.nakama/orgs/<org-id>/channels/<agent-id>/slack/`):
+
+- bot token and app token
+- pairing code
+- paired and allowed member IDs, and the **Everyone in the workspace** switch
+
+Override the config root with `NAKAMA_CONFIG_DIR` when needed.
+
+## Troubleshooting
+
+### Save says the channel account is already in use by another agent
+
+Each agent needs its own Slack app. Create a new app from the manifest for this agent and save its tokens here.
+
+### Save says the tokens come from different Slack apps
+
+The bot token and the app token were copied from two different apps. Copy both from the same app's settings page.
+
+### Save fails with `invalid_auth`
+
+The token was copied wrong or has been revoked. Copy it again from the Slack app settings (Step 2). The bot token must start with `xoxb-` and the app token with `xapp-`.
+
+### Save fails with `not_allowed_token_type` on the app token
+
+The app token is missing the `connections:write` scope, or Socket Mode is off. Generate a new app-level token with that scope and check **Socket Mode** in the app settings.
+
+### The app does not answer at all
+
+Check these first:
+
+1. The worker is running on **Agents → your agent → Connections → Slack**
+2. The Nakama server is running
+3. The Slack member is paired or listed under **Allowed users**
+4. Only one Slack bridge worker runs for this app
+
+### Saving **Everyone in the workspace** asks for `users:read`
+
+The Slack app does not have the `users:read` scope yet. Open the app settings, add it under **OAuth & Permissions → Bot Token Scopes**, click **Reinstall to Workspace**, then save again in Nakama.
+
+### I sent the pairing code in a channel and nothing linked
+
+Pairing codes only work in a DM with the app, so a code posted in a channel is never used up by someone else. Open the Nakama app under **Apps** in the Slack sidebar, go to its **Messages** tab, and send the code there.
+
+### I cannot message the app in Slack
+
+The app's **Messages** tab is turned off. In the Slack app settings, open **App Home** and turn on **Messages Tab** and **Allow users to send Slash commands and messages from the messages tab**. The manifest from Nakama sets both.
+
+### DMs work but channels do not
+
+- The app is not in the channel yet. Invite it with `/invite @Nakama`.
+- The message did not `@mention` the app, and it was not in a thread the app already answered.
+- The member has not paired or been allowed yet.
+
+## Next steps
+
+- [Quickstart](/quickstart)
+- [Profiles](/profiles)
+- [Discord](/discord)
+- [Telegram](/telegram)

@@ -6,6 +6,39 @@ import { join } from "node:path";
 import { getUserConfigDir, saveUserConfig } from "@nakama/core";
 import { NakamaAuthExpiredError, NakamaClient } from "./index";
 
+test.each(["http://localhost:4310", "https://nakama.example.com"])(
+  "CLI images are uploaded in the request body to %s",
+  async (baseUrl) => {
+    const requests: Request[] = [];
+    const client = new NakamaClient({
+      authToken: "test-token",
+      baseUrl,
+      fetch: async (input, init) => {
+        requests.push(new Request(input, init));
+        return new Response('data: {"type":"done","reply":"ok"}\n\n', {
+          headers: { "Content-Type": "text/event-stream" },
+        });
+      },
+      orgId: "org-a",
+    });
+    const images = [{ data: "aW1hZ2U=", mediaType: "image/png" }];
+    const session = client.createChatSession("session-1", "cli");
+    await session.sendStream({ images, message: "Describe this" }, () => {});
+    expect(requests).toHaveLength(1);
+    const request = requests[0]!;
+    expect(request.url).toBe(
+      `${baseUrl}/v1/sessions/session-1/messages?stream=true`
+    );
+    expect(request.headers.get("Authorization")).toBe("Bearer test-token");
+    expect(request.headers.get("X-Org-Id")).toBe("org-a");
+    expect(await request.json()).toMatchObject({
+      images,
+      message: "Describe this",
+      stream: true,
+    });
+  }
+);
+
 test("scoped clients keep session requests in their original organization", async () => {
   const requests: Request[] = [];
   const client = new NakamaClient({
@@ -359,6 +392,29 @@ test("readProfileArtifactContent fetches artifact bytes with inline query", asyn
   expect(new TextDecoder().decode(result.data)).toBe("# Report");
 });
 
+test("hasProfileArtifact reads a 404 as deleted and rethrows other failures", async () => {
+  const methods: Array<string | undefined> = [];
+  let status = 200;
+  const client = new NakamaClient({
+    authToken: "local-auth-token",
+    baseUrl: "http://localhost:4310",
+    fetch: async (_input, init) => {
+      methods.push(init?.method);
+      return new Response(null, { status });
+    },
+    orgId: "org_test",
+  });
+
+  expect(await client.hasProfileArtifact("profile_1", "report.md")).toBe(true);
+  status = 404;
+  expect(await client.hasProfileArtifact("profile_1", "report.md")).toBe(false);
+  status = 500;
+  await expect(
+    client.hasProfileArtifact("profile_1", "report.md")
+  ).rejects.toMatchObject({ status: 500 });
+  expect(methods).toEqual(["HEAD", "HEAD", "HEAD"]);
+});
+
 test("data import helpers upload base64 archive data", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
@@ -625,4 +681,31 @@ test("publishProfileArtifactShare omits clientOrigin when unset", async () => {
   expect(JSON.parse(fetchCalls[0]!.init?.body as string)).toEqual({
     path: "report.md",
   });
+});
+
+test("listSessions asks for several channels and a page in one request", async () => {
+  const urls: string[] = [];
+  const client = new NakamaClient({
+    baseUrl: "http://localhost:4310",
+    fetch: (async (input, init) => {
+      urls.push(new Request(input, init).url);
+      return Response.json({ sessions: [] });
+    }) as typeof fetch,
+  });
+  await client.listSessions("agent-a");
+  await client.listSessions("agent-a", ["web", "telegram"], {
+    cursor: null,
+    limit: 30,
+  });
+  await client.listSessions("agent-a", ["web"], { cursor: "next", limit: 30 });
+  await client.listSessions("agent-a", ["web"], {
+    limit: 30,
+    query: "budget plan",
+  });
+  expect(urls.map((url) => new URL(url).search)).toEqual([
+    "?channel=web&profileId=agent-a",
+    "?channels=web%2Ctelegram&profileId=agent-a&limit=30",
+    "?channels=web&profileId=agent-a&limit=30&cursor=next",
+    "?channels=web&profileId=agent-a&limit=30&q=budget+plan",
+  ]);
 });

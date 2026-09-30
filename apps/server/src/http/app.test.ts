@@ -455,6 +455,23 @@ describe("createHonoApp", () => {
     expect(csp).not.toContain("frame-ancestors");
   });
 
+  test("serves the artifact frame with its own CSP so artifact scripts run", async () => {
+    // With a web dist the SPA fallback must not swallow the frame path.
+    const app = createHonoApp({
+      ...createServerOptions(),
+      webDistDir: resolve(import.meta.dir, "../../../web"),
+    });
+    const response = await app.fetch(
+      new Request("http://localhost:4310/artifact-frame")
+    );
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("nakama-artifact-frame-ready");
+    const csp = response.headers.get("Content-Security-Policy") ?? "";
+    expect(csp).toContain("'unsafe-inline'");
+    expect(csp).toContain("frame-ancestors 'self'");
+    expect(response.headers.get("X-Frame-Options")).toBeNull();
+  });
+
   test.each(["/docs", "/docs/"])(
     "allows the docs scripts on %s",
     async (path) => {
@@ -928,6 +945,48 @@ describe("createHonoApp", () => {
 
     expect(response.status).toBe(415);
   });
+  test("accept-invite rejects a body that is not application/json", async () => {
+    const options = createServerOptions();
+    options.orgService = new OrgService(
+      options.databaseAdapter,
+      options.authService,
+      { send: async () => ({ error: "Email unavailable.", ok: false }) }
+    );
+    const app = createHonoApp(options);
+    const session = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
+    );
+    const admin =
+      await options.databaseAdapter.getUserByEmail("admin@example.com");
+    const invite = await options.orgService.createInvite({
+      email: "invitee@example.com",
+      invitedByUserId: admin!.id,
+      orgId: session.orgId!,
+      role: "member",
+    });
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/accept-invite", {
+        body: JSON.stringify({ password: "secret123", token: invite.token }),
+        headers: { "Content-Type": "text/plain;charset=UTF-8" },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(415);
+    expect(extractSetCookies(response)).toEqual([]);
+
+    const accepted = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/accept-invite", {
+        body: JSON.stringify({ password: "secret123", token: invite.token }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+    expect(accepted.status).toBe(200);
+    expect(extractSetCookies(accepted).length).toBeGreaterThan(0);
+  });
 
   test("logout clears both Secure and non-Secure session cookies", async () => {
     const options = createServerOptions();
@@ -1213,7 +1272,7 @@ describe("createHonoApp", () => {
     });
   });
 
-  test("auth/me reports what the credential may do, not what its owner may do", async () => {
+  test("API-key auth responses expose only the key's organization", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
     const adminSession = await setupFreshInstallSession(
@@ -1226,6 +1285,11 @@ describe("createHonoApp", () => {
       throw new Error("Expected setup admin");
     }
     expect(admin.isPlatformAdmin).toBe(true);
+    const secondOrg = await options.orgService.createOrganization(
+      { name: "Other Org", slug: "other-org" },
+      admin.id
+    );
+    expect(secondOrg.organization.id).not.toBe(adminSession.orgId);
 
     const secret = `nk_live_${"c".repeat(64)}`;
     await options.databaseAdapter.createApiKey({
@@ -1251,8 +1315,10 @@ describe("createHonoApp", () => {
       })
     );
     const body = (await response.json()) as {
+      activeOrgId?: string;
       isPlatformAdmin?: boolean;
       mode?: string;
+      orgId?: string;
     };
 
     // The key was minted by a platform admin and is de-privileged anyway, which
@@ -1261,6 +1327,31 @@ describe("createHonoApp", () => {
     expect(response.status).toBe(200);
     expect(body.isPlatformAdmin).toBe(false);
     expect(body.mode).toBe("api-key");
+    expect(body.activeOrgId).toBe(adminSession.orgId);
+    expect(body.orgId).toBe(adminSession.orgId);
+
+    const orgsResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/orgs", {
+        headers: { Authorization: `Bearer ${secret}` },
+      })
+    );
+    const orgsBody = (await orgsResponse.json()) as {
+      orgs: Array<{ id: string }>;
+    };
+    expect(orgsResponse.status).toBe(200);
+    expect(orgsBody.orgs.map((org) => org.id)).toEqual([adminSession.orgId]);
+
+    const browserOrgsResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/orgs", {
+        headers: adminSession.headers(),
+      })
+    );
+    const browserOrgsBody = (await browserOrgsResponse.json()) as {
+      orgs: Array<{ id: string }>;
+    };
+    expect(browserOrgsBody.orgs.map((org) => org.id).sort()).toEqual(
+      [adminSession.orgId, secondOrg.organization.id].sort()
+    );
 
     // A browser session for the same admin still reports the admin it is.
     const sessionResponse = await app.fetch(
@@ -1380,6 +1471,81 @@ describe("createHonoApp", () => {
     });
 
     expect(listCalls).toEqual([]);
+  });
+
+  test("GET /v1/sessions reads channels, limit and cursor", async () => {
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const session = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
+    );
+    const listCalls: unknown[][] = [];
+    options.agent.listSessions = async (...args: unknown[]) => {
+      // Everything after orgId and profileId: channels, auth, appUserId, page,
+      // query.
+      listCalls.push(args.slice(2));
+      return { nextCursor: null, sessions: [] };
+    };
+    const list = (query: string) =>
+      app.fetch(
+        new Request(
+          `http://localhost:4310/v1/sessions?profileId=default&${query}`,
+          { headers: session.headers() }
+        )
+      );
+
+    expect(
+      (await list("channels=web,telegram&limit=30&cursor=abc")).status
+    ).toBe(200);
+    expect((await list("channel=web")).status).toBe(200);
+    for (const invalid of [
+      "channels=web,not-a-channel",
+      "channel=web&limit=0",
+      "channel=web&limit=101",
+      "channel=web&limit=ten",
+    ]) {
+      expect((await list(invalid)).status).toBe(400);
+    }
+
+    expect(listCalls).toEqual([
+      [
+        ["web", "telegram"],
+        expect.anything(),
+        undefined,
+        { cursor: "abc", limit: 30 },
+        undefined,
+      ],
+      ["web", expect.anything(), undefined, undefined, undefined],
+    ]);
+  });
+
+  test("GET /v1/sessions passes a trimmed q of up to 200 characters", async () => {
+    const options = createServerOptions();
+    const app = createHonoApp(options);
+    const session = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
+    );
+    const queries: unknown[] = [];
+    options.agent.listSessions = async (...args: unknown[]) => {
+      queries.push(args[6]);
+      return { nextCursor: null, sessions: [] };
+    };
+    const list = (q: string) =>
+      app.fetch(
+        new Request(
+          `http://localhost:4310/v1/sessions?profileId=default&channel=web&q=${encodeURIComponent(q)}`,
+          { headers: session.headers() }
+        )
+      );
+
+    expect((await list("  budget plan ")).status).toBe(200);
+    expect((await list("   ")).status).toBe(200);
+    expect((await list("x".repeat(200))).status).toBe(200);
+    expect((await list("x".repeat(201))).status).toBe(400);
+
+    expect(queries).toEqual(["budget plan", undefined, "x".repeat(200)]);
   });
 
   describe("org context middleware", () => {
@@ -1693,6 +1859,26 @@ describe("createHonoApp", () => {
         new Request("http://localhost:4310/v1/skills", { headers: orgHeaders })
       );
       expect(skillsResponse.status).toBe(403);
+    });
+    test("returns generic passkey options without authentication", async () => {
+      const app = createHonoApp(createServerOptions());
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/passkey/login/options", {
+          body: "{}",
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        })
+      );
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        challenge: string;
+        options: { allowCredentials?: unknown };
+        totpEnabled?: unknown;
+      };
+      expect(body.challenge).toBeString();
+      expect(body.options.allowCredentials).toBeUndefined();
+      expect(body.totpEnabled).toBeUndefined();
     });
   });
 });

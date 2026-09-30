@@ -1,7 +1,14 @@
-import { DocsBody, DocsPage, DocsTitle } from "fumadocs-ui/layouts/docs/page";
+import {
+  DocsBody,
+  DocsPage,
+  DocsTitle,
+  MarkdownCopyButton,
+  ViewOptionsPopover,
+} from "fumadocs-ui/layouts/docs/page";
 import defaultMdxComponents, { createRelativeLink } from "fumadocs-ui/mdx";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { withBasePath } from "@/lib/base-path";
 import {
   buildJsonLd,
   buildPageMetadata,
@@ -24,6 +31,7 @@ export default async function Page(props: PageProps) {
 
   const MDX = page.data.body;
   const relativePath = slugToRelativePath(page.slugs);
+  const markdownUrl = withBasePath(`/${relativePath}`);
   const jsonLd = buildJsonLd(
     relativePath,
     buildPageMetadata(relativePath, page.data.title).title ?? page.data.title,
@@ -38,6 +46,13 @@ export default async function Page(props: PageProps) {
       />
       <DocsPage full={page.data.full} toc={page.data.toc}>
         <DocsTitle>{page.data.title}</DocsTitle>
+        <div className="flex items-center gap-2 border-b pt-2 pb-6">
+          <MarkdownCopyButton markdownUrl={markdownUrl} />
+          <ViewOptionsPopover
+            githubUrl={`https://github.com/ahmadrosid/nakama/blob/main/docs/website/content/docs/${page.path}`}
+            markdownUrl={markdownUrl}
+          />
+        </div>
         <DocsBody>
           <MDX
             components={getMDXComponents({

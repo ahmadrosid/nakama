@@ -23,7 +23,11 @@ import {
   type DataExportManifest,
   type DataExportSkippedItem,
   type DataImportPreviewResponse,
+  getKnowledgeBaseDir,
+  getOrgKnowledgeBaseDir,
+  getProfileSoulDir,
   getUserConfigDir,
+  listArtifacts,
   loadConfig,
   NAKAMA_API_VERSION,
   NakamaApiError,
@@ -44,10 +48,13 @@ export const NAKAMA_EXPORT_MANIFEST = "nakama-export.json";
 export const NAKAMA_EXPORT_FORMAT_VERSION = 1;
 export const NAKAMA_USER_EXPORT_MANIFEST = "nakama-user-export.json";
 export const NAKAMA_USER_EXPORT_FORMAT_VERSION = 1;
+export const NAKAMA_ORG_EXPORT_MANIFEST = "nakama-org-export.json";
+export const NAKAMA_ORG_EXPORT_FORMAT_VERSION = 1;
 
 // Setup import is unauthenticated until the first admin exists, so an archive
 // has to be capped on the way in rather than once it is already in memory.
 export const MAX_IMPORT_ARCHIVE_BYTES = 100 * 1024 * 1024;
+export const MAX_IMPORT_ENTRIES = 10_000;
 export const MAX_IMPORT_ENTRY_BYTES = 100 * 1024 * 1024;
 export const MAX_IMPORT_UNCOMPRESSED_BYTES = 500 * 1024 * 1024;
 /** Base64 carries 3 bytes per 4 characters. */
@@ -328,6 +335,203 @@ export async function createNakamaUserDataExport(
   };
 }
 
+export async function createNakamaOrgDataExport(
+  databaseAdapter: DatabaseAdapter,
+  orgId: string,
+  options: { now?: Date } = {}
+): Promise<CreateUserDataExportResult> {
+  const organization = await databaseAdapter.getOrganizationById(orgId);
+  if (!organization) {
+    throw new NakamaApiError("Not found", 404);
+  }
+
+  const entries: Record<string, Uint8Array> = {};
+  const members = [];
+  for (const member of await databaseAdapter.listOrgMembers(orgId)) {
+    const user = await databaseAdapter.getUserById(member.userId);
+    members.push({
+      joinedAt: member.createdAt,
+      role: member.role,
+      user: user
+        ? {
+            createdAt: user.createdAt,
+            disabledAt: user.disabledAt ?? null,
+            email: user.email,
+            id: user.id,
+            name: user.name ?? null,
+            phone: user.phone ?? null,
+            updatedAt: user.updatedAt,
+          }
+        : { id: member.userId },
+      userContext: member.userContext ?? null,
+    });
+  }
+
+  const profiles = [];
+  for (const profile of await databaseAdapter.listProfilesForOrg(orgId)) {
+    const artifacts = await listArtifacts(orgId, profile.id);
+    const exportedArtifacts = [];
+    for (const artifact of artifacts.artifacts) {
+      const archivePath = toZipPath(
+        `profiles/${profile.id}/artifacts/${artifact.filename}`
+      );
+      validateArchivePath(archivePath);
+      entries[archivePath] = await readFile(artifact.path);
+      exportedArtifacts.push({
+        filename: artifact.filename,
+        mediaType: artifact.mimeType,
+        path: archivePath,
+        sizeBytes: artifact.sizeBytes,
+        updatedAt: artifact.updatedAt,
+      });
+    }
+
+    const soulDir = getProfileSoulDir(orgId, profile.id);
+    for (const filename of [
+      "SOUL.md",
+      "STYLE.md",
+      "INSTRUCTIONS.md",
+      "MEMORY.md",
+    ]) {
+      const sourcePath = join(soulDir, filename);
+      if (await pathExists(sourcePath)) {
+        const archivePath = `profiles/${profile.id}/workspace/${filename}`;
+        validateArchivePath(archivePath);
+        entries[archivePath] = await readFile(sourcePath);
+      }
+    }
+
+    await addDirectoryFiles(
+      entries,
+      getKnowledgeBaseDir(orgId, profile.id),
+      `profiles/${profile.id}/knowledge-base`
+    );
+    profiles.push({
+      ...profile,
+      artifacts: exportedArtifacts,
+    });
+  }
+
+  await addDirectoryFiles(
+    entries,
+    getOrgKnowledgeBaseDir(orgId),
+    "organization/knowledge-base"
+  );
+
+  const sessions = [];
+  const profileIds = new Set(profiles.map((profile) => profile.id));
+  const orgSessions = (await databaseAdapter.listSessions()).filter((session) =>
+    profileIds.has(session.profileId)
+  );
+  for (const session of orgSessions) {
+    const attachments = [];
+    for (const attachment of await databaseAdapter.listAttachmentsForSession(
+      session.id
+    )) {
+      const attachmentPath = `attachments/${attachment.id}`;
+      validateArchivePath(attachmentPath);
+      const bytes = await readAttachmentBytes(
+        orgId,
+        attachment.profileId,
+        attachment.id
+      );
+      if (bytes) {
+        entries[attachmentPath] = bytes;
+      }
+      attachments.push({
+        channel: attachment.channel,
+        createdAt: attachment.createdAt,
+        filename: attachment.filename,
+        id: attachment.id,
+        kind: attachment.kind,
+        mediaType: attachment.mediaType,
+        path: bytes ? attachmentPath : null,
+        sizeBytes: attachment.sizeBytes,
+      });
+    }
+
+    sessions.push({
+      ...session,
+      attachments,
+      messages: await databaseAdapter.listMessagesForSession(session.id),
+    });
+  }
+
+  const automations = [];
+  for (const automation of await databaseAdapter.listAutomationsForOrg(orgId)) {
+    automations.push({
+      ...automation,
+      runs: await databaseAdapter.listAutomationRuns(
+        automation.id,
+        Number.MAX_SAFE_INTEGER
+      ),
+    });
+  }
+
+  const workflows = [];
+  for (const workflow of await databaseAdapter.listWorkflowsForOrg(orgId)) {
+    const runs = [];
+    for (const run of await databaseAdapter.listWorkflowRuns(
+      workflow.id,
+      Number.MAX_SAFE_INTEGER
+    )) {
+      runs.push({
+        ...run,
+        steps: await databaseAdapter.listWorkflowRunSteps(run.id),
+      });
+    }
+    workflows.push({ ...workflow, runs });
+  }
+
+  const createdAt = (options.now ?? new Date()).toISOString();
+  entries[NAKAMA_ORG_EXPORT_MANIFEST] = Buffer.from(
+    JSON.stringify(
+      {
+        apiVersion: NAKAMA_API_VERSION,
+        automations,
+        createdAt,
+        kind: "nakama-org-export",
+        members,
+        organization,
+        profiles,
+        sessions,
+        version: NAKAMA_ORG_EXPORT_FORMAT_VERSION,
+        workflows,
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  return {
+    data: Buffer.from(zipSync(entries)),
+    filename: `nakama-org-export-${organization.slug}-${createdAt.replace(/[:.]/g, "-")}.zip`,
+  };
+}
+
+async function addDirectoryFiles(
+  entries: Record<string, Uint8Array>,
+  sourceDir: string,
+  archiveDir: string
+): Promise<void> {
+  if (!(await pathExists(sourceDir))) {
+    return;
+  }
+
+  for (const entry of await readdir(sourceDir, { withFileTypes: true })) {
+    const sourcePath = join(sourceDir, entry.name);
+    const archivePath = toZipPath(`${archiveDir}/${entry.name}`);
+
+    if (entry.isDirectory()) {
+      await addDirectoryFiles(entries, sourcePath, archivePath);
+    } else if (entry.isFile()) {
+      validateArchivePath(archivePath);
+      entries[archivePath] = await readFile(sourcePath);
+    }
+  }
+}
+
 export async function previewNakamaDataImport(
   archive: Buffer | Uint8Array | ArrayBuffer,
   options: PreviewDataImportOptions = {}
@@ -561,10 +765,19 @@ async function writeRestoredEntry(
 }
 
 function readZip(buffer: Buffer): ZipEntry[] {
+  let entryCount = 0;
   let uncompressedTotal = 0;
   // fflate sizes each output buffer from the entry's declared uncompressed
   // size, so refusing here is what stops a bomb from being inflated at all.
   const admitEntry = (name: string, size: number): boolean => {
+    entryCount += 1;
+    if (entryCount > MAX_IMPORT_ENTRIES) {
+      throw new NakamaApiError(
+        `Archive exceeds the ${MAX_IMPORT_ENTRIES} entry limit.`,
+        400
+      );
+    }
+
     if (size > MAX_IMPORT_ENTRY_BYTES) {
       throw new NakamaApiError(
         `Archive entry ${name} exceeds the ${megabytes(MAX_IMPORT_ENTRY_BYTES)} limit.`,

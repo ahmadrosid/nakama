@@ -36,6 +36,7 @@ import { Link, useParams } from "react-router-dom";
 import { DiscordSettingsCard } from "@/components/DiscordSettingsCard";
 import { ExportProfileButton } from "@/components/profiles/ExportProfileButton";
 import { ProfileSkillsSettingsSection } from "@/components/profiles/ProfileSkillsSettingsSection";
+import { SlackSettingsCard } from "@/components/SlackSettingsCard";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
 import { TelegramSettingsCard } from "@/components/TelegramSettingsCard";
 import { WhatsAppSettingsCard } from "@/components/WhatsAppSettingsCard";
@@ -128,7 +129,8 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
 export function ProfileConnections() {
   const profileId = useChannelProfileId();
   const { data: status, isPending, error } = useSystemStatusQuery();
-  // Brand SVGs: Simple Icons v16 (CC0), https://simpleicons.org.
+  // Brand SVGs: Simple Icons v16 (CC0), https://simpleicons.org. Slack is from
+  // v13.21.0, the last release that still ships it.
   const channels = [
     {
       id: "telegram",
@@ -144,6 +146,11 @@ export function ProfileConnections() {
       id: "discord",
       name: "Discord",
       worker: status?.discordWorker,
+    },
+    {
+      id: "slack",
+      name: "Slack",
+      worker: status?.slackWorker,
     },
   ].map((channel) => {
     const worker = channel.worker;
@@ -232,11 +239,15 @@ export function ProfileChannelSettingsPage() {
   const profile = profiles.find((item) => item.id === profileId);
   const settings = {
     discord: { Component: DiscordSettingsCard, name: "Discord" },
+    slack: { Component: SlackSettingsCard, name: "Slack" },
     telegram: { Component: TelegramSettingsCard, name: "Telegram" },
     whatsapp: { Component: WhatsAppSettingsCard, name: "WhatsApp" },
   };
   const selected =
-    channel === "telegram" || channel === "whatsapp" || channel === "discord"
+    channel === "telegram" ||
+    channel === "whatsapp" ||
+    channel === "discord" ||
+    channel === "slack"
       ? settings[channel]
       : undefined;
   if (isPending) {

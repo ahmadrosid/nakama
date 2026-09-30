@@ -13,12 +13,14 @@ import type {
   SendMessageResponse,
   SessionMessagesResponse,
   SessionStatusResponse,
+  SessionSummary,
   UpdateSessionRequest,
 } from "@nakama/core";
 import {
   AGENT_CHANNELS,
   fetchRemoteImage,
   formatServerError,
+  MAX_SESSION_SEARCH_LENGTH,
   NakamaApiError,
   reportError,
 } from "@nakama/core";
@@ -31,6 +33,7 @@ import {
 } from "../org-guards";
 import {
   errorResponse,
+  getRequestAppUserScope,
   getRequestAuth,
   json,
   parseChannel,
@@ -40,6 +43,8 @@ import {
   streamTurnSubscribe,
 } from "../shared";
 import type { HonoApp } from "../types";
+
+const MAX_SESSION_PAGE_SIZE = 100;
 
 export function registerSessionRoutes(
   app: HonoApp,
@@ -51,8 +56,7 @@ export function registerSessionRoutes(
   const requireSessionAccess = async (
     c: Parameters<typeof requireActiveOrgIdFromContext>[0]
   ) => {
-    const auth = getRequestAuth(c);
-    const appUserId = c.req.header("X-Nakama-App-User-Id")?.trim();
+    const { appUserId, auth } = getRequestAppUserScope(c);
     if (auth.mode === "api-key" && !appUserId) {
       throw new NakamaApiError(
         "X-Nakama-App-User-Id is required for API-key session access.",
@@ -104,7 +108,9 @@ export function registerSessionRoutes(
     .openapi("SessionSummary");
   const listSessionsResponseSchema = z
     .object({
+      nextCursor: z.string().nullable().optional(),
       sessions: z.array(sessionSummarySchema),
+      stale: z.boolean().optional(),
     })
     .openapi("ListSessionsResponse");
   const compactSessionRequestSchema = z
@@ -274,7 +280,25 @@ export function registerSessionRoutes(
   });
   const sessionListQuerySchema = z.object({
     channel: agentChannelSchema.optional(),
+    channels: z.string().optional().openapi({
+      description: "Comma-separated channels, listed as one merged list.",
+    }),
+    cursor: z.string().optional().openapi({
+      description: "`nextCursor` from the previous page.",
+    }),
+    limit: z
+      .string()
+      .optional()
+      .openapi({
+        description: `Page size, 1 to ${MAX_SESSION_PAGE_SIZE}. Without it every session is returned.`,
+      }),
     profileId: z.string().optional(),
+    q: z
+      .string()
+      .optional()
+      .openapi({
+        description: `Keeps the sessions whose title or message text contains it, up to ${MAX_SESSION_SEARCH_LENGTH} characters.`,
+      }),
   });
   const streamQuerySchema = z.object({
     stream: z.enum(["true", "false"]).optional(),
@@ -369,6 +393,26 @@ export function registerSessionRoutes(
         },
       },
       summary: "List chat sessions",
+      tags: ["Chat"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getSession",
+      path: "/v1/sessions/{sessionId}",
+      request: { params: sessionIdParamSchema },
+      responses: {
+        200: {
+          content: { "application/json": { schema: sessionSummarySchema } },
+          description: "Session",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Get one chat session",
       tags: ["Chat"],
     })
   );
@@ -628,8 +672,7 @@ export function registerSessionRoutes(
 
   app.get("/v1/sessions", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
-    const auth = getRequestAuth(c);
-    const appUserId = c.req.header("X-Nakama-App-User-Id")?.trim();
+    const { appUserId, auth } = getRequestAppUserScope(c);
     if (auth.mode === "api-key" && !appUserId) {
       return errorResponse(
         "X-Nakama-App-User-Id is required for API-key session access.",
@@ -637,15 +680,58 @@ export function registerSessionRoutes(
       );
     }
     const profileId = c.req.query("profileId")?.trim();
-    const channel = parseChannel(c.req.query("channel"));
+    const channelsParam = c.req.query("channels");
+    const channels =
+      channelsParam === undefined
+        ? parseChannel(c.req.query("channel"))
+        : channelsParam.split(",").map((channel) => parseChannel(channel));
+    const limitParam = c.req.query("limit");
+    const limit = limitParam === undefined ? undefined : Number(limitParam);
+    const query = c.req.query("q")?.trim() || undefined;
 
     if (!profileId) {
       return errorResponse("profileId is required.", 400);
     }
+    if (
+      limit !== undefined &&
+      !(Number.isInteger(limit) && limit >= 1 && limit <= MAX_SESSION_PAGE_SIZE)
+    ) {
+      return errorResponse(
+        `limit must be an integer from 1 to ${MAX_SESSION_PAGE_SIZE}.`,
+        400
+      );
+    }
+    if (query && query.length > MAX_SESSION_SEARCH_LENGTH) {
+      return errorResponse(
+        `q must be at most ${MAX_SESSION_SEARCH_LENGTH} characters.`,
+        400
+      );
+    }
 
     return json<ListSessionsResponse>(
-      await agent.listSessions(orgId, profileId, channel, auth, appUserId)
+      await agent.listSessions(
+        orgId,
+        profileId,
+        channels,
+        auth,
+        appUserId,
+        limit === undefined
+          ? undefined
+          : { cursor: c.req.query("cursor"), limit },
+        query
+      )
     );
+  });
+
+  app.get("/v1/sessions/:sessionId", async (c) => {
+    const { orgId, sessionId } = await requireSessionAccess(c);
+    const session = await agent.getSessionSummary(sessionId, orgId);
+
+    if (!session) {
+      return errorResponse("Session not found", 404);
+    }
+
+    return json<SessionSummary>(session);
   });
 
   app.delete("/v1/sessions/:sessionId", async (c) => {

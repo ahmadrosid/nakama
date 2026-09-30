@@ -31,6 +31,7 @@ const POST_TURN_OVERLAY_POLL_CHANNEL = {
   automation: false,
   cli: true,
   discord: false,
+  slack: false,
   subagent: false,
   task: false,
   telegram: false,

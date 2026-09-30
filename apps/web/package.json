@@ -17,6 +17,7 @@
     "@nakama/client": "workspace:*",
     "@nakama/core": "workspace:*",
     "@nakama/ui": "workspace:*",
+    "@simplewebauthn/browser": "14.0.0",
     "@streamdown/cjk": "^1.0.3",
     "@streamdown/code": "^1.1.1",
     "@streamdown/math": "^1.0.2",

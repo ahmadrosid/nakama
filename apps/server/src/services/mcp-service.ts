@@ -236,8 +236,9 @@ export class McpService {
     const configChanged =
       JSON.stringify(server.config) !== JSON.stringify(config) ||
       server.transport !== transport;
+    const enabledChanged = updated.enabled !== server.enabled;
 
-    if (configChanged) {
+    if (configChanged || enabledChanged) {
       await this.manager.disconnect(serverId);
       updated.status = "disconnected";
       updated.lastError = null;
@@ -392,40 +393,9 @@ export class McpService {
     serverId: string,
     options: McpConnectOptions = {}
   ): Promise<McpServerResponse> {
-    const server = await this.requireServer(serverId);
-
-    if (!this.manager.isConnected(serverId, server.transport)) {
-      return this.connectServer(serverId, options);
-    }
-
-    try {
-      const cachedTools = await this.manager.listTools(
-        serverId,
-        server.transport
-      );
-      const updated: StoredMcpServerRecord = {
-        ...server,
-        cachedTools,
-        lastError: null,
-        status: "connected",
-        updatedAt: new Date().toISOString(),
-      };
-
-      await this.db.upsertMcpServer(updated);
-
-      return { server: toMcpServerDetail(updated) };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const updated: StoredMcpServerRecord = {
-        ...server,
-        lastError: message,
-        status: "error",
-        updatedAt: new Date().toISOString(),
-      };
-
-      await this.db.upsertMcpServer(updated);
-      throw new Error(message);
-    }
+    await this.requireServer(serverId);
+    await this.manager.disconnect(serverId);
+    return this.connectServer(serverId, options);
   }
 
   async testServer(
@@ -478,7 +448,9 @@ export class McpService {
     const servers = await this.db.listMcpServers();
 
     for (const server of servers) {
-      if (!server.enabled) {
+      if (!server.enabled || server.transport === "stdio") {
+        // Stdio connections are profile-scoped; defer them until a profile
+        // calls a tool.
         continue;
       }
 

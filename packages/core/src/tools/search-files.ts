@@ -1,3 +1,4 @@
+import path from "node:path";
 import { z } from "zod";
 import type { ToolContext, ToolDefinition } from "../contract";
 import { getProfileSoulDir } from "../soul/resolve";
@@ -66,11 +67,19 @@ export async function runSearchFiles(
   const workspaceRoot = await resolveWorkspaceRoot(
     options.workspaceRoot ?? getProfileSoulDir(orgId, profileId)
   );
+  const sessionRoot = context.workspaceRoot?.trim() || null;
   const searchRoot = await resolveSearchRoot(
     workspaceRoot,
-    parsed.path ?? null
+    parsed.path ?? null,
+    sessionRoot && path.isAbsolute(sessionRoot)
+      ? path.join(workspaceRoot, "users")
+      : null,
+    sessionRoot
   );
   const args = buildRipgrepArgs({
+    // A profile-wide walk would list every app user's artifacts by name, so
+    // `users/` leaves the walk unless the search already starts inside it.
+    excludes: excludeAppUserDirs(searchRoot, workspaceRoot, sessionRoot),
     glob: parsed.glob ?? null,
     maxResults: parsed.maxResults,
     query: parsed.query,
@@ -95,15 +104,44 @@ export async function runSearchFiles(
 
 async function resolveSearchRoot(
   workspaceRoot: string,
-  subPath: string | null
+  subPath: string | null,
+  deniedUsersDir: string | null,
+  sessionRoot: string | null
 ): Promise<string> {
   if (!subPath) {
     return workspaceRoot;
   }
 
+  const allowedDirs = [workspaceRoot];
+
+  if (sessionRoot) {
+    allowedDirs.push(sessionRoot);
+  }
+
   const guarded = await guardFilePath(subPath, workspaceRoot, undefined, {
-    allowedDirs: [workspaceRoot],
+    allowedDirs,
     cwd: workspaceRoot,
+    deniedDirs: deniedUsersDir ? [deniedUsersDir] : [],
   });
   return guarded.resolved;
+}
+
+/**
+ * `users` when the walk starts above it, nothing when the walk already starts
+ * inside the session's own user directory: excluding it there would leave the
+ * session unable to search its own files.
+ */
+function excludeAppUserDirs(
+  searchRoot: string,
+  workspaceRoot: string,
+  sessionRoot: string | null
+): string[] {
+  if (!(sessionRoot && path.isAbsolute(sessionRoot))) {
+    return [];
+  }
+
+  const withinOwn =
+    searchRoot === sessionRoot || searchRoot.startsWith(sessionRoot + path.sep);
+
+  return withinOwn || searchRoot !== workspaceRoot ? [] : ["users"];
 }

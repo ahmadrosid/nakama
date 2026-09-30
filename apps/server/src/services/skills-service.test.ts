@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureBundledSkillFiles } from "@nakama/core";
@@ -46,6 +46,25 @@ describe("SkillsService", () => {
 
     expect(weather).toBeDefined();
     expect(weather?.hasTool).toBe(true);
+  });
+
+  test("includes script issues in skill details", async () => {
+    const weatherDir = join(configDir, "agent", "skills", "weather");
+    await writeFile(
+      join(weatherDir, "SKILL.md"),
+      weatherSkillMarkdown.replace(
+        "---\n\nCall",
+        "scripts: scripts/missing.py\n---\n\nCall"
+      )
+    );
+    const service = new SkillsService(createInMemoryDatabaseAdapter());
+    const weather = (await service.listSkills()).skills.find(
+      (skill) => skill.name === "weather"
+    )!;
+
+    expect((await service.getSkill(weather.id)).skill.scriptIssues).toEqual([
+      { path: "scripts/missing.py", reason: "declared but not in the skill" },
+    ]);
   });
 
   test.each([
@@ -486,6 +505,59 @@ Original body.
 
     const detail = await service.getSkill(notes!.id);
     expect(detail.skill.body).toBe("Updated body.");
+  });
+
+  test("patchSkill keeps the scripts the skill ships", async () => {
+    // A patch edits prose. Rewriting the frontmatter without `scripts:` left
+    // the skill installed and every one of its scripts unreachable, with
+    // nothing on screen saying so, which is how a dashboard edit silently
+    // disabled a working skill.
+    const db = createInMemoryDatabaseAdapter();
+    const service = new SkillsService(db);
+    const profileDir = join(
+      configDir,
+      "orgs",
+      ORG_ID,
+      "profiles",
+      PROFILE_ID,
+      "skills",
+      "beams"
+    );
+
+    await mkdir(join(profileDir, "scripts"), { recursive: true });
+    await writeFile(
+      join(profileDir, "scripts", "beam.py"),
+      'def run(input, context):\n    return {}\n\nif __name__ == "__main__":\n' +
+        "    import sys, json\n" +
+        "    sys.stdout.write(json.dumps(run(json.loads(sys.stdin.read() or '{}'), {})))\n"
+    );
+    await writeFile(
+      join(profileDir, "SKILL.md"),
+      `---
+name: beams
+description: Check a beam.
+scripts: scripts/beam.py
+---
+
+Original body.
+`
+    );
+
+    await service.syncProfileSkills(ORG_ID, PROFILE_ID);
+    const beams = (await service.listSkills()).skills.find(
+      (skill) => skill.name === "beams"
+    );
+    expect(beams?.hasTool).toBe(true);
+
+    await service.patchSkill(ORG_ID, beams!.id, { body: "Updated body." });
+
+    const onDisk = await readFile(join(profileDir, "SKILL.md"), "utf8");
+    expect(onDisk).toContain("scripts: scripts/beam.py");
+
+    const after = (await service.listSkills()).skills.find(
+      (skill) => skill.name === "beams"
+    );
+    expect(after?.hasTool).toBe(true);
   });
 
   test("editAssignedProfileSkill replaces SKILL.md and refuses rename", async () => {

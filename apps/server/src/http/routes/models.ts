@@ -25,6 +25,7 @@ import {
   type SendEmailTestRequest,
   type SendEmailTestResponse,
   type SendErrorTrackingTestResponse,
+  type SlackSettingsResponse,
   type StartTelegramPairingRequest,
   type TelegramPairingStartResponse,
   type TelegramPairingStatusResponse,
@@ -41,6 +42,7 @@ import {
   type UpdateImageGenerationRequest,
   type UpdateProviderRequest,
   type UpdateProviderResponse,
+  type UpdateSlackSettingsRequest,
   type UpdateTelegramSettingsRequest,
   type UpdateThinkingRequest,
   type UpdateTimezoneRequest,
@@ -52,6 +54,15 @@ import {
   type WebSearchSettingsResponse,
   type WhatsAppSettingsResponse,
 } from "@nakama/core";
+import {
+  checkSlackTokensMatch,
+  checkSlackWorkspaceAccess,
+  loadSlackConfigFile,
+  loadSlackSettingsPublic,
+  regenerateSlackHandshake,
+  saveSlackConfig,
+  validateSlackTokens,
+} from "@nakama/core/slack-config";
 import type { Context } from "hono";
 import {
   completeChatgptOAuthDeviceSession,
@@ -254,6 +265,58 @@ export function registerModelRoutes(
     .object({})
     .passthrough()
     .openapi("DiscordSettingsResponse");
+  const slackMemberIds = z
+    .array(z.string())
+    .openapi({ example: ["U01ABCDEF"] });
+  const slackSettingsSchema = z
+    .object({
+      allowedUserIds: slackMemberIds.describe(
+        "Member IDs allowed without pairing."
+      ),
+      allowWorkspace: z
+        .boolean()
+        .describe(
+          "Every full member of the workspace may chat. Guests and people from other orgs still need pairing."
+        ),
+      appTokenMasked: z
+        .string()
+        .nullable()
+        .describe("Last characters of the saved app token (xapp-)."),
+      botTokenMasked: z
+        .string()
+        .nullable()
+        .describe("Last characters of the saved bot token (xoxb-)."),
+      configured: z.boolean().describe("True once both tokens are saved."),
+      handshakeCode: z
+        .string()
+        .nullable()
+        .describe(
+          "Pairing code to send to the app in Slack, if one is active."
+        ),
+      pairedUserIds: slackMemberIds.describe("Members linked by pairing."),
+      profileId: z.string().describe("Agent this connection belongs to."),
+    })
+    .openapi("SlackSettingsResponse");
+  const updateSlackRequestSchema = z
+    .object({
+      allowedUserIds: z
+        .string()
+        .optional()
+        .describe("Comma separated member IDs. Replaces the saved list."),
+      allowWorkspace: z
+        .boolean()
+        .optional()
+        .describe("Turning it on requires the users:read bot scope."),
+      appToken: z
+        .string()
+        .optional()
+        .describe("App-level token with connections:write. Omit to keep."),
+      botToken: z
+        .string()
+        .optional()
+        .describe("Bot User OAuth Token. Omit to keep the saved one."),
+    })
+    .openapi("UpdateSlackSettingsRequest");
   const composioSettingsSchema = z
     .object({})
     .passthrough()
@@ -1087,6 +1150,60 @@ export function registerModelRoutes(
       },
       summary: "Regenerate Discord handshake",
       tags: ["Models"],
+    })
+  );
+  const slackResponses = {
+    200: {
+      content: { "application/json": { schema: slackSettingsSchema } },
+      description: "Slack settings",
+    },
+    400: {
+      content: { "application/json": { schema: errorSchema } },
+      description: "Invalid token, member ID, or Slack error",
+    },
+  };
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      description:
+        "Saved Slack bridge settings. Tokens come back masked; the pairing code is included.",
+      method: "get",
+      operationId: "getSlackSettings",
+      path: "/v1/settings/slack",
+      responses: slackResponses,
+      summary: "Get Slack settings",
+      tags: ["Slack"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      description:
+        "Checks new tokens with Slack (auth.test, apps.connections.open) before saving. The first save issues a pairing code. Restart the Slack worker after changing a token.",
+      method: "put",
+      operationId: "setSlackSettings",
+      path: "/v1/settings/slack",
+      request: {
+        body: {
+          content: {
+            "application/json": { schema: updateSlackRequestSchema },
+          },
+          required: true,
+        },
+      },
+      responses: slackResponses,
+      summary: "Update Slack settings",
+      tags: ["Slack"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      description:
+        "Issues a new pairing code. Send it to the app's Messages tab in Slack to link a member.",
+      method: "post",
+      operationId: "regenerateSlackHandshake",
+      path: "/v1/settings/slack/handshake",
+      responses: slackResponses,
+      summary: "New Slack pairing code",
+      tags: ["Slack"],
     })
   );
   app.openAPIRegistry.registerPath(
@@ -2108,6 +2225,61 @@ export function registerModelRoutes(
       return json<DiscordSettingsResponse>(
         await agent.regenerateDiscordHandshake(await channelOwner(c))
       );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
+  });
+
+  // Slack settings belong to one agent connection, like Discord's.
+  app.get("/v1/settings/slack", async (c) =>
+    json<SlackSettingsResponse>(
+      await loadSlackSettingsPublic(await channelOwner(c))
+    )
+  );
+
+  app.put("/v1/settings/slack", async (c) => {
+    const owner = await channelOwner(c);
+    // Typed at the boundary: a string "false" must never read as a yes.
+    const parsed = updateSlackRequestSchema.safeParse(
+      await readJson<unknown>(c.req.raw)
+    );
+    if (!parsed.success) {
+      return errorResponse("Invalid Slack settings.", 400);
+    }
+    const body: UpdateSlackSettingsRequest = parsed.data;
+    const botToken = body.botToken?.trim() || undefined;
+    const appToken = body.appToken?.trim() || undefined;
+
+    try {
+      await validateSlackTokens({ appToken, botToken });
+      const saved = await loadSlackConfigFile(owner);
+      const pair = {
+        appToken: appToken ?? saved?.appToken,
+        botToken: botToken ?? saved?.botToken,
+      };
+      if ((appToken || botToken) && pair.appToken && pair.botToken) {
+        await checkSlackTokensMatch({
+          appToken: pair.appToken,
+          botToken: pair.botToken,
+        });
+      }
+      if (body.allowWorkspace === true && pair.botToken) {
+        await checkSlackWorkspaceAccess(pair.botToken);
+      }
+      return json<SlackSettingsResponse>(
+        await saveSlackConfig(owner, { ...body, appToken, botToken })
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(message, 400);
+    }
+  });
+
+  app.post("/v1/settings/slack/handshake", async (c) => {
+    const owner = await channelOwner(c);
+    try {
+      return json<SlackSettingsResponse>(await regenerateSlackHandshake(owner));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return errorResponse(message, 400);

@@ -20,7 +20,6 @@ import {
   McpPageState,
   McpServersSection,
 } from "@/components/soul-tools/mcp-tab/McpServersSection";
-import { McpServerToolsDialog } from "@/components/soul-tools/mcp-tab/McpServerToolsDialog";
 import { useMcpServersQuery } from "@/hooks/use-app-queries";
 import {
   useConnectMcpServerMutation,
@@ -57,7 +56,7 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
   const [testingServerId, setTestingServerId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [editServerId, setEditServerId] = useState<string | null>(null);
-  const [detailServerId, setDetailServerId] = useState<string | null>(null);
+  const [expandedServerId, setExpandedServerId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<McpServerSummary | null>(
     null
   );
@@ -66,8 +65,6 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
     : undefined;
   const editServer =
     servers.find((server) => server.id === editServerId) ?? null;
-  const detailServer =
-    servers.find((server) => server.id === detailServerId) ?? null;
 
   const loading = isLoading && servers.length === 0;
   const busy =
@@ -120,7 +117,7 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
 
     try {
       await deleteMutation.mutateAsync(deleteTarget.id);
-      setDetailServerId((current) =>
+      setExpandedServerId((current) =>
         current === deleteTarget.id ? null : current
       );
       setDeleteTarget(null);
@@ -139,7 +136,7 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
         return;
       }
 
-      setDetailServerId(serverId);
+      setExpandedServerId(serverId);
     } catch (err) {
       setActionError(formatError(err));
     }
@@ -150,7 +147,7 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
 
     try {
       await syncMutation.mutateAsync(serverId);
-      setDetailServerId(serverId);
+      setExpandedServerId(serverId);
     } catch (err) {
       setActionError(formatError(err));
     }
@@ -213,6 +210,7 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
       <McpServersSection
         busy={busy}
         embedded={embedded}
+        expandedServerId={expandedServerId}
         onAddServer={() => setCreateOpen(true)}
         onConnect={(serverId) => void handleConnect(serverId)}
         onDelete={requestDelete}
@@ -224,18 +222,9 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
             void handleTestConnection(server);
           }
         }}
-        onViewTools={setDetailServerId}
+        onToggleServer={setExpandedServerId}
         servers={servers}
-      />
-
-      <McpServerToolsDialog
-        onOpenChange={(open) => {
-          if (!open) {
-            setDetailServerId(null);
-          }
-        }}
-        open={detailServerId !== null}
-        server={detailServer}
+        syncingServerId={syncMutation.isPending ? syncMutation.variables : null}
       />
 
       <McpServerDialog
@@ -260,7 +249,7 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
               return;
             }
 
-            setDetailServerId(response.server.id);
+            setExpandedServerId(response.server.id);
           } catch (err) {
             const message = formatError(err);
             setActionError(message);

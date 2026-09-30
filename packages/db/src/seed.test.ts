@@ -364,7 +364,9 @@ describe("seed preinstalled MCP servers", () => {
     await ensurePreinstalledMcpServers(db);
     await ensurePreinstalledMcpServers(db);
 
-    expect((await db.listMcpServers()).length).toBe(3);
+    expect(
+      (await db.listMcpServers()).map((server) => server.id).sort()
+    ).toEqual(["mcp_exa", "mcp_firecrawl"]);
   });
 
   test("seeds firecrawl keyless HTTP MCP unassigned", async () => {

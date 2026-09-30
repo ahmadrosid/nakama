@@ -1,6 +1,32 @@
 import { expect, test } from "bun:test";
 import { styledLineText } from "./styled-text";
+import { buildComposerLines } from "./terminal-renderer";
 import { VirtualMessageList } from "./virtual-message-list";
+
+test("submitted messages retain composer spacing when wrapped and resized", () => {
+  const value = "abcdefghijklmno\n\nsecond long line 中文";
+  const list = new VirtualMessageList();
+  list.beginMessage("user");
+  list.appendLine(`> ${value.replaceAll("\n", "\n  ")}`);
+  list.sealMessage();
+
+  for (const width of [20, 10, 30]) {
+    const composer = buildComposerLines(
+      {
+        composer: {
+          cursorVisible: false,
+          prefix: "> ",
+          selectedIndex: 0,
+          suggestions: [],
+          value,
+        },
+        pendingMessages: [],
+      },
+      width
+    );
+    expect(list.messageLines(0, width)).toEqual(composer.map(styledLineText));
+  }
+});
 
 test("consecutive tools use one row each without blank gaps", () => {
   const list = new VirtualMessageList();

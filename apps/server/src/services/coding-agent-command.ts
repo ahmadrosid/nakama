@@ -37,12 +37,12 @@ export function buildHarnessNonInteractiveArgs(
   if (kind === "codex") {
     return [
       ...baseArgs,
+      "--ask-for-approval",
+      "never",
       "exec",
       "--skip-git-repo-check",
       "--sandbox",
       "workspace-write",
-      "--ask-for-approval",
-      "never",
       "--color",
       "never",
       prompt,
@@ -120,18 +120,18 @@ export async function buildCodingAgentCommandTemplate(
       ...shared,
       command: [
         baseCommand,
+        "--ask-for-approval",
+        "never",
         "exec",
         "--skip-git-repo-check",
         "--sandbox",
         "workspace-write",
-        "--ask-for-approval",
-        "never",
         "--color",
         "never",
         escapedTask,
       ].join(" "),
       notes: [
-        "Codex may require a git repository. If the workspace is not a repo, initialize one in a temp dir or use the sandbox flags from the backend skill.",
+        "Set bash cwd to the target repo when editing one. --skip-git-repo-check also permits scratch work outside a git repo.",
         "Prefer capturing the final message from stdout; Codex may also write a last-message file when using --output-last-message.",
       ],
     };

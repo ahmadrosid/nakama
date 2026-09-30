@@ -76,9 +76,14 @@ const install = Bun.spawn(
     "--ignore-scripts",
     // MakeAppx cannot package Bun's isolated dependency directory links.
     ...(process.platform === "win32" ? ["--linker", "hoisted"] : []),
-    ...["server", "automation", "telegram", "whatsapp", "discord"].flatMap(
-      (name) => ["--filter", `@nakama/${name}`]
-    ),
+    ...[
+      "server",
+      "automation",
+      "telegram",
+      "whatsapp",
+      "discord",
+      "slack",
+    ].flatMap((name) => ["--filter", `@nakama/${name}`]),
   ],
   { cwd: output, stderr: "inherit", stdout: "inherit" }
 );

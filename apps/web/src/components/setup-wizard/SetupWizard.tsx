@@ -95,7 +95,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
       : currentStep === 2
         ? "Every workspace lives inside an organization. Name yours to finish setup."
         : currentStep === 3
-          ? "Set up your AI provider to get started. You can add more later."
+          ? "Add an AI provider now, or skip it and add one from Settings later."
           : "Help the agent understand your preferences. Optional.";
 
   function renderStep(): ReactNode {
@@ -121,7 +121,12 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
           />
         );
       case 3:
-        return <SetupStepProvider onNext={() => handleStepAdvance()} />;
+        return (
+          <SetupStepProvider
+            onNext={() => handleStepAdvance()}
+            onSkip={handleSkip}
+          />
+        );
       case 4:
         return (
           <SetupStepUserContext

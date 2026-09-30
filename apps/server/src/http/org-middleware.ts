@@ -3,7 +3,12 @@ import { ORG_ROLES } from "@nakama/db";
 import type { MiddlewareHandler } from "hono";
 import type { ServerOptions } from "./context";
 import { isPublicRouteRequest } from "./public-routes";
-import { errorResponse, type RequestAuthContext } from "./shared";
+import {
+  errorResponse,
+  isPendingBrowserMfa,
+  isPendingMfaAllowedRequest,
+  type RequestAuthContext,
+} from "./shared";
 import type { AppEnv } from "./types";
 
 export const ORG_ID_HEADER = "x-org-id";
@@ -126,12 +131,23 @@ export function createOrgContextMiddleware(
       assertOrgRole(member.role);
     }
 
-    c.set("auth", {
+    const orgAuth = {
       ...auth,
       activeOrgId: orgId,
       orgRole: member?.role,
-    });
+    };
+    if (
+      (await isPendingBrowserMfa(orgAuth, databaseAdapter, orgId)) &&
+      !isPendingMfaAllowedRequest(c.req.method, c.req.path)
+    ) {
+      c.res = errorResponse(
+        "Complete MFA enrollment before accessing this resource.",
+        403
+      );
+      return;
+    }
 
+    c.set("auth", orgAuth);
     await next();
   };
 }

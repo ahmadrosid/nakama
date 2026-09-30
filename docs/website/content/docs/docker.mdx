@@ -121,10 +121,12 @@ Stock `docker run` / `./scripts/docker-build-run.sh` does **not** pass `/dev/kvm
 
 In Docker, host Bash runs inside the Nakama container with the server process's OS permissions. It can access mounted data outside the active profile workspace, including other profiles' files when permissions allow. The shared container does not isolate profiles from each other. Assign host Bash only to trusted profiles.
 
-If you set `NAKAMA_BASH_BACKEND=microsandbox` without a working MicroSandbox runtime / KVM device, **every** `bash` tool call fails closed — there is no silent host fallback. Coding-agent harness runs require `host` for now. See [Built-in tools — bash](/builtin-tools#bash).
+If you set `NAKAMA_BASH_BACKEND=microsandbox` without a working MicroSandbox runtime / KVM device, **every** `bash` tool call fails closed — there is no silent host fallback. Coding-agent harness runs require `host` for now. See [Choose a MicroSandbox image](/builtin-tools#choose-a-microsandbox-image) for custom image setup.
 
 ## Next steps
 
+- [Deployment hardening](/deployment-hardening) — keep port 4310 private and protect the data root
+- [Outbound connections](/outbound-connections) — plan egress for enabled providers, channels, and tools
 - [Quickstart](/quickstart) — first-run flow from zero
 - [Backup and restore](/backup-restore) — export and restore your data root
 - [Providers](/providers) — LLM API keys and models

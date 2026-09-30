@@ -19,6 +19,13 @@ const SPECIAL_PATH_PREFIXES = ["/dev/", "/proc/", "/sys/"];
 export interface PathGuardOptions {
   allowedDirs?: string[];
   cwd?: string;
+  /**
+   * Directories that stay refused even though they sit inside `allowedDirs`.
+   * The most specific rule wins, so listing `<profile>/users` here while also
+   * allowing `<profile>/users/<own hash>` refuses every other app user's
+   * directory and keeps the session's own.
+   */
+  deniedDirs?: string[];
   maxFileBytes?: number;
 }
 
@@ -30,6 +37,7 @@ export class PathGuardError extends Error {
       | "SPECIAL_FILE"
       | "NULL_BYTE"
       | "TOO_LARGE"
+      | "CROSS_TENANT"
   ) {
     super(message);
     this.name = "PathGuardError";
@@ -41,6 +49,9 @@ const WORKSPACE_TRAVERSAL_MESSAGE =
 
 const WORKSPACE_REQUIRED_MESSAGE =
   "workspaceRoot is required; file tools cannot fall back to process.cwd().";
+
+const CROSS_TENANT_MESSAGE =
+  "Path belongs to another app user of this profile. A session may only reach its own user directory.";
 
 export async function guardFilePath(
   rawPath: string,
@@ -96,8 +107,20 @@ export async function guardFilePath(
     realPath = resolveWithRealpath(absolute);
   }
 
-  if (!isWithinDirs(realPath, allowedDirs)) {
+  const allowedDepth = deepestMatch(realPath, allowedDirs);
+
+  if (allowedDepth < 0) {
     throw new PathGuardError(WORKSPACE_TRAVERSAL_MESSAGE, "TRAVERSAL");
+  }
+
+  // Most specific rule wins. A denied dir nested deeper than every allowed dir
+  // refuses the path; an allowed dir nested inside a denied one lets it back in.
+  const deniedDirs = await resolveAllowedDirs(
+    options.deniedDirs?.filter((dir) => dir.trim()) ?? []
+  );
+
+  if (deepestMatch(realPath, deniedDirs) > allowedDepth) {
+    throw new PathGuardError(CROSS_TENANT_MESSAGE, "CROSS_TENANT");
   }
 
   return { allowed: true, resolved: realPath };
@@ -168,15 +191,22 @@ function getUserHome(): string {
   return process.env.HOME ?? homedir();
 }
 
-function isWithinDirs(target: string, dirs: string[]): boolean {
+/** Length of the longest dir in `dirs` that contains `target`, or -1 for none. */
+function deepestMatch(target: string, dirs: string[]): number {
   const normalized = target.endsWith(path.sep) ? target : target + path.sep;
+  let deepest = -1;
+
   for (const dir of dirs) {
     const dirEnd = dir.endsWith(path.sep) ? dir : dir + path.sep;
-    if (normalized === dirEnd || normalized.startsWith(dirEnd)) {
-      return true;
+    if (
+      (normalized === dirEnd || normalized.startsWith(dirEnd)) &&
+      dirEnd.length > deepest
+    ) {
+      deepest = dirEnd.length;
     }
   }
-  return false;
+
+  return deepest;
 }
 
 function resolveSafeCwd(
@@ -189,7 +219,7 @@ function resolveSafeCwd(
   }
   const expanded = expandHome(rawCwd.trim());
   const absolute = resolveWithRealpath(path.resolve(defaultCwd, expanded));
-  if (!isWithinDirs(absolute, allowedDirs)) {
+  if (deepestMatch(absolute, allowedDirs) < 0) {
     throw new PathGuardError(
       "Working directory is outside allowed directories. Omit cwd to use the active profile workspace. To read a skill, pass its full instruction path as path and omit cwd.",
       "TRAVERSAL"

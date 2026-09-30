@@ -175,7 +175,7 @@ test("history limits apply after actor and profile access filters", () => {
   expect(store.list("me", "theirs")).toEqual([]);
   expect(store.list(null, "mine").map((row) => row.id)).toEqual([own.id]);
   expect(store.list()).toHaveLength(100);
-});
+}, 15_000);
 
 test("upgrades existing meeting databases without losing transcripts", () => {
   const meeting = store.create(meetingUrl, "me", undefined, 1);

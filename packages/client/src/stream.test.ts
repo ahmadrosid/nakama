@@ -29,12 +29,31 @@ describe("readStreamEvents", () => {
     ).resolves.toBe("ok");
   });
 
+  test("accepts an empty terminal done reply", async () => {
+    await expect(
+      readStreamEvents(
+        streamFromChunks(['data: {"type":"done","reply":""}\n\n']),
+        { onChunk: () => {} }
+      )
+    ).resolves.toBe("");
+  });
+
   test("throws a helpful error when only keepalive comments arrive", async () => {
     await expect(
       readStreamEvents(streamFromChunks([": ping\n\n", ": ping\n\n"]), {
         onChunk: () => {},
       })
     ).rejects.toThrow("Only server keepalive events were received");
+  });
+
+  test("times out while a reader is waiting for the first chunk", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start() {},
+    });
+
+    await expect(
+      readStreamEvents(stream, { onChunk: () => {} }, undefined, 10)
+    ).rejects.toThrow("Chat stream timed out after 0s waiting for the model.");
   });
 
   test("dispatches tool_input_delta events", async () => {

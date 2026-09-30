@@ -1,14 +1,13 @@
 ---
 title: "Quickstart"
-description: "Try the live demo, or install Nakama with Bun, Docker, or managed hosting and send your first chat message."
+description: "Try the live demo, or run Nakama with managed hosting, Docker, or Bun and send your first chat message."
 ---
 
 ## Before you start
 
-You need:
+The live demo needs no installation or provider credentials. To send messages on your own instance, choose a model provider during setup. Some providers use an API key; others use account sign-in or a local model. See [Providers](/providers).
 
-- An LLM provider API key (see [Providers](/providers))
-- [Bun](https://bun.sh) if you run from source — not needed for [managed hosting](https://getnakama.cloud/) or [Docker](/docker)
+Install [Bun](https://bun.sh) only if you run from source. Managed hosting and Docker do not need it.
 
 ## Choose a deployment path
 
@@ -23,7 +22,7 @@ The demo is shared and reset periodically — use it to click around the dashboa
 
 ### Option 2: Managed hosting
 
-If you do not want to run your own server, use [Nakama Cloud](https://getnakama.cloud/). Sign up, create an instance, and open your dedicated URL (for example `acme.getnakama.cloud`). The first 24 hours are free with no credit card required.
+If you do not want to run your own server, use [Nakama Cloud](https://getnakama.cloud/). Sign up, create an instance, and open your dedicated URL (for example `acme.getnakama.cloud`).
 
 Complete the setup wizard in the browser and you are live. Skip to [First-time setup](/first-time-setup).
 
@@ -61,7 +60,7 @@ If you only want the API server:
 bun run dev:server
 ```
 
-On first run, Nakama asks for your provider and API key if they are not configured yet. Settings are saved in `~/.nakama/config.ini`.
+On first run, the browser setup wizard guides you through creating an admin account and organization, then configuring a model provider. Local settings are saved in `~/.nakama/config.ini`.
 
 ## First-time setup
 

@@ -12,6 +12,7 @@ export const queryKeys = {
     runs: (automationId: string) =>
       ["automations", automationId, "runs"] as const,
   },
+  browserSessions: ["browserSessions"] as const,
   cerebrasModels: ["cerebrasModels"] as const,
   composio: {
     profileToolkits: (profileId: string) =>
@@ -74,8 +75,16 @@ export const queryKeys = {
     hostMode?: string;
     apiKey?: string;
   }) => ["remoteModelDiscovery", options] as const,
-  sessions: (profileId: string, channel: string) =>
-    ["sessions", profileId, channel] as const,
+  // Outside "sessions", so invalidating the list does not also re-run its poll.
+  sessionListHead: (profileId: string, search?: string) =>
+    search
+      ? (["sessionListHead", profileId, search] as const)
+      : (["sessionListHead", profileId] as const),
+  sessionSearch: (profileId: string, search: string) =>
+    ["sessions", profileId, "search", search] as const,
+  sessionSummary: (profileId: string, sessionId: string) =>
+    ["sessions", profileId, sessionId] as const,
+  sessions: (profileId: string) => ["sessions", profileId] as const,
   skillProposals: (orgId: string, status?: string, profileId?: string) =>
     ["skillProposals", orgId, status ?? "all", profileId ?? "all"] as const,
   skillSuggestions: (
@@ -92,6 +101,9 @@ export const queryKeys = {
   skills: {
     all: ["skills"] as const,
     detail: (skillId: string) => ["skills", skillId] as const,
+  },
+  slack: {
+    settings: ["slack", "settings"] as const,
   },
   soul: {
     profile: (profileId: string) => ["soul", "profile", profileId] as const,

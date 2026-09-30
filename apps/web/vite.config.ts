@@ -49,6 +49,7 @@ export default defineConfig({
   server: {
     port: 3003,
     proxy: {
+      "/artifact-frame": serverUrl,
       "/health": serverUrl,
       "/v1": serverUrl,
     },

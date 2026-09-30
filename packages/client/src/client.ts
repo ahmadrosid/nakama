@@ -1,6 +1,7 @@
 import {
   NakamaApiError,
   NakamaAuthExpiredError,
+  readApiErrorDetails,
   readApiErrorMessage,
 } from "@nakama/core/api-error";
 import type {
@@ -87,6 +88,7 @@ import type {
   ListArtifactsResponse,
   ListAutomationRunsResponse,
   ListAutomationsResponse,
+  ListBrowserSessionsResponse,
   ListComposioToolkitsResponse,
   ListKnowledgeBaseResponse,
   ListMcpServersResponse,
@@ -114,6 +116,10 @@ import type {
   ListWorkspaceFilesResponse,
   MarkAutomationRunsReadResponse,
   McpServerResponse,
+  MfaBackupCodesResponse,
+  MfaPolicyResponse,
+  MfaTotpStartResponse,
+  MfaTotpVerifyResponse,
   ModelsResponse,
   MoveProfileRequest,
   NotificationDestinationSummary,
@@ -128,6 +134,10 @@ import type {
   OrgMemorySearchRequest,
   OrgMemorySearchResponse,
   OrgPluginDetail,
+  PasskeyAuthenticationOptionsResponse,
+  PasskeyCredentialResponse,
+  PasskeyRegistrationOptionsResponse,
+  PasskeyVerificationResponse,
   PatchSkillRequest,
   PinOrgMemoryRequest,
   PluginContributionChangePreview,
@@ -151,6 +161,7 @@ import type {
   RestoreDataImportResponse,
   RestoreOrgMemoryHistoryResponse,
   RevokeArtifactShareResponse,
+  RevokeBrowserSessionsResponse,
   RotateApiKeyResponse,
   RotateLocalAuthTokenResponse,
   RunAutomationResponse,
@@ -166,6 +177,7 @@ import type {
   SendMessageResponse,
   SessionMessagesResponse,
   SessionStatusResponse,
+  SessionSummary,
   SetActiveOrgRequest,
   SetFilePinnedRequest,
   SetupAuthRequest,
@@ -176,6 +188,7 @@ import type {
   SkillFilesResponse,
   SkillProposalResponse,
   SkillResponse,
+  SlackSettingsResponse,
   SoulStackResponse,
   SoulStatusResponse,
   StartTelegramPairingRequest,
@@ -223,6 +236,7 @@ import type {
   UpdateProviderRequest,
   UpdateProviderResponse,
   UpdateSessionRequest,
+  UpdateSlackSettingsRequest,
   UpdateSoulFileRequest,
   UpdateTelegramSettingsRequest,
   UpdateThinkingRequest,
@@ -755,6 +769,12 @@ export class NakamaClient {
     );
   }
 
+  async getSession(sessionId: string): Promise<SessionSummary> {
+    return this.request<SessionSummary>(
+      `/v1/sessions/${encodeURIComponent(sessionId)}`
+    );
+  }
+
   async getSessionStatus(sessionId: string): Promise<SessionStatusResponse> {
     return this.request<SessionStatusResponse>(
       `/v1/sessions/${encodeURIComponent(sessionId)}/status`
@@ -831,11 +851,26 @@ export class NakamaClient {
     );
   }
 
+  /** Several channels come back as one list, newest first. */
   async listSessions(
     profileId: string,
-    channel: AgentChannel = "web"
+    channel: AgentChannel | readonly AgentChannel[] = "web",
+    options: { cursor?: string | null; limit?: number; query?: string } = {}
   ): Promise<ListSessionsResponse> {
-    const query = new URLSearchParams({ channel, profileId });
+    const query = new URLSearchParams(
+      typeof channel === "string"
+        ? { channel, profileId }
+        : { channels: channel.join(","), profileId }
+    );
+    if (options.limit !== undefined) {
+      query.set("limit", String(options.limit));
+    }
+    if (options.cursor) {
+      query.set("cursor", options.cursor);
+    }
+    if (options.query) {
+      query.set("q", options.query);
+    }
     return this.request<ListSessionsResponse>(
       `/v1/sessions?${query.toString()}`
     );
@@ -1438,6 +1473,26 @@ export class NakamaClient {
         response.headers.get("Content-Type") ?? "application/octet-stream",
       data: await response.arrayBuffer(),
     };
+  }
+
+  async hasProfileArtifact(
+    profileId: string,
+    artifactPath: string
+  ): Promise<boolean> {
+    const query = new URLSearchParams({ path: artifactPath });
+
+    try {
+      await this.fetchRaw(
+        `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`,
+        { method: "HEAD" }
+      );
+      return true;
+    } catch (error) {
+      if (error instanceof NakamaApiError && error.status === 404) {
+        return false;
+      }
+      throw error;
+    }
   }
 
   async writeProfileArtifactContent(
@@ -2146,6 +2201,36 @@ export class NakamaClient {
     );
   }
 
+  async getSlackSettings(profileId?: string): Promise<SlackSettingsResponse> {
+    return this.request<SlackSettingsResponse>(
+      `/v1/settings/slack?profileId=${encodeURIComponent(profileId ?? "")}`
+    );
+  }
+
+  async setSlackSettings(
+    request: UpdateSlackSettingsRequest,
+    profileId?: string
+  ): Promise<SlackSettingsResponse> {
+    return this.request<SlackSettingsResponse>(
+      `/v1/settings/slack?profileId=${encodeURIComponent(profileId ?? "")}`,
+      {
+        body: JSON.stringify(request),
+        method: "PUT",
+      }
+    );
+  }
+
+  async regenerateSlackHandshake(
+    profileId?: string
+  ): Promise<SlackSettingsResponse> {
+    return this.request<SlackSettingsResponse>(
+      `/v1/settings/slack/handshake?profileId=${encodeURIComponent(profileId ?? "")}`,
+      {
+        method: "POST",
+      }
+    );
+  }
+
   async getErrorTrackingSettings(): Promise<ErrorTrackingSettingsResponse> {
     return this.request<ErrorTrackingSettingsResponse>(
       "/v1/settings/error-tracking"
@@ -2446,14 +2531,116 @@ export class NakamaClient {
     return response;
   }
 
-  async login(email: string, password: string): Promise<AuthUserResponse> {
+  async login(
+    email: string,
+    password: string,
+    mfa?: {
+      backupCode?: string;
+      mfaCode?: string;
+      passkey?: PasskeyCredentialResponse;
+      passkeyChallenge?: string;
+    }
+  ): Promise<AuthUserResponse> {
     const response = await this.request<AuthUserResponse>("/v1/auth/login", {
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, ...mfa }),
       method: "POST",
     });
 
     this.applyAuthUserResponse(response);
     return response;
+  }
+  async getPasskeyLoginOptions(): Promise<PasskeyAuthenticationOptionsResponse> {
+    return this.request<PasskeyAuthenticationOptionsResponse>(
+      "/v1/auth/passkey/login/options",
+      {
+        body: JSON.stringify({}),
+        method: "POST",
+      }
+    );
+  }
+  async getMfaPolicy(): Promise<MfaPolicyResponse> {
+    return this.request<MfaPolicyResponse>("/v1/settings/mfa");
+  }
+
+  async updateMfaPolicy(
+    request: Partial<
+      Pick<MfaPolicyResponse, "enabled" | "enforcedRoles" | "required">
+    >
+  ): Promise<MfaPolicyResponse> {
+    return this.request<MfaPolicyResponse>("/v1/settings/mfa", {
+      body: JSON.stringify(request),
+      method: "PUT",
+    });
+  }
+
+  async startTotp(): Promise<MfaTotpStartResponse> {
+    return this.request<MfaTotpStartResponse>("/v1/auth/mfa/totp/start", {
+      method: "POST",
+    });
+  }
+  async generateBackupCodes(input: {
+    mfaCode?: string;
+    passkey?: PasskeyCredentialResponse;
+    passkeyChallenge?: string;
+    password?: string;
+  }): Promise<MfaBackupCodesResponse> {
+    return this.request<MfaBackupCodesResponse>("/v1/auth/mfa/backup-codes", {
+      body: JSON.stringify(input),
+      method: "POST",
+    });
+  }
+
+  async startPasskey(): Promise<PasskeyRegistrationOptionsResponse> {
+    return this.request<PasskeyRegistrationOptionsResponse>(
+      "/v1/auth/mfa/passkey/start",
+      { method: "POST" }
+    );
+  }
+
+  async verifyPasskey(
+    challenge: string,
+    credential: PasskeyCredentialResponse,
+    name?: string
+  ): Promise<PasskeyVerificationResponse> {
+    return this.request<PasskeyVerificationResponse>(
+      "/v1/auth/mfa/passkey/verify",
+      {
+        body: JSON.stringify({
+          challenge,
+          credential,
+          ...(name ? { name } : {}),
+        }),
+        method: "POST",
+      }
+    );
+  }
+
+  async disablePasskey(input: {
+    backupCode?: string;
+    challenge?: string;
+    credential?: PasskeyCredentialResponse;
+  }): Promise<{ enabled: boolean }> {
+    return this.request<{ enabled: boolean }>("/v1/auth/mfa/passkey/disable", {
+      body: JSON.stringify(input),
+      method: "POST",
+    });
+  }
+
+  async verifyTotp(code: string): Promise<MfaTotpVerifyResponse> {
+    return this.request<MfaTotpVerifyResponse>("/v1/auth/mfa/totp/verify", {
+      body: JSON.stringify({ code }),
+      method: "POST",
+    });
+  }
+
+  async disableMfa(input: {
+    backupCode?: string;
+    code?: string;
+  }): Promise<{ enabled: boolean }> {
+    return this.request<{ enabled: boolean }>("/v1/auth/mfa/disable", {
+      body: JSON.stringify(input),
+      method: "POST",
+    });
   }
 
   async acceptOrgInvite(
@@ -2823,6 +3010,29 @@ export class NakamaClient {
   async listOrgMembers(orgId: string): Promise<ListOrgMembersResponse> {
     return this.request<ListOrgMembersResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/members`
+    );
+  }
+
+  async listBrowserSessions(): Promise<ListBrowserSessionsResponse> {
+    return this.request<ListBrowserSessionsResponse>("/v1/auth/sessions");
+  }
+
+  async revokeBrowserSession(
+    sessionId: string
+  ): Promise<RevokeBrowserSessionsResponse> {
+    return this.request<RevokeBrowserSessionsResponse>(
+      `/v1/auth/sessions/${encodeURIComponent(sessionId)}`,
+      { method: "DELETE" }
+    );
+  }
+
+  /** Platform admin only: ends every login session a user holds. */
+  async revokeAllBrowserSessionsForUser(
+    userId: string
+  ): Promise<RevokeBrowserSessionsResponse> {
+    return this.request<RevokeBrowserSessionsResponse>(
+      `/v1/auth/users/${encodeURIComponent(userId)}/sessions`,
+      { method: "DELETE" }
     );
   }
 
@@ -3307,8 +3517,10 @@ async function createApiError(
   response: Response,
   path: string
 ): Promise<NakamaApiError> {
-  const message = await readApiErrorMessage(response);
-  return new NakamaApiError(message, response.status, path);
+  const details = await readApiErrorDetails(response);
+  return new NakamaApiError(details.message, response.status, path, undefined, {
+    totpEnabled: details.totpEnabled,
+  });
 }
 
 function isMutatingMethod(method: string): boolean {

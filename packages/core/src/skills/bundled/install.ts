@@ -8,6 +8,7 @@ import { BUNDLED_SKILL_NAMES, readBundledSkillMarkdown } from "./index";
 const FORCE_REFRESH_BUNDLED_SKILL_NAMES = new Set<string>([
   "manage-skills",
   "coding-agent",
+  "coding-backend-codex",
   "coding-backend-cursor",
   "agent-browser",
   "save-artifact",

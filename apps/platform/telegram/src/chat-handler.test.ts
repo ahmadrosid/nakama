@@ -574,6 +574,66 @@ describe("createChatHandler group chats", () => {
     });
   });
 
+  test("unauthorized /stop in a group does not abort the active stream", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, {
+        botToken: "1234567890:TEST",
+        pairedUserIds: [42],
+      });
+
+      const authStore = new TelegramAuthStore(null);
+      await authStore.reload();
+      const { client, getStreamControl } = createMockClient({
+        autoComplete: false,
+        streaming: true,
+      });
+      const sessionStore = new SessionStore(
+        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      );
+      const orgStore = createTestOrgStore(homeDir);
+      await orgStore.load();
+      const handleMessage = createChatHandler({
+        authStore,
+        client,
+        config: TEST_CONFIG,
+        getBotInfo: () => TEST_BOT_INFO,
+        orgStore,
+        sessionStore,
+      });
+
+      const chatAttempt = createMessageContext({
+        chatId: -100_123,
+        chatType: "supergroup",
+        entities: [{ length: 6, offset: 0, type: "mention" }],
+        text: "@mybot hello",
+        userId: 42,
+      });
+      const chatPromise = handleMessage(chatAttempt.ctx);
+
+      try {
+        await waitForCondition(
+          () => getStreamControl()?.signal != null,
+          "Expected in-flight stream before unauthorized /stop"
+        );
+
+        const stopAttempt = createMessageContext({
+          chatId: -100_123,
+          chatType: "supergroup",
+          text: "/stop",
+          userId: 9999,
+        });
+        await handleMessage(stopAttempt.ctx);
+
+        expect(getStreamControl()?.signal?.aborted).toBe(false);
+        expect(stopAttempt.replies).toEqual([]);
+        expect(authStore.isAuthorized(9999)).toBe(false);
+      } finally {
+        getStreamControl()?.complete();
+        await chatPromise.catch(() => undefined);
+      }
+    });
+  });
+
   test("unpaired @mention redirects to private chat without pairing", async () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {

@@ -36,7 +36,7 @@ async function createScenario() {
     null,
     databaseAdapter
   );
-  const { app } = createMinimalHonoApp({
+  const { app, authService } = createMinimalHonoApp({
     agent,
     databaseAdapter,
   });
@@ -72,7 +72,7 @@ async function createScenario() {
     },
   ]);
 
-  return { agent, app, databaseAdapter, victimSessionId };
+  return { agent, app, authService, databaseAdapter, victimSessionId };
 }
 
 const CROSS_ORG_ROUTES: Array<{
@@ -80,6 +80,7 @@ const CROSS_ORG_ROUTES: Array<{
   method: string;
   path: (sessionId: string) => string;
 }> = [
+  { method: "GET", path: (id) => `/v1/sessions/${id}` },
   { method: "GET", path: (id) => `/v1/sessions/${id}/messages` },
   { method: "GET", path: (id) => `/v1/sessions/${id}/status` },
   { method: "GET", path: (id) => `/v1/sessions/${id}/stream` },
@@ -261,6 +262,131 @@ describe("session routes are scoped to the caller's active org", () => {
     expect(await response.json()).toEqual({ error: "Profile not found." });
   });
 
+  test("app-user session scope is API-key-only across list, message, branch, and run routes", async () => {
+    const { app, authService, databaseAdapter } = await createScenario();
+    await seedOrgAdmin(databaseAdapter, {
+      email: "same-org-attacker@example.com",
+      orgId: VICTIM_ORG,
+      password: PASSWORD,
+      profileId: "profile_same_org_attacker",
+      role: "member",
+      userId: "user_same_org_attacker",
+    });
+    const browser = await loginUserSession(
+      app,
+      "same-org-attacker@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+    const secret = `nk_live_${"1".repeat(64)}`;
+    await databaseAdapter.createApiKey({
+      createdAt: new Date().toISOString(),
+      createdByUserId: "user_victim",
+      environment: "live",
+      expiresAt: null,
+      id: "key_app_user_scope_test",
+      keyPrefix: secret.slice(0, 20),
+      lastUsedAt: null,
+      name: "App user scope test",
+      orgId: VICTIM_ORG,
+      revokedAt: null,
+      secretHash: authService.hashToken(secret),
+    });
+    const apiKeyHeaders = {
+      Authorization: `Bearer ${secret}`,
+      "X-Org-Id": VICTIM_ORG,
+    };
+    const apiRequest = (
+      path: string,
+      options: { appUserId?: string; body?: unknown; method?: string } = {}
+    ) =>
+      app.fetch(
+        new Request(`http://localhost:4310${path}`, {
+          body:
+            options.body === undefined
+              ? undefined
+              : JSON.stringify(options.body),
+          headers: {
+            ...apiKeyHeaders,
+            ...(options.appUserId
+              ? { "X-Nakama-App-User-Id": options.appUserId }
+              : {}),
+          },
+          method: options.method,
+        })
+      );
+    const browserRequest = (path: string, options: { body?: unknown } = {}) =>
+      app.fetch(
+        new Request(`http://localhost:4310${path}`, {
+          body:
+            options.body === undefined
+              ? undefined
+              : JSON.stringify(options.body),
+          headers: browser.headers({
+            "X-CSRF-Token": browser.csrfToken,
+            "X-Nakama-App-User-Id": "alice",
+          }),
+          method: options.body === undefined ? "GET" : "POST",
+        })
+      );
+
+    const created = await apiRequest("/v1/sessions", {
+      appUserId: "alice",
+      body: { appUserId: "alice", channel: "web", profileId: "profile_victim" },
+      method: "POST",
+    });
+    expect(created.status).toBe(201);
+    const { sessionId } = (await created.json()) as { sessionId: string };
+    await databaseAdapter.replaceMessagesForSession(sessionId, [
+      {
+        createdAt: new Date().toISOString(),
+        id: "msg_api_user_scope",
+        payload: { content: "app user scope", role: "user" },
+        seq: 0,
+        sessionId,
+      },
+    ]);
+    const listPath = "/v1/sessions?profileId=profile_victim&channel=web";
+
+    const listed = await apiRequest(listPath, { appUserId: "alice" });
+    expect(listed.status).toBe(200);
+    expect(await listed.json()).toMatchObject({
+      sessions: [{ id: sessionId }],
+    });
+    const messages = await apiRequest(`/v1/sessions/${sessionId}/messages`, {
+      appUserId: "alice",
+    });
+    expect(messages.status).toBe(200);
+
+    const wrongAppUserList = await apiRequest(listPath, { appUserId: "bob" });
+    expect(wrongAppUserList.status).toBe(200);
+    expect(await wrongAppUserList.json()).toEqual({ sessions: [] });
+    for (const [path, body] of [
+      [`/v1/sessions/${sessionId}/messages`, undefined],
+      [`/v1/sessions/${sessionId}/branch`, { messageIndex: 0 }],
+      [`/v1/sessions/${sessionId}/messages`, { message: "run" }],
+    ] as const) {
+      const response = await apiRequest(path, {
+        appUserId: "bob",
+        body,
+        method: body === undefined ? "GET" : "POST",
+      });
+      expect(response.status).toBe(404);
+    }
+
+    expect((await browserRequest(listPath)).status).toBe(400);
+    for (const [path, body] of [
+      [`/v1/sessions/${sessionId}/messages`, undefined],
+      [`/v1/sessions/${sessionId}/branch`, { messageIndex: 0 }],
+      [`/v1/sessions/${sessionId}/messages`, { message: "run" }],
+    ] as const) {
+      expect((await browserRequest(path, { body })).status).toBe(400);
+    }
+    expect((await databaseAdapter.getSession(sessionId))?.appUserId).toBe(
+      "alice"
+    );
+  });
+
   test("the owning org still reads its own session", async () => {
     const { app, victimSessionId } = await createScenario();
     const victim = await loginUserSession(
@@ -282,6 +408,29 @@ describe("session routes are scoped to the caller's active org", () => {
       messages: Array<{ content: string }>;
     };
     expect(body.messages[0]?.content).toBe("victim org secret");
+  });
+
+  test("the owning org reads one session's summary", async () => {
+    const { app, victimSessionId } = await createScenario();
+    const victim = await loginUserSession(
+      app,
+      "victim@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+
+    const response = await app.fetch(
+      new Request(`http://localhost:4310/v1/sessions/${victimSessionId}`, {
+        headers: victim.headers(),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      channel: "web",
+      id: victimSessionId,
+      profileId: "profile_victim",
+    });
   });
 
   test("the owning org can set a chat-only model", async () => {

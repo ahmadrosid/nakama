@@ -737,6 +737,8 @@ Standalone body.
       hasTool: true,
       includeBodyOnMatch: false,
       name: "notes",
+      scriptIssues: [],
+      scriptTools: [],
       skillFilePath: join(pluginDir!, "SKILL.md"),
       toolPath: join(pluginDir!, "tool.js"),
     });

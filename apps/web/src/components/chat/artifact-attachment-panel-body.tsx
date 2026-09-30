@@ -8,6 +8,8 @@ import type { ArtifactPreviewMode } from "@/components/chat/artifact-preview-mod
 import { SpreadsheetGrid } from "@/components/chat/artifact-spreadsheet-editor";
 import { useAuth } from "@/context/use-auth";
 import {
+  ARTIFACT_FRAME_READY,
+  ARTIFACT_FRAME_URL,
   ARTIFACT_HTML_IFRAME_SANDBOX,
   htmlForArtifactPreview,
   resolveArtifactHtmlAssets,
@@ -290,13 +292,50 @@ function ArtifactHtmlPreview({
     return <ArtifactBodyError error={current.error} />;
   }
   return (
+    <ArtifactHtmlFrame
+      html={htmlForArtifactPreview(profileId ? (current?.html ?? "") : content)}
+      sandbox={htmlSandbox}
+      title={filename}
+    />
+  );
+}
+
+/** `srcDoc` would inherit the app's CSP and block every artifact script, so
+ * the HTML is handed to the server's permissive `/artifact-frame` page. */
+function ArtifactHtmlFrame({
+  html,
+  sandbox,
+  title,
+}: {
+  html: string;
+  sandbox: string;
+  title: string;
+}) {
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      const frame = frameRef.current?.contentWindow;
+      if (
+        frame &&
+        event.source === frame &&
+        event.data === ARTIFACT_FRAME_READY
+      ) {
+        // The sandboxed frame has an opaque origin, so "*" is the only target.
+        frame.postMessage({ nakamaArtifactHtml: html }, "*");
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [html]);
+
+  return (
     <iframe
       className="min-h-0 w-full flex-1 border-0 bg-background"
-      sandbox={htmlSandbox}
-      srcDoc={htmlForArtifactPreview(
-        profileId ? (current?.html ?? "") : content
-      )}
-      title={filename}
+      key={html}
+      ref={frameRef}
+      sandbox={sandbox}
+      src={ARTIFACT_FRAME_URL}
+      title={title}
     />
   );
 }

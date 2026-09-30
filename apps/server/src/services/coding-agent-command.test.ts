@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildCodingAgentCommandTemplate,
+  buildHarnessNonInteractiveArgs,
   formatCodingAgentCommandContext,
 } from "./coding-agent-command";
 import { makeAnthropicProvider } from "./coding-agent-test-fixtures";
@@ -42,9 +43,15 @@ describe("buildCodingAgentCommandTemplate", () => {
       "/tmp/workspace"
     );
 
-    expect(template.command).toContain("codex exec");
+    expect(template.command).toContain("codex --ask-for-approval never exec");
     expect(template.command).toContain("--skip-git-repo-check");
     expect(template.command).toContain("'Refactor auth module'");
+    expect(
+      buildHarnessNonInteractiveArgs("codex", {
+        cwd: "/tmp/workspace",
+        prompt: "Refactor auth module",
+      }).slice(0, 3)
+    ).toEqual(["--ask-for-approval", "never", "exec"]);
   });
 
   test("builds pi.dev command and spawn env", async () => {

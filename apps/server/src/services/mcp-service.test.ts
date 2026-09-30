@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { NakamaApiError, nanoid } from "@nakama/core";
+import { getProfileSoulDir, NakamaApiError, nanoid } from "@nakama/core";
 import { PREINSTALLED_MCP_SERVER_IDS } from "@nakama/core/mcp/preinstalled";
 import {
   createInMemoryDatabaseAdapter,
@@ -7,6 +7,7 @@ import {
 } from "@nakama/db";
 import { McpClientManager } from "./mcp-client-manager";
 import { McpService } from "./mcp-service";
+import { buildMcpToolDefinitions } from "./mcp-tool-bridge";
 
 async function seedProfile(
   db: ReturnType<typeof createInMemoryDatabaseAdapter>
@@ -28,6 +29,98 @@ async function seedProfile(
 }
 
 describe("McpService", () => {
+  test("refreshes tools from a new MCP connection", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const calls: string[] = [];
+    const manager = {
+      async connect() {
+        calls.push("connect");
+        return [{ description: "New tool", inputSchema: {}, name: "new_tool" }];
+      },
+      async disconnect() {
+        calls.push("disconnect");
+      },
+    } as unknown as McpClientManager;
+    const service = new McpService(db, manager);
+    const created = await service.createServer({
+      config: { url: "https://example.com/mcp" },
+      connect: false,
+      name: "demo",
+      transport: "http",
+    });
+
+    const refreshed = await service.syncServer(created.server.id);
+
+    expect(calls).toEqual(["disconnect", "connect"]);
+    expect(refreshed.server.cachedTools.map((tool) => tool.name)).toEqual([
+      "new_tool",
+    ]);
+    expect((await db.getMcpServer(created.server.id))?.cachedTools).toEqual([
+      { description: "New tool", inputSchema: {}, name: "new_tool" },
+    ]);
+  });
+
+  test("disabling disconnects and blocks current and future tool use", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const calls: string[] = [];
+    const manager = {
+      async callTool() {
+        calls.push("callTool");
+        return { ok: true };
+      },
+      async connect() {
+        calls.push("connect");
+        return [
+          { description: "Read a file", inputSchema: {}, name: "read_file" },
+        ];
+      },
+      async disconnect() {
+        calls.push("disconnect");
+      },
+      async ensureConnected() {
+        calls.push("ensureConnected");
+      },
+    } as unknown as McpClientManager;
+    const service = new McpService(db, manager);
+    const created = await service.createServer({
+      config: { command: "mcp-filesystem" },
+      name: "filesystem",
+      transport: "stdio",
+    });
+    const profileId = await seedProfile(db);
+
+    await service.assignServerToProfile(profileId, created.server.id);
+
+    const existingTools = buildMcpToolDefinitions(
+      await db.listMcpServersForProfile(profileId),
+      manager,
+      db,
+      "org_test",
+      profileId
+    );
+    expect(existingTools).toHaveLength(1);
+    const updated = await service.updateServer(created.server.id, {
+      enabled: false,
+    });
+    const futureTools = buildMcpToolDefinitions(
+      await db.listMcpServersForProfile(profileId),
+      manager,
+      db,
+      "org_test",
+      profileId
+    );
+    const existingResult = await existingTools[0]!.run({}, {});
+
+    expect(updated.server).toMatchObject({
+      enabled: false,
+      status: "disconnected",
+    });
+    expect(futureTools).toEqual([]);
+    expect(existingResult).toEqual({ error: expect.any(String) });
+    await expect(service.connectServer(created.server.id)).rejects.toThrow();
+    expect(calls).toEqual(["connect", "disconnect"]);
+  });
+
   test("creates and lists MCP servers", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new McpService(db, new McpClientManager());
@@ -339,5 +432,83 @@ describe("McpService", () => {
     const listed = await service.listServers();
 
     expect(listed.servers[0]?.assignedProfileCount).toBe(1);
+  });
+
+  test("defers stdio startup and opens one process in the profile cwd", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const startupConnections: string[] = [];
+    const spawns: Array<{
+      cwd: string;
+      orgId: string;
+      profileId: string;
+    }> = [];
+    const manager = {
+      async callTool(
+        _serverId: string,
+        _transport: "stdio",
+        _toolName: string,
+        _input: unknown,
+        profileId: string,
+        orgId: string
+      ) {
+        return { orgId, profileId };
+      },
+      async connect(server: { id: string }) {
+        startupConnections.push(server.id);
+        return [];
+      },
+      async ensureConnected(
+        _server: unknown,
+        orgId: string,
+        profileId: string
+      ) {
+        spawns.push({
+          cwd: getProfileSoulDir(orgId, profileId),
+          orgId,
+          profileId,
+        });
+      },
+    } as unknown as McpClientManager;
+    const service = new McpService(db, manager);
+    const created = await service.createServer({
+      config: { command: "fake-stdio-server" },
+      connect: false,
+      name: "filesystem",
+      transport: "stdio",
+    });
+    const server = await db.getMcpServer(created.server.id);
+
+    await service.connectEnabledServers();
+
+    expect(startupConnections).toEqual([]);
+
+    const profileId = await seedProfile(db);
+    await service.assignServerToProfile(profileId, created.server.id);
+    const orgId = "org_test";
+    expect(server).not.toBeNull();
+    const scopedServer = {
+      ...server!,
+      cachedTools: [
+        {
+          description: "Read a scoped file",
+          inputSchema: { type: "object" },
+          name: "read",
+        },
+      ],
+    };
+    await db.upsertMcpServer(scopedServer);
+    const tools = buildMcpToolDefinitions(
+      [scopedServer],
+      manager,
+      db,
+      orgId,
+      profileId
+    );
+    const result = await tools[0]!.run({}, {});
+
+    expect(spawns).toEqual([
+      { cwd: getProfileSoulDir(orgId, profileId), orgId, profileId },
+    ]);
+    expect(result).toEqual({ orgId, profileId });
   });
 });

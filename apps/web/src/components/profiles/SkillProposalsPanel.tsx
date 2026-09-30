@@ -68,6 +68,9 @@ function proposalPreview(proposal: SkillProposal): string {
   if (proposal.action === "write_file") {
     return `Write ${proposal.relativePath ?? "?"}:\n${proposal.content ?? ""}`;
   }
+  if (proposal.action === "approve_code") {
+    return `Review ${proposal.relativePath ?? "?"}:\n${proposal.content ?? ""}`;
+  }
   if (proposal.action === "remove_file") {
     return `Remove supporting file "${proposal.relativePath ?? "?"}" from skill "${proposal.skillName}"`;
   }
@@ -86,6 +89,9 @@ function actionLabel(action: SkillProposal["action"]): string {
   }
   if (action === "write_file") {
     return "Write file";
+  }
+  if (action === "approve_code") {
+    return "Review code";
   }
   if (action === "remove_file") {
     return "Remove file";

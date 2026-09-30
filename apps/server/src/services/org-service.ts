@@ -56,6 +56,7 @@ import {
   seedOrgSuperBotProfile,
 } from "@nakama/db";
 import type { AuthService } from "./auth-service";
+import { loadMfaPolicy } from "./mfa-config";
 
 const LAST_MEMBERSHIP_MESSAGE =
   "Cannot archive your last remaining organization.";
@@ -63,6 +64,8 @@ const LAST_ORGANIZATION_MESSAGE =
   "Cannot archive the last remaining organization.";
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const INVITE_DOMAIN_PATTERN =
+  /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 const PHONE_PATTERN = /^[+0-9()\-\s]{6,32}$/;
 const MAX_MEMBER_NAME_LENGTH = 120;
 const PASSWORD_RESET_EXPIRY_MINUTES = 60;
@@ -162,7 +165,12 @@ export class OrgService {
       );
     }
 
-    for (const platform of ["telegram", "discord", "whatsapp"] as const) {
+    for (const platform of [
+      "telegram",
+      "discord",
+      "whatsapp",
+      "slack",
+    ] as const) {
       for (const owner of await listChannelOwners(platform)) {
         if (owner.orgId === orgId) {
           await removeChannelConnection(platform, owner);
@@ -227,6 +235,10 @@ export class OrgService {
     );
     const updated: StoredOrganizationRecord = {
       ...org,
+      allowedInviteDomains:
+        request.allowedInviteDomains === undefined
+          ? (org.allowedInviteDomains ?? [])
+          : normalizeAllowedInviteDomains(request.allowedInviteDomains),
       monthlyLlmTokenLimit,
       monthlyLlmTurnLimit,
       monthlyLlmWarningPercent,
@@ -329,11 +341,20 @@ export class OrgService {
     return { organization };
   }
 
-  async listUserOrgs(userId: string): Promise<ListUserOrgsResponse> {
+  async listUserOrgs(
+    userId: string,
+    orgId?: string | null
+  ): Promise<ListUserOrgsResponse> {
     const memberships =
       await this.databaseAdapter.listUserOrganizations(userId);
+    const scopedMemberships =
+      orgId === undefined
+        ? memberships
+        : memberships.filter(
+            (membership) => membership.organization.id === orgId
+          );
     return {
-      orgs: memberships.map((membership) => ({
+      orgs: scopedMemberships.map((membership) => ({
         ...toOrganizationSummary(membership.organization),
         role: membership.role,
       })),
@@ -413,14 +434,33 @@ export class OrgService {
       sessionId,
       requestedOrgId
     );
-
+    const activeMember = activeOrgId
+      ? await this.databaseAdapter.getOrgMember(activeOrgId, user.id)
+      : null;
+    const mfaPolicy = await loadMfaPolicy();
+    const passkeyEnabled =
+      (await this.databaseAdapter.listPasskeys(user.id)).length > 0;
+    const backupCodesEnabled =
+      (await this.databaseAdapter.countUnusedMfaBackupCodes(user.id)) > 0;
     return {
       activeOrgId,
+      backupCodesEnabled,
       email: user.email,
       id: user.id,
       isPlatformAdmin: Boolean(user.isPlatformAdmin),
+      mfaEnabled: Boolean(user.mfaEnabled),
+      mfaEnrolled: Boolean(
+        (user.mfaEnabled && user.mfaTotpSecretEnc) || passkeyEnabled
+      ),
+      mfaRequired:
+        mfaPolicy.enabled &&
+        mfaPolicy.required &&
+        (activeMember
+          ? mfaPolicy.enforcedRoles.includes(activeMember.role)
+          : false),
       name: user.name ?? null,
       orgId: activeOrgId,
+      passkeyEnabled,
       phone: user.phone ?? null,
     };
   }
@@ -1014,6 +1054,7 @@ export class OrgService {
     if (!EMAIL_PATTERN.test(email)) {
       throw new NakamaApiError("A valid email address is required.", 400);
     }
+    assertAllowedInviteDomain(email, organization);
 
     if (!ORG_ROLES.includes(input.role)) {
       throw new NakamaApiError("Invalid org role.", 400);
@@ -1106,7 +1147,8 @@ export class OrgService {
 
     assertInviteUsable(invite);
 
-    await this.requireActiveOrganization(invite.orgId);
+    const organization = await this.requireActiveOrganization(invite.orgId);
+    assertAllowedInviteDomain(invite.email, organization);
 
     const password = request.password?.trim();
     if (!password) {
@@ -1410,6 +1452,35 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+function normalizeAllowedInviteDomains(input: unknown): string[] {
+  if (!Array.isArray(input)) {
+    throw new NakamaApiError("Allowed invite domains must be a list.", 400);
+  }
+
+  const domains = new Set<string>();
+  for (const entry of input) {
+    if (typeof entry !== "string") {
+      throw new NakamaApiError("Invalid invite domain.", 400);
+    }
+    const domain = entry.trim().toLowerCase();
+    if (!INVITE_DOMAIN_PATTERN.test(domain)) {
+      throw new NakamaApiError("Invalid invite domain.", 400);
+    }
+    domains.add(domain);
+  }
+  return [...domains];
+}
+
+function assertAllowedInviteDomain(
+  email: string,
+  organization: StoredOrganizationRecord
+): void {
+  const domains = organization.allowedInviteDomains ?? [];
+  if (domains.length > 0 && !domains.includes(email.split("@")[1] ?? "")) {
+    throw new NakamaApiError("Email domain is not allowed.", 400);
+  }
+}
+
 function normalizeOptionalPhone(
   phone: string | null | undefined
 ): string | null {
@@ -1489,6 +1560,7 @@ function toOrganizationSummary(
   record: StoredOrganizationRecord
 ): OrganizationSummary {
   return {
+    allowedInviteDomains: record.allowedInviteDomains ?? [],
     archivedAt: record.archivedAt ?? null,
     createdAt: record.createdAt,
     id: record.id,

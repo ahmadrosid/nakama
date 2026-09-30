@@ -133,7 +133,7 @@ const authValue = {
   createOrg: async () => undefined,
   isAuthenticated: true,
   isLoading: false,
-  login: async () => undefined,
+  login: async () => ({ email: "admin@example.com", id: "admin" }),
   logout: async () => undefined,
   orgs: [],
   refreshSession: async () => undefined,

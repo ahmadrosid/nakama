@@ -369,6 +369,12 @@ async function buildChatCompletionRequestBody(options: {
 }) {
   const provider = options.provider ?? "openai";
   const hasTools = provider !== "perplexity" && Boolean(options.tools?.length);
+  if (
+    hasTools &&
+    options.model.trim().toLowerCase().startsWith("gpt-6-astra")
+  ) {
+    throw new Error("GPT-6 Astra requires the Responses API for tools.");
+  }
 
   return {
     model: options.model,

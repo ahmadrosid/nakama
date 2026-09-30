@@ -324,6 +324,31 @@ Run a one-off shell command starting in the profile workspace and return stdout,
 
 **Execution backend:** By default bash runs on the Nakama **host** (`NAKAMA_BASH_BACKEND=host`). Set `NAKAMA_BASH_BACKEND=microsandbox` to run each profile in its own warm MicroSandbox microVM (1 profile → 1 sandbox) with the profile workspace bind-mounted. Defaults: public network **off** (`NAKAMA_BASH_SANDBOX_NETWORK=off|public`), image `alpine` (`NAKAMA_BASH_SANDBOX_IMAGE`). If MicroSandbox is selected but unavailable, the tool **fails closed** — it does not fall back to host. `codingAgent: true` / harness CLI runs are **unsupported** under `microsandbox` (use `host` for coding-agent). Stock Docker without `/dev/kvm` cannot enable MicroSandbox — see [Docker](/docker).
 
+#### Choose a MicroSandbox image
+
+The default Alpine image has no Python. To give profiles Python, start Nakama with a Python image:
+
+```bash
+NAKAMA_BASH_BACKEND=microsandbox NAKAMA_BASH_SANDBOX_IMAGE=python:3.12 bun run dev:server
+```
+
+To include your own packages, create a `Dockerfile` in an empty directory:
+
+```dockerfile
+FROM python:3.12-alpine
+RUN apk add --no-cache git
+```
+
+Build it and load it into MicroSandbox on the machine running Nakama:
+
+```bash
+docker build -t nakama-bash:python-git .
+docker save nakama-bash:python-git | msb load
+NAKAMA_BASH_BACKEND=microsandbox NAKAMA_BASH_SANDBOX_IMAGE=nakama-bash:python-git bun run dev:server
+```
+
+Use the same image name when starting Nakama. For a Docker deployment, publish the image to a registry accessible to the Nakama container and set `NAKAMA_BASH_SANDBOX_IMAGE` to its registry name; a MicroSandbox cache loaded on the Docker host is not the container's cache. The first profile run may wait while MicroSandbox pulls a registry image. See [MicroSandbox image commands](https://docs.microsandbox.dev/cli/image-commands) for `msb load` and `msb pull`.
+
 **Coding-agent spawn env:** When the command starts with a known harness binary (`codex`, `claude`, `opencode`, `pi`, or `agent`), or when `codingAgent: true` is set with such a command, Nakama merges provider passthrough env vars on the server before spawn. `codingAgent: true` without a known binary fails closed. See [Coding agent — Provider passthrough](/coding-agent#provider-passthrough). Optional `env` keys are merged on top (credential keys cannot override passthrough).
 
 **Host access:** Host Bash is unrestricted by Nakama and runs with the server process's OS permissions. The profile workspace is only the starting directory; commands can access files outside it, including other profiles' files when OS permissions allow. Checking `cwd` does not isolate commands. Assign host Bash only to trusted profiles; use MicroSandbox when profile isolation is required.

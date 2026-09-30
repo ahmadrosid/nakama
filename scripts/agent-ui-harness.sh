@@ -228,7 +228,7 @@ cmd_start() {
 
   local data_dir="${run_dir}/nakama-data"
   mkdir -p "${data_dir}/runtime" "${run_dir}/logs" "${run_dir}/pm2"
-  printf '%s\n' '{"automation":false,"discord":false,"telegram":false,"whatsapp":false}' \
+  printf '%s\n' '{"automation":false,"discord":false,"slack":false,"telegram":false,"whatsapp":false}' \
     >"${data_dir}/runtime/worker-desired-state.json"
 
   local api_port web_port

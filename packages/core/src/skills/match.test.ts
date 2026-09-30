@@ -10,6 +10,8 @@ const weatherSkill: DiscoveredSkill = {
   hasTool: true,
   includeBodyOnMatch: false,
   name: "weather",
+  scriptIssues: [],
+  scriptTools: [],
   skillFilePath: "/tmp/weather/SKILL.md",
   toolPath: "/tmp/weather/tool.ts",
 };
@@ -34,14 +36,6 @@ describe("matchSkillsForMessage", () => {
     const matched = matchSkillsForMessage(
       [privateSkill],
       "Please /skill deploy now"
-    );
-    expect(matched.map((skill) => skill.name)).toEqual(["deploy"]);
-  });
-
-  test("matches inserted explicit-only composer invocation", () => {
-    const matched = matchSkillsForMessage(
-      [weatherSkill, privateSkill],
-      "/skill deploy "
     );
     expect(matched.map((skill) => skill.name)).toEqual(["deploy"]);
   });

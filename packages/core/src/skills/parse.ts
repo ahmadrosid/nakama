@@ -72,7 +72,16 @@ function parseFrontmatter(raw: string, sourcePath: string): SkillFrontmatter {
     ),
     includeBodyOnMatch: parseBooleanField(fields.get("include-body-on-match")),
     name,
+    scripts: parseListField(fields.get("scripts")),
   };
+}
+
+/** Comma separated, because the frontmatter reader is flat key and value. */
+function parseListField(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((entry) => stripQuotes(entry.trim()))
+    .filter((entry) => entry.length > 0);
 }
 
 function stripQuotes(value: string): string {

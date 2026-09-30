@@ -17,6 +17,23 @@ The **agent-browser** skill is assigned (see Available Agent Skills). Skills are
 \`agent-browser open <url>\` → act or \`screenshot artifacts/<file>.png\` → \`close\`. Full workflow: follow the skill when matched or \`/skill agent-browser\`. Missing CLI → tell the operator to install it. Host \`AGENT_BROWSER_EXECUTABLE_PATH\` / \`AGENT_BROWSER_ARGS\` (optional Cloak stealth Chromium) are inherited by bash; if unset, stock Chrome from \`agent-browser install\` is correct.`;
 }
 
+/**
+ * A skill that ships code nothing here can run used to read exactly like a
+ * prose-only skill. Its SKILL.md still says to run the script, so the model
+ * followed the instructions, found no tool, and answered from the source it
+ * had just read. Saying it out loud is what stops that.
+ */
+function describeSkillTooling(skill: DiscoveredSkill): string {
+  if (skill.hasTool) {
+    return " (includes tool)";
+  }
+  const count = skill.scriptIssues.length;
+  if (count === 0) {
+    return "";
+  }
+  return ` (ships ${count} script${count === 1 ? "" : "s"} that cannot run here; do not answer from their source, say they are unavailable)`;
+}
+
 export function composeSkillsCatalog(skills: DiscoveredSkill[]): string {
   if (skills.length === 0) {
     return "";
@@ -30,7 +47,7 @@ export function composeSkillsCatalog(skills: DiscoveredSkill[]): string {
     "",
     ...skills.map(
       (skill) =>
-        `- **${skill.name}**: ${skill.description}${skill.hasTool ? " (includes tool)" : ""} (instructions: ${JSON.stringify(skill.skillFilePath)})`
+        `- **${skill.name}**: ${skill.description}${describeSkillTooling(skill)} (instructions: ${JSON.stringify(skill.skillFilePath)})`
     ),
   ];
 

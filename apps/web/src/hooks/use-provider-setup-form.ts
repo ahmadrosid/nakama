@@ -513,6 +513,7 @@ export function useProviderSetupForm(
             baseUrl: resolvedCloudflareBaseUrl ?? baseUrl,
             chatgptOAuth: chatgptOAuth ?? undefined,
             customModels:
+              (selectedProvider === "chatgpt" && subscriptionModels.length) ||
               selectedProvider === "xai_oauth"
                 ? filteredModels.map((entry) => ({
                     default: entry.id === modelToSave,
@@ -586,6 +587,7 @@ export function useProviderSetupForm(
       createProvider,
       onSuccess,
       filteredModels,
+      subscriptionModels,
       wireApi,
     ]
   );

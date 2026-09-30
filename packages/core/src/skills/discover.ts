@@ -9,7 +9,31 @@ import {
   SKILL_FILE_NAME,
   SKILL_TOOL_FILES,
 } from "./paths";
+import { resolveSkillScripts } from "./script-tools";
 import type { DiscoveredSkill } from "./types";
+
+/**
+ * Discovery runs on every session build, so a skill is only reported once per
+ * process. Without this the operator never learns the script is dead weight:
+ * the old behaviour surfaced nothing at all, and the model quietly answered
+ * from the script's text instead of running it.
+ */
+const warnedSkillDirectories = new Set<string>();
+
+function warnAboutUnrunnableScripts(
+  directory: string,
+  issues: { path: string; reason: string }[]
+): void {
+  if (issues.length === 0 || warnedSkillDirectories.has(directory)) {
+    return;
+  }
+  warnedSkillDirectories.add(directory);
+  for (const issue of issues) {
+    console.warn(
+      `[nakama:skills] ${directory}: ${issue.path} ${issue.reason}.`
+    );
+  }
+}
 
 export interface DiscoverSkillsOptions {
   orgId?: string;
@@ -77,6 +101,13 @@ export async function discoverSkillDirectory(
     const content = await readFile(skillFilePath, "utf8");
     const parsed = parseSkillMarkdown(content, skillFilePath);
     const toolPath = await findSkillToolPath(directory);
+    const scripts = await resolveSkillScripts({
+      declared: parsed.frontmatter.scripts ?? [],
+      directory,
+      skillName: parsed.frontmatter.name,
+      toolPath,
+    });
+    warnAboutUnrunnableScripts(directory, scripts.issues);
 
     return {
       body: parsed.body,
@@ -84,9 +115,11 @@ export async function discoverSkillDirectory(
       directory,
       disableModelInvocation:
         parsed.frontmatter.disableModelInvocation ?? false,
-      hasTool: toolPath !== null,
+      hasTool: toolPath !== null || scripts.tools.length > 0,
       includeBodyOnMatch: parsed.frontmatter.includeBodyOnMatch ?? false,
       name: parsed.frontmatter.name,
+      scriptIssues: scripts.issues,
+      scriptTools: scripts.tools,
       skillFilePath,
       toolPath,
     };

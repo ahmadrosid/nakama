@@ -17,8 +17,8 @@ export function SetupWizardPage() {
   } = useAuth();
   const [wizardInProgress, setWizardInProgress] = useState(false);
 
-  const isFullyConfigured =
-    health?.userConfigured === true && health?.providerConfigured === true;
+  // The provider step can be skipped, so an account is what finishes setup.
+  const isFullyConfigured = health?.userConfigured === true;
 
   // Allow finishing the wizard when setup flags flip true mid-flow (e.g. step 4
   // after provider is configured on step 3), but block fresh visits once done.

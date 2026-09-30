@@ -10,7 +10,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readWorkerDesiredState, setWorkerDesiredRunning } from "@nakama/core";
-import { claimChannelIdentity } from "@nakama/core/channel-config-shared";
+import {
+  claimChannelIdentity,
+  getChannelConfigDir,
+} from "@nakama/core/channel-config-shared";
 import { saveWhatsAppConfig } from "@nakama/core/whatsapp-config";
 import { WorkerManagerService } from "./worker-manager-service";
 
@@ -168,6 +171,7 @@ describe("WorkerManagerService", () => {
       expect(await readWorkerDesiredState()).toEqual({
         automation: true,
         discord: false,
+        slack: false,
         telegram: true,
         whatsapp: false,
       });
@@ -214,6 +218,7 @@ describe("WorkerManagerService", () => {
       expect(await readWorkerDesiredState()).toEqual({
         automation: true,
         discord: false,
+        slack: false,
         telegram: false,
         whatsapp: false,
       });
@@ -323,6 +328,7 @@ describe("WorkerManagerService", () => {
       expect(await readWorkerDesiredState()).toEqual({
         automation: true,
         discord: false,
+        slack: false,
         telegram: false,
         whatsapp: false,
       });
@@ -607,6 +613,27 @@ describe("WorkerManagerService", () => {
       await setWorkerDesiredRunning("telegram", true);
       await service.recoverDesiredWorkers();
 
+      expect(mockPm2.start).not.toHaveBeenCalled();
+    });
+
+    test("recovery does not start over a live manual owner", async () => {
+      const owner = { orgId: "org_a", profileId: "agent_a" };
+      await saveWhatsAppConfig({}, owner);
+      await setWorkerDesiredRunning("automation", false);
+      await setWorkerDesiredRunning("whatsapp", true, owner);
+      await writeFile(
+        join(getChannelConfigDir("whatsapp", owner), "worker-heartbeat.json"),
+        JSON.stringify({
+          pid: process.pid,
+          updatedAt: new Date().toISOString(),
+        })
+      );
+      const mockPm2 = createMockPm2();
+      const service = new WorkerManagerService(projectRoot, mockPm2);
+
+      await service.recoverDesiredWorkers();
+
+      expect((await readWorkerDesiredState(owner)).whatsapp).toBe(true);
       expect(mockPm2.start).not.toHaveBeenCalled();
     });
   });

@@ -19,7 +19,7 @@ function requireWorkerAuthorization(
   name: string,
   manager: ServerOptions["workerManager"]
 ): void {
-  if (["telegram", "discord", "whatsapp"].includes(name)) {
+  if (["telegram", "discord", "whatsapp", "slack"].includes(name)) {
     requireOrgAdminOrPlatformAdminFromContext(c);
     return;
   }
@@ -39,7 +39,7 @@ export function registerWorkerRoutes(
 ): void {
   const { workerManager } = options;
   async function workerScope(c: Context<AppEnv>, name: string) {
-    if (!["telegram", "discord", "whatsapp"].includes(name)) {
+    if (!["telegram", "discord", "whatsapp", "slack"].includes(name)) {
       return null;
     }
     const orgId = requireActiveOrgIdFromContext(c);
@@ -213,7 +213,7 @@ export function registerWorkerRoutes(
             );
           }
           await workerManager.disconnectChannel(
-            name as "telegram" | "discord" | "whatsapp",
+            name as "telegram" | "discord" | "whatsapp" | "slack",
             owner
           );
         } else if (action === "start") {

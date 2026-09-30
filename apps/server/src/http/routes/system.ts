@@ -45,6 +45,27 @@ const DOCS_HTML = `<!doctype html>
 </html>
 `;
 
+/**
+ * Host page for HTML artifact previews. A `srcdoc` frame inherits the app's
+ * strict CSP, so artifact scripts (inline or CDN) never ran. This page carries
+ * its own permissive CSP and writes the HTML the parent posts into itself; the
+ * web client still loads it sandboxed without `allow-same-origin`.
+ */
+export const ARTIFACT_FRAME_PATH = "/artifact-frame";
+export const ARTIFACT_FRAME_CSP =
+  "default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'self'";
+const ARTIFACT_FRAME_HTML = `<!doctype html>
+<script>
+  addEventListener("message", (event) => {
+    if (event.source !== parent || typeof event.data?.nakamaArtifactHtml !== "string") return;
+    document.open();
+    document.write(event.data.nakamaArtifactHtml);
+    document.close();
+  });
+  parent.postMessage("nakama-artifact-frame-ready", "*");
+</script>
+`;
+
 const BUILTIN_TOOL_NAMES = Object.keys(BUILTIN_TOOL_IDS);
 
 export function registerSystemRoutes(
@@ -186,6 +207,14 @@ export function registerSystemRoutes(
     "/docs/",
     () =>
       new Response(DOCS_HTML, {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      })
+  );
+
+  app.get(
+    ARTIFACT_FRAME_PATH,
+    () =>
+      new Response(ARTIFACT_FRAME_HTML, {
         headers: { "Content-Type": "text/html; charset=utf-8" },
       })
   );

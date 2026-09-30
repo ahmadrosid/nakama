@@ -35,6 +35,7 @@ import {
   composeMatchedSkillsPrompt,
   composeSkillMarkdown,
   composeSkillsCatalog,
+  createBlockedSkillCodeTool,
   createId,
   createSkillFile,
   type DiscoveredSkill,
@@ -48,6 +49,7 @@ import {
   getProfileSoulDir,
   guardFilePath,
   isGlobalSkillSourcePath,
+  isMemberAuthoredSkillDirectory,
   isPathWithinProfileSkillsDir,
   loadSkillTools,
   matchSkillsForMessage,
@@ -61,6 +63,7 @@ import {
   removeProfileSkillSupportingFile,
   resolveProfileSkillDirectory,
   resolveProfileSkillSupportingFilePath,
+  resolveSkillCodeExecutionPolicy,
   SKILL_FILE_NAME,
   writeProfileSkillSupportingFile,
   writeRawProfileSkillMarkdown,
@@ -80,6 +83,7 @@ import {
   withAssignmentChange,
 } from "./profile-change-history";
 import { loadPythonSkillTool } from "./python-skill-tool-loader";
+import { isSkillWriteApprovalRequired } from "./skill-write-approval";
 
 export interface SkillUsageRecordingContext {
   seenCatalogSkillIds: Set<string>;
@@ -223,7 +227,10 @@ export class SkillsService {
       throw new Error("Skill name is required.");
     }
 
-    if (!request.description.trim()) {
+    // Optional chaining because a create with no description used to reach
+    // .trim() on undefined and answer 500, which reads as a server fault for
+    // what is a missing field.
+    if (!request.description?.trim()) {
       throw new Error("Skill description is required.");
     }
 
@@ -235,6 +242,7 @@ export class SkillsService {
       name,
       orgId: profileId ? orgId : undefined,
       profileId,
+      scripts: request.scripts,
     });
 
     const discovered = await discoverSkillDirectory(directory);
@@ -302,6 +310,10 @@ export class SkillsService {
       description,
       disableModelInvocation,
       name: parsed.frontmatter.name,
+      // Carried from what is on disk. A patch edits prose; it has no opinion
+      // about which scripts the skill ships, and dropping the key here leaves
+      // the skill installed with none of its scripts loaded as tools.
+      scripts: parsed.frontmatter.scripts,
     });
 
     parseSkillMarkdown(content, skillFilePath);
@@ -829,6 +841,7 @@ export class SkillsService {
       skill: {
         ...toSkillSummary(record),
         body,
+        scriptIssues: discovered?.scriptIssues ?? [],
       },
     };
   }
@@ -1059,9 +1072,117 @@ export class SkillsService {
     profileId: string
   ): Promise<ToolDefinition[]> {
     const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
-    const skillTools = assigned.filter(
-      (item) => !isPluginOwnedSkill(item.record) && item.discovered.hasTool
-    );
+    // What a member asks the agent to write lands under this profile's own
+    // skills dir, and a skill's tool module and `scripts:` entries are host
+    // code. The setting alone cannot approve files written before it was on:
+    // each code file must still match content from an approved proposal.
+    // Approval is read fail-closed:
+    // a database hiccup, or an org the adapter cannot resolve, must not read as
+    // approved. The write path still 404s on a profile that is really missing,
+    // so only the exec decision degrades.
+    const memberAuthoredCodeApproved = await isSkillWriteApprovalRequired(
+      this.db,
+      orgId,
+      profileId
+    ).catch((error: unknown) => {
+      console.warn(
+        `[nakama:skills] Treating ${orgId}/${profileId} skill code as unapproved:`,
+        error instanceof Error ? error.message : error
+      );
+      return false;
+    });
+    const approvedCode = new Map<string, Set<string>>();
+    if (memberAuthoredCodeApproved) {
+      const proposals = await this.db
+        .listSkillProposals(orgId, { profileId, status: "approved" })
+        .catch((error: unknown) => {
+          console.warn(
+            "[nakama:skills] Could not read approved skill code:",
+            error
+          );
+          return [];
+        });
+      for (const proposal of proposals) {
+        const files =
+          proposal.action === "create"
+            ? (proposal.supportingFiles ?? []).map((file) => ({
+                bytes: Buffer.from(file.contentBase64, "base64"),
+                path: file.path,
+              }))
+            : (proposal.action === "write_file" ||
+                  proposal.action === "approve_code") &&
+                proposal.relativePath &&
+                proposal.content !== null
+              ? [
+                  {
+                    bytes: Buffer.from(proposal.content),
+                    path: proposal.relativePath,
+                  },
+                ]
+              : [];
+        for (const file of files) {
+          const key = `${proposal.skillName}/${file.path.replaceAll("\\", "/")}`;
+          const hashes = approvedCode.get(key) ?? new Set<string>();
+          hashes.add(createHash("sha256").update(file.bytes).digest("hex"));
+          approvedCode.set(key, hashes);
+        }
+      }
+    }
+    const codeIsReviewed = async (skill: DiscoveredSkill): Promise<boolean> => {
+      const directories = [skill.directory];
+      while (directories.length > 0) {
+        const directory = directories.pop()!;
+        for (const entry of await readdir(directory, { withFileTypes: true })) {
+          const file = path.join(directory, entry.name);
+          if (entry.isSymbolicLink()) {
+            return false;
+          }
+          if (entry.isDirectory()) {
+            directories.push(file);
+          } else if (/\.(?:py|js|ts|mjs|cjs|jsx|tsx)$/i.test(entry.name)) {
+            const key = `${skill.name}/${path.relative(skill.directory, file).split(path.sep).join("/")}`;
+            const digest = createHash("sha256")
+              .update(await readFile(file))
+              .digest("hex");
+            if (!approvedCode.get(key)?.has(digest)) {
+              return false;
+            }
+          }
+        }
+      }
+      return true;
+    };
+    const loadable: typeof assigned = [];
+    const blocked: Array<{
+      discovered: DiscoveredSkill;
+      reason: string;
+    }> = [];
+    for (const item of assigned) {
+      if (isPluginOwnedSkill(item.record)) {
+        continue;
+      }
+      const reviewed =
+        memberAuthoredCodeApproved &&
+        isMemberAuthoredSkillDirectory({
+          directory: item.discovered.directory,
+          orgId,
+          profileId,
+        })
+          ? await codeIsReviewed(item.discovered).catch(() => false)
+          : memberAuthoredCodeApproved;
+      const policy = resolveSkillCodeExecutionPolicy({
+        directory: item.discovered.directory,
+        memberAuthoredCodeApproved: reviewed,
+        orgId,
+        profileId,
+      });
+      if (policy.executable) {
+        loadable.push(item);
+      } else {
+        blocked.push({ discovered: item.discovered, reason: policy.reason });
+      }
+    }
+    const skillTools = loadable.filter((item) => item.discovered.hasTool);
     const javascriptTools = await loadSkillTools(
       skillTools
         .filter((item) => !item.discovered.toolPath?.endsWith(".py"))
@@ -1070,11 +1191,55 @@ export class SkillsService {
     const pythonTools = await Promise.all(
       skillTools
         .filter((item) => item.discovered.toolPath?.endsWith(".py"))
-        .map((item) => loadPythonSkillTool(item.discovered))
+        .map((item) =>
+          loadPythonSkillTool(item.discovered, undefined, {
+            exposeConfigDir: isGlobalSkillSourcePath(item.discovered.directory),
+          })
+        )
     );
+    // Scripts named in `scripts:` each become their own tool, so a skill is no
+    // longer capped at the single tool.py slot.
+    const declaredTools = await Promise.all(
+      loadable.flatMap((item) =>
+        item.discovered.scriptTools.map((script) =>
+          loadPythonSkillTool(item.discovered, script, {
+            exposeConfigDir: isGlobalSkillSourcePath(item.discovered.directory),
+          })
+        )
+      )
+    );
+    // The refusals keep the tool names occupied so the model is told why the
+    // skill's code did nothing, rather than finding an unknown tool and
+    // answering from the script's text as if it had run. A blocked tool
+    // module's own exported name is never read, because reading it means
+    // importing it, which is exactly what is being refused.
+    const refusals = blocked.flatMap(({ discovered, reason }) => {
+      const moduleStub = discovered.toolPath
+        ? [
+            createBlockedSkillCodeTool({
+              description: discovered.description,
+              name: discovered.name,
+              reason,
+            }),
+          ]
+        : [];
+      return [
+        ...moduleStub,
+        ...discovered.scriptTools.map((script) =>
+          createBlockedSkillCodeTool({
+            description: script.description,
+            name: script.name,
+            reason,
+          })
+        ),
+      ];
+    });
     return [
       ...javascriptTools,
-      ...pythonTools.filter((tool): tool is ToolDefinition => tool !== null),
+      ...refusals,
+      ...[...pythonTools, ...declaredTools].filter(
+        (tool): tool is ToolDefinition => tool !== null
+      ),
     ];
   }
 

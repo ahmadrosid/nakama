@@ -1,7 +1,13 @@
 import type { MiddlewareHandler } from "hono";
 import type { ServerOptions } from "./context";
 import { isPublicRouteRequest } from "./public-routes";
-import { assertBrowserCsrf, authenticateRequest } from "./shared";
+import {
+  assertBrowserCsrf,
+  authenticateRequest,
+  errorResponse,
+  isPendingBrowserMfa,
+  isPendingMfaAllowedRequest,
+} from "./shared";
 import type { AppEnv } from "./types";
 
 export function createAuthMiddleware(
@@ -53,6 +59,17 @@ export function createAuthMiddleware(
       }
 
       throw error;
+    }
+
+    if (
+      (await isPendingBrowserMfa(auth, databaseAdapter)) &&
+      !isPendingMfaAllowedRequest(c.req.method, c.req.path)
+    ) {
+      c.res = errorResponse(
+        "Complete MFA enrollment before accessing this resource.",
+        403
+      );
+      return;
     }
 
     c.set("auth", auth);

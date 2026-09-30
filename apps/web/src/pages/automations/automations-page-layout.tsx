@@ -6,8 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@nakama/ui/select";
-import { Spinner } from "@nakama/ui/spinner";
-import { Message01Icon, RefreshIcon } from "hugeicons-react";
+import { Message01Icon } from "hugeicons-react";
 import { AutomationDetailPanel } from "@/pages/automations/automation-detail-panel";
 import {
   AutomationDetailSkeleton,
@@ -27,7 +26,6 @@ export function AutomationsPageLayout(state: AutomationsPageState) {
     busy,
     searchQuery,
     setSearchQuery,
-    isSearching,
     loading,
     refreshing,
     initialLoading,
@@ -35,7 +33,6 @@ export function AutomationsPageLayout(state: AutomationsPageState) {
     filteredAutomations,
     error,
     goToCreateAutomation,
-    refresh,
   } = state;
 
   return (
@@ -85,31 +82,14 @@ export function AutomationsPageLayout(state: AutomationsPageState) {
               </SelectContent>
             </Select>
 
-            <div className="flex shrink-0 items-center gap-1">
-              <Button
-                aria-label="Refresh automations"
-                disabled={busy || refreshing}
-                onClick={() => void refresh()}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                {refreshing ? (
-                  <Spinner className="size-4" />
-                ) : (
-                  <RefreshIcon aria-hidden className="size-4" />
-                )}
-              </Button>
-              <Button onClick={goToCreateAutomation} size="sm" type="button">
-                <Message01Icon aria-hidden className="size-4" />
-                Create automation
-              </Button>
-            </div>
+            <Button onClick={goToCreateAutomation} size="sm" type="button">
+              <Message01Icon aria-hidden className="size-4" />
+              Create automation
+            </Button>
           </div>
 
           <AutomationSearch
             disabled={initialLoading || automations.length === 0 || busy}
-            isSearching={isSearching}
             onChange={setSearchQuery}
             onClear={() => setSearchQuery("")}
             value={searchQuery}

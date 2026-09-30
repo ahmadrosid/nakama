@@ -3,44 +3,19 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getDiscordConfigDir, getDiscordConfigPath } from "@nakama/core";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AutomationRunner } from "../services/automation-runner";
 import { AutomationService } from "../services/automation-service";
+import {
+  createAutomationTestDb as createTestDb,
+  ORG_ID,
+  PROFILE_ID,
+} from "../services/automation-test-fixtures";
 import {
   createAutomationRunHistoryTools,
   createAutomationTools,
 } from "./automation-tools";
 
-const ORG_ID = "org_test";
-const PROFILE_ID = "profile_default";
 const TOOL_CONTEXT = { orgId: ORG_ID, profileId: PROFILE_ID };
-
-async function createTestDb() {
-  const db = createInMemoryDatabaseAdapter();
-  const now = new Date().toISOString();
-
-  await db.upsertOrganization({
-    createdAt: now,
-    id: ORG_ID,
-    name: "Test Org",
-    slug: "test-org",
-    updatedAt: now,
-  });
-
-  await db.upsertProfile({
-    createdAt: now,
-    id: PROFILE_ID,
-    isDefault: true,
-    isSuper: false,
-    model: null,
-    name: "Default Bot",
-    orgId: ORG_ID,
-    systemPrompt: "",
-    updatedAt: now,
-  });
-
-  return db;
-}
 
 function getRunAutomationTool(
   service: AutomationService,

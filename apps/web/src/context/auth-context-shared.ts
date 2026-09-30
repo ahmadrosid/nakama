@@ -1,5 +1,6 @@
 import type {
   AuthUserResponse,
+  PasskeyCredentialResponse,
   SetupAuthRequest,
   UpdateOrganizationRequest,
   UserOrgSummary,
@@ -12,7 +13,16 @@ export interface AuthContextValue {
   createOrg: (input: { name: string; slug: string }) => Promise<void>;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (
+    email: string,
+    password: string,
+    mfa?: {
+      backupCode?: string;
+      mfaCode?: string;
+      passkey?: PasskeyCredentialResponse;
+      passkeyChallenge?: string;
+    }
+  ) => Promise<AuthUserResponse>;
   logout: () => Promise<void>;
   orgs: UserOrgSummary[];
   refreshSession: () => Promise<void>;

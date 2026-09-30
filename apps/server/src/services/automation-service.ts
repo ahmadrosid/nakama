@@ -326,10 +326,9 @@ export class AutomationService {
     automationId: string,
     result: { output?: string; error?: string }
   ): Promise<AutomationRunRecord> {
-    const active = await this.db.getActiveAutomationRun(automationId);
-    const run = active?.id === runId ? active : null;
+    const run = await this.db.getAutomationRun(automationId, runId);
 
-    if (!run) {
+    if (!run || run.status !== "running") {
       throw new Error("Automation run not found.");
     }
 

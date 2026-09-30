@@ -86,6 +86,12 @@ describe("web_fetch input schema", () => {
       raw: true,
       url: "http://x.io/a",
     });
+    expect(
+      webFetchInputSchema.parse({
+        imageMetadata: true,
+        url: "https://example.com",
+      })
+    ).toEqual({ imageMetadata: true, url: "https://example.com" });
   });
 
   test("rejects empty url, non-http schemes, unknown keys, and non-boolean raw", () => {
@@ -316,9 +322,11 @@ describe("web_fetch pins the address it verified", () => {
 
 describe("web_fetch happy path", () => {
   test("converts HTML to Markdown and returns metadata", async () => {
-    stubFetch(async () =>
-      htmlResponse("<h1>Title</h1><p>Hello <b>world</b></p>")
-    );
+    let requests = 0;
+    stubFetch(async () => {
+      requests += 1;
+      return htmlResponse("<h1>Title</h1><p>Hello <b>world</b></p>");
+    });
 
     const out = await webFetchTool.run({ url: "https://example.com" }, CTX);
 
@@ -329,6 +337,225 @@ describe("web_fetch happy path", () => {
     expect(out.bytes).toBeGreaterThan(0);
     expect(out.content).toContain("# Title");
     expect(out.content).toContain("**world**");
+    expect(out.imageUrl).toBeUndefined();
+    expect(requests).toBe(1); // The default path never fetches robots or images.
+  });
+
+  test("returns only a same-site HTTPS og:image sourced from the fetched school page", async () => {
+    const page = "https://chatswood-h.schools.nsw.gov.au/";
+    const requests: string[] = [];
+    stubFetch(async (input) => {
+      requests.push(String(input));
+      if (String(input).endsWith("/robots.txt")) {
+        return new Response("User-agent: *\nDisallow: /private/", {
+          headers: { "content-type": "text/plain" },
+        });
+      }
+      if (String(input).includes("/media_school.jpg")) {
+        return new Response(Buffer.from("ffd8ff00", "hex"), {
+          headers: { "content-type": "image/jpeg" },
+        });
+      }
+      return htmlResponse(`<!doctype html><html><head>
+        <title>Chatswood High School</title>
+        <meta content="https://chatswood-h.schools.nsw.gov.au/media_school.jpg?width=1200&#x26;format=pjpg" property="og:image">
+      </head><body><h1>Chatswood High School</h1></body></html>`);
+    });
+
+    const out = await webFetchTool.run({ imageMetadata: true, url: page }, CTX);
+    expect(out.finalUrl).toBe(page);
+    expect(out.imageUrl).toBe(
+      "https://chatswood-h.schools.nsw.gov.au/media_school.jpg?width=1200&format=pjpg"
+    );
+    expect(requests.map((request) => new URL(request).pathname)).toEqual([
+      "/robots.txt",
+      "/",
+      "/media_school.jpg",
+    ]);
+  });
+
+  test("returns no image for pages without suitable same-site image metadata", async () => {
+    for (const meta of [
+      "",
+      '<meta property="og:image" content="https://other.example.com/photo.jpg">',
+      '<meta property="og:image" content="http://chatswood-h.schools.nsw.gov.au/photo.jpg">',
+      '<meta property="og:image" content="https://chatswood-h.schools.nsw.gov.au/logo.svg">',
+      '<meta property="og:image" content="https://chatswood-h.schools.nsw.gov.au:8443/photo.jpg">',
+    ]) {
+      stubFetch(async (input) =>
+        String(input).endsWith("/robots.txt")
+          ? new Response("User-agent: *\nAllow: /", {
+              headers: { "content-type": "text/plain" },
+            })
+          : htmlResponse(`<html><head>${meta}</head><body>School</body></html>`)
+      );
+      const out = await webFetchTool.run(
+        {
+          imageMetadata: true,
+          url: "https://chatswood-h.schools.nsw.gov.au/",
+        },
+        CTX
+      );
+      expect(out.imageUrl).toBeNull();
+    }
+  });
+
+  test("does not trust image metadata after a redirect to an unrelated site", async () => {
+    let requests = 0;
+    stubFetch(async (input) => {
+      requests += 1;
+      return String(input).endsWith("/robots.txt")
+        ? new Response("User-agent: *\nAllow: /", {
+            headers: { "content-type": "text/plain" },
+          })
+        : new Response(null, {
+            headers: { location: "https://other.example.com/" },
+            status: 302,
+          });
+    });
+    await expect(
+      webFetchTool.run(
+        {
+          imageMetadata: true,
+          url: "https://chatswood-h.schools.nsw.gov.au/",
+        },
+        CTX
+      )
+    ).rejects.toThrow();
+    expect(requests).toBe(2); // No request to an unvetted redirect host.
+  });
+
+  test("robots denial prevents fetching the page or its declared image", async () => {
+    const requests: string[] = [];
+    stubFetch(async (input) => {
+      requests.push(String(input));
+      return new Response("User-agent: *\nDisallow: /", {
+        headers: { "content-type": "text/plain" },
+      });
+    });
+    await expect(
+      webFetchTool.run(
+        { imageMetadata: true, url: "https://example.com/" },
+        CTX
+      )
+    ).rejects.toThrow();
+    expect(requests.map((request) => new URL(request).pathname)).toEqual([
+      "/robots.txt",
+    ]);
+  });
+
+  test("a missing robots.txt permits reading the page", async () => {
+    const requests: string[] = [];
+    stubFetch(async (input) => {
+      const path = new URL(String(input)).pathname;
+      requests.push(path);
+      return path === "/robots.txt"
+        ? new Response(null, { status: 404 })
+        : htmlResponse("<h1>School with no image</h1>");
+    });
+    const out = await webFetchTool.run(
+      { imageMetadata: true, url: "https://example.com/" },
+      CTX
+    );
+    expect(out.imageUrl).toBeNull();
+    expect(requests).toEqual(["/robots.txt", "/"]);
+  });
+
+  test("unavailable or invalid robots policy fails closed before fetching a page", async () => {
+    for (const robotsResponse of [
+      new Response("failure", { status: 503 }),
+      htmlResponse("<html>not robots.txt</html>"),
+      new Response(null, {
+        headers: { location: "https://other.example.com/robots.txt" },
+        status: 302,
+      }),
+    ]) {
+      const requests: string[] = [];
+      stubFetch(async (input) => {
+        requests.push(new URL(String(input)).pathname);
+        return robotsResponse;
+      });
+      await expect(
+        webFetchTool.run(
+          { imageMetadata: true, url: "https://example.com/" },
+          CTX
+        )
+      ).rejects.toThrow();
+      expect(requests).toEqual(["/robots.txt"]);
+    }
+  });
+
+  test("robots denial and inaccessible images return null without trusting og:image", async () => {
+    const page = "https://example.com/";
+    for (const imageResponse of [
+      null,
+      new Response("unavailable", { status: 404 }),
+      new Response("<html>not an image</html>", {
+        headers: { "content-type": "image/jpeg" },
+      }),
+      new Response(null, {
+        headers: { location: "https://another.example.com/pic.jpg" },
+        status: 302,
+      }),
+    ]) {
+      const requests: string[] = [];
+      stubFetch(async (input) => {
+        const path = new URL(String(input)).pathname;
+        requests.push(path);
+        if (path === "/robots.txt") {
+          return new Response(
+            `User-agent: *\n${imageResponse ? "Allow: /" : "Disallow: /*.jpg$"}`,
+            { headers: { "content-type": "text/plain" } }
+          );
+        }
+        if (path === "/") {
+          return htmlResponse(
+            '<meta property="og:image" content="https://example.com/pic.jpg">'
+          );
+        }
+        return imageResponse ?? new Response("unexpected image request");
+      });
+      const out = await webFetchTool.run(
+        { imageMetadata: true, url: page },
+        CTX
+      );
+      expect(out.imageUrl).toBeNull();
+      expect(requests).toEqual(
+        imageResponse ? ["/robots.txt", "/", "/pic.jpg"] : ["/robots.txt", "/"]
+      );
+    }
+  });
+
+  test("an og:image that redirects is not a direct image URL", async () => {
+    const requests: string[] = [];
+    stubFetch(async (input) => {
+      const path = new URL(String(input)).pathname;
+      requests.push(path);
+      if (path === "/robots.txt") {
+        return new Response("User-agent: *\nAllow: /", {
+          headers: { "content-type": "text/plain" },
+        });
+      }
+      if (path === "/") {
+        return htmlResponse(
+          '<meta property="og:image" content="https://example.com/photo.jpg">'
+        );
+      }
+      return path === "/photo.jpg"
+        ? new Response(null, {
+            headers: { location: "https://example.com/final.jpg" },
+            status: 302,
+          })
+        : new Response(Buffer.from("ffd8ff00", "hex"), {
+            headers: { "content-type": "image/jpeg" },
+          });
+    });
+    const out = await webFetchTool.run(
+      { imageMetadata: true, url: "https://example.com/" },
+      CTX
+    );
+    expect(out.imageUrl).toBeNull();
+    expect(requests).toEqual(["/robots.txt", "/", "/photo.jpg"]);
   });
 
   test("respects raw=true (no markdown conversion)", async () => {

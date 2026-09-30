@@ -46,7 +46,7 @@ test.each(["http", "stdio"] as const)(
       state = useMcpServerDialogState({
         busy: false,
         onSubmit: async (request) => {
-          requests.push(JSON.parse(JSON.stringify(request)));
+          requests.push(structuredClone(request));
         },
         open,
         server: editing ? server : null,

@@ -1,8 +1,12 @@
 # Nakama — one container: API, web dashboard, automation + task workers
 # Build & run: ./scripts/docker-build-run.sh
 
-# --- Build web dashboard and runtime bundles for the target architecture ---
-FROM oven/bun:1.4-slim AS web-builder
+# Keep image references literal so Dependabot can update all three pins.
+# Use patch-version tags so new Bun patches produce version updates.
+# Verify each proposed multi-arch digest with: docker buildx imagetools inspect <image>
+
+# --- Build architecture-independent web and JavaScript bundles once ---
+FROM --platform=$BUILDPLATFORM oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61 AS web-builder
 WORKDIR /app
 
 COPY package.json bun.lock ./
@@ -16,8 +20,19 @@ RUN bun install --frozen-lockfile --ignore-scripts \
   && bun run --filter @nakama/automation build \
   && bun run --filter @nakama/telegram build \
   && bun run --filter @nakama/whatsapp build \
-  && bun run --filter @nakama/discord build
+  && bun run --filter @nakama/discord build \
+  && bun run --filter @nakama/slack build
 
+FROM scratch AS build-assets
+COPY --from=web-builder /app/apps/web/dist /app/apps/web/dist
+COPY --from=web-builder /app/apps/server/dist /app/apps/server/dist
+COPY --from=web-builder /app/apps/platform/automation/dist /app/apps/platform/automation/dist
+COPY --from=web-builder /app/apps/platform/telegram/dist /app/apps/platform/telegram/dist
+COPY --from=web-builder /app/apps/platform/whatsapp/dist /app/apps/platform/whatsapp/dist
+COPY --from=web-builder /app/apps/platform/discord/dist /app/apps/platform/discord/dist
+COPY --from=web-builder /app/apps/platform/slack/dist /app/apps/platform/slack/dist
+
+FROM oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61 AS runtime-deps
 RUN mkdir -p /runtime-deps \
   && printf '{"private":true}\n' > /runtime-deps/package.json \
   && cd /runtime-deps \
@@ -43,7 +58,7 @@ RUN set -eu; \
   chmod +x /ffmpeg /ffprobe
 
 # --- Production runtime (server + workspace packages + built static assets) ---
-FROM oven/bun:1.4-slim AS runtime
+FROM oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61 AS runtime
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates sudo python3 \
@@ -103,13 +118,14 @@ RUN mkdir -p /nakama/data \
 COPY --chown=1000:1000 package.json ./
 COPY --chown=1000:1000 apps/server apps/server
 COPY --chown=1000:1000 packages packages
-COPY --chown=1000:1000 --from=web-builder /app/apps/web/dist apps/web/dist
-COPY --chown=1000:1000 --from=web-builder /app/apps/server/dist apps/server/dist
-COPY --chown=1000:1000 --from=web-builder /app/apps/platform/automation/dist apps/platform/automation/dist
-COPY --chown=1000:1000 --from=web-builder /app/apps/platform/telegram/dist apps/platform/telegram/dist
-COPY --chown=1000:1000 --from=web-builder /app/apps/platform/whatsapp/dist apps/platform/whatsapp/dist
-COPY --chown=1000:1000 --from=web-builder /app/apps/platform/discord/dist apps/platform/discord/dist
-COPY --chown=1000:1000 --from=web-builder /runtime-deps/node_modules node_modules
+COPY --chown=1000:1000 --from=build-assets /app/apps/web/dist apps/web/dist
+COPY --chown=1000:1000 --from=build-assets /app/apps/server/dist apps/server/dist
+COPY --chown=1000:1000 --from=build-assets /app/apps/platform/automation/dist apps/platform/automation/dist
+COPY --chown=1000:1000 --from=build-assets /app/apps/platform/telegram/dist apps/platform/telegram/dist
+COPY --chown=1000:1000 --from=build-assets /app/apps/platform/whatsapp/dist apps/platform/whatsapp/dist
+COPY --chown=1000:1000 --from=build-assets /app/apps/platform/discord/dist apps/platform/discord/dist
+COPY --chown=1000:1000 --from=build-assets /app/apps/platform/slack/dist apps/platform/slack/dist
+COPY --chown=1000:1000 --from=runtime-deps /runtime-deps/node_modules node_modules
 
 RUN test -f apps/server/src/services/javascript-tool-runner.js \
   && test -f apps/server/src/services/plugin-runner.js \

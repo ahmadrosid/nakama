@@ -222,6 +222,13 @@ function buildThinkingBody(
   thinking: ProviderChatOptions["thinking"] | undefined,
   options: { model: string; hasTools: boolean }
 ) {
+  if (
+    options.hasTools &&
+    options.model.trim().toLowerCase().startsWith("gpt-6-astra")
+  ) {
+    throw new Error("GPT-6 Astra requires the Responses API for tools.");
+  }
+
   // OpenAI gpt-5.4+ chat/completions rejects tools + non-none reasoning_effort
   // (including when the API would default effort). Force none whenever tools are present.
   if (
