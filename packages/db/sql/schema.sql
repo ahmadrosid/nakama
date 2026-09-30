@@ -193,6 +193,18 @@ CREATE TABLE IF NOT EXISTS notification_destinations (
 CREATE INDEX IF NOT EXISTS notification_destinations_org_id
   ON notification_destinations (org_id);
 
+-- Idempotency ledger for public POST /v1/notify/:destinationId (claim before send).
+CREATE TABLE IF NOT EXISTS notification_webhook_deliveries (
+  destination_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (destination_id, event_id),
+  FOREIGN KEY (destination_id) REFERENCES notification_destinations (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS notification_webhook_deliveries_created_at
+  ON notification_webhook_deliveries (created_at);
+
 CREATE TABLE IF NOT EXISTS mcp_servers (
   id TEXT PRIMARY KEY NOT NULL,
   name TEXT NOT NULL,

@@ -1,6 +1,7 @@
 import { readdir, readFile, rm } from "node:fs/promises";
 import {
   basename,
+  extname,
   isAbsolute,
   join,
   normalize,
@@ -64,6 +65,26 @@ const ROOT_ALLOWED_FILES = new Set([
 ]);
 const ALLOWED_ROOT_SUBDIRS = new Set(["examples", "knowledge-base", "skills"]);
 const AVATAR_BASENAME_PATTERN = /^avatar\.[a-z0-9]+$/i;
+/**
+ * A skill-local `tool.js`/`tool.ts` is `import()`ed straight into the
+ * long-lived server process, so a pack carrying one turns a profile import
+ * into arbitrary code execution holding the deployment's secrets, the
+ * database handle, and the server's network identity. Python skill tools run
+ * in a separate interpreter and are not covered here.
+ */
+const IN_PROCESS_SKILL_SOURCE_EXTENSIONS = new Set([
+  ".cjs",
+  ".cts",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".mts",
+  ".ts",
+  ".tsx",
+]);
+const IN_PROCESS_SKILL_SOURCE_REASON =
+  "Executable JavaScript/TypeScript skill sources run inside the Nakama server process and are never installed from a profile pack.";
+
 const AVATAR_EXTENSION_MEDIA_TYPES: Record<string, string> = {
   gif: "image/gif",
   jpeg: "image/jpeg",
@@ -475,7 +496,8 @@ async function inventorySkillsDir(
     await collectFilesRecursively(
       join(skillsDir, entry.name),
       relativePath,
-      files
+      files,
+      skipped
     );
   }
 }
@@ -483,7 +505,8 @@ async function inventorySkillsDir(
 async function collectFilesRecursively(
   dir: string,
   relativeBase: string,
-  out: ProfilePackFile[]
+  out: ProfilePackFile[],
+  skipped?: ProfilePackSkippedItem[]
 ): Promise<void> {
   const entries = await readdir(dir, { withFileTypes: true });
 
@@ -492,10 +515,25 @@ async function collectFilesRecursively(
     const relativePath = `${relativeBase}/${entry.name}`;
 
     if (entry.isDirectory()) {
-      await collectFilesRecursively(absolutePath, relativePath, out);
-    } else if (entry.isFile()) {
-      out.push({ absolutePath, relativePath });
+      await collectFilesRecursively(absolutePath, relativePath, out, skipped);
+      continue;
     }
+
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    // A pack is a transport, not an approval channel: anything a receiver
+    // would have to refuse on import never leaves the exporting server either.
+    if (skipped && isInProcessSkillSource(relativePath)) {
+      skipped.push({
+        path: relativePath,
+        reason: IN_PROCESS_SKILL_SOURCE_REASON,
+      });
+      continue;
+    }
+
+    out.push({ absolutePath, relativePath });
   }
 }
 
@@ -1211,6 +1249,24 @@ function isAvatarEntry(relativePath: string): boolean {
   );
 }
 
+/**
+ * True for pack paths the server would `import()` while building a session's
+ * tools. Only paths under `skills/` qualify: the same extensions elsewhere in
+ * a profile are inert documentation, and the agent write tools already refuse
+ * skill-local executables.
+ */
+function isInProcessSkillSource(relativePath: string): boolean {
+  const [first, ...rest] = relativePath.split("/");
+
+  if (first !== "skills" || rest.length === 0) {
+    return false;
+  }
+
+  return IN_PROCESS_SKILL_SOURCE_EXTENSIONS.has(
+    extname(relativePath).toLowerCase()
+  );
+}
+
 function isAllowlistedProfilePackPath(relativePath: string): boolean {
   if (ROOT_ALLOWED_FILES.has(relativePath)) {
     return true;
@@ -1272,8 +1328,16 @@ function readProfilePackZip(
     )
       .filter(([name]) => !name.endsWith("/"))
       .map(([name, data]) => {
-        validateProfilePackEntryPath(name);
-        return { data: Buffer.from(data), name };
+        const entryPath = validateProfilePackEntryPath(name);
+
+        if (isInProcessSkillSource(entryPath)) {
+          throw new NakamaApiError(
+            `Profile pack entry ${entryPath} is not importable. ${IN_PROCESS_SKILL_SOURCE_REASON}`,
+            400
+          );
+        }
+
+        return { data: Buffer.from(data), name: entryPath };
       });
   } catch (error) {
     if (error instanceof NakamaApiError) {
@@ -1323,28 +1387,35 @@ function readProfilePackManifest(
   return manifest;
 }
 
-function validateProfilePackEntryPath(path: string): void {
-  if (!path || path.includes("\0")) {
+/**
+ * Returns the canonical POSIX form of the entry path, so the guard below and
+ * the write that follows it see the same string: `./skills/x/tool.js` and
+ * `skills/x/tool.js` must not slip past as two different entries.
+ */
+function validateProfilePackEntryPath(entryPath: string): string {
+  if (!entryPath || entryPath.includes("\0")) {
     throw new Error("Archive entry path is empty or invalid.");
   }
 
-  if (path !== toZipPath(path)) {
-    throw new Error(`Archive entry must use POSIX separators: ${path}`);
+  if (entryPath !== toZipPath(entryPath)) {
+    throw new Error(`Archive entry must use POSIX separators: ${entryPath}`);
   }
 
-  if (isAbsolute(path) || /^[a-zA-Z]:/.test(path)) {
-    throw new Error(`Archive entry must be relative: ${path}`);
+  if (isAbsolute(entryPath) || /^[a-zA-Z]:/.test(entryPath)) {
+    throw new Error(`Archive entry must be relative: ${entryPath}`);
   }
 
-  const normalized = normalize(path).split(sep).join("/");
+  const normalized = normalize(entryPath).split(sep).join("/");
 
   if (
     normalized === ".." ||
     normalized.startsWith("../") ||
     normalized.includes("/../")
   ) {
-    throw new Error(`Archive entry escapes profile pack root: ${path}`);
+    throw new Error(`Archive entry escapes profile pack root: ${entryPath}`);
   }
+
+  return normalized;
 }
 
 function toZipPath(path: string): string {

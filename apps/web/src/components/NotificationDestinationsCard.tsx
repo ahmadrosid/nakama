@@ -83,6 +83,7 @@ function LatestSecret({
     `curl -X POST '${webhookUrl}' \\`,
     `  -H 'Content-Type: application/json' \\`,
     `  -H 'X-API-Key: ${apiKey}' \\`,
+    `  -H "Idempotency-Key: evt_$(date +%s)_$$" \\`,
     `  -d '{`,
     `    "title": "New notification",`,
     `    "body": "Hello from Nakama",`,

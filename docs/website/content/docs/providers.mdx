@@ -43,7 +43,7 @@ Nakama supports these built-in provider types:
 
 | Provider | Notes |
 |---|---|
-| OpenAI | GPT models; required for OpenAI audio transcription (Telegram voice notes) |
+| OpenAI | GPT models; required for OpenAI audio transcription (Telegram voice notes); can also drive local image-generation and transcription endpoints via a custom base URL |
 | ChatGPT (Plus/Pro) | Sign in with ChatGPT; uses your plan quota via Codex (not API credits). One account per Nakama instance |
 | Grok (SuperGrok / Premium+) | Sign in with your xAI subscription; API eligibility depends on your plan |
 | Anthropic | Claude models |
@@ -72,7 +72,7 @@ Most built-in types allow one configured instance each. **Ollama** and **Custom 
 Some capabilities depend on the active provider:
 
 - **Web search** (`web_search` tool) — OpenAI or Anthropic with a valid API key; not available on OpenRouter or ChatGPT (Plus/Pro). Configure a custom back-end (Exa, Firecrawl, or any JSON search endpoint) in **Settings → Web search** to lift this restriction
-- **Audio transcription** (Telegram voice notes) — requires an OpenAI provider and a transcription model in **Settings → Audio transcription model** (ChatGPT Plus/Pro cannot replace this)
+- **Audio transcription** (Telegram voice notes) — needs a transcription model in **Settings → Audio transcription model**, backed by an OpenAI provider or an OpenAI-compatible provider with a base URL (ChatGPT Plus/Pro cannot replace this)
 - **Image parsing** — used when the chat model cannot see images. Set **Settings → Image parsing model**. The list only includes models marked as vision-capable. For a custom endpoint, turn **Vision** on for that model under **Settings → LLM providers**
 - **Responses API endpoints**: a custom endpoint that serves `/responses` rather than `/chat/completions`. Set **API** to Responses under **Settings → LLM providers**, or answer `responses` in the CLI setup wizard. Required for endpoints that do not serve chat/completions at all, and it keeps reasoning available alongside tools on models that reject the pair on chat/completions
 - **Context window**: models in the built-in catalog carry their own size. A model Nakama does not recognise (a custom endpoint, an OpenRouter slug, a self-hosted build) falls back to 128k, which cuts history early on a larger model and overflows a smaller one. Set **Context** for that model under **Settings → LLM providers** to the real token window; leave it on auto to keep the fallback. Browsing models.dev fills it in for you
@@ -90,7 +90,7 @@ ChatGPT Plus/Pro is **not** an OpenAI API key. In **Settings → LLM providers**
 
 - One ChatGPT account covers the whole Nakama instance (operator use, not per-user login)
 - Usage comes from your ChatGPT plan quota, not pay-as-you-go API billing
-- Whisper transcription and image generation still need a regular OpenAI API key provider
+- Whisper transcription and image generation still need a regular OpenAI API-key provider or an OpenAI-compatible provider with a base URL
 - Coding-agent provider passthrough does not apply to this provider type — use **Integrations → Coding agents → harness login** with `codex login` for Codex CLI subscription use
 
 ## Grok (SuperGrok / Premium+)
@@ -104,6 +104,53 @@ Connect your Grok subscription to chat with Grok models in Nakama without enteri
 Nakama refreshes the saved session automatically. Use **Reconnect Grok** if access is revoked. The connected account is shared across the Nakama instance.
 
 xAI controls subscription API eligibility and usage limits. A successful sign-in does not guarantee model access; a 402 or 403 response can indicate a quota or plan restriction.
+
+## Self-hosted / local models for image generation and transcription
+
+Keep prompts, images, and audio entirely inside your network (data residency) by pointing image generation and audio transcription at an **OpenAI-compatible** backend you host. Nakama never calls `api.openai.com` for these flows when the provider carries a base URL.
+
+### Add a local OpenAI-compatible provider
+
+1. In **Settings → LLM providers → Add provider**, choose **Custom (OpenAI-compatible)**.
+2. Set **Base URL** to your local endpoint (for example `http://localhost:8000/v1` or `http://100.64.0.1:8000/v1` for a Tailscale peer).
+3. Enter an API key. Local backends often ignore it, but the field is required — use any non-empty placeholder (`local-key`, `ollama`, etc.) if your server does not verify one.
+4. Add at least one model under **Models** (`gpt-image-2`, a Whisper id, etc.). For a model you set as the transcription or image-generation model, enable the matching capability (image **Vision** toggle for image parsing) under **Settings → LLM providers**.
+
+### Image generation
+
+Set **Image generation model** in Settings to select `gpt-image-2` against the compatible instance:
+
+```text
+openai_compatible::gpt-image-2
+```
+
+Nakama requests `POST {baseUrl}/images/generations` (for example `http://localhost:8000/v1/images/generations`) with the same body OpenAI sends. A backend exposes images as `b64_json` works unchanged.
+
+### Audio transcription
+
+Set **Audio transcription model** to the Whisper id your endpoint serves, for example:
+
+```text
+p-my-local::whisper-1
+```
+
+where `p-my-local` is the id of the local provider instance. Nakama sends a multipart `POST {baseUrl}/audio/transcriptions` with the audio `file` and the `model` name — the same contract as OpenAI's transcriptions endpoint.
+
+### Verify the two flows
+
+Both routes answer over the configured base URL, so a deployment whose only provider is a local endpoint makes no call to `api.openai.com`:
+
+```sh
+# Transcription
+curl -sS "$BASE_URL/v1/audio/transcriptions" \
+  -F model=whisper-1 -F file=@voice.ogg
+
+# Image generation
+curl -sS "$BASE_URL/v1/images/generations" \
+  -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-image-2","prompt":"a cat","n":1,"output_format":"png","size":"1024x1024"}'
+```
 
 ## Next steps
 
