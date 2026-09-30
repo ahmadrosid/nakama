@@ -1029,7 +1029,9 @@ export class AgentService {
     this.llmUsageTracker?.record(
       result.model,
       usage.inputTokens,
-      usage.outputTokens
+      usage.outputTokens,
+      0,
+      { providerInstance: selection.instance }
     );
 
     return {
