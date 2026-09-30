@@ -258,9 +258,7 @@ export async function generateImageWithOpenAI(
         "Content-Type": "application/json",
       },
       method: "POST",
-      signal: input.signal
-        ? AbortSignal.any([input.signal, deadline])
-        : deadline,
+      signal: input.signal ? AbortSignal.any([input.signal, deadline]) : deadline,
     }
   ).catch(rethrowTimeout);
 
