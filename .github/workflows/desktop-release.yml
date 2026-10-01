@@ -170,33 +170,3 @@ jobs:
           name: nakama-windows-store
           path: apps/desktop/dist/electron/*.msix
           if-no-files-found: error
-
-  # The only job that can attach a Store package to a release.
-  windows-store-publish:
-    needs: [release, windows-store]
-    if: ${{ !cancelled() && needs.windows-store.result == 'success' && (needs.release.result == 'success' || github.event_name == 'workflow_dispatch') }}
-    runs-on: windows-latest
-    timeout-minutes: 20
-    permissions:
-      contents: write
-    env:
-      RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.release_tag }}
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
-      - name: Download Store package
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: nakama-windows-store
-          path: apps/desktop/dist/electron
-      - name: Upload Windows package to release
-        if: env.RELEASE_TAG != ''
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $packages = @(Get-ChildItem apps/desktop/dist/electron/*.msix | ForEach-Object { $_.FullName })
-          if ($packages.Count -eq 0) { throw 'No MSIX package found.' }
-          gh release upload $env:RELEASE_TAG @packages --repo $env:GITHUB_REPOSITORY --clobber
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
