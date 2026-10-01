@@ -138,19 +138,6 @@ describe("browser session governance", () => {
     }
 
     const secret = `nk_live_${"d".repeat(64)}`;
-    await databaseAdapter.createApiKey({
-      createdAt: new Date().toISOString(),
-      createdByUserId: user.id,
-      environment: "live",
-      expiresAt: null,
-      id: "key_auth_sessions_list",
-      keyPrefix: secret.slice(0, 20),
-      lastUsedAt: null,
-      name: "Auth sessions list test",
-      orgId: owner.orgId,
-      revokedAt: null,
-      secretHash: authService.hashToken(secret),
-    });
 
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/auth/sessions", {
@@ -158,7 +145,7 @@ describe("browser session governance", () => {
       })
     );
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(401);
     const ownerSessions = await listSessions(app, owner);
     expect(ownerSessions.sessions.some((entry) => entry.current)).toBe(true);
   });
@@ -180,19 +167,6 @@ describe("browser session governance", () => {
     }
 
     const secret = `nk_live_${"e".repeat(64)}`;
-    await databaseAdapter.createApiKey({
-      createdAt: new Date().toISOString(),
-      createdByUserId: user.id,
-      environment: "live",
-      expiresAt: null,
-      id: "key_auth_sessions_revoke",
-      keyPrefix: secret.slice(0, 20),
-      lastUsedAt: null,
-      name: "Auth sessions revoke test",
-      orgId: owner.orgId,
-      revokedAt: null,
-      secretHash: authService.hashToken(secret),
-    });
 
     const response = await app.fetch(
       new Request(
@@ -204,7 +178,7 @@ describe("browser session governance", () => {
       )
     );
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(401);
     const remaining = await listSessions(app, owner);
     expect(remaining.sessions.map((entry) => entry.id)).toContain(
       ownerSessionId

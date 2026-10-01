@@ -1,53 +1,23 @@
-import { describe, expect, test } from "bun:test";
-import { createInMemoryDatabaseAdapter } from "./index";
+import { Database } from "bun:sqlite";
+import { expect, test } from "bun:test";
+import { migrateDatabase } from "./migrate";
 
-describe("API keys", () => {
-  test("stores, lists, resolves, and revokes org-scoped keys", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const now = new Date().toISOString();
-
-    await db.upsertOrganization({
-      createdAt: now,
-      id: "org_api",
-      name: "API Org",
-      slug: "api-org",
-      updatedAt: now,
-    });
-    await db.createUser({
-      createdAt: now,
-      email: "owner@example.com",
-      id: "user_owner",
-      passwordHash: "unused",
-      updatedAt: now,
-    });
-
-    await db.createApiKey({
-      createdAt: now,
-      createdByUserId: "user_owner",
-      environment: "live",
-      expiresAt: null,
-      id: "key_api",
-      keyPrefix: "nk_live_123456789012",
-      lastUsedAt: null,
-      name: "Production app",
-      orgId: "org_api",
-      revokedAt: null,
-      secretHash: "hash",
-    });
-
-    await expect(
-      db.getApiKeyByPrefix("nk_live_123456789012")
-    ).resolves.toMatchObject({
-      id: "key_api",
-      orgId: "org_api",
-      secretHash: "hash",
-    });
-    await expect(db.listApiKeysForOrg("org_api")).resolves.toHaveLength(1);
-    await expect(db.revokeApiKey("key_api", now)).resolves.toBe(true);
-    await expect(
-      db.getApiKeyByPrefix("nk_live_123456789012")
-    ).resolves.toMatchObject({
-      revokedAt: now,
-    });
-  });
+test("removes retired backend credentials on every migration, including restored databases", () => {
+  const db = new Database(":memory:");
+  try {
+    migrateDatabase(db);
+    db.exec(
+      "CREATE TABLE api_keys (id TEXT, secret_hash TEXT); INSERT INTO api_keys VALUES ('legacy', 'retired-secret')"
+    );
+    migrateDatabase(db);
+    expect(
+      db.query("SELECT name FROM sqlite_master WHERE name = 'api_keys'").all()
+    ).toEqual([]);
+    migrateDatabase(db);
+    expect(
+      db.query("SELECT name FROM sqlite_master WHERE name = 'api_keys'").all()
+    ).toEqual([]);
+  } finally {
+    db.close();
+  }
 });

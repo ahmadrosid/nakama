@@ -15,7 +15,7 @@ import path from "node:path";
 import { readArtifactFile } from "../artifacts";
 import { convertDocxToMarkdown } from "../docx-text";
 import { getGlobalSkillsDir } from "../skills/paths";
-import { ensureAppUserSoulDir, getProfileSoulDir } from "../soul/resolve";
+import { getChatWorkspaceDir, getProfileSoulDir } from "../soul/resolve";
 import {
   PathGuardError,
   runDeleteFile,
@@ -1182,15 +1182,11 @@ describe("file builtin tools", () => {
       runReadFile({ path: "/etc/nakama-should-fail" }, PROFILE_CONTEXT, opts)
     ).rejects.toThrow(/relative path under the active profile workspace/i);
   });
-  test("an app user's artifacts are written under that user's folder", async () => {
+  test("chat artifacts are written under that chat's folder", async () => {
     configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-appuser-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const appUserId = "app-user-42";
-    const userRoot = await ensureAppUserSoulDir(
-      PROFILE_CONTEXT.orgId,
-      PROFILE_CONTEXT.profileId,
-      appUserId
-    );
+    const userRoot = getChatWorkspaceDir(PROFILE_CONTEXT.orgId, "chat_test");
+    await mkdir(userRoot, { recursive: true });
     const context = buildToolExecutionContext({
       ...PROFILE_CONTEXT,
       workspaceRoot: userRoot,
@@ -1214,7 +1210,7 @@ describe("file builtin tools", () => {
     // The read side resolves the same folder, so the file it names is reachable.
     await expect(
       readArtifactFile({
-        appUserId,
+        directory: path.join(userRoot, "artifacts"),
         filename: "draft.docx",
         orgId: PROFILE_CONTEXT.orgId,
         profileId: PROFILE_CONTEXT.profileId,
@@ -1222,18 +1218,15 @@ describe("file builtin tools", () => {
     ).resolves.toMatchObject({ filePath: docx.path });
   });
 
-  test("everything outside artifacts stays on the profile for an app user", async () => {
+  test("ordinary files stay in the chat workspace", async () => {
     configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-appuser-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
     const profileRoot = getProfileSoulDir(
       PROFILE_CONTEXT.orgId,
       PROFILE_CONTEXT.profileId
     );
-    const userRoot = await ensureAppUserSoulDir(
-      PROFILE_CONTEXT.orgId,
-      PROFILE_CONTEXT.profileId,
-      "app-user-42"
-    );
+    const userRoot = getChatWorkspaceDir(PROFILE_CONTEXT.orgId, "chat_test");
+    await mkdir(userRoot, { recursive: true });
     const context = buildToolExecutionContext({
       ...PROFILE_CONTEXT,
       workspaceRoot: userRoot,
@@ -1247,11 +1240,11 @@ describe("file builtin tools", () => {
     );
 
     expect(written.path).toBe(
-      await realpath(path.join(profileRoot, "knowledge-base", "policy.md"))
+      await realpath(path.join(userRoot, "knowledge-base", "policy.md"))
     );
   });
 
-  test("a session with no app user writes artifacts where it always did", async () => {
+  test("operational tools retain their profile workspace", async () => {
     configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-appuser-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
     const profileRoot = getProfileSoulDir(

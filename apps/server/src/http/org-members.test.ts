@@ -295,7 +295,7 @@ describe("org member management (AE2)", () => {
     expect(badShapeResponse.status).toBe(400);
   });
 
-  test("admin can create, list, rotate, and revoke backend API keys", async () => {
+  test("retired backend API key routes are unavailable to admins", async () => {
     const { app, authService, databaseAdapter } = createMinimalHonoApp();
     const platformSession = await loginPlatformAdminSession(
       app,
@@ -334,49 +334,14 @@ describe("org member management (AE2)", () => {
         orgId
       );
 
-    const createKeyResponse = await app.fetch(
-      new Request(`http://localhost:4310/v1/orgs/${orgId}/api-keys`, {
-        body: JSON.stringify({ environment: "live", name: "Vibe app" }),
-        headers: headers(),
-        method: "POST",
-      })
-    );
-    expect(createKeyResponse.status).toBe(201);
-    const createdKey = (await createKeyResponse.json()) as {
-      key: { id: string };
-      secret: string;
-    };
-    expect(createdKey.secret).toStartWith("nk_live_");
-
-    const listResponse = await app.fetch(
-      new Request(`http://localhost:4310/v1/orgs/${orgId}/api-keys`, {
-        headers: headers(),
-      })
-    );
-    expect(listResponse.status).toBe(200);
-    expect(await listResponse.json()).toEqual({
-      keys: [expect.objectContaining({ name: "Vibe app" })],
-    });
-
-    const rotateResponse = await app.fetch(
-      new Request(
-        `http://localhost:4310/v1/orgs/${orgId}/api-keys/${createdKey.key.id}/rotate`,
-        { headers: headers(), method: "POST" }
-      )
-    );
-    expect(rotateResponse.status).toBe(200);
-    const rotated = (await rotateResponse.json()) as {
-      key: { id: string };
-      secret: string;
-    };
-    expect(rotated.secret).not.toBe(createdKey.secret);
-
-    const revokeResponse = await app.fetch(
-      new Request(
-        `http://localhost:4310/v1/orgs/${orgId}/api-keys/${rotated.key.id}`,
-        { headers: headers(), method: "DELETE" }
-      )
-    );
-    expect(revokeResponse.status).toBe(204);
+    for (const method of ["GET", "POST", "DELETE"]) {
+      const response = await app.fetch(
+        new Request(`http://localhost:4310/v1/orgs/${orgId}/api-keys`, {
+          headers: headers(),
+          method,
+        })
+      );
+      expect(response.status).toBe(404);
+    }
   });
 });

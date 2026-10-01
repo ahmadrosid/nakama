@@ -35,34 +35,10 @@ import type {
 import { convertDocxToMarkdown } from "./docx-text";
 import { pathExists } from "./fs";
 import { SOUL_FILES } from "./soul/load";
-import {
-  getAppUserSoulDir,
-  getProfileArtifactsDir,
-  getProfileSoulDir,
-} from "./soul/resolve";
+import { getProfileArtifactsDir, getProfileSoulDir } from "./soul/resolve";
 import { buildToolExecutionContext } from "./tools/context";
-import { jsonSchemaFromZod, parseToolInput } from "./tools/schema";
-
-/**
- * Where an artifact written by this org and profile is stored.
- *
- * An app user's own folder, or the shared profile folder when no app user is
- * named. Reads go through `artifactReadDirs` instead, which falls back to the
- * shared folder; this is the single destination a write picks.
- */
-function artifactsDirFor(
-  orgId: string,
-  profileId: string,
-  appUserId?: string | null
-): string {
-  const trimmed = appUserId?.trim();
-
-  return trimmed
-    ? path.join(getAppUserSoulDir(orgId, profileId, trimmed), "artifacts")
-    : getProfileArtifactsDir(orgId, profileId);
-}
-
 import { guardFilePath, PathGuardError } from "./tools/paths";
+import { jsonSchemaFromZod, parseToolInput } from "./tools/schema";
 
 const ARTIFACT_META_SUFFIX = ".nakama-meta.json";
 // ponytail: per-process locking; coordinate replicas before sharing writable workspaces.
@@ -94,11 +70,14 @@ export async function listArtifacts(
   orgId: string,
   profileId: string,
   options: ListArtifactsOptions = {},
-  workspaceRoot?: string
+  workspaceRoot?: string,
+  outputRoot?: string
 ): Promise<ListArtifactsResponse> {
-  const directory = workspaceRoot
-    ? path.join(workspaceRoot, "artifacts")
-    : artifactsDirFor(orgId, profileId, options.appUserId);
+  const directory =
+    outputRoot ??
+    (workspaceRoot
+      ? path.join(workspaceRoot, "artifacts")
+      : getProfileArtifactsDir(orgId, profileId));
 
   if (workspaceRoot && (await pathExists(directory))) {
     if ((await lstat(directory)).isSymbolicLink()) {
@@ -247,48 +226,6 @@ function artifactNotFoundOr(error: unknown, filename: string): unknown {
  * would strand files that exist today. It grants nothing new: the same caller
  * reaches the shared folder already by leaving the header off.
  */
-function artifactReadDirs(
-  orgId: string,
-  profileId: string,
-  appUserId?: string | null
-): { directory: string; fallback: boolean }[] {
-  const trimmed = appUserId?.trim();
-  const shared = {
-    directory: getProfileArtifactsDir(orgId, profileId),
-    fallback: false,
-  };
-
-  if (!trimmed) {
-    return [shared];
-  }
-
-  return [
-    {
-      directory: path.join(
-        getAppUserSoulDir(orgId, profileId, trimmed),
-        "artifacts"
-      ),
-      fallback: false,
-    },
-    { ...shared, fallback: true },
-  ];
-}
-
-/**
- * A name the fallback is allowed to carry into the shared folder. An app user
- * naming an absolute path or a `..` segment is reaching outside their own
- * folder, and that stays a 404 whatever is on the other side.
- */
-function isPlainArtifactName(filename: string): boolean {
-  if (path.isAbsolute(filename) || filename.startsWith("~")) {
-    return false;
-  }
-
-  return !filename
-    .split(/[\\/]/)
-    .some((segment) => segment === ".." || segment.trim() === "~");
-}
-
 /**
  * First directory holding the file, or null. Every way of failing answers the
  * same: a path the caller may not reach and a path that is not there are not
@@ -299,9 +236,6 @@ async function locateArtifact(
   filename: string
 ): Promise<{ filePath: string; fileStat: Stats } | null> {
   for (const candidate of candidates) {
-    if (candidate.fallback && !isPlainArtifactName(filename)) {
-      continue;
-    }
     const resolvedDir = await realpath(candidate.directory).catch(() => null);
     if (!resolvedDir) {
       continue;
@@ -323,8 +257,7 @@ async function locateArtifact(
 }
 
 export async function readArtifactFile(input: {
-  /** Resolves the end user's own artifacts folder when the caller names one. */
-  appUserId?: string | null;
+  directory?: string;
   orgId: string;
   profileId: string;
   filename: string;
@@ -336,7 +269,14 @@ export async function readArtifactFile(input: {
   render?: "markdown";
 }): Promise<{ bytes: Buffer; contentType: string; filePath: string }> {
   const located = await locateArtifact(
-    artifactReadDirs(input.orgId, input.profileId, input.appUserId),
+    [
+      {
+        directory:
+          input.directory ??
+          getProfileArtifactsDir(input.orgId, input.profileId),
+        fallback: false,
+      },
+    ],
     input.filename
   );
 
@@ -808,17 +748,25 @@ export const listArtifactsTool: ToolDefinition = {
       context.orgId,
       context.profileId,
       { ...parsed, limit: 20 },
-      context.workspaceRoot
+      context.workspaceRoot,
+      context.outputRoot
     );
     return {
-      artifacts: listing.artifacts.map(
-        ({ filename, mimeType, sizeBytes, updatedAt }) => ({
-          filename,
-          mimeType,
-          path: filename,
-          sizeBytes,
-          updatedAt,
-        })
+      artifacts: await Promise.all(
+        listing.artifacts.map(
+          async ({ filename, mimeType, sizeBytes, updatedAt }) => ({
+            filename,
+            mimeType,
+            path: filename,
+            sizeBytes,
+            updatedAt,
+            ...(context.outputRoot
+              ? await context.registerGeneratedFile?.(
+                  path.join(context.outputRoot, filename)
+                )
+              : {}),
+          })
+        )
       ),
       limit: 20,
       offset: parsed.offset,

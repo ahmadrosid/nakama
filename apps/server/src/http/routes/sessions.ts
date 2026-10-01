@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises";
 import { createRoute, z } from "@hono/zod-openapi";
 import type { AgentChatSession } from "@nakama/agent";
 import type {
@@ -20,10 +21,22 @@ import {
   AGENT_CHANNELS,
   fetchRemoteImage,
   formatServerError,
+  getChatWorkspaceDir,
   MAX_SESSION_SEARCH_LENGTH,
   NakamaApiError,
+  readArtifactFile,
   reportError,
 } from "@nakama/core";
+import {
+  createAttachmentSaver,
+  deleteStoredAttachmentBytes,
+  readStoredAttachmentBytes,
+} from "../../services/attachment-service";
+import {
+  assertWorkspaceAccess,
+  resolveWorkspaceFile,
+  withWorkspaceSnapshot,
+} from "../../services/chat-workspace-service";
 import { resolveRequestClientOrigin } from "../../services/composio-callback-url";
 import { sessionTurnRegistry } from "../../services/session-turn-registry";
 import type { ServerOptions } from "../context";
@@ -33,7 +46,6 @@ import {
 } from "../org-guards";
 import {
   errorResponse,
-  getRequestAppUserScope,
   getRequestAuth,
   json,
   parseChannel,
@@ -51,48 +63,580 @@ export function registerSessionRoutes(
   options: ServerOptions
 ): void {
   const { agent } = options;
+  const workspaceAccess = (c: Parameters<typeof getRequestAuth>[0]) => {
+    const auth = getRequestAuth(c);
+    return { ...auth, userId: auth.user.id };
+  };
+  app.get("/v1/workspaces", async (c) => {
+    const orgId = requireActiveOrgIdFromContext(c);
+    const access = workspaceAccess(c);
+    const workspaces = (
+      (await options.databaseAdapter?.listWorkspaces(orgId)) ?? []
+    ).filter((workspace) => {
+      try {
+        assertWorkspaceAccess(workspace, access);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    return json({ workspaces });
+  });
+  const projectSchema = z
+    .object({ name: z.string().trim().min(1).max(120) })
+    .strict();
+  app.post("/v1/projects", async (c) => {
+    const auth = requireNotViewerFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const body = await readJson<{ name: string }>(c.req.raw, projectSchema);
+    return json(
+      {
+        workspace: await agent.chatWorkspaces.create(
+          orgId,
+          "project",
+          body.name,
+          auth.user.id
+        ),
+      },
+      201
+    );
+  });
+  app.get("/v1/workspaces/:workspaceId", async (c) => {
+    const orgId = requireActiveOrgIdFromContext(c);
+    return json({
+      workspace: await agent.chatWorkspaces.require(
+        orgId,
+        c.req.param("workspaceId"),
+        workspaceAccess(c)
+      ),
+    });
+  });
+  app.patch("/v1/workspaces/:workspaceId", async (c) => {
+    requireNotViewerFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const workspace = await agent.chatWorkspaces.require(
+      orgId,
+      c.req.param("workspaceId"),
+      workspaceAccess(c)
+    );
+    const { name } = await readJson<{ name: string }>(c.req.raw, projectSchema);
+    await options.databaseAdapter?.upsertWorkspace({
+      ...workspace,
+      name,
+      updatedAt: new Date().toISOString(),
+    });
+    return json({ workspace: { ...workspace, name } });
+  });
+  app.delete("/v1/workspaces/:workspaceId", async (c) => {
+    requireNotViewerFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const workspace = await agent.chatWorkspaces.require(
+      orgId,
+      c.req.param("workspaceId"),
+      workspaceAccess(c),
+      true
+    );
+    await agent.purgeWorkspace(workspace.id, orgId);
+    return new Response(null, { status: 204 });
+  });
+  app.get("/v1/workspaces/:workspaceId/files", async (c) => {
+    const orgId = requireActiveOrgIdFromContext(c);
+    const workspace = await agent.chatWorkspaces.require(
+      orgId,
+      c.req.param("workspaceId"),
+      workspaceAccess(c)
+    );
+    return json({
+      files: await agent.chatWorkspaces.files(
+        workspace,
+        c.req.query("sessionId")
+      ),
+    });
+  });
+  const uploadSchema = z
+    .object({
+      filename: z.string().min(1).max(255),
+      mediaType: z.string().min(1).max(120),
+      data: z.string().max(8_000_000),
+      sessionId: z.string().optional(),
+    })
+    .strict();
+  app.post("/v1/workspaces/:workspaceId/files", async (c) => {
+    requireNotViewerFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const workspace = await agent.chatWorkspaces.require(
+      orgId,
+      c.req.param("workspaceId"),
+      workspaceAccess(c)
+    );
+    const body = await readJson<z.infer<typeof uploadSchema>>(
+      c.req.raw,
+      uploadSchema
+    );
+    if (workspace.id.startsWith("recovered-")) {
+      return errorResponse("Recovered files are read-only.", 400);
+    }
+    const db = options.databaseAdapter;
+    if (!db) {
+      return errorResponse("Storage unavailable.", 503);
+    }
+    const session = body.sessionId ? await db.getSession(body.sessionId) : null;
+    if (body.sessionId && session?.workspaceId !== workspace.id) {
+      return errorResponse("Session not found.", 404);
+    }
+    if (!session && workspace.kind !== "project") {
+      return errorResponse("A chat session is required.", 400);
+    }
+    const root = getChatWorkspaceDir(orgId, workspace.id);
+    const roots = session
+      ? await agent.chatWorkspaces.roots(session)
+      : { workspaceRoot: root, chatRoot: root };
+    const bytes = Buffer.from(body.data, "base64");
+    if (
+      !body.data ||
+      bytes.length > 5_000_000 ||
+      bytes.toString("base64") !== body.data
+    ) {
+      return errorResponse("Invalid file data or file exceeds 5 MB.", 400);
+    }
+    const saved = await createAttachmentSaver(db, {
+      ...roots,
+      workspaceId: workspace.id,
+      orgId,
+      profileId: session?.profileId ?? "",
+      sessionId: session?.id ?? null,
+      channel: "web",
+      purpose: session ? "input" : "reference",
+    })({
+      kind: body.mediaType.startsWith("image/") ? "image" : "document",
+      filename: body.filename,
+      mediaType: body.mediaType,
+      bytes,
+    });
+    return json(saved, 201);
+  });
+  app.put("/v1/workspaces/:workspaceId/files/content", async (c) => {
+    requireNotViewerFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const workspace = await agent.chatWorkspaces.require(
+      orgId,
+      c.req.param("workspaceId"),
+      workspaceAccess(c)
+    );
+    if (workspace.id.startsWith("recovered-")) {
+      throw new NakamaApiError("Recovered files are read-only.", 400);
+    }
+    const body = await readJson<{ content: string }>(
+      c.req.raw,
+      z.object({ content: z.string().max(5_000_000) }).strict()
+    );
+    const path = c.req.query("path");
+    const file = (await agent.chatWorkspaces.files(workspace)).find(
+      (entry) => entry.path === path
+    );
+    if (!file || file.purpose !== "output") {
+      throw new NakamaApiError("Output file not found.", 404);
+    }
+    return withWorkspaceSnapshot(workspace.id, async () => {
+      await writeFile(
+        await resolveWorkspaceFile(
+          getChatWorkspaceDir(orgId, workspace.id),
+          file.path
+        ),
+        body.content,
+        { mode: 0o600 }
+      );
+      return json({ path: file.path });
+    });
+  });
+  app.delete("/v1/workspaces/:workspaceId/files/:fileId", async (c) => {
+    requireNotViewerFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const workspace = await agent.chatWorkspaces.require(
+      orgId,
+      c.req.param("workspaceId"),
+      workspaceAccess(c)
+    );
+    if (workspace.id.startsWith("recovered-")) {
+      throw new NakamaApiError("Recovered files are read-only.", 400);
+    }
+    const file = await options.databaseAdapter?.getAttachment(
+      c.req.param("fileId")
+    );
+    if (!file || file.workspaceId !== workspace.id) {
+      throw new NakamaApiError("File not found.", 404);
+    }
+    await withWorkspaceSnapshot(workspace.id, async () => {
+      await agent.chatWorkspaces.removeFileShares(workspace.id, file.id);
+      await deleteStoredAttachmentBytes(file);
+      await options.databaseAdapter?.deleteAttachment(file.id);
+    });
+    return new Response(null, { status: 204 });
+  });
+  app.get("/v1/workspaces/:workspaceId/pins", async (c) => {
+    const orgId = requireActiveOrgIdFromContext(c);
+    const workspace = await agent.chatWorkspaces.require(
+      orgId,
+      c.req.param("workspaceId"),
+      workspaceAccess(c)
+    );
+    return json({
+      fileIds:
+        (await options.databaseAdapter?.listWorkspaceFilePins(
+          orgId,
+          getRequestAuth(c).user.id,
+          workspace.id
+        )) ?? [],
+    });
+  });
+  app.put("/v1/workspaces/:workspaceId/pins", async (c) => {
+    const auth = requireNotViewerFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const workspace = await agent.chatWorkspaces.require(
+      orgId,
+      c.req.param("workspaceId"),
+      workspaceAccess(c)
+    );
+    const body = await readJson<{ fileId: string; pinned: boolean }>(
+      c.req.raw,
+      z.object({ fileId: z.string(), pinned: z.boolean() }).strict()
+    );
+    const file = await options.databaseAdapter?.getAttachment(body.fileId);
+    if (!file || file.workspaceId !== workspace.id) {
+      throw new NakamaApiError("File not found.", 404);
+    }
+    await options.databaseAdapter?.setWorkspaceFilePin(
+      orgId,
+      auth.user.id,
+      workspace.id,
+      file.id,
+      body.pinned
+    );
+    return new Response(null, { status: 204 });
+  });
+  app.get("/v1/workspaces/:workspaceId/files/:fileId/content", async (c) => {
+    const orgId = requireActiveOrgIdFromContext(c);
+    const workspace = await agent.chatWorkspaces.require(
+      orgId,
+      c.req.param("workspaceId"),
+      workspaceAccess(c)
+    );
+    const file = await options.databaseAdapter?.getAttachment(
+      c.req.param("fileId")
+    );
+    if (!file || file.workspaceId !== workspace.id) {
+      return errorResponse("File not found.", 404);
+    }
+    const bytes = await readStoredAttachmentBytes(file);
+    if (!bytes) {
+      return errorResponse("File not found.", 404);
+    }
+    return new Response(new Uint8Array(bytes), {
+      headers: {
+        "Content-Type": file.mediaType,
+        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.filename ?? file.id)}`,
+        "Cache-Control": "no-store",
+      },
+    });
+  });
+  app.get("/v1/workspaces/:workspaceId/files/content", async (c) => {
+    const orgId = requireActiveOrgIdFromContext(c);
+    const workspace = await agent.chatWorkspaces.require(
+      orgId,
+      c.req.param("workspaceId"),
+      workspaceAccess(c)
+    );
+    const path = c.req.query("path");
+    if (!path) {
+      return errorResponse("File path is required.", 400);
+    }
+    const file = await readArtifactFile({
+      orgId,
+      profileId: "",
+      directory: getChatWorkspaceDir(orgId, workspace.id),
+      filename: path,
+      render: c.req.query("render") === "markdown" ? "markdown" : undefined,
+    });
+    return new Response(new Uint8Array(file.bytes), {
+      headers: {
+        "Content-Type": file.contentType,
+        "Content-Security-Policy": "sandbox",
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "no-store",
+        "Content-Disposition": `${c.req.query("inline") === "1" ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(path.split("/").at(-1) ?? "file")}`,
+      },
+    });
+  });
   // createSession refuses Super Bot to non-admins. Every route that names an
   // existing session repeats the check, or holding the ID would be enough.
   const requireSessionAccess = async (
     c: Parameters<typeof requireActiveOrgIdFromContext>[0]
   ) => {
-    const { appUserId, auth } = getRequestAppUserScope(c);
-    if (auth.mode === "api-key" && !appUserId) {
-      throw new NakamaApiError(
-        "X-Nakama-App-User-Id is required for API-key session access.",
-        400
-      );
-    }
+    const auth = getRequestAuth(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const sessionId = decodeURIComponent(c.req.param("sessionId") ?? "");
-    await agent.assertSessionProfileAccess(
-      sessionId,
-      orgId,
-      auth,
-      appUserId,
-      auth.mode === "api-key"
-    );
+    await agent.assertSessionProfileAccess(sessionId, orgId, {
+      ...auth,
+      userId: auth.user.id,
+    });
     return { orgId, sessionId };
   };
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
+  const workspaceSchema = z
+    .object({
+      id: z.string(),
+      orgId: z.string(),
+      name: z.string(),
+      kind: z.enum(["chat", "project"]),
+      access: z.enum(["org", "owner", "admin"]),
+      ownerUserId: z.string().nullable(),
+      state: z.enum(["active", "deleting"]),
+      createdAt: z.string(),
+      updatedAt: z.string(),
+    })
+    .openapi("ChatWorkspace");
+  const workspaceFileSchema = z
+    .object({
+      id: z.string(),
+      workspaceId: z.string(),
+      sessionId: z.string().nullable(),
+      filename: z.string(),
+      mediaType: z.string(),
+      path: z.string(),
+      purpose: z.enum(["input", "output", "reference"]),
+      sizeBytes: z.number(),
+    })
+    .openapi("ChatWorkspaceFile");
+  const workspaceParams = z.object({ workspaceId: z.string() });
+  const fileParams = workspaceParams.extend({ fileId: z.string() });
+  const pathQuery = z.object({
+    path: z.string(),
+    inline: z.enum(["0", "1"]).optional(),
+    render: z.enum(["markdown"]).optional(),
+  });
+  const jsonResponse = (schema: z.ZodType) => ({
+    description: "Success",
+    content: { "application/json": { schema } },
+  });
+  const workspaceResponse = z.object({ workspace: workspaceSchema });
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      path: "/v1/workspaces",
+      tags: ["Workspaces"],
+      summary: "List accessible chat and project folders",
+      responses: {
+        200: jsonResponse(z.object({ workspaces: z.array(workspaceSchema) })),
+      },
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      path: "/v1/projects",
+      tags: ["Workspaces"],
+      summary: "Create a project folder",
+      request: {
+        body: {
+          required: true,
+          content: { "application/json": { schema: projectSchema } },
+        },
+      },
+      responses: { 201: jsonResponse(workspaceResponse) },
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      path: "/v1/workspaces/{workspaceId}",
+      tags: ["Workspaces"],
+      summary: "Get a folder",
+      request: { params: workspaceParams },
+      responses: { 200: jsonResponse(workspaceResponse) },
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "patch",
+      path: "/v1/workspaces/{workspaceId}",
+      tags: ["Workspaces"],
+      summary: "Rename a folder",
+      request: {
+        params: workspaceParams,
+        body: {
+          required: true,
+          content: { "application/json": { schema: projectSchema } },
+        },
+      },
+      responses: { 200: jsonResponse(workspaceResponse) },
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "delete",
+      path: "/v1/workspaces/{workspaceId}",
+      tags: ["Workspaces"],
+      summary: "Delete a folder and its chats and files",
+      request: { params: workspaceParams },
+      responses: {
+        204: { description: "Deleted" },
+        409: jsonResponse(errorSchema),
+      },
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      path: "/v1/workspaces/{workspaceId}/files",
+      tags: ["Workspaces"],
+      summary: "List folder files",
+      request: {
+        params: workspaceParams,
+        query: z.object({ sessionId: z.string().optional() }),
+      },
+      responses: {
+        200: jsonResponse(z.object({ files: z.array(workspaceFileSchema) })),
+      },
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      path: "/v1/workspaces/{workspaceId}/files",
+      tags: ["Workspaces"],
+      summary: "Upload a reference or chat input (maximum 5 MB)",
+      request: {
+        params: workspaceParams,
+        body: {
+          required: true,
+          content: { "application/json": { schema: uploadSchema } },
+        },
+      },
+      responses: {
+        201: jsonResponse(
+          z.object({ attachmentId: z.string(), size: z.number() })
+        ),
+      },
+    })
+  );
+  for (const path of [
+    "/v1/workspaces/{workspaceId}/files/{fileId}/content",
+    "/v1/workspaces/{workspaceId}/files/content",
+  ]) {
+    app.openAPIRegistry.registerPath(
+      createRoute({
+        method: "get",
+        path,
+        tags: ["Workspaces"],
+        summary: "Read a folder file",
+        request: path.includes("{fileId}")
+          ? { params: fileParams }
+          : { params: workspaceParams, query: pathQuery },
+        responses: {
+          200: {
+            description: "File bytes",
+            content: {
+              "application/octet-stream": {
+                schema: z.string().openapi({ format: "binary" }),
+              },
+            },
+          },
+        },
+      })
+    );
+  }
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "put",
+      path: "/v1/workspaces/{workspaceId}/files/content",
+      tags: ["Workspaces"],
+      summary: "Edit an output file",
+      request: {
+        params: workspaceParams,
+        query: z.object({ path: z.string() }),
+        body: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: z.object({ content: z.string().max(5_000_000) }).strict(),
+            },
+          },
+        },
+      },
+      responses: {
+        200: jsonResponse(z.object({ path: z.string() })),
+        409: jsonResponse(errorSchema),
+      },
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "delete",
+      path: "/v1/workspaces/{workspaceId}/files/{fileId}",
+      tags: ["Workspaces"],
+      summary: "Delete a folder file and its shares",
+      request: { params: fileParams },
+      responses: {
+        204: { description: "Deleted" },
+        409: jsonResponse(errorSchema),
+      },
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      path: "/v1/workspaces/{workspaceId}/pins",
+      tags: ["Workspaces"],
+      summary: "List your pinned files",
+      request: { params: workspaceParams },
+      responses: {
+        200: jsonResponse(z.object({ fileIds: z.array(z.string()) })),
+      },
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "put",
+      path: "/v1/workspaces/{workspaceId}/pins",
+      tags: ["Workspaces"],
+      summary: "Pin or unpin a folder file",
+      request: {
+        params: workspaceParams,
+        body: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: z
+                .object({ fileId: z.string(), pinned: z.boolean() })
+                .strict(),
+            },
+          },
+        },
+      },
+      responses: { 204: { description: "Updated" } },
+    })
+  );
   const agentChannelSchema = z.enum(AGENT_CHANNELS).openapi("AgentChannel");
   const createSessionRequestSchema = z
     .object({
-      appUserId: z.string().trim().min(1).max(200).optional(),
+      workspaceId: z.string().trim().min(1).optional(),
       channel: agentChannelSchema,
       cognito: z.boolean().optional(),
       codingWorkspaceRoot: z.string().optional(),
       model: z.string().trim().min(1).optional(),
       profileId: z.string().optional(),
     })
+    .strict()
     .openapi("CreateSessionRequest");
   const createSessionResponseSchema = z
     .object({ sessionId: z.string() })
     .openapi("CreateSessionResponse");
   const sessionSummarySchema = z
     .object({
+      workspaceId: z.string().optional(),
+      activeProfileId: z.string().nullable().optional(),
       active: z.boolean().optional(),
       channel: agentChannelSchema,
       createdAt: z.string().optional(),
@@ -162,6 +706,8 @@ export function registerSessionRoutes(
     .openapi("AgentQuestionnaire");
   const sessionMessagesResponseSchema = z
     .object({
+      workspaceId: z.string().optional(),
+      activeProfileId: z.string().nullable().optional(),
       channel: agentChannelSchema,
       messageMeta: z.array(sessionMessageMetaSchema),
       messages: z.array(z.object({}).passthrough()),
@@ -178,12 +724,14 @@ export function registerSessionRoutes(
     .openapi("BranchSessionResponse");
   const updateSessionRequestSchema = z
     .object({
+      profileId: z.string().min(1).optional(),
       model: z.string().trim().min(1).nullable().optional(),
       pinned: z.boolean().optional(),
       title: z.string().trim().min(1).max(200).optional(),
     })
     .refine(
       (body) =>
+        body.profileId !== undefined ||
         body.model !== undefined ||
         body.pinned !== undefined ||
         body.title !== undefined,
@@ -192,9 +740,20 @@ export function registerSessionRoutes(
     .openapi("UpdateSessionRequest");
   const sendMessageRequestSchema = z
     .object({
+      attachmentIds: z.array(z.string()).max(20).optional(),
       clientOrigin: z.string().optional(),
-      documents: z.array(z.object({}).passthrough()).optional(),
-      images: z.array(z.object({}).passthrough()).optional(),
+      documents: z
+        .array(
+          z.object({
+            data: z.string(),
+            mediaType: z.string(),
+            filename: z.string(),
+          })
+        )
+        .optional(),
+      images: z
+        .array(z.object({ data: z.string(), mediaType: z.string() }))
+        .optional(),
       message: z.string(),
       stream: z.boolean().optional(),
     })
@@ -279,6 +838,7 @@ export function registerSessionRoutes(
     sessionId: z.string().openapi({ param: { in: "path", name: "sessionId" } }),
   });
   const sessionListQuerySchema = z.object({
+    workspaceId: z.string().optional(),
     channel: agentChannelSchema.optional(),
     channels: z.string().optional().openapi({
       description: "Comma-separated channels, listed as one merged list.",
@@ -611,7 +1171,7 @@ export function registerSessionRoutes(
     const attachment = await agent.readChatImageAttachment(
       requireActiveOrgIdFromContext(c),
       c.req.param("attachmentId"),
-      getRequestAuth(c)
+      workspaceAccess(c)
     );
     if (!attachment) {
       return errorResponse("Image not found", 404);
@@ -636,12 +1196,6 @@ export function registerSessionRoutes(
       return errorResponse("Invalid session request.", 400);
     }
     const body: CreateSessionRequest = parsedBody.data;
-    if (auth.mode === "api-key" && !body.appUserId) {
-      return errorResponse(
-        "appUserId is required when creating a session with an API key.",
-        400
-      );
-    }
     const channel = parseChannel(body.channel);
     if (
       body.codingWorkspaceRoot !== undefined &&
@@ -658,7 +1212,7 @@ export function registerSessionRoutes(
       body.profileId,
       auth.user.id,
       {
-        appUserId: auth.mode === "api-key" ? body.appUserId : undefined,
+        workspaceId: body.workspaceId,
         cognito: body.cognito,
         codingWorkspaceRoot: body.codingWorkspaceRoot,
         excludeSuperBot: auth.mode === "local-token" && channel !== "cli",
@@ -672,13 +1226,7 @@ export function registerSessionRoutes(
 
   app.get("/v1/sessions", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
-    const { appUserId, auth } = getRequestAppUserScope(c);
-    if (auth.mode === "api-key" && !appUserId) {
-      return errorResponse(
-        "X-Nakama-App-User-Id is required for API-key session access.",
-        400
-      );
-    }
+    const auth = getRequestAuth(c);
     const profileId = c.req.query("profileId")?.trim();
     const channelsParam = c.req.query("channels");
     const channels =
@@ -689,9 +1237,6 @@ export function registerSessionRoutes(
     const limit = limitParam === undefined ? undefined : Number(limitParam);
     const query = c.req.query("q")?.trim() || undefined;
 
-    if (!profileId) {
-      return errorResponse("profileId is required.", 400);
-    }
     if (
       limit !== undefined &&
       !(Number.isInteger(limit) && limit >= 1 && limit <= MAX_SESSION_PAGE_SIZE)
@@ -713,8 +1258,8 @@ export function registerSessionRoutes(
         orgId,
         profileId,
         channels,
-        auth,
-        appUserId,
+        { ...auth, userId: auth.user.id },
+        c.req.query("workspaceId"),
         limit === undefined
           ? undefined
           : { cursor: c.req.query("cursor"), limit },
@@ -759,6 +1304,14 @@ export function registerSessionRoutes(
       return errorResponse("Invalid session update.", 400);
     }
     const body: UpdateSessionRequest = parsedBody.data;
+    if (body.profileId !== undefined) {
+      await agent.changeSessionAgent(
+        sessionId,
+        orgId,
+        body.profileId,
+        workspaceAccess(c)
+      );
+    }
     if (body.model !== undefined) {
       const updated = await agent.updateSessionModel(
         sessionId,
@@ -820,6 +1373,8 @@ export function registerSessionRoutes(
     const questionnaire =
       (await agent.getSessionQuestionnaire(sessionId, orgId)) ?? null;
     return json<SessionMessagesResponse>({
+      workspaceId: result.workspaceId,
+      activeProfileId: result.activeProfileId,
       channel: result.channel,
       contextUsage: result.contextUsage,
       messageMeta: result.messageMeta,
@@ -896,6 +1451,7 @@ export function registerSessionRoutes(
 
     let session: AgentChatSession;
     let body: SendMessageRequest;
+    let attachmentRefs;
     try {
       const resolvedSession = await agent.resolveSession(sessionId, orgId);
       if (!resolvedSession) {
@@ -903,7 +1459,17 @@ export function registerSessionRoutes(
         return errorResponse("Session not found", 404);
       }
       session = resolvedSession;
-      body = await readJson<SendMessageRequest>(c.req.raw);
+      body = await readJson<SendMessageRequest>(
+        c.req.raw,
+        sendMessageRequestSchema
+      );
+      attachmentRefs = body.attachmentIds?.length
+        ? await agent.validateSessionAttachments(
+            sessionId,
+            orgId,
+            body.attachmentIds
+          )
+        : [];
     } catch (error) {
       sessionTurnRegistry.cancelTurn(sessionId);
       throw error;
@@ -914,6 +1480,7 @@ export function registerSessionRoutes(
       body.clientOrigin
     );
     const input = {
+      attachmentRefs,
       documents: body.documents,
       images: body.images,
       message: body.message ?? "",
@@ -932,7 +1499,9 @@ export function registerSessionRoutes(
         (terminal) => {
           agent.scheduleSessionTitleGeneration(sessionId);
           if (terminal.type === "done") {
-            agent.schedulePostTurnSkillReview(sessionId);
+            void Promise.resolve(
+              agent.schedulePostTurnSkillReview(sessionId)
+            ).catch(() => undefined);
           }
         },
         c.req.raw.signal
@@ -950,7 +1519,9 @@ export function registerSessionRoutes(
         ...(usage ? { usage } : {}),
       });
       agent.scheduleSessionTitleGeneration(sessionId);
-      agent.schedulePostTurnSkillReview(sessionId);
+      void Promise.resolve(agent.schedulePostTurnSkillReview(sessionId)).catch(
+        () => undefined
+      );
       return json<SendMessageResponse>({
         reply,
         ...(contextUsage ? { contextUsage } : {}),

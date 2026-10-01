@@ -1041,7 +1041,7 @@ describe("profile service deleteProfile", () => {
     ).toBeGreaterThan(0);
   });
 
-  test("removes artifact share snapshots before their rows cascade", async () => {
+  test("preserves artifact share snapshots when deleting an agent", async () => {
     const { db, service } = await setup();
     const removed = await service.createProfile(ORG_ID, { name: "Removed" });
     const shareId = "share_delete_test";
@@ -1068,7 +1068,10 @@ describe("profile service deleteProfile", () => {
 
     await service.deleteProfile(ORG_ID, removed.profile.id);
 
-    await expect(access(storagePath)).rejects.toThrow();
+    await access(storagePath);
+    expect(
+      await db.getArtifactShareById(ORG_ID, removed.profile.id, shareId)
+    ).not.toBeNull();
   });
 
   test("deletes the default when the org has 3 profiles and promotes a successor", async () => {
@@ -1267,6 +1270,10 @@ describe("profile organization transfer", () => {
         profile.id
       );
       await writeFile(path.join(sourceDir, "MEMORY.md"), "Keep my memory");
+      await writeFile(
+        path.join(sourceDir, "legacy-work.txt"),
+        "Old organization work"
+      );
       await db.upsertSession({
         channel: "web",
         createdAt: now,
@@ -1318,7 +1325,7 @@ describe("profile organization transfer", () => {
         .run(path.join(sourceDir, "skills/local"), now, now);
       await db.assignSkillToProfile(profile.id, "local-skill");
       raw.exec(
-        "CREATE TRIGGER fail_transfer BEFORE UPDATE OF org_id ON attachments BEGIN SELECT RAISE(ABORT, 'test failure'); END"
+        "CREATE TRIGGER fail_transfer BEFORE UPDATE OF org_id ON profiles BEGIN SELECT RAISE(ABORT, 'test failure'); END"
       );
       await expect(
         service.moveProfile("source", profile.id, {
@@ -1393,14 +1400,25 @@ describe("profile organization transfer", () => {
       await service.moveProfile("source", profile.id, {
         organizationId: "destination",
       });
+      expect(
+        await Bun.file(path.join(targetDir, "legacy-work.txt")).exists()
+      ).toBe(false);
+      expect(
+        await Bun.file(path.join(sourceDir, "legacy-work.txt")).exists()
+      ).toBe(true);
       expect((await db.getProfile(successor.id))?.isDefault).toBe(true);
       expect((await db.getProfile(profile.id))?.isDefault).toBe(false);
-      for (const table of [
-        "sessions",
-        "attachments",
-        "automations",
-        "workflows",
-      ]) {
+      expect(
+        (await db.getSession("transfer-session"))?.activeProfileId
+      ).toBeNull();
+      expect(
+        (
+          await db.getWorkspace(
+            (await db.getSession("transfer-session"))!.workspaceId!
+          )
+        )?.orgId
+      ).toBe("source");
+      for (const table of ["automations", "workflows"]) {
         expect(
           raw
             .query(`SELECT org_id FROM ${table} WHERE profile_id = ?`)
@@ -1423,15 +1441,15 @@ describe("profile organization transfer", () => {
           )
           .get()
       ).toEqual({
-        storage_path: path.join(targetDir, "attachments/transfer-attachment"),
+        storage_path: path.join(sourceDir, "attachments/transfer-attachment"),
       });
       expect(
         await readFile(
-          sessionHistoryArchivePath("destination", "transfer-session"),
+          sessionHistoryArchivePath("source", "transfer-session"),
           "utf8"
         )
       ).toBe("archived history");
-      expect(await Bun.file(archive).exists()).toBe(false);
+      expect(await Bun.file(archive).exists()).toBe(true);
       await expect(
         service.moveProfile("source", profile.id, {
           organizationId: "destination",

@@ -25,6 +25,7 @@ const ARTIFACT_PATH_IN_TEXT =
   /(?:\bprofiles\/([\w-]+)\/)?\bartifacts\/((?:[\w.-]+\/)*[\w.-]+\.[A-Za-z0-9][A-Za-z0-9._-]*)\b/g;
 
 export interface ChatArtifactRef {
+  fileId?: string;
   /** Basename for chip label (e.g. `report.md`). */
   filename: string;
   mimeType: string;
@@ -37,19 +38,24 @@ export interface ChatArtifactRef {
   path: string;
   savedAt: string;
   sizeBytes: number;
+  workspaceId?: string;
 }
 
 interface WriteFileResult {
   bytesWritten?: number;
   error?: string;
+  fileId?: string;
   path?: string;
+  workspaceId?: string;
 }
 
 interface GenerateImageResult {
   error?: string;
+  fileId?: string;
   mimeType?: string;
   path?: string;
   sizeBytes?: number;
+  workspaceId?: string;
 }
 
 function isWriteFileTool(message: ChatListItem): boolean {
@@ -391,10 +397,38 @@ export function extractTurnArtifacts(
   const artifactsByPath = new Map<string, ChatArtifactRef>();
 
   for (const message of messages) {
+    const result = message.toolResult as
+      | (WriteFileResult & GenerateImageResult)
+      | undefined;
+    if (
+      !result ||
+      result.error ||
+      message.toolStatus === "running" ||
+      !result.fileId ||
+      !result.workspaceId ||
+      !result.path
+    ) {
+      continue;
+    }
+    artifactsByPath.set(result.path, {
+      ...buildArtifactRef(result.path, {
+        mimeType: result.mimeType || inferArtifactMimeType(result.path),
+        savedAt: "",
+        sizeBytes: result.sizeBytes ?? result.bytesWritten ?? 0,
+      }),
+      fileId: result.fileId,
+      workspaceId: result.workspaceId,
+    });
+  }
+
+  for (const message of messages) {
     if (!isSuccessfulWrite(message) || message.toolStatus === "running") {
       continue;
     }
 
+    if ((message.toolResult as WriteFileResult | undefined)?.fileId) {
+      continue;
+    }
     const resolvedPath = resolvedWritePath(message);
     if (!resolvedPath || isArtifactMetaResolvedPath(resolvedPath)) {
       continue;
@@ -416,6 +450,9 @@ export function extractTurnArtifacts(
       continue;
     }
 
+    if ((message.toolResult as WriteFileResult | undefined)?.fileId) {
+      continue;
+    }
     const resolvedPath = resolvedWritePath(message);
     if (!(resolvedPath && isArtifactMetaResolvedPath(resolvedPath))) {
       continue;
@@ -492,12 +529,15 @@ export function extractTurnArtifacts(
 export function buildArtifactContentUrl(
   profileId: string,
   artifactPath: string,
-  inline = false
+  inline = false,
+  workspaceId?: string
 ): string {
   const query = new URLSearchParams({ path: artifactPath });
   if (inline) {
     query.set("inline", "1");
   }
 
-  return `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`;
+  return workspaceId
+    ? `/v1/workspaces/${encodeURIComponent(workspaceId)}/files/content?${query.toString()}`
+    : `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`;
 }

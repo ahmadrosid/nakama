@@ -1,3 +1,4 @@
+import { createRoute, z } from "@hono/zod-openapi";
 import { NakamaApiError } from "@nakama/core";
 import type {
   ArtifactShareStatusResponse,
@@ -12,7 +13,7 @@ import {
   requireActiveOrgIdFromContext,
   requireNotViewerFromContext,
 } from "../org-guards";
-import { json, readJson } from "../shared";
+import { getRequestAuth, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
 export function registerArtifactShareRoutes(
@@ -27,6 +28,154 @@ export function registerArtifactShareRoutes(
     options.databaseAdapter,
     options.authService
   );
+
+  const workspaceParams = z.object({ workspaceId: z.string() });
+  const publishRequest = z
+    .object({ path: z.string().min(1), clientOrigin: z.string().optional() })
+    .strict();
+  const sharedResponseFields = {
+    id: z.string(),
+    sharePath: z.string(),
+    shareUrl: z.string().nullable(),
+    webPublicUrlConfigured: z.boolean(),
+  };
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      path: "/v1/workspaces/{workspaceId}/files/shares",
+      tags: ["Workspaces"],
+      summary: "Publish a snapshot of a folder file",
+      request: {
+        params: workspaceParams,
+        body: {
+          required: true,
+          content: { "application/json": { schema: publishRequest } },
+        },
+      },
+      responses: {
+        201: {
+          description: "Published",
+          content: {
+            "application/json": {
+              schema: z.object({
+                ...sharedResponseFields,
+                refreshed: z.boolean(),
+                token: z.string(),
+              }),
+            },
+          },
+        },
+      },
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      path: "/v1/workspaces/{workspaceId}/files/shares/status",
+      tags: ["Workspaces"],
+      summary: "Get a folder file's share status",
+      request: {
+        params: workspaceParams,
+        query: z.object({ path: z.string() }),
+      },
+      responses: {
+        200: {
+          description: "Share status",
+          content: {
+            "application/json": {
+              schema: z
+                .object({
+                  ...sharedResponseFields,
+                  active: z.boolean(),
+                  createdAt: z.string(),
+                })
+                .nullable(),
+            },
+          },
+        },
+      },
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "delete",
+      path: "/v1/workspaces/{workspaceId}/files/shares/{shareId}",
+      tags: ["Workspaces"],
+      summary: "Revoke a folder file's public share",
+      request: { params: workspaceParams.extend({ shareId: z.string() }) },
+      responses: {
+        200: {
+          description: "Revoked",
+          content: {
+            "application/json": {
+              schema: z.object({ id: z.string(), revoked: z.boolean() }),
+            },
+          },
+        },
+      },
+    })
+  );
+  const workspaceScope = async (c: Parameters<typeof getRequestAuth>[0]) => {
+    const auth = getRequestAuth(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const workspace = await options.agent.chatWorkspaces.require(
+      orgId,
+      c.req.param("workspaceId") ?? "",
+      { ...auth, userId: auth.user.id }
+    );
+    return { orgId, workspaceId: workspace.id, profileId: "", workspace };
+  };
+  app.post("/v1/workspaces/:workspaceId/files/shares", async (c) => {
+    const auth = requireNotViewerFromContext(c);
+    const scope = await workspaceScope(c);
+    const body = await readJson<PublishArtifactShareRequest>(
+      c.req.raw,
+      publishRequest
+    );
+    const file = (
+      await options.agent.chatWorkspaces.files(scope.workspace)
+    ).find((entry) => entry.path === body.path);
+    if (!file) {
+      throw new NakamaApiError("File not found.", 404);
+    }
+    return json(
+      await service.publishArtifactShare({
+        ...scope,
+        fileId: file.id,
+        sourcePath: file.path,
+        userId: auth.user.id,
+        request: c.req.raw,
+        clientOrigin: resolveRequestClientOrigin(c.req.raw, body.clientOrigin),
+      }),
+      201
+    );
+  });
+  app.get("/v1/workspaces/:workspaceId/files/shares/status", async (c) => {
+    const scope = await workspaceScope(c);
+    const file = (
+      await options.agent.chatWorkspaces.files(scope.workspace)
+    ).find((entry) => entry.path === c.req.query("path"));
+    return json(
+      file
+        ? await service.getArtifactShareStatus({
+            ...scope,
+            fileId: file.id,
+            sourcePath: file.path,
+            request: c.req.raw,
+          })
+        : null
+    );
+  });
+  app.delete("/v1/workspaces/:workspaceId/files/shares/:shareId", async (c) => {
+    requireNotViewerFromContext(c);
+    const scope = await workspaceScope(c);
+    return json(
+      await service.revokeArtifactShare({
+        ...scope,
+        shareId: c.req.param("shareId"),
+      })
+    );
+  });
 
   app.post("/v1/profiles/:profileId/artifacts/shares", async (c) => {
     const auth = requireNotViewerFromContext(c);

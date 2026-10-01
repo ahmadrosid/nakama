@@ -3,6 +3,7 @@ import { createReadStream } from "node:fs";
 import { lstat, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import {
+  getChatWorkspaceDir,
   getProfileArtifactsDir,
   getProfileSoulDir,
   guardFilePath,
@@ -79,6 +80,39 @@ function normalizeArtifactRelativePath(rawPath: string): string {
   return withoutPrefix;
 }
 
+function artifactLocation(
+  context: ToolContext,
+  rawPath: string,
+  orgId: string,
+  profileId: string
+): { root: string; directory: string; relativePath: string } {
+  if (!context.workspaceId) {
+    return {
+      directory: getProfileArtifactsDir(orgId, profileId),
+      relativePath: normalizeArtifactRelativePath(rawPath),
+      root: getProfileSoulDir(orgId, profileId),
+    };
+  }
+  const root = getChatWorkspaceDir(orgId, context.workspaceId);
+  const raw = rawPath.trim();
+  if (
+    !raw ||
+    path.isAbsolute(raw) ||
+    raw.includes("\\") ||
+    raw.split("/").includes("..")
+  ) {
+    throw new Error("Artifact path must stay inside this workspace.");
+  }
+  const relativePath =
+    raw.startsWith("artifacts/") && context.outputRoot
+      ? path.relative(
+          root,
+          path.join(context.outputRoot, raw.slice("artifacts/".length))
+        )
+      : raw;
+  return { directory: root, relativePath, root };
+}
+
 async function runSendDiscordArtifact(
   input: SendDiscordArtifactInput,
   context: ToolContext
@@ -86,8 +120,12 @@ async function runSendDiscordArtifact(
   try {
     requireDiscordChannel(context);
     const { orgId, profileId } = requireOrgAndProfile(context);
-    const relativePath = normalizeArtifactRelativePath(input.path);
-    const artifactsDir = getProfileArtifactsDir(orgId, profileId);
+    const { relativePath, directory: artifactsDir } = artifactLocation(
+      context,
+      input.path,
+      orgId,
+      profileId
+    );
     const guarded = await guardFilePath(relativePath, null, undefined, {
       allowedDirs: [artifactsDir],
       cwd: artifactsDir,
@@ -127,6 +165,7 @@ async function runSendDiscordArtifact(
       ok: true,
       path: relativePath,
       sizeBytes,
+      ...(await context.registerGeneratedFile?.(guarded.resolved)),
     };
   } catch (error) {
     if (error instanceof PathGuardError) {
@@ -180,14 +219,17 @@ export const sendWhatsAppArtifactTool: ToolDefinition<SendDiscordArtifactInput> 
           throw new Error("Only available in WhatsApp chats.");
         }
         const { orgId, profileId } = requireOrgAndProfile(context);
-        const soulDir = getProfileSoulDir(orgId, profileId);
+        const {
+          root: soulDir,
+          directory: artifactsDir,
+          relativePath,
+        } = artifactLocation(context, input.path, orgId, profileId);
         if (
           context.workspaceRoot &&
           (await realpath(context.workspaceRoot)) !== (await realpath(soulDir))
         ) {
           throw new Error("WhatsApp delivery requires the profile workspace.");
         }
-        const relativePath = normalizeArtifactRelativePath(input.path);
         if (
           path.isAbsolute(relativePath) ||
           /^[a-z]:/i.test(relativePath) ||
@@ -195,7 +237,6 @@ export const sendWhatsAppArtifactTool: ToolDefinition<SendDiscordArtifactInput> 
         ) {
           throw new Error("Artifact path must be relative.");
         }
-        const artifactsDir = getProfileArtifactsDir(orgId, profileId);
         if ((await lstat(artifactsDir)).isSymbolicLink()) {
           throw new Error("The artifacts folder must not be a symlink.");
         }
@@ -238,6 +279,7 @@ export const sendWhatsAppArtifactTool: ToolDefinition<SendDiscordArtifactInput> 
           sha256: digest.digest("hex"),
           sizeBytes,
           status: "prepared",
+          ...(await context.registerGeneratedFile?.(guarded.resolved)),
         };
       } catch (error) {
         return {

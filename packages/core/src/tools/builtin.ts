@@ -94,7 +94,9 @@ export type ReadFileInput = z.infer<typeof readFileInputSchema>;
 
 export interface WriteFileOutput {
   bytesWritten: number;
+  fileId?: string;
   path: string;
+  workspaceId?: string;
 }
 
 export interface DeleteFileOutput {
@@ -137,7 +139,9 @@ function normalizeArtifactPath(relativePath: string): string {
 function isArtifactPath(relativePath: string): boolean {
   const normalized = normalizeArtifactPath(relativePath);
   return (
-    normalized.startsWith("artifacts/") &&
+    (normalized.startsWith("artifacts/") ||
+      normalized.startsWith("outputs/") ||
+      normalized.includes("/outputs/")) &&
     !normalized.endsWith(ARTIFACT_META_SUFFIX)
   );
 }
@@ -239,12 +243,21 @@ export function refuseMemoryFileWrite(
   resolvedPath: string,
   workspaceRoot: string
 ): void {
+  const workspaceRelative = path
+    .relative(workspaceRoot, resolvedPath)
+    .replace(/\\/g, "/");
+  if (context.workspaceId && /(^|\/)history(\/|$)/.test(workspaceRelative)) {
+    throw new Error("Chat history is managed by Nakama.");
+  }
   if (!context.forbidMemoryWrites) {
     return;
   }
 
   const name = path
-    .relative(resolveWithRealpath(workspaceRoot), resolvedPath)
+    .relative(
+      resolveWithRealpath(context.identityRoot ?? workspaceRoot),
+      resolvedPath
+    )
     .replace(/\\/g, "/");
   // NTFS opens `memory.md` as MEMORY.md, and a file that does not exist yet
   // keeps the caller's casing through the path guard. The archive pattern is
@@ -301,7 +314,9 @@ function fileToolWorkspaceRoot(
 ): string {
   const { orgId, profileId } = requireProfileScope(context);
   const workspaceRoot =
-    options.workspaceRoot ?? getProfileSoulDir(orgId, profileId);
+    options.workspaceRoot ??
+    context.workspaceRoot ??
+    getProfileSoulDir(orgId, profileId);
   assertAbsoluteWorkspaceRoot(workspaceRoot);
 
   return workspaceRoot;
@@ -322,64 +337,40 @@ function buildFileGuardOptions(
   options: FileToolRunOptions = {}
 ): PathGuardOptions {
   const workspaceRoot = fileToolWorkspaceRoot(context, options);
-  const sessionRoot = appUserSessionRoot(context);
   const allowedDirs = [workspaceRoot, getCustomToolsDir()];
-
-  if (sessionRoot) {
-    allowedDirs.push(sessionRoot);
+  if (context.identityRoot) {
+    allowedDirs.push(context.identityRoot);
   }
-
   return {
     ...defaultGuardOptions,
     allowedDirs,
     cwd: workspaceRoot,
-    deniedDirs: sessionRoot ? [appUsersDir(workspaceRoot)] : [],
+    deniedDirs: [
+      path.join(workspaceRoot, "users"),
+      ...(context.identityRoot
+        ? ["users", "attachments", "artifacts"].map((dir) =>
+            path.join(context.identityRoot!, dir)
+          )
+        : []),
+    ],
   };
 }
 
-/** The session's own app user directory, or null for a profile-level session. */
-function appUserSessionRoot(context: ToolContext): string | null {
-  const sessionRoot = context.workspaceRoot?.trim();
-
-  return sessionRoot && path.isAbsolute(sessionRoot) ? sessionRoot : null;
-}
-
-/**
- * `<root>/users` — denied as a whole, with the session's own dir allowed back in.
- * Derived from the effective workspace root rather than the profile dir, so an
- * `options.workspaceRoot` override keeps the guard pointing at the same tree the
- * tools actually read.
- */
-function appUsersDir(workspaceRoot: string): string {
-  return path.join(workspaceRoot, "users");
-}
-
-/**
- * Where `artifacts/...` resolves to. A session created for an app user runs with
- * that user's soul dir as its workspace root, and the artifact read side looks
- * for the file under `users/<hash>/artifacts`. Resolving the write against the
- * profile root instead put every generated document where the read never looks.
- *
- * Only artifact paths follow the app user. The rest of the soul stack, the
- * knowledge base and the skills live on the profile, and an app-user session
- * still has to read them.
- */
-function artifactWriteRoot(
+function resolveOutputAlias(
   context: ToolContext,
-  options: FileToolRunOptions,
-  targetPath: string
-): string {
-  const profileRoot = fileToolWorkspaceRoot(context, options);
-
-  if (options.workspaceRoot || !isArtifactPath(targetPath)) {
-    return profileRoot;
+  parsed: { path: string }
+): void {
+  const normalized = normalizeArtifactPath(parsed.path);
+  if (
+    context.outputRoot &&
+    context.workspaceRoot &&
+    normalized.startsWith("artifacts/")
+  ) {
+    parsed.path = path.relative(
+      context.workspaceRoot,
+      path.join(context.outputRoot, normalized.slice("artifacts/".length))
+    );
   }
-
-  const sessionRoot = context.workspaceRoot?.trim();
-
-  return sessionRoot && path.isAbsolute(sessionRoot)
-    ? sessionRoot
-    : profileRoot;
 }
 
 function assertAbsoluteWorkspaceRoot(workspaceRoot: string): void {
@@ -427,10 +418,11 @@ export async function runWriteFile(
   options: FileToolRunOptions = {}
 ): Promise<WriteFileOutput> {
   const parsed = parseToolInput(writeFileInputSchema, input);
+  resolveOutputAlias(context, parsed);
   refuseWordExtension(parsed.path);
   const contentBytes = Buffer.byteLength(parsed.content, "utf8");
   const guardOptions = buildFileGuardOptions(context, options);
-  const artifactRoot = artifactWriteRoot(context, options, parsed.path);
+  const artifactRoot = fileToolWorkspaceRoot(context, options);
 
   const guarded = await guardFilePath(
     parsed.path,
@@ -480,7 +472,10 @@ export async function runWriteFile(
   await context.memoryFiles?.write(filePath, parsed.content);
   await writeFile(filePath, parsed.content, "utf8");
 
-  return { bytesWritten: contentBytes, path: filePath };
+  const registered = filePath.endsWith(ARTIFACT_META_SUFFIX)
+    ? undefined
+    : await context.registerGeneratedFile?.(filePath);
+  return { bytesWritten: contentBytes, path: filePath, ...registered };
 }
 
 export const writeDocxTool: ToolDefinition<WriteDocxInput, WriteFileOutput> = {
@@ -499,6 +494,7 @@ export async function runWriteDocx(
   options: FileToolRunOptions = {}
 ): Promise<WriteFileOutput> {
   const parsed = parseToolInput(writeDocxInputSchema, input);
+  resolveOutputAlias(context, parsed);
 
   if (!isDocxFile(path.basename(parsed.path))) {
     throw new Error("write_docx requires a path ending in .docx");
@@ -512,7 +508,7 @@ export async function runWriteDocx(
     bytes.length,
     {
       ...guardOptions,
-      cwd: artifactWriteRoot(context, options, parsed.path),
+      cwd: fileToolWorkspaceRoot(context, options),
     }
   );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
@@ -530,7 +526,11 @@ export async function runWriteDocx(
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, bytes);
 
-  return { bytesWritten: bytes.length, path: filePath };
+  return {
+    bytesWritten: bytes.length,
+    path: filePath,
+    ...(await context.registerGeneratedFile?.(filePath)),
+  };
 }
 
 export const deleteFileTool: ToolDefinition<DeleteFileInput, DeleteFileOutput> =
@@ -550,6 +550,7 @@ export async function runDeleteFile(
   options: FileToolRunOptions = {}
 ): Promise<DeleteFileOutput> {
   const parsed = parseToolInput(deleteFileInputSchema, input);
+  resolveOutputAlias(context, parsed);
   const guardOptions = buildFileGuardOptions(context, options);
 
   const guarded = await guardFilePath(
@@ -587,6 +588,7 @@ export async function runEditFile(
   options: FileToolRunOptions = {}
 ): Promise<EditFileOutput> {
   const parsed = parseToolInput(editFileInputSchema, input);
+  resolveOutputAlias(context, parsed);
   // Editing a Word document as UTF-8 text would corrupt the archive.
   refuseWordExtension(parsed.path);
 
@@ -887,6 +889,7 @@ export async function runReadFile(
   options: FileToolRunOptions = {}
 ): Promise<ReadFileOutput> {
   const parsed = parseToolInput(readFileInputSchema, input);
+  resolveOutputAlias(context, parsed);
   const guardOptions = buildFileGuardOptions(context, options);
   guardOptions.allowedDirs!.push(getGlobalSkillsDir());
   const maxBytes = guardOptions.maxFileBytes ?? 10 * 1024 * 1024;

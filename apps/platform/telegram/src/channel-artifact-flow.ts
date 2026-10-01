@@ -28,7 +28,8 @@ export async function maybeSendRequestedTelegramArtifactAttachment(input: {
 
   const { data } = await input.client.readProfileArtifactContent(
     input.profileId,
-    artifact.path
+    artifact.path,
+    artifact.workspaceId ? { workspaceId: artifact.workspaceId } : undefined
   );
   const result = await sendTelegramArtifactDocument(input.ctx, {
     bytes: new Uint8Array(data),

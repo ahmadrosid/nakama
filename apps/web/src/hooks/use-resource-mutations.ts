@@ -114,9 +114,9 @@ export function useUpdateSessionMutation() {
       sessionId: string;
       input: UpdateSessionRequest;
     }) => client.updateSession(sessionId, input),
-    onSuccess: async (_data, variables) => {
+    onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.sessions(variables.profileId),
+        queryKey: ["sessions"],
       });
     },
   });
@@ -531,10 +531,11 @@ export function useHistorySessionsQuery(profileId: string, search?: string) {
   const runningSessionIds = useRunningTurnsStore((state) => state.sessionIds);
   const localTurn = runningSessionIds.length > 0;
   const runningSessionIdSet = new Set(runningSessionIds);
-  const enabled = Boolean(profileId) && search !== "";
+  const { activeOrg } = useAuth();
+  const enabled = Boolean(activeOrg?.id) && search !== "";
   const queryKey = search
-    ? queryKeys.sessionSearch(profileId, search)
-    : queryKeys.sessions(profileId);
+    ? [...queryKeys.sessionSearch(profileId, search), activeOrg?.id]
+    : [...queryKeys.sessions(profileId), activeOrg?.id];
 
   const query = useInfiniteQuery({
     enabled,
@@ -731,11 +732,19 @@ export function useWriteArtifactMutation() {
       profileId,
       artifactPath,
       content,
+      workspaceId,
     }: {
       profileId: string;
       artifactPath: string;
       content: string;
-    }) => client.writeProfileArtifactContent(profileId, artifactPath, content),
+      workspaceId?: string;
+    }) =>
+      client.writeProfileArtifactContent(
+        profileId,
+        artifactPath,
+        content,
+        workspaceId
+      ),
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.artifacts.profile(variables.profileId),
@@ -767,13 +776,24 @@ export function useDeleteArtifactMutation() {
 export function useArtifactShareStatusQuery(
   profileId: string,
   artifactPath: string,
-  orgId: string
+  orgId: string,
+  workspaceId?: string
 ) {
   return useQuery({
-    enabled: Boolean(profileId && artifactPath && orgId),
+    enabled: Boolean((workspaceId || profileId) && artifactPath && orgId),
     queryFn: () =>
-      client.getProfileArtifactShareStatus(profileId, artifactPath),
-    queryKey: queryKeys.artifacts.shareStatus(profileId, artifactPath),
+      client.getProfileArtifactShareStatus(
+        profileId,
+        artifactPath,
+        workspaceId
+      ),
+    queryKey: [
+      ...queryKeys.artifacts.shareStatus(
+        workspaceId ?? profileId,
+        artifactPath
+      ),
+      orgId,
+    ],
   });
 }
 
@@ -781,12 +801,22 @@ export function usePublishArtifactShareMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ profileId, path }: { profileId: string; path: string }) =>
-      client.publishProfileArtifactShare(profileId, path),
+    mutationFn: ({
+      profileId,
+      path,
+      workspaceId,
+    }: {
+      profileId: string;
+      path: string;
+      workspaceId?: string;
+    }) =>
+      workspaceId
+        ? client.publishProfileArtifactShare(profileId, path, workspaceId)
+        : client.publishProfileArtifactShare(profileId, path),
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.artifacts.shareStatus(
-          variables.profileId,
+          variables.workspaceId ?? variables.profileId,
           variables.path
         ),
       });
@@ -801,13 +831,17 @@ export function useRevokeArtifactShareMutation() {
     mutationFn: async ({
       profileId,
       shareId,
+      workspaceId,
     }: {
       profileId: string;
       shareId: string;
       path?: string;
+      workspaceId?: string;
     }) => {
       try {
-        return await client.revokeProfileArtifactShare(profileId, shareId);
+        return await (workspaceId
+          ? client.revokeProfileArtifactShare(profileId, shareId, workspaceId)
+          : client.revokeProfileArtifactShare(profileId, shareId));
       } catch (error) {
         // Another tab may have revoked this link; still clear stale share state.
         if (error instanceof NakamaApiError && error.status === 404) {
@@ -820,7 +854,7 @@ export function useRevokeArtifactShareMutation() {
       if (variables.path) {
         await queryClient.invalidateQueries({
           queryKey: queryKeys.artifacts.shareStatus(
-            variables.profileId,
+            variables.workspaceId ?? variables.profileId,
             variables.path
           ),
         });
@@ -862,9 +896,9 @@ export function useBranchSessionMutation() {
       sessionId: string;
       messageIndex: number;
     }) => client.branchSession(sessionId, { messageIndex }),
-    onSuccess: async (_data, variables) => {
+    onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.sessions(variables.profileId),
+        queryKey: ["sessions"],
       });
     },
   });

@@ -18,7 +18,6 @@ import type {
   OrgMemoryProposalStatus,
   PluginPublishResult,
   PublishOrgPluginReleaseInput,
-  StoredApiKeyRecord,
   StoredArtifactShareRecord,
   StoredAttachmentRecord,
   StoredAuditEvent,
@@ -54,6 +53,7 @@ import type {
   StoredWorkflowRecord,
   StoredWorkflowRunRecord,
   StoredWorkflowRunStepRecord,
+  StoredWorkspaceRecord,
   StoredWorkspaceSettingsRecord,
   UpsertPluginReleaseResult,
 } from "../types";
@@ -179,18 +179,47 @@ interface ToolRow {
 }
 
 interface SessionRow {
+  active_profile_id: string | null;
   agent_questionnaire: string | null;
   agent_todos: string;
-  app_user_id?: string | null;
   channel: string;
   created_at: string;
+  deleting: number;
   id: string;
+  legacy_app_user_id?: string | null;
   model: string | null;
   pinned: number;
   profile_id: string;
   title: string | null;
   updated_at?: string | null;
   user_id?: string | null;
+  workspace_id: string | null;
+}
+
+interface WorkspaceRow {
+  access: StoredWorkspaceRecord["access"];
+  created_at: string;
+  id: string;
+  kind: StoredWorkspaceRecord["kind"];
+  name: string;
+  org_id: string;
+  owner_user_id: string | null;
+  state: StoredWorkspaceRecord["state"];
+  updated_at: string;
+}
+
+function toWorkspaceRecord(row: WorkspaceRow): StoredWorkspaceRecord {
+  return {
+    access: row.access,
+    createdAt: row.created_at,
+    id: row.id,
+    kind: row.kind,
+    name: row.name,
+    orgId: row.org_id,
+    ownerUserId: row.owner_user_id,
+    state: row.state,
+    updatedAt: row.updated_at,
+  };
 }
 
 interface SessionMessageRow {
@@ -211,23 +240,27 @@ interface AttachmentRow {
   media_type: string;
   org_id: string | null;
   profile_id: string;
+  purpose: StoredAttachmentRecord["purpose"];
   session_id: string | null;
   size_bytes: number;
   storage_path: string;
+  workspace_id: string | null;
 }
 
 interface SessionSummaryRow {
-  app_user_id?: string | null;
+  active_profile_id: string | null;
   channel: string;
   created_at: string;
   first_user_payload: string | null;
   id: string;
+  legacy_app_user_id?: string | null;
   message_count: number;
   pinned: number;
   position: number;
   profile_id: string;
   title: string | null;
   updated_at: string;
+  workspace_id: string | null;
 }
 
 interface LlmUsageStatsRow {
@@ -399,20 +432,6 @@ interface BrowserSessionRow {
   user_id: string;
 }
 
-interface ApiKeyRow {
-  created_at: string;
-  created_by_user_id: string;
-  environment: string;
-  expires_at: string | null;
-  id: string;
-  key_prefix: string;
-  last_used_at: string | null;
-  name: string;
-  org_id: string;
-  revoked_at: string | null;
-  secret_hash: string;
-}
-
 interface OrganizationRow {
   allowed_invite_domains: string;
   archived_at: string | null;
@@ -514,6 +533,7 @@ interface SkillSuggestionRow {
 interface ArtifactShareRow {
   created_at: string;
   created_by_user_id: string;
+  file_id: string | null;
   filename: string;
   id: string;
   mime_type: string;
@@ -524,6 +544,7 @@ interface ArtifactShareRow {
   source_path: string;
   storage_path: string;
   token_hash: string;
+  workspace_id: string | null;
 }
 
 /**
@@ -925,8 +946,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         "UPDATE profiles SET org_id = ?, is_default = 0, updated_at = ? WHERE id = ?"
       ).run(targetOrgId, now, profileId);
       for (const table of [
-        "sessions",
-        "attachments",
         "profile_change_events",
         "profile_skill_usage",
         "skill_proposals",
@@ -938,14 +957,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         );
       }
       db.query(
-        "UPDATE attachments SET storage_path = ? || substr(storage_path, length(?) + 1) WHERE profile_id = ? AND substr(storage_path, 1, length(?)) = ?"
-      ).run(
-        workspaceTo,
-        workspaceFrom,
-        profileId,
-        workspacePrefix,
-        workspacePrefix
-      );
+        "UPDATE sessions SET active_profile_id = NULL WHERE active_profile_id = ?"
+      ).run(profileId);
       for (const table of ["automations", "workflows"]) {
         db.query(
           `UPDATE ${table} SET org_id = ?, enabled = 0, updated_at = ? WHERE profile_id = ?`
@@ -954,10 +967,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       db.query(
         "DELETE FROM automation_run_read_state WHERE automation_id IN (SELECT id FROM automations WHERE profile_id = ?)"
       ).run(profileId);
-      // Existing public links must not grant access after a transfer.
-      db.query(
-        "UPDATE artifact_shares SET revoked_at = ? WHERE profile_id = ? AND revoked_at IS NULL"
-      ).run(now, profileId);
       db.query(
         "DELETE FROM profile_composio_toolkits WHERE profile_id = ?"
       ).run(profileId);
@@ -1025,14 +1034,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   );
   const getSessionStmt = db.prepare("SELECT * FROM sessions WHERE id = ?");
   const upsertSessionStmt = db.prepare(`
-    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, app_user_id, user_id, model, pinned)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, legacy_app_user_id, user_id, model, pinned, workspace_id, active_profile_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       profile_id = excluded.profile_id,
       channel = excluded.channel,
-      app_user_id = COALESCE(excluded.app_user_id, sessions.app_user_id),
+      legacy_app_user_id = COALESCE(excluded.legacy_app_user_id, sessions.legacy_app_user_id),
       user_id = COALESCE(excluded.user_id, sessions.user_id),
-      model = excluded.model
+      model = excluded.model,
+      workspace_id = COALESCE(excluded.workspace_id, sessions.workspace_id),
+      active_profile_id = excluded.active_profile_id
   `);
   const updateSessionUpdatedAtStmt = db.prepare(
     "UPDATE sessions SET updated_at = ? WHERE id = ?"
@@ -1106,9 +1117,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const insertAttachmentStmt = db.prepare(`
     INSERT INTO attachments (
       id, org_id, profile_id, session_id, channel, kind, filename,
-      media_type, size_bytes, storage_path, created_at, ephemeral
+      media_type, size_bytes, storage_path, created_at, ephemeral, workspace_id, purpose
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const getAttachmentStmt = db.prepare(
     "SELECT * FROM attachments WHERE id = ?"
@@ -1130,7 +1141,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WITH summaries AS (
       SELECT
         s.id,
-        s.app_user_id,
+        s.workspace_id,
+        s.active_profile_id,
+        s.legacy_app_user_id,
         s.profile_id,
         s.channel,
         s.created_at,
@@ -1143,10 +1156,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         ) AS updated_at
       FROM sessions s
       LEFT JOIN session_messages m ON m.session_id = s.id
-      WHERE s.profile_id = ?1
+      WHERE s.deleting = 0 AND (?1 IS NULL OR s.profile_id = ?1)
         AND s.channel IN (SELECT value FROM json_each(?2))
         AND (?8 IS NULL OR s.id = ?8)
-        AND (?9 IS NULL OR s.app_user_id = ?9)
+        AND (?9 IS NULL OR s.workspace_id IN (SELECT value FROM json_each(?9)))
         -- Only message text is searched: content is a string or an array of
         -- parts, and matching the raw JSON would let "role" hit every chat.
         -- LIKE ignores case for ASCII letters only, so "école" does not find
@@ -1178,7 +1191,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           )
         )
       GROUP BY s.id
-      HAVING COUNT(m.id) > 0
     ),
     ranked AS (
       SELECT
@@ -2047,25 +2059,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET active_org_id = ?
     WHERE id = ?
   `);
-  const createApiKeyStmt = db.prepare(`
-    INSERT INTO api_keys (
-      id, org_id, name, environment, key_prefix, secret_hash,
-      created_by_user_id, created_at, expires_at, last_used_at, revoked_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const getApiKeyByPrefixStmt = db.prepare(`
-    SELECT * FROM api_keys WHERE key_prefix = ? LIMIT 1
-  `);
-  const listApiKeysForOrgStmt = db.prepare(`
-    SELECT * FROM api_keys WHERE org_id = ? ORDER BY created_at DESC, id DESC
-  `);
-  const revokeApiKeyStmt = db.prepare(`
-    UPDATE api_keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL
-  `);
-  const deleteApiKeyStmt = db.prepare("DELETE FROM api_keys WHERE id = ?");
-  const updateApiKeyLastUsedAtStmt = db.prepare(`
-    UPDATE api_keys SET last_used_at = ? WHERE id = ?
-  `);
   const createPasswordResetTokenStmt = db.prepare(`
     INSERT INTO password_reset_tokens (
       id, user_id, token_hash, expires_at, consumed_at, created_at
@@ -2134,6 +2127,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       db.query(`DELETE FROM ${table} WHERE org_id = ?`).run(orgId);
     }
 
+    db.query("DELETE FROM file_pins WHERE org_id = ?").run(orgId);
+    db.query("DELETE FROM artifact_shares WHERE org_id = ?").run(orgId);
+    db.query("DELETE FROM attachments WHERE org_id = ?").run(orgId);
+    db.query(
+      "DELETE FROM sessions WHERE workspace_id IN (SELECT id FROM chat_workspaces WHERE org_id = ?)"
+    ).run(orgId);
+    db.query("DELETE FROM chat_workspaces WHERE org_id = ?").run(orgId);
     return deleteOrganizationStmt.run(orgId).changes > 0;
   });
   const upsertOrganizationStmt = db.prepare(`
@@ -2423,8 +2423,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const createArtifactShareStmt = db.prepare(`
     INSERT INTO artifact_shares (
       id, org_id, profile_id, source_path, filename, mime_type, size_bytes,
-      token_hash, storage_path, created_by_user_id, created_at, revoked_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      token_hash, storage_path, created_by_user_id, created_at, revoked_at, workspace_id, file_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const updateArtifactShareSnapshotStmt = db.prepare(`
     UPDATE artifact_shares
@@ -2434,7 +2434,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const getArtifactShareByTokenHashStmt = db.prepare(`
     SELECT
       id, org_id, profile_id, source_path, filename, mime_type, size_bytes,
-      token_hash, storage_path, created_by_user_id, created_at, revoked_at
+      token_hash, storage_path, created_by_user_id, created_at, revoked_at, workspace_id, file_id
     FROM artifact_shares
     WHERE token_hash = ? AND revoked_at IS NULL
     LIMIT 1
@@ -2442,7 +2442,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const getActiveArtifactShareByPathStmt = db.prepare(`
     SELECT
       id, org_id, profile_id, source_path, filename, mime_type, size_bytes,
-      token_hash, storage_path, created_by_user_id, created_at, revoked_at
+      token_hash, storage_path, created_by_user_id, created_at, revoked_at, workspace_id, file_id
     FROM artifact_shares
     WHERE org_id = ? AND profile_id = ? AND source_path = ? AND revoked_at IS NULL
     LIMIT 1
@@ -2450,7 +2450,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const getArtifactShareByIdStmt = db.prepare(`
     SELECT
       id, org_id, profile_id, source_path, filename, mime_type, size_bytes,
-      token_hash, storage_path, created_by_user_id, created_at, revoked_at
+      token_hash, storage_path, created_by_user_id, created_at, revoked_at, workspace_id, file_id
     FROM artifact_shares
     WHERE org_id = ? AND profile_id = ? AND id = ?
     LIMIT 1
@@ -2458,7 +2458,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listArtifactSharesForProfileStmt = db.prepare(`
     SELECT
       id, org_id, profile_id, source_path, filename, mime_type, size_bytes,
-      token_hash, storage_path, created_by_user_id, created_at, revoked_at
+      token_hash, storage_path, created_by_user_id, created_at, revoked_at, workspace_id, file_id
     FROM artifact_shares
     WHERE org_id = ? AND profile_id = ?
   `);
@@ -2853,6 +2853,35 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
       return result.changes > 0;
     },
+    async adoptLegacyFileBindings(orgId, profileId, workspaceId, aliases) {
+      db.transaction(() => {
+        for (const alias of aliases) {
+          db.query(
+            "UPDATE artifact_shares SET workspace_id = ?, file_id = ?, source_path = ? WHERE org_id = ? AND profile_id = ? AND workspace_id IS NULL AND source_path = ?"
+          ).run(
+            workspaceId,
+            alias.fileId,
+            alias.fileId,
+            orgId,
+            profileId,
+            alias.path
+          );
+          db.query(
+            "INSERT OR IGNORE INTO file_pins (org_id, user_id, profile_id, path, workspace_id, file_id) SELECT org_id, user_id, '', ?, ?, ? FROM file_pins WHERE org_id = ? AND profile_id = ? AND workspace_id IS NULL AND path = ?"
+          ).run(
+            alias.fileId,
+            workspaceId,
+            alias.fileId,
+            orgId,
+            profileId,
+            alias.path
+          );
+          db.query(
+            "DELETE FROM file_pins WHERE org_id = ? AND profile_id = ? AND workspace_id IS NULL AND path = ?"
+          ).run(orgId, profileId, alias.path);
+        }
+      })();
+    },
     async appendMessagesForSession(sessionId, messages) {
       appendMessagesTransaction(sessionId, messages);
     },
@@ -2969,21 +2998,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const row = countUsersStmt.get() as { count: number };
       return row.count;
     },
-    async createApiKey(record) {
-      createApiKeyStmt.run(
-        record.id,
-        record.orgId,
-        record.name,
-        record.environment,
-        record.keyPrefix,
-        record.secretHash,
-        record.createdByUserId,
-        record.createdAt,
-        record.expiresAt,
-        record.lastUsedAt,
-        record.revokedAt
-      );
-    },
 
     async createArtifactShare(record) {
       createArtifactShareStmt.run(
@@ -2998,7 +3012,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.storagePath,
         record.createdByUserId,
         record.createdAt,
-        record.revokedAt
+        record.revokedAt,
+        record.workspaceId ?? null,
+        record.fileId ?? null
       );
     },
     async createAuditEvent(record) {
@@ -3167,14 +3183,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       runCreateUserStmt(record);
     },
 
-    async deleteApiKey(id) {
-      const result = deleteApiKeyStmt.run(id);
-      return result.changes > 0;
-    },
-
     async deleteAttachment(id) {
-      const result = deleteAttachmentStmt.run(id);
-      return result.changes > 0;
+      return db.transaction(() => {
+        db.query("DELETE FROM file_pins WHERE file_id = ?").run(id);
+        db.query("DELETE FROM artifact_shares WHERE file_id = ?").run(id);
+        return deleteAttachmentStmt.run(id).changes > 0;
+      })();
     },
 
     async deleteAutomation(id) {
@@ -3280,6 +3294,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const result = deleteWorkflowRunStmt.run(workflowId, runId);
       return result.changes > 0;
     },
+    async deleteWorkspace(id) {
+      return db.transaction(() => {
+        db.query("DELETE FROM file_pins WHERE workspace_id = ?").run(id);
+        db.query("DELETE FROM artifact_shares WHERE workspace_id = ?").run(id);
+        db.query("DELETE FROM attachments WHERE workspace_id = ?").run(id);
+        return (
+          db.query("DELETE FROM chat_workspaces WHERE id = ?").run(id).changes >
+          0
+        );
+      })();
+    },
 
     async disableUser(id, disabledAt) {
       disableUserStmt.run(disabledAt, disabledAt, id);
@@ -3312,7 +3337,20 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return automations.changes + workflows.changes;
     },
 
-    async getActiveArtifactShareByPath(orgId, profileId, sourcePath) {
+    async getActiveArtifactShareByPath(
+      orgId,
+      profileId,
+      sourcePath,
+      workspaceId
+    ) {
+      if (workspaceId) {
+        const row = db
+          .query(
+            "SELECT * FROM artifact_shares WHERE org_id = ? AND workspace_id = ? AND source_path = ? AND revoked_at IS NULL LIMIT 1"
+          )
+          .get(orgId, workspaceId, sourcePath) as ArtifactShareRow | null;
+        return row ? toArtifactShareRecord(row) : null;
+      }
       const row = getActiveArtifactShareByPathStmt.get(
         orgId,
         profileId,
@@ -3328,12 +3366,15 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return row ? toAutomationRunRecord(row) : null;
     },
 
-    async getApiKeyByPrefix(keyPrefix) {
-      const row = getApiKeyByPrefixStmt.get(keyPrefix) as ApiKeyRow | null;
-      return row ? toApiKeyRecord(row) : null;
-    },
-
-    async getArtifactShareById(orgId, profileId, shareId) {
+    async getArtifactShareById(orgId, profileId, shareId, workspaceId) {
+      if (workspaceId) {
+        const row = db
+          .query(
+            "SELECT * FROM artifact_shares WHERE org_id = ? AND workspace_id = ? AND id = ?"
+          )
+          .get(orgId, workspaceId, shareId) as ArtifactShareRow | null;
+        return row ? toArtifactShareRecord(row) : null;
+      }
       const row = getArtifactShareByIdStmt.get(
         orgId,
         profileId,
@@ -3670,6 +3711,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       ) as WorkflowRunRow | null;
       return row ? toWorkflowRunRecord(row) : null;
     },
+    async getWorkspace(id) {
+      const row = db
+        .query("SELECT * FROM chat_workspaces WHERE id = ?")
+        .get(id) as WorkspaceRow | null;
+      return row ? toWorkspaceRecord(row) : null;
+    },
 
     async getWorkspaceSettings() {
       const row = getWorkspaceSettingsStmt.get(
@@ -3761,7 +3808,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.sizeBytes,
         record.storagePath,
         record.createdAt,
-        record.ephemeral ? 1 : 0
+        record.ephemeral ? 1 : 0,
+        record.workspaceId ?? null,
+        record.purpose ?? "input"
       );
     },
 
@@ -3809,22 +3858,32 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
-    async listApiKeysForOrg(orgId) {
-      return listApiKeysForOrgStmt
-        .all(orgId)
-        .map((row) => toApiKeyRecord(row as ApiKeyRow));
-    },
-
     async listArtifactSharesForProfile(orgId, profileId) {
       return listArtifactSharesForProfileStmt
         .all(orgId, profileId)
         .map((row) => toArtifactShareRecord(row as ArtifactShareRow));
     },
 
+    async listArtifactSharesForWorkspace(workspaceId) {
+      return (
+        db
+          .query("SELECT * FROM artifact_shares WHERE workspace_id = ?")
+          .all(workspaceId) as ArtifactShareRow[]
+      ).map(toArtifactShareRecord);
+    },
     async listAttachmentsForSession(sessionId) {
       return listAttachmentsForSessionStmt
         .all(sessionId)
         .map((row) => toAttachmentRecord(row as AttachmentRow));
+    },
+    async listAttachmentsForWorkspace(workspaceId) {
+      return (
+        db
+          .query(
+            "SELECT * FROM attachments WHERE workspace_id = ? ORDER BY created_at, id"
+          )
+          .all(workspaceId) as AttachmentRow[]
+      ).map(toAttachmentRecord);
     },
 
     async listAuditEvents(options = {}) {
@@ -3895,6 +3954,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           )
           .all(orgId, userId, profileId) as { path: string }[]
       ).map((row) => row.path);
+    },
+
+    async listLegacyAttachmentsForProfile(orgId, profileId) {
+      return (
+        db
+          .query(
+            "SELECT * FROM attachments WHERE org_id = ? AND profile_id = ? AND workspace_id IS NULL AND ephemeral = 0"
+          )
+          .all(orgId, profileId) as AttachmentRow[]
+      ).map(toAttachmentRecord);
     },
 
     async listLlmTurnUsage(orgId) {
@@ -4061,9 +4130,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .all(orgId)
         .map((row) => toProfileRecord(row as ProfileRow));
     },
+    async listSessionFileAliases(sessionId) {
+      return db
+        .query(
+          "SELECT source_file_id AS sourceFileId, file_id AS fileId FROM session_file_aliases WHERE session_id = ?"
+        )
+        .all(sessionId) as { sourceFileId: string; fileId: string }[];
+    },
 
     async listSessionSummaries(profileId, channels, options = {}) {
-      const { after, appUserId, limit, query, sessionId } = options;
+      const { after, workspaceIds, limit, query, sessionId } = options;
       return listSessionSummariesStmt
         .all(
           profileId,
@@ -4075,7 +4151,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           // SQLite reads a negative LIMIT as no limit.
           limit ?? -1,
           sessionId ?? null,
-          appUserId ?? null,
+          workspaceIds ? JSON.stringify(workspaceIds) : null,
           query ? likeContains(query) : null
         )
         .map((row) => toSessionSummaryRecord(row as SessionSummaryRow));
@@ -4223,9 +4299,29 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .all(orgId)
         .map((row) => toWorkflowRecord(row as WorkflowRow));
     },
+    async listWorkspaceFilePins(orgId, userId, workspaceId) {
+      return (
+        db
+          .query(
+            "SELECT file_id FROM file_pins WHERE org_id = ? AND user_id = ? AND workspace_id = ?"
+          )
+          .all(orgId, userId, workspaceId) as { file_id: string }[]
+      ).map((row) => row.file_id);
+    },
+    async listWorkspaces(orgId) {
+      const rows = db
+        .query(
+          "SELECT * FROM chat_workspaces WHERE org_id = ? ORDER BY updated_at DESC, id DESC"
+        )
+        .all(orgId) as WorkspaceRow[];
+      return rows.map(toWorkspaceRecord);
+    },
 
     async markOrgInviteAccepted(id, acceptedAt) {
       markOrgInviteAcceptedStmt.run(acceptedAt, id);
+    },
+    async markSessionDeleting(id) {
+      db.query("UPDATE sessions SET deleting = 1 WHERE id = ?").run(id);
     },
 
     async markSkillSuggestionApplied(orgId, id, appliedAt) {
@@ -4293,11 +4389,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       replaceProfileComposioToolkitsTransaction(profileId, assignments);
     },
 
-    async revokeApiKey(id, revokedAt) {
-      const result = revokeApiKeyStmt.run(revokedAt, id);
-      return result.changes > 0;
-    },
-
     async revokeArtifactShare(id, revokedAt) {
       const result = revokeArtifactShareStmt.run(revokedAt, id);
       return result.changes > 0;
@@ -4334,9 +4425,25 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async setPendingMfaSecret(id, pendingTotpSecretEnc, updatedAt) {
       setPendingMfaSecretStmt.run(pendingTotpSecretEnc, updatedAt, id);
     },
+    async setSessionFileAlias(sessionId, sourceFileId, fileId) {
+      db.query(
+        "INSERT OR REPLACE INTO session_file_aliases VALUES (?, ?, ?)"
+      ).run(sessionId, sourceFileId, fileId);
+    },
 
     async setUserContext(orgId, userId, content, _updatedAt) {
       setUserContextStmt.run(content, orgId, userId);
+    },
+    async setWorkspaceFilePin(orgId, userId, workspaceId, fileId, pinned) {
+      if (pinned) {
+        db.query(
+          "INSERT OR IGNORE INTO file_pins (org_id, user_id, profile_id, path, workspace_id, file_id) VALUES (?, ?, '', ?, ?, ?)"
+        ).run(orgId, userId, fileId, workspaceId, fileId);
+      } else {
+        db.query(
+          "DELETE FROM file_pins WHERE org_id = ? AND user_id = ? AND workspace_id = ? AND file_id = ?"
+        ).run(orgId, userId, workspaceId, fileId);
+      }
     },
 
     async tryMarkOrganizationArchived(orgId, archivedAt) {
@@ -4379,10 +4486,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return result.changes > 0;
     },
 
-    async updateApiKeyLastUsedAt(id, lastUsedAt) {
-      updateApiKeyLastUsedAtStmt.run(lastUsedAt, id);
-    },
-
     async updateArtifactShareSnapshot(id, snapshot) {
       updateArtifactShareSnapshotStmt.run(
         snapshot.filename,
@@ -4391,6 +4494,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         snapshot.storagePath,
         id
       );
+    },
+    async updateAttachmentStorage(id, workspaceId, storagePath, sizeBytes) {
+      db.query(
+        "UPDATE attachments SET workspace_id = ?, storage_path = ?, size_bytes = COALESCE(?, size_bytes) WHERE id = ?"
+      ).run(workspaceId, storagePath, sizeBytes ?? null, id);
     },
 
     async updateAutomationRun(record) {
@@ -4634,16 +4742,45 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       runUpsertProfileStmt(record);
     },
     async upsertSession(record) {
+      // Old exports and channel callers may omit the locator. Assign ownership
+      // at this single persistence boundary, never from a filesystem fallback.
+      let workspaceId = record.workspaceId;
+      if (!workspaceId) {
+        const profile = db
+          .query("SELECT org_id, is_super FROM profiles WHERE id = ?")
+          .get(record.profileId) as {
+          org_id: string | null;
+          is_super: number;
+        } | null;
+        const orgId = profile?.org_id ?? record.orgId;
+        if (orgId) {
+          workspaceId = `chat-${record.id}`;
+          db.query(
+            "INSERT OR IGNORE INTO chat_workspaces (id, org_id, kind, name, owner_user_id, access, state, created_at, updated_at) VALUES (?, ?, 'chat', 'Chat', ?, ?, 'active', ?, ?)"
+          ).run(
+            workspaceId,
+            orgId,
+            record.legacyAppUserId ? null : (record.userId ?? null),
+            record.legacyAppUserId || profile?.is_super ? "admin" : "org",
+            record.createdAt,
+            record.createdAt
+          );
+        }
+      }
       upsertSessionStmt.run(
         record.id,
         record.profileId,
         record.channel,
         record.createdAt,
         record.createdAt,
-        record.appUserId ?? null,
+        record.legacyAppUserId ?? null,
         record.userId ?? null,
         record.model,
-        record.pinned ? 1 : 0
+        record.pinned ? 1 : 0,
+        workspaceId ?? null,
+        record.activeProfileId === undefined
+          ? record.profileId
+          : record.activeProfileId
       );
     },
     async upsertSkill(record) {
@@ -4691,6 +4828,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.orgId ?? null,
         record.enabled ? 1 : 0,
         existing?.createdAt ?? record.createdAt,
+        record.updatedAt
+      );
+    },
+    async upsertWorkspace(record) {
+      db.query(`INSERT INTO chat_workspaces (id, org_id, kind, name, owner_user_id, access, state, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET name = excluded.name, state = excluded.state, updated_at = excluded.updated_at`).run(
+        record.id,
+        record.orgId,
+        record.kind,
+        record.name,
+        record.ownerUserId,
+        record.access,
+        record.state,
+        record.createdAt,
         record.updatedAt
       );
     },
@@ -5037,17 +5189,20 @@ function parseAgentQuestionnaire(
 
 function toSessionRecord(row: SessionRow): StoredSessionRecord {
   return {
+    activeProfileId: row.active_profile_id,
     agentQuestionnaire: parseAgentQuestionnaire(row.agent_questionnaire),
     agentTodos: parseAgentTodos(row.agent_todos),
-    appUserId: row.app_user_id ?? null,
     channel: row.channel,
     createdAt: row.created_at,
+    deleting: row.deleting === 1,
     id: row.id,
+    legacyAppUserId: row.legacy_app_user_id ?? null,
     model: row.model ?? null,
     pinned: row.pinned === 1,
     profileId: row.profile_id,
     title: row.title ?? null,
     userId: row.user_id ?? null,
+    workspaceId: row.workspace_id,
   };
 }
 
@@ -5074,9 +5229,11 @@ function toAttachmentRecord(row: AttachmentRow): StoredAttachmentRecord {
     mediaType: row.media_type,
     orgId: row.org_id,
     profileId: row.profile_id,
+    purpose: row.purpose,
     sessionId: row.session_id,
     sizeBytes: row.size_bytes,
     storagePath: row.storage_path,
+    workspaceId: row.workspace_id,
   };
 }
 
@@ -5110,10 +5267,11 @@ function toSessionSummaryRecord(
   row: SessionSummaryRow
 ): StoredSessionSummaryRecord {
   return {
-    appUserId: row.app_user_id ?? null,
+    activeProfileId: row.active_profile_id,
     channel: row.channel,
     createdAt: row.created_at,
     id: row.id,
+    legacyAppUserId: row.legacy_app_user_id ?? null,
     messageCount: row.message_count,
     pinned: row.pinned === 1,
     position: row.position,
@@ -5121,6 +5279,7 @@ function toSessionSummaryRecord(
     profileId: row.profile_id,
     title: row.title ?? null,
     updatedAt: row.updated_at,
+    workspaceId: row.workspace_id,
   };
 }
 
@@ -5572,6 +5731,7 @@ function toArtifactShareRecord(
   return {
     createdAt: row.created_at,
     createdByUserId: row.created_by_user_id,
+    fileId: row.file_id,
     filename: row.filename,
     id: row.id,
     mimeType: row.mime_type,
@@ -5582,6 +5742,7 @@ function toArtifactShareRecord(
     sourcePath: row.source_path,
     storagePath: row.storage_path,
     tokenHash: row.token_hash,
+    workspaceId: row.workspace_id,
   };
 }
 
@@ -5598,22 +5759,6 @@ function toBrowserSessionRecord(
     revokedAt: row.revoked_at,
     sessionTokenHash: row.session_token_hash,
     userId: row.user_id,
-  };
-}
-
-function toApiKeyRecord(row: ApiKeyRow): StoredApiKeyRecord {
-  return {
-    createdAt: row.created_at,
-    createdByUserId: row.created_by_user_id,
-    environment: row.environment,
-    expiresAt: row.expires_at,
-    id: row.id,
-    keyPrefix: row.key_prefix,
-    lastUsedAt: row.last_used_at,
-    name: row.name,
-    orgId: row.org_id,
-    revokedAt: row.revoked_at,
-    secretHash: row.secret_hash,
   };
 }
 

@@ -18,9 +18,11 @@ export type PublishIntent = "publish" | "refresh" | "view" | "recover";
 export function useArtifactShareControls({
   profileId,
   artifactPath,
+  workspaceId,
 }: {
   profileId: string;
   artifactPath: string;
+  workspaceId?: string;
 }) {
   const { activeOrg, user } = useAuth();
   const userId = user?.id ?? "";
@@ -45,14 +47,20 @@ export function useArtifactShareControls({
   const statusQuery = useArtifactShareStatusQuery(
     profileId,
     artifactPath,
-    orgId
+    orgId,
+    workspaceId
   );
   const publishMutation = usePublishArtifactShareMutation();
   const revokeMutation = useRevokeArtifactShareMutation();
 
   const stored =
     orgId && userId
-      ? readStoredArtifactShare({ artifactPath, orgId, profileId, userId })
+      ? readStoredArtifactShare({
+          artifactPath,
+          orgId,
+          profileId: workspaceId ?? profileId,
+          userId,
+        })
       : null;
   const shareUrl = stored?.shareUrl ?? null;
   const isShared = Boolean(statusQuery.data?.active || shareUrl);
@@ -136,7 +144,7 @@ export function useArtifactShareControls({
     writeStoredArtifactShare({
       artifactPath,
       orgId,
-      profileId,
+      profileId: workspaceId ?? profileId,
       shareId,
       shareUrl: url,
       userId,
@@ -153,6 +161,7 @@ export function useArtifactShareControls({
       const result = await publishMutation.mutateAsync({
         path: artifactPath,
         profileId,
+        workspaceId,
       });
       let nextUrl: string | null = null;
       let warning: string | null = null;
@@ -208,8 +217,14 @@ export function useArtifactShareControls({
         path: artifactPath,
         profileId,
         shareId,
+        workspaceId,
       });
-      clearStoredArtifactShare({ artifactPath, orgId, profileId, userId });
+      clearStoredArtifactShare({
+        artifactPath,
+        orgId,
+        profileId: workspaceId ?? profileId,
+        userId,
+      });
       refreshStoredShare();
 
       if (!revoked) {
@@ -221,6 +236,7 @@ export function useArtifactShareControls({
       const result = await publishMutation.mutateAsync({
         path: artifactPath,
         profileId,
+        workspaceId,
       });
       let nextUrl: string | null = null;
       let warning: string | null = null;
@@ -258,8 +274,14 @@ export function useArtifactShareControls({
       path: artifactPath,
       profileId,
       shareId,
+      workspaceId,
     });
-    clearStoredArtifactShare({ artifactPath, orgId, profileId, userId });
+    clearStoredArtifactShare({
+      artifactPath,
+      orgId,
+      profileId: workspaceId ?? profileId,
+      userId,
+    });
     refreshStoredShare();
     toast(
       revoked ? "Share link revoked" : "This share link was already revoked."

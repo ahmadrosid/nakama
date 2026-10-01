@@ -23,6 +23,7 @@ import {
   type DataExportManifest,
   type DataExportSkippedItem,
   type DataImportPreviewResponse,
+  getChatWorkspaceDir,
   getKnowledgeBaseDir,
   getOrgKnowledgeBaseDir,
   getProfileSoulDir,
@@ -33,10 +34,11 @@ import {
   NakamaApiError,
   pathExists,
   type RestoreDataImportResponse,
-  readAttachmentBytes,
 } from "@nakama/core";
 import { type DatabaseAdapter, resolveDatabasePath } from "@nakama/db";
 import { unzipSync, zipSync } from "fflate";
+import { readStoredAttachmentBytes } from "./attachment-service";
+import { withWorkspaceSnapshot } from "./chat-workspace-service";
 import {
   PluginExportBarrierError,
   quarantineInvalidPluginReleases,
@@ -45,11 +47,11 @@ import {
 } from "./plugin-service";
 
 export const NAKAMA_EXPORT_MANIFEST = "nakama-export.json";
-export const NAKAMA_EXPORT_FORMAT_VERSION = 1;
+export const NAKAMA_EXPORT_FORMAT_VERSION = 2;
 export const NAKAMA_USER_EXPORT_MANIFEST = "nakama-user-export.json";
-export const NAKAMA_USER_EXPORT_FORMAT_VERSION = 1;
+export const NAKAMA_USER_EXPORT_FORMAT_VERSION = 2;
 export const NAKAMA_ORG_EXPORT_MANIFEST = "nakama-org-export.json";
-export const NAKAMA_ORG_EXPORT_FORMAT_VERSION = 1;
+export const NAKAMA_ORG_EXPORT_FORMAT_VERSION = 2;
 
 // Setup import is unauthenticated until the first admin exists, so an archive
 // has to be capped on the way in rather than once it is already in memory.
@@ -156,126 +158,131 @@ export async function createNakamaDataExport(
   );
 
   try {
-    return await runWithPluginExportBarrier(
-      async () => {
-        const snapshotParent = (await pathExists(rootDir))
-          ? await mkdtemp(join(rootDir, PLUGIN_SNAPSHOT_PREFIX))
-          : "";
-        try {
-          const snapshots = snapshotParent
-            ? await snapshotOrgPluginDatabases(rootDir, snapshotParent)
-            : new Map<string, string>();
-          const outsideDatabases: DataExportSkippedItem[] = [];
-          if (configuredDatabasePath && configuredDatabasePath !== ":memory:") {
-            const databasePath = resolve(configuredDatabasePath);
-            const relativeDatabasePath = relative(rootDir, databasePath);
-            if (
-              relativeDatabasePath.startsWith("..") ||
-              isAbsolute(relativeDatabasePath)
-            ) {
-              outsideDatabases.push({
-                path: databasePath,
-                reason: "Database path is outside the Nakama root.",
-              });
-            } else if (snapshotParent && (await pathExists(databasePath))) {
-              const target = join(snapshotParent, relativeDatabasePath);
-              await vacuumPluginDatabaseInto(databasePath, target);
-              snapshots.set(toZipPath(relativeDatabasePath), target);
-            }
-          }
-          const { files, skipped } = await inventoryConfigRoot(
-            rootDir,
-            snapshots
-          );
-          skipped.push(...outsideDatabases);
-
-          const entries: Record<string, Uint8Array> = {};
-          for (const file of files) {
-            validateArchivePath(file.relativePath);
-            entries[file.relativePath] = await readFile(file.absolutePath);
-          }
-          for (const [relativePath, absolutePath] of snapshots) {
-            validateArchivePath(relativePath);
-            entries[relativePath] = await readFile(absolutePath);
-            files.push({
-              absolutePath,
-              relativePath,
-              size: entries[relativePath].byteLength,
-            });
-          }
-
-          const topLevelPaths = Array.from(
-            new Set(
-              files
-                .map((file) => file.relativePath.split("/")[0])
-                .filter(Boolean)
-            )
-          ).sort();
-          const totalBytes = Object.values(entries).reduce(
-            (sum, data) => sum + data.byteLength,
-            0
-          );
-
-          const manifest: DataExportManifest = {
-            apiVersion: NAKAMA_API_VERSION,
-            createdAt,
-            fileCount: files.length,
-            kind: "nakama-export",
-            skipped,
-            sourceRootName: basename(rootDir) || ".nakama",
-            topLevelPaths,
-            totalBytes,
-            version: NAKAMA_EXPORT_FORMAT_VERSION,
-          };
-
-          entries[NAKAMA_EXPORT_MANIFEST] = Buffer.from(
-            JSON.stringify(manifest, null, 2),
-            "utf8"
-          );
-
-          let entryCount = 0;
-          let uncompressedTotal = 0;
+    return await withWorkspaceSnapshot(null, () =>
+      runWithPluginExportBarrier(
+        async () => {
+          const snapshotParent = (await pathExists(rootDir))
+            ? await mkdtemp(join(rootDir, PLUGIN_SNAPSHOT_PREFIX))
+            : "";
           try {
-            for (const [name, entry] of Object.entries(entries)) {
-              entryCount += 1;
-              uncompressedTotal += entry.byteLength;
-              validateArchiveEntryLimits(
-                name,
-                entry.byteLength,
-                entryCount,
-                uncompressedTotal
-              );
+            const snapshots = snapshotParent
+              ? await snapshotOrgPluginDatabases(rootDir, snapshotParent)
+              : new Map<string, string>();
+            const outsideDatabases: DataExportSkippedItem[] = [];
+            if (
+              configuredDatabasePath &&
+              configuredDatabasePath !== ":memory:"
+            ) {
+              const databasePath = resolve(configuredDatabasePath);
+              const relativeDatabasePath = relative(rootDir, databasePath);
+              if (
+                relativeDatabasePath.startsWith("..") ||
+                isAbsolute(relativeDatabasePath)
+              ) {
+                outsideDatabases.push({
+                  path: databasePath,
+                  reason: "Database path is outside the Nakama root.",
+                });
+              } else if (snapshotParent && (await pathExists(databasePath))) {
+                const target = join(snapshotParent, relativeDatabasePath);
+                await vacuumPluginDatabaseInto(databasePath, target);
+                snapshots.set(toZipPath(relativeDatabasePath), target);
+              }
             }
-          } catch (error) {
-            if (error instanceof NakamaApiError) {
+            const { files, skipped } = await inventoryConfigRoot(
+              rootDir,
+              snapshots
+            );
+            skipped.push(...outsideDatabases);
+
+            const entries: Record<string, Uint8Array> = {};
+            for (const file of files) {
+              validateArchivePath(file.relativePath);
+              entries[file.relativePath] = await readFile(file.absolutePath);
+            }
+            for (const [relativePath, absolutePath] of snapshots) {
+              validateArchivePath(relativePath);
+              entries[relativePath] = await readFile(absolutePath);
+              files.push({
+                absolutePath,
+                relativePath,
+                size: entries[relativePath].byteLength,
+              });
+            }
+
+            const topLevelPaths = Array.from(
+              new Set(
+                files
+                  .map((file) => file.relativePath.split("/")[0])
+                  .filter(Boolean)
+              )
+            ).sort();
+            const totalBytes = Object.values(entries).reduce(
+              (sum, data) => sum + data.byteLength,
+              0
+            );
+
+            const manifest: DataExportManifest = {
+              apiVersion: NAKAMA_API_VERSION,
+              createdAt,
+              fileCount: files.length,
+              kind: "nakama-export",
+              skipped,
+              sourceRootName: basename(rootDir) || ".nakama",
+              topLevelPaths,
+              totalBytes,
+              version: NAKAMA_EXPORT_FORMAT_VERSION,
+            };
+
+            entries[NAKAMA_EXPORT_MANIFEST] = Buffer.from(
+              JSON.stringify(manifest, null, 2),
+              "utf8"
+            );
+
+            let entryCount = 0;
+            let uncompressedTotal = 0;
+            try {
+              for (const [name, entry] of Object.entries(entries)) {
+                entryCount += 1;
+                uncompressedTotal += entry.byteLength;
+                validateArchiveEntryLimits(
+                  name,
+                  entry.byteLength,
+                  entryCount,
+                  uncompressedTotal
+                );
+              }
+            } catch (error) {
+              if (error instanceof NakamaApiError) {
+                throw new NakamaApiError(
+                  `Cannot export a restorable backup: ${error.message} Use a filesystem or volume backup instead.`,
+                  413
+                );
+              }
+              throw error;
+            }
+
+            const archive = zipSync(entries);
+            if (archive.byteLength > MAX_IMPORT_ARCHIVE_BYTES) {
               throw new NakamaApiError(
-                `Cannot export a restorable backup: ${error.message} Use a filesystem or volume backup instead.`,
+                `Cannot export a restorable backup: ZIP exceeds the ${megabytes(MAX_IMPORT_ARCHIVE_BYTES)} import limit. Use a filesystem or volume backup instead.`,
                 413
               );
             }
-            throw error;
-          }
 
-          const archive = zipSync(entries);
-          if (archive.byteLength > MAX_IMPORT_ARCHIVE_BYTES) {
-            throw new NakamaApiError(
-              `Cannot export a restorable backup: ZIP exceeds the ${megabytes(MAX_IMPORT_ARCHIVE_BYTES)} import limit. Use a filesystem or volume backup instead.`,
-              413
-            );
+            return {
+              data: Buffer.from(archive),
+              filename: `nakama-export-${createdAt.replace(/[:.]/g, "-")}.zip`,
+              manifest,
+            };
+          } finally {
+            if (snapshotParent) {
+              await rm(snapshotParent, { force: true, recursive: true });
+            }
           }
-
-          return {
-            data: Buffer.from(archive),
-            filename: `nakama-export-${createdAt.replace(/[:.]/g, "-")}.zip`,
-            manifest,
-          };
-        } finally {
-          if (snapshotParent) {
-            await rm(snapshotParent, { force: true, recursive: true });
-          }
-        }
-      },
-      { drainTimeoutMs: options.drainTimeoutMs }
+        },
+        { drainTimeoutMs: options.drainTimeoutMs }
+      )
     );
   } catch (error) {
     if (error instanceof PluginExportBarrierError) {
@@ -285,7 +292,7 @@ export async function createNakamaDataExport(
   }
 }
 
-export async function createNakamaUserDataExport(
+async function buildNakamaUserDataExport(
   databaseAdapter: DatabaseAdapter,
   userId: string,
   options: { now?: Date } = {}
@@ -316,7 +323,43 @@ export async function createNakamaUserDataExport(
 
   const entries: Record<string, Uint8Array> = {};
   const sessions = [];
-  const userSessions = await databaseAdapter.listSessionsForUser(userId);
+  let userSessions = (await databaseAdapter.listSessionsForUser(userId)).filter(
+    (session) => !session.legacyAppUserId
+  );
+  const workspaceIds = new Set(
+    userSessions.map((session) => session.workspaceId).filter(Boolean)
+  );
+  const workspaces = [];
+  for (const membership of memberships) {
+    for (const workspace of await databaseAdapter.listWorkspaces(
+      membership.organization.id
+    )) {
+      if (
+        workspace.state !== "active" ||
+        (workspace.access === "admin" &&
+          !user.isPlatformAdmin &&
+          membership.role !== "admin") ||
+        (workspace.kind === "project"
+          ? workspace.ownerUserId !== userId
+          : !workspaceIds.has(workspace.id))
+      ) {
+        continue;
+      }
+      workspaces.push(workspace);
+      await addDirectoryFiles(
+        entries,
+        getChatWorkspaceDir(workspace.orgId, workspace.id),
+        `workspaces/${workspace.id}`
+      );
+    }
+  }
+  const includedWorkspaceIds = new Set(
+    workspaces.map((workspace) => workspace.id)
+  );
+  userSessions = (await databaseAdapter.listSessions()).filter(
+    (session) =>
+      !!session.workspaceId && includedWorkspaceIds.has(session.workspaceId)
+  );
   for (const session of userSessions) {
     const attachments = [];
     for (const attachment of await databaseAdapter.listAttachmentsForSession(
@@ -325,11 +368,7 @@ export async function createNakamaUserDataExport(
       const attachmentPath = `attachments/${attachment.id}`;
       validateArchivePath(attachmentPath);
       const bytes = attachment.orgId
-        ? await readAttachmentBytes(
-            attachment.orgId,
-            attachment.profileId,
-            attachment.id
-          )
+        ? await readStoredAttachmentBytes(attachment)
         : null;
       if (bytes) {
         entries[attachmentPath] = bytes;
@@ -355,10 +394,14 @@ export async function createNakamaUserDataExport(
       id: session.id,
       messages: await databaseAdapter.listMessagesForSession(session.id),
       model: session.model,
-      orgId: session.orgId ?? null,
+      orgId: session.workspaceId
+        ? ((await databaseAdapter.getWorkspace(session.workspaceId))?.orgId ??
+          null)
+        : (session.orgId ?? null),
       pinned: session.pinned ?? false,
       profileId: session.profileId,
       title: session.title,
+      workspaceId: session.workspaceId,
     });
   }
 
@@ -382,6 +425,7 @@ export async function createNakamaUserDataExport(
           updatedAt: user.updatedAt,
         },
         version: NAKAMA_USER_EXPORT_FORMAT_VERSION,
+        workspaces,
       },
       null,
       2
@@ -395,7 +439,7 @@ export async function createNakamaUserDataExport(
   };
 }
 
-export async function createNakamaOrgDataExport(
+async function buildNakamaOrgDataExport(
   databaseAdapter: DatabaseAdapter,
   orgId: string,
   options: { now?: Date } = {}
@@ -479,9 +523,21 @@ export async function createNakamaOrgDataExport(
   );
 
   const sessions = [];
+  const workspaces = await databaseAdapter.listWorkspaces(orgId);
+  const workspaceIds = new Set(workspaces.map((workspace) => workspace.id));
+  for (const workspace of workspaces) {
+    await addDirectoryFiles(
+      entries,
+      getChatWorkspaceDir(orgId, workspace.id),
+      `workspaces/${workspace.id}`
+    );
+  }
   const profileIds = new Set(profiles.map((profile) => profile.id));
-  const orgSessions = (await databaseAdapter.listSessions()).filter((session) =>
-    profileIds.has(session.profileId)
+  const orgSessions = (await databaseAdapter.listSessions()).filter(
+    (session) =>
+      session.workspaceId
+        ? workspaceIds.has(session.workspaceId)
+        : profileIds.has(session.profileId)
   );
   for (const session of orgSessions) {
     const attachments = [];
@@ -490,11 +546,7 @@ export async function createNakamaOrgDataExport(
     )) {
       const attachmentPath = `attachments/${attachment.id}`;
       validateArchivePath(attachmentPath);
-      const bytes = await readAttachmentBytes(
-        orgId,
-        attachment.profileId,
-        attachment.id
-      );
+      const bytes = await readStoredAttachmentBytes(attachment);
       if (bytes) {
         entries[attachmentPath] = bytes;
       }
@@ -557,6 +609,7 @@ export async function createNakamaOrgDataExport(
         sessions,
         version: NAKAMA_ORG_EXPORT_FORMAT_VERSION,
         workflows,
+        workspaces,
       },
       null,
       2
@@ -964,7 +1017,7 @@ function readManifest(entries: ZipEntry[]): DataExportManifest {
     throw new NakamaApiError("Archive is not a Nakama export.", 400);
   }
 
-  if (manifest.version !== NAKAMA_EXPORT_FORMAT_VERSION) {
+  if (![1, NAKAMA_EXPORT_FORMAT_VERSION].includes(manifest.version)) {
     throw new NakamaApiError(
       `Unsupported Nakama export version: ${manifest.version}`,
       400
@@ -1034,6 +1087,8 @@ function skipRelativePathReason(
   const first = parts[0] ?? "";
   if (
     first === NAKAMA_EXPORT_MANIFEST ||
+    first === "ephemeral" ||
+    path.endsWith(".before-chat-workspaces") ||
     (parts[0] === "orgs" && parts[2] === "meet" && parts[3] === "audio") ||
     first.startsWith(RESTORE_PREFIX) ||
     first.startsWith(BACKUP_PREFIX) ||
@@ -1265,4 +1320,23 @@ function isRetryableMoveError(error: unknown): boolean {
 
   const code = (error as { code?: unknown }).code;
   return code === "EBUSY" || code === "EXDEV" || code === "EPERM";
+}
+
+export function createNakamaUserDataExport(
+  databaseAdapter: DatabaseAdapter,
+  userId: string,
+  options: { now?: Date } = {}
+): Promise<CreateUserDataExportResult> {
+  return withWorkspaceSnapshot(null, () =>
+    buildNakamaUserDataExport(databaseAdapter, userId, options)
+  );
+}
+export function createNakamaOrgDataExport(
+  databaseAdapter: DatabaseAdapter,
+  orgId: string,
+  options: { now?: Date } = {}
+): Promise<CreateUserDataExportResult> {
+  return withWorkspaceSnapshot(null, () =>
+    buildNakamaOrgDataExport(databaseAdapter, orgId, options)
+  );
 }

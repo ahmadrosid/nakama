@@ -18,6 +18,7 @@ import {
 import { Input } from "@nakama/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowDown01Icon,
   ArrowLeft01Icon,
@@ -32,7 +33,7 @@ import {
 } from "hugeicons-react";
 import type { ElementType } from "react";
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
@@ -52,6 +53,7 @@ import {
   chatProfileIdFromPath,
   resolveRecentChatsProfileId,
 } from "@/lib/chat-history";
+import { client, formatError } from "@/lib/client";
 import {
   type NavItem,
   navHrefForPage,
@@ -130,7 +132,12 @@ export function AppSidebar({
             />
           ))}
         </div>
-        {collapsed ? null : <RecentChats />}
+        {collapsed ? null : (
+          <>
+            <SidebarProjects />
+            <RecentChats />
+          </>
+        )}
       </nav>
     </aside>
   );
@@ -407,6 +414,87 @@ function PinnedChats({
   ) : null;
 }
 
+function SidebarProjects() {
+  const { activeOrg } = useAuth();
+  const projects = useQuery({
+    enabled: Boolean(activeOrg?.id),
+    queryFn: () => client.listChatWorkspaces(),
+    queryKey: ["chatWorkspaces", activeOrg?.id],
+  });
+  return (
+    <div className="mt-5 shrink-0 px-2">
+      <Link className="sidebar-nav-group-label" to="/projects">
+        Projects
+      </Link>
+      {projects.isLoading && <SessionRowSkeletons />}
+      {projects.error && (
+        <p className="text-muted-foreground text-xs" role="status">
+          Couldn’t load projects.
+        </p>
+      )}
+      {projects.data?.workspaces
+        .filter((workspace) => workspace.kind === "project")
+        .map((workspace) => (
+          <SidebarProjectFolder key={workspace.id} workspace={workspace} />
+        ))}
+    </div>
+  );
+}
+
+function SidebarProjectFolder({
+  workspace,
+}: {
+  workspace: { id: string; name: string };
+}) {
+  const { activeOrg } = useAuth();
+  const [expanded, setExpanded] = useState(false);
+  const chats = useQuery({
+    enabled: expanded,
+    queryFn: () =>
+      client.listSessions(
+        "",
+        ["web", "cli", "telegram", "discord", "whatsapp", "slack"],
+        { workspaceId: workspace.id }
+      ),
+    queryKey: ["sessions", "project", activeOrg?.id, workspace.id],
+  });
+  return (
+    <div>
+      <div className="flex items-center">
+        <button
+          aria-expanded={expanded}
+          aria-label={`Expand ${workspace.name}`}
+          className="px-2 py-1"
+          onClick={() => setExpanded(!expanded)}
+          type="button"
+        >
+          {expanded ? "−" : "+"}
+        </button>
+        <Link
+          className="block min-w-0 truncate rounded-md px-2 py-1.5 text-sm hover:bg-sidebar-accent"
+          to={`/projects/${workspace.id}`}
+        >
+          {workspace.name}
+        </Link>
+      </div>
+      {expanded && (
+        <div className="pl-6">
+          {chats.isLoading && <SessionRowSkeletons />}
+          {chats.data?.sessions.map((chat) => (
+            <Link
+              className="block truncate rounded-md px-2 py-1 text-xs hover:bg-sidebar-accent"
+              key={chat.id}
+              to={buildChatPath(chat.profileId, chat.id)}
+            >
+              {chat.title ?? chat.preview ?? "Chat"}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RecentChats() {
   const location = useLocation();
   const { activeOrg } = useAuth();
@@ -421,7 +509,10 @@ function RecentChats() {
       profiles,
       search: location.search,
     }) ?? "";
-  const history = useHistorySessionsQuery(profileId);
+  const history = useHistorySessionsQuery("");
+  const navigate = useNavigate();
+  const [newChatError, setNewChatError] = useState("");
+  const [creatingChat, setCreatingChat] = useState(false);
   const [search, setSearch] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   // Typing waits a moment before asking the server; clearing is immediate.
@@ -435,7 +526,7 @@ function RecentChats() {
     return () => clearTimeout(timer);
   }, [search]);
   // Idle until there is a search, then its own paged list.
-  const results = useHistorySessionsQuery(profileId, searchQuery);
+  const results = useHistorySessionsQuery("", searchQuery);
   const list = searchQuery ? results : history;
   const { data: sessions } = history;
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = list;
@@ -481,7 +572,7 @@ function RecentChats() {
           sessionId: session.id,
         })
       }
-      profileId={profileId}
+      profileId={session.profileId}
       session={session}
     />
   );
@@ -507,6 +598,11 @@ function RecentChats() {
 
   return (
     <div className="mt-5 flex min-h-0 flex-1 flex-col">
+      {newChatError && (
+        <p className="px-3 text-destructive text-xs" role="alert">
+          {newChatError}
+        </p>
+      )}
       <PinnedChats renderSession={renderSession} sessions={pinnedSessions} />
       <div className="group mb-1.5 flex shrink-0 items-center gap-1 px-2">
         <button
@@ -529,8 +625,21 @@ function RecentChats() {
           <Button
             aria-label="New chat"
             className="text-muted-foreground/55 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
-            nativeButton={false}
-            render={<Link to={navHrefForPage("chat", profileId)} />}
+            disabled={creatingChat}
+            onClick={async () => {
+              setCreatingChat(true);
+              setNewChatError("");
+              try {
+                const session = await client.createSession("web", {
+                  profileId,
+                });
+                navigate(buildChatPath(profileId, session.id));
+              } catch (error) {
+                setNewChatError(formatError(error));
+              } finally {
+                setCreatingChat(false);
+              }
+            }}
             size="icon-sm"
             title="New chat"
             variant="ghost"

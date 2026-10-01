@@ -1,4 +1,10 @@
-import { existsSync, lstatSync, mkdirSync, renameSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  renameSync,
+  rmdirSync,
+} from "node:fs";
 import { cp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type {
@@ -72,6 +78,10 @@ import {
   ensureProfileDefaultBundledSkills,
 } from "@nakama/db";
 import {
+  ChatWorkspaceService,
+  withWorkspaceSnapshot,
+} from "./chat-workspace-service";
+import {
   CUSTOM_TOOL_HANDLERS,
   type CustomToolType,
   customToolTypesLabel,
@@ -87,10 +97,7 @@ import {
   soulFieldFromFileName,
   withAssignmentChange,
 } from "./profile-change-history";
-import {
-  deleteProfileWithHistoryArchives,
-  sessionHistoryArchivePath,
-} from "./session-persistence";
+import { deleteProfileWithHistoryArchives } from "./session-persistence";
 import { sessionTurnRegistry } from "./session-turn-registry";
 import { toSkillSummaries } from "./skills-service";
 import { readToolSource } from "./tool-source";
@@ -486,7 +493,20 @@ export class ProfileService {
     profileId: string,
     request: MoveProfileRequest
   ): Promise<ProfileResponse> {
-    await this.requireProfile(orgId, profileId);
+    return withWorkspaceSnapshot(null, () =>
+      this.moveProfileUnlocked(orgId, profileId, request)
+    );
+  }
+
+  private async moveProfileUnlocked(
+    orgId: string,
+    profileId: string,
+    request: MoveProfileRequest
+  ): Promise<ProfileResponse> {
+    const profile = await this.requireProfile(orgId, profileId);
+    if (profile.isSuper) {
+      throw new NakamaApiError("Super Bot cannot be moved.", 400);
+    }
     for (const platform of [
       "telegram",
       "discord",
@@ -526,13 +546,34 @@ export class ProfileService {
     }
     const from = getProfileSoulDir(orgId, profileId);
     const to = getProfileSoulDir(destination, profileId);
+    const storage = new ChatWorkspaceService(this.db);
+    for (const session of sessions) {
+      if (session.workspaceId) {
+        await storage.roots(session);
+      }
+    }
+    await storage.recoverProfile(orgId, profileId);
+    if (lstatSync(to, { throwIfNoEntry: false })) {
+      throw new NakamaApiError(
+        "Destination already contains profile data.",
+        409
+      );
+    }
+    // Only identity/configuration crosses the tenant boundary. Original legacy
+    // work remains in its old organization beside the verified recovery copy.
     const paths: [string, string][] = [
-      [from, to],
-      ...sessions.map((session): [string, string] => [
-        sessionHistoryArchivePath(orgId, session.id),
-        sessionHistoryArchivePath(destination, session.id),
-      ]),
-    ];
+      "SOUL.md",
+      "STYLE.md",
+      "INSTRUCTIONS.md",
+      "MEMORY.md",
+      "memory-archive",
+      "memory-history",
+      "skills",
+      "knowledge-base",
+      "avatar.png",
+      "avatar.jpg",
+      "avatar.webp",
+    ].map((name) => [join(from, name), join(to, name)]);
     const moved: [string, string][] = [];
     try {
       for (const [source, targetPath] of paths) {
@@ -554,13 +595,32 @@ export class ProfileService {
       for (const [source, targetPath] of moved.reverse()) {
         renameSync(targetPath, source);
       }
+      if (existsSync(to)) {
+        rmdirSync(to);
+      }
       throw error;
     }
     return this.getProfile(destination, profileId);
   }
 
   async deleteProfile(orgId: string, profileId: string): Promise<void> {
+    return withWorkspaceSnapshot(null, () =>
+      this.deleteProfileUnlocked(orgId, profileId)
+    );
+  }
+
+  private async deleteProfileUnlocked(
+    orgId: string,
+    profileId: string
+  ): Promise<void> {
     const profile = await this.requireProfile(orgId, profileId);
+    const storage = new ChatWorkspaceService(this.db);
+    for (const session of await this.db.listSessions()) {
+      if (session.profileId === profileId && session.workspaceId) {
+        await storage.roots(session);
+      }
+    }
+    await storage.recoverProfile(orgId, profileId);
 
     if (profile.isDefault) {
       const orgProfiles = await this.db.listProfilesForOrg(orgId);

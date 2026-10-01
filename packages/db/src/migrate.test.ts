@@ -1140,7 +1140,7 @@ describe("ephemeral attachment marking", () => {
   });
 });
 
-test("file pins migrate existing databases, survive reopen and cascade with profiles", () => {
+test("file pins migrate existing databases, survive reopen and profile deletion", () => {
   const directory = mkdtempSync(join(tmpdir(), "nakama-file-pins-"));
   const filename = join(directory, "pins.sqlite");
   let db = new Database(filename);
@@ -1152,7 +1152,7 @@ test("file pins migrate existing databases, survive reopen and cascade with prof
       INSERT INTO organizations (id, name, slug, created_at, updated_at) VALUES ('pin-org', 'Pins', 'pins', 'now', 'now');
       INSERT INTO users (id, email, password_hash, created_at, updated_at) VALUES ('pin-user', 'pins@example.com', 'unused', 'now', 'now');
       INSERT INTO profiles (id, name, org_id, created_at, updated_at) VALUES ('pin-profile', 'Pins', 'pin-org', 'now', 'now');
-      INSERT INTO file_pins VALUES ('pin-org', 'pin-user', 'pin-profile', 'notes.md');
+      INSERT INTO file_pins (org_id, user_id, profile_id, path) VALUES ('pin-org', 'pin-user', 'pin-profile', 'notes.md');
     `);
     db.close(true);
     db = new Database(filename);
@@ -1161,7 +1161,83 @@ test("file pins migrate existing databases, survive reopen and cascade with prof
       { path: "notes.md" },
     ]);
     db.exec("DELETE FROM profiles WHERE id = 'pin-profile'");
-    expect(db.query("SELECT path FROM file_pins").all()).toEqual([]);
+    expect(db.query("SELECT path FROM file_pins").all()).toEqual([
+      { path: "notes.md" },
+    ]);
+  } finally {
+    db.close(true);
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("legacy storage migration backs up credentials, restricts external chats, and preserves history after agent deletion", () => {
+  const directory = mkdtempSync(join(tmpdir(), "nakama-storage-migration-"));
+  const filename = join(directory, "legacy.sqlite");
+  const db = new Database(filename);
+  try {
+    const { readFileSync } = require("node:fs");
+    db.exec(
+      readFileSync(resolveSchemaPath(), "utf8").replace(
+        "legacy_app_user_id TEXT",
+        "app_user_id TEXT"
+      )
+    );
+    db.exec(`
+      INSERT INTO organizations (id, name, slug, created_at, updated_at) VALUES ('migration-org', 'Migration', 'migration', 'now', 'now');
+      INSERT INTO users (id, email, password_hash, created_at, updated_at) VALUES ('migration-owner', 'migration@example.com', 'unused', 'now', 'now');
+      INSERT INTO profiles (id, name, org_id, created_at, updated_at) VALUES ('migration-agent', 'Agent', 'migration-org', 'now', 'now');
+      INSERT INTO sessions (id, profile_id, channel, app_user_id, user_id, created_at, updated_at) VALUES ('legacy-external', 'migration-agent', 'web', 'external-alice', 'migration-owner', 'now', 'now');
+      INSERT INTO session_messages (id, session_id, seq, payload, created_at) VALUES ('legacy-message', 'legacy-external', 0, '{"role":"user","content":"Keep history"}', 'now');
+      CREATE TABLE api_keys (id TEXT, secret_hash TEXT);
+      INSERT INTO api_keys VALUES ('retired', 'old-secret-hash');
+    `);
+    migrateDatabase(db);
+    expect(existsSync(`${filename}.before-chat-workspaces`)).toBe(true);
+    expect(
+      db.query("SELECT name FROM sqlite_master WHERE name = 'api_keys'").all()
+    ).toEqual([]);
+    expect(
+      db
+        .query(
+          "SELECT access, owner_user_id FROM chat_workspaces WHERE id = 'chat-legacy-external'"
+        )
+        .get()
+    ).toEqual({ access: "admin", owner_user_id: null });
+    expect(
+      db
+        .query(
+          "SELECT legacy_app_user_id FROM sessions WHERE id = 'legacy-external'"
+        )
+        .get()
+    ).toEqual({ legacy_app_user_id: "external-alice" });
+    migrateDatabase(db);
+    expect(
+      db
+        .query(
+          "SELECT COUNT(*) AS count FROM chat_workspaces WHERE id = 'chat-legacy-external'"
+        )
+        .get()
+    ).toEqual({ count: 1 });
+    db.exec("DELETE FROM profiles WHERE id = 'migration-agent'");
+    expect(
+      db
+        .query(
+          "SELECT active_profile_id FROM sessions WHERE id = 'legacy-external'"
+        )
+        .get()
+    ).toEqual({ active_profile_id: null });
+    expect(
+      db
+        .query(
+          "SELECT payload FROM session_messages WHERE session_id = 'legacy-external'"
+        )
+        .get()
+    ).toEqual({ payload: '{"role":"user","content":"Keep history"}' });
+    expect(() =>
+      db.exec(
+        "INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, workspace_id) VALUES ('second', 'old-agent', 'web', 'now', 'now', 'chat-legacy-external')"
+      )
+    ).toThrow();
   } finally {
     db.close(true);
     rmSync(directory, { force: true, recursive: true });

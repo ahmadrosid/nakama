@@ -343,38 +343,12 @@ describe("profile artifact content auth", () => {
     expect(browserResponse.status).toBe(400);
     expect(readCalls).toEqual([]);
 
-    const owner = await databaseAdapter.getUserByEmail(
-      "app-user-artifact@example.com"
-    );
-    if (!(owner && memberSession.orgId)) {
-      throw new Error("Expected artifact test owner");
-    }
-    const secret = `nk_live_${"2".repeat(64)}`;
-    await databaseAdapter.createApiKey({
-      createdAt: new Date().toISOString(),
-      createdByUserId: owner.id,
-      environment: "live",
-      expiresAt: null,
-      id: "key_artifact_app_user_test",
-      keyPrefix: secret.slice(0, 20),
-      lastUsedAt: null,
-      name: "Artifact app user test",
-      orgId: memberSession.orgId,
-      revokedAt: null,
-      secretHash: authService.hashToken(secret),
-    });
-    const apiKeyResponse = await app.fetch(
+    const retired = await app.fetch(
       new Request(url, {
-        headers: {
-          Authorization: `Bearer ${secret}`,
-          "X-Nakama-App-User-Id": "alice",
-          "X-Org-Id": memberSession.orgId,
-        },
+        headers: { Authorization: `Bearer nk_live_${"2".repeat(64)}` },
       })
     );
-
-    expect(apiKeyResponse.status).toBe(200);
-    expect(readCalls).toEqual([{ appUserId: "alice", render: undefined }]);
+    expect(retired.status).toBe(401);
   });
 
   test("serves artifact content with a Unicode filename", async () => {

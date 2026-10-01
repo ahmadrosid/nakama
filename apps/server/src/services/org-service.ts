@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { rm } from "node:fs/promises";
 import {
   createEmailOutboundAdapter,
@@ -17,13 +16,9 @@ import {
 import type {
   AcceptOrgInviteRequest,
   AddOrgMemberResponse,
-  ApiKeySummary,
   AuthUserResponse,
-  CreateApiKeyRequest,
-  CreateApiKeyResponse,
   CreateOrganizationRequest,
   CreateOrganizationResponse,
-  ListApiKeysResponse,
   ListOrgMembersResponse,
   ListUserOrgsResponse,
   OrganizationSummary,
@@ -34,7 +29,6 @@ import type {
   OrgRole,
   RequestPasswordResetResponse,
   ResetPasswordRequest,
-  RotateApiKeyResponse,
   UpdateOrganizationRequest,
   UpdateOrgMemberRequest,
   UserOrgSummary,
@@ -42,7 +36,6 @@ import type {
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import type {
   DatabaseAdapter,
-  StoredApiKeyRecord,
   StoredOrganizationRecord,
   StoredOrgInviteRecord,
   StoredPasswordResetTokenRecord,
@@ -56,6 +49,7 @@ import {
   seedOrgSuperBotProfile,
 } from "@nakama/db";
 import type { AuthService } from "./auth-service";
+import { withWorkspaceSnapshot } from "./chat-workspace-service";
 import { loadMfaPolicy } from "./mfa-config";
 
 const LAST_MEMBERSHIP_MESSAGE =
@@ -154,6 +148,14 @@ export class OrgService {
   }
 
   async permanentlyDeleteOrganization(orgId: string): Promise<void> {
+    return withWorkspaceSnapshot(null, () =>
+      this.permanentlyDeleteOrganizationUnlocked(orgId)
+    );
+  }
+
+  private async permanentlyDeleteOrganizationUnlocked(
+    orgId: string
+  ): Promise<void> {
     const organization = await this.databaseAdapter.getOrganizationById(orgId);
     if (!organization) {
       throw new NakamaApiError("Not found", 404);
@@ -887,161 +889,6 @@ export class OrgService {
     };
   }
 
-  async listApiKeys(orgId: string): Promise<ListApiKeysResponse> {
-    await this.requireActiveOrganization(orgId);
-    const keys = await this.databaseAdapter.listApiKeysForOrg(orgId);
-    return { keys: keys.map(toApiKeySummary) };
-  }
-
-  async createApiKey(input: {
-    orgId: string;
-    userId: string;
-    request: CreateApiKeyRequest;
-  }): Promise<CreateApiKeyResponse> {
-    await this.requireActiveOrganization(input.orgId);
-    const { expiresAt, name } = input.request;
-    const environment = "live" as const;
-    const trimmedName = name.trim();
-    if (!trimmedName || trimmedName.length > 120) {
-      throw new NakamaApiError(
-        "A key name from 1 to 120 characters is required.",
-        400
-      );
-    }
-    if (expiresAt && Number.isNaN(new Date(expiresAt).getTime())) {
-      throw new NakamaApiError("Invalid expiration date.", 400);
-    }
-
-    const secret = randomBytes(32).toString("hex");
-    const rawKey = `nk_${environment}_${secret}`;
-    const record: StoredApiKeyRecord = {
-      createdAt: new Date().toISOString(),
-      createdByUserId: input.userId,
-      environment,
-      expiresAt: expiresAt ?? null,
-      id: `key_${crypto.randomUUID().replace(/-/g, "")}`,
-      keyPrefix: rawKey.slice(0, 20),
-      lastUsedAt: null,
-      name: trimmedName,
-      orgId: input.orgId,
-      revokedAt: null,
-      secretHash: this.authService.hashToken(rawKey),
-    };
-
-    await this.databaseAdapter.createApiKey(record);
-    await this.databaseAdapter.createAuditEvent({
-      action: "api_key.create",
-      actorUserId: input.userId,
-      createdAt: record.createdAt,
-      id: `audit_${crypto.randomUUID().replace(/-/g, "")}`,
-      metadata: { environment: record.environment },
-      orgId: input.orgId,
-      requestId: null,
-      resourceId: record.id,
-      resourceType: "api_key",
-    });
-    return { key: toApiKeySummary(record), secret: rawKey };
-  }
-
-  async revokeApiKey(
-    orgId: string,
-    userId: string,
-    keyId: string
-  ): Promise<void> {
-    await this.requireActiveOrganization(orgId);
-    const key = (await this.databaseAdapter.listApiKeysForOrg(orgId)).find(
-      (candidate) => candidate.id === keyId
-    );
-    if (
-      !(
-        key &&
-        (await this.databaseAdapter.revokeApiKey(
-          keyId,
-          new Date().toISOString()
-        ))
-      )
-    ) {
-      throw new NakamaApiError("Not found", 404);
-    }
-    await this.databaseAdapter.createAuditEvent({
-      action: "api_key.revoke",
-      actorUserId: userId,
-      createdAt: new Date().toISOString(),
-      id: `audit_${crypto.randomUUID().replace(/-/g, "")}`,
-      metadata: {},
-      orgId,
-      requestId: null,
-      resourceId: keyId,
-      resourceType: "api_key",
-    });
-  }
-
-  async deleteApiKey(
-    orgId: string,
-    userId: string,
-    keyId: string
-  ): Promise<void> {
-    await this.requireActiveOrganization(orgId);
-    const key = (await this.databaseAdapter.listApiKeysForOrg(orgId)).find(
-      (candidate) => candidate.id === keyId
-    );
-    if (!(key && (await this.databaseAdapter.deleteApiKey(keyId)))) {
-      throw new NakamaApiError("Not found", 404);
-    }
-    await this.databaseAdapter.createAuditEvent({
-      action: "api_key.delete",
-      actorUserId: userId,
-      createdAt: new Date().toISOString(),
-      id: `audit_${crypto.randomUUID().replace(/-/g, "")}`,
-      metadata: {},
-      orgId,
-      requestId: null,
-      resourceId: keyId,
-      resourceType: "api_key",
-    });
-  }
-
-  async rotateApiKey(
-    orgId: string,
-    userId: string,
-    keyId: string
-  ): Promise<RotateApiKeyResponse> {
-    await this.requireActiveOrganization(orgId);
-    const keys = await this.databaseAdapter.listApiKeysForOrg(orgId);
-    const current = keys.find((key) => key.id === keyId);
-    if (!current || current.revokedAt) {
-      throw new NakamaApiError("Not found", 404);
-    }
-    const revoked = await this.databaseAdapter.revokeApiKey(
-      keyId,
-      new Date().toISOString()
-    );
-    if (!revoked) {
-      throw new NakamaApiError("Not found", 404);
-    }
-    const created = await this.createApiKey({
-      orgId,
-      request: {
-        environment: current.environment as CreateApiKeyRequest["environment"],
-        expiresAt: current.expiresAt,
-        name: current.name,
-      },
-      userId,
-    });
-    await this.databaseAdapter.createAuditEvent({
-      action: "api_key.rotate",
-      actorUserId: userId,
-      createdAt: new Date().toISOString(),
-      id: `audit_${crypto.randomUUID().replace(/-/g, "")}`,
-      metadata: {},
-      orgId,
-      requestId: null,
-      resourceId: keyId,
-      resourceType: "api_key",
-    });
-    return created;
-  }
-
   async createInvite(input: {
     orgId: string;
     email: string;
@@ -1587,19 +1434,6 @@ function toOrgInviteSummary(record: StoredOrgInviteRecord): OrgInviteSummary {
     id: record.id,
     orgId: record.orgId,
     role: record.role,
-  };
-}
-
-function toApiKeySummary(record: StoredApiKeyRecord): ApiKeySummary {
-  return {
-    createdAt: record.createdAt,
-    environment: record.environment as ApiKeySummary["environment"],
-    expiresAt: record.expiresAt,
-    id: record.id,
-    keyPrefix: record.keyPrefix,
-    lastUsedAt: record.lastUsedAt,
-    name: record.name,
-    revokedAt: record.revokedAt,
   };
 }
 

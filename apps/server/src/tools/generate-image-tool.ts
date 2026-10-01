@@ -53,10 +53,12 @@ export interface GenerateImageToolInput {
 
 export interface GenerateImageToolSuccess {
   attachmentId: string | null;
+  fileId?: string;
   mimeType: string;
   model: string;
   path: string;
   sizeBytes: number;
+  workspaceId?: string;
 }
 
 export interface GenerateImageToolFailure {
@@ -193,7 +195,8 @@ export async function runGenerateImageTool(
       "workspaceRoot must be an absolute path; relative roots resolve against process.cwd() and break profile isolation."
     );
   }
-  const artifactsDir = path.join(workspaceRoot, "artifacts");
+  const artifactsDir =
+    context.outputRoot ?? path.join(workspaceRoot, "artifacts");
   const outputName = resolveOutputFilename(filenameHint, result.mediaType);
   const targetPath = await uniqueArtifactPath(
     path.join(artifactsDir, outputName)
@@ -221,10 +224,15 @@ export async function runGenerateImageTool(
       const trackEphemeral = context.trackEphemeralAttachment;
       const save = createAttachmentSaver(deps.db, {
         channel,
+        chatRoot: context.chatRoot,
         ephemeral: Boolean(trackEphemeral),
+        existingPath: context.chatRoot ? targetPath : undefined,
         orgId,
         profileId,
+        purpose: "output",
         sessionId: trackEphemeral ? null : sessionId,
+        workspaceId: context.workspaceId,
+        workspaceRoot: context.workspaceRoot,
       });
       const saved = await save({
         bytes: Buffer.from(result.data),
@@ -251,6 +259,9 @@ export async function runGenerateImageTool(
 
   return {
     attachmentId,
+    ...(context.workspaceId && attachmentId
+      ? { fileId: attachmentId, workspaceId: context.workspaceId }
+      : {}),
     mimeType: result.mediaType,
     model: result.model,
     path: relativePath,

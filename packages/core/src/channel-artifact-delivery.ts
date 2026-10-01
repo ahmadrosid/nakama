@@ -39,11 +39,13 @@ const ATTACH_INTENT_PATTERNS = [
 ];
 
 export interface ListedArtifactCandidate {
+  fileId?: string;
   /** Relative path under the profile artifacts dir (API read key). */
   filename: string;
   mimeType: string;
   sizeBytes: number;
   updatedAt: string;
+  workspaceId?: string;
 }
 
 /** In-process document upload budget, not WhatsApp's absolute limit. */
@@ -97,6 +99,9 @@ function listedCandidateToDeliverable(
 ): DeliverableChannelArtifact {
   const basename = entry.filename.split(/[\\/]/).pop() ?? entry.filename;
   return {
+    ...(entry.workspaceId
+      ? { fileId: entry.fileId, workspaceId: entry.workspaceId }
+      : {}),
     filename: basename,
     mimeType: entry.mimeType,
     path: entry.filename,
@@ -181,13 +186,16 @@ export function getMostRecentDeliverableArtifact(
 export async function mintDeliverableArtifacts(input: {
   artifacts: ChannelArtifactRef[];
   shareUrlCache: Record<string, string>;
-  publish: (relativePath: string) => Promise<PublishArtifactShareResult>;
+  publish: (
+    relativePath: string,
+    artifact?: ChannelArtifactRef
+  ) => Promise<PublishArtifactShareResult>;
 }): Promise<DeliverableChannelArtifact[]> {
   const delivered: DeliverableChannelArtifact[] = [];
 
   for (const artifact of input.artifacts) {
     try {
-      const response = await input.publish(artifact.path);
+      const response = await input.publish(artifact.path, artifact);
       const resolved = resolveShareUrlForPublish(
         response,
         input.shareUrlCache,
@@ -211,7 +219,10 @@ export async function mintDeliverableArtifacts(input: {
 export async function deliverTurnArtifactShares(input: {
   conversationKey: string;
   afterMinted?: (artifacts: DeliverableChannelArtifact[]) => Promise<void>;
-  publish: (relativePath: string) => Promise<PublishArtifactShareResult>;
+  publish: (
+    relativePath: string,
+    artifact?: ChannelArtifactRef
+  ) => Promise<PublishArtifactShareResult>;
   sendFooter: (footer: string) => Promise<void>;
   session: { getMessages(): Promise<ChatMessage[]> };
   sessionStore: {
@@ -241,8 +252,8 @@ export async function deliverTurnArtifactShares(input: {
   let webPublicUrlConfigured = true;
   const delivered = await mintDeliverableArtifacts({
     artifacts: paired,
-    publish: async (path) => {
-      const response = await input.publish(path);
+    publish: async (path, artifact) => {
+      const response = await input.publish(path, artifact);
       webPublicUrlConfigured = response.webPublicUrlConfigured;
       return response;
     },

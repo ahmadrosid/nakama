@@ -86,6 +86,18 @@ function readPositiveEnv(name: string): number | undefined {
 
 export function createHonoApp(options: ServerOptions) {
   const app: HonoApp = new OpenAPIHono();
+  app.use("/v1/*", async (c, next) => {
+    if (
+      c.req.header("X-Nakama-App-User-Id") !== undefined ||
+      c.req.query("appUserId") !== undefined
+    ) {
+      return errorResponse(
+        "External app-user selectors are no longer supported.",
+        400
+      );
+    }
+    await next();
+  });
   const metricsEnabled = process.env.NAKAMA_METRICS === "true";
   let requests = 0;
   let serverErrors = 0;

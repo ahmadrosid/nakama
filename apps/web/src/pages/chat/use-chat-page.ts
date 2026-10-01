@@ -90,7 +90,6 @@ import {
   resolveModelThinkingSupport,
   resolveModelVisionSupport,
 } from "@/lib/models";
-import { queryKeys } from "@/lib/query-keys";
 import {
   buildAutoEnableThinkingPayload,
   DEFAULT_THINKING_EFFORT,
@@ -187,6 +186,7 @@ export function useChatPage() {
     });
   const [session, setSession] = useState<RemoteChatSession | null>(null);
   const [cognito, setCognito] = useState(false);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [sessionModel, setSessionModel] = useState<string | null>(null);
   const [sessionChannel, setSessionChannel] = useState<AgentChannel>("web");
   const [messages, setMessages] = useState<ChatListItem[]>([]);
@@ -590,6 +590,8 @@ export function useChatPage() {
           todos,
           questionnaire,
           contextUsage: nextContextUsage,
+          workspaceId: nextWorkspaceId,
+          activeProfileId,
         } = await client.getSessionMessages(sessionId);
         if (!isCurrentLoad()) {
           return;
@@ -603,7 +605,8 @@ export function useChatPage() {
           listItems = appendFailedTurnIfNeeded(listItems, storedFailedTurn);
         }
 
-        setProfileId(nextProfileId);
+        setWorkspaceId(nextWorkspaceId ?? null);
+        setProfileId(activeProfileId ?? nextProfileId);
         setSessionChannel(channel);
         setSession(nextSession);
         setSessionModel(model);
@@ -764,10 +767,17 @@ export function useChatPage() {
       ) {
         return;
       }
-      setProfileId(nextProfileId);
-      enterDraftChat(nextProfileId);
+      if (session && !cognitoRef.current) {
+        void client
+          .updateSession(session.id, { profileId: nextProfileId })
+          .then(() => resumeSession(nextProfileId, session.id))
+          .catch((cause) => setError(formatError(cause)));
+      } else {
+        setProfileId(nextProfileId);
+        enterDraftChat(nextProfileId);
+      }
     },
-    [enterDraftChat, setProfileId]
+    [enterDraftChat, setProfileId, session, resumeSession]
   );
 
   // Layout effect so session is cleared before the syncChatUrl effect can
@@ -878,19 +888,15 @@ export function useChatPage() {
     if (!list || list.length === 0) {
       return;
     }
-    const resolved = syncForOrg({
+    syncForOrg({
       orgId: activeOrg?.id ?? null,
       preferredProfileId: routeSession?.profileId,
       profiles: list,
     });
-    if (routeSession && resolved && routeSession.profileId !== resolved) {
-      enterDraftChat(resolved);
-    }
   }, [
     profilesQuery.data,
     profilesQuery.error,
     activeOrg?.id,
-    enterDraftChat,
     routeSession,
     syncForOrg,
   ]);
@@ -976,7 +982,7 @@ export function useChatPage() {
           if (!cognitoRef.current) {
             syncChatUrl(profileId, activeSession.id);
             void queryClient.invalidateQueries({
-              queryKey: queryKeys.sessions(profileId),
+              queryKey: ["sessions"],
             });
           }
         }
@@ -1003,10 +1009,37 @@ export function useChatPage() {
             }
           };
 
+        const attachmentIds: string[] = [];
+        if (!cognitoRef.current && (documents.length || images.length)) {
+          const { workspaceId } = await client.getSessionMessages(
+            activeSession.id
+          );
+          if (!workspaceId) {
+            throw new Error("Chat workspace unavailable.");
+          }
+          const uploadSessionId = activeSession.id;
+          const results = await Promise.all(
+            [
+              ...documents,
+              ...images.map((image) => ({ ...image, filename: "image" })),
+            ].map((file) =>
+              client.uploadChatWorkspaceFile(workspaceId, {
+                ...file,
+                sessionId: uploadSessionId,
+              })
+            )
+          );
+          attachmentIds.push(...results.map((result) => result.attachmentId));
+        }
         await activeSession.sendStream(
           {
-            documents: documents.length > 0 ? documents : undefined,
-            images: images.length > 0 ? images : undefined,
+            attachmentIds: attachmentIds.length ? attachmentIds : undefined,
+            documents:
+              cognitoRef.current && documents.length > 0
+                ? documents
+                : undefined,
+            images:
+              cognitoRef.current && images.length > 0 ? images : undefined,
             message: text,
           },
           buildStreamHandlers(whileAttached(setMessages), {
@@ -1129,7 +1162,7 @@ export function useChatPage() {
         // else here belongs to a detached turn: the page has moved on and
         // releaseActiveStream already cleared the flags and the queue.
         void queryClient.invalidateQueries({
-          queryKey: queryKeys.sessions(profileId),
+          queryKey: ["sessions"],
         });
         // A turn can remove an artifact owned by any profile.
         void queryClient.invalidateQueries({
@@ -1426,6 +1459,7 @@ export function useChatPage() {
     thinkingEffortDisabled,
     thinkingEffortVisible,
     turnStartedAt,
+    workspaceId,
   };
 }
 

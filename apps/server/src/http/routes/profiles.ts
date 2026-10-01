@@ -43,13 +43,7 @@ import {
   requireOrgAdminOrPlatformAdminFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
-import {
-  getRequestAppUserScope,
-  getRequestAuth,
-  json,
-  readJson,
-  readOptionalJson,
-} from "../shared";
+import { getRequestAuth, json, readJson, readOptionalJson } from "../shared";
 import type { HonoApp } from "../types";
 
 const ORG_ADMIN_PROFILE_SETTING_KEYS = new Set([
@@ -75,6 +69,24 @@ export function registerProfileRoutes(
   options: ServerOptions
 ): void {
   const { agent } = options;
+  const requireRecoveredFileAccess = async (
+    c: Parameters<typeof getRequestAuth>[0],
+    next: () => Promise<void>
+  ) => {
+    const orgId = requireActiveOrgIdFromContext(c);
+    const profileId = c.req.param("profileId");
+    if (
+      profileId &&
+      (await options.databaseAdapter?.getWorkspace(
+        `recovered-${orgId}-${profileId}`
+      ))
+    ) {
+      requireOrgAdminOrPlatformAdminFromContext(c);
+    }
+    await next();
+  };
+  app.use("/v1/profiles/:profileId/artifacts", requireRecoveredFileAccess);
+  app.use("/v1/profiles/:profileId/artifacts/*", requireRecoveredFileAccess);
   const artifactShares =
     options.databaseAdapter && options.authService
       ? new ArtifactShareService(options.databaseAdapter, options.authService)
@@ -1305,7 +1317,6 @@ export function registerProfileRoutes(
   app.get("/v1/profiles/:profileId/artifacts", async (c) => {
     requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
-    const { appUserId } = getRequestAppUserScope(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const limitRaw = c.req.query("limit");
     const offsetRaw = c.req.query("offset");
@@ -1332,7 +1343,6 @@ export function registerProfileRoutes(
 
     return json<ListArtifactsResponse>(
       await agent.listProfileArtifacts(orgId, profileId, {
-        appUserId,
         folder: c.req.query("folder"),
         limit,
         offset,
@@ -1342,7 +1352,6 @@ export function registerProfileRoutes(
 
   app.get("/v1/profiles/:profileId/artifacts/content", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
-    const { appUserId } = getRequestAppUserScope(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const artifactPath = c.req.query("path");
 
@@ -1357,7 +1366,6 @@ export function registerProfileRoutes(
       profileId,
       artifactPath,
       {
-        appUserId,
         ...(c.req.method === "HEAD" ? { headOnly: true } : {}),
         render,
       }

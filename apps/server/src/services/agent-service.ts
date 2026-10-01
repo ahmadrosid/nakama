@@ -1,3 +1,4 @@
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type AgentChatSession,
@@ -134,13 +135,13 @@ import {
   DEFAULT_THINKING_ENABLED,
   defaultOllamaBaseUrl,
   deleteArtifactFile,
-  deleteAttachmentBytes,
-  ensureAppUserSoulDir,
   extractImageParts,
   findProviderInstance,
   getActiveProviderInstance,
+  getChatSessionDir,
   getProfileSoulDir,
   getSoulStatus,
+  getUserConfigDir,
   initSoulDirectory,
   isEmailConfigComplete,
   isProviderConfigured,
@@ -270,12 +271,20 @@ import { AgentTodoState } from "./agent-todo-state";
 import {
   createAttachmentLoader,
   createAttachmentSaver,
+  deleteStoredAttachmentBytes,
+  readStoredAttachmentBytes,
 } from "./attachment-service";
 import {
   resolveTranscriptionProviderSelection,
   TRANSCRIPTION_MODEL_REQUIRED_MESSAGE,
 } from "./audio-transcription";
 import type { AutomationRunner } from "./automation-runner";
+import {
+  acquireWorkspaceWrite,
+  assertWorkspaceAccess,
+  ChatWorkspaceService,
+  withWorkspaceSnapshot,
+} from "./chat-workspace-service";
 import {
   buildCodingAgentCommandTemplate,
   formatCodingAgentCommandContext,
@@ -374,21 +383,23 @@ interface CognitoSessionOptions {
 }
 
 export interface CreateSessionOptions {
-  appUserId?: string | null;
   codingWorkspaceRoot?: string;
   cognito?: boolean;
   excludeSuperBot?: boolean;
   isPlatformAdmin?: boolean;
   model?: string | null;
   orgRole?: OrgRole | null;
+  userId?: string | null;
+  workspaceId?: string;
 }
 
 type ChatProfileAccess = Pick<
   CreateSessionOptions,
-  "excludeSuperBot" | "isPlatformAdmin" | "orgRole"
+  "excludeSuperBot" | "isPlatformAdmin" | "orgRole" | "userId"
 >;
 
 export class AgentService {
+  readonly chatWorkspaces: ChatWorkspaceService;
   private harness: AgentDependencies;
   private userConfig: UserConfig | null;
   private readonly db: DatabaseAdapter;
@@ -422,6 +433,7 @@ export class AgentService {
   private orgMemoryService: OrgMemoryService | null = null;
   private readonly memoryBackend: MemoryBackendService;
   private readonly sessions = new Map<string, StoredSession>();
+  private readonly delegates = new Map<string, Set<Promise<unknown>>>();
   private readonly ephemeralSessions = new EphemeralSessionStore((entry) =>
     this.purgeEphemeralAttachments(entry)
   );
@@ -442,6 +454,7 @@ export class AgentService {
   ) {
     this.userConfig = userConfig;
     this.db = db;
+    this.chatWorkspaces = new ChatWorkspaceService(db);
     this.memoryBackend = new MemoryBackendService(db);
     this.profileService = new ProfileService(db);
     this.orgUsageQuotaService = new OrgUsageQuotaService(db);
@@ -1719,7 +1732,9 @@ export class AgentService {
     const profile = await this.requireProfile(input.orgId, input.profileId);
     const tools = await this.resolveProfileTools(profile, {
       includeAutomationTools: false,
+      includeMemoryWriteTools: !input.parentContext?.forbidMemoryWrites,
       includeQuestionTools: false,
+      includeSkillManageTools: false,
       includeSubAgentTool: false,
       includeTodoTools: false,
       userId: input.userId,
@@ -1751,6 +1766,7 @@ export class AgentService {
       soul: soulActive,
       systemPrompt: childSystemPrompt,
       toolContext: buildToolExecutionContext({
+        ...input.parentContext,
         agentDepth: input.agentDepth,
         ...this.memoryBackend.toolContext(input.orgId, input.profileId),
         assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(input.orgId),
@@ -1777,32 +1793,60 @@ export class AgentService {
 
     emitActivity("Starting…");
 
+    const releaseDelegate = input.parentContext?.workspaceId
+      ? acquireWorkspaceWrite(input.parentContext.workspaceId)
+      : () => undefined;
     const sendPromise = session
-      .sendStream(prompt, {
-        onChunk: () => {
-          if (sawWriting) {
-            return;
-          }
+      .sendStream(
+        prompt,
+        {
+          onChunk: () => {
+            if (sawWriting) {
+              return;
+            }
 
-          sawWriting = true;
-          emitActivity("Writing answer…");
-        },
-        onThinking: () => {
-          if (sawPlanning) {
-            return;
-          }
+            sawWriting = true;
+            emitActivity("Writing answer…");
+          },
+          onThinking: () => {
+            if (sawPlanning) {
+              return;
+            }
 
-          sawPlanning = true;
-          emitActivity("Planning…");
+            sawPlanning = true;
+            emitActivity("Planning…");
+          },
+          onToolStart: (event) => {
+            emitActivity(formatToolActivityLabel(event.tool, event.input));
+          },
         },
-        onToolStart: (event) => {
-          emitActivity(formatToolActivityLabel(event.tool, event.input));
-        },
-      })
+        {
+          signal: input.parentContext?.signal
+            ? AbortSignal.any([
+                input.parentContext.signal,
+                AbortSignal.timeout(timeoutMs),
+              ])
+            : AbortSignal.timeout(timeoutMs),
+        }
+      )
       .then((reply) => ({
         kind: "success" as const,
         reply: reply.trim(),
-      }));
+      }))
+      .finally(releaseDelegate);
+    if (input.sessionId) {
+      const delegates = this.delegates.get(input.sessionId) ?? new Set();
+      delegates.add(sendPromise);
+      this.delegates.set(input.sessionId, delegates);
+      void sendPromise
+        .finally(() => {
+          delegates.delete(sendPromise);
+          if (delegates.size === 0) {
+            this.delegates.delete(input.sessionId!);
+          }
+        })
+        .catch(() => undefined);
+    }
 
     const timeoutPromise = new Promise<{ kind: "timeout" }>((resolve) => {
       setTimeout(() => resolve({ kind: "timeout" }), timeoutMs);
@@ -1864,82 +1908,202 @@ export class AgentService {
     const sessionId = nanoid();
     const modelOverride = this.normalizeSessionModelOverride(options?.model);
     const cognito = options?.cognito;
-    const record: StoredSessionRecord = {
-      agentQuestionnaire: null,
-      agentTodos: [],
-      appUserId: options?.appUserId ?? null,
-      channel,
-      createdAt: new Date().toISOString(),
-      id: sessionId,
-      model: modelOverride,
-      profileId: resolvedProfileId,
-      title: null,
-      userId: userId ?? null,
-    };
-
-    // A cognito session skips this row on purpose. Without it there is nothing
-    // for session_messages to hang off, so the conversation cannot be
-    // persisted even by a path that forgets to check.
-    if (!cognito) {
-      await this.db.upsertSession(record);
+    if (cognito && options?.workspaceId) {
+      throw new NakamaApiError(
+        "Temporary chats cannot belong to a project.",
+        400
+      );
     }
+    const workspace = cognito
+      ? null
+      : options?.workspaceId
+        ? await this.chatWorkspaces.require(orgId, options.workspaceId, {
+            ...options,
+            userId,
+          })
+        : await this.chatWorkspaces.create(
+            orgId,
+            "chat",
+            "Chat",
+            userId ?? null,
+            profile.isSuper
+          );
+    if (workspace?.id.startsWith("recovered-")) {
+      throw new NakamaApiError("Recovered files are read-only.", 400);
+    }
+    if (
+      options?.workspaceId &&
+      profile.isSuper &&
+      workspace?.access !== "admin"
+    ) {
+      throw new NakamaApiError(
+        "Super Bot chats require a separate workspace.",
+        400
+      );
+    }
+    if (options?.workspaceId && workspace?.kind !== "project") {
+      throw new NakamaApiError("New chats require a project workspace.", 400);
+    }
+    const releaseCreation = workspace
+      ? acquireWorkspaceWrite(workspace.id)
+      : () => undefined;
+    try {
+      const record: StoredSessionRecord = {
+        activeProfileId: resolvedProfileId,
+        agentQuestionnaire: null,
+        agentTodos: [],
+        channel,
+        createdAt: new Date().toISOString(),
+        id: sessionId,
+        model: modelOverride,
+        orgId,
+        profileId: resolvedProfileId,
+        title: null,
+        userId: userId ?? null,
+        workspaceId: workspace?.id ?? null,
+      };
 
-    const session = await this.buildChatSession(
-      channel,
-      orgId,
-      resolvedProfileId,
-      sessionId,
-      modelOverride,
-      userId ?? null,
-      options?.orgRole,
-      options?.isPlatformAdmin,
-      options?.codingWorkspaceRoot,
-      cognito ? {} : undefined,
-      options?.appUserId
-    );
+      // A cognito session skips this row on purpose. Without it there is nothing
+      // for session_messages to hang off, so the conversation cannot be
+      // persisted even by a path that forgets to check.
+      if (!cognito) {
+        await this.db.upsertSession(record);
+      }
 
-    if (cognito) {
-      await this.ephemeralSessions.set({
-        attachmentIds: new Set(),
-        lastActiveAt: Date.now(),
-        record,
+      const session = await this.buildChatSession(
+        channel,
+        orgId,
+        resolvedProfileId,
+        sessionId,
+        modelOverride,
+        userId ?? null,
+        options?.orgRole,
+        options?.isPlatformAdmin,
+        options?.codingWorkspaceRoot,
+        cognito ? {} : undefined
+      );
+
+      if (cognito) {
+        await this.ephemeralSessions.set({
+          attachmentIds: new Set(),
+          lastActiveAt: Date.now(),
+          record,
+          session,
+        });
+
+        return sessionId;
+      }
+
+      this.sessions.set(sessionId, {
+        channel,
+        pluginRevision: await this.pluginCapabilityRevision(orgId),
+        profileId: resolvedProfileId,
         session,
       });
 
       return sessionId;
+    } catch (error) {
+      if (workspace) {
+        const record = await this.db.getSession(sessionId);
+        if (record) {
+          await this.purgeSessionUnlocked(sessionId, orgId);
+        } else if (workspace.kind === "chat") {
+          await this.chatWorkspaces.removeEmpty(workspace);
+        }
+      }
+      throw error;
+    } finally {
+      releaseCreation();
     }
+  }
 
-    this.sessions.set(sessionId, {
-      channel,
-      pluginRevision: await this.pluginCapabilityRevision(orgId),
-      profileId: resolvedProfileId,
-      session,
-    });
+  async changeSessionAgent(
+    sessionId: string,
+    orgId: string,
+    profileId: string,
+    access: ChatProfileAccess
+  ): Promise<void> {
+    const record = await this.getSessionRecordForOrg(sessionId, orgId);
+    if (!record || record.deleting) {
+      throw new NakamaApiError("Session not found.", 404);
+    }
+    const profile = await this.requireProfile(orgId, profileId);
+    this.assertChatProfileAccess(profile, access);
+    if (
+      sessionTurnRegistry.isActive(sessionId) ||
+      this.delegates.get(sessionId)?.size
+    ) {
+      throw new NakamaApiError(
+        "Wait for running work before changing agents.",
+        409
+      );
+    }
+    await this.db.upsertSession({ ...record, activeProfileId: profileId });
+    this.sessions.delete(sessionId);
+  }
 
-    return sessionId;
+  async validateSessionAttachments(
+    sessionId: string,
+    orgId: string,
+    ids: string[]
+  ) {
+    const session = await this.getSessionRecordForOrg(sessionId, orgId);
+    const refs = [];
+    for (const id of ids) {
+      const file = await this.db.getAttachment(id);
+      if (
+        !session?.workspaceId ||
+        file?.workspaceId !== session.workspaceId ||
+        file.orgId !== orgId ||
+        (file.sessionId !== sessionId && file.purpose !== "reference")
+      ) {
+        throw new NakamaApiError("Attachment not found.", 404);
+      }
+      refs.push(
+        file.kind === "image"
+          ? {
+              attachmentId: file.id,
+              mediaType: file.mediaType,
+              size: file.sizeBytes,
+              type: "image_ref" as const,
+            }
+          : {
+              attachmentId: file.id,
+              filename: file.filename ?? file.id,
+              mediaType: file.mediaType,
+              size: file.sizeBytes,
+              type: "document_ref" as const,
+            }
+      );
+    }
+    return refs;
   }
 
   async assertSessionProfileAccess(
     sessionId: string,
     orgId: string,
-    access: ChatProfileAccess,
-    appUserId?: string,
-    requireAppUser = false
+    access: ChatProfileAccess
   ): Promise<void> {
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
-    if (
-      record &&
-      requireAppUser &&
-      (!appUserId || record.appUserId !== appUserId)
-    ) {
-      throw new NakamaApiError("Session not found", 404);
-    }
     // A missing session is left to the route, which still answers 404.
     if (record) {
-      this.assertChatProfileAccess(
-        await this.requireProfile(orgId, record.profileId),
-        access
+      const profile = await this.db.getProfileForOrg(
+        record.activeProfileId === undefined
+          ? record.profileId
+          : (record.activeProfileId ?? ""),
+        orgId
       );
+      if (profile) {
+        this.assertChatProfileAccess(profile, access);
+      }
+      if (record.workspaceId) {
+        await this.chatWorkspaces.require(
+          orgId,
+          record.workspaceId,
+          access,
+          true
+        );
+      }
     }
   }
 
@@ -1951,6 +2115,13 @@ export class AgentService {
     const record = await this.db.getAttachment(attachmentId);
     if (!record || record.orgId !== orgId || record.kind !== "image") {
       return null;
+    }
+    if (record.workspaceId) {
+      await this.chatWorkspaces.require(orgId, record.workspaceId, access);
+      const bytes = await readStoredAttachmentBytes(record);
+      return bytes
+        ? { bytes, filename: record.filename, mediaType: record.mediaType }
+        : null;
     }
     this.assertChatProfileAccess(
       await this.requireProfile(orgId, record.profileId),
@@ -1997,13 +2168,13 @@ export class AgentService {
         continue;
       }
 
-      await deleteAttachmentBytes(
-        attachment.orgId ?? "",
-        attachment.profileId,
-        attachment.id
-      );
+      await deleteStoredAttachmentBytes(attachment);
       await this.db.deleteAttachment(attachment.id);
     }
+    await rm(join(getUserConfigDir(), "ephemeral", entry.record.id), {
+      force: true,
+      recursive: true,
+    });
   }
 
   /**
@@ -2035,8 +2206,7 @@ export class AgentService {
       orgRole,
       isPlatformAdmin,
       undefined,
-      { initialHistory: [...entry.session.getHistory()] },
-      entry.record.appUserId
+      { initialHistory: [...entry.session.getHistory()] }
     );
 
     entry.record.model = model;
@@ -2053,14 +2223,14 @@ export class AgentService {
     const leftovers = await this.db.listEphemeralAttachments();
 
     for (const attachment of leftovers) {
-      await deleteAttachmentBytes(
-        attachment.orgId ?? "",
-        attachment.profileId,
-        attachment.id
-      );
+      await deleteStoredAttachmentBytes(attachment);
       await this.db.deleteAttachment(attachment.id);
     }
 
+    await rm(join(getUserConfigDir(), "ephemeral"), {
+      force: true,
+      recursive: true,
+    });
     return leftovers.length;
   }
 
@@ -2101,6 +2271,8 @@ export class AgentService {
     contextUsage: ChatContextUsage | null;
     model: string | null;
     profileId: string;
+    workspaceId?: string | null;
+    activeProfileId?: string | null;
   } | null> {
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
 
@@ -2129,6 +2301,7 @@ export class AgentService {
           new Date().toISOString();
 
         return {
+          activeProfileId: record.activeProfileId,
           channel,
           contextUsage: liveSession.getContextUsage(),
           messageMeta: history.map((_, index) => ({
@@ -2139,6 +2312,7 @@ export class AgentService {
           messages: [...history],
           model: record.model,
           profileId: record.profileId,
+          workspaceId: record.workspaceId,
         };
       }
     }
@@ -2147,12 +2321,10 @@ export class AgentService {
     const cached = this.sessions.get(sessionId)?.session;
     const contextUsage = options?.persistedOnly
       ? null
-      : cached
-        ? cached.getContextUsage()
-        : ((await this.resolveSession(sessionId, orgId))?.getContextUsage() ??
-          null);
+      : (cached?.getContextUsage() ?? null);
 
     return {
+      activeProfileId: record.activeProfileId,
       channel,
       contextUsage,
       messageMeta: storedMessages.map((message) => ({
@@ -2163,6 +2335,7 @@ export class AgentService {
       messages: storedMessages.map((message) => message.payload as ChatMessage),
       model: record.model,
       profileId: record.profileId,
+      workspaceId: record.workspaceId,
     };
   }
 
@@ -2196,86 +2369,168 @@ export class AgentService {
       ? `${sourceTitle} (Branch)`
       : "Untitled (Branch)";
 
-    await this.db.upsertSession({
-      agentQuestionnaire: null,
-      agentTodos: [],
-      appUserId: record.appUserId ?? null,
-      channel: record.channel,
-      createdAt: new Date().toISOString(),
-      id: nextSessionId,
-      model: record.model,
-      profileId: record.profileId,
-      title: null,
-      userId: record.userId ?? null,
-    });
-
-    await copySessionHistoryArchive(this.db, orgId, sessionId, nextSessionId);
-    await replaceSessionHistory(
-      this.db,
-      nextSessionId,
-      sourceMessages.slice(0, messageIndex + 1)
-    );
-    await this.db.updateSessionTitle(nextSessionId, branchTitle);
-
-    const channel = parseAgentChannel(record.channel);
-
-    if (!channel) {
-      throw new Error("Session channel is invalid.");
+    const sourceWorkspace = record.workspaceId
+      ? await this.db.getWorkspace(record.workspaceId)
+      : null;
+    if (!sourceWorkspace) {
+      throw new NakamaApiError("Workspace not found.", 404);
     }
-
-    const { orgId: profileOrgId } = await this.requireProfileRecord(
-      record.profileId
+    const siblings = (await this.db.listSessions()).filter(
+      (session) => session.workspaceId === sourceWorkspace.id
     );
+    if (
+      siblings.some(
+        (session) =>
+          sessionTurnRegistry.isActive(session.id) ||
+          this.delegates.get(session.id)?.size
+      )
+    ) {
+      throw new NakamaApiError(
+        "Wait for project work to finish before branching.",
+        409
+      );
+    }
+    return withWorkspaceSnapshot(sourceWorkspace.id, async () => {
+      const workspace =
+        sourceWorkspace.kind === "project"
+          ? sourceWorkspace
+          : await this.chatWorkspaces.create(
+              orgId,
+              "chat",
+              branchTitle,
+              record.userId ?? null,
+              sourceWorkspace.access === "admin"
+            );
+      const branchRecord: StoredSessionRecord = {
+        ...record,
+        agentQuestionnaire: null,
+        agentTodos: [],
+        createdAt: new Date().toISOString(),
+        deleting: false,
+        id: nextSessionId,
+        title: null,
+        workspaceId: workspace.id,
+      };
+      try {
+        await this.db.upsertSession(branchRecord);
+        const fileMapping = await this.chatWorkspaces.fork(
+          record,
+          branchRecord
+        );
+        const sourceRoot = getChatSessionDir(
+          orgId,
+          sourceWorkspace.id,
+          record.id,
+          sourceWorkspace.kind
+        );
+        const targetRoot = getChatSessionDir(
+          orgId,
+          workspace.id,
+          branchRecord.id,
+          workspace.kind
+        );
+        const remap = (key: string, value: unknown): unknown => {
+          if (typeof value !== "string") {
+            return value;
+          }
+          if (key === "attachmentId" || key === "fileId") {
+            return fileMapping.get(value) ?? value;
+          }
+          if (key === "workspaceId" && value === sourceWorkspace.id) {
+            return workspace.id;
+          }
+          if (key === "path") {
+            if (value.startsWith(`${sourceRoot}/`)) {
+              return targetRoot + value.slice(sourceRoot.length);
+            }
+            if (
+              sourceWorkspace.kind === "project" &&
+              value.startsWith(`chats/${record.id}/`)
+            ) {
+              return (
+                `chats/${branchRecord.id}/` +
+                value.slice(`chats/${record.id}/`.length)
+              );
+            }
+          }
+          return value;
+        };
+        const branchMessages = JSON.parse(
+          JSON.stringify(sourceMessages.slice(0, messageIndex + 1), remap)
+        ) as ChatMessage[];
+        for (const message of branchMessages) {
+          if (message.role === "tool") {
+            try {
+              message.content = JSON.stringify(
+                JSON.parse(message.content),
+                remap
+              );
+            } catch {
+              /* Plain tool text keeps its original bytes. */
+            }
+          }
+        }
 
-    const { isPlatformAdmin: branchIsPlatformAdmin, orgRole: branchOrgRole } =
-      await this.resolveSessionAccess(profileOrgId, record.userId);
-    const session = await this.buildChatSession(
-      channel,
-      profileOrgId,
-      record.profileId,
-      nextSessionId,
-      record.model,
-      record.userId ?? null,
-      branchOrgRole,
-      branchIsPlatformAdmin,
-      undefined,
-      undefined,
-      record.appUserId
-    );
-    this.sessions.set(nextSessionId, {
-      channel,
-      pluginRevision: await this.pluginCapabilityRevision(profileOrgId),
-      profileId: record.profileId,
-      session,
+        await copySessionHistoryArchive(
+          this.db,
+          orgId,
+          sessionId,
+          nextSessionId
+        );
+        await replaceSessionHistory(this.db, nextSessionId, branchMessages);
+        await this.db.updateSessionTitle(nextSessionId, branchTitle);
+
+        return { sessionId: nextSessionId };
+      } catch (error) {
+        if (await this.db.getSession(nextSessionId)) {
+          await this.purgeSessionUnlocked(nextSessionId, orgId);
+        } else if (workspace.kind === "chat") {
+          await this.chatWorkspaces.removeEmpty(workspace);
+        }
+        throw error;
+      }
     });
-
-    return { sessionId: nextSessionId };
   }
 
   async listSessions(
     orgId: string,
-    profileId: string,
+    profileId: string | undefined,
     channels: AgentChannel | readonly AgentChannel[],
     access: ChatProfileAccess,
-    appUserId?: string,
+    workspaceId?: string,
     page?: { cursor?: string; limit: number },
     query?: string
   ): Promise<ListSessionsResponse> {
-    this.assertChatProfileAccess(
-      await this.requireProfile(orgId, profileId),
-      access
-    );
+    if (profileId) {
+      const profile = await this.requireProfile(orgId, profileId);
+      this.assertChatProfileAccess(profile, access);
+    }
+    const workspaceIds = (await this.db.listWorkspaces(orgId))
+      .filter((workspace) => {
+        if (
+          workspaceId ? workspace.id !== workspaceId : workspace.kind !== "chat"
+        ) {
+          return false;
+        }
+        try {
+          assertWorkspaceAccess(workspace, access);
+          return true;
+        } catch {
+          return false;
+        }
+      })
+      .map((workspace) => workspace.id);
 
     const cursor = page?.cursor ? decodeSessionCursor(page.cursor) : undefined;
     const rows = await this.db.listSessionSummaries(
-      profileId,
+      profileId ?? null,
       typeof channels === "string" ? [channels] : channels,
       {
         after: cursor,
-        appUserId,
         // One row past the page tells whether another page follows.
         limit: page ? page.limit + 1 : undefined,
         query,
+        workspaceIds,
       }
     );
 
@@ -2323,44 +2578,172 @@ export class AgentService {
     this.sessionTitleService.scheduleSessionTitleGeneration(sessionId);
   }
 
-  schedulePostTurnSkillReview(sessionId: string): void {
-    // The review writes skill suggestions, which is exactly the write-back a
-    // cognito session promises not to do.
+  async schedulePostTurnSkillReview(sessionId: string): Promise<void> {
     if (this.ephemeralSessions.has(sessionId)) {
       return;
     }
-
-    this.skillPostTurnReviewService.schedulePostTurnSkillReview(sessionId);
+    const record = await this.db.getSession(sessionId);
+    const workspace = record?.workspaceId
+      ? await this.db.getWorkspace(record.workspaceId)
+      : null;
+    // Private project material must not become shared agent/org learning.
+    if (
+      workspace?.access === "org" &&
+      record?.activeProfileId === record?.profileId
+    ) {
+      this.skillPostTurnReviewService.schedulePostTurnSkillReview(sessionId);
+    }
   }
 
   getSkillPostTurnReviewService(): SkillPostTurnReviewService {
     return this.skillPostTurnReviewService;
   }
 
+  async initializeChatStorage(): Promise<void> {
+    for (const session of await this.db.listSessions()) {
+      if (session.deleting && session.workspaceId) {
+        const workspace = await this.db.getWorkspace(session.workspaceId);
+        if (workspace) {
+          await this.purgeSession(session.id, workspace.orgId);
+        }
+      }
+    }
+    for (const org of await this.db.listOrganizations()) {
+      for (const workspace of await this.db.listWorkspaces(org.id)) {
+        if (workspace.state === "deleting") {
+          await this.purgeWorkspace(workspace.id, org.id);
+        }
+      }
+    }
+    await this.chatWorkspaces.initialize();
+    for (const session of await this.db.listSessions()) {
+      await loadSessionHistory(this.db, session.id);
+    }
+  }
+
+  async purgeWorkspace(workspaceId: string, orgId: string): Promise<void> {
+    return withWorkspaceSnapshot(workspaceId, () =>
+      this.purgeWorkspaceUnlocked(workspaceId, orgId)
+    );
+  }
+
+  private async purgeWorkspaceUnlocked(
+    workspaceId: string,
+    orgId: string
+  ): Promise<void> {
+    const workspace = await this.db.getWorkspace(workspaceId);
+    if (!workspace || workspace.orgId !== orgId) {
+      throw new NakamaApiError("Workspace not found.", 404);
+    }
+    const sessions = (await this.db.listSessions()).filter(
+      (record) => record.workspaceId === workspaceId
+    );
+    if (
+      sessions.some(
+        (record) =>
+          sessionTurnRegistry.isActive(record.id) ||
+          this.delegates.get(record.id)?.size
+      )
+    ) {
+      throw new NakamaApiError(
+        "Wait for running work before deleting this workspace.",
+        409
+      );
+    }
+    await this.db.upsertWorkspace({
+      ...workspace,
+      state: "deleting",
+      updatedAt: new Date().toISOString(),
+    });
+    for (const record of sessions) {
+      await this.purgeSessionUnlocked(record.id, orgId);
+    }
+    if (await this.db.getWorkspace(workspaceId)) {
+      for (const file of await this.db.listAttachmentsForWorkspace(
+        workspaceId
+      )) {
+        await this.chatWorkspaces.removeFileShares(workspaceId, file.id);
+        await deleteStoredAttachmentBytes(file);
+        await this.db.deleteAttachment(file.id);
+      }
+      await this.chatWorkspaces.removeEmpty(workspace);
+    }
+  }
+
   async purgeSession(sessionId: string, orgId: string): Promise<boolean> {
+    const record = await this.getSessionRecordForOrg(sessionId, orgId);
+    return record?.workspaceId
+      ? withWorkspaceSnapshot(record.workspaceId, () =>
+          this.purgeSessionUnlocked(sessionId, orgId)
+        )
+      : this.purgeSessionUnlocked(sessionId, orgId);
+  }
+
+  private async purgeSessionUnlocked(
+    sessionId: string,
+    orgId: string
+  ): Promise<boolean> {
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
 
     if (!record) {
       return false;
     }
+    if (
+      this.delegates.get(sessionId)?.size ||
+      !sessionTurnRegistry.beginTurn(sessionId).started
+    ) {
+      throw new NakamaApiError(
+        "Wait for running work before deleting this chat.",
+        409
+      );
+    }
+    try {
+      if (await this.ephemeralSessions.delete(sessionId)) {
+        return true;
+      }
 
-    if (await this.ephemeralSessions.delete(sessionId)) {
+      this.sessions.get(sessionId)?.session.clear();
+      this.sessions.delete(sessionId);
+      this.superBotSessionState.clearSession(sessionId);
+      this.agentTodoState.clearSession(sessionId);
+      this.agentQuestionnaireState.clearSession(sessionId);
+      await this.db.markSessionDeleting(sessionId);
+      const workspace = record.workspaceId
+        ? await this.db.getWorkspace(record.workspaceId)
+        : null;
+      if (workspace?.kind === "chat") {
+        await this.db.upsertWorkspace({
+          ...workspace,
+          state: "deleting",
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      await deleteSessionHistoryArchive(orgId, sessionId, this.db);
+      const attachments = await this.db.listAttachmentsForSession(sessionId);
+      for (const attachment of attachments) {
+        if (attachment.workspaceId) {
+          await this.chatWorkspaces.removeFileShares(
+            attachment.workspaceId,
+            attachment.id
+          );
+        }
+        await deleteStoredAttachmentBytes(attachment);
+        await this.db.deleteAttachment(attachment.id);
+      }
+      if (workspace?.kind === "project") {
+        await rm(getChatSessionDir(orgId, workspace.id, sessionId, "project"), {
+          force: true,
+          recursive: true,
+        });
+      }
+      await this.db.deleteSession(sessionId);
+      if (workspace?.kind === "chat") {
+        await this.chatWorkspaces.removeEmpty(workspace);
+      }
       return true;
+    } finally {
+      sessionTurnRegistry.cancelTurn(sessionId);
     }
-
-    this.sessions.get(sessionId)?.session.clear();
-    this.sessions.delete(sessionId);
-    this.superBotSessionState.clearSession(sessionId);
-    this.agentTodoState.clearSession(sessionId);
-    this.agentQuestionnaireState.clearSession(sessionId);
-    await deleteSessionHistoryArchive(orgId, sessionId);
-    const attachments = await this.db.listAttachmentsForSession(sessionId);
-    for (const attachment of attachments) {
-      await deleteAttachmentBytes(orgId, attachment.profileId, attachment.id);
-      await this.db.deleteAttachment(attachment.id);
-    }
-    await this.db.deleteSession(sessionId);
-    return true;
   }
 
   async resolveSession(
@@ -2381,6 +2764,18 @@ export class AgentService {
       return ephemeral.session;
     }
 
+    const activeProfileId =
+      record.activeProfileId === undefined
+        ? record.profileId
+        : record.activeProfileId;
+    if (
+      !(
+        activeProfileId &&
+        (await this.db.getProfileForOrg(activeProfileId, orgId))
+      )
+    ) {
+      throw new NakamaApiError("Choose an agent to continue this chat.", 409);
+    }
     const stored = this.sessions.get(sessionId);
     const pluginRevision = await this.pluginCapabilityRevision(orgId);
 
@@ -2398,30 +2793,27 @@ export class AgentService {
       return null;
     }
 
-    const { orgId: profileOrgId } = await this.requireProfileRecord(
-      record.profileId
-    );
+    const profileOrgId = orgId;
 
     const { isPlatformAdmin: resumeIsPlatformAdmin, orgRole: resumeOrgRole } =
       await this.resolveSessionAccess(profileOrgId, record.userId);
     const session = await this.buildChatSession(
       channel,
       profileOrgId,
-      record.profileId,
+      activeProfileId,
       sessionId,
       record.model,
       record.userId ?? null,
       resumeOrgRole,
       resumeIsPlatformAdmin,
       undefined,
-      undefined,
-      record.appUserId
+      undefined
     );
 
     this.sessions.set(sessionId, {
       channel,
       pluginRevision,
-      profileId: record.profileId,
+      profileId: activeProfileId,
       session,
     });
 
@@ -2518,10 +2910,40 @@ export class AgentService {
       this.sessions.delete(sessionId);
     }
 
+    if (record.deleting) {
+      throw new NakamaApiError("Chat is being deleted.", 409);
+    }
+    if (record.workspaceId) {
+      const workspace = await this.db.getWorkspace(record.workspaceId);
+      if (workspace?.state !== "active") {
+        throw new NakamaApiError("Workspace unavailable.", 409);
+      }
+    }
     return sessionTurnRegistry.beginTurn(sessionId).started;
   }
 
   async clearSession(sessionId: string, orgId: string): Promise<boolean> {
+    const record = await this.getSessionRecordForOrg(sessionId, orgId);
+    if (
+      sessionTurnRegistry.isActive(sessionId) ||
+      this.delegates.get(sessionId)?.size
+    ) {
+      throw new NakamaApiError(
+        "Wait for running work before clearing this chat.",
+        409
+      );
+    }
+    return record?.workspaceId
+      ? withWorkspaceSnapshot(record.workspaceId, () =>
+          this.clearSessionUnlocked(sessionId, orgId)
+        )
+      : this.clearSessionUnlocked(sessionId, orgId);
+  }
+
+  private async clearSessionUnlocked(
+    sessionId: string,
+    orgId: string
+  ): Promise<boolean> {
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
 
     if (!record) {
@@ -2541,8 +2963,8 @@ export class AgentService {
       stored.session.clear();
     }
 
-    await deleteSessionHistoryArchive(orgId, sessionId);
-    await this.db.deleteMessagesForSession(sessionId);
+    await deleteSessionHistoryArchive(orgId, sessionId, this.db);
+    await replaceSessionHistory(this.db, sessionId, []);
     await this.agentQuestionnaireState.clear(sessionId);
     return true;
   }
@@ -2558,7 +2980,20 @@ export class AgentService {
       return null;
     }
 
-    return session.compact(options);
+    if (
+      this.delegates.get(sessionId)?.size ||
+      !sessionTurnRegistry.beginTurn(sessionId).started
+    ) {
+      throw new NakamaApiError(
+        "Wait for running work before compacting this chat.",
+        409
+      );
+    }
+    try {
+      return await session.compact(options);
+    } finally {
+      sessionTurnRegistry.cancelTurn(sessionId);
+    }
   }
 
   async draftAutomation(prompt: string, channel: AgentChannel) {
@@ -3730,14 +4165,12 @@ export class AgentService {
     profileId: string,
     filename: string,
     options: {
-      appUserId?: string | null;
       headOnly?: boolean;
       render?: "markdown";
     } = {}
   ) {
     await this.requireProfile(orgId, profileId);
     return readArtifactFile({
-      appUserId: options.appUserId,
       filename,
       headOnly: options.headOnly,
       orgId,
@@ -3896,9 +4329,12 @@ export class AgentService {
       return null;
     }
 
+    if (record.workspaceId) {
+      const workspace = await this.db.getWorkspace(record.workspaceId);
+      return workspace?.orgId === orgId ? { ...record, orgId } : null;
+    }
     const profile = await this.db.getProfileForOrg(record.profileId, orgId);
-
-    return profile ? record : null;
+    return profile ? { ...record, orgId } : null;
   }
 
   private async requireProfile(
@@ -3909,18 +4345,6 @@ export class AgentService {
 
     if (!profile) {
       throw new NakamaApiError("Profile not found.", 404);
-    }
-
-    return profile;
-  }
-
-  private async requireProfileRecord(
-    profileId: string
-  ): Promise<StoredProfileRecord> {
-    const profile = await this.db.getProfile(profileId);
-
-    if (!profile?.orgId) {
-      throw new Error("Profile not found.");
     }
 
     return profile;
@@ -4111,18 +4535,34 @@ export class AgentService {
     orgRole?: OrgRole | null,
     isPlatformAdmin?: boolean,
     codingWorkspaceRoot?: string,
-    cognito?: CognitoSessionOptions,
-    appUserId?: string | null
+    cognito?: CognitoSessionOptions
   ): Promise<AgentChatSession> {
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireProfile(orgId, profileId);
-    const workspaceRoot = appUserId
-      ? await ensureAppUserSoulDir(orgId, profileId, appUserId)
-      : undefined;
+    const temporaryRoot = join(getUserConfigDir(), "ephemeral", sessionId);
+    const storedRecord = cognito ? null : await this.db.getSession(sessionId);
+    const roots = storedRecord?.workspaceId
+      ? await this.chatWorkspaces.roots(storedRecord)
+      : {
+          chatRoot: cognito
+            ? temporaryRoot
+            : getProfileSoulDir(orgId, profileId),
+          outputRoot: join(
+            cognito ? temporaryRoot : getProfileSoulDir(orgId, profileId),
+            cognito ? "outputs" : "artifacts"
+          ),
+          workspaceId: undefined,
+          workspaceRoot: cognito
+            ? temporaryRoot
+            : getProfileSoulDir(orgId, profileId),
+        };
+    const { workspaceRoot, chatRoot, outputRoot, workspaceId } = roots;
+    if (cognito) {
+      await mkdir(outputRoot, { mode: 0o700, recursive: true });
+    }
     // skill_manage writes skills and expands /learn, both of which outlive the
     // chat, so a cognito session never gets it whatever the channel allows.
-    const includeSkillManageTools =
-      !(cognito || appUserId) && SKILL_MANAGE_CHANNELS[channel];
+    const includeSkillManageTools = !cognito && SKILL_MANAGE_CHANNELS[channel];
     const pluginOrgRole =
       channel === "telegram" ||
       channel === "whatsapp" ||
@@ -4144,7 +4584,7 @@ export class AgentService {
     if (channel === "discord" && tools.length > 0) {
       tools = [...tools, ...createSendDiscordArtifactTools()];
     }
-    if (channel === "whatsapp" && !appUserId && tools.length > 0) {
+    if (channel === "whatsapp" && tools.length > 0) {
       tools = [...tools, sendWhatsAppArtifactTool];
     }
     // Same table as the tools above on purpose: a channel that can manage
@@ -4160,16 +4600,17 @@ export class AgentService {
       orgRole,
       skillUsageContext,
       !cognito,
-      workspaceRoot
+      undefined
     );
     // Per-org override for the tool-output optimiser. Undefined leaves the
     // decision to the server's env var, so an operator who never opened the UI
     // keeps whatever they configured.
     const tokenOptimizerEnabled = (await this.db.getWorkspaceSettings())
       ?.tokenOptimizerEnabled;
-    const resolvedSystemPrompt = profile.isSuper
+    const identityPrompt = profile.isSuper
       ? `${systemPrompt.trim()}\n\n${SUPER_BOT_TOOL_AUTHORING_RULES}`
       : systemPrompt;
+    const resolvedSystemPrompt = `${identityPrompt}\n\nWorking directory: ${workspaceRoot}\nThis chat's input directory: ${join(chatRoot, "inputs")}\nSave this chat's generated files under: ${outputRoot}\nAgent identity and memory directory: ${getProfileSoulDir(orgId, profileId)}\nChat history files are managed by Nakama; do not modify them.`;
     // A cognito session has nothing stored to load. On a model change it is
     // handed the live history instead, so the conversation survives the
     // rebuild that a new provider needs.
@@ -4177,9 +4618,7 @@ export class AgentService {
       ? (cognito.initialHistory ?? [])
       : await loadSessionHistory(this.db, sessionId);
     const userTimezone = await this.getUserTimezone();
-    const userContext = appUserId
-      ? undefined
-      : await this.loadUserContextForUser(orgId, userId);
+    const userContext = await this.loadUserContextForUser(orgId, userId);
     const selectedModel = modelOverride
       ? this.normalizeSessionModelOverride(modelOverride)
       : profile.model;
@@ -4189,16 +4628,22 @@ export class AgentService {
     // helpers are also platform groups, so a profile that resolved to zero
     // tools must not receive them either.
     if (tools.length > 0) {
-      tools = [...tools, createReadSessionHistoryTool(orgId, sessionId)];
+      tools = [
+        ...tools,
+        createReadSessionHistoryTool(orgId, sessionId, this.db),
+      ];
     }
     const persistAttachment = createAttachmentSaver(this.db, {
       channel,
+      chatRoot,
       ephemeral: Boolean(cognito),
       orgId,
       profileId,
       // No `sessions` row exists for a cognito session, and the column is a
       // foreign key, so it has to be null rather than the session id.
       sessionId: cognito ? null : sessionId,
+      workspaceId,
+      workspaceRoot,
     });
     const trackEphemeralAttachment = cognito
       ? (attachmentId: string) =>
@@ -4214,16 +4659,21 @@ export class AgentService {
     const loadAttachment = createAttachmentLoader(this.db, {
       orgId,
       profileId,
+      sessionId,
+      workspaceId,
+      workspaceRoot,
     });
     const hasSkillManage = tools.some((tool) => tool.name === "skill_manage");
 
     const session = createAgentChatSession(harness, {
-      archiveHistory: (history) => {
-        if (this.sessions.get(sessionId)?.session !== persistedSession) {
-          throw new Error("Session changed during compaction. Try again.");
-        }
-        return archiveSessionHistory(this.db, orgId, sessionId, history);
-      },
+      archiveHistory: cognito
+        ? undefined
+        : (history) => {
+            if (this.sessions.get(sessionId)?.session !== persistedSession) {
+              throw new Error("Session changed during compaction. Try again.");
+            }
+            return archiveSessionHistory(this.db, orgId, sessionId, history);
+          },
       channel,
       compaction,
       enableToolLoop: true,
@@ -4307,6 +4757,16 @@ export class AgentService {
       },
       resolvePromptContext: async (context) => {
         const parts: string[] = [];
+        const references = workspaceId
+          ? (await this.db.listAttachmentsForWorkspace(workspaceId))
+              .filter((file) => file.purpose === "reference")
+              .slice(0, 30)
+          : [];
+        if (references.length) {
+          parts.push(
+            `Project references: read only relevant documents with read_file or extract_document_text.\n${references.map((file) => `${file.filename ?? file.id}: ${file.storagePath}`).join("\n")}`
+          );
+        }
         const todoContext =
           await this.agentTodoState.formatForPrompt(sessionId);
 
@@ -4360,7 +4820,7 @@ export class AgentService {
                       await this.formatCodingDelegationContext(
                         orgId,
                         profileId,
-                        codingWorkspaceRoot
+                        codingWorkspaceRoot ?? workspaceRoot
                       )
                     );
                   }
@@ -4384,10 +4844,12 @@ export class AgentService {
       toolContext: buildToolExecutionContext({
         assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
         channel,
-        ...this.memoryBackend.toolContext(orgId, profileId, workspaceRoot),
+        ...this.memoryBackend.toolContext(orgId, profileId),
+        chatRoot,
         codingWorkspaceRoot,
         forbidMemoryWrites: cognito ? true : undefined,
         forbidProfileSkillMarkdownWrites: hasSkillManage,
+        identityRoot: getProfileSoulDir(orgId, profileId),
         isPlatformAdmin: isPlatformAdmin || undefined,
         loadAttachment,
         onSkillCatalogChange: () => {
@@ -4395,13 +4857,24 @@ export class AgentService {
         },
         orgId,
         orgRole: orgRole ?? undefined,
+        outputRoot,
         profileId,
         recordToolOutputSavings: this.savingsRecorderFor(orgId),
         recordTurnUsage: this.turnUsageRecorderFor(orgId),
+        registerGeneratedFile: workspaceId
+          ? (path) =>
+              this.chatWorkspaces.registerFile(
+                workspaceId,
+                orgId,
+                sessionId,
+                path
+              )
+          : undefined,
         sessionId,
         tokenOptimizerEnabled: tokenOptimizerEnabled ?? undefined,
         trackEphemeralAttachment,
         userId: userId ?? undefined,
+        workspaceId,
         workspaceRoot,
       }),
       tools,
@@ -4415,10 +4888,35 @@ export class AgentService {
       return session;
     }
 
+    let releaseWorkspace: (() => void) | undefined;
     const persistedSession = wrapPersistedSession(sessionId, session, this.db, {
-      onBeginTurn: (id) => {
+      onBeginTurn: async (id) => {
+        releaseWorkspace = workspaceId
+          ? acquireWorkspaceWrite(workspaceId)
+          : () => undefined;
+        try {
+          const record = await this.db.getSession(id);
+          const workspace = workspaceId
+            ? await this.db.getWorkspace(workspaceId)
+            : null;
+          if (
+            !record ||
+            record.deleting ||
+            (workspaceId && workspace?.state !== "active")
+          ) {
+            throw new NakamaApiError("Chat unavailable.", 409);
+          }
+        } catch (error) {
+          releaseWorkspace();
+          releaseWorkspace = undefined;
+          throw error;
+        }
         this.superBotSessionState.beginTurn(id);
         void this.agentQuestionnaireState.clear(id);
+      },
+      onEndTurn: () => {
+        releaseWorkspace?.();
+        releaseWorkspace = undefined;
       },
     });
     return persistedSession;
@@ -4766,9 +5264,10 @@ function toSessionSummary(session: StoredSessionSummaryRecord): SessionSummary {
     messageCount: session.messageCount,
     pinned: session.pinned,
     preview: session.preview,
-    profileId: session.profileId,
+    profileId: session.activeProfileId ?? session.profileId,
     title: session.title,
     updatedAt: session.updatedAt,
+    workspaceId: session.workspaceId,
   };
 }
 

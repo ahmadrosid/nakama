@@ -530,7 +530,12 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     if (profileId) {
       await deliverTurnArtifactShares({
         conversationKey,
-        publish: (path) => client.publishProfileArtifactShare(profileId, path),
+        publish: (path, artifact) =>
+          client.publishProfileArtifactShare(
+            profileId,
+            path,
+            artifact?.workspaceId
+          ),
         sendFooter: (footer) => telegram.sendRaw(footer),
         session,
         sessionStore,

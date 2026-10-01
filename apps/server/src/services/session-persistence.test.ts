@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { type AgentChatSession, createAgentChatSession } from "@nakama/agent";
 import {
   type ChatMessage,
@@ -16,7 +16,6 @@ import { AgentService } from "./agent-service";
 import { ProfileService } from "./profile-service";
 import {
   archiveSessionHistory,
-  copySessionHistoryArchive,
   createReadSessionHistoryTool,
   deleteSessionHistoryArchive,
   loadSessionHistory,
@@ -258,10 +257,16 @@ describe("session persistence", () => {
     expect(working.length).toBeLessThan(original.length);
     expect(working.some((message) => message.role === "tool")).toBe(false);
     const archived = JSON.parse(
-      await readFile(sessionHistoryArchivePath("org_1", "session_1"), "utf8")
+      await readFile(
+        sessionHistoryArchivePath("org_1", "session_1", {
+          id: "chat-session_1",
+          kind: "chat",
+        }),
+        "utf8"
+      )
     );
     expect(archived.messages).toEqual(original);
-    const tool = createReadSessionHistoryTool("org_1", "session_1");
+    const tool = createReadSessionHistoryTool("org_1", "session_1", db);
     let content = "";
     let offset = 0;
     for (;;) {
@@ -280,7 +285,13 @@ describe("session persistence", () => {
     await wrapped.send("Another turn");
     await wrapped.compact({ force: true });
     const snapshots = (
-      await readFile(sessionHistoryArchivePath("org_1", "session_1"), "utf8")
+      await readFile(
+        sessionHistoryArchivePath("org_1", "session_1", {
+          id: "chat-session_1",
+          kind: "chat",
+        }),
+        "utf8"
+      )
     )
       .trim()
       .split("\n")
@@ -292,10 +303,10 @@ describe("session persistence", () => {
       role: "user",
     });
     await expect(
-      createReadSessionHistoryTool("org_2", "session_1").run({}, {})
+      createReadSessionHistoryTool("org_2", "session_1", db).run({}, {})
     ).rejects.toThrow();
     await expect(
-      createReadSessionHistoryTool("org_1", "session_2").run({}, {})
+      createReadSessionHistoryTool("org_1", "session_2", db).run({}, {})
     ).rejects.toThrow();
   });
 
@@ -342,7 +353,10 @@ describe("session persistence", () => {
       } else {
         await session.send("Proceed");
       }
-      const path = sessionHistoryArchivePath("org_1", "automatic");
+      const path = sessionHistoryArchivePath("org_1", "automatic", {
+        id: "chat-automatic",
+        kind: "chat",
+      });
       const first = await readFile(path, "utf8");
       expect(JSON.parse(first).messages).toEqual([
         ...original,
@@ -385,7 +399,10 @@ describe("session persistence", () => {
       (await service.compactSession(id, { force: true }, "org_1"))?.action
     ).toBe("summarized");
     const saved = await readFile(
-      sessionHistoryArchivePath("org_1", id),
+      sessionHistoryArchivePath("org_1", id, {
+        id: (await db.getSession(id))!.workspaceId!,
+        kind: "chat",
+      }),
       "utf8"
     );
     expect(JSON.parse(saved).messages).toEqual(history);
@@ -394,16 +411,28 @@ describe("session persistence", () => {
     expect(await service.purgeSession(id, "other-org")).toBe(false);
     expect(await service.clearSession(id, "other-org")).toBe(false);
     const source = await readFile(
-      sessionHistoryArchivePath("org_1", id),
+      sessionHistoryArchivePath("org_1", id, {
+        id: (await db.getSession(id))!.workspaceId!,
+        kind: "chat",
+      }),
       "utf8"
     );
+    const sourceWorkspaceId = (await db.getSession(id))!.workspaceId!;
     expect(await service.purgeSession(id, "org_1")).toBe(true);
     await expect(
-      readFile(sessionHistoryArchivePath("org_1", id))
+      readFile(
+        sessionHistoryArchivePath("org_1", id, {
+          id: sourceWorkspaceId,
+          kind: "chat",
+        })
+      )
     ).rejects.toThrow();
     expect(
       await readFile(
-        sessionHistoryArchivePath("org_1", branch!.sessionId),
+        sessionHistoryArchivePath("org_1", branch!.sessionId, {
+          id: (await db.getSession(branch!.sessionId))!.workspaceId!,
+          kind: "chat",
+        }),
         "utf8"
       )
     ).toBe(source);
@@ -414,7 +443,12 @@ describe("session persistence", () => {
     expect(await service.clearSession(branch!.sessionId, "org_1")).toBe(true);
     await expect(detached!.compact({ force: true })).rejects.toThrow();
     await expect(
-      readFile(sessionHistoryArchivePath("org_1", branch!.sessionId))
+      readFile(
+        sessionHistoryArchivePath("org_1", branch!.sessionId, {
+          id: (await db.getSession(branch!.sessionId))!.workspaceId!,
+          kind: "chat",
+        })
+      )
     ).rejects.toThrow();
     expect(await loadSessionHistory(db, branch!.sessionId)).toEqual([]);
   });
@@ -488,7 +522,7 @@ describe("session persistence", () => {
     ).rejects.toThrow();
   });
 
-  test("profile deletion cleans archives, rejects late writers, and can retry failed cleanup", async () => {
+  test("profile deletion preserves chat archives and detaches the current agent", async () => {
     const database = await createSqliteDatabase(":memory:");
     const db = database.adapter;
     try {
@@ -519,26 +553,16 @@ describe("session persistence", () => {
         await seedSession(db, profileId, profileId, orgId);
         await archiveSessionHistory(db, orgId, profileId, historyWithTool());
       }
-      const path = sessionHistoryArchivePath("org_1", "deleted");
-      await rm(path);
-      await mkdir(path);
+      const path = sessionHistoryArchivePath("org_1", "deleted", {
+        id: "chat-deleted",
+        kind: "chat",
+      });
+      const original = await readFile(path, "utf8");
       const service = new ProfileService(db);
-      await expect(service.deleteProfile("org_1", "deleted")).rejects.toThrow();
-      expect(await db.getProfile("deleted")).not.toBeNull();
-      expect(await db.getSession("deleted")).not.toBeNull();
-      await rm(path, { recursive: true });
-
-      await archiveSessionHistory(db, "org_1", "deleted", historyWithTool());
       await service.deleteProfile("org_1", "deleted");
       expect(await db.getProfile("deleted")).toBeNull();
-      expect(await db.getSession("deleted")).toBeNull();
-      await expect(
-        archiveSessionHistory(db, "org_1", "deleted", historyWithTool())
-      ).rejects.toThrow();
-      await expect(
-        copySessionHistoryArchive(db, "org_1", "kept", "deleted")
-      ).rejects.toThrow();
-      await expect(readFile(path)).rejects.toThrow();
+      expect((await db.getSession("deleted"))?.activeProfileId).toBeNull();
+      expect(await readFile(path, "utf8")).toBe(original);
       for (const [orgId, id] of [
         ["org_1", "kept"],
         ["org_2", "other"],
@@ -546,7 +570,13 @@ describe("session persistence", () => {
         expect(await db.getSession(id)).not.toBeNull();
         expect(
           JSON.parse(
-            await readFile(sessionHistoryArchivePath(orgId, id), "utf8")
+            await readFile(
+              sessionHistoryArchivePath(orgId, id, {
+                id: `chat-${id}`,
+                kind: "chat",
+              }),
+              "utf8"
+            )
           ).messages
         ).toEqual(historyWithTool());
       }
@@ -577,5 +607,473 @@ describe("session persistence", () => {
     wrapPersistedSession("session_1", session, db).clear();
 
     expect(cleared).toBe(true);
+  });
+});
+
+describe("chat and project storage", () => {
+  setupTestConfigDir("nakama-workspaces-");
+
+  async function setup() {
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+    await db.upsertOrganization({
+      createdAt: now,
+      id: "org_test",
+      name: "Org",
+      slug: "org_test",
+      updatedAt: now,
+    });
+    await db.upsertProfile({
+      createdAt: now,
+      id: "workspace_agent",
+      isDefault: true,
+      isSuper: false,
+      model: null,
+      name: "Agent",
+      orgId: "org_test",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+    const agent = new AgentService(null, null, db);
+    return { agent, db };
+  }
+
+  test("new chats own distinct folders, output ids, and identity roots", async () => {
+    const { db, agent } = await setup();
+    const ids = await Promise.all([
+      agent.createSession("org_test", "web", "workspace_agent"),
+      agent.createSession("org_test", "web", "workspace_agent"),
+    ]);
+    const { runWriteFile, runReadFile } = await import(
+      "@nakama/core/tools/builtin"
+    );
+    const roots = [];
+    for (const id of ids) {
+      const record = (await db.getSession(id))!;
+      const root = await agent.chatWorkspaces.roots(record);
+      roots.push(root);
+      const context = {
+        ...root,
+        orgId: "org_test",
+        profileId: "workspace_agent",
+        registerGeneratedFile: (path: string) =>
+          agent.chatWorkspaces.registerFile(
+            root.workspaceId,
+            "org_test",
+            id,
+            path
+          ),
+        sessionId: id,
+      };
+      const output = await runWriteFile(
+        { content: id, path: "artifacts/result.txt" },
+        context
+      );
+      expect(output.workspaceId).toBe(root.workspaceId);
+      expect(output.fileId).toBeTruthy();
+      const files = await agent.chatWorkspaces.files(
+        (await db.getWorkspace(root.workspaceId))!
+      );
+      expect(files.map((file) => file.path)).toEqual(["outputs/result.txt"]);
+      await expect(
+        runReadFile({ path: "../escape" }, context)
+      ).rejects.toThrow();
+    }
+    expect(roots[0].workspaceRoot).not.toBe(roots[1].workspaceRoot);
+    expect(await readFile(`${roots[0].outputRoot}/result.txt`, "utf8")).toBe(
+      ids[0]
+    );
+    expect(await readFile(`${roots[1].outputRoot}/result.txt`, "utf8")).toBe(
+      ids[1]
+    );
+  });
+
+  test("project chats share references, isolate inputs, and survive another chat's deletion", async () => {
+    const { db, agent } = await setup();
+    const project = await agent.chatWorkspaces.create(
+      "org_test",
+      "project",
+      "Research",
+      null
+    );
+    const ids = [];
+    for (let i = 0; i < 2; i++) {
+      ids.push(
+        await agent.createSession("org_test", "web", "workspace_agent", null, {
+          orgRole: "admin",
+          workspaceId: project.id,
+        })
+      );
+    }
+    const first = await agent.chatWorkspaces.roots(
+      (await db.getSession(ids[0]))!
+    );
+    const second = await agent.chatWorkspaces.roots(
+      (await db.getSession(ids[1]))!
+    );
+    expect(first.workspaceRoot).toBe(second.workspaceRoot);
+    expect(first.chatRoot).not.toBe(second.chatRoot);
+    const { createAttachmentSaver, createAttachmentLoader } = await import(
+      "./attachment-service"
+    );
+    const reference = await createAttachmentSaver(db, {
+      channel: "web",
+      chatRoot: first.workspaceRoot,
+      orgId: "org_test",
+      profileId: "workspace_agent",
+      purpose: "reference",
+      sessionId: null,
+      workspaceId: project.id,
+      workspaceRoot: first.workspaceRoot,
+    })({
+      bytes: Buffer.from("shared reference"),
+      filename: "reference.txt",
+      kind: "document",
+      mediaType: "text/plain",
+    });
+    const input = await createAttachmentSaver(db, {
+      ...first,
+      channel: "web",
+      orgId: "org_test",
+      profileId: "workspace_agent",
+      sessionId: ids[0],
+    })({
+      bytes: Buffer.from("first chat only"),
+      filename: "private.txt",
+      kind: "document",
+      mediaType: "text/plain",
+    });
+    const loader = createAttachmentLoader(db, {
+      ...second,
+      orgId: "org_test",
+      profileId: "workspace_agent",
+      sessionId: ids[1],
+    });
+    expect((await loader(reference.attachmentId))?.bytes.toString()).toBe(
+      "shared reference"
+    );
+    expect(await loader(input.attachmentId)).toBeNull();
+    expect(
+      (
+        await agent.listSessions("org_test", undefined, "web", {
+          orgRole: "admin",
+        })
+      ).sessions
+    ).toHaveLength(0);
+    expect(
+      (
+        await agent.listSessions(
+          "org_test",
+          undefined,
+          "web",
+          { orgRole: "admin" },
+          project.id
+        )
+      ).sessions
+    ).toHaveLength(2);
+    await expect(
+      agent.validateSessionAttachments(ids[1], "org_test", [input.attachmentId])
+    ).rejects.toMatchObject({ status: 404 });
+    expect(
+      await agent.validateSessionAttachments(ids[1], "org_test", [
+        reference.attachmentId,
+      ])
+    ).toHaveLength(1);
+    await agent.purgeSession(ids[0], "org_test");
+    expect(await db.getSession(ids[1])).not.toBeNull();
+    expect((await loader(reference.attachmentId))?.bytes.toString()).toBe(
+      "shared reference"
+    );
+    expect(await Bun.file(first.chatRoot).exists()).toBe(false);
+  });
+
+  test("branch owns referenced bytes after purging its source", async () => {
+    const { db, agent } = await setup();
+    const source = await agent.createSession(
+      "org_test",
+      "web",
+      "workspace_agent"
+    );
+    const roots = await agent.chatWorkspaces.roots(
+      (await db.getSession(source))!
+    );
+    const { createAttachmentSaver, createAttachmentLoader } = await import(
+      "./attachment-service"
+    );
+    const saved = await createAttachmentSaver(db, {
+      ...roots,
+      channel: "web",
+      orgId: "org_test",
+      profileId: "workspace_agent",
+      sessionId: source,
+    })({
+      bytes: Buffer.from("preserved"),
+      filename: "notes.txt",
+      kind: "document",
+      mediaType: "text/plain",
+    });
+    await replaceSessionHistory(db, source, [
+      {
+        content: [
+          {
+            attachmentId: saved.attachmentId,
+            filename: "notes.txt",
+            mediaType: "text/plain",
+            size: 9,
+            type: "document_ref",
+          },
+        ],
+        role: "user",
+      },
+    ]);
+    const branch = (await agent.branchSession(source, 0, "org_test"))!;
+    await agent.purgeSession(source, "org_test");
+    const branchRoots = await agent.chatWorkspaces.roots(
+      (await db.getSession(branch.sessionId))!
+    );
+    const loader = createAttachmentLoader(db, {
+      ...branchRoots,
+      orgId: "org_test",
+      profileId: "workspace_agent",
+      sessionId: branch.sessionId,
+    });
+    expect((await loader(saved.attachmentId))?.bytes.toString()).toBe(
+      "preserved"
+    );
+    expect(
+      (await db.listAttachmentsForSession(branch.sessionId))[0].storagePath
+    ).not.toContain(roots.workspaceRoot);
+  });
+
+  test("user exports include their project references and exclude other private folders", async () => {
+    const { db, agent } = await setup();
+    const now = new Date().toISOString();
+    for (const id of ["alice", "bob"]) {
+      await db.createUser({
+        createdAt: now,
+        email: `${id}@example.com`,
+        id,
+        passwordHash: "test",
+        updatedAt: now,
+      });
+      await db.upsertOrgMember({
+        createdAt: now,
+        orgId: "org_test",
+        role: "member",
+        userId: id,
+      });
+    }
+    const { getChatWorkspaceDir } = await import("@nakama/core");
+    const owned = await agent.chatWorkspaces.create(
+      "org_test",
+      "project",
+      "Alice",
+      "alice"
+    );
+    const other = await agent.chatWorkspaces.create(
+      "org_test",
+      "project",
+      "Bob",
+      "bob"
+    );
+    await Bun.write(
+      `${getChatWorkspaceDir("org_test", owned.id)}/references/own.txt`,
+      "own reference"
+    );
+    await Bun.write(
+      `${getChatWorkspaceDir("org_test", other.id)}/references/private.txt`,
+      "private"
+    );
+    const { createNakamaUserDataExport } = await import("./data-portability");
+    const { unzipSync } = await import("fflate");
+    const exported = unzipSync(
+      (await createNakamaUserDataExport(db, "alice")).data
+    );
+    expect(
+      Buffer.from(
+        exported[`workspaces/${owned.id}/references/own.txt`]
+      ).toString()
+    ).toBe("own reference");
+    expect(Object.keys(exported).some((path) => path.includes(other.id))).toBe(
+      false
+    );
+  });
+
+  test("legacy branches recover referenced bytes and archive aliases before source deletion", async () => {
+    const { db, agent } = await setup();
+    await seedSession(db, "legacy-source", "workspace_agent", "org_test");
+    await seedSession(db, "legacy-branch", "workspace_agent", "org_test");
+    const source = (await db.getSession("legacy-source"))!;
+    const roots = await agent.chatWorkspaces.roots(source);
+    const { createAttachmentSaver, createAttachmentLoader } = await import(
+      "./attachment-service"
+    );
+    const file = await createAttachmentSaver(db, {
+      ...roots,
+      channel: "web",
+      orgId: "org_test",
+      profileId: "workspace_agent",
+      sessionId: source.id,
+    })({
+      bytes: Buffer.from("legacy bytes"),
+      filename: "old.txt",
+      kind: "document",
+      mediaType: "text/plain",
+    });
+    const history: ChatMessage[] = [
+      {
+        content: [
+          {
+            attachmentId: file.attachmentId,
+            filename: "old.txt",
+            mediaType: "text/plain",
+            size: 12,
+            type: "document_ref",
+          },
+        ],
+        role: "user",
+      },
+    ];
+    await replaceSessionHistory(db, "legacy-branch", history);
+    await archiveSessionHistory(db, "org_test", "legacy-branch", history);
+    await agent.initializeChatStorage();
+    await agent.initializeChatStorage();
+    expect(await db.listAttachmentsForSession("legacy-branch")).toHaveLength(1);
+    const [recovered] = await db.listAttachmentsForSession("legacy-branch");
+    expect(
+      JSON.stringify(await loadSessionHistory(db, "legacy-branch"))
+    ).toContain(recovered.id);
+    expect(
+      JSON.stringify(await loadSessionHistory(db, "legacy-branch"))
+    ).not.toContain(file.attachmentId);
+    await agent.purgeSession(source.id, "org_test");
+    const branchRoots = await agent.chatWorkspaces.roots(
+      (await db.getSession("legacy-branch"))!
+    );
+    const loader = createAttachmentLoader(db, {
+      ...branchRoots,
+      orgId: "org_test",
+      profileId: "workspace_agent",
+      sessionId: "legacy-branch",
+    });
+    expect((await loader(file.attachmentId))?.bytes.toString()).toBe(
+      "legacy bytes"
+    );
+    expect(
+      await readFile(`${branchRoots.chatRoot}/history/archive.jsonl`, "utf8")
+    ).toContain(file.attachmentId);
+  });
+
+  test("deleted agent leaves readable history and requires an explicit replacement", async () => {
+    const { db, agent } = await setup();
+    const id = await agent.createSession("org_test", "web", "workspace_agent");
+    await replaceSessionHistory(db, id, [
+      { content: "Keep this", role: "user" },
+    ]);
+    await db.deleteProfile("workspace_agent");
+    expect((await agent.getSessionMessages(id, "org_test"))?.messages).toEqual([
+      { content: "Keep this", role: "user" },
+    ]);
+    await expect(agent.resolveSession(id, "org_test")).rejects.toMatchObject({
+      status: 409,
+    });
+    const now = new Date().toISOString();
+    await db.upsertProfile({
+      createdAt: now,
+      id: "replacement",
+      isDefault: true,
+      isSuper: false,
+      model: null,
+      name: "Replacement",
+      orgId: "org_test",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+    const workspaceId = (await db.getSession(id))!.workspaceId;
+    await agent.changeSessionAgent(id, "org_test", "replacement", {
+      orgRole: "admin",
+    });
+    expect((await db.getSession(id))?.workspaceId).toBe(workspaceId);
+    expect((await agent.resolveSession(id, "org_test"))?.getHistory()).toEqual([
+      { content: "Keep this", role: "user" },
+    ]);
+  });
+
+  test("leases reject deletion/export until writers actually finish; recovery is admin-only", async () => {
+    const { db, agent } = await setup();
+    const id = await agent.createSession("org_test", "web", "workspace_agent");
+    const record = (await db.getSession(id))!;
+    const { acquireWorkspaceWrite, withWorkspaceSnapshot } = await import(
+      "./chat-workspace-service"
+    );
+    const release = acquireWorkspaceWrite(record.workspaceId!);
+    await expect(agent.purgeSession(id, "org_test")).rejects.toMatchObject({
+      status: 409,
+    });
+    await expect(
+      withWorkspaceSnapshot(null, async () => "export")
+    ).rejects.toMatchObject({ status: 409 });
+    release();
+    expect(await agent.purgeSession(id, "org_test")).toBe(true);
+    const { getProfileSoulDir } = await import("@nakama/core");
+    const profileRoot = getProfileSoulDir("org_test", "workspace_agent");
+    await mkdir(`${profileRoot}/artifacts`, { recursive: true });
+    await Bun.write(`${profileRoot}/artifacts/legacy.txt`, "original");
+    const now = new Date().toISOString();
+    await db.createUser({
+      createdAt: now,
+      email: "legacy@example.com",
+      id: "legacy-owner",
+      passwordHash: "test",
+      updatedAt: now,
+    });
+    await db.setFilePinned(
+      "org_test",
+      "legacy-owner",
+      "workspace_agent",
+      "legacy.txt",
+      true
+    );
+    await db.createArtifactShare({
+      createdAt: now,
+      createdByUserId: "legacy-owner",
+      filename: "legacy.txt",
+      id: "legacy-share",
+      mimeType: "text/plain",
+      orgId: "org_test",
+      profileId: "workspace_agent",
+      revokedAt: null,
+      sizeBytes: 8,
+      sourcePath: "legacy.txt",
+      storagePath: "original-snapshot",
+      tokenHash: "original-token",
+    });
+    await agent.chatWorkspaces.recoverProfile("org_test", "workspace_agent");
+    await agent.chatWorkspaces.recoverProfile("org_test", "workspace_agent");
+    const workspace = (await db.listWorkspaces("org_test")).find((item) =>
+      item.id.startsWith("recovered-")
+    )!;
+    await expect(
+      agent.chatWorkspaces.require("org_test", workspace.id, {
+        orgRole: "member",
+      })
+    ).rejects.toMatchObject({ status: 404 });
+    const files = await agent.chatWorkspaces.files(workspace);
+    expect(files.some((file) => file.path === "artifacts/legacy.txt")).toBe(
+      true
+    );
+    const recovered = files.find(
+      (file) => file.path === "artifacts/legacy.txt"
+    )!;
+    expect(
+      await db.listWorkspaceFilePins("org_test", "legacy-owner", workspace.id)
+    ).toEqual([recovered.id]);
+    const [share] = await db.listArtifactSharesForWorkspace(workspace.id);
+    expect(share.fileId).toBe(recovered.id);
+    expect(share.tokenHash).toBe("original-token");
+    expect(share.storagePath).toBe("original-snapshot");
+    expect(await readFile(`${profileRoot}/artifacts/legacy.txt`, "utf8")).toBe(
+      "original"
+    );
   });
 });

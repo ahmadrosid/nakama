@@ -44,6 +44,7 @@ export async function sendArtifactDocumentForPath(input: {
   client: NakamaClient;
   profileId: string;
   path: string;
+  workspaceId?: string;
   filename: string;
   mimeType: string;
   sizeBytes?: number;
@@ -71,6 +72,7 @@ export async function sendArtifactDocumentForPath(input: {
         signal: input.signal
           ? AbortSignal.any([input.signal, AbortSignal.timeout(30_000)])
           : AbortSignal.timeout(30_000),
+        workspaceId: input.workspaceId,
       }
     );
     input.signal?.throwIfAborted();
@@ -113,6 +115,7 @@ export function parsePreparedWhatsAppArtifact(result: unknown): {
   filename: string;
   mimeType: string;
   path: string;
+  workspaceId?: string;
   sizeBytes: number;
   sha256: string;
 } | null {
@@ -146,6 +149,9 @@ export function parsePreparedWhatsAppArtifact(result: unknown): {
     return null;
   }
   return {
+    ...(typeof record.workspaceId === "string"
+      ? { workspaceId: record.workspaceId }
+      : {}),
     filename: record.filename,
     mimeType: record.mimeType,
     path,

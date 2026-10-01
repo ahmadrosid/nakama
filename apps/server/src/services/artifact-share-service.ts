@@ -3,6 +3,7 @@ import {
   buildArtifactSharePath,
   deleteArtifactShareSnapshot,
   generateArtifactShareToken,
+  getChatWorkspaceDir,
   isBrowserExecutableArtifactMimeType,
   NakamaApiError,
   readArtifactFile,
@@ -18,6 +19,7 @@ import type {
 } from "@nakama/core/contract";
 import type { DatabaseAdapter, StoredArtifactShareRecord } from "@nakama/db";
 import type { AuthService } from "./auth-service";
+import { acquireWorkspaceWrite } from "./chat-workspace-service";
 import {
   isLoopbackComposioCallbackBaseUrl,
   resolveComposioCallbackBaseUrl,
@@ -48,92 +50,111 @@ export class ArtifactShareService {
   async publishArtifactShare(input: {
     orgId: string;
     profileId: string;
+    workspaceId?: string;
+    fileId?: string;
     sourcePath: string;
     userId: string;
     clientOrigin?: string;
     request?: Request;
   }): Promise<PublishArtifactShareResponse> {
-    await this.requireProfile(input.orgId, input.profileId);
+    const release = input.workspaceId
+      ? acquireWorkspaceWrite(input.workspaceId)
+      : () => undefined;
+    try {
+      await this.requireProfile(
+        input.orgId,
+        input.profileId,
+        input.workspaceId
+      );
 
-    const sourcePath = input.sourcePath.trim();
-    if (!sourcePath) {
-      throw new NakamaApiError("path is required.", 400);
-    }
+      const sourcePath = input.sourcePath.trim();
+      if (!sourcePath) {
+        throw new NakamaApiError("path is required.", 400);
+      }
 
-    const artifact = await readArtifactFile({
-      filename: sourcePath,
-      orgId: input.orgId,
-      profileId: input.profileId,
-    });
-
-    const filename = sourcePath.split("/").pop() ?? "artifact";
-    const mimeType = resolveArtifactMimeType(artifact.contentType, filename);
-    const existing = await this.db.getActiveArtifactShareByPath(
-      input.orgId,
-      input.profileId,
-      sourcePath
-    );
-
-    const now = new Date().toISOString();
-    let record: StoredArtifactShareRecord;
-    let token: string | null = null;
-    let refreshed = false;
-
-    if (existing) {
-      refreshed = true;
-      record = await this.replaceSnapshot(existing, {
-        bytes: artifact.bytes,
-        filename,
-        mimeType,
-        orgId: input.orgId,
-      });
-    } else {
-      token = generateArtifactShareToken();
-      const shareId = `share_${crypto.randomUUID().replace(/-/g, "")}`;
-      const storagePath = await writeArtifactShareSnapshot({
-        bytes: artifact.bytes,
-        filename,
-        orgId: input.orgId,
-        shareId,
-      });
-
-      record = {
-        createdAt: now,
-        createdByUserId: input.userId,
-        filename,
-        id: shareId,
-        mimeType,
+      const artifact = await readArtifactFile({
+        directory: input.workspaceId
+          ? getChatWorkspaceDir(input.orgId, input.workspaceId)
+          : undefined,
+        filename: sourcePath,
         orgId: input.orgId,
         profileId: input.profileId,
-        revokedAt: null,
-        sizeBytes: artifact.bytes.byteLength,
-        sourcePath,
-        storagePath,
-        tokenHash: this.authService.hashToken(token),
+      });
+
+      const filename = sourcePath.split("/").pop() ?? "artifact";
+      const mimeType = resolveArtifactMimeType(artifact.contentType, filename);
+      const existing = await this.db.getActiveArtifactShareByPath(
+        input.orgId,
+        input.profileId,
+        input.fileId ?? sourcePath,
+        input.workspaceId
+      );
+
+      const now = new Date().toISOString();
+      let record: StoredArtifactShareRecord;
+      let token: string | null = null;
+      let refreshed = false;
+
+      if (existing) {
+        refreshed = true;
+        record = await this.replaceSnapshot(existing, {
+          bytes: artifact.bytes,
+          filename,
+          mimeType,
+          orgId: input.orgId,
+        });
+      } else {
+        token = generateArtifactShareToken();
+        const shareId = `share_${crypto.randomUUID().replace(/-/g, "")}`;
+        const storagePath = await writeArtifactShareSnapshot({
+          bytes: artifact.bytes,
+          filename,
+          orgId: input.orgId,
+          shareId,
+        });
+
+        record = {
+          createdAt: now,
+          createdByUserId: input.userId,
+          fileId: input.fileId,
+          filename,
+          id: shareId,
+          mimeType,
+          orgId: input.orgId,
+          profileId: input.profileId,
+          revokedAt: null,
+          sizeBytes: artifact.bytes.byteLength,
+          sourcePath: input.fileId ?? sourcePath,
+          storagePath,
+          tokenHash: this.authService.hashToken(token),
+          workspaceId: input.workspaceId,
+        };
+
+        await this.db.createArtifactShare(record);
+      }
+
+      const baseUrl = resolveArtifactShareBaseUrl({
+        clientOrigin: input.clientOrigin,
+        request: input.request,
+      });
+      const webPublicUrlConfigured = Boolean(
+        baseUrl && !isLoopbackComposioCallbackBaseUrl(baseUrl)
+      );
+      const shareUrl = token
+        ? `${baseUrl}${buildArtifactSharePath(token)}`
+        : null;
+
+      return {
+        id: record.id,
+        refreshed,
+        sharePath: token ? buildArtifactSharePath(token) : "",
+        shareUrl,
+        token: token ?? "",
+        webPublicUrlConfigured,
       };
-
-      await this.db.createArtifactShare(record);
+    } finally {
+      release();
     }
-
-    const baseUrl = resolveArtifactShareBaseUrl({
-      clientOrigin: input.clientOrigin,
-      request: input.request,
-    });
-    const webPublicUrlConfigured = Boolean(
-      baseUrl && !isLoopbackComposioCallbackBaseUrl(baseUrl)
-    );
-    const shareUrl = token
-      ? `${baseUrl}${buildArtifactSharePath(token)}`
-      : null;
-
-    return {
-      id: record.id,
-      refreshed,
-      sharePath: token ? buildArtifactSharePath(token) : "",
-      shareUrl,
-      token: token ?? "",
-      webPublicUrlConfigured,
-    };
   }
 
   private async replaceSnapshot(
@@ -222,16 +243,19 @@ export class ArtifactShareService {
   async getArtifactShareStatus(input: {
     orgId: string;
     profileId: string;
+    workspaceId?: string;
+    fileId?: string;
     sourcePath: string;
     clientOrigin?: string;
     request?: Request;
   }): Promise<ArtifactShareStatusResponse | null> {
-    await this.requireProfile(input.orgId, input.profileId);
+    await this.requireProfile(input.orgId, input.profileId, input.workspaceId);
 
     const share = await this.db.getActiveArtifactShareByPath(
       input.orgId,
       input.profileId,
-      input.sourcePath.trim()
+      input.fileId ?? input.sourcePath.trim(),
+      input.workspaceId
     );
 
     if (!share) {
@@ -259,14 +283,16 @@ export class ArtifactShareService {
   async revokeArtifactShare(input: {
     orgId: string;
     profileId: string;
+    workspaceId?: string;
     shareId: string;
   }): Promise<RevokeArtifactShareResponse> {
-    await this.requireProfile(input.orgId, input.profileId);
+    await this.requireProfile(input.orgId, input.profileId, input.workspaceId);
 
     const share = await this.db.getArtifactShareById(
       input.orgId,
       input.profileId,
-      input.shareId
+      input.shareId,
+      input.workspaceId
     );
 
     if (!share || share.revokedAt) {
@@ -323,8 +349,16 @@ export class ArtifactShareService {
 
   private async requireProfile(
     orgId: string,
-    profileId: string
+    profileId: string,
+    workspaceId?: string
   ): Promise<void> {
+    if (workspaceId) {
+      const workspace = await this.db.getWorkspace(workspaceId);
+      if (workspace?.orgId !== orgId || workspace.state !== "active") {
+        throw new NakamaApiError("Not found", 404);
+      }
+      return;
+    }
     const profile = await this.profileService.getProfile(orgId, profileId);
     if (!profile) {
       throw new NakamaApiError("Not found", 404);

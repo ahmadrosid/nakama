@@ -1,6 +1,4 @@
-import { createHash } from "node:crypto";
 import { isAbsolute, join } from "node:path";
-import { ensureDir } from "../fs";
 import { getUserConfigDir } from "../user-config";
 import { loadSoulStack } from "./load";
 import type { LoadedSoulStack } from "./types";
@@ -46,30 +44,28 @@ export function getProfileSoulDir(orgId: string, profileId: string): string {
   );
 }
 
-export function getAppUserSoulDir(
+/** Managed chat/project storage. IDs, never display names, determine paths. */
+export function getChatWorkspaceDir(
   orgId: string,
-  profileId: string,
-  appUserId: string
+  workspaceId: string
 ): string {
-  const trimmed = appUserId.trim();
-  if (!trimmed) {
-    throw new Error("Invalid appUserId.");
-  }
-  const digest = createHash("sha256").update(trimmed).digest("hex");
-  return join(getProfileSoulDir(orgId, profileId), "users", digest);
+  return join(
+    getOrgMemoryDir(orgId),
+    "workspaces",
+    assertConfigPathSegment(workspaceId, "workspaceId")
+  );
 }
 
-export async function ensureAppUserSoulDir(
+export function getChatSessionDir(
   orgId: string,
-  profileId: string,
-  appUserId: string
-): Promise<string> {
-  const target = getAppUserSoulDir(orgId, profileId, appUserId);
-  await ensureDir(target);
-
-  await ensureDir(join(target, "memory-archive"));
-  await ensureDir(join(target, "artifacts"));
-  return target;
+  workspaceId: string,
+  sessionId: string,
+  kind: "chat" | "project"
+): string {
+  const root = getChatWorkspaceDir(orgId, workspaceId);
+  return kind === "project"
+    ? join(root, "chats", assertConfigPathSegment(sessionId, "sessionId"))
+    : root;
 }
 
 export function getProfileArtifactsDir(

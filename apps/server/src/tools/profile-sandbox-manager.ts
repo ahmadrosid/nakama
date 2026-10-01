@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { BashSandboxNetwork } from "./bash-config";
 
 export const BASH_SANDBOX_GUEST_WORKSPACE = "/workspace";
@@ -92,7 +93,11 @@ export class ProfileSandboxManager {
     signal?: AbortSignal;
     timeoutMs: number;
   }): Promise<BashSandboxExecResult> {
-    const name = profileSandboxName(args.orgId, args.profileId);
+    const scope = createHash("sha256")
+      .update(`${args.orgId}\0${args.profileId}\0${args.hostWorkspace}`)
+      .digest("hex")
+      .slice(0, 24);
+    const name = `${profileSandboxName(args.orgId, args.profileId).slice(0, 100)}-${scope}`;
     const guestWorkspace = BASH_SANDBOX_GUEST_WORKSPACE;
     const fingerprint = `${args.hostWorkspace}|${args.network}|${args.image}|${guestWorkspace}`;
 

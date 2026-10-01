@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { existsSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { orgIdFromSkillSourcePath } from "@nakama/core";
@@ -7,6 +7,23 @@ import { orgIdFromSkillSourcePath } from "@nakama/core";
 const BOOTSTRAP_SCHEMA_VERSION = 1;
 
 export function migrateDatabase(db: Database): void {
+  const existingSessions = db
+    .query(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sessions'"
+    )
+    .get();
+  const migrated = db
+    .query(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'chat_workspaces'"
+    )
+    .get();
+  if (existingSessions && !migrated && db.filename !== ":memory:") {
+    const backup = `${db.filename}.before-chat-workspaces`;
+    if (!existsSync(backup)) {
+      db.query("VACUUM INTO ?").run(backup);
+      chmodSync(backup, 0o600);
+    }
+  }
   applyBootstrapSchema(db);
 
   // Each step runs in its own transaction so a failure cannot leave one half
@@ -23,13 +40,12 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateAutomationsTable);
   atomic(migrateDropTasksTables);
   atomic(migrateSessionsTable);
-  atomic(migrateSessionAppUserId);
+  atomic(migrateLegacySessionProvenance);
   atomic(migrateMcpTables);
   atomic(migrateSkillsTables);
   atomic(migrateUsersTable);
   atomic(migratePasskeyTables);
   atomic(migrateOrgTables);
-  atomic(migrateApiKeysTable);
   atomic(migrateLegacyUserContextToOrgMembers);
   atomic(migrateOrgMemoryProposalsTable);
   atomic(migrateSkillProposalsTable);
@@ -66,18 +82,153 @@ export function migrateDatabase(db: Database): void {
   atomic(migratePluginTables);
   atomic(migrateFilePinsTable);
   atomic(migrateNotificationWebhookDeliveriesTable);
+  migrateChatWorkspaces(db);
+  db.exec("DROP TABLE IF EXISTS api_keys");
 }
 
-function migrateSessionAppUserId(db: Database): void {
-  const columns = db.prepare("PRAGMA table_info(sessions)").all() as Array<{
-    name: string;
-  }>;
-  if (!columns.some((column) => column.name === "app_user_id")) {
-    db.exec("ALTER TABLE sessions ADD COLUMN app_user_id TEXT;");
-  }
-  db.exec(
-    "CREATE INDEX IF NOT EXISTS sessions_app_user_id ON sessions (profile_id, channel, app_user_id)"
+function migrateChatWorkspaces(db: Database): void {
+  db.exec(`CREATE TABLE IF NOT EXISTS chat_workspaces (
+    id TEXT PRIMARY KEY NOT NULL,
+    org_id TEXT NOT NULL REFERENCES organizations(id),
+    kind TEXT NOT NULL CHECK(kind IN ('chat', 'project')),
+    name TEXT NOT NULL,
+    owner_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    access TEXT NOT NULL CHECK(access IN ('org', 'owner', 'admin')),
+    state TEXT NOT NULL DEFAULT 'active' CHECK(state IN ('active', 'deleting')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );`);
+  const addColumn = (table: string, name: string, definition: string) => {
+    const columns = db.query(`PRAGMA table_info(${table})`).all() as {
+      name: string;
+    }[];
+    if (columns.length === 0) {
+      return;
+    }
+    if (!columns.some((column) => column.name === name)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+    }
+  };
+  addColumn("sessions", "workspace_id", "TEXT REFERENCES chat_workspaces(id)");
+  addColumn("sessions", "deleting", "INTEGER NOT NULL DEFAULT 0");
+  addColumn(
+    "sessions",
+    "active_profile_id",
+    "TEXT REFERENCES profiles(id) ON DELETE SET NULL"
   );
+  addColumn(
+    "attachments",
+    "workspace_id",
+    "TEXT REFERENCES chat_workspaces(id)"
+  );
+  addColumn("attachments", "purpose", "TEXT NOT NULL DEFAULT 'input'");
+  addColumn(
+    "artifact_shares",
+    "workspace_id",
+    "TEXT REFERENCES chat_workspaces(id)"
+  );
+  addColumn("artifact_shares", "file_id", "TEXT REFERENCES attachments(id)");
+  addColumn("file_pins", "workspace_id", "TEXT REFERENCES chat_workspaces(id)");
+  addColumn("file_pins", "file_id", "TEXT REFERENCES attachments(id)");
+  db.exec(`CREATE TABLE IF NOT EXISTS session_file_aliases (
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    source_file_id TEXT NOT NULL,
+    file_id TEXT NOT NULL REFERENCES attachments(id) ON DELETE CASCADE,
+    PRIMARY KEY(session_id, source_file_id)
+  );`);
+
+  // Historical attribution is retained, but deleting an agent must not cascade
+  // into user-owned conversations, files, shares, or pins.
+  db.exec("PRAGMA foreign_keys = OFF");
+  try {
+    db.transaction(() => {
+      for (const table of [
+        "sessions",
+        "attachments",
+        "artifact_shares",
+        "file_pins",
+      ]) {
+        const row = db
+          .query(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?"
+          )
+          .get(table) as { sql: string } | null;
+        if (!row) {
+          continue;
+        }
+        const sql = row.sql
+          .replace(
+            /,?\s*FOREIGN KEY\s*\(profile_id\)\s*REFERENCES\s*profiles\s*\(id\)\s*ON DELETE CASCADE/gi,
+            ""
+          )
+          .replace(
+            /profile_id\s+TEXT\s+NOT NULL\s+REFERENCES\s+profiles\s*\(id\)\s*ON DELETE CASCADE/gi,
+            "profile_id TEXT NOT NULL"
+          );
+        if (sql === row.sql) {
+          continue;
+        }
+        const indexes = db
+          .query(
+            "SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL"
+          )
+          .all(table) as { sql: string }[];
+        db.exec(
+          sql.replace(
+            /CREATE TABLE(?: IF NOT EXISTS)?\s+["`]?\w+["`]?/i,
+            `CREATE TABLE ${table}_workspace_migration`
+          )
+        );
+        db.exec(
+          `INSERT INTO ${table}_workspace_migration SELECT * FROM ${table}`
+        );
+        db.exec(`DROP TABLE ${table}`);
+        db.exec(`ALTER TABLE ${table}_workspace_migration RENAME TO ${table}`);
+        for (const index of indexes) {
+          db.exec(index.sql);
+        }
+      }
+      db.exec(`INSERT OR IGNORE INTO chat_workspaces
+        SELECT 'chat-' || s.id, p.org_id, 'chat', COALESCE(s.title, 'Chat'),
+          CASE WHEN s.legacy_app_user_id IS NULL THEN s.user_id ELSE NULL END,
+          CASE WHEN s.legacy_app_user_id IS NOT NULL OR p.is_super = 1 THEN 'admin' ELSE 'org' END,
+          'active', s.created_at, COALESCE(s.updated_at, s.created_at)
+        FROM sessions s JOIN profiles p ON p.id = s.profile_id
+        WHERE s.workspace_id IS NULL AND p.org_id IS NOT NULL;
+        UPDATE sessions SET workspace_id = 'chat-' || id, active_profile_id = profile_id
+          WHERE workspace_id IS NULL AND EXISTS (SELECT 1 FROM chat_workspaces w WHERE w.id = 'chat-' || sessions.id);
+        UPDATE attachments SET workspace_id = (SELECT workspace_id FROM sessions WHERE id = attachments.session_id)
+          WHERE workspace_id IS NULL;
+        CREATE INDEX IF NOT EXISTS sessions_workspace ON sessions(workspace_id);
+        CREATE INDEX IF NOT EXISTS attachments_workspace ON attachments(workspace_id);
+        CREATE TRIGGER IF NOT EXISTS sessions_one_chat_insert BEFORE INSERT ON sessions
+          WHEN (SELECT kind FROM chat_workspaces WHERE id = NEW.workspace_id) = 'chat'
+          AND EXISTS (SELECT 1 FROM sessions WHERE workspace_id = NEW.workspace_id AND id <> NEW.id)
+          BEGIN SELECT RAISE(ABORT, 'A standalone workspace owns one chat.'); END;
+        CREATE TRIGGER IF NOT EXISTS sessions_one_chat_update BEFORE UPDATE OF workspace_id ON sessions
+          WHEN (SELECT kind FROM chat_workspaces WHERE id = NEW.workspace_id) = 'chat'
+          AND EXISTS (SELECT 1 FROM sessions WHERE workspace_id = NEW.workspace_id AND id <> NEW.id)
+          BEGIN SELECT RAISE(ABORT, 'A standalone workspace owns one chat.'); END;`);
+    })();
+  } finally {
+    db.exec("PRAGMA foreign_keys = ON");
+  }
+}
+
+function migrateLegacySessionProvenance(db: Database): void {
+  const columns = db.query("PRAGMA table_info(sessions)").all() as {
+    name: string;
+  }[];
+  if (!columns.some((column) => column.name === "legacy_app_user_id")) {
+    if (columns.some((column) => column.name === "app_user_id")) {
+      db.exec(
+        "ALTER TABLE sessions RENAME COLUMN app_user_id TO legacy_app_user_id"
+      );
+    } else {
+      db.exec("ALTER TABLE sessions ADD COLUMN legacy_app_user_id TEXT");
+    }
+  }
+  db.exec("DROP INDEX IF EXISTS sessions_app_user_id");
 }
 
 function migrateAuditEventsTable(db: Database): void {
@@ -596,32 +747,10 @@ function migrateOrgTables(db: Database): void {
   }
 }
 
-function migrateApiKeysTable(db: Database): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS api_keys (
-      id TEXT PRIMARY KEY NOT NULL,
-      org_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      environment TEXT NOT NULL,
-      key_prefix TEXT NOT NULL,
-      secret_hash TEXT NOT NULL,
-      created_by_user_id TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      expires_at TEXT,
-      last_used_at TEXT,
-      revoked_at TEXT,
-      FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
-      FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE CASCADE
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS api_keys_prefix_unique ON api_keys (key_prefix);
-    CREATE INDEX IF NOT EXISTS api_keys_org_id ON api_keys (org_id, created_at DESC);
-  `);
-}
-
 /**
  * Pre-org installs stored USER.md on users.user_context. Writes moved to
  * org_members (#550); copy any remaining legacy values into memberships that
- * still lack per-org context so getUserContext can stop reading users.
+ * still lack user context.
  */
 function migrateLegacyUserContextToOrgMembers(db: Database): void {
   const usersColumns = db.prepare("PRAGMA table_info(users)").all() as Array<{

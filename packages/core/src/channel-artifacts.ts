@@ -20,11 +20,13 @@ export function isScratchArtifactPath(relativePath: string): boolean {
 }
 
 export interface ChannelArtifactRef {
+  fileId?: string;
   filename: string;
   mimeType: string;
   path: string;
   savedAt: string;
   sizeBytes: number;
+  workspaceId?: string;
 }
 
 interface WriteFileResult {
@@ -334,6 +336,31 @@ export function extractPairedTurnArtifacts(
   const toolInputs = buildToolInputMap(messages);
   const contentWrites = new Map<string, { relativePath: string }>();
   const artifactsByPath = new Map<string, ChannelArtifactRef>();
+  for (const message of turnMessages) {
+    if (message.role !== "tool") {
+      continue;
+    }
+    const result = parseToolResult(message.content) as {
+      fileId?: string;
+      workspaceId?: string;
+      path?: string;
+      mimeType?: string;
+      sizeBytes?: number;
+      bytesWritten?: number;
+      error?: unknown;
+    } | null;
+    if (result?.fileId && result.workspaceId && result.path && !result.error) {
+      artifactsByPath.set(result.path, {
+        ...buildArtifactRef(result.path, {
+          mimeType: result.mimeType ?? inferArtifactMimeType(result.path),
+          savedAt: "",
+          sizeBytes: result.sizeBytes ?? result.bytesWritten ?? 0,
+        }),
+        fileId: result.fileId,
+        workspaceId: result.workspaceId,
+      });
+    }
+  }
 
   for (const message of turnMessages) {
     if (
@@ -344,6 +371,9 @@ export function extractPairedTurnArtifacts(
       continue;
     }
 
+    if ((getWriteFileResult(message) as { fileId?: string } | null)?.fileId) {
+      continue;
+    }
     const resolvedPath = resolvedWritePath(message);
     if (!resolvedPath || isArtifactMetaResolvedPath(resolvedPath)) {
       continue;
@@ -381,6 +411,9 @@ export function extractPairedTurnArtifacts(
       continue;
     }
 
+    if ((getWriteFileResult(message) as { fileId?: string } | null)?.fileId) {
+      continue;
+    }
     const resolvedPath = resolvedWritePath(message);
     if (!(resolvedPath && isArtifactMetaResolvedPath(resolvedPath))) {
       continue;

@@ -41,8 +41,6 @@ import type {
   ComposioToolkitSummary,
   ConfigureProviderRequest,
   ConfigureProviderResponse,
-  CreateApiKeyRequest,
-  CreateApiKeyResponse,
   CreateAutomationRequest,
   CreateMcpServerRequest,
   CreateNotificationDestinationRequest,
@@ -84,7 +82,6 @@ import type {
   InvokePluginActionRequest,
   InvokePluginActionResponse,
   KnowledgeBaseDuplicateAction,
-  ListApiKeysResponse,
   ListArtifactsResponse,
   ListAutomationRunsResponse,
   ListAutomationsResponse,
@@ -162,7 +159,6 @@ import type {
   RestoreOrgMemoryHistoryResponse,
   RevokeArtifactShareResponse,
   RevokeBrowserSessionsResponse,
-  RotateApiKeyResponse,
   RotateLocalAuthTokenResponse,
   RunAutomationResponse,
   RunSkillCuratorInternalRequest,
@@ -769,11 +765,84 @@ export class NakamaClient {
         cognito: options.cognito,
         model: options.model,
         profileId: options.profileId,
+        workspaceId: options.workspaceId,
       }),
       method: "POST",
     });
 
     return this.createChatSession(response.sessionId, channel);
+  }
+
+  async listChatWorkspaces(): Promise<{
+    workspaces: import("@nakama/core").ChatWorkspace[];
+  }> {
+    return this.request("/v1/workspaces");
+  }
+  async createProject(
+    name: string
+  ): Promise<{ workspace: import("@nakama/core").ChatWorkspace }> {
+    return this.request("/v1/projects", {
+      body: JSON.stringify({ name }),
+      method: "POST",
+    });
+  }
+  async getChatWorkspace(
+    id: string
+  ): Promise<{ workspace: import("@nakama/core").ChatWorkspace }> {
+    return this.request(`/v1/workspaces/${encodeURIComponent(id)}`);
+  }
+  async listChatWorkspaceFiles(
+    id: string,
+    sessionId?: string
+  ): Promise<{ files: import("@nakama/core").ChatWorkspaceFile[] }> {
+    return this.request(
+      `/v1/workspaces/${encodeURIComponent(id)}/files${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ""}`
+    );
+  }
+  async uploadChatWorkspaceFile(
+    id: string,
+    input: {
+      filename: string;
+      mediaType: string;
+      data: string;
+      sessionId?: string;
+    }
+  ): Promise<{ attachmentId: string; size: number }> {
+    return this.request(`/v1/workspaces/${encodeURIComponent(id)}/files`, {
+      body: JSON.stringify(input),
+      method: "POST",
+    });
+  }
+
+  async updateChatWorkspace(id: string, name: string): Promise<void> {
+    await this.request(`/v1/workspaces/${encodeURIComponent(id)}`, {
+      body: JSON.stringify({ name }),
+      method: "PATCH",
+    });
+  }
+  async deleteChatWorkspace(id: string): Promise<void> {
+    await this.request(`/v1/workspaces/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+  }
+  async deleteChatWorkspaceFile(id: string, fileId: string): Promise<void> {
+    await this.request(
+      `/v1/workspaces/${encodeURIComponent(id)}/files/${encodeURIComponent(fileId)}`,
+      { method: "DELETE" }
+    );
+  }
+  async getChatWorkspacePins(id: string): Promise<{ fileIds: string[] }> {
+    return this.request(`/v1/workspaces/${encodeURIComponent(id)}/pins`);
+  }
+  async setChatWorkspacePin(
+    id: string,
+    fileId: string,
+    pinned: boolean
+  ): Promise<void> {
+    await this.request(`/v1/workspaces/${encodeURIComponent(id)}/pins`, {
+      body: JSON.stringify({ fileId, pinned }),
+      method: "PUT",
+    });
   }
 
   async getSessionMessages(
@@ -872,7 +941,12 @@ export class NakamaClient {
   async listSessions(
     profileId: string,
     channel: AgentChannel | readonly AgentChannel[] = "web",
-    options: { cursor?: string | null; limit?: number; query?: string } = {}
+    options: {
+      cursor?: string | null;
+      limit?: number;
+      query?: string;
+      workspaceId?: string;
+    } = {}
   ): Promise<ListSessionsResponse> {
     const query = new URLSearchParams(
       typeof channel === "string"
@@ -887,6 +961,12 @@ export class NakamaClient {
     }
     if (options.query) {
       query.set("q", options.query);
+    }
+    if (!profileId) {
+      query.delete("profileId");
+    }
+    if (options.workspaceId) {
+      query.set("workspaceId", options.workspaceId);
     }
     return this.request<ListSessionsResponse>(
       `/v1/sessions?${query.toString()}`
@@ -1432,7 +1512,8 @@ export class NakamaClient {
 
   async publishProfileArtifactShare(
     profileId: string,
-    path: string
+    path: string,
+    workspaceId?: string
   ): Promise<PublishArtifactShareResponse> {
     const body: PublishArtifactShareRequest = { path };
     if (this.clientOrigin) {
@@ -1440,7 +1521,7 @@ export class NakamaClient {
     }
 
     return this.request<PublishArtifactShareResponse>(
-      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/shares`,
+      `/v1/${workspaceId ? `workspaces/${encodeURIComponent(workspaceId)}/files` : `profiles/${encodeURIComponent(profileId)}/artifacts`}/shares`,
       {
         body: JSON.stringify(body),
         method: "POST",
@@ -1450,20 +1531,22 @@ export class NakamaClient {
 
   async getProfileArtifactShareStatus(
     profileId: string,
-    path: string
+    path: string,
+    workspaceId?: string
   ): Promise<ArtifactShareStatusResponse | null> {
     const query = new URLSearchParams({ path });
     return this.request<ArtifactShareStatusResponse | null>(
-      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/shares/status?${query.toString()}`
+      `/v1/${workspaceId ? `workspaces/${encodeURIComponent(workspaceId)}/files` : `profiles/${encodeURIComponent(profileId)}/artifacts`}/shares/status?${query.toString()}`
     );
   }
 
   async revokeProfileArtifactShare(
     profileId: string,
-    shareId: string
+    shareId: string,
+    workspaceId?: string
   ): Promise<RevokeArtifactShareResponse> {
     return this.request<RevokeArtifactShareResponse>(
-      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/shares/${encodeURIComponent(shareId)}`,
+      `/v1/${workspaceId ? `workspaces/${encodeURIComponent(workspaceId)}/files` : `profiles/${encodeURIComponent(profileId)}/artifacts`}/shares/${encodeURIComponent(shareId)}`,
       { method: "DELETE" }
     );
   }
@@ -1472,6 +1555,7 @@ export class NakamaClient {
     profileId: string,
     artifactPath: string,
     options: {
+      workspaceId?: string;
       inline?: boolean;
       render?: "markdown";
       signal?: AbortSignal;
@@ -1487,7 +1571,9 @@ export class NakamaClient {
     }
 
     const response = await this.fetchRaw(
-      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`,
+      options.workspaceId
+        ? `/v1/workspaces/${encodeURIComponent(options.workspaceId)}/files/content?${query.toString()}`
+        : `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`,
       { signal: options.signal }
     );
 
@@ -1569,12 +1655,13 @@ export class NakamaClient {
   async writeProfileArtifactContent(
     profileId: string,
     artifactPath: string,
-    content: string
+    content: string,
+    workspaceId?: string
   ): Promise<UpdateArtifactResponse> {
     const query = new URLSearchParams({ path: artifactPath });
 
     return this.request<UpdateArtifactResponse>(
-      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`,
+      `/v1/${workspaceId ? `workspaces/${encodeURIComponent(workspaceId)}/files` : `profiles/${encodeURIComponent(profileId)}/artifacts`}/content?${query.toString()}`,
       {
         body: JSON.stringify({ content } satisfies UpdateArtifactRequest),
         method: "PUT",
@@ -3103,39 +3190,6 @@ export class NakamaClient {
   ): Promise<RevokeBrowserSessionsResponse> {
     return this.request<RevokeBrowserSessionsResponse>(
       `/v1/auth/users/${encodeURIComponent(userId)}/sessions`,
-      { method: "DELETE" }
-    );
-  }
-
-  async createApiKey(
-    orgId: string,
-    request: CreateApiKeyRequest
-  ): Promise<CreateApiKeyResponse> {
-    return this.request<CreateApiKeyResponse>(
-      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys`,
-      { body: JSON.stringify(request), method: "POST" }
-    );
-  }
-
-  async listApiKeys(orgId: string): Promise<ListApiKeysResponse> {
-    return this.request<ListApiKeysResponse>(
-      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys`
-    );
-  }
-
-  async rotateApiKey(
-    orgId: string,
-    keyId: string
-  ): Promise<RotateApiKeyResponse> {
-    return this.request<RotateApiKeyResponse>(
-      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys/${encodeURIComponent(keyId)}/rotate`,
-      { method: "POST" }
-    );
-  }
-
-  async deleteApiKey(orgId: string, keyId: string): Promise<void> {
-    await this.request(
-      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys/${encodeURIComponent(keyId)}`,
       { method: "DELETE" }
     );
   }

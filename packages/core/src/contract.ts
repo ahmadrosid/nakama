@@ -500,7 +500,7 @@ export interface AuthUserResponse {
   mfaEnrolled?: boolean;
   mfaRequired?: boolean;
   /** Which credential answered, which is what explains the flag above. */
-  mode?: "api-key" | "browser-session" | "local-token";
+  mode?: "browser-session" | "local-token";
   name?: string | null;
   orgId?: string | null;
   passkeyEnabled?: boolean;
@@ -765,36 +765,6 @@ export interface RevokeBrowserSessionsResponse {
   revoked: number;
 }
 
-export interface ApiKeySummary {
-  createdAt: string;
-  environment: "live" | "test";
-  expiresAt: string | null;
-  id: string;
-  keyPrefix: string;
-  lastUsedAt: string | null;
-  name: string;
-  revokedAt: string | null;
-}
-
-export interface CreateApiKeyRequest {
-  expiresAt?: string | null;
-  name: string;
-}
-
-export interface CreateApiKeyResponse {
-  key: ApiKeySummary;
-  secret: string;
-}
-
-export interface ListApiKeysResponse {
-  keys: ApiKeySummary[];
-}
-
-export interface RotateApiKeyResponse {
-  key: ApiKeySummary;
-  secret: string;
-}
-
 export interface OrgMemoryResponse {
   content: string;
 }
@@ -1050,8 +1020,6 @@ export interface ListChannelOrgMappingsResponse {
 }
 
 export interface CreateSessionRequest {
-  /** Stable end-user identifier supplied by a trusted backend using an API key. */
-  appUserId?: string;
   channel: AgentChannel;
   codingWorkspaceRoot?: string;
   /**
@@ -1063,15 +1031,41 @@ export interface CreateSessionRequest {
   cognito?: boolean;
   model?: string;
   profileId?: string;
+  /** Existing project to share working files with. */
+  workspaceId?: string;
 }
 
 export interface CreateSessionResponse {
   sessionId: string;
 }
 
+export interface ChatWorkspace {
+  access: "org" | "owner" | "admin";
+  createdAt: string;
+  id: string;
+  kind: "chat" | "project";
+  name: string;
+  orgId: string;
+  ownerUserId: string | null;
+  state: "active" | "deleting";
+  updatedAt: string;
+}
+
+export interface ChatWorkspaceFile {
+  filename: string;
+  id: string;
+  mediaType: string;
+  path: string;
+  purpose: "input" | "output" | "reference";
+  sessionId: string | null;
+  sizeBytes: number;
+  workspaceId: string;
+}
+
 export interface UpdateSessionRequest {
   model?: string | null;
   pinned?: boolean;
+  profileId?: string;
   title?: string;
 }
 
@@ -1158,6 +1152,7 @@ export interface ChatContextUsage {
 }
 
 export interface SessionMessagesResponse {
+  activeProfileId?: string | null;
   channel: AgentChannel;
   contextUsage?: ChatContextUsage | null;
   messageMeta: SessionMessageMeta[];
@@ -1165,6 +1160,7 @@ export interface SessionMessagesResponse {
   model: string | null;
   questionnaire: AgentQuestionnaire | null;
   todos: AgentTodo[];
+  workspaceId?: string | null;
 }
 
 export interface SessionStatusResponse {
@@ -1184,6 +1180,7 @@ export interface SessionSummary {
   profileId: string;
   title: string | null;
   updatedAt: string;
+  workspaceId?: string | null;
 }
 
 /**
@@ -1240,6 +1237,12 @@ export interface DocumentAttachment {
 }
 
 export interface SendMessageInput {
+  attachmentIds?: string[];
+  /** Resolved by the host after validating workspace ownership. */
+  attachmentRefs?: Extract<
+    MessageContentPart,
+    { type: "image_ref" | "document_ref" }
+  >[];
   /** Browser origin for OAuth callbacks (e.g. window.location.origin). */
   clientOrigin?: string;
   documents?: DocumentAttachment[];
@@ -1248,6 +1251,7 @@ export interface SendMessageInput {
 }
 
 export interface SendMessageRequest {
+  attachmentIds?: string[];
   clientOrigin?: string;
   documents?: DocumentAttachment[];
   images?: ImageAttachment[];
@@ -2477,8 +2481,6 @@ export interface ListWorkspaceFilesResponse {
 }
 
 export interface ListArtifactsOptions {
-  /** Scopes the listing to one end user's artifacts, when the caller names one. */
-  appUserId?: string | null;
   folder?: string;
   limit?: number;
   offset?: number;
@@ -2858,6 +2860,7 @@ export interface ToolContext {
   automationRunId?: string;
   /** Session channel when known (used for interactive-only tool gates). */
   channel?: AgentChannel;
+  chatRoot?: string;
   /** Browser origin for OAuth callbacks during this tool run. */
   clientOrigin?: string;
   /** Local CLI launch directory for shell commands, including coding agents. */
@@ -2875,6 +2878,8 @@ export interface ToolContext {
    * refuse paths matching skills/<name>/SKILL.md under the profile workspace.
    */
   forbidProfileSkillMarkdownWrites?: boolean;
+  /** Agent identity is separate from the conversation's working files. */
+  identityRoot?: string;
   /** Platform admin flag for Super Bot bind checks (same as HTTP ProfileAccess). */
   isPlatformAdmin?: boolean;
   /** Loads a provider-neutral document/image reference scoped to this execution. */
@@ -2890,6 +2895,7 @@ export interface ToolContext {
   orgId?: string;
   /** Org role of the invoking user. Org-memory tools gate on this; undefined means deny-by-default. */
   orgRole?: OrgRole;
+  outputRoot?: string;
   profileId?: string;
   /**
    * Records bytes an optimiser removed from a tool result before insertion.
@@ -2914,6 +2920,9 @@ export interface ToolContext {
     optimized: boolean;
     outputTokens: number;
   }) => void;
+  registerGeneratedFile?: (
+    path: string
+  ) => Promise<{ fileId: string; workspaceId: string; path: string }>;
   searchKnowledge?: (input: {
     query: string;
     filename?: string;
@@ -2940,7 +2949,8 @@ export interface ToolContext {
   userId?: string;
   workflowId?: string;
   workflowRunId?: string;
-  /** Profile workspace root (~/.nakama/orgs/{orgId}/profiles/{profileId}/). */
+  workspaceId?: string;
+  /** Validated working directory; project chats share their project root. */
   workspaceRoot?: string;
 }
 

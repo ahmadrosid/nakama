@@ -326,19 +326,6 @@ test("blocks API keys from mutating browser MFA enrollment", async () => {
   }
 
   const apiKey = `nk_live_${"d".repeat(64)}`;
-  await databaseAdapter.createApiKey({
-    createdAt: new Date().toISOString(),
-    createdByUserId: user.id,
-    environment: "live",
-    expiresAt: null,
-    id: "pending-mfa-api-key",
-    keyPrefix: apiKey.slice(0, 20),
-    lastUsedAt: null,
-    name: "Pending MFA test key",
-    orgId,
-    revokedAt: null,
-    secretHash: authService.hashToken(apiKey),
-  });
 
   const loginResponse = await app.fetch(
     new Request("http://localhost:4310/v1/auth/login", {
@@ -388,7 +375,7 @@ test("blocks API keys from mutating browser MFA enrollment", async () => {
       headers: { Authorization: `Bearer ${apiKey}` },
     })
   );
-  expect(apiKeyProfiles.status).toBe(200);
+  expect(apiKeyProfiles.status).toBe(401);
 
   await seedLocalClientUser(databaseAdapter);
   const localToken = await loadLocalAuthToken();
@@ -429,7 +416,7 @@ test("blocks API keys from mutating browser MFA enrollment", async () => {
       method: "POST",
     })
   );
-  expect(apiKeyStart.status).toBe(403);
+  expect(apiKeyStart.status).toBe(401);
 
   const startResponse = await app.fetch(
     new Request("http://localhost:4310/v1/auth/mfa/totp/start", {
@@ -451,7 +438,7 @@ test("blocks API keys from mutating browser MFA enrollment", async () => {
       method: "POST",
     })
   );
-  expect(apiKeyVerify.status).toBe(403);
+  expect(apiKeyVerify.status).toBe(401);
 
   const verifyResponse = await app.fetch(
     new Request("http://localhost:4310/v1/auth/mfa/totp/verify", {
@@ -474,7 +461,7 @@ test("blocks API keys from mutating browser MFA enrollment", async () => {
       method: "POST",
     })
   );
-  expect(apiKeyDisable.status).toBe(403);
+  expect(apiKeyDisable.status).toBe(401);
 
   const unblockedProfiles = await app.fetch(
     new Request("http://localhost:4310/v1/profiles", {

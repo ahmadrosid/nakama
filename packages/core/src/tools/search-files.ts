@@ -65,7 +65,9 @@ export async function runSearchFiles(
   const parsed = parseToolInput(searchFilesInputSchema, input);
 
   const workspaceRoot = await resolveWorkspaceRoot(
-    options.workspaceRoot ?? getProfileSoulDir(orgId, profileId)
+    options.workspaceRoot ??
+      context.workspaceRoot ??
+      getProfileSoulDir(orgId, profileId)
   );
   const sessionRoot = context.workspaceRoot?.trim() || null;
   const searchRoot = await resolveSearchRoot(

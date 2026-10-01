@@ -116,6 +116,7 @@ function ArtifactAttachmentPreviewHeaderActions({
 }
 
 async function copyArtifactContent({
+  workspaceId,
   isImage,
   isVideo,
   isWordDocument,
@@ -125,6 +126,7 @@ async function copyArtifactContent({
   setContent,
   setCopied,
 }: {
+  workspaceId?: string;
   isImage: boolean;
   isVideo: boolean;
   isWordDocument: boolean;
@@ -147,6 +149,7 @@ async function copyArtifactContent({
         {
           inline: true,
           render: isWordDocument ? "markdown" : undefined,
+          workspaceId,
         }
       );
       text = new TextDecoder().decode(result.data);
@@ -173,6 +176,7 @@ export function useArtifactAttachmentPreviewPanel({
   const share = useArtifactShareControls({
     artifactPath: artifact.path,
     profileId,
+    workspaceId: artifact.workspaceId,
   });
   const open = activeId === id;
   const [fullscreen, setFullscreen] = useState(false);
@@ -184,7 +188,7 @@ export function useArtifactAttachmentPreviewPanel({
   const [saveError, setSaveError] = useState<string | null>(null);
   const { activeOrg } = useAuth();
   const writeArtifact = useWriteArtifactMutation();
-  const downloadUrl = `${client.baseUrl}${buildArtifactContentUrl(profileId, artifact.path)}`;
+  const downloadUrl = `${client.baseUrl}${buildArtifactContentUrl(profileId, artifact.path, false, artifact.workspaceId)}`;
   const mimeType = resolveArtifactMimeType(
     artifact.mimeType,
     artifact.filename
@@ -263,6 +267,7 @@ export function useArtifactAttachmentPreviewPanel({
         artifactPath: artifact.path,
         content: nextContent,
         profileId,
+        workspaceId: artifact.workspaceId,
       });
       setContent(nextContent);
       setEditMode(null);
@@ -429,6 +434,7 @@ export function useArtifactAttachmentPreviewPanel({
               profileId,
               setContent,
               setCopied,
+              workspaceId: artifact.workspaceId,
             })
           }
           onEdit={() => {

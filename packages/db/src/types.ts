@@ -116,19 +116,34 @@ export interface StoredToolRecord {
   updatedAt: string;
 }
 
-export interface StoredSessionRecord {
-  agentQuestionnaire: AgentQuestionnaire | null;
-  agentTodos: AgentTodo[];
-  appUserId?: string | null;
-  channel: string;
+export interface StoredWorkspaceRecord {
+  access: "org" | "owner" | "admin";
   createdAt: string;
   id: string;
+  kind: "chat" | "project";
+  name: string;
+  orgId: string;
+  ownerUserId: string | null;
+  state: "active" | "deleting";
+  updatedAt: string;
+}
+
+export interface StoredSessionRecord {
+  activeProfileId?: string | null;
+  agentQuestionnaire: AgentQuestionnaire | null;
+  agentTodos: AgentTodo[];
+  channel: string;
+  createdAt: string;
+  deleting?: boolean;
+  id: string;
+  legacyAppUserId?: string | null;
   model: string | null;
   orgId?: string | null;
   pinned?: boolean;
   profileId: string;
   title: string | null;
   userId?: string | null;
+  workspaceId?: string | null;
 }
 
 export interface StoredSessionMessageRecord {
@@ -156,16 +171,19 @@ export interface StoredAttachmentRecord {
   mediaType: string;
   orgId: string | null;
   profileId: string;
+  purpose?: "input" | "output" | "reference";
   sessionId: string | null;
   sizeBytes: number;
   storagePath: string;
+  workspaceId?: string | null;
 }
 
 export interface StoredSessionSummaryRecord {
-  appUserId?: string | null;
+  activeProfileId?: string | null;
   channel: string;
   createdAt: string;
   id: string;
+  legacyAppUserId?: string | null;
   messageCount: number;
   orgId?: string | null;
   pinned: boolean;
@@ -175,6 +193,7 @@ export interface StoredSessionSummaryRecord {
   profileId: string;
   title: string | null;
   updatedAt: string;
+  workspaceId?: string | null;
 }
 
 export interface StoredLlmUsageStatsRecord {
@@ -528,20 +547,6 @@ export interface StoredOrgMemberRecord {
   userId: string;
 }
 
-export interface StoredApiKeyRecord {
-  createdAt: string;
-  createdByUserId: string;
-  environment: string;
-  expiresAt: string | null;
-  id: string;
-  keyPrefix: string;
-  lastUsedAt: string | null;
-  name: string;
-  orgId: string;
-  revokedAt: string | null;
-  secretHash: string;
-}
-
 export interface StoredUserOrganizationRecord {
   joinedAt: string;
   organization: StoredOrganizationRecord;
@@ -671,6 +676,7 @@ export interface StoredSkillSuggestion {
 export interface StoredArtifactShareRecord {
   createdAt: string;
   createdByUserId: string;
+  fileId?: string | null;
   filename: string;
   id: string;
   mimeType: string;
@@ -681,6 +687,7 @@ export interface StoredArtifactShareRecord {
   sourcePath: string;
   storagePath: string;
   tokenHash: string;
+  workspaceId?: string | null;
 }
 
 export interface StoredChannelOrgMappingRecord {
@@ -722,6 +729,12 @@ export interface DatabaseAdapter {
     lastStep: number,
     updatedAt: string
   ): Promise<boolean>;
+  adoptLegacyFileBindings(
+    orgId: string,
+    profileId: string,
+    workspaceId: string,
+    aliases: { path: string; fileId: string }[]
+  ): Promise<void>;
   appendMessagesForSession(
     sessionId: string,
     messages: StoredSessionMessageRecord[]
@@ -788,7 +801,6 @@ export interface DatabaseAdapter {
   ): Promise<AutomationUnreadCountRecord[]>;
   countUnusedMfaBackupCodes(userId: string): Promise<number>;
   countUsers(): Promise<number>;
-  createApiKey(record: StoredApiKeyRecord): Promise<void>;
 
   createArtifactShare(record: StoredArtifactShareRecord): Promise<void>;
   /** Append-only insert. Adapters must not expose update/delete for this table. */
@@ -814,7 +826,6 @@ export interface DatabaseAdapter {
 
   createSkillSuggestion(record: StoredSkillSuggestion): Promise<void>;
   createUser(record: StoredUserRecord): Promise<void>;
-  deleteApiKey(id: string): Promise<boolean>;
   deleteAttachment(id: string): Promise<boolean>;
   deleteAutomation(id: string): Promise<boolean>;
   deleteAutomationRun(automationId: string, runId: string): Promise<boolean>;
@@ -839,6 +850,7 @@ export interface DatabaseAdapter {
   deleteTool(id: string): Promise<boolean>;
   deleteWorkflow(id: string): Promise<boolean>;
   deleteWorkflowRun(workflowId: string, runId: string): Promise<boolean>;
+  deleteWorkspace(id: string): Promise<boolean>;
   disableUser(id: string, disabledAt: string): Promise<void>;
   enableUser(id: string): Promise<void>;
   eraseUser(input: {
@@ -858,16 +870,17 @@ export interface DatabaseAdapter {
   getActiveArtifactShareByPath(
     orgId: string,
     profileId: string,
-    sourcePath: string
+    sourcePath: string,
+    workspaceId?: string
   ): Promise<StoredArtifactShareRecord | null>;
   getActiveAutomationRun(
     automationId: string
   ): Promise<StoredAutomationRunRecord | null>;
-  getApiKeyByPrefix(keyPrefix: string): Promise<StoredApiKeyRecord | null>;
   getArtifactShareById(
     orgId: string,
     profileId: string,
-    shareId: string
+    shareId: string,
+    workspaceId?: string
   ): Promise<StoredArtifactShareRecord | null>;
   getArtifactShareByTokenHash(
     tokenHash: string
@@ -1002,6 +1015,7 @@ export interface DatabaseAdapter {
     workflowId: string,
     runId: string
   ): Promise<StoredWorkflowRunRecord | null>;
+  getWorkspace(id: string): Promise<StoredWorkspaceRecord | null>;
 
   getWorkspaceSettings(): Promise<StoredWorkspaceSettingsRecord | null>;
   incrementLlmTurnUsage(orgId: string, delta: LlmTurnUsageDelta): Promise<void>;
@@ -1035,15 +1049,20 @@ export interface DatabaseAdapter {
   insertAutomationRun(record: StoredAutomationRunRecord): Promise<void>;
   insertWorkflowRun(record: StoredWorkflowRunRecord): Promise<void>;
   insertWorkflowRunStep(record: StoredWorkflowRunStepRecord): Promise<void>;
-  listApiKeysForOrg(orgId: string): Promise<StoredApiKeyRecord[]>;
 
   listArtifactSharesForProfile(
     orgId: string,
     profileId: string
   ): Promise<StoredArtifactShareRecord[]>;
+  listArtifactSharesForWorkspace(
+    workspaceId: string
+  ): Promise<StoredArtifactShareRecord[]>;
 
   listAttachmentsForSession(
     sessionId: string
+  ): Promise<StoredAttachmentRecord[]>;
+  listAttachmentsForWorkspace(
+    workspaceId: string
   ): Promise<StoredAttachmentRecord[]>;
 
   listAuditEvents(options?: {
@@ -1080,6 +1099,10 @@ export interface DatabaseAdapter {
     userId: string,
     profileId: string
   ): Promise<string[]>;
+  listLegacyAttachmentsForProfile(
+    orgId: string,
+    profileId: string
+  ): Promise<StoredAttachmentRecord[]>;
   listLlmTurnUsage(orgId: string): Promise<StoredLlmTurnUsageRecord[]>;
   listLlmUsageStatsByModel(): Promise<StoredLlmUsageModelStatsRecord[]>;
   listMcpServerProfileCounts(): Promise<Record<string, number>>;
@@ -1120,19 +1143,22 @@ export interface DatabaseAdapter {
   listProfiles(): Promise<StoredProfileRecord[]>;
   listProfilesForMcpServer(serverId: string): Promise<StoredProfileRecord[]>;
   listProfilesForOrg(orgId: string): Promise<StoredProfileRecord[]>;
+  listSessionFileAliases(
+    sessionId: string
+  ): Promise<{ sourceFileId: string; fileId: string }[]>;
   /**
    * Newest first, pinned ahead. `after` is the last row of the previous page;
    * `sessionId` narrows the list to that one session.
    */
   listSessionSummaries(
-    profileId: string,
+    profileId: string | null,
     channels: readonly string[],
     options?: {
       after?: Pick<
         StoredSessionSummaryRecord,
         "createdAt" | "id" | "pinned" | "updatedAt"
       >;
-      appUserId?: string;
+      workspaceIds?: string[];
       limit?: number;
       /** Keeps the sessions whose title or user/assistant text contains it. */
       query?: string;
@@ -1183,7 +1209,14 @@ export interface DatabaseAdapter {
     limit?: number
   ): Promise<StoredWorkflowRunRecord[]>;
   listWorkflowsForOrg(orgId: string): Promise<StoredWorkflowRecord[]>;
+  listWorkspaceFilePins(
+    orgId: string,
+    userId: string,
+    workspaceId: string
+  ): Promise<string[]>;
+  listWorkspaces(orgId: string): Promise<StoredWorkspaceRecord[]>;
   markOrgInviteAccepted(id: string, acceptedAt: string): Promise<void>;
+  markSessionDeleting(id: string): Promise<void>;
   markSkillSuggestionApplied(
     orgId: string,
     id: string,
@@ -1214,7 +1247,6 @@ export interface DatabaseAdapter {
     profileId: string,
     assignments: StoredProfileComposioToolkitRecord[]
   ): Promise<void>;
-  revokeApiKey(id: string, revokedAt: string): Promise<boolean>;
   revokeArtifactShare(id: string, revokedAt: string): Promise<boolean>;
   revokeBrowserSessionBySessionTokenHash(
     sessionTokenHash: string,
@@ -1246,11 +1278,23 @@ export interface DatabaseAdapter {
     pendingTotpSecretEnc: string,
     updatedAt: string
   ): Promise<void>;
+  setSessionFileAlias(
+    sessionId: string,
+    sourceFileId: string,
+    fileId: string
+  ): Promise<void>;
   setUserContext(
     orgId: string,
     userId: string,
     content: string,
     updatedAt: string
+  ): Promise<void>;
+  setWorkspaceFilePin(
+    orgId: string,
+    userId: string,
+    workspaceId: string,
+    fileId: string,
+    pinned: boolean
   ): Promise<void>;
 
   tryMarkOrganizationArchived(
@@ -1274,13 +1318,18 @@ export interface DatabaseAdapter {
     skillId: string
   ): Promise<boolean>;
   unassignToolFromProfile(profileId: string, toolId: string): Promise<boolean>;
-  updateApiKeyLastUsedAt(id: string, lastUsedAt: string): Promise<void>;
   updateArtifactShareSnapshot(
     id: string,
     snapshot: Pick<
       StoredArtifactShareRecord,
       "filename" | "mimeType" | "sizeBytes" | "storagePath"
     >
+  ): Promise<void>;
+  updateAttachmentStorage(
+    id: string,
+    workspaceId: string | null,
+    storagePath: string,
+    sizeBytes?: number
   ): Promise<void>;
   updateAutomationRun(record: StoredAutomationRunRecord): Promise<void>;
   updateBrowserSessionActiveOrgId(
@@ -1373,5 +1422,6 @@ export interface DatabaseAdapter {
   upsertSkill(record: StoredSkillRecord): Promise<void>;
   upsertTool(record: StoredToolRecord): Promise<void>;
   upsertWorkflow(record: StoredWorkflowRecord): Promise<void>;
+  upsertWorkspace(record: StoredWorkspaceRecord): Promise<void>;
   upsertWorkspaceSettings(record: StoredWorkspaceSettingsRecord): Promise<void>;
 }

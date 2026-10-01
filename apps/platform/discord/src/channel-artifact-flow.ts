@@ -122,8 +122,33 @@ export async function maybeSendRequestedDiscordArtifactAttachment(input: {
 
   if (registry.length === 0) {
     try {
-      const response = await input.client.listProfileArtifacts(input.profileId);
-      listed = response.artifacts;
+      const sessionId = input.sessionStore.get(
+        input.conversationKey
+      )?.sessionId;
+      const workspaceId = sessionId
+        ? (await input.client.getSessionMessages(sessionId)).workspaceId
+        : null;
+      if (workspaceId) {
+        const response = await input.client.listChatWorkspaceFiles(
+          workspaceId,
+          sessionId
+        );
+        listed = response.files
+          .filter((file) => file.purpose === "output")
+          .map((file) => ({
+            fileId: file.id,
+            filename: file.path,
+            mimeType: file.mediaType,
+            sizeBytes: file.sizeBytes,
+            updatedAt: "",
+            workspaceId,
+          }));
+      } else {
+        const response = await input.client.listProfileArtifacts(
+          input.profileId
+        );
+        listed = response.artifacts;
+      }
     } catch (error) {
       console.warn(
         "Discord artifact list failed during /attach; cannot fall back to profile artifacts.",
@@ -182,8 +207,12 @@ export async function deliverDiscordTurnArtifactShares(input: {
       }
     },
     conversationKey: input.conversationKey,
-    publish: (path) =>
-      input.client.publishProfileArtifactShare(input.profileId, path),
+    publish: (path, artifact) =>
+      input.client.publishProfileArtifactShare(
+        input.profileId,
+        path,
+        artifact?.workspaceId
+      ),
     sendFooter: (footer) => input.messenger.send(footer),
     session: input.session,
     sessionStore: input.sessionStore,

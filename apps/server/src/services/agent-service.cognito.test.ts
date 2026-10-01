@@ -307,7 +307,7 @@ describe("cognito sessions never write back", () => {
       { cognito: true }
     );
     service.scheduleSessionTitleGeneration(cognitoId);
-    service.schedulePostTurnSkillReview(cognitoId);
+    await service.schedulePostTurnSkillReview(cognitoId);
     expect(scheduled).toEqual([]);
 
     const normalId = await service.createSession(
@@ -317,7 +317,7 @@ describe("cognito sessions never write back", () => {
       null
     );
     service.scheduleSessionTitleGeneration(normalId);
-    service.schedulePostTurnSkillReview(normalId);
+    await service.schedulePostTurnSkillReview(normalId);
     expect(scheduled).toEqual([`title:${normalId}`, `review:${normalId}`]);
   });
 });

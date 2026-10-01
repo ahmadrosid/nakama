@@ -190,6 +190,144 @@ describe("Nakama data portability", () => {
     expect(await Bun.file(join(worker, "cache/server")).exists()).toBe(false);
   });
 
+  test("managed chat files and archives restore under a different installation root", async () => {
+    const databasePath = join(rootDir, "sqlite", "nakama.sqlite");
+    const database = await createDatabase(`file:${databasePath}`);
+    const db = database.adapter;
+    const now = new Date().toISOString();
+    const targetRoot = await mkdtemp(
+      join(tmpdir(), "nakama-workspace-restore-")
+    );
+    try {
+      await db.upsertOrganization({
+        createdAt: now,
+        id: "org",
+        name: "Org",
+        slug: "org",
+        updatedAt: now,
+      });
+      await db.upsertProfile({
+        createdAt: now,
+        id: "agent",
+        isDefault: false,
+        isSuper: false,
+        model: null,
+        name: "Agent",
+        orgId: "org",
+        systemPrompt: "",
+        updatedAt: now,
+      });
+      await db.createUser({
+        createdAt: now,
+        email: "owner@example.com",
+        id: "owner",
+        passwordHash: "test",
+        updatedAt: now,
+      });
+      await db.upsertWorkspace({
+        access: "owner",
+        createdAt: now,
+        id: "project",
+        kind: "project",
+        name: "Project",
+        orgId: "org",
+        ownerUserId: "owner",
+        state: "active",
+        updatedAt: now,
+      });
+      await db.upsertSession({
+        activeProfileId: "agent",
+        agentQuestionnaire: null,
+        agentTodos: [],
+        channel: "web",
+        createdAt: now,
+        id: "chat",
+        model: null,
+        profileId: "agent",
+        title: null,
+        workspaceId: "project",
+      });
+      const path = "chats/chat/inputs/document.txt";
+      await db.insertAttachment({
+        channel: "web",
+        createdAt: now,
+        ephemeral: false,
+        filename: "document.txt",
+        id: "file",
+        kind: "document",
+        mediaType: "text/plain",
+        orgId: "org",
+        profileId: "agent",
+        purpose: "input",
+        sessionId: "chat",
+        sizeBytes: 8,
+        storagePath: path,
+        workspaceId: "project",
+      });
+      const workspaceRoot = join(
+        rootDir,
+        "orgs",
+        "org",
+        "workspaces",
+        "project"
+      );
+      await mkdir(join(workspaceRoot, "chats/chat/inputs"), {
+        recursive: true,
+      });
+      await mkdir(join(workspaceRoot, "chats/chat/history"), {
+        recursive: true,
+      });
+      await writeFile(join(workspaceRoot, path), "portable");
+      await writeFile(
+        join(workspaceRoot, "chats/chat/history/archive.jsonl"),
+        "original archive 日本語\n"
+      );
+      await mkdir(join(rootDir, "ephemeral"), { recursive: true });
+      await writeFile(join(rootDir, "ephemeral", "private.txt"), "temporary");
+      const exported = await createNakamaDataExport({ databasePath, rootDir });
+      expect(
+        Object.keys(fflate.unzipSync(exported.data)).some((path) =>
+          path.startsWith("ephemeral/")
+        )
+      ).toBe(false);
+      await restoreNakamaDataImport(exported.data, {
+        confirm: true,
+        databasePath: join(targetRoot, "sqlite", "nakama.sqlite"),
+        rootDir: targetRoot,
+      });
+      const restored = await createDatabase(
+        `file:${join(targetRoot, "sqlite", "nakama.sqlite")}`
+      );
+      try {
+        const file = (await restored.adapter.getAttachment("file"))!;
+        expect((await restored.adapter.getSession("chat"))?.workspaceId).toBe(
+          "project"
+        );
+        expect(file.storagePath).toBe(path);
+        expect(
+          await readFile(
+            join(targetRoot, "orgs/org/workspaces/project", file.storagePath),
+            "utf8"
+          )
+        ).toBe("portable");
+        expect(
+          await readFile(
+            join(
+              targetRoot,
+              "orgs/org/workspaces/project/chats/chat/history/archive.jsonl"
+            ),
+            "utf8"
+          )
+        ).toBe("original archive 日本語\n");
+      } finally {
+        await restored.close();
+      }
+    } finally {
+      await database.close();
+      await rm(targetRoot, { force: true, recursive: true });
+    }
+  });
+
   test("exports config root content with a manifest", async () => {
     await writeFile(join(rootDir, "config.ini"), "provider=openai");
     await writeFile(join(rootDir, "nakama.db"), "sqlite");

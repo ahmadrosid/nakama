@@ -511,6 +511,15 @@ async function sendMessage(
     input.documents
   );
 
+  if (input.attachmentRefs?.length) {
+    userContent = [
+      ...(typeof userContent === "string"
+        ? [{ text: userContent, type: "text" as const }]
+        : userContent),
+      ...input.attachmentRefs,
+    ];
+  }
+
   if (options.preprocessUserContent) {
     userContent = await options.preprocessUserContent(userContent);
   }

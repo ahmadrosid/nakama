@@ -239,12 +239,14 @@ function ArtifactHtmlPreview({
   filename,
   htmlSandbox,
   profileId,
+  workspaceId,
 }: {
   content: string;
   artifactPath: string;
   filename: string;
   htmlSandbox: string;
   profileId?: string;
+  workspaceId?: string;
 }) {
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id;
@@ -267,6 +269,7 @@ function ArtifactHtmlPreview({
       (path) =>
         scopedClient.readProfileArtifactContent(profileId, path, {
           inline: true,
+          workspaceId,
         }),
       controller.signal
     )
@@ -281,7 +284,7 @@ function ArtifactHtmlPreview({
         }
       });
     return () => controller.abort();
-  }, [content, artifactPath, profileId, orgId]);
+  }, [content, artifactPath, profileId, orgId, workspaceId]);
 
   const current =
     preview?.content === content && preview.orgId === orgId ? preview : null;
@@ -378,6 +381,7 @@ function ArtifactAttachmentHtmlBody({
           htmlSandbox={htmlSandbox}
           key={`${profileId}:${artifact.path}`}
           profileId={profileId}
+          workspaceId={artifact.workspaceId}
         />
       ) : null}
       {phase === "unavailable" ? <UnavailablePreview padded /> : null}

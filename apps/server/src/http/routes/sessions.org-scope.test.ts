@@ -278,113 +278,35 @@ describe("session routes are scoped to the caller's active org", () => {
       PASSWORD,
       VICTIM_ORG
     );
-    const secret = `nk_live_${"1".repeat(64)}`;
-    await databaseAdapter.createApiKey({
-      createdAt: new Date().toISOString(),
-      createdByUserId: "user_victim",
-      environment: "live",
-      expiresAt: null,
-      id: "key_app_user_scope_test",
-      keyPrefix: secret.slice(0, 20),
-      lastUsedAt: null,
-      name: "App user scope test",
-      orgId: VICTIM_ORG,
-      revokedAt: null,
-      secretHash: authService.hashToken(secret),
-    });
-    const apiKeyHeaders = {
-      Authorization: `Bearer ${secret}`,
-      "X-Org-Id": VICTIM_ORG,
-    };
-    const apiRequest = (
-      path: string,
-      options: { appUserId?: string; body?: unknown; method?: string } = {}
-    ) =>
-      app.fetch(
+    for (const selector of [{ "X-Nakama-App-User-Id": "alice" }, {}]) {
+      const path = selector["X-Nakama-App-User-Id"]
+        ? "/v1/sessions"
+        : "/v1/sessions?appUserId=alice";
+      const response = await app.fetch(
         new Request(`http://localhost:4310${path}`, {
-          body:
-            options.body === undefined
-              ? undefined
-              : JSON.stringify(options.body),
-          headers: {
-            ...apiKeyHeaders,
-            ...(options.appUserId
-              ? { "X-Nakama-App-User-Id": options.appUserId }
-              : {}),
-          },
-          method: options.method,
+          headers: browser.headers(selector, VICTIM_ORG),
         })
       );
-    const browserRequest = (path: string, options: { body?: unknown } = {}) =>
-      app.fetch(
-        new Request(`http://localhost:4310${path}`, {
-          body:
-            options.body === undefined
-              ? undefined
-              : JSON.stringify(options.body),
-          headers: browser.headers({
+      expect(response.status).toBe(400);
+    }
+    const create = await app.fetch(
+      new Request("http://localhost:4310/v1/sessions", {
+        method: "POST",
+        headers: browser.headers(
+          {
+            "Content-Type": "application/json",
             "X-CSRF-Token": browser.csrfToken,
-            "X-Nakama-App-User-Id": "alice",
-          }),
-          method: options.body === undefined ? "GET" : "POST",
-        })
-      );
-
-    const created = await apiRequest("/v1/sessions", {
-      appUserId: "alice",
-      body: { appUserId: "alice", channel: "web", profileId: "profile_victim" },
-      method: "POST",
-    });
-    expect(created.status).toBe(201);
-    const { sessionId } = (await created.json()) as { sessionId: string };
-    await databaseAdapter.replaceMessagesForSession(sessionId, [
-      {
-        createdAt: new Date().toISOString(),
-        id: "msg_api_user_scope",
-        payload: { content: "app user scope", role: "user" },
-        seq: 0,
-        sessionId,
-      },
-    ]);
-    const listPath = "/v1/sessions?profileId=profile_victim&channel=web";
-
-    const listed = await apiRequest(listPath, { appUserId: "alice" });
-    expect(listed.status).toBe(200);
-    expect(await listed.json()).toMatchObject({
-      sessions: [{ id: sessionId }],
-    });
-    const messages = await apiRequest(`/v1/sessions/${sessionId}/messages`, {
-      appUserId: "alice",
-    });
-    expect(messages.status).toBe(200);
-
-    const wrongAppUserList = await apiRequest(listPath, { appUserId: "bob" });
-    expect(wrongAppUserList.status).toBe(200);
-    expect(await wrongAppUserList.json()).toEqual({ sessions: [] });
-    for (const [path, body] of [
-      [`/v1/sessions/${sessionId}/messages`, undefined],
-      [`/v1/sessions/${sessionId}/branch`, { messageIndex: 0 }],
-      [`/v1/sessions/${sessionId}/messages`, { message: "run" }],
-    ] as const) {
-      const response = await apiRequest(path, {
-        appUserId: "bob",
-        body,
-        method: body === undefined ? "GET" : "POST",
-      });
-      expect(response.status).toBe(404);
-    }
-
-    expect((await browserRequest(listPath)).status).toBe(400);
-    for (const [path, body] of [
-      [`/v1/sessions/${sessionId}/messages`, undefined],
-      [`/v1/sessions/${sessionId}/branch`, { messageIndex: 0 }],
-      [`/v1/sessions/${sessionId}/messages`, { message: "run" }],
-    ] as const) {
-      expect((await browserRequest(path, { body })).status).toBe(400);
-    }
-    expect((await databaseAdapter.getSession(sessionId))?.appUserId).toBe(
-      "alice"
+          },
+          VICTIM_ORG
+        ),
+        body: JSON.stringify({
+          channel: "web",
+          profileId: "profile_victim",
+          appUserId: "alice",
+        }),
+      })
     );
+    expect(create.status).toBe(400);
   });
 
   test("the owning org still reads its own session", async () => {
@@ -648,4 +570,148 @@ describe("Super Bot sessions stay admin-only after they are created", () => {
       (await get(admin, `/v1/sessions/${superSessionId}/messages`)).status
     ).toBe(200);
   });
+});
+
+test("project routes keep owner files private, reject retired keys, and clean up pinned references", async () => {
+  const { app, databaseAdapter, agent } = await createScenario();
+  Object.assign(agent, {
+    createHarnessForProfile: () => ({
+      provider: {
+        name: "openai",
+        async generateChat() {
+          return {
+            assistantMessage: { role: "assistant", content: "Done" },
+            content: "Done",
+            toolCalls: [],
+          };
+        },
+      },
+    }),
+  });
+  await seedOrgAdmin(databaseAdapter, {
+    email: "project-owner@example.com",
+    orgId: VICTIM_ORG,
+    password: PASSWORD,
+    profileId: "project_owner_agent",
+    role: "member",
+    userId: "project_owner",
+  });
+  await seedOrgAdmin(databaseAdapter, {
+    email: "other-member@example.com",
+    orgId: VICTIM_ORG,
+    password: PASSWORD,
+    profileId: "other_member_agent",
+    role: "member",
+    userId: "other_member",
+  });
+  const owner = await loginUserSession(
+    app,
+    "project-owner@example.com",
+    PASSWORD,
+    VICTIM_ORG
+  );
+  const other = await loginUserSession(
+    app,
+    "other-member@example.com",
+    PASSWORD,
+    VICTIM_ORG
+  );
+  const request = (
+    path: string,
+    method = "GET",
+    body?: unknown,
+    browser = owner
+  ) =>
+    app.fetch(
+      new Request(`http://localhost:4310${path}`, {
+        method,
+        headers: browser.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": browser.csrfToken,
+          },
+          VICTIM_ORG
+        ),
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      })
+    );
+  const created = await request("/v1/projects", "POST", {
+    name: "Reference project",
+  });
+  expect(created.status).toBe(201);
+  const { workspace } = (await created.json()) as { workspace: { id: string } };
+  const base = `/v1/workspaces/${workspace.id}`;
+  expect((await request(base, "GET", undefined, other)).status).toBe(404);
+  const privateList = await request("/v1/workspaces", "GET", undefined, other);
+  expect(JSON.stringify(await privateList.json())).not.toContain(workspace.id);
+  const uploaded = await request(`${base}/files`, "POST", {
+    filename: "reference.txt",
+    mediaType: "text/plain",
+    data: Buffer.from("Project reference").toString("base64"),
+  });
+  expect(uploaded.status).toBe(201);
+  const { attachmentId } = (await uploaded.json()) as { attachmentId: string };
+  const downloaded = await request(`${base}/files/${attachmentId}/content`);
+  expect(await downloaded.text()).toBe("Project reference");
+  expect(
+    (
+      await request(
+        `${base}/files/${attachmentId}/content`,
+        "GET",
+        undefined,
+        other
+      )
+    ).status
+  ).toBe(404);
+  expect(
+    (
+      await request(
+        `${base}/files/content?path=../../profiles/profile_victim/SOUL.md`
+      )
+    ).status
+  ).toBe(404);
+  const session = await request("/v1/sessions", "POST", {
+    channel: "web",
+    profileId: "project_owner_agent",
+    workspaceId: workspace.id,
+  });
+  expect(session.status).toBe(201);
+  const { sessionId } = (await session.json()) as { sessionId: string };
+  const send = await request(`/v1/sessions/${sessionId}/messages`, "POST", {
+    message: "Read reference",
+    attachmentIds: [attachmentId],
+  });
+  expect(send.status).toBe(200);
+  const messages = await request(`/v1/sessions/${sessionId}/messages`);
+  expect(JSON.stringify(await messages.json())).toContain(attachmentId);
+  expect(
+    (
+      await request(`${base}/pins`, "PUT", {
+        fileId: attachmentId,
+        pinned: true,
+      })
+    ).status
+  ).toBe(204);
+  expect(await (await request(`${base}/pins`)).json()).toEqual({
+    fileIds: [attachmentId],
+  });
+  expect((await request(base, "PATCH", { name: "Renamed" })).status).toBe(200);
+  expect(
+    (await request(`${base}/files/${attachmentId}`, "DELETE")).status
+  ).toBe(204);
+  expect(await (await request(`${base}/pins`)).json()).toEqual({ fileIds: [] });
+  expect((await request(base, "DELETE")).status).toBe(204);
+  expect(await databaseAdapter.getWorkspace(workspace.id)).toBeNull();
+  expect(await databaseAdapter.getSession(sessionId)).toBeNull();
+  for (const token of [
+    `nk_live_${"a".repeat(64)}`,
+    `nk_test_${"b".repeat(64)}`,
+  ]) {
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/profiles", {
+        headers: { Authorization: `Bearer ${token}`, "X-Org-Id": VICTIM_ORG },
+      })
+    );
+    expect(response.status).toBe(401);
+  }
 });

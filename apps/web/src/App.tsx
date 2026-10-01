@@ -31,6 +31,7 @@ const SkillsPage = lazyPage(
   "SkillsPage"
 );
 const FilesPage = lazyPage(() => import("@/pages/FilesPage"), "FilesPage");
+const ProjectPage = lazyPage(() => import("@/pages/FilesPage"), "ProjectPage");
 const IntegrationsPage = lazyPage(
   () => import("@/pages/IntegrationsPage"),
   "IntegrationsPage"
@@ -172,6 +173,11 @@ function AppShell() {
                     <Route element={<StatusPage />} path="/workers" />
                   </Route>
                   <Route element={<ChatPage />} path="/chat" />
+                  <Route element={<ProjectPage />} path="/projects" />
+                  <Route
+                    element={<ProjectPage />}
+                    path="/projects/:workspaceId"
+                  />
                   <Route
                     element={<ChatPage />}
                     path="/chat/:profileId/:sessionId"

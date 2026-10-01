@@ -134,6 +134,7 @@ export function useArtifactPreviewContent({
       .readProfileArtifactContent(profileId, artifact.path, {
         inline: true,
         render: isWordDocument ? "markdown" : undefined,
+        workspaceId: artifact.workspaceId,
       })
       .then((result) => {
         if (cancelled) {
@@ -233,6 +234,7 @@ export function useArtifactPreviewContent({
     isWordDocument,
     profileId,
     artifact.path,
+    artifact.workspaceId,
     artifact.filename,
   ]);
 
