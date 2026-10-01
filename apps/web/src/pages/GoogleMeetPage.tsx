@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
   Input,
+  Switch,
 } from "@nakama/ui";
 import {
   ArrowRight01Icon,
@@ -100,19 +101,22 @@ function Settings({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Live transcription</DialogTitle>
+          <DialogTitle>Google Meet integration</DialogTitle>
           <DialogDescription>
-            Add an OpenAI key to turn your meetings into text.
+            Enable transcription for your Google Meet calls.
           </DialogDescription>
         </DialogHeader>
         <form className="meet-form" onSubmit={save}>
-          <label>
-            <input
+          <label className="meet-enable" htmlFor="meet-enabled">
+            <img alt="" height={32} src="/icons/google-meet.png" width={32} />
+            <span className="meet-enable-copy">Enable Google Meet</span>
+            <Switch
               checked={enabled}
-              onChange={(event) => setEnabled(event.target.checked)}
-              type="checkbox"
+              className={enabled ? "bg-blue-600" : undefined}
+              disabled={busy}
+              id="meet-enabled"
+              onCheckedChange={setEnabled}
             />
-            Enable Google Meet
           </label>
           <div className="meet-row" style={{ justifyContent: "space-between" }}>
             <label htmlFor="meet-api-key">OpenAI API key</label>
@@ -130,6 +134,7 @@ function Settings({
             </a>
           </div>
           <Input
+            aria-describedby="meet-api-key-note"
             autoComplete="off"
             disabled={busy}
             id="meet-api-key"
@@ -143,7 +148,7 @@ function Settings({
             value={apiKey}
           />
           {configured && <p className="meet-status">A key is already saved.</p>}
-          <p className="meet-status">
+          <p className="meet-status" id="meet-api-key-note">
             OpenAI charges for transcription separately from ChatGPT.
           </p>
           {error && <p role="alert">{error}</p>}
@@ -157,7 +162,11 @@ function Settings({
               Cancel
             </Button>
             <Button disabled={busy} type="submit">
-              {busy ? "Saving…" : "Save"}
+              {busy
+                ? "Saving…"
+                : enabled
+                  ? "Enable transcription"
+                  : "Save changes"}
             </Button>
           </DialogFooter>
         </form>
