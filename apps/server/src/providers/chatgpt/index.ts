@@ -23,6 +23,8 @@ export interface ChatgptProviderOptions {
   onTokenRefresh?: (oauth: ChatgptOAuthCredentials) => Promise<void>;
 }
 
+// Short-lived cooldowns (60s by default) intentionally stay in memory per process
+// and reset on restart; they do not need database persistence.
 const accountCooldowns = new Map<string, number>();
 const accountsNeedingReauth = new Set<string>();
 const ACCOUNT_COOLDOWN_MS = 60_000;
