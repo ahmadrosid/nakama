@@ -190,7 +190,7 @@ Old body.
     });
 
     expect(result.created).toBe(false);
-    expect(result.directory).toBe(realpathSync(directory));
+    expect(result.directory).toBe(realpathSync.native(directory));
   });
 
   test("refuses bundled skill names", async () => {
@@ -358,7 +358,7 @@ describe("resolveProfileSkillDirectory", () => {
 
     expect(resolveProfileSkillDirectory(ORG_ID, PROFILE_ID, "ok-skill")).toBe(
       join(
-        realpathSync(configDir),
+        realpathSync.native(configDir),
         "orgs",
         ORG_ID,
         "profiles",

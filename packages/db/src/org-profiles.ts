@@ -17,9 +17,13 @@ const DEFAULT_BUILTIN_TOOL_IDS = Object.values(BUILTIN_TOOL_IDS);
 
 export async function ensureProfileDefaultBuiltinTools(
   db: DatabaseAdapter,
-  profileId: string
+  profileId: string,
+  existingProfile = false
 ): Promise<void> {
   for (const toolId of DEFAULT_BUILTIN_TOOL_IDS) {
+    if (existingProfile && toolId === BUILTIN_TOOL_IDS.list_artifacts) {
+      continue;
+    }
     await db.assignToolToProfile(profileId, toolId);
   }
 }
@@ -67,7 +71,7 @@ export async function seedOrgDefaultProfile(
   const existing = await db.getDefaultProfileForOrg(orgId);
 
   if (existing) {
-    await ensureProfileDefaultBuiltinTools(db, existing.id);
+    await ensureProfileDefaultBuiltinTools(db, existing.id, true);
     await ensureProfileDefaultBundledSkills(db, existing.id);
     return existing;
   }
@@ -105,7 +109,7 @@ export async function seedOrgSuperBotProfile(
   );
 
   if (existing) {
-    await ensureProfileDefaultBuiltinTools(db, existing.id);
+    await ensureProfileDefaultBuiltinTools(db, existing.id, true);
     await db.unassignToolFromProfile(existing.id, BUILTIN_TOOL_IDS.delete_file);
     await ensureProfileDefaultBundledSkills(db, existing.id);
     await ensureProfileSuperBotBundledSkills(db, existing.id);

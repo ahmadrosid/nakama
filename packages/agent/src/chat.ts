@@ -1006,18 +1006,25 @@ async function generateReply(
   // All tool replies must precede the visual content, including parallel calls.
   // Expand only for the provider so these don't become fabricated user turns.
   const expanded: ChatMessage[] = [];
+  const lastUserIndex = history.findLastIndex(
+    (message) => message.role === "user"
+  );
   let attachments: MessageContentPart[] = [];
   for (const [index, message] of history.entries()) {
     if (message.role === "tool" && message.attachments?.length) {
       const { attachments: parts, ...toolMessage } = message;
       expanded.push(toolMessage);
-      attachments.push(
-        {
-          text: `Image output from ${message.name} (${message.toolCallId}): ${message.content}`,
-          type: "text",
-        },
-        ...parts
-      );
+      // Page images are turn-local evidence. Keep their source metadata and
+      // stored attachments; a later turn can fetch the page again to inspect it.
+      if (message.name !== "web_fetch" || index > lastUserIndex) {
+        attachments.push(
+          {
+            text: `Image output from ${message.name} (${message.toolCallId}): ${message.content}`,
+            type: "text",
+          },
+          ...parts
+        );
+      }
     } else {
       expanded.push(message);
     }

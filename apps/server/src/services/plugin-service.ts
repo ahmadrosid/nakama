@@ -106,7 +106,6 @@ const OFFICIAL_PLUGINS = new Map<
 >([
   ["workflows", { requiresHost: true, setupAction: "import_legacy" }],
   ["supermemory", { requiresHost: true }],
-  ["google-meet", { requiresHost: false }],
 ]);
 const lifecycleLocks = new Map<string, Promise<unknown>>();
 const BUN_BIN = process.env.NAKAMA_BUN_BIN ?? "bun";
@@ -311,7 +310,7 @@ export async function vacuumPluginDatabaseInto(
   try {
     source.exec(`VACUUM INTO ${sqlQuote(targetPath)}`);
   } finally {
-    source.close();
+    source.close(true);
   }
 }
 
@@ -526,6 +525,9 @@ export class PluginService {
       JSON.parse(Buffer.from(files.get(PLUGIN_MANIFEST_FILENAME)!).toString())
     );
     if (!validated.ok || validated.manifest.id !== pluginId) {
+      throw new PluginHostError("invalid_manifest");
+    }
+    if (validated.manifest.id === "google-meet") {
       throw new PluginHostError("invalid_manifest");
     }
     assertReferencedFilesExist(validated.manifest, files);
@@ -1625,10 +1627,7 @@ export class PluginService {
           input.context.pluginId === "workflows" &&
           input.context.actionKey === "run_workflow"
             ? 300_000
-            : input.context.pluginId === "google-meet" &&
-                input.context.actionKey === "upload"
-              ? 150_000
-              : undefined,
+            : undefined,
       },
       workspaceRoot: input.context.workspaceRoot,
     });
@@ -1795,7 +1794,7 @@ export class PluginService {
         (migration) => !applied.some((row) => row.id === migration.id)
       ).length;
     } finally {
-      db.close();
+      db.close(true);
     }
   }
 
@@ -2013,7 +2012,7 @@ export class PluginService {
       }
       try {
         const db = new Database(databasePath);
-        db.close();
+        db.close(true);
       } catch {
         return "database_unavailable";
       }
@@ -2268,6 +2267,9 @@ async function inspectPluginPackage(
       packageJson.peerDependencies,
     ].some((deps) => Object.keys(deps ?? {}).length > 0)
   ) {
+    throw new PluginHostError("invalid_manifest");
+  }
+  if (validated.manifest.id === "google-meet") {
     throw new PluginHostError("invalid_manifest");
   }
   assertReferencedFilesExist(validated.manifest, files);
@@ -2741,7 +2743,7 @@ function applyPluginMigrations(
     }
     throw new PluginHostError("migration_failed", lifecycleErrorMessage(error));
   } finally {
-    db.close();
+    db.close(true);
   }
 }
 

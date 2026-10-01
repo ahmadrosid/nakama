@@ -17,6 +17,8 @@ import {
   withFastCliProbes,
 } from "./coding-agent-test-fixtures";
 
+const testPosix = test.skipIf(process.platform === "win32");
+
 describe("coding-agent harness resolution", () => {
   test("login commands follow default harnesses that support vendor login", () => {
     expect(listCodingHarnessLoginCommands()).toEqual([
@@ -171,76 +173,26 @@ describe("coding-agent harness resolution", () => {
     ).toBe(true);
   });
 
-  test("a harness that ignores SIGTERM still resolves the readiness probe", async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), "nakama-stubborn-harness-"));
-    const command = path.join(dir, "stubborn");
-    // Answers --version so the harness counts as installed, then refuses to die
-    // on the real probe run. Without a bounded probe the promise never settles,
-    // because `close` only fires once the child actually exits.
-    //
-    // The spawned process must be the one ignoring SIGTERM, not a shell whose
-    // `sleep` child does: kill() signals the direct child only, so a shell
-    // wrapper would leave the sleep running for ten minutes after the test.
-    await writeFile(
-      command,
-      [
-        `#!${process.execPath}`,
-        'if (process.argv[2] === "--version") { console.log("1.0.0"); process.exit(0); }',
-        'process.on("SIGTERM", () => {});',
-        "setInterval(() => {}, 1000);",
-        "",
-      ].join("\n"),
-      { mode: 0o755 }
-    );
-
-    try {
-      const db = createInMemoryDatabaseAdapter();
-      await db.upsertWorkspaceSettings({
-        codingAgentHarnesses: [
-          {
-            args: [],
-            command,
-            enabled: true,
-            id: "coding-harness-claude-code",
-            kind: "claude_code",
-            name: "Claude Code",
-          },
-        ],
-        id: "workspace-settings",
-        imageModel: null,
-        selectedCodingAgentHarness: "coding-harness-claude-code",
-        transcriptionModel: null,
-        updatedAt: new Date().toISOString(),
-        visionModel: null,
-      });
-
-      const probed = await refreshCodingAgentHarnessProbe(
-        db,
-        "coding-harness-claude-code",
-        { probeTimeoutMs: 200 }
-      );
-
-      expect(probed.installed).toBe(true);
-      expect(probed.ready).toBe(false);
-    } finally {
-      await rm(dir, { force: true, recursive: true });
-    }
-  }, 5000);
-
-  test("a harness that traps SIGTERM is killed once the version probe times out", async () => {
-    await withFastCliProbes(async () => {
+  // Windows has no catchable SIGTERM.
+  testPosix(
+    "a harness that ignores SIGTERM still resolves the readiness probe",
+    async () => {
       const dir = await mkdtemp(
-        path.join(tmpdir(), "nakama-sigterm-proof-harness-")
+        path.join(tmpdir(), "nakama-stubborn-harness-")
       );
-      const command = path.join(dir, "stubborn-version");
-      const pidFile = path.join(dir, "pid");
-      // Hangs on --version and swallows SIGTERM, so only the SIGKILL escalation
-      // ends it. It records its own pid because the probe never exposes the child.
+      const command = path.join(dir, "stubborn");
+      // Answers --version so the harness counts as installed, then refuses to die
+      // on the real probe run. Without a bounded probe the promise never settles,
+      // because `close` only fires once the child actually exits.
+      //
+      // The spawned process must be the one ignoring SIGTERM, not a shell whose
+      // `sleep` child does: kill() signals the direct child only, so a shell
+      // wrapper would leave the sleep running for ten minutes after the test.
       await writeFile(
         command,
         [
           `#!${process.execPath}`,
-          `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
+          'if (process.argv[2] === "--version") { console.log("1.0.0"); process.exit(0); }',
           'process.on("SIGTERM", () => {});',
           "setInterval(() => {}, 1000);",
           "",
@@ -269,20 +221,81 @@ describe("coding-agent harness resolution", () => {
           visionModel: null,
         });
 
-        const statusesPromise = listCodingAgentHarnessStatuses(db);
-        const pid = await waitForPidFile(pidFile, 2000);
-        const statuses = await statusesPromise;
-        expect(
-          statuses.find(
-            (harness) => harness.id === "coding-harness-claude-code"
-          )?.installed
-        ).toBe(false);
-        expect(await waitForExit(pid, 2000)).toBe(true);
+        const probed = await refreshCodingAgentHarnessProbe(
+          db,
+          "coding-harness-claude-code",
+          { probeTimeoutMs: 200 }
+        );
+
+        expect(probed.installed).toBe(true);
+        expect(probed.ready).toBe(false);
       } finally {
         await rm(dir, { force: true, recursive: true });
       }
-    });
-  }, 5000);
+    },
+    5000
+  );
+
+  testPosix(
+    "a harness that traps SIGTERM is killed once the version probe times out",
+    async () => {
+      await withFastCliProbes(async () => {
+        const dir = await mkdtemp(
+          path.join(tmpdir(), "nakama-sigterm-proof-harness-")
+        );
+        const command = path.join(dir, "stubborn-version");
+        const pidFile = path.join(dir, "pid");
+        // Hangs on --version and swallows SIGTERM, so only the SIGKILL escalation
+        // ends it. It records its own pid because the probe never exposes the child.
+        await writeFile(
+          command,
+          [
+            `#!${process.execPath}`,
+            `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
+            'process.on("SIGTERM", () => {});',
+            "setInterval(() => {}, 1000);",
+            "",
+          ].join("\n"),
+          { mode: 0o755 }
+        );
+
+        try {
+          const db = createInMemoryDatabaseAdapter();
+          await db.upsertWorkspaceSettings({
+            codingAgentHarnesses: [
+              {
+                args: [],
+                command,
+                enabled: true,
+                id: "coding-harness-claude-code",
+                kind: "claude_code",
+                name: "Claude Code",
+              },
+            ],
+            id: "workspace-settings",
+            imageModel: null,
+            selectedCodingAgentHarness: "coding-harness-claude-code",
+            transcriptionModel: null,
+            updatedAt: new Date().toISOString(),
+            visionModel: null,
+          });
+
+          const statusesPromise = listCodingAgentHarnessStatuses(db);
+          const pid = await waitForPidFile(pidFile, 2000);
+          const statuses = await statusesPromise;
+          expect(
+            statuses.find(
+              (harness) => harness.id === "coding-harness-claude-code"
+            )?.installed
+          ).toBe(false);
+          expect(await waitForExit(pid, 2000)).toBe(true);
+        } finally {
+          await rm(dir, { force: true, recursive: true });
+        }
+      });
+    },
+    5000
+  );
 
   test("a harness that hangs on --version resolves as not installed", async () => {
     await withFastCliProbes(async () => {

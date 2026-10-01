@@ -83,6 +83,19 @@ function providerModelCountLabel(modelCount: number): string {
   return modelCount === 1 ? "1 model" : `${modelCount} models`;
 }
 
+function providerKeyActionLabel(
+  card: ReturnType<typeof useProviderInstanceCard>,
+  hasApiKey: boolean
+): string {
+  if (card.isXaiOAuth) {
+    return hasApiKey ? "Reconnect Grok" : "Connect Grok";
+  }
+  if (card.isChatgpt) {
+    return hasApiKey ? "Reconnect ChatGPT" : "Connect ChatGPT";
+  }
+  return hasApiKey ? "Update key" : "Add key";
+}
+
 function ProviderInstanceTableRow({
   instance,
   card,
@@ -167,19 +180,7 @@ function ProviderInstanceTableRow({
             </ProviderActionButton>
           ) : null}
           <ProviderActionButton
-            label={
-              card.isXaiOAuth
-                ? instance.hasApiKey
-                  ? "Reconnect Grok"
-                  : "Connect Grok"
-                : card.isChatgpt
-                  ? instance.hasApiKey
-                    ? "Reconnect ChatGPT"
-                    : "Connect ChatGPT"
-                  : instance.hasApiKey
-                    ? "Update key"
-                    : "Add key"
-            }
+            label={providerKeyActionLabel(card, instance.hasApiKey)}
             onClick={() => card.setReplaceKeyOpen(true)}
           >
             <Key01Icon className="size-3.5" />

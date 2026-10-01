@@ -264,6 +264,7 @@ import type {
   XaiOAuthDeviceStartResponse,
 } from "@nakama/core/contract";
 import { withDisabledFetchIdle } from "@nakama/core/fetch-idle";
+import type { MeetAction, MeetActionResults } from "@nakama/core/google-meet";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { resolveServerUrl } from "@nakama/core/runtime";
 import { readBrowserOrigin, readCookie } from "./browser";
@@ -284,6 +285,20 @@ import type {
 } from "./types";
 
 export class NakamaClient {
+  invokeGoogleMeet<Action extends MeetAction>(
+    action: Action,
+    input: unknown,
+    orgId: string,
+    signal?: AbortSignal
+  ): Promise<MeetActionResults[Action]> {
+    return this.request(`/v1/meet/actions/${encodeURIComponent(action)}`, {
+      body: JSON.stringify(input ?? {}),
+      headers: { "X-Org-Id": orgId },
+      method: "POST",
+      signal,
+    });
+  }
+
   readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly credentials: RequestCredentials;
@@ -771,10 +786,12 @@ export class NakamaClient {
   }
 
   async getSessionMessages(
-    sessionId: string
+    sessionId: string,
+    options: { signal?: AbortSignal } = {}
   ): Promise<SessionMessagesResponse> {
     return this.request<SessionMessagesResponse>(
-      `/v1/sessions/${encodeURIComponent(sessionId)}/messages`
+      `/v1/sessions/${encodeURIComponent(sessionId)}/messages`,
+      { signal: options.signal }
     );
   }
 
@@ -1463,7 +1480,12 @@ export class NakamaClient {
   async readProfileArtifactContent(
     profileId: string,
     artifactPath: string,
-    options: { inline?: boolean; render?: "markdown" } = {}
+    options: {
+      inline?: boolean;
+      render?: "markdown";
+      signal?: AbortSignal;
+      maxBytes?: number;
+    } = {}
   ): Promise<{ contentType: string; data: ArrayBuffer }> {
     const query = new URLSearchParams({ path: artifactPath });
     if (options.inline) {
@@ -1474,13 +1496,62 @@ export class NakamaClient {
     }
 
     const response = await this.fetchRaw(
-      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`
+      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`,
+      { signal: options.signal }
     );
 
+    let data: ArrayBuffer;
+    if (options.maxBytes === undefined) {
+      data = await response.arrayBuffer();
+    } else {
+      const maxBytes = options.maxBytes;
+      if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+        await response.body?.cancel();
+        throw new Error("maxBytes must be a nonnegative integer.");
+      }
+      const reader = response.body?.getReader();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      const onAbort = () => {
+        void reader?.cancel().catch(() => {});
+      };
+      options.signal?.addEventListener("abort", onAbort, { once: true });
+      try {
+        if (Number(response.headers.get("Content-Length")) > maxBytes) {
+          throw new Error("Artifact exceeds the download byte budget.");
+        }
+        while (reader) {
+          options.signal?.throwIfAborted();
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+          size += value.byteLength;
+          if (size > maxBytes) {
+            throw new Error("Artifact exceeds the download byte budget.");
+          }
+          chunks.push(value);
+        }
+        options.signal?.throwIfAborted();
+        const bytes = new Uint8Array(size);
+        let offset = 0;
+        for (const chunk of chunks) {
+          bytes.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
+        data = bytes.buffer;
+      } catch (error) {
+        await reader?.cancel().catch(() => {});
+        throw error;
+      } finally {
+        options.signal?.removeEventListener("abort", onAbort);
+        reader?.releaseLock();
+      }
+    }
     return {
       contentType:
         response.headers.get("Content-Type") ?? "application/octet-stream",
-      data: await response.arrayBuffer(),
+      data,
     };
   }
 
@@ -1679,8 +1750,8 @@ export class NakamaClient {
 
         return response.automation;
       },
-      getMessages: async () => {
-        const response = await this.getSessionMessages(sessionId);
+      getMessages: async (options) => {
+        const response = await this.getSessionMessages(sessionId, options);
         return response.messages;
       },
       id: sessionId,

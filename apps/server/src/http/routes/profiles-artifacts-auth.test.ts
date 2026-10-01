@@ -770,7 +770,9 @@ test("personal file pins persist and enforce user, org, profile and path boundar
   const root = getProfileSoulDir(owner.orgId!, "pins-profile");
   await mkdir(path.join(root, "artifacts"), { recursive: true });
   await writeFile(path.join(root, "artifacts/report.md"), "Report");
-  await symlink("/etc/passwd", path.join(root, "outside"));
+  const outside = path.join(root, "..", "pin-secret.txt");
+  await writeFile(outside, "Secret");
+  await symlink(outside, path.join(root, "outside"));
   const request = (
     session = owner,
     body?: unknown,
