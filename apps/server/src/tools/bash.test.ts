@@ -266,10 +266,23 @@ describe("bash tool", () => {
 
   test("drains active descendant output after the shell exits", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+    // Spawning Git Bash's sleep.exe can exceed the 100 ms idle grace on Windows.
+    // Keep output in one native process and let it start before the shell exits.
+    await writeFile(
+      path.join(workspaceRoot, "output.cjs"),
+      `const fs = require("node:fs");
+let i = 0;
+const timer = setInterval(() => {
+  process.stdout.write(String(++i) + "\\n");
+  if (i === 1) fs.writeFileSync("ready", "");
+  if (i === 8) clearInterval(timer);
+}, 40);`
+    );
     const result = await runBash(
       {
         command:
-          '(for i in 1 2 3 4 5 6 7 8; do echo "$i"; sleep 0.04; done) & exit 0',
+          '"$NAKAMA_TEST_BUN" output.cjs & while [ ! -f ready ]; do sleep 0.01; done; exit 0',
+        env: { NAKAMA_TEST_BUN: process.execPath },
       },
       { orgId: "org_test", profileId: "profile_test" },
       { backend: "host", workspaceRoot }
