@@ -1,5 +1,5 @@
 import { toast } from "@nakama/ui/toast";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { useAuth } from "@/context/use-auth";
 import {
   useArtifactShareStatusQuery,
@@ -26,12 +26,15 @@ export function useArtifactShareControls({
   const userId = user?.id ?? "";
   const orgId = activeOrg?.id ?? "";
   const [copied, setCopied] = useState(false);
-  const [storedUrl, setStoredUrl] = useState<string | null>(null);
+  const [, refreshStoredShare] = useReducer(
+    (revision: number) => revision + 1,
+    0
+  );
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [publishIntent, setPublishIntent] = useState<PublishIntent>("publish");
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
   const [publishWarning, setPublishWarning] = useState<string | null>(null);
-  const storedShareIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     setCopied(false);
     setPublishDialogOpen(false);
@@ -47,30 +50,17 @@ export function useArtifactShareControls({
   const publishMutation = usePublishArtifactShareMutation();
   const revokeMutation = useRevokeArtifactShareMutation();
 
-  const shareUrl = storedUrl;
-  const isShared = Boolean(statusQuery.data?.active || storedUrl);
+  const stored =
+    orgId && userId
+      ? readStoredArtifactShare({ artifactPath, orgId, profileId, userId })
+      : null;
+  const shareUrl = stored?.shareUrl ?? null;
+  const isShared = Boolean(statusQuery.data?.active || shareUrl);
   const publishDialogSucceeded = publishedUrl !== null;
   const busy =
     publishMutation.isPending ||
     revokeMutation.isPending ||
     statusQuery.isLoading;
-
-  useEffect(() => {
-    if (!(orgId && userId)) {
-      setStoredUrl(null);
-      storedShareIdRef.current = null;
-      return;
-    }
-
-    const stored = readStoredArtifactShare({
-      artifactPath,
-      orgId,
-      profileId,
-      userId,
-    });
-    setStoredUrl(stored?.shareUrl ?? null);
-    storedShareIdRef.current = stored?.shareId ?? null;
-  }, [orgId, userId, profileId, artifactPath, statusQuery.dataUpdatedAt]);
 
   useEffect(() => {
     if (!copied) {
@@ -151,8 +141,7 @@ export function useArtifactShareControls({
       shareUrl: url,
       userId,
     });
-    setStoredUrl(url);
-    storedShareIdRef.current = shareId;
+    refreshStoredShare();
   }
 
   async function confirmPublish() {
@@ -209,7 +198,7 @@ export function useArtifactShareControls({
   }
 
   async function handleRotateLink() {
-    const shareId = statusQuery.data?.id ?? storedShareIdRef.current;
+    const shareId = statusQuery.data?.id ?? stored?.shareId;
     if (!(orgId && shareId)) {
       return;
     }
@@ -221,8 +210,7 @@ export function useArtifactShareControls({
         shareId,
       });
       clearStoredArtifactShare({ artifactPath, orgId, profileId, userId });
-      setStoredUrl(null);
-      storedShareIdRef.current = null;
+      refreshStoredShare();
 
       if (!revoked) {
         closePublishDialog();
@@ -261,7 +249,7 @@ export function useArtifactShareControls({
   }
 
   async function handleRevoke() {
-    const shareId = statusQuery.data?.id ?? storedShareIdRef.current;
+    const shareId = statusQuery.data?.id ?? stored?.shareId;
     if (!(orgId && shareId)) {
       return;
     }
@@ -272,8 +260,7 @@ export function useArtifactShareControls({
       shareId,
     });
     clearStoredArtifactShare({ artifactPath, orgId, profileId, userId });
-    setStoredUrl(null);
-    storedShareIdRef.current = null;
+    refreshStoredShare();
     toast(
       revoked ? "Share link revoked" : "This share link was already revoked."
     );
