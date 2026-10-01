@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { PluginExecutionContext } from "@nakama/core";
+import { z } from "zod";
 import { type Meeting, MeetingStore } from "./store";
 import { transcriptionConfig } from "./transcription";
 
@@ -16,13 +16,72 @@ export function readSettings(directory: string) {
   );
 }
 
+export const meetingActionSchemas = {
+  configure: z
+    .object({
+      apiKey: z.string().max(4096).optional(),
+      enabled: z.boolean().optional(),
+    })
+    .strict(),
+  delete: z.object({ meetingId: z.string() }).strict(),
+  leave: z.object({ meetingId: z.string() }).strict(),
+  meetings: z.object({}).strict(),
+  "start-capture": z
+    .object({
+      durationMinutes: z.number().int().min(1).max(120).optional(),
+      url: z.string(),
+    })
+    .strict(),
+  status: z.object({ meetingId: z.string() }).strict(),
+  transcript: z
+    .object({
+      after: z.number().int().nonnegative().optional(),
+      meetingId: z.string(),
+    })
+    .strict(),
+  upload: z
+    .object({
+      content: z.string().max(9_786_712),
+      filename: z.string().max(255),
+    })
+    .strict(),
+};
+
+export interface MeetExecutionContext {
+  actionKey: string;
+  actor: { id: string; role: "admin" | "member" | "viewer" };
+  captureUrl?(): Promise<string>;
+  createCapture?(meeting: Meeting): { token: string; url: string };
+  dataDir: string;
+  orgId: string;
+  profileId?: string;
+  signal?: AbortSignal;
+  transcribeAudio?(
+    request: { data: string; filename: string; mediaType: string },
+    signal?: AbortSignal
+  ): Promise<{ text: string }>;
+}
+
+export function meetEnabled(directory: string) {
+  const path = join(directory, "availability.json");
+  return (
+    !existsSync(path) || JSON.parse(readFileSync(path, "utf8")).enabled === true
+  );
+}
+
 export async function run(
   input: Record<string, unknown>,
-  context: PluginExecutionContext & {
-    host?(request: Record<string, unknown>): Promise<unknown>;
-  }
+  context: MeetExecutionContext
 ) {
-  if (context.actor.role === "viewer") {
+  const schema =
+    meetingActionSchemas[
+      context.actionKey as keyof typeof meetingActionSchemas
+    ];
+  if (!Object.hasOwn(meetingActionSchemas, context.actionKey)) {
+    throw new Error("Unknown meeting action");
+  }
+  input = schema.parse(input);
+  if (!context.actor.id || context.actor.role === "viewer") {
     throw new Error("Member access required");
   }
   const store = new MeetingStore(context.dataDir, context.orgId);
@@ -36,81 +95,55 @@ export async function run(
       if (context.actor.role !== "admin") {
         throw new Error("Admin access required");
       }
-      const previous = existsSync(settingsPath)
-        ? readSettings(context.dataDir)
-        : {};
-      const config = transcriptionConfig({
-        ...previous,
-        ...input,
-        apiKey: input.apiKey || (previous as { apiKey?: string }).apiKey,
-      });
-      privateJson(settingsPath, config);
-      return { configured: true };
+      if (input.apiKey !== undefined) {
+        privateJson(
+          settingsPath,
+          transcriptionConfig({ apiKey: input.apiKey })
+        );
+      }
+      if (typeof input.enabled === "boolean") {
+        privateJson(join(context.dataDir, "availability.json"), {
+          enabled: input.enabled,
+        });
+      }
+      return {
+        configured: existsSync(settingsPath),
+        enabled: meetEnabled(context.dataDir),
+      };
     }
-    let worker: {
-      state: string;
-      updatedAt?: number;
-      message?: string;
-      captureUrl?: string;
-    } = {
-      state: "stopped",
-    };
-    try {
-      worker = JSON.parse(
-        readFileSync(
-          join(context.dataDir, "workers", "meet", "status.json"),
-          "utf8"
-        )
-      );
-    } catch {
-      /* Worker has not started. */
-    }
-    if (!worker.updatedAt || Date.now() - worker.updatedAt > 15_000) {
-      worker = { state: "stopped" };
+    const enabled = meetEnabled(context.dataDir);
+    if (
+      !(enabled || (action === "meetings" && context.actor.role === "admin"))
+    ) {
+      throw new Error("Google Meet is disabled");
     }
     if (action === "meetings") {
       return {
-        authenticated: worker.state === "ready",
         canConfigure: context.actor.role === "admin",
         captureProtocol: 2,
         configured: existsSync(settingsPath),
-        meetings: store.list(
-          context.actor.role === "admin" ? null : context.actor.id,
-          context.profileId ?? null
-        ),
-        worker,
+        enabled,
+        meetings: enabled
+          ? store.list(
+              context.actor.role === "admin" ? null : context.actor.id,
+              context.profileId ?? null
+            )
+          : [],
       };
     }
     if (action === "start-capture") {
-      if (worker.state !== "ready") {
-        throw new Error(
-          worker.message ?? "Start the Google Meet worker in Workers first"
-        );
-      }
       readSettings(context.dataDir);
+      if (!(context.captureUrl && context.createCapture)) {
+        throw new Error("Capture service unavailable");
+      }
+      await context.captureUrl();
       const meeting = store.create(
         String(input.url ?? "").trim(),
         context.actor.id,
         context.profileId,
         Number(input.durationMinutes ?? 120)
       );
-      const token = crypto.randomUUID();
-      privateJson(join(context.dataDir, "capture.json"), {
-        actorId: meeting.actorId,
-        expiresAt: Date.now() + meeting.durationMinutes * 60_000,
-        meetingId: meeting.id,
-        profileId: meeting.profileId,
-        token,
-      });
-      return {
-        ...meeting,
-        capture: worker.captureUrl
-          ? {
-              token,
-              url: `${worker.captureUrl}?meetingId=${meeting.id}&token=${token}`,
-            }
-          : undefined,
-      };
+      return { ...meeting, capture: context.createCapture(meeting) };
     }
     if (action === "upload") {
       const filename = input.filename;
@@ -156,16 +189,14 @@ export async function run(
           context.profileId
         );
       }
-      if (!context.host) {
-        throw new Error(
-          "Nakama transcription is unavailable; update the server"
-        );
+      if (!context.transcribeAudio) {
+        throw new Error("Transcription is unavailable");
       }
-      const result = (await context.host({
-        data: encoded,
-        filename,
-        op: "transcribe_audio",
-      })) as { text?: unknown };
+      const result = await context.transcribeAudio(
+        { data: encoded, filename, mediaType: "application/octet-stream" },
+        context.signal
+      );
+      context.signal?.throwIfAborted();
       if (typeof result.text !== "string" || !result.text.trim()) {
         throw new Error("No speech found in the audio file");
       }
@@ -181,7 +212,7 @@ export async function run(
       throw new Error("Meeting not found");
     }
     if (action === "status") {
-      return { meeting, worker };
+      return { meeting };
     }
     if (action === "delete") {
       store.delete(meeting.id);
@@ -209,26 +240,6 @@ export async function run(
         nextCursor: segments.at(-1)?.sequence ?? after,
         segments,
       };
-    }
-    if (action === "caption") {
-      if (
-        typeof input.id !== "string" ||
-        typeof input.text !== "string" ||
-        typeof input.speakerName !== "string" ||
-        !input.text.trim() ||
-        !input.speakerName.trim()
-      ) {
-        throw new Error("Invalid caption");
-      }
-      store.addCaptionSegment(meeting.id, {
-        endMs: typeof input.endMs === "number" ? input.endMs : null,
-        id: input.id,
-        receivedAt: Date.now(),
-        speakerName: input.speakerName.trim(),
-        startMs: typeof input.startMs === "number" ? input.startMs : null,
-        text: input.text.trim(),
-      });
-      return { ok: true };
     }
     throw new Error("Unknown meeting action");
   } finally {

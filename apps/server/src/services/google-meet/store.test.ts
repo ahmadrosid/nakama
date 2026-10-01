@@ -1,4 +1,3 @@
-import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
   mkdtempSync,
@@ -72,7 +71,10 @@ test("one active meeting per org, transcripts survive closing and cannot cross t
   expect(store.list("user-a", "profile-a")[0]?.preview).toBe("Hello");
   const file = join(dir, "transcripts", `meeting-${meeting.id}.txt`);
   expect(readFileSync(file, "utf8")).toBe("Hello\n");
-  expect(statSync(file).mode % 0o1000).toBe(0o600);
+  // Windows does not expose POSIX owner/group permission bits.
+  if (process.platform !== "win32") {
+    expect(statSync(file).mode % 0o1000).toBe(0o600);
+  }
   expect(store.list("user-a", "profile-a")[0]?.transcriptFile).toBe(
     `meeting-${meeting.id}.txt`
   );
@@ -88,7 +90,7 @@ test("one active meeting per org, transcripts survive closing and cannot cross t
   ).not.toBe(meeting.id);
 });
 
-test("legacy export includes every segment beyond the transcript page limit", () => {
+test("file exports include every segment beyond the transcript page limit", () => {
   const meeting = store.create(meetingUrl, "me", undefined, 1);
   store.close();
   const db = new Database(join(dir, "meetings.sqlite"));
@@ -177,7 +179,7 @@ test("history limits apply after actor and profile access filters", () => {
   expect(store.list()).toHaveLength(100);
 }, 15_000);
 
-test("upgrades existing meeting databases without losing transcripts", () => {
+test("titles and transcript text survive reopening the database", () => {
   const meeting = store.create(meetingUrl, "me", undefined, 1);
   store.addSegment(meeting.id, {
     id: "one",
@@ -186,9 +188,6 @@ test("upgrades existing meeting databases without losing transcripts", () => {
   });
   store.update(meeting.id, "finished");
   store.close();
-  const db = new Database(join(dir, "meetings.sqlite"));
-  db.exec("ALTER TABLE meetings DROP COLUMN title");
-  db.close();
   store = new MeetingStore(dir, "org");
   expect(store.nextUntitled()).toEqual({
     id: meeting.id,
@@ -244,28 +243,4 @@ test("speaker turns survive reopen and recording remains an exclusive active sta
   }
 });
 
-test("caption names enrich matching audio turns without duplicating them", () => {
-  const meeting = store.create(meetingUrl, "me", undefined, 1);
-  store.addSegment(meeting.id, {
-    id: "0-0",
-    receivedAt: 1,
-    speakerName: "Speaker 1",
-    text: "Hello everyone",
-  });
-  store.addCaptionSegment(meeting.id, {
-    id: "caption-1",
-    receivedAt: 2,
-    speakerName: "Alice",
-    text: "Hello everyone",
-  });
-  expect(store.transcript(meeting.id)).toMatchObject([
-    { speakerName: "Alice", text: "Hello everyone" },
-  ]);
-  store.addCaptionSegment(meeting.id, {
-    id: "caption-2",
-    receivedAt: 3,
-    speakerName: "Bob",
-    text: "A new sentence",
-  });
-  expect(store.transcript(meeting.id)).toHaveLength(2);
-});
+import { Database } from "bun:sqlite";

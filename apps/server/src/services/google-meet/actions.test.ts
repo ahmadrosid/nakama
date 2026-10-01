@@ -1,22 +1,20 @@
 import { expect, mock, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { PluginExecutionContext } from "@nakama/core";
-import { privateJson, run } from "./actions";
+import type { MeetExecutionContext } from "./actions";
+import { run } from "./actions";
 import { MeetingStore } from "./store";
 
 test("settings are admin-only, credentials never returned, meetings are scoped to actor and profile", async () => {
   const dir = mkdtempSync(join(tmpdir(), "meet-actions-"));
-  const context: PluginExecutionContext = {
+  const context: MeetExecutionContext = {
     actionKey: "configure",
     actor: { id: "a", role: "admin" },
-    apiVersion: 1,
+    captureUrl: async () => "ws://localhost/capture",
+    createCapture: () => ({ token: "test", url: "ws://localhost/capture" }),
     dataDir: dir,
-    invocationId: "test",
     orgId: "org",
-    pluginId: "google-meet",
-    pluginVersion: "0.1.0",
     profileId: "p",
   };
   const input = {
@@ -28,11 +26,6 @@ test("settings are admin-only, credentials never returned, meetings are scoped t
     ).rejects.toThrow();
     const result = await run(input, context);
     expect(JSON.stringify(result)).not.toContain("secret");
-    mkdirSync(join(dir, "workers", "meet"), { recursive: true });
-    privateJson(join(dir, "workers", "meet", "status.json"), {
-      state: "ready",
-      updatedAt: Date.now(),
-    });
     const meeting = (await run(
       { url: "https://meet.google.com/abc-defg-hij" },
       { ...context, actionKey: "start-capture" }
@@ -116,12 +109,9 @@ test("uploads preserve Markdown and use Nakama's host for audio without plugin c
     actor: { id: "a", role: "member" as const },
     apiVersion: 1 as const,
     dataDir: dir,
-    host,
-    invocationId: "test",
     orgId: "org",
-    pluginId: "google-meet",
-    pluginVersion: "0.1.0",
     profileId: "p",
+    transcribeAudio: host,
   };
   try {
     const content = "# Planning\n\n**Keep** this Markdown.\n";
@@ -139,11 +129,14 @@ test("uploads preserve Markdown and use Nakama's host for audio without plugin c
       { content: audio, filename: "meeting.wav" },
       context
     )) as { id: string };
-    expect(host).toHaveBeenCalledWith({
-      data: audio,
-      filename: "meeting.wav",
-      op: "transcribe_audio",
-    });
+    expect(host).toHaveBeenCalledWith(
+      {
+        data: audio,
+        filename: "meeting.wav",
+        mediaType: "application/octet-stream",
+      },
+      undefined
+    );
     const store = new MeetingStore(dir, "org");
     try {
       expect(

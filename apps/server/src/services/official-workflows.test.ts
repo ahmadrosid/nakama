@@ -1,4 +1,4 @@
-import { afterEach, expect, mock, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 import { appendFile, cp, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -11,46 +11,6 @@ import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { PluginService } from "./plugin-service";
 
 const directories: string[] = [];
-test("plugin transcription validates uploads and uses Nakama's configured service", async () => {
-  const { createPluginAgentHost } = await import("./plugin-agent-host");
-  const transcribeAudio = mock(async () => ({ text: "Transcript" }));
-  const host = createPluginAgentHost(createInMemoryDatabaseAdapter(), {
-    transcribeAudio,
-  } as never);
-  const context = {
-    actor: { id: "member", role: "member" as const },
-    apiVersion: 1 as const,
-    dataDir: "/tmp",
-    invocationId: "invocation",
-    orgId: "org_a",
-    pluginId: "google-meet",
-    pluginVersion: "0.1.0",
-  };
-  const request = {
-    data: Buffer.from("audio").toString("base64"),
-    filename: "meeting.wav",
-    op: "transcribe_audio",
-  };
-  expect(await host(request, context)).toEqual({ text: "Transcript" });
-  expect(transcribeAudio).toHaveBeenCalledWith(
-    {
-      data: request.data,
-      filename: "meeting.wav",
-      mediaType: "application/octet-stream",
-    },
-    expect.any(AbortSignal)
-  );
-  await expect(
-    host(request, { ...context, actor: { id: "viewer", role: "viewer" } })
-  ).rejects.toThrow();
-  await expect(
-    host({ ...request, data: "invalid" }, context)
-  ).rejects.toThrow();
-  await expect(
-    host({ ...request, filename: "../meeting.wav" }, context)
-  ).rejects.toThrow();
-  expect(transcribeAudio).toHaveBeenCalledTimes(1);
-});
 afterEach(async () => {
   for (const dir of directories.splice(0)) {
     await rm(dir, { force: true, recursive: true });
@@ -61,7 +21,7 @@ test("official workflow install imports once, executes through IPC, isolates org
   const dir = await mkdtemp(join(tmpdir(), "official-workflows-"));
   directories.push(dir);
   const officialPackagesDir = join(dir, "official");
-  for (const pluginId of ["workflows", "supermemory", "google-meet"]) {
+  for (const pluginId of ["workflows", "supermemory"]) {
     await cp(
       resolve(import.meta.dir, "../../../../packages/plugins", pluginId),
       join(officialPackagesDir, pluginId),

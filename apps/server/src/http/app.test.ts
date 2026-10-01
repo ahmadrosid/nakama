@@ -9,6 +9,7 @@ import {
   createSqliteDatabase,
 } from "@nakama/db";
 import { AuthService } from "../services/auth-service";
+import { GoogleMeetService } from "../services/google-meet/service";
 import { OrgService } from "../services/org-service";
 import { setupTestConfigDir } from "../test-config-dir";
 import {
@@ -101,6 +102,59 @@ function createServerOptions() {
 }
 
 describe("createHonoApp", () => {
+  test("built-in Meet routes use current org roles and reject spoofed actor fields", async () => {
+    const options = createServerOptions();
+    const root = await mkdtemp(join(tmpdir(), "meet-http-"));
+    const googleMeetService = new GoogleMeetService(
+      options.databaseAdapter,
+      root,
+      async () => ({ text: "Speech" })
+    );
+    try {
+      const app = createHonoApp({ ...options, googleMeetService });
+      const session = await setupFreshInstallSession(
+        app,
+        options.databaseAdapter
+      );
+      const user =
+        await options.databaseAdapter.getUserByEmail("admin@example.com");
+      const request = (action: string, input = {}) =>
+        app.fetch(
+          new Request(`http://localhost:4310/v1/meet/actions/${action}`, {
+            body: JSON.stringify(input),
+            headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
+            method: "POST",
+          })
+        );
+      expect((await request("meetings")).status).toBe(200);
+      expect(
+        (await request("meetings", { actorId: "someone-else" })).status
+      ).toBe(400);
+      expect((await request("toString")).status).toBe(404);
+      await options.databaseAdapter.upsertOrgMember({
+        createdAt: new Date().toISOString(),
+        orgId: session.orgId,
+        role: "member",
+        userId: user!.id,
+      });
+      expect((await request("meetings")).status).toBe(200);
+      expect((await request("configure", { enabled: false })).status).toBe(403);
+      await options.databaseAdapter.upsertOrgMember({
+        createdAt: new Date().toISOString(),
+        orgId: session.orgId,
+        role: "viewer",
+        userId: user!.id,
+      });
+      expect((await request("meetings")).status).toBe(403);
+      expect(
+        (await request("upload", { content: "YQ==", filename: "notes.md" }))
+          .status
+      ).toBe(403);
+    } finally {
+      await googleMeetService.close();
+      await rm(root, { force: true, recursive: true });
+    }
+  });
   test("rejects oversized request bodies before public route handlers", async () => {
     const app = createHonoApp(createServerOptions());
 

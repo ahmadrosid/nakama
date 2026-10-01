@@ -106,7 +106,6 @@ const OFFICIAL_PLUGINS = new Map<
 >([
   ["workflows", { requiresHost: true, setupAction: "import_legacy" }],
   ["supermemory", { requiresHost: true }],
-  ["google-meet", { requiresHost: false }],
 ]);
 const lifecycleLocks = new Map<string, Promise<unknown>>();
 const BUN_BIN = process.env.NAKAMA_BUN_BIN ?? "bun";
@@ -526,6 +525,9 @@ export class PluginService {
       JSON.parse(Buffer.from(files.get(PLUGIN_MANIFEST_FILENAME)!).toString())
     );
     if (!validated.ok || validated.manifest.id !== pluginId) {
+      throw new PluginHostError("invalid_manifest");
+    }
+    if (validated.manifest.id === "google-meet") {
       throw new PluginHostError("invalid_manifest");
     }
     assertReferencedFilesExist(validated.manifest, files);
@@ -1625,10 +1627,7 @@ export class PluginService {
           input.context.pluginId === "workflows" &&
           input.context.actionKey === "run_workflow"
             ? 300_000
-            : input.context.pluginId === "google-meet" &&
-                input.context.actionKey === "upload"
-              ? 150_000
-              : undefined,
+            : undefined,
       },
       workspaceRoot: input.context.workspaceRoot,
     });
@@ -2268,6 +2267,9 @@ async function inspectPluginPackage(
       packageJson.peerDependencies,
     ].some((deps) => Object.keys(deps ?? {}).length > 0)
   ) {
+    throw new PluginHostError("invalid_manifest");
+  }
+  if (validated.manifest.id === "google-meet") {
     throw new PluginHostError("invalid_manifest");
   }
   assertReferencedFilesExist(validated.manifest, files);
