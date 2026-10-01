@@ -1,12 +1,10 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getOrgPluginDataDir } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { GoogleMeetService } from "./service";
-import { MeetingStore } from "./store";
-import { transcriptionProviders } from "./transcription";
+import * as transcription from "./transcription";
 
 let root: string;
 let db: ReturnType<typeof createInMemoryDatabaseAdapter>;
@@ -35,112 +33,44 @@ afterEach(async () => {
   rmSync(root, { force: true, recursive: true });
 });
 
-test("cutover resumes after metadata failure and preserves tool assignments and retained transcripts", async () => {
-  await db.upsertProfile({
-    createdAt: now,
-    id: "profile",
-    isSuper: false,
-    model: null,
-    name: "Agent",
-    orgId: "a",
-    systemPrompt: "",
-    updatedAt: now,
-  });
-  await db.upsertTool({
-    createdAt: now,
-    description: "Meetings",
-    handlerConfig: {},
-    handlerType: "plugin",
-    id: "old-tool",
-    name: "plugin_google_meet__meetings",
-    orgId: "a",
-    pluginId: "google-meet",
-    pluginKey: "meetings",
-    updatedAt: now,
-  });
-  await db.assignToolToProfile("profile", "old-tool");
-  await db.upsertSkill({
-    createdAt: now,
-    createdBy: "bundled",
-    description: "Meetings",
-    disableModelInvocation: false,
-    enabled: true,
-    hasTool: false,
-    id: "old-skill",
-    name: "google-meet",
-    orgId: "a",
-    pluginId: "google-meet",
-    pluginKey: "google-meet",
-    sourcePath: join(root, "old-skill"),
-    updatedAt: now,
-  });
-  await db.assignSkillToProfile("profile", "old-skill");
-  const legacy = getOrgPluginDataDir("a", "google-meet", root);
-  const store = new MeetingStore(legacy, "a");
-  const meeting = store.importFile(
-    "notes.md",
-    "Keep this transcript",
-    "alice",
-    "profile"
+test("startup is idempotent and restart preserves settings while recovering unfinished capture", async () => {
+  await Promise.all([
+    service.ensureOrganization("a"),
+    service.ensureOrganization("a"),
+  ]);
+  await service.invoke("a", "configure", { apiKey: "test" }, admin);
+  const capture = await service.invoke(
+    "a",
+    "start-capture",
+    { url: "https://meet.google.com/abc-defg-hij" },
+    admin
   );
-  store.close();
-  const retire = spyOn(db, "retireGoogleMeetPlugin");
-  retire.mockRejectedValueOnce(new Error("interrupted"));
-  await expect(service.ensureOrganization("a")).rejects.toThrow();
-  await service.ensureOrganization("a");
-  const assigned = await db.listToolsForProfile("profile");
-  expect(assigned).toHaveLength(1);
-  expect(assigned[0]?.id).toBe("old-tool");
-  expect(assigned[0]?.handlerType).toBe("builtin");
-  expect(assigned[0]?.pluginId).toBeNull();
-  const skill = (await db.listSkillsForProfile("profile"))[0]!;
-  expect(skill.id).toBe("old-skill");
-  expect(skill.pluginId).toBeNull();
-  expect(existsSync(join(skill.sourcePath, "SKILL.md"))).toBe(true);
-  expect(
-    existsSync(join(root, ".meet-rollback", "a", "data", "meetings.sqlite"))
-  ).toBe(true);
-  expect(existsSync(join(legacy, "meetings.sqlite"))).toBe(true);
-  // Uninstalled plugin data stays disabled until an admin enables it.
+  await service.close();
+  await service.reopen();
+  const status = await service.invoke(
+    "a",
+    "status",
+    { meetingId: capture.id },
+    admin
+  );
+  expect(status.meeting.state).toBe("failed");
+  expect((await service.invoke("a", "meetings", {}, admin)).configured).toBe(
+    true
+  );
+  await service.invoke("a", "configure", { enabled: false }, admin);
+  await service.close();
+  await service.reopen();
   expect((await service.invoke("a", "meetings", {}, admin)).enabled).toBe(
     false
   );
-  await service.invoke("a", "configure", { enabled: true }, admin);
-  const migrated = await service.invoke(
-    "a",
-    "transcript",
-    { meetingId: meeting.id },
-    admin
-  );
-  expect(migrated.segments.map((segment) => segment.text).join("")).toBe(
-    "Keep this transcript"
-  );
+  const tools = (await db.listTools()).filter((tool) => tool.orgId === "a");
+  expect(tools).toHaveLength(6);
   expect(
-    JSON.parse(
-      readFileSync(join(service.directory("a"), "migration.json"), "utf8")
-    ).orgId
-  ).toBe("a");
-  await service.reopen();
-  expect((await db.listToolsForProfile("profile"))[0]?.id).toBe("old-tool");
-  retire.mockRestore();
-});
-
-test("enabled legacy installation stays enabled and its lifecycle record is retired", async () => {
-  expect(
-    await db.publishOrgPluginRelease({
-      contributions: { skills: [], tools: [] },
-      databaseGeneration: null,
-      expectedRevision: 0,
-      lifecycleState: "enabled",
-      now,
-      orgId: "a",
-      pluginId: "google-meet",
-      selectedVersion: "1.0.0",
-    })
-  ).toMatchObject({ ok: true });
-  await service.ensureOrganization("a");
-  expect((await service.invoke("a", "meetings", {}, admin)).enabled).toBe(true);
-  expect(await db.getOrgPlugin("a", "google-meet")).toBeNull();
+    tools.every(
+      (tool) =>
+        tool.handlerType === "builtin" && tool.name.startsWith("google_meet_")
+    )
+  ).toBe(true);
 });
 
 test("agent tools require current assignment and hide page captures without a profile", async () => {
@@ -183,7 +113,7 @@ test("agent tools require current assignment and hide page captures without a pr
   );
   const tool = service
     .tools()
-    .find((item) => item.name === "plugin_google_meet__meetings")!;
+    .find((item) => item.name === "google_meet_meetings")!;
   const context = {
     orgId: "a",
     orgRole: "admin" as const,
@@ -279,22 +209,18 @@ test("bounds simultaneous uploads and shutdown cancels a provider that ignores a
 });
 
 test("shared capture listener consumes tokens once and preserves protocol 2 finalization", async () => {
-  const provider = transcriptionProviders.openai!;
-  transcriptionProviders.openai = {
-    async connect({ onSegment }) {
-      return {
-        close() {},
-        async finish() {
-          onSegment({
-            id: "turn",
-            receivedAt: Date.now(),
-            text: "Captured speech",
-          });
-        },
-        push() {},
-      };
+  const connect = spyOn(transcription, "connectTranscription");
+  connect.mockImplementation(async ({ onSegment }) => ({
+    close() {},
+    async finish() {
+      onSegment({
+        id: "turn",
+        receivedAt: Date.now(),
+        text: "Captured speech",
+      });
     },
-  };
+    push() {},
+  }));
   try {
     await service.invoke("a", "configure", { apiKey: "test" }, admin);
     await service.invoke("b", "configure", { apiKey: "test" }, admin);
@@ -352,6 +278,6 @@ test("shared capture listener consumes tokens once and preserves protocol 2 fina
     ]);
     await service.invoke("b", "leave", { meetingId: second.id }, admin);
   } finally {
-    transcriptionProviders.openai = provider;
+    connect.mockRestore();
   }
 });

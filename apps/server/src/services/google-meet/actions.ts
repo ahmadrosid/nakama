@@ -21,8 +21,6 @@ export const meetingActionSchemas = {
     .object({
       apiKey: z.string().max(4096).optional(),
       enabled: z.boolean().optional(),
-      model: z.enum(["gpt-4o-transcribe-diarize", "gpt-transcribe"]).optional(),
-      provider: z.literal("openai").optional(),
     })
     .strict(),
   delete: z.object({ meetingId: z.string() }).strict(),
@@ -62,7 +60,6 @@ export interface MeetExecutionContext {
     request: { data: string; filename: string; mediaType: string },
     signal?: AbortSignal
   ): Promise<{ text: string }>;
-  worker?: { state: string; message?: string };
 }
 
 export function meetEnabled(directory: string) {
@@ -98,16 +95,11 @@ export async function run(
       if (context.actor.role !== "admin") {
         throw new Error("Admin access required");
       }
-      if (input.apiKey || input.provider || input.model) {
-        const previous = existsSync(settingsPath)
-          ? readSettings(context.dataDir)
-          : {};
-        const config = transcriptionConfig({
-          ...previous,
-          ...input,
-          apiKey: input.apiKey || (previous as { apiKey?: string }).apiKey,
-        });
-        privateJson(settingsPath, config);
+      if (input.apiKey !== undefined) {
+        privateJson(
+          settingsPath,
+          transcriptionConfig({ apiKey: input.apiKey })
+        );
       }
       if (typeof input.enabled === "boolean") {
         privateJson(join(context.dataDir, "availability.json"), {
@@ -125,12 +117,8 @@ export async function run(
     ) {
       throw new Error("Google Meet is disabled");
     }
-    const worker = enabled
-      ? (context.worker ?? { state: "ready" })
-      : { message: "Google Meet is disabled", state: "stopped" };
     if (action === "meetings") {
       return {
-        authenticated: worker.state === "ready",
         canConfigure: context.actor.role === "admin",
         captureProtocol: 2,
         configured: existsSync(settingsPath),
@@ -141,7 +129,6 @@ export async function run(
               context.profileId ?? null
             )
           : [],
-        worker,
       };
     }
     if (action === "start-capture") {
@@ -225,7 +212,7 @@ export async function run(
       throw new Error("Meeting not found");
     }
     if (action === "status") {
-      return { meeting, worker };
+      return { meeting };
     }
     if (action === "delete") {
       store.delete(meeting.id);

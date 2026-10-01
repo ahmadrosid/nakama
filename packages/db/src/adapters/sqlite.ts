@@ -4291,20 +4291,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       replaceProfileComposioToolkitsTransaction(profileId, assignments);
     },
 
-    async retireGoogleMeetPlugin(orgId, skillDirectory) {
-      db.transaction(() => {
-        db.query(
-          "UPDATE tools SET handler_type='builtin', handler_config=json_object('name',name), plugin_id=NULL, plugin_key=NULL WHERE org_id=? AND plugin_id='google-meet'"
-        ).run(orgId);
-        db.query(
-          "UPDATE skills SET source_path=?, created_by='bundled', plugin_id=NULL, plugin_key=NULL WHERE org_id=? AND plugin_id='google-meet'"
-        ).run(skillDirectory, orgId);
-        db.query(
-          "DELETE FROM org_plugins WHERE org_id=? AND plugin_id='google-meet'"
-        ).run(orgId);
-      }).immediate();
-    },
-
     async revokeApiKey(id, revokedAt) {
       const result = revokeApiKeyStmt.run(revokedAt, id);
       return result.changes > 0;

@@ -381,7 +381,7 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
 
   app.get("/v1/tools", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
-    // A failed Meet migration must not hide unrelated tools.
+    // Unavailable Meet capture must not hide unrelated tools.
     await options.googleMeetService
       ?.ensureOrganization(orgId)
       .catch(() => undefined);

@@ -43,13 +43,11 @@ export type MeetAction =
   | "delete"
   | "configure";
 export interface MeetOverview {
-  authenticated: boolean;
   canConfigure: boolean;
   captureProtocol: number;
   configured: boolean;
   enabled: boolean;
   meetings: Meeting[];
-  worker: { state: string; message?: string };
 }
 export interface MeetActionResults {
   configure: { configured: boolean; enabled: boolean };
@@ -57,7 +55,7 @@ export interface MeetActionResults {
   leave: Meeting & { stopRequested: number };
   meetings: MeetOverview;
   "start-capture": Meeting & { capture: { token: string; url: string } };
-  status: { meeting: Meeting; worker: MeetOverview["worker"] };
+  status: { meeting: Meeting };
   transcript: {
     meeting: Meeting;
     segments: (TranscriptSegment & { sequence: number })[];

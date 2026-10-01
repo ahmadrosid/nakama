@@ -1,22 +1,9 @@
-import { Database } from "bun:sqlite";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { cp, mkdir } from "node:fs/promises";
-import { isAbsolute, join, resolve } from "node:path";
+import { existsSync, rmSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
 import {
   assertConfigPathSegment,
-  getOrgPluginDataDir,
   type JsonSchema,
   NakamaApiError,
-  readBundledSkillMarkdown,
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
@@ -29,7 +16,7 @@ import type { DatabaseAdapter } from "@nakama/db";
 import type { Server, ServerWebSocket } from "bun";
 import { z } from "zod";
 import { pluginActorFromContext } from "../tool-resolver";
-import { meetEnabled, meetingActionSchemas, privateJson, run } from "./actions";
+import { meetEnabled, meetingActionSchemas, run } from "./actions";
 import { MeetingStore } from "./store";
 import { createStreamMeeting, generateNextMeetingTitle } from "./worker";
 
@@ -48,14 +35,6 @@ type SocketData = Capture & {
   done?: Promise<void>;
 };
 
-const exposedActions = [
-  "upload",
-  "meetings",
-  "status",
-  "transcript",
-  "leave",
-  "delete",
-] as const;
 const descriptions = {
   delete: "Permanently delete a finished or failed meeting and its transcript.",
   leave: "Stop a meeting and finalize its transcript.",
@@ -67,17 +46,17 @@ const descriptions = {
   upload:
     "Import a Markdown transcript (1 MiB) or audio recording (7 MiB) into meeting history. Pass file bytes as base64.",
 };
+const exposedActions = Object.keys(
+  descriptions
+) as (keyof typeof descriptions)[];
 
 export class GoogleMeetService {
   private readonly initialized = new Map<string, Promise<void>>();
-  private readonly initializing = new Set<Promise<void>>();
   private readonly sessions = new Map<string, Capture>();
   private readonly sockets = new Set<ServerWebSocket<SocketData>>();
   private readonly activeActions = new Map<string, number>();
-  private readonly tasks = new Set<Promise<unknown>>();
-  private readonly failures = new Set<string>();
+  private readonly tasks = new Map<Promise<unknown>, string>();
   private readonly blockedOrganizations = new Set<string>();
-  private readonly titlingOrganizations = new Map<string, number>();
   private abort = new AbortController();
   private paused = false;
   private listener?: Server<SocketData>;
@@ -109,10 +88,7 @@ export class GoogleMeetService {
       try {
         await this.ensureOrganization(org.id);
       } catch {
-        console.warn(
-          "Google Meet migration unavailable for organization",
-          org.id
-        );
+        console.warn("Google Meet unavailable for organization", org.id);
       }
     }
   }
@@ -127,217 +103,37 @@ export class GoogleMeetService {
     if (current) {
       return current;
     }
-    const initialization = this.migrate(orgId)
-      .then(() => this.failures.delete(orgId))
-      .catch((error) => {
-        this.failures.add(orgId);
-        this.initialized.delete(orgId);
-        throw error;
-      })
-      .then(() => undefined);
+    const initialization = this.initializeOrganization(orgId).catch((error) => {
+      this.initialized.delete(orgId);
+      throw error;
+    });
     this.initialized.set(orgId, initialization);
-    this.initializing.add(initialization);
+    this.tasks.set(initialization, orgId);
     void initialization
-      .finally(() => this.initializing.delete(initialization))
+      .finally(() => this.tasks.delete(initialization))
       .catch(() => undefined);
     return initialization;
   }
 
-  private async migrate(orgId: string) {
-    const org = await this.db.getOrganizationById(orgId);
-    if (!org) {
+  private async initializeOrganization(orgId: string) {
+    if (!(await this.db.getOrganizationById(orgId))) {
       throw new NakamaApiError("Organization unavailable", 404);
     }
-    const destination = this.directory(orgId);
-    const legacy = getOrgPluginDataDir(orgId, "google-meet", this.configDir);
-    const rollback = join(
-      this.configDir,
-      ".meet-rollback",
-      assertConfigPathSegment(orgId, "orgId")
-    );
-    const marker = join(rollback, "cutover.json");
-    const install = await this.db.getOrgPlugin(orgId, "google-meet");
-    const tools = (await this.db.listTools()).filter(
-      (tool) => tool.orgId === orgId && tool.pluginId === "google-meet"
-    );
-    const skills = (await this.db.listSkills()).filter(
-      (skill) => skill.orgId === orgId && skill.pluginId === "google-meet"
-    );
-    const hasLegacy =
-      existsSync(legacy) || !!install || tools.length > 0 || skills.length > 0;
-    const completed = existsSync(join(destination, "migration.json"));
-    if (hasLegacy && !completed) {
-      mkdirSync(rollback, { mode: 0o700, recursive: true });
-      if (!existsSync(marker)) {
-        if (existsSync(destination)) {
-          throw new Error("Conflicting Google Meet destination");
-        }
-        privateJson(join(rollback, "metadata.json"), {
-          install,
-          skills,
-          tools,
-        });
-        privateJson(marker, { orgId, phase: "staging" });
-      }
-      const cutover = JSON.parse(readFileSync(marker, "utf8")) as {
-        orgId: string;
-        phase: string;
-      };
-      if (cutover.orgId !== orgId) {
-        throw new Error("Google Meet cutover tenant mismatch");
-      }
-      const staged = `${destination}.staging`;
-      if (!existsSync(destination)) {
-        rmSync(staged, { force: true, recursive: true });
-        await mkdir(staged, { mode: 0o700, recursive: true });
-        if (existsSync(legacy)) {
-          for (const name of ["settings.json", "transcripts"]) {
-            if (existsSync(join(legacy, name))) {
-              await cp(join(legacy, name), join(staged, name), {
-                recursive: true,
-              });
-            }
-          }
-          const source = join(legacy, "meetings.sqlite");
-          if (existsSync(source)) {
-            const database = new Database(source, { readonly: true });
-            try {
-              if (
-                database
-                  .query<{ orgId: string }, []>(
-                    "SELECT orgId FROM tenant WHERE id=1"
-                  )
-                  .get()?.orgId !== orgId
-              ) {
-                throw new Error("Meeting data belongs to another organization");
-              }
-              database
-                .query("VACUUM INTO ?")
-                .run(join(staged, "meetings.sqlite"));
-              const snapshot = new Database(join(staged, "meetings.sqlite"), {
-                readonly: true,
-              });
-              try {
-                for (const table of ["meetings", "segments"]) {
-                  const count = `SELECT count(*) AS n FROM ${table}`;
-                  if (
-                    database.query<{ n: number }, []>(count).get()?.n !==
-                    snapshot.query<{ n: number }, []>(count).get()?.n
-                  ) {
-                    throw new Error("Meeting snapshot validation failed");
-                  }
-                }
-              } finally {
-                snapshot.close();
-              }
-            } finally {
-              database.close();
-            }
-          }
-        }
-        privateJson(join(staged, "availability.json"), {
-          enabled: install?.lifecycleState === "enabled",
-        });
-        const store = new MeetingStore(staged, orgId);
-        try {
-          store.recover();
-        } finally {
-          store.close();
-        }
-        this.protectFiles(staged);
-        // Retain a stable data snapshot outside plugin-owned paths for manual rollback.
-        await cp(staged, join(rollback, "data"), {
-          force: true,
-          recursive: true,
-        });
-        privateJson(join(staged, "cutover.json"), { orgId });
-        renameSync(staged, destination);
-      }
-      if (
-        JSON.parse(readFileSync(join(destination, "cutover.json"), "utf8"))
-          .orgId !== orgId
-      ) {
-        throw new Error("Conflicting Google Meet destination");
-      }
-      mkdirSync(this.skillDirectory(orgId), { mode: 0o700, recursive: true });
-      writeFileSync(
-        join(this.skillDirectory(orgId), "SKILL.md"),
-        await readBundledSkillMarkdown("google-meet"),
-        { mode: 0o600 }
-      );
-      await this.db.retireGoogleMeetPlugin(
-        orgId,
-        resolve(this.skillDirectory(orgId))
-      );
-      privateJson(join(destination, "migration.json"), {
-        completedAt: new Date().toISOString(),
-        orgId,
-      });
-      privateJson(marker, { orgId, phase: "complete" });
-    }
-    const store = new MeetingStore(destination, orgId);
+    const directory = this.directory(orgId);
+    const store = new MeetingStore(directory, orgId);
     try {
       store.recover();
     } finally {
       store.close();
     }
-    rmSync(join(destination, "audio"), { force: true, recursive: true });
-    rmSync(join(destination, "capture.json"), { force: true });
-    if (!(hasLegacy || completed)) {
-      privateJson(join(destination, "migration.json"), {
-        completedAt: new Date().toISOString(),
-        orgId,
-      });
-    }
-    await this.ensureCatalog(orgId);
-  }
-
-  private protectFiles(directory: string) {
-    chmodSync(directory, 0o700);
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      const path = join(directory, entry.name);
-      if (entry.isSymbolicLink()) {
-        throw new Error("Meeting data cannot contain symlinks");
-      }
-      if (entry.isDirectory()) {
-        this.protectFiles(path);
-      } else {
-        chmodSync(path, 0o600);
-      }
-    }
-  }
-
-  private skillDirectory(orgId: string) {
-    return join(this.directory(orgId), "skill");
-  }
-
-  private async ensureCatalog(orgId: string) {
-    for (const skill of await this.db.listSkills()) {
-      if (
-        skill.orgId === orgId &&
-        skill.name === "google-meet" &&
-        skill.createdBy === "bundled" &&
-        !skill.pluginId
-      ) {
-        const sourcePath = resolve(this.skillDirectory(orgId));
-        if (skill.sourcePath !== sourcePath) {
-          mkdirSync(sourcePath, { mode: 0o700, recursive: true });
-          writeFileSync(
-            join(sourcePath, "SKILL.md"),
-            await readBundledSkillMarkdown("google-meet"),
-            { mode: 0o600 }
-          );
-          await this.db.upsertSkill({ ...skill, sourcePath });
-        }
-      }
-    }
+    rmSync(join(directory, "audio"), { force: true, recursive: true });
     const tools = await this.db.listTools();
+    const now = new Date().toISOString();
     for (const action of exposedActions) {
-      const name = `plugin_google_meet__${action}`;
+      const name = `google_meet_${action}`;
       if (tools.some((tool) => tool.orgId === orgId && tool.name === name)) {
         continue;
       }
-      const now = new Date().toISOString();
       await this.db.upsertTool({
         createdAt: now,
         description: descriptions[action],
@@ -355,7 +151,7 @@ export class GoogleMeetService {
     return exposedActions.map((action) => ({
       description: descriptions[action],
       discoveryGroup: "google-meet",
-      name: `plugin_google_meet__${action}`,
+      name: `google_meet_${action}`,
       parameters: z.toJSONSchema(meetingActionSchemas[action]) as JsonSchema,
       run: async (input: unknown, context: ToolContext) => {
         const actor = pluginActorFromContext(context);
@@ -377,7 +173,7 @@ export class GoogleMeetService {
           !assigned.some(
             (tool) =>
               tool.handlerType === "builtin" &&
-              tool.name === `plugin_google_meet__${action}` &&
+              tool.name === `google_meet_${action}` &&
               tool.orgId === orgId
           )
         ) {
@@ -458,7 +254,6 @@ export class GoogleMeetService {
             cancelled,
           ]);
         },
-        worker: { state: "ready" },
       });
       if (action === "upload") {
         this.title(orgId, (result as Meeting).id);
@@ -471,7 +266,7 @@ export class GoogleMeetService {
       }
       return result as MeetActionResults[Action];
     })();
-    this.tasks.add(task);
+    this.tasks.set(task, orgId);
     return task.finally(() => {
       this.tasks.delete(task);
       const remaining = (this.activeActions.get(orgId) ?? 1) - 1;
@@ -491,10 +286,6 @@ export class GoogleMeetService {
     ) {
       return;
     }
-    this.titlingOrganizations.set(
-      orgId,
-      (this.titlingOrganizations.get(orgId) ?? 0) + 1
-    );
     const store = new MeetingStore(this.directory(orgId), orgId);
     const task = generateNextMeetingTitle(
       store,
@@ -506,14 +297,8 @@ export class GoogleMeetService {
       .finally(() => {
         store.close();
         this.tasks.delete(task);
-        const remaining = (this.titlingOrganizations.get(orgId) ?? 1) - 1;
-        if (remaining) {
-          this.titlingOrganizations.set(orgId, remaining);
-        } else {
-          this.titlingOrganizations.delete(orgId);
-        }
       });
-    this.tasks.add(task);
+    this.tasks.set(task, orgId);
   }
 
   private captureUrl() {
@@ -724,7 +509,7 @@ export class GoogleMeetService {
   }
 
   pauseOrganization(orgId: string) {
-    if (this.activeActions.has(orgId) || this.titlingOrganizations.has(orgId)) {
+    if ([...this.tasks.values()].includes(orgId)) {
       throw new NakamaApiError(
         "Wait for Google Meet imports before archiving this organization",
         409
@@ -738,13 +523,11 @@ export class GoogleMeetService {
     if (
       this.paused ||
       this.tasks.size ||
-      this.initializing.size ||
       this.sockets.size ||
-      this.sessions.size ||
-      this.failures.size
+      this.sessions.size
     ) {
       throw new Error(
-        "Stop Google Meet capture and wait for imports/transcription or resolve migration errors before backing up or restoring"
+        "Stop Google Meet capture and wait for imports/transcription before backing up or restoring"
       );
     }
     this.paused = true;
@@ -770,8 +553,7 @@ export class GoogleMeetService {
       ws.close();
     }
     await Promise.allSettled([
-      ...this.tasks,
-      ...this.initializing,
+      ...this.tasks.keys(),
       ...[...this.sockets].map((ws) => this.finishSocket(ws, false)),
     ]);
     this.listener?.stop(true);
@@ -780,7 +562,6 @@ export class GoogleMeetService {
 
   async reopen() {
     this.initialized.clear();
-    this.failures.clear();
     this.abort = new AbortController();
     this.paused = false;
     await this.initialize();

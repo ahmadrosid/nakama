@@ -2,6 +2,7 @@ import {
   formatTranscript,
   type MeetAction,
   type Meeting,
+  type MeetOverview as Overview,
   type TranscriptSegment,
 } from "@nakama/core/google-meet";
 import {
@@ -27,13 +28,6 @@ import { useAuth } from "@/context/use-auth";
 import { client } from "@/lib/client";
 
 type MeetCall = (action: MeetAction, input?: unknown) => Promise<unknown>;
-type Overview = {
-  meetings: Meeting[];
-  configured: boolean;
-  enabled: boolean;
-  canConfigure: boolean;
-  worker: { state: string; message?: string; captureUrl?: string };
-};
 const message = (error: unknown) =>
   error instanceof Error ? error.message : "Request failed";
 
@@ -444,9 +438,8 @@ function ConnectionStatus({
     connectionMessage = "Checking connection…";
   } else if (!overview.configured) {
     connectionMessage = "Set a transcription API key in Settings.";
-  } else if (overview.worker.state !== "ready") {
-    connectionMessage =
-      overview.worker.message ?? "Google Meet is unavailable.";
+  } else if (!overview.enabled) {
+    connectionMessage = "Google Meet is disabled.";
   } else if (!connected) {
     connectionMessage =
       "Open the Chrome extension on this page and choose Connect this Nakama tab.";

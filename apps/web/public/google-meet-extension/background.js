@@ -122,7 +122,7 @@ async function connect() {
     received: setup?.captureProtocol,
   });
   if (setup.captureProtocol !== 2) {
-    throw new Error("Update the Nakama Google Meet plugin first.");
+    throw new Error("Update Nakama first.");
   }
   await chrome.storage.session.remove(SESSION_KEY);
   await chrome.storage.session.set({ connection });
@@ -165,7 +165,7 @@ async function start() {
       received: setup?.captureProtocol,
     });
     if (setup.captureProtocol !== 2) {
-      throw new Error("Update the Nakama Google Meet plugin first.");
+      throw new Error("Update Nakama first.");
     }
     await ensureOffscreen();
     meeting = await callNakama(connection, "start-capture", {

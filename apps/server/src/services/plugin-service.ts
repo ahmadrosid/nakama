@@ -1377,9 +1377,6 @@ export class PluginService {
 
   async recoverPluginWorkers(): Promise<void> {
     for (const install of await this.db.listOrgPlugins()) {
-      if (install.pluginId === "google-meet") {
-        continue;
-      }
       if (install.lifecycleState !== "enabled" || !install.selectedVersion) {
         continue;
       }
@@ -1414,9 +1411,6 @@ export class PluginService {
     return withPluginMutation(async () => {
       const installs = await this.db.listOrgPlugins();
       for (const install of installs) {
-        if (install.pluginId === "google-meet") {
-          continue;
-        }
         try {
           await this.recoverOneInstall(install);
         } catch (error) {
@@ -1474,9 +1468,6 @@ export class PluginService {
     manifest: PluginManifest;
     releaseDir: string;
   }> {
-    if (pluginId === "google-meet") {
-      throw new PluginHostError("not_found");
-    }
     const gate = admissionGateFor(orgId, pluginId);
     return withAdmissionGate(gate, async () => {
       if (gate.closed) {
@@ -1647,9 +1638,6 @@ export class PluginService {
     pluginId: string,
     work: () => Promise<T>
   ): Promise<T> {
-    if (pluginId === "google-meet") {
-      return Promise.reject(new PluginHostError("not_found"));
-    }
     // Keep the lock through filesystem cleanup, after revision checks can no
     // longer protect an installation whose database record has been deleted.
     return withPluginDataLock(

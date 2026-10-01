@@ -501,9 +501,6 @@ export class WorkerManagerService {
     registration: PluginWorkerRegistration,
     start: boolean
   ): Promise<void> {
-    if (registration.pluginId === "google-meet") {
-      throw new Error("Google Meet is built in");
-    }
     for (const contribution of registration.workers) {
       const name =
         "plugin-" +
@@ -580,46 +577,6 @@ export class WorkerManagerService {
         registration.orgId,
         registration.pluginId
       );
-    }
-  }
-
-  async retireGoogleMeetWorkers(configDir: string) {
-    await this.withPm2(async (pm2) => {
-      const processes = await promisifyPm2<Pm2ProcessDescription[]>((cb) =>
-        pm2.list(cb)
-      );
-      let retired = false;
-      for (const process of processes) {
-        if (
-          process.name &&
-          process.pm2_env?.NAKAMA_PLUGIN_ID === "google-meet" &&
-          process.pm2_env.NAKAMA_PLUGIN_WORKER_ROOT === configDir
-        ) {
-          this.pluginWorkers.delete(process.name);
-          await this.deletePluginProcess(pm2, process.name);
-          retired = true;
-        }
-      }
-      if (retired) {
-        await promisifyPm2<void>((cb) => pm2.dump((error) => cb(error)));
-      }
-    });
-    const orgsDir = join(configDir, "orgs");
-    if (!existsSync(orgsDir)) {
-      return;
-    }
-    for (const org of await readdir(orgsDir, { withFileTypes: true })) {
-      if (!org.isDirectory()) {
-        continue;
-      }
-      const desired = join(
-        orgsDir,
-        org.name,
-        "plugins/google-meet/workers/meet/desired.json"
-      );
-      if (existsSync(desired)) {
-        await writeFile(desired, "false", { mode: 0o600 });
-      }
     }
   }
 
@@ -1256,7 +1213,6 @@ interface Pm2ProcessDescription {
     pm_out_log_path?: string;
     pm_err_log_path?: string;
     NAKAMA_PLUGIN_VERSION?: string;
-    NAKAMA_PLUGIN_ID?: string;
     NAKAMA_PLUGIN_WORKER_ROOT?: string;
   };
 }

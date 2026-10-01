@@ -2,8 +2,8 @@ import { join } from "node:path";
 import { readSettings } from "./actions";
 import type { Meeting, MeetingStore } from "./store";
 import {
+  connectTranscription,
   type TranscriptionSession,
-  transcriptionProviders,
 } from "./transcription";
 
 export function createStreamMeeting(
@@ -20,7 +20,7 @@ export function createStreamMeeting(
   const combined = AbortSignal.any([signal, abort.signal]);
   const started = (async () => {
     const config = readSettings(directory);
-    transcription = await transcriptionProviders[config.provider]!.connect({
+    transcription = await connectTranscription({
       ...config,
       directory: join(directory, "audio", meeting.id),
       onError: (error) => {

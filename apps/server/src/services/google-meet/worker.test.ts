@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { privateJson } from "./actions";
 import { MeetingStore } from "./store";
-import { transcriptionProviders } from "./transcription";
+import * as transcription from "./transcription";
 import { createStreamMeeting, generateNextMeetingTitle } from "./worker";
 
 test.each([true, false])(
@@ -80,7 +80,7 @@ test.each([true, false])(
 test("streams PCM frames to OpenAI and persists the final transcript", async () => {
   const directory = mkdtempSync(join(tmpdir(), "meet-stream-"));
   const store = new MeetingStore(directory, "org");
-  const provider = transcriptionProviders.openai!;
+  const connect = spyOn(transcription, "connectTranscription");
   try {
     privateJson(join(directory, "settings.json"), { apiKey: "test" });
     const meeting = store.create(
@@ -90,23 +90,19 @@ test("streams PCM frames to OpenAI and persists the final transcript", async () 
       1
     );
     const frames: Uint8Array[] = [];
-    transcriptionProviders.openai = {
-      async connect({ onSegment }) {
-        return {
-          close() {},
-          async finish() {
-            onSegment({
-              id: "segment-1",
-              receivedAt: Date.now(),
-              text: "Hello from Meet",
-            });
-          },
-          push(audio) {
-            frames.push(audio);
-          },
-        };
+    connect.mockImplementation(async ({ onSegment }) => ({
+      close() {},
+      async finish() {
+        onSegment({
+          id: "segment-1",
+          receivedAt: Date.now(),
+          text: "Hello from Meet",
+        });
       },
-    };
+      push(audio) {
+        frames.push(audio);
+      },
+    }));
     const stream = createStreamMeeting(
       meeting,
       store,
@@ -123,7 +119,7 @@ test("streams PCM frames to OpenAI and persists the final transcript", async () 
       ["Hello from Meet"]
     );
   } finally {
-    transcriptionProviders.openai = provider;
+    connect.mockRestore();
     store.close();
     rmSync(directory, { force: true, recursive: true });
   }
@@ -132,7 +128,7 @@ test("streams PCM frames to OpenAI and persists the final transcript", async () 
 test("Stop acknowledges captured audio while final transcription drains and rejects late frames", async () => {
   const directory = mkdtempSync(join(tmpdir(), "meet-drain-"));
   const store = new MeetingStore(directory, "org");
-  const provider = transcriptionProviders.openai!;
+  const connect = spyOn(transcription, "connectTranscription");
   let release!: () => void;
   const pending = new Promise<void>((resolve) => {
     release = resolve;
@@ -146,24 +142,20 @@ test("Stop acknowledges captured audio while final transcription drains and reje
       undefined,
       1
     );
-    transcriptionProviders.openai = {
-      async connect({ onSegment }) {
-        return {
-          close() {},
-          async finish() {
-            finishes++;
-            await pending;
-            onSegment({
-              id: "last",
-              receivedAt: 1,
-              speakerName: "Speaker 1",
-              text: "Final words",
-            });
-          },
-          push() {},
-        };
+    connect.mockImplementation(async ({ onSegment }) => ({
+      close() {},
+      async finish() {
+        finishes++;
+        await pending;
+        onSegment({
+          id: "last",
+          receivedAt: 1,
+          speakerName: "Speaker 1",
+          text: "Final words",
+        });
       },
-    };
+      push() {},
+    }));
     const stream = createStreamMeeting(
       meeting,
       store,
@@ -186,7 +178,7 @@ test("Stop acknowledges captured audio while final transcription drains and reje
     expect(store.transcript(meeting.id)[0]?.text).toBe("Final words");
   } finally {
     release();
-    transcriptionProviders.openai = provider;
+    connect.mockRestore();
     store.close();
     rmSync(directory, { force: true, recursive: true });
   }

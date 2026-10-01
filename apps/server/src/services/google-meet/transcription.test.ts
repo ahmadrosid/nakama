@@ -6,15 +6,11 @@ import {
   formatTranscript,
   type TranscriptSegment,
 } from "@nakama/core/google-meet";
-import { transcriptionConfig, transcriptionProviders } from "./transcription";
+import { connectTranscription, transcriptionConfig } from "./transcription";
 
-test("legacy settings resolve to diarization without inheriting a chat model", () => {
-  expect(
-    transcriptionConfig({ apiKey: " secret ", model: "gpt-transcribe" })
-  ).toEqual({
+test("settings trim and validate the dedicated API key", () => {
+  expect(transcriptionConfig({ apiKey: " secret " })).toEqual({
     apiKey: "secret",
-    model: "gpt-4o-transcribe-diarize",
-    provider: "openai",
   });
   expect(() =>
     transcriptionConfig({ apiKey: "secret", model: "gpt-4.1" })
@@ -73,7 +69,7 @@ test("publishes before Stop, captures while request is pending, and reuses voice
       });
     }
   );
-  const session = await transcriptionProviders.openai!.connect({
+  const session = await connectTranscription({
     ...transcriptionConfig({ apiKey: "test" }),
     directory: audioDir,
     onError: () => {},
@@ -128,7 +124,7 @@ test("reused anonymous labels across chunks do not merge voices and invalid resp
       ],
     })
   );
-  const session = await transcriptionProviders.openai!.connect({
+  const session = await connectTranscription({
     ...transcriptionConfig({ apiKey: "test" }),
     directory: join(directory, "audio"),
     onError: (error) => failures.push(error),
@@ -156,7 +152,7 @@ test("permanent provider errors are not retried and queued audio is cleaned", as
   const request = spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(null, { status: 401 })
   );
-  const session = await transcriptionProviders.openai!.connect({
+  const session = await connectTranscription({
     ...transcriptionConfig({ apiKey: "test" }),
     directory: join(directory, "audio"),
     onError: () => {},
@@ -210,7 +206,7 @@ test("reference bank stays at four voices and retries do not duplicate turns", a
       });
     }
   );
-  const session = await transcriptionProviders.openai!.connect({
+  const session = await connectTranscription({
     ...transcriptionConfig({ apiKey: "test" }),
     directory: join(directory, "audio"),
     onError: () => {},
@@ -245,7 +241,7 @@ test("aborting an upload publishes no late segments and removes audio", async ()
         );
       })
   );
-  const session = await transcriptionProviders.openai!.connect({
+  const session = await connectTranscription({
     ...transcriptionConfig({ apiKey: "test" }),
     directory: audioDirectory,
     onError: () => {},

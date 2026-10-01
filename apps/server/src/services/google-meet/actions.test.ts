@@ -1,9 +1,9 @@
 import { expect, mock, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { MeetExecutionContext } from "./actions";
-import { privateJson, run } from "./actions";
+import { run } from "./actions";
 import { MeetingStore } from "./store";
 
 test("settings are admin-only, credentials never returned, meetings are scoped to actor and profile", async () => {
@@ -26,11 +26,6 @@ test("settings are admin-only, credentials never returned, meetings are scoped t
     ).rejects.toThrow();
     const result = await run(input, context);
     expect(JSON.stringify(result)).not.toContain("secret");
-    mkdirSync(join(dir, "workers", "meet"), { recursive: true });
-    privateJson(join(dir, "workers", "meet", "status.json"), {
-      state: "ready",
-      updatedAt: Date.now(),
-    });
     const meeting = (await run(
       { url: "https://meet.google.com/abc-defg-hij" },
       { ...context, actionKey: "start-capture" }

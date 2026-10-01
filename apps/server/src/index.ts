@@ -294,13 +294,7 @@ const pluginService = new PluginService(database.adapter, getUserConfigDir(), {
   onHostRequest: createPluginAgentHost(database.adapter, agent),
   workerManager,
 });
-try {
-  await workerManager.retireGoogleMeetWorkers(getUserConfigDir());
-  await googleMeetService.initialize();
-} catch {
-  await googleMeetService.close();
-  console.warn("Google Meet unavailable: could not retire legacy workers");
-}
+await googleMeetService.initialize();
 try {
   await pluginService.recoverInterruptedPluginOperations();
 } catch (error) {

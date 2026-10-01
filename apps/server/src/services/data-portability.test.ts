@@ -42,30 +42,20 @@ afterEach(async () => {
 });
 
 describe("Nakama data portability", () => {
-  test("built-in Meet snapshots round-trip saved transcripts while excluding rollback and temporary audio", async () => {
+  test("built-in Meet snapshots round-trip saved transcripts while excluding temporary audio", async () => {
     const directory = join(rootDir, "orgs", "a", "meet");
     const store = new MeetingStore(directory, "a");
     const meeting = store.importFile("notes.md", "Saved meeting", "alice");
     store.close();
-    await writeFile(
-      join(directory, "migration.json"),
-      JSON.stringify({ orgId: "a" })
-    );
     await mkdir(join(directory, "audio"), { recursive: true });
     await writeFile(join(directory, "audio", "temporary.wav"), "audio");
-    await mkdir(join(rootDir, ".meet-rollback"), { recursive: true });
-    await writeFile(join(rootDir, ".meet-rollback", "secret.json"), "secret");
     const exported = await createNakamaDataExport({
       databasePath: null,
       rootDir,
     });
     const files = Object.keys(fflate.unzipSync(exported.data));
     expect(files).toContain("orgs/a/meet/meetings.sqlite");
-    expect(
-      files.some(
-        (path) => path.includes("audio/") || path.startsWith(".meet-rollback")
-      )
-    ).toBe(false);
+    expect(files.some((path) => path.includes("audio/"))).toBe(false);
     await restoreNakamaDataImport(exported.data, { confirm: true, rootDir });
     const restored = new MeetingStore(directory, "a");
     try {
