@@ -148,12 +148,24 @@ describe("bash tool", () => {
 
   afterEach(async () => {
     if (workspaceRoot) {
-      await rm(workspaceRoot, {
-        force: true,
-        maxRetries: 5,
-        recursive: true,
-        retryDelay: 100,
-      });
+      // Bun 1.4 parses rm's maxRetries/retryDelay but does not apply them.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await rm(workspaceRoot, { force: true, recursive: true });
+          break;
+        } catch (error) {
+          if (
+            process.platform !== "win32" ||
+            attempt >= 5 ||
+            !["EBUSY", "EPERM", "ENOTEMPTY"].includes(
+              (error as NodeJS.ErrnoException).code ?? ""
+            )
+          ) {
+            throw error;
+          }
+          await Bun.sleep(100 * (attempt + 1));
+        }
+      }
       workspaceRoot = "";
     }
   });
