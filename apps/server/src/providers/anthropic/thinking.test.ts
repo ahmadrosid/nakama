@@ -226,6 +226,166 @@ test("Sonnet 5.5 keeps valid between-tools thinking and drops it after prefix ed
   ]);
 });
 
+test.each(["blocks", "tools"])(
+  "Sonnet 5.5 preserves thinking when persisted %s only reorder object keys",
+  async (location) => {
+    const requests: Array<{
+      messages: Array<{ content: unknown[] }>;
+      tools: unknown[];
+    }> = [];
+    const blocks = [
+      { signature: "signed-plan", thinking: "Plan", type: "thinking" },
+      { data: "opaque-plan", type: "redacted_thinking" },
+      { text: "Answer", type: "text" },
+    ];
+    const tools = [
+      {
+        description: "Lookup",
+        name: "lookup",
+        parameters: {
+          additionalProperties: false,
+          properties: {
+            city: { type: "string" },
+            count: { default: 0, type: "number" },
+          },
+          required: ["city", "count"],
+          type: "object",
+        },
+      },
+    ];
+    const provider = createAnthropicProvider({
+      apiKey: "test-key",
+      fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(init?.body)).not.toContain("_nakamaPrefixHash");
+        requests.push(JSON.parse(String(init?.body)));
+        return Response.json({
+          content: blocks,
+          stop_reason: "end_turn",
+          usage: { input_tokens: 5, output_tokens: 2 },
+        });
+      }) as typeof fetch,
+      model: "claude-sonnet-5-5",
+    });
+    const user: ChatMessage = { content: "First", role: "user" };
+    const first = await provider.generateChat({
+      messages: [user],
+      system: "s",
+      tools,
+    });
+    const original =
+      location === "blocks" ? first.assistantMessage.providerContent : tools;
+    const persisted = JSON.parse(
+      JSON.stringify(original, (_key, value) =>
+        value && typeof value === "object" && !Array.isArray(value)
+          ? Object.fromEntries(Object.entries(value).reverse())
+          : value
+      )
+    );
+    expect(persisted).toEqual(original);
+    expect(JSON.stringify(persisted)).not.toBe(JSON.stringify(original));
+    await provider.generateChat({
+      messages: [
+        user,
+        location === "blocks"
+          ? { ...first.assistantMessage, providerContent: persisted }
+          : first.assistantMessage,
+        { content: "Next", role: "user" },
+      ],
+      system: "s",
+      tools: location === "tools" ? persisted : tools,
+    });
+    expect(requests[1]?.messages[1]?.content).toEqual(blocks);
+    expect(requests[1]?.tools).toEqual(requests[0]?.tools);
+  }
+);
+
+test.each([
+  "array-order",
+  "message-order",
+  "boolean",
+  "number",
+  "null",
+  "string",
+])(
+  "Sonnet 5.5 still invalidates thinking after a %s change",
+  async (change) => {
+    const requests: Array<{
+      messages: Array<{ role: string; content: unknown }>;
+    }> = [];
+    const blocks = [
+      { signature: "signed-plan", thinking: "Plan", type: "thinking" },
+      { data: "opaque-plan", type: "redacted_thinking" },
+      { text: "Answer", type: "text" },
+    ];
+    const defaults: Record<string, unknown> = {
+      choices: ["north", "south"],
+      count: 0,
+      enabled: false,
+      label: "0",
+      note: null,
+    };
+    const tools = [
+      {
+        description: "Lookup",
+        name: "lookup",
+        parameters: {
+          properties: { options: { default: defaults, type: "object" } },
+          type: "object",
+        },
+      },
+    ];
+    const provider = createAnthropicProvider({
+      apiKey: "test-key",
+      fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(init?.body)).not.toContain("_nakamaPrefixHash");
+        requests.push(JSON.parse(String(init?.body)));
+        return Response.json({
+          content: blocks,
+          stop_reason: "end_turn",
+          usage: { input_tokens: 5, output_tokens: 2 },
+        });
+      }) as typeof fetch,
+      model: "claude-sonnet-5-5",
+    });
+    const messages: ChatMessage[] = [
+      { content: "First", role: "user" },
+      { content: "Second", role: "user" },
+    ];
+    const first = await provider.generateChat({ messages, system: "s", tools });
+    if (change === "array-order") {
+      defaults.choices = ["south", "north"];
+    }
+    if (change === "message-order") {
+      messages.reverse();
+    }
+    if (change === "boolean") {
+      defaults.enabled = true;
+    }
+    if (change === "number") {
+      defaults.count = 1;
+    }
+    if (change === "null") {
+      defaults.note = "";
+    }
+    if (change === "string") {
+      defaults.label = 0;
+    }
+    await provider.generateChat({
+      messages: [
+        ...messages,
+        first.assistantMessage,
+        { content: "Next", role: "user" },
+      ],
+      system: "s",
+      tools,
+    });
+    expect(
+      requests[1]?.messages.find((message) => message.role === "assistant")
+        ?.content
+    ).toEqual([blocks[2]]);
+  }
+);
+
 test.each([false, true])(
   "Sonnet 5.5 wire replay survives persistence, not edits (stream=%s)",
   async (stream) => {

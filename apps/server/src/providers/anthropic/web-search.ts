@@ -700,6 +700,23 @@ function anthropicPrefixHash(
   replay: NonNullable<Parameters<typeof toAnthropicMessages>[2]>
 ): string {
   return createHash("sha256")
-    .update(JSON.stringify({ ...replay, content, messages }))
+    .update(
+      JSON.stringify(
+        { ...replay, content, messages },
+        (_key, value: unknown) => {
+          // JSON object key order is not part of Anthropic's prefix binding.
+          // Keep array order and primitive values unchanged.
+          if (!value || typeof value !== "object" || Array.isArray(value)) {
+            return value;
+          }
+          const record = readRecord(value);
+          return Object.fromEntries(
+            Object.keys(record)
+              .sort()
+              .map((key) => [key, record[key]])
+          );
+        }
+      )
+    )
     .digest("hex");
 }
