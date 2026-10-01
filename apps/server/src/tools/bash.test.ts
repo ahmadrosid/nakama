@@ -156,10 +156,16 @@ describe("bash tool", () => {
   for (const mode of ["abort", "timeout"] as const) {
     test(`${mode} stops shell descendants and finishes the tool`, async () => {
       workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+      // A native child reports its own Windows PID, without MSYS fork/exec IDs.
+      await writeFile(
+        path.join(workspaceRoot, "child.cjs"),
+        'const fs = require("node:fs"); fs.writeFileSync("heartbeat", String(Date.now())); fs.writeFileSync("child.pid", String(process.pid)); setInterval(() => fs.writeFileSync("heartbeat", String(Date.now())), 20);'
+      );
       const controller = new AbortController();
       const pending = runBash(
         {
-          command: `sleep 30 & ${childPidCommand} > child.pid; wait`,
+          command: '"$NAKAMA_TEST_BUN" child.cjs & wait',
+          env: { NAKAMA_TEST_BUN: process.execPath },
           timeoutMs: mode === "timeout" ? 500 : 30_000,
         },
         {
@@ -194,6 +200,14 @@ describe("bash tool", () => {
           await Bun.sleep(10);
         }
         expect(isProcessAlive(pid)).toBe(false);
+        const heartbeat = await readFile(
+          path.join(workspaceRoot, "heartbeat"),
+          "utf8"
+        );
+        await Bun.sleep(100);
+        expect(
+          await readFile(path.join(workspaceRoot, "heartbeat"), "utf8")
+        ).toBe(heartbeat);
       } finally {
         if (pid > 0 && isProcessAlive(pid)) {
           process.kill(pid, "SIGKILL");
