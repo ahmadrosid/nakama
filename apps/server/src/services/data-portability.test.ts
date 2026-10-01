@@ -323,6 +323,105 @@ describe("Nakama data portability", () => {
     expect(await readFile(join(rootDir, "config.ini"), "utf8")).toBe("changed");
   });
 
+  test("restore keeps a live pm2 home inside the root in place", async () => {
+    // The desktop app sets PM2_HOME inside its data root. Moving it away loses
+    // pm2.pid, so quitting the app no longer stops the daemon and its workers.
+    const sourceRoot = await mkdtemp(join(tmpdir(), "nakama-pm2-source-"));
+    try {
+      await mkdir(join(sourceRoot, "pm2"), { recursive: true });
+      await writeFile(join(sourceRoot, "pm2", "pm2.pid"), "from-archive");
+      await writeFile(join(sourceRoot, "config.ini"), "restored");
+      const exportResult = await createNakamaDataExport({
+        databasePath: null,
+        rootDir: sourceRoot,
+      });
+
+      await mkdir(join(rootDir, "pm2"), { recursive: true });
+      await writeFile(join(rootDir, "pm2", "pm2.pid"), "live");
+      await writeFile(join(rootDir, "config.ini"), "live");
+      await restoreNakamaDataImport(exportResult.data, {
+        confirm: true,
+        databasePath: null,
+        pm2Home: join(rootDir, "pm2"),
+        rootDir,
+      });
+
+      expect(await readFile(join(rootDir, "pm2", "pm2.pid"), "utf8")).toBe(
+        "live"
+      );
+      expect(await readFile(join(rootDir, "config.ini"), "utf8")).toBe(
+        "restored"
+      );
+    } finally {
+      await rm(sourceRoot, { force: true, recursive: true });
+    }
+  });
+
+  test("restore keeps the log file this process writes to", async () => {
+    await writeFile(join(rootDir, "config.ini"), "original");
+    const exportResult = await createNakamaDataExport({
+      databasePath: null,
+      rootDir,
+    });
+    await writeFile(join(rootDir, "server.log"), "live session");
+
+    await restoreNakamaDataImport(exportResult.data, {
+      confirm: true,
+      databasePath: null,
+      pm2Home: null,
+      rootDir,
+      serverLog: join(rootDir, "server.log"),
+    });
+
+    expect(await readFile(join(rootDir, "server.log"), "utf8")).toBe(
+      "live session"
+    );
+  });
+
+  test("restore still replaces a shared directory that holds the pm2 home", async () => {
+    // PM2_HOME under data/ must not freeze data/sqlite/nakama.sqlite in place.
+    await mkdir(join(rootDir, "data"), { recursive: true });
+    await writeFile(join(rootDir, "data", "notes.txt"), "original");
+    const exportResult = await createNakamaDataExport({
+      databasePath: null,
+      rootDir,
+    });
+    await writeFile(join(rootDir, "data", "notes.txt"), "changed");
+
+    await restoreNakamaDataImport(exportResult.data, {
+      confirm: true,
+      databasePath: null,
+      pm2Home: join(rootDir, "data", "pm2"),
+      rootDir,
+    });
+
+    expect(await readFile(join(rootDir, "data", "notes.txt"), "utf8")).toBe(
+      "original"
+    );
+  });
+
+  test("restore replaces a pm2 directory that is not the live pm2 home", async () => {
+    // Installs whose PM2_HOME is outside the root restore exactly as before.
+    await writeFile(join(rootDir, "config.ini"), "original");
+    const exportResult = await createNakamaDataExport({
+      databasePath: null,
+      rootDir,
+    });
+    await mkdir(join(rootDir, "pm2"), { recursive: true });
+    await writeFile(join(rootDir, "pm2", "pm2.pid"), "stale");
+
+    await restoreNakamaDataImport(exportResult.data, {
+      confirm: true,
+      databasePath: null,
+      pm2Home: join(tmpdir(), "elsewhere", ".pm2"),
+      rootDir,
+    });
+
+    expect(await Bun.file(join(rootDir, "pm2", "pm2.pid")).exists()).toBe(
+      false
+    );
+  });
+
   test("restore moves a server-layout database to where a desktop root reads it", async () => {
     // The server defaults to data/sqlite/nakama.sqlite; the desktop app reads sqlite/nakama.sqlite.
     const sourceRoot = await mkdtemp(join(tmpdir(), "nakama-web-root-"));

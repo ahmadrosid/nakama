@@ -93,7 +93,11 @@ export interface RestoreDataImportOptions {
   beforeReplace?: () => Promise<void> | void;
   confirm: boolean;
   databasePath?: string | null;
+  /** Defaults to `PM2_HOME` in the desktop app. A live pm2 home that is a top-level entry stays in place. */
+  pm2Home?: string | null;
   rootDir?: string;
+  /** Defaults to `NAKAMA_SERVER_LOG` in the desktop app, its log for this process. */
+  serverLog?: string | null;
 }
 
 interface ZipEntry {
@@ -654,6 +658,26 @@ export async function restoreNakamaDataImport(
     rootDir,
     resolveConfiguredDatabasePath(rootDir, options.databasePath)
   );
+  // Live runtime state, not user data: replacing the pm2 home orphans the
+  // daemon, and replacing the log loses this session's diagnostics. Only the
+  // desktop app keeps these in its data root.
+  const desktop = process.env.NAKAMA_DESKTOP === "1";
+  const keptEntries = new Set<string>();
+  for (const live of [
+    options.pm2Home === undefined && desktop
+      ? process.env.PM2_HOME
+      : options.pm2Home,
+    options.serverLog === undefined && desktop
+      ? process.env.NAKAMA_SERVER_LOG
+      : options.serverLog,
+  ]) {
+    const inside = pathInsideRoot(rootDir, live);
+    const entry = inside ? relative(rootDir, inside) : "";
+    // Keep only an entry that is itself the live state, never a shared parent.
+    if (entry && !entry.includes(sep)) {
+      keptEntries.add(entry);
+    }
+  }
 
   // Stage and back up inside rootDir so Docker volume mounts (e.g. /nakama/data)
   // are never renamed — rename(2) on a mount point returns EBUSY.
@@ -690,7 +714,10 @@ export async function restoreNakamaDataImport(
       await options.beforeReplace();
     }
 
-    const existingEntries = await listMovableTopLevelEntries(rootDir);
+    const existingEntries = await listMovableTopLevelEntries(
+      rootDir,
+      keptEntries
+    );
     if (existingEntries.length > 0) {
       await mkdir(backupRoot, { mode: 0o700, recursive: true });
       for (const name of existingEntries) {
@@ -703,7 +730,9 @@ export async function restoreNakamaDataImport(
     }
 
     for (const name of await readdir(stagedRoot)) {
-      await movePath(join(stagedRoot, name), join(rootDir, name));
+      if (!keptEntries.has(name)) {
+        await movePath(join(stagedRoot, name), join(rootDir, name));
+      }
     }
     restoreCommitted = true;
     await finalizeRestoredPlugins(
@@ -732,7 +761,10 @@ export async function restoreNakamaDataImport(
     ) {
       try {
         if (backupComplete) {
-          for (const name of await listMovableTopLevelEntries(rootDir)) {
+          for (const name of await listMovableTopLevelEntries(
+            rootDir,
+            keptEntries
+          )) {
             await rm(join(rootDir, name), { force: true, recursive: true });
           }
           for (const name of backedUpEntries) {
@@ -1181,11 +1213,15 @@ async function moveArchiveDatabaseToLiveLayout(
   }
 }
 
-async function listMovableTopLevelEntries(rootDir: string): Promise<string[]> {
+async function listMovableTopLevelEntries(
+  rootDir: string,
+  keptEntries: ReadonlySet<string>
+): Promise<string[]> {
   const entries = await readdir(rootDir);
   return entries.filter(
     (name) =>
       !(
+        keptEntries.has(name) ||
         name.startsWith(RESTORE_PREFIX) ||
         name.startsWith(BACKUP_PREFIX) ||
         name.startsWith(PLUGIN_SNAPSHOT_PREFIX)
