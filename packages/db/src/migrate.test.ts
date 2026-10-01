@@ -1136,7 +1136,7 @@ test("file pins migrate existing databases, survive reopen and cascade with prof
       INSERT INTO profiles (id, name, org_id, created_at, updated_at) VALUES ('pin-profile', 'Pins', 'pin-org', 'now', 'now');
       INSERT INTO file_pins VALUES ('pin-org', 'pin-user', 'pin-profile', 'notes.md');
     `);
-    db.close();
+    db.close(true);
     db = new Database(filename);
     migrateDatabase(db);
     expect(db.query("SELECT path FROM file_pins").all()).toEqual([
@@ -1145,7 +1145,7 @@ test("file pins migrate existing databases, survive reopen and cascade with prof
     db.exec("DELETE FROM profiles WHERE id = 'pin-profile'");
     expect(db.query("SELECT path FROM file_pins").all()).toEqual([]);
   } finally {
-    db.close();
+    db.close(true);
     rmSync(directory, { force: true, recursive: true });
   }
 });
