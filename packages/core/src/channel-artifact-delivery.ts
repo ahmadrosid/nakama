@@ -47,20 +47,54 @@ export interface ListedArtifactCandidate {
 }
 
 const FRESHNESS_MARKERS =
-  "harian|hari\\s+ini|terbaru|today|daily|latest|yang\\s+baru|update|diperbarui";
+  "harian|bulanan|hari\\s+ini|terbaru|today|daily|monthly|latest|yang\\s+baru|update|diperbarui";
 
-const FILENAME_TOKEN = /\S+\.[a-z0-9]{2,5}\b/gi;
+const MONTH_NAMES =
+  "jan(?:uary|uari)?|feb(?:ruary|ruari)?|mar(?:ch|et)?|apr(?:il)?|may|mei|jun(?:e|i)?|jul(?:y|i)?|aug(?:ust)?|agu(?:stus)?|sep(?:t(?:ember)?)?|oct(?:ober)?|okt(?:ober)?|nov(?:ember)?|dec(?:ember)?|des(?:ember)?";
 
-export function isFreshReportRequest(text: string): boolean {
+// Numeric-only suffixes can be dotted dates, not file extensions.
+const FILENAME_TOKEN =
+  /"[^"\r\n]*\.(?!\d+\b)[a-z0-9]{2,5}"|'[^'\r\n]*\.(?!\d+\b)[a-z0-9]{2,5}'|`[^`\r\n]*\.(?!\d+\b)[a-z0-9]{2,5}`|\S+\.(?!\d+\b)[a-z0-9]{2,5}\b/gi;
+
+export function isFreshReportRequest(
+  text: string,
+  savedFilenames: readonly string[] = []
+): boolean {
   // Filenames can carry a marker word (`daily-report.csv`, `update-harga.csv`)
   // and those requests still want the file itself, not a fresh agent turn.
-  const normalized = text.trim().replace(FILENAME_TOKEN, " ");
+  let normalized = text.trim();
+  // Known names also cover unquoted spaces. Match longer names before suffixes,
+  // and leave any constraints outside the filename for the checks below.
+  for (const filename of savedFilenames.toSorted(
+    (a, b) => b.length - a.length
+  )) {
+    normalized = normalized.replace(
+      new RegExp(
+        String.raw`(^|\s)${RegExp.escape(filename)}(?=$|\s|[,.!?;:](?:\s|$))`,
+        "gi"
+      ),
+      " "
+    );
+  }
+  normalized = normalized.replace(FILENAME_TOKEN, " ");
   if (!normalized) {
     return false;
   }
 
-  return new RegExp(String.raw`\b(?:${FRESHNESS_MARKERS})\b`, "i").test(
-    normalized
+  // The saved-file shortcut cannot filter dates or consolidate a report.
+  // Recognize constraints, not date validity; the agent handles the request.
+  return (
+    new RegExp(String.raw`\b(?:${FRESHNESS_MARKERS})\b`, "i").test(
+      normalized
+    ) ||
+    /\b\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}\b/.test(normalized) ||
+    new RegExp(
+      String.raw`\b(?:\d{1,2}(?:st|nd|rd|th)?\s+(?:${MONTH_NAMES})\b|(?:${MONTH_NAMES})\.?\s+\d{1,2}(?:st|nd|rd|th)?\b)`,
+      "i"
+    ).test(normalized) ||
+    /\b(?:1|one|single|satu)\s+(?:file|csv|document|dokumen)\b/i.test(
+      normalized
+    )
   );
 }
 
