@@ -1,4 +1,11 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { createAgentChatSession } from "@nakama/agent";
+import {
+  persistInlineAttachmentsInContent,
+  rehydrateMessagesForProvider,
+  type SaveInlineAttachmentInput,
+} from "@nakama/core";
 import { streamFromChunks } from "../test-helpers";
 import { createChatgptProvider } from "./index";
 import { CHATGPT_CODEX_BASE_URL } from "./oauth";
@@ -42,6 +49,116 @@ function textStreamResponse(text: string) {
 }
 
 describe("createChatgptProvider", () => {
+  test.each([
+    { kind: "pdf", streaming: false },
+    { kind: "pdf", streaming: true },
+    { kind: "png", streaming: false },
+    { kind: "png", streaming: true },
+  ])(
+    "sends stored $kind bytes to ChatGPT (stream: $streaming)",
+    async ({ kind, streaming }) => {
+      const pdf = readFileSync(
+        new URL(
+          "../../../../../packages/core/src/__fixtures__/sample.pdf",
+          import.meta.url
+        )
+      ).toString("base64");
+      const png =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+      const saved = new Map<string, SaveInlineAttachmentInput>();
+      const fetchMock = mock(
+        async (url: RequestInfo | URL, init?: RequestInit) => {
+          expect(String(url)).toBe(`${CHATGPT_CODEX_BASE_URL}/responses`);
+          const body = JSON.parse(String(init?.body));
+          expect(body.stream).toBe(true);
+          expect(body.input).toEqual([
+            {
+              content: [
+                kind === "pdf"
+                  ? {
+                      file_data: `data:application/pdf;base64,${pdf}`,
+                      filename: "receipt.pdf",
+                      type: "input_file",
+                    }
+                  : {
+                      image_url: `data:image/png;base64,${png}`,
+                      type: "input_image",
+                    },
+              ],
+              role: "user",
+              type: "message",
+            },
+          ]);
+          return textStreamResponse("Received");
+        }
+      );
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+      const session = createAgentChatSession(
+        {
+          provider: createChatgptProvider({
+            getOAuth: validOauth,
+            model: "gpt-5.4",
+          }),
+        },
+        {
+          channel: "whatsapp",
+          preprocessUserContent: (content) =>
+            persistInlineAttachmentsInContent(content, async (attachment) => {
+              const attachmentId = `att-${saved.size}`;
+              saved.set(attachmentId, attachment);
+              return { attachmentId, size: attachment.bytes.length };
+            }),
+          rehydrateMessagesForProvider: (messages) =>
+            rehydrateMessagesForProvider(
+              messages,
+              async (id) => saved.get(id) ?? null
+            ),
+        }
+      );
+      const input = {
+        ...(kind === "pdf"
+          ? {
+              documents: [
+                {
+                  data: pdf,
+                  filename: "receipt.pdf",
+                  mediaType: "application/pdf",
+                },
+              ],
+            }
+          : { images: [{ data: png, mediaType: "image/png" }] }),
+        message: "",
+      };
+      const chunks: string[] = [];
+      const reply = streaming
+        ? await session.sendStream(input, {
+            onChunk: (chunk) => chunks.push(chunk),
+          })
+        : await session.send(input);
+      expect(reply).toBe("Received");
+      if (streaming) {
+        expect(chunks.join("")).toBe("Received");
+      }
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(session.getHistory()[0]?.content).toEqual([
+        kind === "pdf"
+          ? {
+              attachmentId: "att-0",
+              filename: "receipt.pdf",
+              mediaType: "application/pdf",
+              size: Buffer.from(pdf, "base64").length,
+              type: "document_ref",
+            }
+          : {
+              attachmentId: "att-0",
+              mediaType: "image/png",
+              size: Buffer.from(png, "base64").length,
+              type: "image_ref",
+            },
+      ]);
+    }
+  );
+
   test("generateText streams a Responses chat turn", async () => {
     const fetchMock = mock(
       async (input: RequestInfo | URL, init?: RequestInit) => {
