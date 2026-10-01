@@ -34,12 +34,18 @@ beforeEach(async () => {
   rootDir = await mkdtemp(join(tmpdir(), "nakama-data-portability-test-"));
 });
 
+// The entry-budget test creates 10,000 files; Windows deletion needs its own budget.
 afterEach(async () => {
   if (rootDir) {
-    await rm(rootDir, { force: true, recursive: true });
+    await rm(rootDir, {
+      force: true,
+      maxRetries: 5,
+      recursive: true,
+      retryDelay: 100,
+    });
     rootDir = "";
   }
-});
+}, 30_000);
 
 describe("Nakama data portability", () => {
   test("built-in Meet snapshots round-trip saved transcripts while excluding temporary audio", async () => {

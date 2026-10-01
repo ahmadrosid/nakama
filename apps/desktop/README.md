@@ -2,6 +2,14 @@
 
 The existing Nakama web app with a bundled local server. Opening the app starts the server automatically; quitting stops the server and its background workers. No separate Bun, Node, Docker, or Nakama server installation is needed.
 
+## Windows installation
+
+There is currently no published Windows installation link in this repository. Windows distribution uses Microsoft Store signing; a public Store link must be added here after the listing is available. No signed Windows installer is provided on GitHub Releases.
+
+**Do not install the unsigned `.msix` from older releases.** It is a Partner Center upload, not an installer you can double-click. New builds keep that package in the `nakama-windows-store` workflow artifact for Store submission only.
+
+Until an installation link is published, use the [web demo](https://demo.getnakama.cloud/) or [run Nakama with Docker](../../README.md#docker).
+
 ## Develop and build
 
 From an Apple Silicon Mac or Windows x64 machine with this Git checkout and Bun installed:

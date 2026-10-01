@@ -248,9 +248,16 @@ function openInBrowser(value) {
   }
 }
 
+// Packaged builds get the icon electron-builder sets on their executable. A
+// development run starts the stock Electron binary, whose icon is Electron's.
+export const windowIcon = app.isPackaged
+  ? undefined
+  : join(import.meta.dirname, "../web/public/icons/icon-512.png");
+
 export async function createWindow(url, { show = true } = {}) {
   const origin = new URL(serverUrl(url)).origin;
   const window = new BrowserWindow({
+    ...(windowIcon && { icon: windowIcon }),
     backgroundColor: "#09090b",
     height: 800,
     minHeight: 540,
