@@ -13,6 +13,10 @@ const ZONE_TAB_PATHS = [
   "/usr/share/zoneinfo/zone.tab",
 ];
 
+const REGION_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+type LocaleWithTimeZones = Intl.Locale & { getTimeZones?: () => string[] };
+
 /** ICU / CLDR names that differ from the current zone.tab id. */
 const ZONE_ALIASES: Readonly<Record<string, string>> = {
   "Africa/Asmera": "Africa/Asmara",
@@ -69,6 +73,23 @@ function isSupportedTimeZone(zoneName: string): boolean {
   }
 }
 
+/**
+ * Windows ships no tzdata tables, but ICU knows the zones of each region. No
+ * API lists the regions themselves, so every two-letter code is asked once.
+ * ICU answers with CLDR ids, which ZONE_ALIASES then maps to the tzdata ones.
+ */
+function addCountriesFromIcu(map: Map<string, string>): void {
+  for (const first of REGION_LETTERS) {
+    for (const second of REGION_LETTERS) {
+      const region = `${first}${second}`;
+      const locale = new Intl.Locale("und", { region }) as LocaleWithTimeZones;
+      for (const zoneName of locale.getTimeZones?.() ?? []) {
+        map.set(zoneName, region);
+      }
+    }
+  }
+}
+
 function loadCountryByZone(): Map<string, string> {
   if (cachedCountryByZone) {
     return cachedCountryByZone;
@@ -93,6 +114,10 @@ function loadCountryByZone(): Map<string, string> {
     } catch {
       // try the next tzdata path
     }
+  }
+
+  if (map.size === 0 && process.platform === "win32") {
+    addCountriesFromIcu(map);
   }
 
   for (const [alias, canonical] of Object.entries(ZONE_ALIASES)) {
