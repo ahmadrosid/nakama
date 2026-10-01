@@ -112,6 +112,15 @@ const RESTORE_PREFIX = ".nakama-restore-";
 const BACKUP_PREFIX = ".nakama-backup-";
 const PLUGIN_SNAPSHOT_PREFIX = ".nakama-plugin-snapshot-";
 const ORG_PLUGIN_SQLITE = /^orgs\/[^/]+\/plugins\/[^/]+\/db\/[^/]+\.sqlite$/;
+/**
+ * Where the main database sits inside a data root: the server default
+ * (`packages/core/src/config.ts`) and the desktop app (`apps/desktop/main.mjs`).
+ * An archive from one layout must land where the restoring install reads it.
+ */
+const MAIN_DATABASE_LAYOUTS: readonly string[] = [
+  "data/sqlite/nakama.sqlite",
+  "sqlite/nakama.sqlite",
+];
 
 function resolveNakamaRootDir(rootDir?: string): string {
   const raw = rootDir ?? getUserConfigDir();
@@ -669,6 +678,11 @@ export async function restoreNakamaDataImport(
       await writeRestoredEntry(stagedRoot, entry);
       restoredFileCount += 1;
     }
+    await moveArchiveDatabaseToLiveLayout(
+      stagedRoot,
+      rootDir,
+      liveDatabasePath
+    );
 
     if (options.beforeReplace) {
       // Set first: a hook that throws may already have released the handle.
@@ -1134,6 +1148,37 @@ function pathInsideRoot(
     !isAbsolute(relativePath)
     ? absolute
     : null;
+}
+
+/**
+ * An archive from the other layout would otherwise restore its database where
+ * this install never reads it, and the reopen creates an empty one instead.
+ */
+async function moveArchiveDatabaseToLiveLayout(
+  stagedRoot: string,
+  rootDir: string,
+  liveDatabasePath: string | null
+): Promise<void> {
+  if (!liveDatabasePath) {
+    return;
+  }
+  const liveLayout = relative(rootDir, liveDatabasePath).split(sep).join("/");
+  const target = join(stagedRoot, liveLayout);
+  if (
+    !MAIN_DATABASE_LAYOUTS.includes(liveLayout) ||
+    (await pathExists(target))
+  ) {
+    return;
+  }
+
+  for (const layout of MAIN_DATABASE_LAYOUTS) {
+    const archived = join(stagedRoot, layout);
+    if (layout !== liveLayout && (await pathExists(archived))) {
+      await mkdir(dirname(target), { mode: 0o700, recursive: true });
+      await rename(archived, target);
+      return;
+    }
+  }
 }
 
 async function listMovableTopLevelEntries(rootDir: string): Promise<string[]> {

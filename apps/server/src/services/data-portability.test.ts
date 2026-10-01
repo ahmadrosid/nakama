@@ -323,6 +323,92 @@ describe("Nakama data portability", () => {
     expect(await readFile(join(rootDir, "config.ini"), "utf8")).toBe("changed");
   });
 
+  test("restore moves a server-layout database to where a desktop root reads it", async () => {
+    // The server defaults to data/sqlite/nakama.sqlite; the desktop app reads sqlite/nakama.sqlite.
+    const sourceRoot = await mkdtemp(join(tmpdir(), "nakama-web-root-"));
+    try {
+      const sourceDatabase = join(
+        sourceRoot,
+        "data",
+        "sqlite",
+        "nakama.sqlite"
+      );
+      await mkdir(join(sourceRoot, "data", "sqlite"), { recursive: true });
+      const source = new Database(sourceDatabase, { create: true });
+      source.exec(
+        "CREATE TABLE org_plugins (org_id TEXT, plugin_id TEXT, lifecycle_state TEXT, revision INTEGER, pending_operation TEXT, updated_at TEXT)"
+      );
+      source.exec(
+        "INSERT INTO org_plugins VALUES ('org-1', 'notes', 'enabled', 1, NULL, '2026-09-30T00:00:00.000Z')"
+      );
+      source.close(true);
+      const exportResult = await createNakamaDataExport({
+        databasePath: sourceDatabase,
+        rootDir: sourceRoot,
+      });
+
+      const liveDatabase = join(rootDir, "sqlite", "nakama.sqlite");
+      await restoreNakamaDataImport(exportResult.data, {
+        confirm: true,
+        databasePath: liveDatabase,
+        rootDir,
+      });
+
+      expect(
+        await Bun.file(
+          join(rootDir, "data", "sqlite", "nakama.sqlite")
+        ).exists()
+      ).toBe(false);
+      const restored = new Database(liveDatabase, { readonly: true });
+      try {
+        expect(
+          restored.query("SELECT lifecycle_state FROM org_plugins").get()
+        ).toEqual({ lifecycle_state: "disabled" });
+      } finally {
+        restored.close(true);
+      }
+    } finally {
+      await rm(sourceRoot, { force: true, recursive: true });
+    }
+  });
+
+  test("restore moves a desktop-layout database to where a server root reads it", async () => {
+    const sourceRoot = await mkdtemp(join(tmpdir(), "nakama-desktop-root-"));
+    try {
+      const sourceDatabase = join(sourceRoot, "sqlite", "nakama.sqlite");
+      await mkdir(join(sourceRoot, "sqlite"), { recursive: true });
+      const source = new Database(sourceDatabase, { create: true });
+      source.exec("CREATE TABLE marker (value TEXT)");
+      source.exec("INSERT INTO marker VALUES ('desktop')");
+      source.close(true);
+      const exportResult = await createNakamaDataExport({
+        databasePath: sourceDatabase,
+        rootDir: sourceRoot,
+      });
+
+      const liveDatabase = join(rootDir, "data", "sqlite", "nakama.sqlite");
+      await restoreNakamaDataImport(exportResult.data, {
+        confirm: true,
+        databasePath: liveDatabase,
+        rootDir,
+      });
+
+      expect(
+        await Bun.file(join(rootDir, "sqlite", "nakama.sqlite")).exists()
+      ).toBe(false);
+      const restored = new Database(liveDatabase, { readonly: true });
+      try {
+        expect(restored.query("SELECT value FROM marker").get()).toEqual({
+          value: "desktop",
+        });
+      } finally {
+        restored.close(true);
+      }
+    } finally {
+      await rm(sourceRoot, { force: true, recursive: true });
+    }
+  });
+
   test("restore disables plugins in the configured live database", async () => {
     // The restore routes pass no databasePath, so the desktop app's
     // sqlite/nakama.sqlite comes only from DATABASE_URL.
