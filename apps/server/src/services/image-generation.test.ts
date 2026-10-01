@@ -434,30 +434,37 @@ describe("AgentService image generation usage (AE5)", () => {
     ]);
   });
 
-  test("a custom image model is priced from its own rates", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const tracker = await LlmUsageTracker.create(db);
-    const config = gatewayConfig({ imageModel: "p-gateway::cb/gpt-image-2" });
-    const service = new AgentService(config, null, db, tracker);
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () =>
-      new Response(
-        JSON.stringify({
-          data: [{ b64_json: Buffer.from("png").toString("base64") }],
-          usage: { input_tokens: 10, output_tokens: 100 },
-        }),
-        { headers: { "Content-Type": "application/json" }, status: 200 }
-      )) as unknown as typeof fetch;
+  // gpt-image-2 shares its id with the OpenAI image rates table.
+  test.each(["cb/gpt-image-2", "gpt-image-2"])(
+    "a custom image model %s is priced from its own rates",
+    async (modelId) => {
+      const db = createInMemoryDatabaseAdapter();
+      const tracker = await LlmUsageTracker.create(db);
+      const config = gatewayConfig({ imageModel: `p-gateway::${modelId}` });
+      config.providers[1].customModels = [
+        { id: modelId, inputPerMillionUsd: 2, outputPerMillionUsd: 40 },
+      ];
+      const service = new AgentService(config, null, db, tracker);
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (async () =>
+        new Response(
+          JSON.stringify({
+            data: [{ b64_json: Buffer.from("png").toString("base64") }],
+            usage: { input_tokens: 10, output_tokens: 100 },
+          }),
+          { headers: { "Content-Type": "application/json" }, status: 200 }
+        )) as unknown as typeof fetch;
 
-    try {
-      await service.generateImage({ prompt: "a cat" });
-    } finally {
-      globalThis.fetch = originalFetch;
+      try {
+        await service.generateImage({ prompt: "a cat" });
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+
+      // 10 input at $2/M plus 100 output at $40/M, not the $1/$3 fallback.
+      expect(tracker.getStats().estimatedCostUsd).toBeCloseTo(0.004_02, 10);
     }
-
-    // 10 input at $2/M plus 100 output at $40/M, not the $1/$3 fallback.
-    expect(tracker.getStats().estimatedCostUsd).toBeCloseTo(0.004_02, 10);
-  });
+  );
 
   test("failed OpenAI response does not increment usage", async () => {
     const db = createInMemoryDatabaseAdapter();
