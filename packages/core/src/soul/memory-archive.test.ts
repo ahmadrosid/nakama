@@ -65,6 +65,19 @@ describe("memory archive", () => {
     ]);
   });
 
+  test("parseMemoryContent reads dated sections from a CRLF file", () => {
+    // Escapes, not a template literal: a template normalises CRLF to LF.
+    const parsed = parseMemoryContent(
+      "# Memory Log\r\n\r\n---\r\n\r\n## 2026-06-28\r\n\r\n- Older fact.\r\n\r\n## 2026-06-29\r\n\r\n- Active fact.\r\n"
+    );
+
+    expect(parsed.preamble).toBe("# Memory Log\n\n---");
+    expect(parsed.sections).toEqual([
+      { bullets: ["Older fact."], date: "2026-06-28" },
+      { bullets: ["Active fact."], date: "2026-06-29" },
+    ]);
+  });
+
   test("partitionMemoryEntries moves matching bullets to archive sections", () => {
     const parsed = parseMemoryContent(`# Memory Log
 
