@@ -125,8 +125,14 @@ export function configureUpdates(
 export async function startLocalServer(runtime, dataDir) {
   await mkdir(dataDir, { mode: 0o700, recursive: true });
   const log = await open(join(dataDir, "server.log"), "w", 0o600);
+  // NAKAMA_PYTHON_BIN survives on Windows so users whose Python is not on PATH
+  // can point the server at it; the server still checks it against its allowlist.
   const env = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.startsWith("NAKAMA_"))
+    Object.entries(process.env).filter(
+      ([key]) =>
+        !key.startsWith("NAKAMA_") ||
+        (process.platform === "win32" && key === "NAKAMA_PYTHON_BIN")
+    )
   );
   const child = spawn(
     join(runtime, "bin", process.platform === "win32" ? "bun.exe" : "bun"),
