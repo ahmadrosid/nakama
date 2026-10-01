@@ -12,7 +12,7 @@ import {
   readFileTool,
   writeFileTool,
 } from "@nakama/core";
-import { createProviderForInstance } from "../providers/create";
+import { createOpenAIProvider } from "../providers/openai";
 import { withMswCassette } from "../testing/llm-msw-cassette";
 import { sendWhatsAppArtifactTool } from "./send-discord-artifact-tool";
 
@@ -51,19 +51,16 @@ const cases = [
 for (const scenario of cases) {
   test(`WhatsApp agent artifact decision: ${scenario.name}`, async () => {
     const config = await loadUserConfig();
-    const instance = config?.providers.find(
-      (item) => item.type === "openai" && item.apiKey.trim()
-    ) ?? {
-      apiKey: process.env.OPENAI_API_KEY ?? "sk-replay-placeholder",
-      createdAt: "2026-10-01T00:00:00.000Z",
-      id: "replay-openai",
-      label: "OpenAI",
-      type: "openai" as const,
-    };
-    const provider = createProviderForInstance(instance, "gpt-4o-mini");
-    if (!provider) {
-      throw new Error("OpenAI provider unavailable");
-    }
+    const provider = createOpenAIProvider({
+      apiKey:
+        config?.providers.find(
+          (item) => item.type === "openai" && item.apiKey.trim()
+        )?.apiKey ??
+        process.env.OPENAI_API_KEY ??
+        "sk-replay-placeholder",
+      // Match the recorded Responses API model regardless of local catalogs.
+      model: "gpt-5.6-luna",
+    });
     const previous = process.env.NAKAMA_CONFIG_DIR;
     const home = await mkdtemp(
       path.join(tmpdir(), "nakama-whatsapp-cassette-")
@@ -106,7 +103,7 @@ for (const scenario of cases) {
         `whatsapp-artifact-${scenario.name}`,
         () => session.send(scenario.message),
         {
-          url: /https:\/\/api\.openai\.com\/v1\/(?:responses|chat\/completions)$/,
+          url: "https://api.openai.com/v1/responses",
         }
       );
       const history = session.getHistory();
