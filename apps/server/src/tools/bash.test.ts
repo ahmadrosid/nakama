@@ -20,8 +20,8 @@ describe("host Bash discovery", () => {
     ProgramFiles: "C:\\Program Files",
     "ProgramFiles(x86)": "C:\\Program Files (x86)",
   };
-  const gitBash = "C:\\Program Files\\Git\\bin\\bash.exe";
-  const gitBashX86 = "C:\\Program Files (x86)\\Git\\bin\\bash.exe";
+  const gitBash = "C:\\Program Files\\Git\\usr\\bin\\bash.exe";
+  const gitBashX86 = "C:\\Program Files (x86)\\Git\\usr\\bin\\bash.exe";
   const pathBash = "C:\\msys64\\usr\\bin\\bash.exe";
 
   test("prefers Git Bash over PATH, including paths with spaces", () => {
@@ -179,7 +179,9 @@ describe("bash tool", () => {
         }
         const result = await Promise.race([
           pending,
-          Bun.sleep(2000).then(() => "hung"),
+          Bun.sleep(process.platform === "win32" ? 5000 : 2000).then(
+            () => "hung"
+          ),
         ]);
         expect(result).not.toBe("hung");
         if (mode === "abort") {
@@ -199,7 +201,7 @@ describe("bash tool", () => {
         controller.abort();
         await pending;
       }
-    });
+    }, 10_000);
   }
 
   test("returns after shell exit when a quiet descendant holds the pipes", async () => {

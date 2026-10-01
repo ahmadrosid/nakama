@@ -236,7 +236,8 @@ export function resolveHostBash(
 
   for (const root of [env.ProgramFiles, env["ProgramFiles(x86)"]]) {
     if (root) {
-      const shell = path.win32.join(root, "Git", "bin", "bash.exe");
+      // Use Bash itself, rather than Git's launcher, so its PID owns the tree.
+      const shell = path.win32.join(root, "Git", "usr", "bin", "bash.exe");
       if (exists(shell)) {
         return shell;
       }
@@ -284,22 +285,29 @@ function runShellCommand(
     let exited = false;
     let settled = false;
     let abortHandled = false;
+    let treeKilled: Promise<void> | undefined;
 
     const killCommand = () => {
       if (!child.pid) {
         return;
       }
       if (process.platform === "win32") {
-        const killer = spawn(
-          path.join(
-            process.env.SystemRoot ?? "C:\\Windows",
-            "System32",
-            "taskkill.exe"
-          ),
-          ["/F", "/T", "/PID", String(child.pid)],
-          { stdio: "ignore", windowsHide: true }
-        );
-        killer.once("error", () => child.kill("SIGKILL"));
+        treeKilled ??= new Promise<void>((done) => {
+          const killer = spawn(
+            path.join(
+              process.env.SystemRoot ?? "C:\\Windows",
+              "System32",
+              "taskkill.exe"
+            ),
+            ["/F", "/T", "/PID", String(child.pid)],
+            { stdio: "ignore", windowsHide: true }
+          );
+          killer.once("close", () => done());
+          killer.once("error", () => {
+            child.kill("SIGKILL");
+            done();
+          });
+        });
         return;
       }
       try {
@@ -367,7 +375,7 @@ function runShellCommand(
       stderr = appendOutput(stderr, String(chunk));
     });
 
-    function finish(exitCode: number | null, error?: Error) {
+    async function finish(exitCode: number | null, error?: Error) {
       if (settled) {
         return;
       }
@@ -377,6 +385,8 @@ function runShellCommand(
       options.signal?.removeEventListener("abort", onAbort);
       child.stdout?.destroy();
       child.stderr?.destroy();
+      // The shell can exit before taskkill finishes terminating descendants.
+      await treeKilled;
       if (error || abortHandled) {
         reject(
           error ?? new DOMException("The operation was aborted", "AbortError")
