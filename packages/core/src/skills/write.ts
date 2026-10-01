@@ -8,7 +8,11 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { pathExists } from "../fs";
-import { comparablePath, resolveWithRealpath } from "../tools/paths";
+import {
+  comparablePath,
+  namesAlternateDataStream,
+  resolveWithRealpath,
+} from "../tools/paths";
 import { getUserConfigDir } from "../user-config";
 import { BUNDLED_SKILL_NAMES } from "./bundled-names";
 import { isGlobalSkillSourcePath } from "./dedupe";
@@ -249,6 +253,11 @@ export function resolveProfileSkillSupportingFilePath(
   }
 
   const target = path.join(directory, ...segments);
+  if (namesAlternateDataStream(target)) {
+    throw new Error(
+      "path cannot contain ':' on Windows, where it names an NTFS alternate data stream."
+    );
+  }
   // resolveProfileSkillDirectory already locked `directory` inside the profile
   // skills root; realpath containment under that skill dir is the remaining check.
   const skillRoot = resolveWithRealpath(directory);
