@@ -159,6 +159,8 @@ export function registerSetupImportRoutes(
     let restore;
     try {
       restore = await restoreNakamaDataImport(archive, {
+        afterFailedReplace: options.onDataRestored,
+        beforeReplace: options.onBeforeDataRestore,
         confirm: body.confirm,
       });
     } catch (error) {
