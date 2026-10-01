@@ -83,7 +83,7 @@ async function publish() {
       "--title",
       `Nakama Desktop ${version}`,
       "--notes",
-      "Self-contained macOS desktop release.",
+      "Self-contained macOS desktop release.\n\nWindows: no installable Windows download is published here. The unsigned MSIX is for Partner Center upload, not installable by double-clicking. See https://github.com/ahmadrosid/nakama/blob/main/apps/desktop/README.md#windows-installation for Windows availability and alternatives.",
       "--latest=false"
     );
     existing = { draft: true };
