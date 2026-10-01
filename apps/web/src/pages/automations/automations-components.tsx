@@ -32,18 +32,17 @@ import {
   PlayIcon,
   Search01Icon,
 } from "hugeicons-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { MessageResponse } from "@/components/ai-elements/message";
-import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
 import {
-  chatMessagesToListItems,
   formatFutureRelativeTime,
   formatSessionRelativeTime,
   formatSessionTimestamp,
 } from "@/lib/chat-history";
 import {
+  automationProgressLines,
   formatRunDuration,
   groupRunsByDay,
   runPreviewText,
@@ -755,32 +754,54 @@ function RunHistoryExpandedActions({
   );
 }
 
+function RunProgressLog({ run }: { run: AutomationRunRecord }) {
+  const container = useRef<HTMLDivElement>(null);
+  const followOutput = useRef(true);
+  useEffect(() => {
+    if (container.current && followOutput.current) {
+      container.current.scrollTop = container.current.scrollHeight;
+    }
+  }, [run.progress]);
+
+  return (
+    <div
+      aria-label="Automation progress"
+      className="max-h-[min(70vh,28rem)] space-y-2 overflow-auto font-mono text-xs leading-relaxed"
+      onScroll={(event) => {
+        const element = event.currentTarget;
+        followOutput.current =
+          element.scrollHeight - element.scrollTop - element.clientHeight < 40;
+      }}
+      ref={container}
+      role="log"
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users need to scroll the live log.
+      tabIndex={0}
+    >
+      {automationProgressLines(run.progress ?? []).map((line) => (
+        <div
+          className={cn(
+            line.type === "text"
+              ? "whitespace-pre-wrap break-words text-foreground"
+              : "truncate text-muted-foreground",
+            line.type === "error" && "text-destructive"
+          )}
+          key={line.id}
+          title={line.type === "text" ? undefined : line.text}
+        >
+          {line.text}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RunHistoryOutput({ run }: { run: AutomationRunRecord }) {
   const isRunning = run.status === "running";
   const hasOutput = Boolean(run.output?.trim());
   const hasError = Boolean(run.error?.trim());
 
   if (isRunning && run.progress?.length) {
-    const messages = chatMessagesToListItems(run.progress).map((message) => ({
-      ...message,
-      streaming:
-        message.role === "assistant" &&
-        message.historyIndex === run.progress!.length - 1,
-      toolStatus:
-        message.role === "tool" && !message.toolCompletedAt
-          ? ("running" as const)
-          : message.toolStatus,
-    }));
-    return (
-      <ChatMessageList
-        actionsDisabled
-        className="h-[min(70vh,28rem)] flex-none"
-        contentClassName="px-0"
-        messages={messages}
-        streamActive
-        turnStartedAt={run.startedAt}
-      />
-    );
+    return <RunProgressLog run={run} />;
   }
 
   if (hasError && hasOutput) {

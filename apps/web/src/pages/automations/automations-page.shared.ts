@@ -1,8 +1,60 @@
 import type {
   AutomationRunRecord,
   AutomationTrigger,
+  ChatMessage,
   StoredAutomation,
 } from "@nakama/core/contract";
+import { segmentAssistantTurn } from "@/components/chat/assistant-tool-group.shared";
+import { chatMessagesToListItems } from "@/lib/chat-history";
+import {
+  formatToolResult,
+  formatToolSummary,
+  isToolResultError,
+} from "@/lib/chat-stream";
+
+export function automationProgressLines(messages: ChatMessage[]) {
+  return segmentAssistantTurn(chatMessagesToListItems(messages)).flatMap<{
+    id: string;
+    text: string;
+    type: "text" | "tool" | "error";
+  }>((segment) => {
+    if (segment.kind === "text") {
+      return [
+        {
+          id: segment.message.id,
+          text: segment.message.content,
+          type: "text" as const,
+        },
+      ];
+    }
+    const running = segment.tools.filter((tool) => !tool.toolCompletedAt);
+    const completed = segment.tools.length - running.length;
+    const errors = segment.tools.flatMap((tool) => {
+      const output = formatToolResult(tool.tool, tool.toolResult);
+      return tool.toolCompletedAt && isToolResultError(tool.toolResult, output)
+        ? [
+            {
+              id: `${tool.id}-error`,
+              text: `✗ ${tool.tool}: ${(output ?? "Failed").replace(/\s+/g, " ").slice(0, 160)}`,
+              type: "error" as const,
+            },
+          ]
+        : [];
+    });
+    const active = running[0];
+    const summary = active
+      ? `⠋ ${active.tool}  ${formatToolSummary(active.tool, active.toolInput) ?? ""} · ${completed} done${running.length > 1 ? ` · ${running.length} running` : ""}`
+      : `${errors.length ? "✗" : "✓"} ${completed} ${completed === 1 ? "tool" : "tools"} completed${errors.length ? ` · ${errors.length} failed` : ""}`;
+    return [
+      ...errors,
+      {
+        id: `${segment.groupId}-summary`,
+        text: summary.replace(/\s+/g, " ").trim(),
+        type: "tool" as const,
+      },
+    ];
+  });
+}
 
 export const agentWorkPanelClassName =
   "flex min-h-0 flex-1 flex-col overflow-hidden";
