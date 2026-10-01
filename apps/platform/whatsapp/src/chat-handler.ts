@@ -491,7 +491,12 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     // ponytail: imperative phrases only; use an explicit send tool for richer requests.
     // Freshness markers (harian/today/…) mean "build it now": never serve the
     // registry without an agent turn, or yesterday's file goes out as today's.
-    const wantsFreshReport = isFreshReportRequest(attachUserText);
+    const wantsFreshReport = isFreshReportRequest(
+      attachUserText,
+      sessionStore
+        .getDeliverableArtifacts(conversationKey)
+        .map((artifact) => artifact.filename)
+    );
     const createsArtifact =
       wantsFreshReport ||
       /^\s*(?:(?:please|tolong)\s+)?(?:collect|create|generate|save|buat(?:kan)?|rekap(?:kan)?)\b/i.test(

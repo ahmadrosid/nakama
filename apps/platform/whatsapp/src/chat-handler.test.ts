@@ -1986,6 +1986,49 @@ describe("createChatHandler artifact delivery", () => {
     );
   });
 
+  test.each([
+    "kirim laporan dalam bulanan, dari tanggal 01-09-2026 sampai 27-09-2026 dalam 1 file .csv",
+    "send the report from 01-09-2026 to 27-09-2026 in one CSV",
+    "kirim laporan dari 01.09.2026 sampai 27.09.2026",
+    "send the report for September 1 to 27, 2026",
+    "send the report from September 1st to 27th, 2026",
+    "send the report from Sep. 1st to 27th, 2026",
+    "send file monthly report.csv in one file",
+    "send file monthly report.csv for September 1st to 27th",
+  ])(
+    "runs constrained report requests instead of resending old files: %s",
+    async (text) => {
+      for (const messages of [[], artifactMessages]) {
+        await withArtifactChat(
+          {
+            deliverableArtifacts: Array.from({ length: 5 }, (_, index) => ({
+              ...SAMPLE_ARTIFACT,
+              filename:
+                index === 0 ? "monthly report.csv" : `saved-${index}.csv`,
+              mimeType: "text/csv",
+              path: index === 0 ? "monthly report.csv" : `saved-${index}.csv`,
+            })),
+            messages,
+          },
+          async (ctx) => {
+            await ctx.handleMessage({ jid: PAIRED_JID, text });
+            expect(ctx.calls.sendStream).toBe(1);
+            expect(ctx.calls.streamInputs[0]).toEqual({ message: text });
+            const documents = ctx.sent.filter(
+              (message) => message.content.document !== undefined
+            );
+            expect(
+              documents.map((message) => message.content.fileName)
+            ).toEqual(messages.length ? ["report.md"] : []);
+            expect(ctx.calls.readProfileArtifactContent).toBe(
+              messages.length ? 1 : 0
+            );
+          }
+        );
+      }
+    }
+  );
+
   test("runs the agent on a freshness request instead of serving a stale file", async () => {
     await withArtifactChat(
       { deliverableArtifacts: [SAMPLE_ARTIFACT], messages: [] },
@@ -2000,28 +2043,53 @@ describe("createChatHandler artifact delivery", () => {
     );
   });
 
-  test("attaches a filename that carries a freshness word instead of running the agent", async () => {
-    await withArtifactChat(
-      {
-        deliverableArtifacts: [
-          {
-            ...SAMPLE_ARTIFACT,
-            filename: "daily-report.csv",
-            path: "daily-report.csv",
-          },
-        ],
-        messages: [],
-      },
-      async (ctx) => {
-        await ctx.handleMessage({
-          jid: PAIRED_JID,
-          text: "kirim file daily-report.csv",
-        });
-        expect(ctx.calls.sendStream).toBe(0);
-        expect(documentSendCount(ctx.sent)).toBe(1);
-      }
-    );
-  });
+  test.each([
+    { filename: "daily-report.csv", text: "kirim file daily-report.csv" },
+    { filename: "monthly report.csv", text: 'send file "monthly report.csv"' },
+    { filename: "monthly report.csv", text: "send file monthly report.csv" },
+    { filename: "monthly report.csv", text: "send file Monthly Report.csv" },
+    { filename: "01.09.2026.csv", text: "kirim file 01.09.2026.csv" },
+    {
+      filename: "September 1 to 27.csv",
+      text: 'send file "September 1 to 27.csv"',
+    },
+    {
+      filename: "September 1st to 27th.csv",
+      text: 'send file "September 1st to 27th.csv"',
+    },
+    {
+      filename: "September 1st to 27th.csv",
+      text: "send file September 1st to 27th.csv",
+    },
+  ])(
+    "attaches $filename instead of running the agent",
+    async ({ filename, text }) => {
+      await withArtifactChat(
+        {
+          deliverableArtifacts: [
+            {
+              ...SAMPLE_ARTIFACT,
+              filename,
+              path: filename,
+            },
+          ],
+          messages: [],
+        },
+        async (ctx) => {
+          await ctx.handleMessage({
+            jid: PAIRED_JID,
+            text,
+          });
+          expect(ctx.calls.sendStream).toBe(0);
+          expect(documentSendCount(ctx.sent)).toBe(1);
+          expect(
+            ctx.sent.find((message) => message.content.document !== undefined)
+              ?.content.fileName
+          ).toBe(filename);
+        }
+      );
+    }
+  );
 
   test("skips scratch-looking writes when delivering post-turn documents", async () => {
     await withArtifactChat(
