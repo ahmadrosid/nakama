@@ -143,6 +143,8 @@ export async function startLocalServer(runtime, dataDir) {
         NAKAMA_DISABLE_FIX_PATH: "1",
         NAKAMA_HOST: "127.0.0.1",
         NAKAMA_PORT: "0",
+        // A data restore must not move the log this process writes to.
+        NAKAMA_SERVER_LOG: join(dataDir, "server.log"),
         NODE_ENV: "production",
         PATH: `${join(runtime, "bin")}${delimiter}${process.env.PATH ?? ""}`,
         PM2_HOME: join(dataDir, "pm2"),
