@@ -9,39 +9,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { formatTranscript, type TranscriptSegment } from "./transcript-format";
+import {
+  formatTranscript,
+  type TranscriptSegment,
+} from "@nakama/core/google-meet";
 
-function comparableTranscriptText(text: string) {
-  return text
-    .toLocaleLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim();
-}
+export type { Meeting } from "@nakama/core/google-meet";
 
-export type MeetingState =
-  | "queued"
-  | "joining"
-  | "recording"
-  | "transcribing"
-  | "finished"
-  | "failed";
-export interface Meeting {
-  actorId: string;
-  createdAt: number;
-  durationMinutes: number;
-  error: string | null;
-  id: string;
-  pendingSeconds?: number;
-  preview?: string | null;
-  profileId: string | null;
-  sourceName?: string | null;
-  state: MeetingState;
-  stopRequested: number;
-  title?: string | null;
-  transcriptFile?: string;
-  updatedAt: number;
-  url: string;
-}
+import type { Meeting, MeetingState } from "@nakama/core/google-meet";
 
 export class MeetingStore {
   private readonly db: Database;
@@ -58,13 +33,14 @@ export class MeetingStore {
       CREATE TABLE IF NOT EXISTS meetings (
         id TEXT PRIMARY KEY, actorId TEXT NOT NULL, profileId TEXT, url TEXT NOT NULL,
         state TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL,
-        durationMinutes INTEGER NOT NULL, stopRequested INTEGER NOT NULL DEFAULT 0, error TEXT);
+        durationMinutes INTEGER NOT NULL, stopRequested INTEGER NOT NULL DEFAULT 0, error TEXT,
+        pendingSeconds INTEGER NOT NULL DEFAULT 0, title TEXT, sourceName TEXT);
       CREATE UNIQUE INDEX IF NOT EXISTS one_active_meeting ON meetings ((1))
-        WHERE state IN ('queued','joining','transcribing');
+        WHERE state IN ('queued','joining','recording','transcribing');
       CREATE TABLE IF NOT EXISTS segments (
         sequence INTEGER PRIMARY KEY AUTOINCREMENT, meetingId TEXT NOT NULL,
         id TEXT NOT NULL, text TEXT NOT NULL, receivedAt INTEGER NOT NULL,
-        UNIQUE(meetingId,id));`);
+        speakerId TEXT, speakerName TEXT, startMs INTEGER, endMs INTEGER, UNIQUE(meetingId,id));`);
     this.db.query("INSERT OR IGNORE INTO tenant VALUES (1, ?)").run(orgId);
     if (
       this.db
@@ -75,47 +51,6 @@ export class MeetingStore {
       throw new Error("Meeting data belongs to another organization");
     }
     try {
-      this.db
-        .transaction(() => {
-          const segmentColumns = this.db
-            .query<{ name: string }, []>("PRAGMA table_info(segments)")
-            .all();
-          for (const [name, type] of [
-            ["speakerId", "TEXT"],
-            ["speakerName", "TEXT"],
-            ["startMs", "INTEGER"],
-            ["endMs", "INTEGER"],
-          ]) {
-            if (!segmentColumns.some((column) => column.name === name)) {
-              this.db.exec(`ALTER TABLE segments ADD COLUMN ${name} ${type}`);
-            }
-          }
-          const activeIndex = this.db
-            .query<{ sql: string }, []>(
-              "SELECT sql FROM sqlite_master WHERE name='one_active_meeting'"
-            )
-            .get();
-          if (!activeIndex?.sql.includes("'recording'")) {
-            this.db.exec(
-              "DROP INDEX IF EXISTS one_active_meeting; CREATE UNIQUE INDEX one_active_meeting ON meetings ((1)) WHERE state IN ('queued','joining','recording','transcribing')"
-            );
-          }
-          const columns = this.db
-            .query<{ name: string }, []>("PRAGMA table_info(meetings)")
-            .all();
-          if (!columns.some((column) => column.name === "pendingSeconds")) {
-            this.db.exec(
-              "ALTER TABLE meetings ADD COLUMN pendingSeconds INTEGER NOT NULL DEFAULT 0"
-            );
-          }
-          if (!columns.some((column) => column.name === "title")) {
-            this.db.exec("ALTER TABLE meetings ADD COLUMN title TEXT");
-          }
-          if (!columns.some((column) => column.name === "sourceName")) {
-            this.db.exec("ALTER TABLE meetings ADD COLUMN sourceName TEXT");
-          }
-        })
-        .immediate();
       this.restoreTranscripts(false);
     } catch (error) {
       this.db.close();
@@ -236,17 +171,12 @@ export class MeetingStore {
           : undefined,
       }));
   }
-  next() {
+  nextUntitled(id?: string) {
     return this.db
-      .query<Meeting, []>("SELECT * FROM meetings WHERE state='queued' LIMIT 1")
-      .get();
-  }
-  nextUntitled() {
-    return this.db
-      .query<{ id: string; text: string }, []>(
-        "SELECT id, (SELECT group_concat(text, char(10)) FROM (SELECT text FROM segments WHERE meetingId=meetings.id ORDER BY sequence)) AS text FROM meetings WHERE title IS NULL AND state IN ('finished','failed') AND EXISTS (SELECT 1 FROM segments WHERE meetingId=meetings.id AND trim(text) != '') ORDER BY createdAt DESC LIMIT 1"
+      .query<{ id: string; text: string }, [string | null, string | null]>(
+        "SELECT id, (SELECT group_concat(text, char(10)) FROM (SELECT text FROM segments WHERE meetingId=meetings.id ORDER BY sequence)) AS text FROM meetings WHERE (? IS NULL OR id=?) AND title IS NULL AND state IN ('finished','failed') AND EXISTS (SELECT 1 FROM segments WHERE meetingId=meetings.id AND trim(text) != '') ORDER BY createdAt DESC LIMIT 1"
       )
-      .get();
+      .get(id ?? null, id ?? null);
   }
   setTitle(id: string, title: string) {
     this.db.query("UPDATE meetings SET title=? WHERE id=?").run(title, id);
@@ -254,7 +184,7 @@ export class MeetingStore {
   recover() {
     this.db
       .query(
-        "UPDATE meetings SET state='failed', error='Meeting worker restarted; partial transcript saved',updatedAt=? WHERE state IN ('queued','joining','recording','transcribing')"
+        "UPDATE meetings SET state='failed', error='Capture service restarted; partial transcript saved',updatedAt=? WHERE state IN ('queued','joining','recording','transcribing')"
       )
       .run(Date.now());
     this.db
@@ -310,54 +240,6 @@ export class MeetingStore {
       );
     this.saveTranscript(meetingId);
   }
-  addCaptionSegment(meetingId: string, segment: TranscriptSegment) {
-    if (!this.get(meetingId)) {
-      throw new Error("Meeting not found");
-    }
-    const captionText = comparableTranscriptText(segment.text);
-    const match = this.db
-      .query<{ sequence: number; text: string }, [string]>(
-        "SELECT sequence,text FROM segments WHERE meetingId=? AND id NOT LIKE 'caption-%' ORDER BY sequence DESC LIMIT 100"
-      )
-      .all(meetingId)
-      .find((row) => {
-        const audioText = comparableTranscriptText(row.text);
-        return (
-          audioText === captionText ||
-          (captionText.length >= 8 &&
-            (audioText.startsWith(captionText) ||
-              captionText.startsWith(audioText)))
-        );
-      });
-    if (match) {
-      this.db
-        .query(
-          "UPDATE segments SET speakerName=?,startMs=COALESCE(startMs,?),endMs=COALESCE(endMs,?) WHERE sequence=?"
-        )
-        .run(
-          segment.speakerName,
-          segment.startMs ?? null,
-          segment.endMs ?? null,
-          match.sequence
-        );
-    } else {
-      this.db
-        .query(
-          "INSERT OR IGNORE INTO segments (meetingId,id,text,receivedAt,speakerId,speakerName,startMs,endMs) VALUES (?,?,?,?,?,?,?,?)"
-        )
-        .run(
-          meetingId,
-          `caption-${segment.id}`,
-          segment.text,
-          segment.receivedAt,
-          null,
-          segment.speakerName,
-          segment.startMs ?? null,
-          segment.endMs ?? null
-        );
-    }
-    this.saveTranscript(meetingId);
-  }
   private transcriptPath(id: string) {
     return join(this.directory, "transcripts", `meeting-${id}.txt`);
   }
@@ -408,7 +290,7 @@ export class MeetingStore {
       )
       .all(id, after);
     let size = 0;
-    // Keep paginated responses below the plugin runner's output limit.
+    // Bound transcript pages for HTTP responses and agent context.
     const end = rows.findIndex((row) => {
       size += JSON.stringify(row).length;
       return size > 500_000;

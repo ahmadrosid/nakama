@@ -2,9 +2,10 @@
  * Bundles the service worker after `vite build`, stamping it with the build's
  * precache list so the worker ships the exact chunk names it must cache.
  */
-import { rm } from "node:fs/promises";
+import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { zipSync } from "fflate";
 import {
   buildVersion,
   precacheUrls,
@@ -73,3 +74,18 @@ async function typeCheckWorker(): Promise<void> {
     process.exit(exitCode);
   }
 }
+
+// Ship the unpacked Chrome extension independently of the retired plugin workspace.
+const extensionDir = join(webRoot, "public/google-meet-extension");
+const extensionFiles: Record<string, Uint8Array> = {};
+await Promise.all(
+  (await readdir(extensionDir)).map(async (file) => {
+    extensionFiles[`google-meet-extension/${file}`] = await readFile(
+      join(extensionDir, file)
+    );
+  })
+);
+await writeFile(
+  join(distDir, "google-meet-extension.zip"),
+  zipSync(extensionFiles)
+);

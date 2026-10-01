@@ -98,73 +98,19 @@ describe("PluginService", () => {
     await rm(configDir, { force: true, recursive: true });
   });
 
-  test("installs the bundled Google Meet plugin and executes its isolated action", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const workers: string[] = [];
-    const service = new PluginService(db, configDir, {
-      officialPackagesDir: resolve(
-        import.meta.dir,
-        "../../../../packages/plugins"
-      ),
-      workerManager: {
-        async registerPluginWorkers(registration, start) {
-          expect(start).toBe(true);
-          workers.push(...registration.workers.map((worker) => worker.key));
-        },
-        async unregisterPluginWorkers() {},
-      },
-    });
-    const actor = { id: "admin", role: "admin" as const };
-    const installed = await service.installOfficialPlugin(
-      "org-meet",
-      "google-meet",
-      actor
-    );
-    expect(installed.lifecycleState).toBe("enabled");
-    expect(workers).toContain("meet");
-    const result = await service.invokePluginAction({
-      access: "ui",
-      actionKey: "meetings",
-      actor,
-      input: {},
-      orgId: "org-meet",
-      pluginId: "google-meet",
-    });
-    expect(result.result).toMatchObject({
-      authenticated: false,
-      configured: false,
-      meetings: [],
-      worker: { state: "stopped" },
-    });
-    const release = getPluginReleaseDir(
-      "google-meet",
-      installed.selectedVersion!,
-      configDir
-    );
-    // Import the bundled worker from the installed release, outside package dependencies.
-    const child = Bun.spawn(
-      [
-        process.execPath,
-        "-e",
-        "await import(process.argv[1])",
-        join(release, "workers/meet.js"),
-      ],
-      { cwd: configDir, stderr: "pipe", stdout: "pipe" }
-    );
-    const errors = await new Response(child.stderr).text();
-    expect(await child.exited, errors).toBe(0);
-  });
-
-  test("installs rebuilt Google Meet bytes without replacing another org's release", async () => {
+  test("installs rebuilt Supermemory bytes without replacing another org's release", async () => {
     const db = createInMemoryDatabaseAdapter();
     const officialPackagesDir = join(configDir, "official");
     await cp(
-      resolve(import.meta.dir, "../../../../packages/plugins/google-meet"),
-      join(officialPackagesDir, "google-meet"),
+      resolve(import.meta.dir, "../../../../packages/plugins/supermemory"),
+      join(officialPackagesDir, "supermemory"),
       { recursive: true }
     );
     const service = new PluginService(db, configDir, {
       officialPackagesDir,
+      async onHostRequest() {
+        return {};
+      },
       workerManager: {
         async registerPluginWorkers() {},
         async unregisterPluginWorkers() {},
@@ -173,22 +119,22 @@ describe("PluginService", () => {
     const actor = { id: "admin", role: "admin" as const };
     const first = await service.installOfficialPlugin(
       "org-a",
-      "google-meet",
+      "supermemory",
       actor
     );
     const originalPath = join(
-      getPluginReleaseDir("google-meet", first.selectedVersion!, configDir),
+      getPluginReleaseDir("supermemory", first.selectedVersion!, configDir),
       "ui/app.js"
     );
     const original = await readFile(originalPath, "utf8");
     await appendFile(
-      join(officialPackagesDir, "google-meet/ui/app.js"),
+      join(officialPackagesDir, "supermemory/ui/app.js"),
       "\n// rebuilt\n"
     );
 
     const second = await service.installOfficialPlugin(
       "org-b",
-      "google-meet",
+      "supermemory",
       actor
     );
     expect(second.lifecycleState).toBe("enabled");
@@ -197,7 +143,7 @@ describe("PluginService", () => {
       await readFile(
         join(
           getPluginReleaseDir(
-            "google-meet",
+            "supermemory",
             second.selectedVersion!,
             configDir
           ),
@@ -207,10 +153,10 @@ describe("PluginService", () => {
       )
     ).toBe(`${original}\n// rebuilt\n`);
     expect(await readFile(originalPath, "utf8")).toBe(original);
-    expect(await db.getOrgPlugin("org-a", "google-meet")).toEqual(first);
+    expect(await db.getOrgPlugin("org-a", "supermemory")).toEqual(first);
     const repeated = await service.installOfficialPlugin(
       "org-b",
-      "google-meet",
+      "supermemory",
       actor
     );
     expect(repeated.selectedVersion).toBe(second.selectedVersion);

@@ -135,7 +135,7 @@ async function saveDownload(value: unknown, path: string, signal: AbortSignal) {
 }
 
 export async function importMeetRecording(
-  composio: ComposioService,
+  composio: Pick<ComposioService, "downloadMeetRecording">,
   input: {
     orgId: string;
     userId: string;

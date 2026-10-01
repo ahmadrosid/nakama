@@ -186,6 +186,7 @@ describe("plugin portability", () => {
     process.env.NAKAMA_CONFIG_DIR = configDir;
   });
 
+  // Wait for admission to drain before deleting files; retry transient Windows locks.
   afterEach(async () => {
     await resetPluginAdmissionForTests();
     if (originalConfigDir === undefined) {
@@ -193,8 +194,13 @@ describe("plugin portability", () => {
     } else {
       process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     }
-    await rm(configDir, { force: true, recursive: true });
-  });
+    await rm(configDir, {
+      force: true,
+      maxRetries: 5,
+      recursive: true,
+      retryDelay: 100,
+    });
+  }, 30_000);
 
   test("Supermemory backup preserves namespace and restricts restored credentials", async () => {
     const source = await createSqliteDatabase(

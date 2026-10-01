@@ -2,8 +2,6 @@ import type { NakamaClient, RemoteChatSession } from "@nakama/client";
 import {
   extractPairedTurnArtifacts,
   isAttachOnlyCommand,
-  isFreshReportRequest,
-  isScratchArtifactPath,
   pushDeliverableArtifact,
 } from "@nakama/core";
 import { formatClientError } from "@nakama/core/api-error";
@@ -42,8 +40,8 @@ import {
 } from "@whiskeysockets/baileys";
 import type { WhatsAppAuthStore } from "./auth-store";
 import {
-  maybeSendRequestedWhatsAppArtifactAttachment,
   maybeSendWhatsAppAttachOnlyCommand,
+  parsePreparedWhatsAppArtifact,
   sendArtifactDocumentForPath,
 } from "./channel-artifact-flow";
 import { isChannelDebugEnabled } from "./channel-log";
@@ -311,18 +309,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         return;
       }
 
-      await handleChatMessage(
-        conversationKey,
-        jid,
-        {
-          message: withGroupContext(
-            withQuotedContext(attachUserText, inbound.quotedText),
-            isGroup
-          ),
-          ...mediaInput?.input,
-        },
-        attachUserText
-      );
+      await handleChatMessage(conversationKey, jid, {
+        message: withGroupContext(
+          withQuotedContext(attachUserText, inbound.quotedText),
+          isGroup
+        ),
+        ...mediaInput?.input,
+      });
     });
   };
 
@@ -481,44 +474,17 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   async function handleChatMessage(
     conversationKey: string,
     jid: string,
-    input: SendMessageInput,
-    attachUserText: string
+    input: SendMessageInput
   ): Promise<void> {
+    const deliveryClient = client.forOrg(
+      config.owner?.orgId ??
+        config.orgId ??
+        orgStore.get(resolveChannelOrgKey(jid, jid.endsWith("@g.us")))?.orgId ??
+        null
+    );
     const session = await resolveSession(conversationKey);
     const profileId = sessionStore.get(conversationKey)?.profileId;
     const socket = getSocket();
-
-    // ponytail: imperative phrases only; use an explicit send tool for richer requests.
-    // Freshness markers (harian/today/…) mean "build it now": never serve the
-    // registry without an agent turn, or yesterday's file goes out as today's.
-    const wantsFreshReport = isFreshReportRequest(attachUserText);
-    const createsArtifact =
-      wantsFreshReport ||
-      /^\s*(?:(?:please|tolong)\s+)?(?:collect|create|generate|save|buat(?:kan)?|rekap(?:kan)?)\b/i.test(
-        attachUserText
-      );
-    if (
-      profileId &&
-      socket &&
-      !createsArtifact &&
-      !input.images?.length &&
-      !input.documents?.length
-    ) {
-      const attached = await maybeSendRequestedWhatsAppArtifactAttachment({
-        attachUserText,
-        client,
-        conversationKey,
-        jid,
-        profileId,
-        sendPlain: (text) => sendText(jid, text),
-        sessionStore,
-        socket,
-      });
-      // Same as /attach: once a document is sent, do not run the agent.
-      if (attached) {
-        return;
-      }
-    }
 
     const typingLoop = createTypingLoop(async () => {
       if (!socket) {
@@ -528,106 +494,179 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     });
     const todoStatus = new WhatsAppTodoStatusMessage(socket, jid);
     let reply = "";
+    let completed = false;
+    const selections: NonNullable<
+      ReturnType<typeof parsePreparedWhatsAppArtifact>
+    >[] = [];
+    const seenCalls = new Set<string>();
+    const seenPaths = new Set<string>();
+    const writeCalls = new Set<string>();
     const signal = registerActiveStream(conversationKey);
 
     try {
       typingLoop.start();
-
-      reply = await session.sendStream(
-        input,
-        {
-          onChunk: (delta) => {
-            reply += delta;
+      try {
+        reply = await session.sendStream(
+          input,
+          {
+            onChunk: (delta) => {
+              reply += delta;
+            },
+            onDone: () => {
+              completed = true;
+            },
+            onThinking: () => typingLoop.ping(),
+            onTodosUpdated: (todos) => {
+              typingLoop.ping();
+              void todoStatus.update(todos);
+            },
+            onToolEnd: (event) => {
+              typingLoop.ping();
+              if (
+                event.tool === "write_file" ||
+                event.tool === "write_docx" ||
+                event.tool === "edit_file"
+              ) {
+                writeCalls.add(event.toolCallId);
+              }
+              if (
+                event.tool !== "send_whatsapp_artifact" ||
+                seenCalls.has(event.toolCallId)
+              ) {
+                return;
+              }
+              seenCalls.add(event.toolCallId);
+              const artifact = parsePreparedWhatsAppArtifact(event.result);
+              if (artifact && !seenPaths.has(artifact.path)) {
+                seenPaths.add(artifact.path);
+                selections.push(artifact);
+              }
+            },
+            onToolStart: () => typingLoop.ping(),
           },
-          onThinking: () => {
-            typingLoop.ping();
-          },
-          onTodosUpdated: (todos) => {
-            typingLoop.ping();
-            void todoStatus.update(todos);
-          },
-          onToolEnd: () => {
-            typingLoop.ping();
-          },
-          onToolStart: () => {
-            typingLoop.ping();
-          },
-        },
-        { signal }
-      );
-
-      await todoStatus.complete();
-
-      if (signal.aborted) {
-        if (reply.trim()) {
-          await sendText(jid, reply.trim());
+          { signal }
+        );
+        if (signal.aborted) {
+          throw new DOMException("Stopped", "AbortError");
         }
+        if (!completed) {
+          throw new Error(
+            "The agent turn was interrupted before completion. No documents were sent."
+          );
+        }
+      } finally {
+        if (profileId && writeCalls.size > 0) {
+          try {
+            const messages = await session.getMessages({
+              signal: AbortSignal.timeout(30_000),
+            });
+            // Keep assistant call inputs but exclude tools from any earlier turn.
+            const artifacts = extractPairedTurnArtifacts(
+              messages.filter(
+                (message) =>
+                  message.role !== "tool" || writeCalls.has(message.toolCallId)
+              )
+            );
+            let registry =
+              sessionStore.getDeliverableArtifacts(conversationKey);
+            for (const artifact of artifacts) {
+              registry = pushDeliverableArtifact(registry, {
+                ...artifact,
+                sharePath: null,
+                shareUrl: null,
+              });
+            }
+            sessionStore.updateArtifactState(conversationKey, {
+              deliverableArtifacts: registry,
+            });
+            await sessionStore.save();
+          } catch (error) {
+            console.warn(
+              "WhatsApp artifact registry reconciliation failed",
+              error
+            );
+          }
+        }
+      }
 
-        await sendText(jid, "Stopped.");
+      let sent = 0;
+      for (const artifact of selections) {
+        if (signal.aborted) {
+          await todoStatus.stop();
+          await sendText(
+            jid,
+            `Stopped. Sent ${sent} of ${selections.length} documents.`
+          );
+          return;
+        }
+        const deliverySocket = getSocket();
+        if (!(profileId && deliverySocket)) {
+          throw new Error(
+            "WhatsApp is disconnected. No further documents were sent."
+          );
+        }
+        const result = await sendArtifactDocumentForPath({
+          ...artifact,
+          client: deliveryClient,
+          jid,
+          profileId,
+          sendPlain: (text) => sendText(jid, text),
+          signal,
+          socket: deliverySocket,
+        });
+        if (!result.ok) {
+          await todoStatus.fail();
+          if (sent) {
+            await sendText(
+              jid,
+              `Sent ${sent} of ${selections.length} documents; remaining uploads stopped.`
+            );
+          }
+          return;
+        }
+        sent += 1;
+        sessionStore.updateArtifactState(conversationKey, {
+          deliverableArtifacts: pushDeliverableArtifact(
+            sessionStore.getDeliverableArtifacts(conversationKey),
+            {
+              ...artifact,
+              savedAt: new Date().toISOString(),
+              sharePath: null,
+              shareUrl: null,
+            }
+          ),
+        });
+        try {
+          await sessionStore.save();
+        } catch (error) {
+          console.warn("WhatsApp sent artifact registry save failed", error);
+        }
+      }
+      if (signal.aborted) {
+        await todoStatus.stop();
+        await sendText(
+          jid,
+          `Stopped. Sent ${sent} of ${selections.length} documents.`
+        );
         return;
+      }
+      await todoStatus.complete();
+      if (reply.trim()) {
+        await sendText(jid, reply.trim());
+      } else if (!sent) {
+        await sendText(jid, "(empty reply)");
       }
     } catch (error) {
       if (isAbortError(error)) {
         await todoStatus.stop();
-        if (reply.trim()) {
-          await sendText(jid, reply.trim());
-        }
-
         await sendText(jid, "Stopped.");
-        return;
+      } else {
+        await todoStatus.fail();
+        await sendText(jid, formatClientError(error));
       }
-
-      await todoStatus.fail();
-      await sendText(jid, formatClientError(error));
-      return;
     } finally {
       clearActiveStream(conversationKey, signal);
       typingLoop.stop();
-    }
-
-    if (reply.trim()) {
-      await sendText(jid, reply.trim());
-    } else {
-      await sendText(jid, "(empty reply)");
-    }
-
-    if (profileId) {
-      const artifacts = extractPairedTurnArtifacts(await session.getMessages());
-      if (artifacts.length === 0) {
-        return;
-      }
-      let registry = sessionStore.getDeliverableArtifacts(conversationKey);
-      for (const artifact of artifacts) {
-        registry = pushDeliverableArtifact(registry, {
-          ...artifact,
-          sharePath: null,
-          shareUrl: null,
-        });
-      }
-      sessionStore.updateArtifactState(conversationKey, {
-        deliverableArtifacts: registry,
-      });
-      await sessionStore.save();
-
-      // Scratch-looking writes stay retrievable via /attach but never blast
-      // into the group unasked.
-      const deliverable = artifacts.filter(
-        (artifact) => !isScratchArtifactPath(artifact.path)
-      );
-      const postTurnSocket = getSocket();
-      if (!postTurnSocket) {
-        return;
-      }
-      for (const artifact of deliverable) {
-        await sendArtifactDocumentForPath({
-          ...artifact,
-          client,
-          jid,
-          profileId,
-          sendPlain: (text) => sendText(jid, text),
-          socket: postTurnSocket,
-        });
-      }
     }
   }
 

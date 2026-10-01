@@ -19,6 +19,7 @@
     "./channel-session-store": "./src/channel-session-store.ts",
     "./channel-chat-lock": "./src/channel-chat-lock.ts",
     "./channel-typing-loop": "./src/channel-typing-loop.ts",
+    "./google-meet": "./src/google-meet.ts",
     "./contract": "./src/contract.ts",
     "./chat-stream-timeout": "./src/chat-stream-timeout.ts",
     "./config": "./src/config.ts",

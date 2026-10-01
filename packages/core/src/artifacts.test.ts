@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   listArtifacts,
+  listArtifactsTool,
   listWorkspaceFiles,
   readArtifactFile,
   readWorkspaceFile,
@@ -863,5 +864,79 @@ test("the shared fallback does not accept a path that reaches out of the folder"
       .then(() => null)
       .catch((error: unknown) => error);
     expect((failure as { status?: number } | null)?.status).toBe(404);
+  }
+});
+
+test("list_artifacts projects relative keys, pages results, and isolates app-user workspaces", async () => {
+  const root = getProfileSoulDir(ORG_ID, PROFILE_ID);
+  for (let i = 0; i < 22; i += 1) {
+    await writeArtifact(`report-${i}.csv`, "data");
+  }
+  const context = { orgId: ORG_ID, profileId: PROFILE_ID, workspaceRoot: root };
+  const first = (await listArtifactsTool.run({}, context)) as {
+    artifacts: { path: string; filename: string }[];
+    total: number;
+  };
+  const next = (await listArtifactsTool.run(
+    { offset: 20 },
+    context
+  )) as typeof first;
+  expect(first.total).toBe(22);
+  expect(first.artifacts).toHaveLength(20);
+  expect(next.artifacts).toHaveLength(2);
+  expect(
+    first.artifacts.every(
+      (item) => item.path === item.filename && !path.isAbsolute(item.path)
+    )
+  ).toBe(true);
+  expect(JSON.stringify(first)).not.toContain(root);
+  const ownRoot = getAppUserSoulDir(ORG_ID, PROFILE_ID, "user-only");
+  await mkdir(ownRoot, { recursive: true });
+  const own = { ...context, workspaceRoot: ownRoot };
+  expect(await listArtifactsTool.run({}, own)).toMatchObject({
+    artifacts: [],
+    total: 0,
+  });
+  await mkdir(path.join(ownRoot, "artifacts"));
+  await writeFile(path.join(ownRoot, "artifacts", "own.csv"), "own");
+  expect(await listArtifactsTool.run({}, own)).toMatchObject({
+    artifacts: [{ path: "own.csv" }],
+    total: 1,
+  });
+  await expect(listArtifactsTool.run({}, {})).rejects.toThrow();
+  for (const input of [
+    { offset: -1 },
+    { offset: 0.5 },
+    { folder: "../other" },
+    { orgId: "other" },
+  ]) {
+    await expect(listArtifactsTool.run(input, context)).rejects.toThrow();
+  }
+});
+
+test("list_artifacts rejects an artifacts-root symlink and skips symlink entries", async () => {
+  const root = getProfileSoulDir(ORG_ID, PROFILE_ID);
+  await writeArtifact("real.csv", "real");
+  const external = await mkdtemp(path.join(tmpdir(), "nakama-list-external-"));
+  try {
+    await writeFile(path.join(external, "private.csv"), "secret");
+    await symlink(
+      path.join(external, "private.csv"),
+      path.join(root, "artifacts", "escape.csv")
+    );
+    const context = {
+      orgId: ORG_ID,
+      profileId: PROFILE_ID,
+      workspaceRoot: root,
+    };
+    const listing = (await listArtifactsTool.run({}, context)) as {
+      total: number;
+    };
+    expect(listing.total).toBe(1);
+    await rm(path.join(root, "artifacts"), { recursive: true });
+    await symlink(external, path.join(root, "artifacts"), "dir");
+    await expect(listArtifactsTool.run({}, context)).rejects.toThrow();
+  } finally {
+    await rm(external, { force: true, recursive: true });
   }
 });

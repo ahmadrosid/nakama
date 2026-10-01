@@ -1,60 +1,17 @@
+import { createHash } from "node:crypto";
 import type { NakamaClient } from "@nakama/client";
 import {
   formatMissingAttachArtifactMessage,
   getMostRecentDeliverableArtifact,
-  isAttachIntent,
-  isScratchArtifactPath,
 } from "@nakama/core";
 import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import type { WASocket } from "@whiskeysockets/baileys";
 import {
   formatWhatsAppArtifactOversizeError,
+  type SendWhatsAppArtifactDocumentResult,
   sendWhatsAppArtifactDocument,
   WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES,
 } from "./send-artifact-document";
-
-/**
- * When the user asks to attach/send a file and a registry artifact exists,
- * sends the WhatsApp document. Returns true when attach was attempted so the
- * chat handler can skip the agent turn (avoids invented "can't attach" replies).
- *
- * Natural-language retry sends the whole deliverable set (minus scratch):
- * the post-turn path only fires on new writes, so older set members would
- * otherwise be unreachable. `/attach` stays most-recent-only.
- */
-export async function maybeSendRequestedWhatsAppArtifactAttachment(input: {
-  client: NakamaClient;
-  conversationKey: string;
-  profileId: string;
-  /** Raw user text before group-context prefixing. */
-  attachUserText: string;
-  sessionStore: ChannelSessionStore;
-  socket: WASocket;
-  jid: string;
-  sendPlain: (text: string) => Promise<void>;
-}): Promise<boolean> {
-  if (!isAttachIntent(input.attachUserText)) {
-    return false;
-  }
-
-  const artifacts = input.sessionStore
-    .getDeliverableArtifacts(input.conversationKey)
-    .filter((artifact) => !isScratchArtifactPath(artifact.path));
-  if (artifacts.length === 0) {
-    return false;
-  }
-
-  for (const artifact of artifacts) {
-    await sendArtifactDocumentForPath({
-      ...input,
-      filename: artifact.filename,
-      mimeType: artifact.mimeType,
-      path: artifact.path,
-      sizeBytes: artifact.sizeBytes,
-    });
-  }
-  return true;
-}
 
 /** `/attach` shortcut: most recent registry artifact, or a missing-artifact message. */
 export async function maybeSendWhatsAppAttachOnlyCommand(input: {
@@ -90,38 +47,109 @@ export async function sendArtifactDocumentForPath(input: {
   filename: string;
   mimeType: string;
   sizeBytes?: number;
+  sha256?: string;
+  signal?: AbortSignal;
   socket: WASocket;
   jid: string;
   sendPlain: (text: string) => Promise<void>;
-}): Promise<void> {
+}): Promise<SendWhatsAppArtifactDocumentResult> {
   if (
     typeof input.sizeBytes === "number" &&
     input.sizeBytes > WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES
   ) {
-    await input.sendPlain(formatWhatsAppArtifactOversizeError(input.sizeBytes));
-    return;
+    const error = formatWhatsAppArtifactOversizeError(input.sizeBytes);
+    await input.sendPlain(error);
+    return { error, ok: false, status: "failed" };
   }
 
   try {
     const { contentType, data } = await input.client.readProfileArtifactContent(
       input.profileId,
-      input.path
+      input.path,
+      {
+        maxBytes: WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES,
+        signal: input.signal
+          ? AbortSignal.any([input.signal, AbortSignal.timeout(30_000)])
+          : AbortSignal.timeout(30_000),
+      }
     );
-    const result = await sendWhatsAppArtifactDocument(input.socket, input.jid, {
-      bytes: new Uint8Array(data),
-      filename: input.filename,
-      mimeType:
-        input.mimeType.trim() || contentType || "application/octet-stream",
-    });
+    input.signal?.throwIfAborted();
+    if (
+      input.sha256 &&
+      createHash("sha256").update(new Uint8Array(data)).digest("hex") !==
+        input.sha256
+    ) {
+      throw new Error(
+        "The selected file changed before delivery. Ask me to select it again."
+      );
+    }
+    const result = await sendWhatsAppArtifactDocument(
+      input.socket,
+      input.jid,
+      {
+        bytes: new Uint8Array(data),
+        filename: input.filename,
+        mimeType:
+          input.mimeType.trim() || contentType || "application/octet-stream",
+      },
+      { signal: input.signal }
+    );
 
     if (!result.ok && result.error) {
       await input.sendPlain(result.error);
     }
+    return result;
   } catch (error) {
-    await input.sendPlain(
+    const message =
       error instanceof Error
         ? error.message
-        : "Failed to read the artifact for attachment."
-    );
+        : "Failed to read the artifact for attachment.";
+    await input.sendPlain(message);
+    return { error: message, ok: false, status: "failed" };
   }
+}
+
+export function parsePreparedWhatsAppArtifact(result: unknown): {
+  filename: string;
+  mimeType: string;
+  path: string;
+  sizeBytes: number;
+  sha256: string;
+} | null {
+  if (!result || typeof result !== "object") {
+    return null;
+  }
+  const record = result as Record<string, unknown>;
+  if (
+    record.ok !== true ||
+    record.status !== "prepared" ||
+    typeof record.path !== "string" ||
+    typeof record.filename !== "string" ||
+    typeof record.mimeType !== "string" ||
+    typeof record.sha256 !== "string" ||
+    !/^[a-f0-9]{64}$/.test(record.sha256) ||
+    typeof record.sizeBytes !== "number" ||
+    !Number.isSafeInteger(record.sizeBytes) ||
+    record.sizeBytes < 0 ||
+    record.sizeBytes > WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES
+  ) {
+    return null;
+  }
+  const path = record.path;
+  if (
+    !path ||
+    path.startsWith("/") ||
+    /^[a-z]:/i.test(path) ||
+    path.includes("\\") ||
+    path.split("/").some((part) => !part || part === "." || part === "..")
+  ) {
+    return null;
+  }
+  return {
+    filename: record.filename,
+    mimeType: record.mimeType,
+    path,
+    sha256: record.sha256,
+    sizeBytes: record.sizeBytes,
+  };
 }

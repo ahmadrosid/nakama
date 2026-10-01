@@ -243,7 +243,10 @@ import {
   createOrgMemoryTools,
   PROPOSE_ORG_MEMORY_TOOL_NAME,
 } from "../tools/org-memory-tools";
-import { createSendDiscordArtifactTools } from "../tools/send-discord-artifact-tool";
+import {
+  createSendDiscordArtifactTools,
+  sendWhatsAppArtifactTool,
+} from "../tools/send-discord-artifact-tool";
 import {
   createSkillManageTools,
   SKILL_MANAGE_CHANNELS,
@@ -4139,6 +4142,9 @@ export class AgentService {
     });
     if (channel === "discord" && tools.length > 0) {
       tools = [...tools, ...createSendDiscordArtifactTools()];
+    }
+    if (channel === "whatsapp" && !appUserId && tools.length > 0) {
+      tools = [...tools, sendWhatsAppArtifactTool];
     }
     // Same table as the tools above on purpose: a channel that can manage
     // skills is a channel that needs the catalog to track what it has seen.

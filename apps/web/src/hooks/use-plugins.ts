@@ -233,41 +233,6 @@ export function useInstallOfficialPlugin() {
   );
 }
 
-export function useInstallGoogleMeet(orgId: string, expectedRevision?: number) {
-  const queryClient = useQueryClient();
-  const install = useMutation({
-    mutationFn: async () =>
-      expectedRevision === undefined
-        ? client.installOfficialPlugin("google-meet", orgId)
-        : client.reinstallOfficialPlugin(
-            "google-meet",
-            expectedRevision,
-            orgId
-          ),
-    onSettled: async () => {
-      await invalidateOrgPlugins(queryClient, orgId);
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.plugins.releases,
-      });
-    },
-  });
-  const dependencies: {
-    data: {
-      state: "ready";
-      steps: Array<{
-        id: string;
-        label: string;
-        state: "failed" | "installing" | "pending" | "ready";
-      }>;
-    };
-    isLoading: boolean;
-  } = {
-    data: { state: "ready" as const, steps: [] },
-    isLoading: false,
-  };
-  return { dependencies, install };
-}
-
 export function useReinstallOfficialPlugin() {
   const queryClient = useQueryClient();
   const { activeOrg } = useAuth();

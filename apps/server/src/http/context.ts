@@ -3,6 +3,7 @@ import type { AgentService } from "../services/agent-service";
 import type { AuthService } from "../services/auth-service";
 import type { AutomationService } from "../services/automation-service";
 import type { ComposioService } from "../services/composio-service";
+import type { GoogleMeetService } from "../services/google-meet/service";
 import type { McpService } from "../services/mcp-service";
 import type { OrgMemoryService } from "../services/org-memory-service";
 import type { OrgService } from "../services/org-service";
@@ -19,6 +20,7 @@ export interface ServerOptions {
   automationService: AutomationService;
   composioService?: ComposioService | null;
   databaseAdapter?: DatabaseAdapter | null;
+  googleMeetService?: GoogleMeetService | null;
   mcpService: McpService;
   /**
    * Release the SQLite file before a restore moves the data root. Set only on

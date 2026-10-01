@@ -24,7 +24,7 @@ import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
 import { Add01Icon, MoreHorizontalIcon } from "hugeicons-react";
 import { type MouseEvent, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
 import {
   formatPluginTrustLines,
@@ -35,7 +35,6 @@ import {
   useDeleteRetainedPluginData,
   useDisableOrgPlugin,
   useEnableOrgPlugin,
-  useInstallGoogleMeet,
   useInstallOfficialPlugin,
   useInstallOrgPlugin,
   useInstallPluginPackage,
@@ -134,10 +133,6 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
   const reinstallOfficial = useReinstallOfficialPlugin();
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const [dialog, setDialog] = useState<PluginDialog | null>(null);
-  const [meetInstall, setMeetInstall] = useState<{
-    orgId: string;
-    expectedRevision?: number;
-  } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [accessDialog, setAccessDialog] = useState<{
     orgId: string;
@@ -273,14 +268,12 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
     confirmDialog,
     dialog,
     handleUpdate,
-    meetInstall,
     previewNpmPackage,
     reinstallOfficial,
     rememberFocus,
     setAccessDialog,
     setActionError,
     setDialog,
-    setMeetInstall,
   };
 }
 
@@ -308,14 +301,12 @@ export function PluginsPage() {
     confirmDialog,
     dialog,
     handleUpdate,
-    meetInstall,
     previewNpmPackage,
     reinstallOfficial,
     rememberFocus,
     setAccessDialog,
     setActionError,
     setDialog,
-    setMeetInstall,
   } = usePluginManagement(canInstallPackages, orgId);
   const agentAccess = usePluginAgentAccess();
   const accessData = isPlatformAdmin ? agentAccess.data : undefined;
@@ -388,10 +379,6 @@ export function PluginsPage() {
                   rememberFocus(target);
                   setActionError(null);
                   if (type === "install" && catalog) {
-                    if (pluginId === "google-meet") {
-                      setMeetInstall({ orgId });
-                      return;
-                    }
                     setDialog({
                       description: catalog.description,
                       name: catalog.name,
@@ -408,13 +395,6 @@ export function PluginsPage() {
                     return;
                   }
                   if (type === "reinstall") {
-                    if (pluginId === "google-meet") {
-                      setMeetInstall({
-                        expectedRevision: plugin.revision,
-                        orgId,
-                      });
-                      return;
-                    }
                     void reinstallOfficial
                       .mutateAsync({
                         expectedRevision: plugin.revision,
@@ -465,147 +445,7 @@ export function PluginsPage() {
         onPreview={(source) => void previewNpmPackage(source)}
         orgId={orgId}
       />
-      {meetInstall?.orgId === orgId && (
-        <GoogleMeetInstallDialog
-          expectedRevision={meetInstall.expectedRevision}
-          key={orgId}
-          onClose={() => setMeetInstall(null)}
-          orgId={orgId}
-        />
-      )}
     </div>
-  );
-}
-
-function GoogleMeetInstallDialog({
-  orgId,
-  onClose,
-  expectedRevision,
-}: {
-  orgId: string;
-  onClose(): void;
-  expectedRevision?: number;
-}) {
-  const navigate = useNavigate();
-  const { dependencies, install } = useInstallGoogleMeet(
-    orgId,
-    expectedRevision
-  );
-  const error = install.error;
-  const busy = install.isPending;
-  return (
-    <Dialog
-      onOpenChange={(open) => {
-        if (!(open || busy)) {
-          onClose();
-        }
-      }}
-      open
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Transcribe Google Meet calls</DialogTitle>
-          <DialogDescription>
-            Turn meetings into transcripts. Add Google Meet to Nakama, then
-            install the Chrome extension.
-          </DialogDescription>
-        </DialogHeader>
-        <GoogleMeetInstallProgress
-          dependencies={dependencies}
-          install={install}
-        />
-        {error && (
-          <p className="text-destructive text-sm" role="alert">
-            {formatError(error)}
-          </p>
-        )}
-        <GoogleMeetInstallFooter
-          install={install}
-          onClose={onClose}
-          onInstalled={() => {
-            onClose();
-            navigate("/plugins/google-meet");
-          }}
-        />
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-type GoogleMeetInstallState = ReturnType<typeof useInstallGoogleMeet>;
-
-function GoogleMeetInstallProgress({
-  dependencies,
-  install,
-}: GoogleMeetInstallState) {
-  const status = dependencies.data;
-  let pluginStatus = "Not installed";
-  if (install.isSuccess) {
-    pluginStatus = "Installed";
-  } else if (install.isPending && status?.state === "ready") {
-    pluginStatus = "Installing…";
-  }
-  return dependencies.isLoading ? (
-    <Spinner />
-  ) : (
-    <ol aria-live="polite" className="space-y-3 text-sm">
-      {status?.steps.map((step) => (
-        <li className="flex items-start justify-between gap-4" key={step.id}>
-          <span>{step.label}</span>
-          <span className="flex shrink-0 items-center gap-2">
-            {step.state === "installing" && <Spinner />}
-            {
-              {
-                failed: "Failed",
-                installing: "Installing…",
-                pending: "To install",
-                ready: "Ready",
-              }[step.state]
-            }
-          </span>
-        </li>
-      ))}
-      <li className="flex justify-between gap-4">
-        <span>Meeting transcription</span>
-        <span>{pluginStatus}</span>
-      </li>
-    </ol>
-  );
-}
-
-function GoogleMeetInstallFooter({
-  install,
-  onClose,
-  onInstalled,
-}: Pick<GoogleMeetInstallState, "install"> & {
-  onClose(): void;
-  onInstalled(): void;
-}) {
-  const busy = install.isPending;
-  let label = "Add to Nakama";
-  if (busy) {
-    label = "Installing…";
-  } else if (install.isError) {
-    label = "Try again";
-  }
-  return (
-    <DialogFooter>
-      <Button disabled={busy} onClick={onClose} variant="outline">
-        {install.isSuccess ? "Close" : "Cancel"}
-      </Button>
-      {install.isSuccess ? (
-        <Button render={<Link to="/plugins/google-meet" />}>
-          Open Google Meet
-        </Button>
-      ) : (
-        <Button
-          disabled={busy}
-          onClick={() => install.mutate(undefined, { onSuccess: onInstalled })}
-        >
-          {label}
-        </Button>
-      )}
-    </DialogFooter>
   );
 }
 

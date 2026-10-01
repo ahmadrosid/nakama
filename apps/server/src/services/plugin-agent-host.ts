@@ -3,13 +3,10 @@ import type { PluginExecutionContext, WorkflowRunRecord } from "@nakama/core";
 import { inspectWorkflowSqlite } from "@nakama/core";
 import { type DatabaseAdapter, DatabaseWorkflowStore } from "@nakama/db";
 import type { AgentService } from "./agent-service";
-import type { ComposioService } from "./composio-service";
-import { importMeetRecording } from "./meet-recording-import";
 
 export function createPluginAgentHost(
   db: DatabaseAdapter,
-  agent: AgentService,
-  composio?: ComposioService
+  agent: AgentService
 ) {
   return async (
     value: unknown,
@@ -25,73 +22,6 @@ export function createPluginAgentHost(
     }
     const request = value as Record<string, unknown>;
     const { orgId } = context;
-    if (
-      request.op === "meet_recordings" ||
-      request.op === "import_meet_recording"
-    ) {
-      if (
-        context.pluginId !== "google-meet" ||
-        !composio ||
-        context.actionKey !==
-          (request.op === "meet_recordings" ? "recordings" : "import-recording")
-      ) {
-        throw new Error("Forbidden");
-      }
-      if (request.op === "meet_recordings") {
-        return composio.listMeetRecordings(orgId, context.actor.id);
-      }
-      if (
-        typeof request.messageId !== "string" ||
-        !/^[A-Za-z0-9_-]{1,128}$/.test(request.messageId) ||
-        typeof request.fileId !== "string" ||
-        !/^[A-Za-z0-9_-]{10,128}$/.test(request.fileId)
-      ) {
-        throw new Error("Invalid recording selection.");
-      }
-      return importMeetRecording(
-        composio,
-        {
-          dataDir: context.dataDir,
-          fileId: request.fileId,
-          messageId: request.messageId,
-          orgId,
-          userId: context.actor.id,
-        },
-        AbortSignal.any([
-          ...(signal ? [signal] : []),
-          AbortSignal.timeout(20 * 60_000),
-        ])
-      );
-    }
-    if (request.op === "transcribe_audio") {
-      const { data, filename } = request;
-      if (
-        typeof data !== "string" ||
-        !data.length ||
-        data.length > 9_786_712 ||
-        typeof filename !== "string" ||
-        filename.length > 255 ||
-        /[\\/\x00-\x1f]/.test(filename) ||
-        !/\.(mp3|mp4|mpeg|mpga|m4a|wav|webm)$/i.test(filename)
-      ) {
-        throw new Error("Invalid audio upload");
-      }
-      const bytes = Buffer.from(data, "base64");
-      if (
-        !bytes.length ||
-        bytes.length > 7 * 1024 * 1024 ||
-        bytes.toString("base64") !== data
-      ) {
-        throw new Error("Invalid audio upload");
-      }
-      return agent.transcribeAudio(
-        { data, filename, mediaType: "application/octet-stream" },
-        AbortSignal.any([
-          ...(signal ? [signal] : []),
-          AbortSignal.timeout(120_000),
-        ])
-      );
-    }
     if (request.op === "workflow_database") {
       if (context.pluginId !== "workflows") {
         throw new Error("Forbidden");

@@ -1027,6 +1027,7 @@ function skipRelativePathReason(
   const first = parts[0] ?? "";
   if (
     first === NAKAMA_EXPORT_MANIFEST ||
+    (parts[0] === "orgs" && parts[2] === "meet" && parts[3] === "audio") ||
     first.startsWith(RESTORE_PREFIX) ||
     first.startsWith(BACKUP_PREFIX) ||
     first.startsWith(PLUGIN_SNAPSHOT_PREFIX)
@@ -1069,6 +1070,14 @@ async function snapshotOrgPluginDatabases(
   for (const org of await readdir(orgsDir, { withFileTypes: true })) {
     if (!org.isDirectory()) {
       continue;
+    }
+    const meetDirectory = join(orgsDir, org.name, "meet");
+    const meetDatabase = join(meetDirectory, "meetings.sqlite");
+    if (await pathExists(meetDatabase)) {
+      const relativePath = toZipPath(relative(rootDir, meetDatabase));
+      const target = join(snapshotParent, relativePath);
+      await vacuumPluginDatabaseInto(meetDatabase, target);
+      snapshots.set(relativePath, target);
     }
     const pluginsDir = join(orgsDir, org.name, "plugins");
     if (!(await pathExists(pluginsDir))) {
