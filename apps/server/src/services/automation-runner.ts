@@ -1,4 +1,8 @@
-import { formatAutomationRunError, type StoredAutomation } from "@nakama/core";
+import {
+  type ChatMessage,
+  formatAutomationRunError,
+  type StoredAutomation,
+} from "@nakama/core";
 import type { AgentService } from "./agent-service";
 import type { AutomationDeliveryService } from "./automation-delivery-service";
 import type { AutomationService } from "./automation-service";
@@ -55,6 +59,14 @@ export class AutomationRunner {
       }
 
       const run = await this.automationService.createRun(automationId);
+      let progress = "";
+      const messages: ChatMessage[] = [];
+      const publishProgress = () => {
+        this.automationService.setRunProgress(run.id, {
+          output: progress,
+          progress: messages,
+        });
+      };
 
       try {
         const output = await this.agentService.runAutomationPrompt(
@@ -62,7 +74,52 @@ export class AutomationRunner {
           automation.profileId,
           automation.prompt,
           automationId,
-          run.id
+          run.id,
+          {
+            onChunk: (delta) => {
+              // ponytail: cap live text at 100k characters; persist events for full live history.
+              progress = (progress + delta).slice(-100_000);
+              const last = messages.at(-1);
+              if (last?.role === "assistant" && !last.toolCalls) {
+                last.content = (last.content + delta).slice(-100_000);
+              } else {
+                messages.push({ content: delta, role: "assistant" });
+              }
+              publishProgress();
+            },
+            onToolEnd: ({ toolCallId, result }) => {
+              const message = messages.find(
+                (item) => item.role === "tool" && item.toolCallId === toolCallId
+              );
+              if (message?.role === "tool") {
+                // Large results fall back to a text preview in the chat renderer.
+                message.content = (JSON.stringify(result) ?? "").slice(
+                  0,
+                  100_000
+                );
+                message.toolCompletedAt = Date.now();
+                publishProgress();
+              }
+            },
+            onToolStart: ({ tool, toolCallId, toolGroupId, input }) => {
+              messages.push(
+                {
+                  content: "",
+                  role: "assistant",
+                  toolCalls: [{ arguments: input, id: toolCallId, name: tool }],
+                },
+                {
+                  content: "",
+                  name: tool,
+                  role: "tool",
+                  toolCallId,
+                  toolGroupId,
+                  toolStartedAt: Date.now(),
+                }
+              );
+              publishProgress();
+            },
+          }
         );
 
         const completedRun = await this.automationService.completeRun(
@@ -79,10 +136,13 @@ export class AutomationRunner {
           automationId,
           {
             error: message,
+            output: progress || undefined,
           }
         );
         await this.tryDeliver(automation, completedRun);
         return { error: message };
+      } finally {
+        this.automationService.setRunProgress(run.id);
       }
     } finally {
       this.running.delete(automationId);

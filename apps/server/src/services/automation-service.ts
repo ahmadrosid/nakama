@@ -33,6 +33,10 @@ export interface AutomationServiceOptions {
 }
 
 export class AutomationService {
+  private readonly runProgress = new Map<
+    string,
+    Pick<AutomationRunRecord, "output" | "progress">
+  >();
   private readonly store: DatabaseAutomationStore;
   private readonly db: DatabaseAdapter;
   private readonly getUserTimezone: () => Promise<string>;
@@ -253,7 +257,21 @@ export class AutomationService {
         ? await this.db.getAutomationRunReadThrough(userId, orgId, automationId)
         : null;
 
-    return runs.map((run) => toRunRecord(run, readThroughAt));
+    return runs.map((run) => ({
+      ...toRunRecord(run, readThroughAt),
+      ...(run.status === "running" ? this.runProgress.get(run.id) : {}),
+    }));
+  }
+
+  setRunProgress(
+    runId: string,
+    progress?: Pick<AutomationRunRecord, "output" | "progress">
+  ): void {
+    if (progress === undefined) {
+      this.runProgress.delete(runId);
+    } else {
+      this.runProgress.set(runId, progress);
+    }
   }
 
   async deleteRun(

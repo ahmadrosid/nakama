@@ -34,9 +34,11 @@ import {
 } from "hugeicons-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { MessageResponse } from "@/components/ai-elements/message";
+import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
 import {
+  chatMessagesToListItems,
   formatFutureRelativeTime,
   formatSessionRelativeTime,
   formatSessionTimestamp,
@@ -533,13 +535,12 @@ export function RunHistoryList({
     () => runs.find((run) => run.status === "running")?.id ?? null
   );
 
+  const activeRunId = runs.find((run) => run.status === "running")?.id;
   useEffect(() => {
-    const running = runs.find((run) => run.status === "running");
-
-    if (running) {
-      setExpandedId(running.id);
+    if (activeRunId) {
+      setExpandedId(activeRunId);
     }
-  }, [runs]);
+  }, [activeRunId]);
 
   const groups = useMemo(() => groupRunsByDay(runs), [runs]);
 
@@ -608,6 +609,7 @@ function runHasExpandableBody(run: AutomationRunRecord): boolean {
     run.output?.trim() ||
       run.error?.trim() ||
       run.deliveryError?.trim() ||
+      run.status === "running" ||
       run.status === "failed"
   );
 }
@@ -670,7 +672,7 @@ function RunHistoryItemSummary({
           </span>
         </div>
 
-        {previewText ? (
+        {previewText && !expanded ? (
           <p
             className={cn(
               "mt-0.5 line-clamp-1 text-sm",
@@ -758,6 +760,29 @@ function RunHistoryOutput({ run }: { run: AutomationRunRecord }) {
   const hasOutput = Boolean(run.output?.trim());
   const hasError = Boolean(run.error?.trim());
 
+  if (isRunning && run.progress?.length) {
+    const messages = chatMessagesToListItems(run.progress).map((message) => ({
+      ...message,
+      streaming:
+        message.role === "assistant" &&
+        message.historyIndex === run.progress!.length - 1,
+      toolStatus:
+        message.role === "tool" && !message.toolCompletedAt
+          ? ("running" as const)
+          : message.toolStatus,
+    }));
+    return (
+      <ChatMessageList
+        actionsDisabled
+        className="h-[min(70vh,28rem)] flex-none"
+        contentClassName="px-0"
+        messages={messages}
+        streamActive
+        turnStartedAt={run.startedAt}
+      />
+    );
+  }
+
   if (hasError && hasOutput) {
     return (
       <>
@@ -788,7 +813,7 @@ function RunHistoryOutput({ run }: { run: AutomationRunRecord }) {
   }
 
   if (isRunning) {
-    return null;
+    return <p className="text-muted-foreground text-sm">Waiting for output…</p>;
   }
 
   return <p className="text-muted-foreground text-sm">No output returned.</p>;
