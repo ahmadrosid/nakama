@@ -33,9 +33,26 @@ describe("resolveModel", () => {
       "gpt-5.6-terra",
       "gpt-5.6-sol",
       "gpt-5.6-luna",
+      "gpt-6.1-sol",
+      "gpt-6-sol",
+      "gpt-6-luna",
       "gpt-6-astra",
       "gpt-5.5",
     ]);
+
+    for (const id of ["gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"]) {
+      expect(
+        getModelsForProvider("chatgpt").find((model) => model.id === id)
+      ).toMatchObject({
+        contextWindow: 272_000,
+        inputPerMillionUsd: 0,
+        outputPerMillionUsd: 0,
+      });
+      expect(
+        getModelsForProvider("chatgpt").find((model) => model.id === id)
+          ?.maxOutputTokens
+      ).toBeUndefined();
+    }
   });
 
   test("honors ChatGPT instance defaults without replacing explicit selections", () => {
@@ -91,6 +108,7 @@ describe("resolveModel", () => {
     // Official model pages: https://developers.openai.com/api/docs/models/<id>
     // Cost expectations use 100k input + 20k output, below long-context tiers.
     for (const [id, context, output, inputPrice, outputPrice, cost] of [
+      ["gpt-6.1-sol", 1_050_000, 128_000, 2, 10, 0.4],
       ["gpt-6-sol", 1_050_000, 128_000, 2, 10, 0.4],
       ["gpt-6-luna", 1_050_000, 128_000, 0.1, 0.5, 0.02],
       ["gpt-6-astra", 1_050_000, 128_000, 10, 50, 2],

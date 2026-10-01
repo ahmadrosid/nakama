@@ -44,6 +44,9 @@ const CHATGPT_MODELS: ProviderModelOption[] = [
   { default: true, id: "gpt-5.6-terra", name: "GPT-5.6 Terra" },
   { id: "gpt-5.6-sol", name: "GPT-5.6 Sol" },
   { id: "gpt-5.6-luna", name: "GPT-5.6 Luna" },
+  { id: "gpt-6.1-sol", name: "GPT-6.1 Sol" },
+  { id: "gpt-6-sol", name: "GPT-6 Sol" },
+  { id: "gpt-6-luna", name: "GPT-6 Luna" },
   { id: "gpt-6-astra", name: "GPT-6 Astra" },
   { id: "gpt-5.5", name: "GPT-5.5" },
 ].map((model) => ({
@@ -122,6 +125,16 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
   },
   // OpenAI API limits and base text prices: https://developers.openai.com/api/docs/models
   // GPT-6, Luna, GPT-5.5 and GPT-5.4 charge more above 272k input tokens.
+  {
+    contextWindow: 1_050_000,
+    id: "gpt-6.1-sol",
+    inputPerMillionUsd: 2,
+    maxOutputTokens: 128_000,
+    name: "GPT-6.1 Sol",
+    outputPerMillionUsd: 10,
+    provider: "openai",
+    supportsThinking: true,
+  },
   {
     contextWindow: 1_050_000,
     id: "gpt-6-sol",

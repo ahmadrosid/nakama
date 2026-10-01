@@ -92,50 +92,69 @@ describe("OpenAI provider streaming", () => {
     expect(chunks.join("")).toBe(result.content);
   });
 
-  test("streams responses api text and thinking", async () => {
-    const fetchMock = mock(async (input: RequestInfo | URL) => {
-      expect(String(input)).toBe("https://api.openai.com/v1/responses");
+  test.each([false, true])(
+    "streams GPT-6.1 Sol tools through Responses (thinking: %s)",
+    async (enabled) => {
+      const fetchMock = mock(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          expect(String(input)).toBe("https://api.openai.com/v1/responses");
+          const body = JSON.parse(String(init?.body));
+          expect(body.model).toBe("gpt-6.1-sol");
+          expect(body.reasoning).toEqual(
+            enabled ? { effort: "medium", summary: "auto" } : undefined
+          );
+          expect(body.reasoning_effort).toBeUndefined();
+          expect(body.tools).toHaveLength(1);
 
-      return new Response(
-        streamFromChunks([
-          'event: response.output_text.delta\r\ndata:{"type":"response.output_text.delta","delta":"Hi"}\r\n\r\n',
-          'data:{"type":"response.reasoning_summary_text.delta","delta":"Plan"}\r\n\r\n',
-          'data:{"type":"response.output_item.done","item":{"id":"msg_1","type":"message","content":[{"type":"output_text","text":"Hi"}]}}\r\n\r\n',
-          "data:[DONE]\r\n\r\n",
-        ]),
-        { headers: { "Content-Type": "text/event-stream" }, status: 200 }
+          return new Response(
+            streamFromChunks([
+              'event: response.output_text.delta\r\ndata:{"type":"response.output_text.delta","delta":"Hi"}\r\n\r\n',
+              'data:{"type":"response.reasoning_summary_text.delta","delta":"Plan"}\r\n\r\n',
+              'data:{"type":"response.output_item.done","item":{"id":"msg_1","type":"message","content":[{"type":"output_text","text":"Hi"}]}}\r\n\r\n',
+              "data:[DONE]\r\n\r\n",
+            ]),
+            { headers: { "Content-Type": "text/event-stream" }, status: 200 }
+          );
+        }
       );
-    });
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-    const provider = createOpenAIProvider({
-      apiKey: "sk-test",
-      model: "gpt-5.4",
-    });
+      const provider = createOpenAIProvider({
+        apiKey: "sk-test",
+        model: "gpt-6.1-sol",
+      });
 
-    const chunks: string[] = [];
-    const thinking: string[] = [];
-    const result = await provider.streamChat(
-      {
-        messages: [{ content: "Think, then answer", role: "user" }],
-        providerOptions: {
-          thinking: { effort: "medium", enabled: true },
+      const chunks: string[] = [];
+      const thinking: string[] = [];
+      const result = await provider.streamChat(
+        {
+          messages: [{ content: "Think, then answer", role: "user" }],
+          providerOptions: {
+            thinking: { effort: "medium", enabled },
+          },
+          system: "You are helpful.",
+          tools: [
+            {
+              description: "Search files",
+              name: "search_files",
+              parameters: { properties: {}, type: "object" },
+            },
+          ],
         },
-        system: "You are helpful.",
-      },
-      {
-        onChunk: (delta) => chunks.push(delta),
-        onThinking: (delta) => thinking.push(delta),
-      }
-    );
+        {
+          onChunk: (delta) => chunks.push(delta),
+          onThinking: (delta) => thinking.push(delta),
+        }
+      );
 
-    expect(result.content).toBe("Hi");
-    expect(result.assistantMessage.thinking).toBe("Plan");
-    expect(chunks).toEqual(["Hi"]);
-    expect(thinking).toEqual(["Plan"]);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
+      expect(result.content).toBe("Hi");
+      expect(result.assistantMessage.thinking).toBe("Plan");
+      expect(chunks).toEqual(["Hi"]);
+      expect(thinking).toEqual(["Plan"]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    }
+  );
 
   test("streams chat completion chunks when thinking is enabled for an unsupported model", async () => {
     const fetchMock = mock(async (input: RequestInfo | URL) => {
