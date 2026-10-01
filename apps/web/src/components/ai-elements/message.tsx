@@ -106,7 +106,7 @@ const MessageResponseBody = memo(
   messageResponseBodyPropsEqual
 );
 
-export function messageResponseBodyPropsEqual(
+function messageResponseBodyPropsEqual(
   prevProps: MessageResponseProps,
   nextProps: MessageResponseProps
 ): boolean {
