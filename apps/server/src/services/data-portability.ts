@@ -123,15 +123,24 @@ function resolveNakamaRootDir(rootDir?: string): string {
   return resolve(raw);
 }
 
+function resolveConfiguredDatabasePath(
+  rootDir: string,
+  databasePath: string | null | undefined
+): string | null {
+  return databasePath === undefined
+    ? resolveDatabasePath(loadConfig().databaseUrl, { baseDir: rootDir })
+    : databasePath;
+}
+
 export async function createNakamaDataExport(
   options: CreateDataExportOptions = {}
 ): Promise<CreateDataExportResult> {
   const rootDir = resolveNakamaRootDir(options.rootDir);
   const createdAt = (options.now ?? new Date()).toISOString();
-  const configuredDatabasePath =
-    options.databasePath === undefined
-      ? resolveDatabasePath(loadConfig().databaseUrl, { baseDir: rootDir })
-      : options.databasePath;
+  const configuredDatabasePath = resolveConfiguredDatabasePath(
+    rootDir,
+    options.databasePath
+  );
 
   try {
     return await runWithPluginExportBarrier(
