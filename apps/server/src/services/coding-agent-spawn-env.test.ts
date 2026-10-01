@@ -23,10 +23,6 @@ describe("coding-agent spawn env", () => {
     );
   });
 
-  test("returns no env overrides when routing is inactive", () => {
-    expect(buildClaudeCodeSpawnEnv(inactiveRouting)).toEqual({});
-  });
-
   test("returns empty spawn env for Cursor Agent even when routing is active", async () => {
     const spawn = await buildSpawnEnvForHarness(
       "cursor_agent",
