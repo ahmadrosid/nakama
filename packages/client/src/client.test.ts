@@ -709,3 +709,68 @@ test("listSessions asks for several channels and a page in one request", async (
     "?channels=web&profileId=agent-a&limit=30&q=budget+plan",
   ]);
 });
+
+test("artifact download budget stops declared and chunked oversize bodies", async () => {
+  for (const declared of [undefined, "100", "1"]) {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true;
+      },
+      start(controller) {
+        controller.enqueue(new Uint8Array(5));
+      },
+    });
+    const client = new NakamaClient({
+      fetch: (async () =>
+        new Response(body, {
+          headers: declared ? { "Content-Length": declared } : {},
+        })) as unknown as typeof fetch,
+    });
+    await expect(
+      client.readProfileArtifactContent("profile", "report.csv", {
+        maxBytes: 4,
+      })
+    ).rejects.toThrow();
+    expect(cancelled).toBe(true);
+  }
+  const client = new NakamaClient({
+    fetch: (async () => new Response("1234")) as unknown as typeof fetch,
+  });
+  expect(
+    new TextDecoder().decode(
+      (
+        await client.readProfileArtifactContent("profile", "report.csv", {
+          maxBytes: 4,
+        })
+      ).data
+    )
+  ).toBe("1234");
+});
+
+test("artifact download cancellation aborts a pending body read and forwards the signal", async () => {
+  const controller = new AbortController();
+  let cancelled = false;
+  let requestSignal: AbortSignal | null | undefined;
+  const client = new NakamaClient({
+    fetch: (async (_input, init) => {
+      requestSignal = init?.signal;
+      return new Response(
+        new ReadableStream({
+          cancel() {
+            cancelled = true;
+          },
+        })
+      );
+    }) as typeof fetch,
+  });
+  const download = client.readProfileArtifactContent("profile", "report.csv", {
+    maxBytes: 10,
+    signal: controller.signal,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  controller.abort();
+  await expect(download).rejects.toThrow();
+  expect(requestSignal).toBe(controller.signal);
+  expect(cancelled).toBe(true);
+});

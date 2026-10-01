@@ -2,6 +2,7 @@ import { mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { isDocxFile, isLegacyDocFile } from "../artifact-mime";
+import { listArtifactsTool } from "../artifacts";
 import type { ImageAttachment, ToolContext, ToolDefinition } from "../contract";
 import { convertDocxToMarkdown } from "../docx-text";
 import { markdownToDocx } from "../docx-write";
@@ -982,6 +983,7 @@ export const builtinTools: ToolDefinition[] = [
   deleteFileTool,
   editFileTool,
   readFileTool,
+  listArtifactsTool,
   searchFilesTool,
   knowledgeBaseSearchTool,
   sqliteTool,

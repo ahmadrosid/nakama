@@ -174,3 +174,38 @@ describe("readStreamEvents", () => {
     ).rejects.toThrow("Rate limit exceeded");
   });
 });
+
+test("terminal done callback does not authorize partial EOF, abort, or error streams", async () => {
+  let done = 0;
+  const handlers = {
+    onChunk: () => {},
+    onDone: () => {
+      done += 1;
+    },
+  };
+  expect(
+    await readStreamEvents(
+      streamFromChunks(['data: {"type":"chunk","delta":"partial"}\n\n']),
+      handlers
+    )
+  ).toBe("partial");
+  expect(done).toBe(0);
+  await expect(
+    readStreamEvents(
+      streamFromChunks(['data: {"type":"error","error":"failed"}\n\n']),
+      handlers
+    )
+  ).rejects.toThrow();
+  expect(done).toBe(0);
+  const controller = new AbortController();
+  controller.abort();
+  await expect(
+    readStreamEvents(streamFromChunks([]), handlers, controller.signal)
+  ).rejects.toThrow();
+  expect(done).toBe(0);
+  await readStreamEvents(
+    streamFromChunks(['data: {"type":"done","reply":"ok"}\n\n']),
+    handlers
+  );
+  expect(done).toBe(1);
+});
