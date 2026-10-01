@@ -4,6 +4,7 @@ import type {
   CreateProviderResponse,
   CustomModelEntry,
   OllamaHostMode,
+  OpenRouterRoutingSettings,
   ProviderModelOption,
   WireApi,
   XaiOAuthCredentials,
@@ -81,6 +82,8 @@ export function useProviderSetupForm(
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState("");
   const [openRouterModels, setOpenRouterModels] = useState<ModelListRow[]>([]);
+  const [openRouterRouting, setOpenRouterRouting] =
+    useState<OpenRouterRoutingSettings>({});
   const [openRouterModelsError, setOpenRouterModelsError] = useState<
     string | null
   >(null);
@@ -544,6 +547,7 @@ export function useProviderSetupForm(
             hostMode:
               selectedProvider === "ollama" ? ollamaHostMode : undefined,
             model: modelToSave || undefined,
+            openRouterRouting,
             provider: selectedProvider,
             wireApi:
               selectedProvider === "openai_compatible" ? wireApi : undefined,
@@ -560,6 +564,7 @@ export function useProviderSetupForm(
         setChatgptOAuth(null);
         setSubscriptionModels([]);
         setOpenRouterModels([]);
+        setOpenRouterRouting({});
         setShortlistModels([]);
         setCustomModels([]);
         onSuccess?.(result);
@@ -576,6 +581,7 @@ export function useProviderSetupForm(
       xaiOAuth,
       chatgptOAuth,
       openRouterModels,
+      openRouterRouting,
       shortlistModels,
       ollamaHostMode,
       ollamaApiKeyOptions,
@@ -622,12 +628,14 @@ export function useProviderSetupForm(
     openCodeZenConfigured,
     openRouterModels,
     openRouterModelsError,
+    openRouterRouting,
     selectedModel,
     selectedProvider,
     setBaseUrl,
     setChatgptOAuth,
     setCustomModels,
     setDisplayName,
+    setOpenRouterRouting,
     setSelectedModel,
     setShowApiKey,
     setWireApi,

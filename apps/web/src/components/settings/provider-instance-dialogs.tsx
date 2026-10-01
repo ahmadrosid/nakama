@@ -337,6 +337,7 @@ export function ProviderManageModelsDialog({
   onOpenChange,
   onSave,
   children,
+  title = "Manage models",
 }: {
   open: boolean;
   busy: boolean;
@@ -344,6 +345,7 @@ export function ProviderManageModelsDialog({
   onOpenChange: (open: boolean) => void;
   onSave: () => void;
   children: ReactNode;
+  title?: string;
 }) {
   return (
     <ProviderModelsDialogShell
@@ -353,7 +355,7 @@ export function ProviderManageModelsDialog({
       onOpenChange={onOpenChange}
       onSave={onSave}
       open={open}
-      title="Manage models"
+      title={title}
     >
       {children}
     </ProviderModelsDialogShell>

@@ -1,4 +1,20 @@
 import { describe, expect, mock, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  loadUserConfig,
+  type OpenRouterRoutingSettings,
+  saveUserConfig,
+} from "@nakama/core";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import {
+  applyProviderInstanceUpdate,
+  buildProviderInstanceFromCreateRequest,
+  toProviderInstanceSummary,
+} from "../../services/provider-instance-helpers";
+import { createProviderForInstance } from "../create";
 import { streamFromChunks } from "../test-helpers";
 import { createOpenRouterProvider } from "./index";
 
@@ -38,6 +54,199 @@ function streamChunk(delta: Record<string, unknown>): string {
 }
 
 describe("createOpenRouterProvider", () => {
+  test.each([
+    [undefined, undefined],
+    [{}, undefined],
+    [
+      { dataCollection: "deny", requireParameters: true, zdr: true },
+      { data_collection: "deny", require_parameters: true, zdr: true },
+    ],
+    [
+      { dataCollection: "allow", requireParameters: false, zdr: false },
+      { data_collection: "allow", require_parameters: false, zdr: false },
+    ],
+    [{ requireParameters: true }, { require_parameters: true }],
+  ] satisfies [OpenRouterRoutingSettings | undefined, unknown][])(
+    "serializes routing %j on every dedicated request path",
+    async (openRouterRouting, expected) => {
+      const bodies: Record<string, unknown>[] = [];
+      const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request =
+          input instanceof Request ? input : new Request(input, init);
+        const body = (await request.json()) as Record<string, unknown>;
+        bodies.push(body);
+        return body.stream
+          ? new Response(
+              streamFromChunks([
+                streamChunk({ content: "ok" }),
+                "data:[DONE]\r\n\r\n",
+              ]),
+              { headers: { "Content-Type": "text/event-stream" } }
+            )
+          : new Response(chatCompletionResponse("ok"), {
+              headers: { "Content-Type": "application/json" },
+            });
+      };
+      const provider = createOpenRouterProvider({
+        apiKey: "test-key",
+        fetcher,
+        model: "openai/gpt-6-luna",
+        openRouterRouting,
+      });
+      const input = {
+        messages: [{ content: "hi", role: "user" as const }],
+        system: "test",
+      };
+      expect((await provider.generateChat(input)).content).toBe("ok");
+      expect((await provider.streamChat(input, { onChunk() {} })).content).toBe(
+        "ok"
+      );
+      for (const format of ["text", "json"] as const) {
+        expect(
+          (
+            await provider.generateText({
+              format,
+              prompt: "hi",
+              system: "test",
+            })
+          ).content
+        ).toBe("ok");
+      }
+      expect(bodies.map((body) => body.stream)).toEqual([
+        false,
+        true,
+        false,
+        false,
+      ]);
+      for (const body of bodies) {
+        expect(body.provider).toEqual(expected);
+        expect(body.model).toBe("openai/gpt-6-luna");
+        expect(body).not.toHaveProperty("extra_body");
+        if (expected === undefined) {
+          expect(body).not.toHaveProperty("provider");
+        }
+      }
+      expect(bodies[3]?.response_format).toEqual({ type: "json_object" });
+    }
+  );
+
+  test("create, persist, update and clear routing through the instance factory", async () => {
+    const previousDir = process.env.NAKAMA_CONFIG_DIR;
+    const directory = await mkdtemp(join(tmpdir(), "nakama-routing-"));
+    const bodies: Record<string, unknown>[] = [];
+    const server = setupServer(
+      http.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        async ({ request }) => {
+          const body = (await request.json()) as Record<string, unknown>;
+          bodies.push(body);
+          return body.stream
+            ? new HttpResponse(
+                streamChunk({ content: "ok" }) + "data:[DONE]\r\n\r\n",
+                { headers: { "Content-Type": "text/event-stream" } }
+              )
+            : new HttpResponse(chatCompletionResponse("ok"), {
+                headers: { "Content-Type": "application/json" },
+              });
+        }
+      )
+    );
+    server.listen({ onUnhandledRequest: "error" });
+    process.env.NAKAMA_CONFIG_DIR = directory;
+    try {
+      const strict = {
+        dataCollection: "deny",
+        requireParameters: true,
+        zdr: true,
+      } as const;
+      let instance = buildProviderInstanceFromCreateRequest(
+        {
+          apiKey: `sk-or-${"x".repeat(24)}`,
+          openRouterRouting: strict,
+          type: "openrouter",
+        },
+        []
+      );
+      const other = buildProviderInstanceFromCreateRequest(
+        { apiKey: `sk-or-${"y".repeat(24)}`, type: "openrouter" },
+        [instance]
+      );
+      const stages = [
+        [
+          undefined,
+          strict,
+          { data_collection: "deny", require_parameters: true, zdr: true },
+        ],
+        [
+          { label: "Renamed" },
+          strict,
+          { data_collection: "deny", require_parameters: true, zdr: true },
+        ],
+        [
+          {
+            openRouterRouting: {
+              dataCollection: "allow",
+              requireParameters: false,
+              zdr: false,
+            },
+          },
+          { dataCollection: "allow", requireParameters: false, zdr: false },
+          { data_collection: "allow", require_parameters: false, zdr: false },
+        ],
+        [{ openRouterRouting: { zdr: true } }, { zdr: true }, { zdr: true }],
+        [{ openRouterRouting: {} }, undefined, undefined],
+      ] as const;
+      for (const [update, saved, wire] of stages) {
+        if (update) {
+          instance = applyProviderInstanceUpdate(instance, update);
+        }
+        await saveUserConfig({
+          defaultProviderId: instance.id,
+          providers: [instance, other],
+        });
+        const loaded = await loadUserConfig();
+        instance = loaded!.providers.find((entry) => entry.id === instance.id)!;
+        expect(instance.openRouterRouting).toEqual(saved);
+        expect(
+          toProviderInstanceSummary(instance, 0).openRouterRouting
+        ).toEqual(saved);
+        const otherLoaded = loaded!.providers.find(
+          (entry) => entry.id === other.id
+        )!;
+        expect(otherLoaded.openRouterRouting).toBeUndefined();
+        const client = createProviderForInstance(
+          instance,
+          "openai/gpt-6-luna"
+        )!;
+        const input = {
+          messages: [{ content: "hi", role: "user" as const }],
+          system: "test",
+        };
+        await client.generateChat(input);
+        await client.streamChat(input, { onChunk() {} });
+        await client.generateText({ prompt: "hi", system: "test" });
+        for (const body of bodies.splice(0)) {
+          expect(body.provider).toEqual(wire);
+        }
+        await createProviderForInstance(
+          otherLoaded,
+          "openai/gpt-6-luna"
+        )!.generateChat(input);
+        expect(bodies.splice(0).map((body) => body.provider)).toEqual([
+          undefined,
+        ]);
+      }
+    } finally {
+      server.close();
+      if (previousDir === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = previousDir;
+      }
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
   test("calls OpenRouter chat completions via SDK", async () => {
     const fetchMock = mock(
       async (input: RequestInfo | URL, init?: RequestInit) => {
