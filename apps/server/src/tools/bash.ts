@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import {
   mkdir,
   readdir,
@@ -219,6 +220,44 @@ export async function runBash(
   });
 }
 
+export function resolveHostBash(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+  exists: (file: string) => boolean = existsSync,
+  which: (name: string) => string | null = Bun.which
+): string {
+  if (platform !== "win32") {
+    const shell = exists("/bin/bash") ? "/bin/bash" : which("bash");
+    if (shell) {
+      return shell;
+    }
+    throw new Error("No Bash shell found. Install Bash and add it to PATH.");
+  }
+
+  for (const root of [env.ProgramFiles, env["ProgramFiles(x86)"]]) {
+    if (root) {
+      const shell = path.win32.join(root, "Git", "bin", "bash.exe");
+      if (exists(shell)) {
+        return shell;
+      }
+    }
+  }
+
+  const shell = which("bash.exe");
+  // The WSL launcher uses a different filesystem and toolchain from the host.
+  if (
+    shell &&
+    !/^[a-z]:\\windows\\(?:system32|sysnative)\\bash\.exe$/i.test(
+      shell.replaceAll("/", "\\")
+    )
+  ) {
+    return shell;
+  }
+  throw new Error(
+    "No native Bash shell found. Install Git for Windows (https://git-scm.com/download/win) or add a native Bash executable to PATH."
+  );
+}
+
 function runShellCommand(
   command: string,
   cwd: string,
@@ -228,7 +267,7 @@ function runShellCommand(
 ): Promise<BashOutput> {
   return new Promise((resolve, reject) => {
     options.signal?.throwIfAborted();
-    const child = spawn("/bin/bash", ["-lc", command], {
+    const child = spawn(resolveHostBash(), ["-lc", command], {
       cwd,
       detached: process.platform !== "win32",
       env: mergeCodingAgentSpawnEnv(process.env, envOverrides),
