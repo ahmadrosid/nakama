@@ -14,6 +14,7 @@ import {
 } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 import {
+  encodeModelSelection,
   groupModelsByProvider,
   IMAGE_GENERATION_MODEL_OPTIONS,
   IMAGE_GENERATION_SELECTION,
@@ -43,23 +44,37 @@ export function ImageGenerationSettingsCard() {
     [providerModelGroups]
   );
 
-  const imageModelGroups = useMemo(() => {
-    if (!openaiAvailable) {
-      return [] as typeof providerModelGroups;
-    }
+  // Any custom model on an OpenAI-compatible provider may speak the Images
+  // API; the server posts the one picked to `<baseUrl>/images/generations`.
+  const compatibleModelGroups = useMemo(
+    () =>
+      providerModelGroups.filter((group) =>
+        group.models.some((model) => model.provider === "openai_compatible")
+      ),
+    [providerModelGroups]
+  );
 
-    return [
-      {
-        models: IMAGE_GENERATION_MODEL_OPTIONS.map((option) => ({
-          id: option.id,
-          name: option.name,
-          provider: "openai" as const,
-        })),
-        providerId: "openai",
-        providerLabel: "OpenAI",
-      },
-    ];
-  }, [openaiAvailable]);
+  const imageModelGroups = useMemo(
+    () => [
+      ...(openaiAvailable
+        ? [
+            {
+              models: IMAGE_GENERATION_MODEL_OPTIONS.map((option) => ({
+                id: option.id,
+                name: option.name,
+                provider: "openai" as const,
+              })),
+              providerId: "openai",
+              providerLabel: "OpenAI",
+            },
+          ]
+        : []),
+      ...compatibleModelGroups,
+    ],
+    [openaiAvailable, compatibleModelGroups]
+  );
+
+  const providerAvailable = imageModelGroups.length > 0;
 
   const selectionValue = selection || CLEAR_IMAGE_GENERATION_MODEL_VALUE;
 
@@ -100,7 +115,7 @@ export function ImageGenerationSettingsCard() {
       title="Image generation model"
     >
       <Select
-        disabled={saveImageGenerationMutation.isPending || !openaiAvailable}
+        disabled={saveImageGenerationMutation.isPending || !providerAvailable}
         onValueChange={(value) => {
           if (!value) {
             return;
@@ -137,9 +152,9 @@ export function ImageGenerationSettingsCard() {
           <SelectValue placeholder="Select image generation model">
             {selection
               ? profileModelLabel(selection, imageModelGroups)
-              : openaiAvailable
+              : providerAvailable
                 ? "Not configured"
-                : "No OpenAI provider"}
+                : "No image provider"}
           </SelectValue>
         </SelectTrigger>
         <SelectContent
@@ -154,6 +169,16 @@ export function ImageGenerationSettingsCard() {
               OpenAI: {IMAGE_GENERATION_MODEL_OPTIONS[0].name}
             </SelectItem>
           ) : null}
+          {compatibleModelGroups.flatMap((group) =>
+            group.models.map((model) => (
+              <SelectItem
+                key={`${group.providerId}::${model.id}`}
+                value={encodeModelSelection(group.providerId, model.id)}
+              >
+                {group.providerLabel}: {model.name}
+              </SelectItem>
+            ))
+          )}
         </SelectContent>
       </Select>
     </SettingsModelTile>

@@ -118,11 +118,13 @@ Keep prompts, images, and audio entirely inside your network (data residency) by
 
 ### Image generation
 
-Set **Image generation model** in Settings to select `gpt-image-2` against the compatible instance:
+Set **Image generation model** in Settings. The dropdown lists the models of every compatible provider, stored as `<providerId>::<modelId>`, so a gateway that namespaces its ids works too:
 
 ```text
-openai_compatible::gpt-image-2
+p-my-local::cb/gpt-image-2
 ```
+
+The model must be one of that provider's models, otherwise saving fails. The older `openai_compatible::gpt-image-2` selection still works and uses your default provider, or the first compatible one with a base URL. Usage is priced from the rates you enter on that model.
 
 Nakama requests `POST {baseUrl}/images/generations` (for example `http://localhost:8000/v1/images/generations`) with the same body OpenAI sends. A backend exposes images as `b64_json` works unchanged.
 
