@@ -567,7 +567,12 @@ function registerRuntimeCleanup(
     ) {
       const { default: pm2 } = await import("pm2");
       await new Promise<void>((resolve) => {
-        const timeout = setTimeout(resolve, 3000);
+        // Connecting alone takes ~2.5s on Windows, so 3s ran out before pm2
+        // sent the daemon its kill request.
+        const timeout = setTimeout(
+          resolve,
+          process.platform === "win32" ? 5000 : 3000
+        );
         pm2.connect((error) => {
           if (error) {
             clearTimeout(timeout);
