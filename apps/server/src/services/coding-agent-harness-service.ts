@@ -853,6 +853,7 @@ async function runProbeCommand(
       cwd,
       env: mergeCodingAgentSpawnEnv(getToolExecutionEnv(), spawnEnv),
       stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
     });
     let stdout = "";
     let stderr = "";

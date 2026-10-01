@@ -97,6 +97,7 @@ export async function probeCliVersion(command: string): Promise<{
       child = spawn(command, ["--version"], {
         env: getToolExecutionEnv(),
         stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
       });
     } catch {
       resolve({
@@ -173,6 +174,7 @@ export async function runTimedInstallCommand(
       detached: true,
       env: getToolExecutionEnv(),
       stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
     });
     let stdout = "";
     let stderr = "";
