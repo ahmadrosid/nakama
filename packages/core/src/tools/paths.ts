@@ -16,6 +16,34 @@ export function getCustomToolsDir(): string {
 const DEFAULT_MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 const SPECIAL_PATH_PREFIXES = ["/dev/", "/proc/", "/sys/"];
 
+// On Windows the JS realpathSync keeps the caller's casing and short names;
+// the native one returns the on-disk name, as the async realpath already does.
+const realpathOnDisk: (filePath: string) => string =
+  process.platform === "win32" ? realpathSync.native : realpathSync;
+
+/**
+ * NTFS matches names case-insensitively, and the part of a path that does not
+ * exist yet keeps whatever casing the caller typed, so containment checks fold
+ * case on Windows. POSIX filesystems are case-sensitive and compare as-is.
+ */
+export function comparablePath(filePath: string): string {
+  return process.platform === "win32" ? filePath.toLowerCase() : filePath;
+}
+
+/**
+ * On NTFS a `:` after the drive root names an alternate data stream:
+ * `tool.js::$DATA` writes `tool.js` under a name no refusal matches, and
+ * `notes 10:30.md` hides its content in a stream of `notes 10`. POSIX allows
+ * `:` in file names, so only Windows refuses it.
+ */
+export function namesAlternateDataStream(absolutePath: string): boolean {
+  if (process.platform !== "win32") {
+    return false;
+  }
+  const { root } = path.parse(absolutePath);
+  return absolutePath.slice(root.length).includes(":");
+}
+
 export interface PathGuardOptions {
   allowedDirs?: string[];
   cwd?: string;
@@ -100,6 +128,13 @@ export async function guardFilePath(
     }
   }
 
+  if (namesAlternateDataStream(absolute)) {
+    throw new PathGuardError(
+      `Path names an NTFS alternate data stream: ${absolute}. File names cannot contain ":" on Windows.`,
+      "SPECIAL_FILE"
+    );
+  }
+
   let realPath: string;
   try {
     realPath = await realpath(absolute);
@@ -130,14 +165,14 @@ export async function guardFilePath(
 export function resolveWithRealpath(targetPath: string): string {
   const absolute = path.resolve(targetPath);
   try {
-    return realpathSync(absolute);
+    return realpathOnDisk(absolute);
   } catch {
     let dir = path.dirname(absolute);
     const root = path.parse(dir).root;
 
     while (true) {
       try {
-        const resolvedDir = realpathSync(dir);
+        const resolvedDir = realpathOnDisk(dir);
         const relativeDir = path.relative(dir, path.dirname(absolute));
         return path.resolve(resolvedDir, relativeDir, path.basename(absolute));
       } catch {
@@ -193,10 +228,14 @@ function getUserHome(): string {
 
 /** Length of the longest dir in `dirs` that contains `target`, or -1 for none. */
 function deepestMatch(target: string, dirs: string[]): number {
-  const normalized = target.endsWith(path.sep) ? target : target + path.sep;
+  const comparableTarget = comparablePath(target);
+  const normalized = comparableTarget.endsWith(path.sep)
+    ? comparableTarget
+    : comparableTarget + path.sep;
   let deepest = -1;
 
-  for (const dir of dirs) {
+  for (const rawDir of dirs) {
+    const dir = comparablePath(rawDir);
     const dirEnd = dir.endsWith(path.sep) ? dir : dir + path.sep;
     if (
       (normalized === dirEnd || normalized.startsWith(dirEnd)) &&
