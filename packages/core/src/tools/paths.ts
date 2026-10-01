@@ -16,6 +16,11 @@ export function getCustomToolsDir(): string {
 const DEFAULT_MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 const SPECIAL_PATH_PREFIXES = ["/dev/", "/proc/", "/sys/"];
 
+// On Windows the JS realpathSync keeps the caller's casing and short names;
+// the native one returns the on-disk name, as the async realpath already does.
+const realpathOnDisk: (filePath: string) => string =
+  process.platform === "win32" ? realpathSync.native : realpathSync;
+
 export interface PathGuardOptions {
   allowedDirs?: string[];
   cwd?: string;
@@ -130,14 +135,14 @@ export async function guardFilePath(
 export function resolveWithRealpath(targetPath: string): string {
   const absolute = path.resolve(targetPath);
   try {
-    return realpathSync(absolute);
+    return realpathOnDisk(absolute);
   } catch {
     let dir = path.dirname(absolute);
     const root = path.parse(dir).root;
 
     while (true) {
       try {
-        const resolvedDir = realpathSync(dir);
+        const resolvedDir = realpathOnDisk(dir);
         const relativeDir = path.relative(dir, path.dirname(absolute));
         return path.resolve(resolvedDir, relativeDir, path.basename(absolute));
       } catch {
