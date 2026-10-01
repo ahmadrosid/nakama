@@ -286,7 +286,9 @@ describe("plugin portability", () => {
         getOrgPluginDataDir(ORG, "supermemory", restoreRoot),
         "connection.json"
       );
-      expect((await stat(credentials)).mode % 512).toBe(0o600);
+      if (process.platform !== "win32") {
+        expect((await stat(credentials)).mode % 512).toBe(0o600);
+      }
       await chmod(credentials, 0o644);
       expect(
         (
@@ -297,7 +299,9 @@ describe("plugin portability", () => {
           })
         ).result
       ).toEqual({ configured: true, url: "http://localhost:6767" });
-      expect((await stat(credentials)).mode % 512).toBe(0o600);
+      if (process.platform !== "win32") {
+        expect((await stat(credentials)).mode % 512).toBe(0o600);
+      }
       await restored.adapter.upsertOrganization({
         createdAt: now,
         id: DEST,

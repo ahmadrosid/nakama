@@ -57,8 +57,9 @@ describe("database reopen after restore", () => {
     await writeFile(join(stagedSqliteDir, "marker.txt"), "restored");
     staged.close();
 
-    // Still holding the old connection — same situation as a live restore.
+    // A live restore releases the connection before moving its directory.
     expect(await database.adapter.countHumanUsers()).toBe(1);
+    database.release();
 
     await rename(liveSqliteDir, backupSqliteDir);
     await rename(stagedSqliteDir, liveSqliteDir);
@@ -84,7 +85,7 @@ describe("database reopen after restore", () => {
 
     database.release();
 
-    // close() would leave the prepared statements, and the file, alive.
+    // Releasing the connection invalidates its prepared statements.
     await expect(database.adapter.countHumanUsers()).rejects.toThrow();
     await rename(join(rootDir, "sqlite"), join(rootDir, "sqlite-moved"));
     await rename(join(rootDir, "sqlite-moved"), join(rootDir, "sqlite"));
