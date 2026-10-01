@@ -92,6 +92,16 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
   },
   {
     contextWindow: 1_000_000,
+    id: "claude-sonnet-5-5",
+    inputPerMillionUsd: 2,
+    maxOutputTokens: 128_000,
+    name: "Sonnet 5.5",
+    outputPerMillionUsd: 10,
+    provider: "anthropic",
+    supportsThinking: true,
+  },
+  {
+    contextWindow: 1_000_000,
     id: "claude-opus-5",
     inputPerMillionUsd: 5,
     maxOutputTokens: 128_000,

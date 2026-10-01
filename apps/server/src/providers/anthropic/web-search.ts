@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type Anthropic from "@anthropic-ai/sdk";
 import type {
   ContentBlock,
@@ -51,7 +52,13 @@ export function buildAnthropicTools(
 
 export async function toAnthropicMessages(
   messages: ChatMessage[],
-  provider: ProviderName = "anthropic"
+  provider: ProviderName = "anthropic",
+  replay?: {
+    model: string;
+    system: string;
+    thinking: Pick<MessageCreateParams, "thinking" | "output_config">;
+    tools?: ToolUnion[];
+  }
 ): Promise<MessageParam[]> {
   const result: MessageParam[] = [];
 
@@ -74,10 +81,24 @@ export async function toAnthropicMessages(
           (part) => typeof readRecord(part).type === "string"
         )
       ) {
-        result.push({
-          content: message.providerContent as ContentBlockParam[],
-          role: "assistant",
-        });
+        const content: ContentBlockParam[] = [];
+        for (const part of message.providerContent) {
+          const block = readRecord(part);
+          const { _nakamaPrefixHash, ...wireBlock } = block;
+          if (
+            replay?.model === "claude-sonnet-5-5" &&
+            readRecord(replay.thinking.thinking).type === "between_tools" &&
+            (block.type === "thinking" || block.type === "redacted_thinking") &&
+            _nakamaPrefixHash !==
+              anthropicPrefixHash(result, [...content, wireBlock], replay)
+          ) {
+            continue;
+          }
+          content.push(wireBlock as unknown as ContentBlockParam);
+        }
+        if (content.length) {
+          result.push({ content, role: "assistant" });
+        }
         continue;
       }
 
@@ -185,10 +206,6 @@ export interface ContinueAnthropicUntilDoneOptions {
 export async function continueAnthropicUntilDone(
   options: ContinueAnthropicUntilDoneOptions
 ): Promise<ChatCompletionResult> {
-  let apiMessages = await toAnthropicMessages(
-    options.messages,
-    options.provider
-  );
   const combinedContent: ContentBlock[] = [];
   let totalCachedInputTokens = 0;
   let totalInputTokens = 0;
@@ -198,9 +215,27 @@ export async function continueAnthropicUntilDone(
     options.thinking,
     options.model
   );
+  const replay = {
+    model: options.model,
+    system: options.system,
+    thinking: thinkingRequest,
+    ...(tools ? { tools } : {}),
+  };
+  const initialMessages = await toAnthropicMessages(
+    options.messages,
+    options.provider,
+    replay
+  );
+  let apiMessages = initialMessages;
+  const thinkingReplay =
+    options.model === "claude-sonnet-5-5"
+      ? { messages: initialMessages, replay }
+      : undefined;
   const requestOptions = {
     signal: options.signal,
-    ...(options.model === "claude-opus-5-5"
+    ...(options.model === "claude-opus-5-5" ||
+    (options.model === "claude-sonnet-5-5" &&
+      options.thinking?.thinking?.enabled)
       ? {
           headers: { "anthropic-beta": "thinking-binding-controls-2026-08-01" },
         }
@@ -236,6 +271,7 @@ export async function continueAnthropicUntilDone(
         return finalizeAnthropicResult({
           content: streamed.content,
           parsed: parseAnthropicContent(combinedContent),
+          thinkingReplay,
           toolCalls: streamed.toolCalls,
           usage: buildTokenUsage({
             cachedInputTokens: totalCachedInputTokens,
@@ -246,7 +282,7 @@ export async function continueAnthropicUntilDone(
       }
 
       apiMessages = appendAnthropicAssistantMessage(
-        apiMessages,
+        initialMessages,
         combinedContent
       );
       continue;
@@ -273,6 +309,7 @@ export async function continueAnthropicUntilDone(
     if (payload.stop_reason !== "pause_turn") {
       return finalizeAnthropicResult({
         parsed: parseAnthropicContent(combinedContent),
+        thinkingReplay,
         usage: buildTokenUsage({
           cachedInputTokens: totalCachedInputTokens,
           inputTokens: totalInputTokens,
@@ -281,11 +318,15 @@ export async function continueAnthropicUntilDone(
       });
     }
 
-    apiMessages = appendAnthropicAssistantMessage(apiMessages, combinedContent);
+    apiMessages = appendAnthropicAssistantMessage(
+      initialMessages,
+      combinedContent
+    );
   }
 
   return finalizeAnthropicResult({
     parsed: parseAnthropicContent(combinedContent),
+    thinkingReplay,
     usage: buildTokenUsage({
       cachedInputTokens: totalCachedInputTokens,
       inputTokens: totalInputTokens,
@@ -474,6 +515,31 @@ export function buildAnthropicThinkingRequest(
   providerOptions: GenerateChatInput["providerOptions"],
   model: string
 ): Pick<MessageCreateParams, "thinking" | "output_config"> {
+  if (model === "claude-sonnet-5-5") {
+    if (!providerOptions?.thinking?.enabled) {
+      // Keep the API's fixed high effort in this mode, regardless of the UI
+      // effort setting. between_tools forbids per-turn effort changes and
+      // accepts no display/binding/budget fields.
+      return {
+        // The installed SDK does not yet type this documented mode.
+        thinking: {
+          type: "between_tools",
+        } as unknown as MessageCreateParams["thinking"],
+      };
+    }
+
+    return {
+      output_config: {
+        effort: normalizeThinkingEffort(providerOptions.thinking.effort),
+      },
+      thinking: {
+        block_binding: { prefix_mismatch_behavior: "drop_block" },
+        display: "summarized",
+        type: "adaptive",
+      } as MessageCreateParams["thinking"],
+    };
+  }
+
   if (model === "claude-opus-5-5") {
     const thinking = {
       block_binding: { prefix_mismatch_behavior: "drop_block" },
@@ -583,10 +649,32 @@ function finalizeAnthropicResult(options: {
   content?: string;
   toolCalls?: ToolCall[];
   usage?: ChatCompletionResult["usage"];
+  thinkingReplay?: {
+    messages: MessageParam[];
+    replay: NonNullable<Parameters<typeof toAnthropicMessages>[2]>;
+  };
 }): ChatCompletionResult {
   const content = options.content?.trim() || options.parsed.content;
   const toolCalls = options.toolCalls ?? options.parsed.toolCalls;
-  const providerContent = options.parsed.assistantMessage.providerContent;
+  const blocks = options.parsed.assistantMessage.providerContent;
+  const replay = options.thinkingReplay;
+  const providerContent = replay
+    ? blocks?.map((block, index) =>
+        readRecord(block).type === "thinking" ||
+        readRecord(block).type === "redacted_thinking"
+          ? {
+              ...readRecord(block),
+              // Local persistence metadata, removed before every API request.
+              // Hash the wire prefix (including this block), not UI/DB fields.
+              _nakamaPrefixHash: anthropicPrefixHash(
+                replay.messages,
+                blocks.slice(0, index + 1),
+                replay.replay
+              ),
+            }
+          : block
+      )
+    : blocks;
 
   if (!content && toolCalls.length === 0 && !providerContent?.length) {
     throw new Error("Anthropic returned an empty response.");
@@ -604,4 +692,14 @@ function finalizeAnthropicResult(options: {
       ...(providerContent?.length ? { providerContent } : {}),
     },
   };
+}
+
+function anthropicPrefixHash(
+  messages: MessageParam[],
+  content: unknown[],
+  replay: NonNullable<Parameters<typeof toAnthropicMessages>[2]>
+): string {
+  return createHash("sha256")
+    .update(JSON.stringify({ ...replay, content, messages }))
+    .digest("hex");
 }
