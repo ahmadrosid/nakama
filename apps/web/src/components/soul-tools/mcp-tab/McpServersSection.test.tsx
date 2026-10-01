@@ -129,12 +129,12 @@ test("server rows reveal tools and actions inline and respect deletion and busy 
     const blockedDelete = button("Delete");
     const matches = blockedDelete.matches.bind(blockedDelete);
     // Happy DOM does not track keyboard :focus-visible like a browser.
-    const focusVisible = spyOn(blockedDelete, "matches").mockImplementation(
-      (selector) =>
-        selector === ":focus-visible"
-          ? document.activeElement === blockedDelete
-          : matches(selector)
-    );
+    const focusVisible = spyOn(blockedDelete, "matches").mockImplementation(((
+      selector: string
+    ) =>
+      selector === ":focus-visible"
+        ? document.activeElement === blockedDelete
+        : matches(selector)) as typeof blockedDelete.matches);
     try {
       await act(async () => blockedDelete.focus());
     } finally {
@@ -197,6 +197,14 @@ test("syncs an assignable server without assigning it and refreshes its tool cou
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
+  const waitUntil = async (ready: () => boolean) => {
+    for (let attempt = 0; attempt < 100 && !ready(); attempt++) {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+    }
+    expect(ready()).toBe(true);
+  };
   try {
     await act(async () =>
       root.render(
@@ -216,16 +224,20 @@ test("syncs an assignable server without assigning it and refreshes its tool cou
     ).find((item) => item.textContent?.includes("Sync tools"))!;
     await act(async () => {
       syncItem.click();
-      await new Promise((resolve) => setTimeout(resolve, 10));
     });
+    await waitUntil(() => button.getAttribute("aria-busy") === "true");
     expect(sync).toHaveBeenCalledWith(server.id);
     expect(onAssign).not.toHaveBeenCalled();
     expect(button.disabled).toBe(true);
     expect(button.getAttribute("aria-busy")).toBe("true");
     await act(async () => {
       request.resolve({ server: refreshed });
-      await new Promise((resolve) => setTimeout(resolve, 10));
     });
+    await waitUntil(
+      () =>
+        container.textContent?.includes("http · 1 tool") === true &&
+        !button.disabled
+    );
     expect(container.textContent).toContain("http · 1 tool");
     expect(button.disabled).toBe(false);
     sync.mockRejectedValueOnce(new Error("offline"));
@@ -237,8 +249,11 @@ test("syncs an assignable server without assigning it and refreshes its tool cou
     ).find((item) => item.textContent?.includes("Sync tools"))!;
     await act(async () => {
       retryItem.click();
-      await new Promise((resolve) => setTimeout(resolve, 10));
     });
+    await waitUntil(
+      () =>
+        container.querySelector('[role="alert"]') !== null && !button.disabled
+    );
     expect(container.querySelector('[role="alert"]')).not.toBeNull();
     expect(button.disabled).toBe(false);
     expect(onAssign).not.toHaveBeenCalled();

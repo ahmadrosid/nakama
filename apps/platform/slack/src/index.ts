@@ -58,6 +58,14 @@ async function shutdown(code: number): Promise<never> {
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
   process.on(signal, () => void shutdown(0));
 }
+// pm2 stops Windows workers with a "shutdown" message instead of a signal.
+if (process.platform === "win32") {
+  process.on("message", (message) => {
+    if (message === "shutdown") {
+      void shutdown(0);
+    }
+  });
+}
 
 function isSlackBlockRejection(error: unknown): boolean {
   return error instanceof Error && /failed: invalid_blocks/.test(error.message);

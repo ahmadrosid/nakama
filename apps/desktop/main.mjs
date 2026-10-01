@@ -125,8 +125,14 @@ export function configureUpdates(
 export async function startLocalServer(runtime, dataDir) {
   await mkdir(dataDir, { mode: 0o700, recursive: true });
   const log = await open(join(dataDir, "server.log"), "w", 0o600);
+  // NAKAMA_PYTHON_BIN survives on Windows so users whose Python is not on PATH
+  // can point the server at it; the server still checks it against its allowlist.
   const env = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.startsWith("NAKAMA_"))
+    Object.entries(process.env).filter(
+      ([key]) =>
+        !key.startsWith("NAKAMA_") ||
+        (process.platform === "win32" && key === "NAKAMA_PYTHON_BIN")
+    )
   );
   const child = spawn(
     join(runtime, "bin", process.platform === "win32" ? "bun.exe" : "bun"),
@@ -143,6 +149,8 @@ export async function startLocalServer(runtime, dataDir) {
         NAKAMA_DISABLE_FIX_PATH: "1",
         NAKAMA_HOST: "127.0.0.1",
         NAKAMA_PORT: "0",
+        // A data restore must not move the log this process writes to.
+        NAKAMA_SERVER_LOG: join(dataDir, "server.log"),
         NODE_ENV: "production",
         PATH: `${join(runtime, "bin")}${delimiter}${process.env.PATH ?? ""}`,
         PM2_HOME: join(dataDir, "pm2"),

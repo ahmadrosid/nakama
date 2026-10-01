@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -8,9 +8,11 @@ import {
   getUserConfigDir,
   saveAttachmentBytes,
 } from "@nakama/core";
+import * as fflate from "fflate";
 import { unzipSync, zipSync } from "fflate";
 import {
   createNakamaDataExport,
+  MAX_IMPORT_ARCHIVE_BYTES,
   MAX_IMPORT_ENTRIES,
   NAKAMA_ORG_EXPORT_MANIFEST,
   NAKAMA_USER_EXPORT_MANIFEST,
@@ -45,6 +47,30 @@ async function createArchiveOverEntryLimit(): Promise<Buffer> {
 }
 
 describe("data portability routes", () => {
+  test("platform export returns 413 instead of downloading an unrestorable ZIP", async () => {
+    const { app, authService, databaseAdapter } = createApp();
+    const session = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+    const zipMock = spyOn(fflate, "zipSync").mockReturnValue(
+      new Uint8Array(MAX_IMPORT_ARCHIVE_BYTES + 1)
+    );
+    try {
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/platform/data/export", {
+          headers: session.headers(),
+        })
+      );
+      expect(response.status).toBe(413);
+      expect(response.headers.get("content-disposition")).toBeNull();
+      expect(typeof (await response.json()).error).toBe("string");
+    } finally {
+      zipMock.mockRestore();
+    }
+  });
+
   test("platform admin can download a Nakama export ZIP", async () => {
     const { app, authService, databaseAdapter } = createApp();
     const session = await loginPlatformAdminSession(
@@ -670,6 +696,100 @@ describe("data portability routes", () => {
     await expect(
       readFile(join(getUserConfigDir(), "config.ini"), "utf8")
     ).resolves.toBe("keep");
+  });
+
+  test("platform restore releases the database before files move and reopens after", async () => {
+    const calls: string[] = [];
+    const { app, authService, databaseAdapter } = createMinimalHonoApp({
+      agent: {
+        listProfiles: async () => ({ profiles: [{ id: "default" }] }),
+        providerConfigured: true,
+      },
+      onBeforeDataRestore: async () => {
+        const live = await readFile(
+          join(getUserConfigDir(), "config.ini"),
+          "utf8"
+        );
+        calls.push(`release:${live}`);
+      },
+      onDataRestored: async () => {
+        calls.push("reopen");
+      },
+    });
+    const session = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+    await writeFile(join(getUserConfigDir(), "config.ini"), "original");
+    const archive = (
+      await createNakamaDataExport({ rootDir: getUserConfigDir() })
+    ).data;
+    await writeFile(join(getUserConfigDir(), "config.ini"), "changed");
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/data/import/restore", {
+        body: JSON.stringify({
+          confirm: true,
+          data: archive.toString("base64"),
+        }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(calls).toEqual(["release:changed", "reopen"]);
+  });
+
+  test("platform restore reopens a released database when clearing plugin workers fails", async () => {
+    const calls: string[] = [];
+    const { app, authService, databaseAdapter } = createMinimalHonoApp({
+      agent: {
+        listProfiles: async () => ({ profiles: [{ id: "default" }] }),
+        providerConfigured: true,
+      },
+      onBeforeDataRestore: () => {
+        calls.push("release");
+      },
+      onDataRestored: async () => {
+        calls.push("reopen");
+      },
+      workerManager: {
+        clearPluginWorkers: async () => {
+          throw new Error("pm2 unavailable");
+        },
+      },
+    });
+    const session = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+    await writeFile(join(getUserConfigDir(), "config.ini"), "original");
+    const archive = (
+      await createNakamaDataExport({ rootDir: getUserConfigDir() })
+    ).data;
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/data/import/restore", {
+        body: JSON.stringify({
+          confirm: true,
+          data: archive.toString("base64"),
+        }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(calls).toEqual(["release", "reopen"]);
   });
 
   test("platform preview and restore reject archives over the entry limit", async () => {

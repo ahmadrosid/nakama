@@ -13,6 +13,7 @@ import { spawnJsonTool } from "./custom-tool-subprocess";
 
 /** Bare interpreter names allowed when NAKAMA_PYTHON_BIN has no path. */
 const ALLOWED_PYTHON_BASENAME = /^python(\d+(\.\d+)*)?$/;
+const ALLOWED_WINDOWS_PYTHON_BASENAME = /^python(\d+(\.\d+)*)?(\.exe)?$/i;
 
 /**
  * Absolute interpreter paths must resolve under one of these prefixes after
@@ -28,21 +29,65 @@ const ALLOWED_PYTHON_PATH_PREFIXES = [
   "/home/linuxbrew/.linuxbrew/Cellar/python",
 ] as const;
 
+/** A python.org install directory such as `Python313` or `Python313-arm64`. */
+const WINDOWS_PYTHON_VERSION_DIR = /^\d+(-\w+)?\\/;
+
+function pythonBasenamePattern(): RegExp {
+  return process.platform === "win32"
+    ? ALLOWED_WINDOWS_PYTHON_BASENAME
+    : ALLOWED_PYTHON_BASENAME;
+}
+
 /**
- * Resolve NAKAMA_PYTHON_BIN (or the default `python3`) against the allowlist.
- * Called at spawn time so tests can change the env without reloading the module.
+ * The python.org installer roots: per user, all users, and the legacy
+ * `C:\PythonXY` layout. The POSIX prefixes are not reused here because a
+ * drive-less `/usr/bin/python` that fails realpath would still spawn
+ * `C:\usr\bin\python.exe`, and any local user can create that folder.
+ */
+function isOnWindowsPythonAllowlist(resolved: string): boolean {
+  const candidate = path.win32.normalize(resolved).toLowerCase();
+  const localAppData = process.env.LOCALAPPDATA;
+  const programFiles = process.env.ProgramFiles;
+
+  if (
+    localAppData &&
+    candidate.startsWith(
+      `${path.win32.join(localAppData, "Programs", "Python")}\\`.toLowerCase()
+    )
+  ) {
+    return true;
+  }
+
+  return [programFiles && path.win32.join(programFiles, "Python"), "C:\\Python"]
+    .filter((prefix): prefix is string => Boolean(prefix))
+    .some((prefix) => {
+      const lowered = prefix.toLowerCase();
+      return (
+        candidate.startsWith(lowered) &&
+        WINDOWS_PYTHON_VERSION_DIR.test(candidate.slice(lowered.length))
+      );
+    });
+}
+
+/**
+ * Resolve NAKAMA_PYTHON_BIN (or the default `python3`, `python` on Windows)
+ * against the allowlist. Called at spawn time so tests can change the env
+ * without reloading the module.
  */
 export function resolvePythonBin(
   raw: string | undefined = process.env.NAKAMA_PYTHON_BIN
 ): string {
-  const value = raw?.trim() || "python3";
+  // Windows installers put `python.exe` on PATH; `python3` there is usually
+  // the Microsoft Store stub, which exits 49 without running anything.
+  const value =
+    raw?.trim() || (process.platform === "win32" ? "python" : "python3");
 
   if (value.includes("\0")) {
     throw new Error("NAKAMA_PYTHON_BIN contains a null byte.");
   }
 
   if (!(value.includes("/") || value.includes("\\"))) {
-    if (!ALLOWED_PYTHON_BASENAME.test(value)) {
+    if (!pythonBasenamePattern().test(value)) {
       throw new Error(
         `NAKAMA_PYTHON_BIN bare name must match python or python3…; got "${value}".`
       );
@@ -58,32 +103,42 @@ export function resolvePythonBin(
 
   let resolved = value;
   try {
-    resolved = realpathSync(value);
+    // The native call also expands 8.3 short names (`C:\PROGRA~1`) on Windows,
+    // which the JS realpath leaves as typed.
+    resolved =
+      process.platform === "win32"
+        ? realpathSync.native(value)
+        : realpathSync(value);
   } catch {
     // Missing binary fails later at spawn; still enforce basename + prefix.
   }
 
   const basename = path.basename(resolved);
-  if (!ALLOWED_PYTHON_BASENAME.test(basename)) {
+  if (!pythonBasenamePattern().test(basename)) {
     throw new Error(
       `NAKAMA_PYTHON_BIN basename must match python or python3…; got "${basename}".`
     );
   }
 
-  if (
-    !ALLOWED_PYTHON_PATH_PREFIXES.some((prefix) => {
-      if (prefix.endsWith("/")) {
-        return resolved === prefix.slice(0, -1) || resolved.startsWith(prefix);
-      }
-      // Homebrew Cellar formula dirs are `python` or `python@3.x` — require a
-      // path boundary so `…/Cellar/pythonfoo` cannot sneak through.
-      return (
-        resolved === prefix ||
-        resolved.startsWith(`${prefix}/`) ||
-        resolved.startsWith(`${prefix}@`)
-      );
-    })
-  ) {
+  const allowed =
+    process.platform === "win32"
+      ? isOnWindowsPythonAllowlist(resolved)
+      : ALLOWED_PYTHON_PATH_PREFIXES.some((prefix) => {
+          if (prefix.endsWith("/")) {
+            return (
+              resolved === prefix.slice(0, -1) || resolved.startsWith(prefix)
+            );
+          }
+          // Homebrew Cellar formula dirs are `python` or `python@3.x` — require a
+          // path boundary so `…/Cellar/pythonfoo` cannot sneak through.
+          return (
+            resolved === prefix ||
+            resolved.startsWith(`${prefix}/`) ||
+            resolved.startsWith(`${prefix}@`)
+          );
+        });
+
+  if (!allowed) {
     throw new Error(
       `NAKAMA_PYTHON_BIN path is not on the server allowlist: "${value}".`
     );

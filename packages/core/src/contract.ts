@@ -1950,6 +1950,12 @@ export interface ProviderModelOption {
   supportsVision?: boolean;
 }
 
+export interface OpenRouterRoutingSettings {
+  dataCollection?: "allow" | "deny";
+  requireParameters?: boolean;
+  zdr?: boolean;
+}
+
 export interface ProviderInstanceSummary {
   accountStatus?: "ready" | "rate_limited" | "reauth_required";
   accountStatusUntil?: number;
@@ -1961,6 +1967,7 @@ export interface ProviderInstanceSummary {
   id: string;
   label: string;
   modelCount: number;
+  openRouterRouting?: OpenRouterRoutingSettings;
   type: ProviderName;
   wireApi?: WireApi | null;
 }
@@ -1978,6 +1985,7 @@ export interface CreateProviderRequest {
   hostMode?: OllamaHostMode;
   label?: string;
   model?: string;
+  openRouterRouting?: OpenRouterRoutingSettings;
   type: ProviderName;
   wireApi?: WireApi;
   xaiOAuth?: XaiOAuthCredentials;
@@ -1996,6 +2004,8 @@ export interface UpdateProviderRequest {
   customModels?: CustomModelEntry[];
   hostMode?: OllamaHostMode;
   label?: string;
+  /** Replaces the routing settings; {} clears request-level overrides. */
+  openRouterRouting?: OpenRouterRoutingSettings;
   wireApi?: WireApi;
   xaiOAuth?: XaiOAuthCredentials;
 }

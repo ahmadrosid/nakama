@@ -1,6 +1,7 @@
 import type {
   ChatgptOAuthCredentials,
   CustomModelEntry,
+  OpenRouterRoutingSettings,
   ProviderInstanceSummary,
   ProviderModelOption,
   UpdateProviderRequest,
@@ -64,6 +65,8 @@ export function useProviderInstanceCard({
   const [editBaseUrl, setEditBaseUrl] = useState("");
   const [editWireApi, setEditWireApi] = useState<WireApi>("chat");
   const [manageModels, setManageModels] = useState<ModelListRow[]>([]);
+  const [openRouterRouting, setOpenRouterRouting] =
+    useState<OpenRouterRoutingSettings>({});
 
   const providerType = instance.type as SelectedProvider;
   const isXaiOAuth = providerType === "xai_oauth";
@@ -90,6 +93,7 @@ export function useProviderInstanceCard({
 
   const openManage = () => {
     setDialogError(null);
+    setOpenRouterRouting(instance.openRouterRouting ?? {});
 
     setManageModels(seedManageModelRows(instance.customModels, instanceModels));
 
@@ -230,7 +234,10 @@ export function useProviderInstanceCard({
     }
 
     await runUpdate(
-      { customModels: normalizeModelListRows(manageModels) },
+      {
+        customModels: normalizeModelListRows(manageModels),
+        ...(isOpenRouter ? { openRouterRouting } : {}),
+      },
       () => setManageOpen(false)
     );
   };
@@ -269,6 +276,7 @@ export function useProviderInstanceCard({
     manageOpen,
     openEdit,
     openManage,
+    openRouterRouting,
     providerType,
     replaceKeyOpen,
     saveCompatible,
@@ -283,6 +291,7 @@ export function useProviderInstanceCard({
     setEditWireApi,
     setManageModels,
     setManageOpen,
+    setOpenRouterRouting,
     setReplaceKeyOpen,
     setShowApiKey,
     setXaiOAuth,

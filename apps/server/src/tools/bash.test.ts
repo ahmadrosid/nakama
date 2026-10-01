@@ -13,7 +13,91 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { getProfileSoulDir, PathGuardError } from "@nakama/core";
-import { runBash } from "./bash";
+import { resolveHostBash, runBash } from "./bash";
+
+describe("host Bash discovery", () => {
+  const env = {
+    ProgramFiles: "C:\\Program Files",
+    "ProgramFiles(x86)": "C:\\Program Files (x86)",
+  };
+  const gitBash = "C:\\Program Files\\Git\\bin\\bash.exe";
+  const gitBashX86 = "C:\\Program Files (x86)\\Git\\bin\\bash.exe";
+  const pathBash = "C:\\msys64\\usr\\bin\\bash.exe";
+
+  test("prefers Git Bash over PATH, including paths with spaces", () => {
+    expect(
+      resolveHostBash(
+        "win32",
+        env,
+        () => true,
+        () => pathBash
+      )
+    ).toBe(gitBash);
+    expect(
+      resolveHostBash(
+        "win32",
+        env,
+        (file) => file === gitBashX86,
+        () => pathBash
+      )
+    ).toBe(gitBashX86);
+  });
+
+  test("falls back to native Bash on PATH", () => {
+    expect(
+      resolveHostBash(
+        "win32",
+        env,
+        () => false,
+        () => pathBash
+      )
+    ).toBe(pathBash);
+  });
+
+  test("rejects missing Bash and legacy WSL launchers", () => {
+    for (const shell of [
+      null,
+      "C:\\Windows\\System32\\bash.exe",
+      "c:/WINDOWS/Sysnative/bash.exe",
+    ]) {
+      expect(() =>
+        resolveHostBash(
+          "win32",
+          env,
+          () => false,
+          () => shell
+        )
+      ).toThrow();
+    }
+  });
+
+  test("keeps Unix Bash and falls back to PATH when needed", () => {
+    expect(
+      resolveHostBash(
+        "linux",
+        {},
+        () => true,
+        () => "/usr/bin/bash"
+      )
+    ).toBe("/bin/bash");
+    expect(
+      resolveHostBash(
+        "darwin",
+        {},
+        () => false,
+        () => "/opt/bin/bash"
+      )
+    ).toBe("/opt/bin/bash");
+    expect(() =>
+      resolveHostBash(
+        "linux",
+        {},
+        () => false,
+        () => null
+      )
+    ).toThrow();
+  });
+});
 
 async function waitForPositivePid(pidPath: string): Promise<number> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -41,6 +125,22 @@ function isProcessAlive(pid: number): boolean {
 
 describe("bash tool", () => {
   let workspaceRoot = "";
+
+  test("coding-agent commands preserve quoted arguments in a workspace with spaces", async () => {
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama bash "));
+    const result = await runBash(
+      {
+        codingAgent: true,
+        command: "printf '%s' 'quoted argument with spaces' > result.txt",
+      },
+      { orgId: "org_test", profileId: "profile_test" },
+      { backend: "host", workspaceRoot }
+    );
+    expect(result.exitCode).toBe(0);
+    expect(await readFile(path.join(workspaceRoot, "result.txt"), "utf8")).toBe(
+      "quoted argument with spaces"
+    );
+  });
 
   afterEach(async () => {
     if (workspaceRoot) {

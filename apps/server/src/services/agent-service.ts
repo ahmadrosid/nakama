@@ -232,7 +232,6 @@ import {
   fetchChatgptCodexModels,
   refreshChatgptOAuthToken,
 } from "../providers/chatgpt/oauth";
-import { isAllowedImageGenerationSelection } from "../providers/models";
 import { wrapProviderForNonVision } from "../providers/non-vision-wrap";
 import { wrapProviderWithUsageTracking } from "../providers/usage-tracking";
 import {
@@ -966,11 +965,13 @@ export class AgentService {
     await this.ensureImageGenerationSettingsLoaded();
     const model = input.model?.trim() || null;
 
-    if (model && !isAllowedImageGenerationSelection(model)) {
-      throw new NakamaApiError(
-        "Only openai::gpt-image-2 is supported for image generation.",
-        400
-      );
+    if (model) {
+      // Same check a generate call runs, so a bad pick fails here, unsaved.
+      resolveImageGenerationSelection({
+        defaultProviderId: this.userConfig?.defaultProviderId ?? null,
+        imageModel: model,
+        providers: this.userConfig?.providers ?? [],
+      });
     }
 
     const imageGeneration: ImageGenerationSettings = { model };
@@ -1029,7 +1030,9 @@ export class AgentService {
     this.llmUsageTracker?.record(
       result.model,
       usage.inputTokens,
-      usage.outputTokens
+      usage.outputTokens,
+      0,
+      { providerInstance: selection.instance }
     );
 
     return {
