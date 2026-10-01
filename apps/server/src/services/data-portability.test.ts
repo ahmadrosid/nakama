@@ -627,6 +627,109 @@ describe("Nakama data portability", () => {
     ).rejects.toThrow("Archive entry uses a reserved restore path");
   });
 
+  test.each([
+    "notes/10:30.md",
+    "notes/summary.md::$DATA",
+    "notes:stream/summary.md",
+  ])(
+    "Windows rejects colon archive entry %s before replacing data",
+    async (name) => {
+      await writeFile(join(rootDir, "config.ini"), "original");
+      const archive = fflate.zipSync({
+        [NAKAMA_EXPORT_MANIFEST]: Buffer.from(
+          JSON.stringify({ kind: "nakama-export", version: 1 })
+        ),
+        "config.ini": Buffer.from("replacement"),
+        [name]: Buffer.from("synthetic"),
+      });
+      let closed = false;
+      const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+      // Exercise the Windows admission check locally; CI also runs on Windows.
+      Object.defineProperty(process, "platform", { value: "win32" });
+      try {
+        await expect(
+          previewNakamaDataImport(archive, { rootDir })
+        ).rejects.toMatchObject({ status: 400 });
+        await expect(
+          restoreNakamaDataImport(archive, {
+            beforeReplace: () => {
+              closed = true;
+            },
+            confirm: true,
+            databasePath: null,
+            rootDir,
+          })
+        ).rejects.toMatchObject({ status: 400 });
+      } finally {
+        Object.defineProperty(process, "platform", platform);
+      }
+      expect(closed).toBe(false);
+      expect(await readFile(join(rootDir, "config.ini"), "utf8")).toBe(
+        "original"
+      );
+      expect(await readdir(rootDir)).toEqual(["config.ini"]);
+    }
+  );
+
+  test("restores a normal nested archive entry on Windows", async () => {
+    const archive = fflate.zipSync({
+      [NAKAMA_EXPORT_MANIFEST]: Buffer.from(
+        JSON.stringify({ kind: "nakama-export", version: 1 })
+      ),
+      "notes/summary.md": Buffer.from("retained"),
+    });
+    const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+    Object.defineProperty(process, "platform", { value: "win32" });
+    try {
+      const preview = await previewNakamaDataImport(archive, { rootDir });
+      expect(preview.archiveFileCount).toBe(1);
+      const result = await restoreNakamaDataImport(archive, {
+        confirm: true,
+        databasePath: null,
+        rootDir,
+      });
+      expect(result.restoredFileCount).toBe(1);
+      expect(await readFile(join(rootDir, "notes/summary.md"), "utf8")).toBe(
+        "retained"
+      );
+    } finally {
+      Object.defineProperty(process, "platform", platform);
+    }
+  });
+
+  test.skipIf(process.platform === "win32")(
+    "restores colon archive entries on POSIX",
+    async () => {
+      const entries = {
+        "notes:stream/summary.md": "directory",
+        "notes/10:30.md": "time",
+        "notes/summary.md::$DATA": "stream",
+      };
+      const archive = fflate.zipSync({
+        [NAKAMA_EXPORT_MANIFEST]: Buffer.from(
+          JSON.stringify({ kind: "nakama-export", version: 1 })
+        ),
+        ...Object.fromEntries(
+          Object.entries(entries).map(([name, content]) => [
+            name,
+            Buffer.from(content),
+          ])
+        ),
+      });
+      const preview = await previewNakamaDataImport(archive, { rootDir });
+      expect(preview.archiveFileCount).toBe(3);
+      const result = await restoreNakamaDataImport(archive, {
+        confirm: true,
+        databasePath: null,
+        rootDir,
+      });
+      expect(result.restoredFileCount).toBe(3);
+      for (const [name, content] of Object.entries(entries)) {
+        expect(await readFile(join(rootDir, name), "utf8")).toBe(content);
+      }
+    }
+  );
+
   test("partial backup failure does not delete unbacked siblings", async () => {
     await writeFile(join(rootDir, "keep.ini"), "keep-me");
     await writeFile(join(rootDir, "move.ini"), "move-me");
