@@ -8,7 +8,7 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { pathExists } from "../fs";
-import { resolveWithRealpath } from "../tools/paths";
+import { comparablePath, resolveWithRealpath } from "../tools/paths";
 import { getUserConfigDir } from "../user-config";
 import { BUNDLED_SKILL_NAMES } from "./bundled-names";
 import { isGlobalSkillSourcePath } from "./dedupe";
@@ -27,10 +27,9 @@ function isResolvedWithinRoot(
   resolvedRoot: string,
   resolvedTarget: string
 ): boolean {
-  return (
-    resolvedTarget === resolvedRoot ||
-    resolvedTarget.startsWith(`${resolvedRoot}${path.sep}`)
-  );
+  const root = comparablePath(resolvedRoot);
+  const target = comparablePath(resolvedTarget);
+  return target === root || target.startsWith(`${root}${path.sep}`);
 }
 
 export interface CreateSkillFileOptions {

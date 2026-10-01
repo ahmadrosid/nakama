@@ -409,6 +409,41 @@ describe("resolveProfileSkillDirectory", () => {
       )
     ).toThrow(/outside the profile skills directory/);
   });
+
+  test.skipIf(process.platform !== "win32")(
+    "counts a differently cased path as inside the profile skills dir on Windows",
+    async () => {
+      configDir = await mkdtemp(join(tmpdir(), "nakama-skill-case-"));
+      process.env.NAKAMA_CONFIG_DIR = configDir;
+      const profileDir = join(
+        configDir,
+        "orgs",
+        ORG_ID,
+        "profiles",
+        PROFILE_ID
+      );
+      await mkdir(join(profileDir, "skills", "notes"), { recursive: true });
+
+      // NTFS opens each of these inside this profile's skills dir, so the
+      // member-authored code gate has to count them as this profile's own.
+      for (const directory of [
+        join(profileDir, "SKILLS", "notes"),
+        join(profileDir, "Skills", "NOT-YET-CREATED"),
+        join(profileDir, "skills", "notes").toUpperCase(),
+      ]) {
+        expect(
+          isPathWithinProfileSkillsDir(ORG_ID, PROFILE_ID, directory)
+        ).toBe(true);
+      }
+      expect(
+        isPathWithinProfileSkillsDir(
+          ORG_ID,
+          "profile_other",
+          join(profileDir, "SKILLS", "notes")
+        )
+      ).toBe(false);
+    }
+  );
 });
 
 describe("profile skill supporting files", () => {
