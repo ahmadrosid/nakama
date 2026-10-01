@@ -123,6 +123,10 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
+// Git Bash's POSIX PIDs differ from the Windows PIDs used by process.kill.
+const childPidCommand =
+  process.platform === "win32" ? "cat /proc/$!/winpid" : "echo $!";
+
 describe("bash tool", () => {
   let workspaceRoot = "";
 
@@ -155,7 +159,7 @@ describe("bash tool", () => {
       const controller = new AbortController();
       const pending = runBash(
         {
-          command: "sleep 30 & echo $! > child.pid; wait",
+          command: `sleep 30 & ${childPidCommand} > child.pid; wait`,
           timeoutMs: mode === "timeout" ? 500 : 30_000,
         },
         {
@@ -201,7 +205,9 @@ describe("bash tool", () => {
   test("returns after shell exit when a quiet descendant holds the pipes", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
     const pending = runBash(
-      { command: "sleep 30 & echo $! > child.pid; echo done; exit 0" },
+      {
+        command: `sleep 30 & ${childPidCommand} > child.pid; echo done; exit 0`,
+      },
       { orgId: "org_test", profileId: "profile_test" },
       { backend: "host", workspaceRoot }
     );
@@ -289,8 +295,7 @@ describe("bash tool", () => {
     const controller = new AbortController();
     const pending = runBash(
       {
-        command:
-          "trap '' TERM; echo $$ > trapped.pid; while :; do sleep 1; done",
+        command: `trap '' TERM; ${process.platform === "win32" ? "cat /proc/$$/winpid" : "echo $$"} > trapped.pid; while :; do sleep 1; done`,
       },
       {
         orgId: "org_test",

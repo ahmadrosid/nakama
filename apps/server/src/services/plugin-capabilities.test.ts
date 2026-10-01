@@ -187,13 +187,11 @@ describe("plugin capabilities", () => {
     const copyRoot = join(workspaceRoot, "skills", ".plugins");
     const [copy] = await readdir(copyRoot);
     const instructionPath = join(copyRoot, copy!, "SKILL.md");
-    const catalogPath = JSON.parse(
-      catalog.match(/\(instructions: (.+)\)$/m)![1]!
-    ) as string;
+    expect(catalog).toContain(JSON.stringify(instructionPath));
     const context = { orgId: ORG_ID, profileId: profile.id, workspaceRoot };
-    expect((await runReadFile({ path: catalogPath }, context)).content).toBe(
-      SKILL_MD
-    );
+    expect(
+      (await runReadFile({ path: instructionPath }, context)).content
+    ).toBe(SKILL_MD);
     expect(
       (
         await runReadFile(

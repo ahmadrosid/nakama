@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   createWorkerHeartbeatStore,
   isHeartbeatAlive,
@@ -74,7 +75,9 @@ describe("worker-heartbeat store", () => {
 
 test("a killed worker releases its operating-system connection lock", async () => {
   const dir = await mkdtemp(join(tmpdir(), "nakama-worker-crash-"));
-  const modulePath = new URL("./worker-heartbeat.ts", import.meta.url).href;
+  const modulePath = fileURLToPath(
+    new URL("./worker-heartbeat.ts", import.meta.url)
+  );
   const script = `import {createWorkerHeartbeatStore} from ${JSON.stringify(modulePath)}; const store = createWorkerHeartbeatStore({getDir: () => process.argv[1]}); await store.acquire(); console.log("ready"); setInterval(() => {}, 1000);`;
   const child = Bun.spawn([process.execPath, "-e", script, dir], {
     stderr: "pipe",
