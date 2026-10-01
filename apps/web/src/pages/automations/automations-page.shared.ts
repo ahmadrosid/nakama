@@ -1,59 +1,61 @@
 import type {
   AutomationRunRecord,
   AutomationTrigger,
-  ChatMessage,
   StoredAutomation,
 } from "@nakama/core/contract";
-import { segmentAssistantTurn } from "@/components/chat/assistant-tool-group.shared";
-import { chatMessagesToListItems } from "@/lib/chat-history";
-import {
-  formatToolResult,
-  formatToolSummary,
-  isToolResultError,
-} from "@/lib/chat-stream";
+import { type ChatListItem, chatMessagesToListItems } from "@/lib/chat-history";
 
-export function automationProgressLines(messages: ChatMessage[]) {
-  return segmentAssistantTurn(chatMessagesToListItems(messages)).flatMap<{
-    id: string;
-    text: string;
-    type: "text" | "tool" | "error";
-  }>((segment) => {
-    if (segment.kind === "text") {
-      return [
-        {
-          id: segment.message.id,
-          text: segment.message.content,
-          type: "text" as const,
-        },
-      ];
-    }
-    const running = segment.tools.filter((tool) => !tool.toolCompletedAt);
-    const completed = segment.tools.length - running.length;
-    const errors = segment.tools.flatMap((tool) => {
-      const output = formatToolResult(tool.tool, tool.toolResult);
-      return tool.toolCompletedAt && isToolResultError(tool.toolResult, output)
-        ? [
-            {
-              id: `${tool.id}-error`,
-              text: `✗ ${tool.tool}: ${(output ?? "Failed").replace(/\s+/g, " ").slice(0, 160)}`,
-              type: "error" as const,
-            },
-          ]
-        : [];
+export function automationRunMessages(
+  run: AutomationRunRecord
+): ChatListItem[] {
+  const running = run.status === "running";
+  const transcript = run.progress?.length
+    ? run.progress
+    : run.output
+      ? [{ content: run.output, role: "assistant" as const }]
+      : [];
+  const messages: ChatListItem[] = chatMessagesToListItems(transcript).map(
+    (message) => ({
+      ...message,
+      createdAt: run.startedAt,
+      streaming:
+        running &&
+        message.role === "assistant" &&
+        message.historyIndex === transcript.length - 1,
+      thinkingStreaming:
+        running &&
+        Boolean(message.thinking) &&
+        !message.content &&
+        message.historyIndex === transcript.length - 1,
+      toolStatus:
+        running && message.role === "tool" && !message.toolCompletedAt
+          ? ("running" as const)
+          : message.toolStatus,
+    })
+  );
+  if (running && (!messages.length || messages.at(-1)?.role === "user")) {
+    messages.push({
+      content: "",
+      createdAt: run.startedAt,
+      id: `${run.id}-waiting`,
+      role: "assistant",
+      streaming: true,
+      thinkingStreaming: false,
+      toolStatus: undefined,
     });
-    const active = running[0];
-    const summary = active
-      ? `⠋ ${active.tool}  ${formatToolSummary(active.tool, active.toolInput) ?? ""} · ${completed} done${running.length > 1 ? ` · ${running.length} running` : ""}`
-      : `${errors.length ? "✗" : "✓"} ${completed} ${completed === 1 ? "tool" : "tools"} completed${errors.length ? ` · ${errors.length} failed` : ""}`;
+  }
+  if (run.error) {
     return [
-      ...errors,
+      ...messages,
       {
-        id: `${segment.groupId}-summary`,
-        text: summary.replace(/\s+/g, " ").trim(),
-        type: "tool" as const,
+        content: run.error,
+        failed: true,
+        id: `${run.id}-error`,
+        role: "assistant",
       },
     ];
-  });
+  }
+  return messages;
 }
 
 export const agentWorkPanelClassName =

@@ -1,3 +1,4 @@
+import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import type {
   AutomationDelivery,
   AutomationDeliveryChannel,
@@ -8,6 +9,7 @@ import type {
 } from "@nakama/core/contract";
 import { MAX_SESSION_SEARCH_LENGTH } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
+import { DialogOverlay, DialogTitle } from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
 import {
   Select,
@@ -25,15 +27,14 @@ import {
   Cancel01Icon,
   CancelCircleIcon,
   CheckmarkCircle01Icon,
-  Copy01Icon,
   Delete02Icon,
   Edit03Icon,
   Loading03Icon,
   PlayIcon,
   Search01Icon,
 } from "hugeicons-react";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { MessageResponse } from "@/components/ai-elements/message";
+import { type ReactNode, useMemo, useState } from "react";
+import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
 import {
@@ -42,7 +43,7 @@ import {
   formatSessionTimestamp,
 } from "@/lib/chat-history";
 import {
-  automationProgressLines,
+  automationRunMessages,
   formatRunDuration,
   groupRunsByDay,
   runPreviewText,
@@ -521,434 +522,169 @@ export function RunHistoryList({
   runs,
   busy,
   running,
+  profileId,
   onDeleteRun,
   onRerun,
 }: {
   runs: AutomationRunRecord[];
   busy: boolean;
   running: boolean;
+  profileId: string;
   onDeleteRun: (run: AutomationRunRecord) => void;
   onRerun: () => void;
 }) {
-  const [expandedId, setExpandedId] = useState<string | null>(
-    () => runs.find((run) => run.status === "running")?.id ?? null
-  );
-
-  const activeRunId = runs.find((run) => run.status === "running")?.id;
-  useEffect(() => {
-    if (activeRunId) {
-      setExpandedId(activeRunId);
-    }
-  }, [activeRunId]);
-
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const selectedRun = runs.find((run) => run.id === selectedRunId);
   const groups = useMemo(() => groupRunsByDay(runs), [runs]);
-
   return (
-    <div className="space-y-4">
-      {groups.map((group) => (
-        <section className="space-y-3" key={group.label}>
-          <p className="text-muted-foreground/55 text-xs">{group.label}</p>
-          <ul className="divide-y divide-border rounded-xl border border-border bg-card text-card-foreground">
-            {group.runs.map((run) => (
-              <RunHistoryItem
-                busy={busy}
-                expanded={expandedId === run.id}
-                key={run.id}
-                onDelete={() => onDeleteRun(run)}
-                onRerun={onRerun}
-                onToggle={() => {
-                  setExpandedId((current) =>
-                    current === run.id ? null : run.id
-                  );
-                }}
-                run={run}
-                running={running}
-              />
-            ))}
-          </ul>
-        </section>
-      ))}
-    </div>
+    <DialogPrimitive.Root
+      onOpenChange={(open) => {
+        if (!open) {
+          setSelectedRunId(null);
+        }
+      }}
+      open={Boolean(selectedRun)}
+    >
+      <div className="space-y-4">
+        {groups.map((group) => (
+          <section className="space-y-3" key={group.label}>
+            <p className="text-muted-foreground/55 text-xs">{group.label}</p>
+            <ul className="divide-y divide-border rounded-xl border border-border bg-card text-card-foreground">
+              {group.runs.map((run) => (
+                <li
+                  className="flex min-w-0 items-center gap-2 px-4 py-3"
+                  key={run.id}
+                >
+                  <DialogPrimitive.Trigger
+                    aria-label={`Open run from ${formatSessionTimestamp(run.startedAt)}`}
+                    className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                    onClick={() => setSelectedRunId(run.id)}
+                  >
+                    <RunStatusIcon status={run.status} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        {run.read === false ? (
+                          <span
+                            aria-label="Unread"
+                            className="size-1.5 shrink-0 rounded-full bg-primary"
+                          />
+                        ) : null}
+                        <span
+                          className="truncate"
+                          title={formatSessionTimestamp(run.startedAt)}
+                        >
+                          {[
+                            runStatusLabel(run.status),
+                            formatSessionRelativeTime(run.startedAt),
+                            formatRunDuration(run.startedAt, run.completedAt),
+                            run.deliveryStatus === "failed"
+                              ? "Delivery failed"
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                      </div>
+                      {runPreviewText(run) ? (
+                        <p
+                          className={cn(
+                            "mt-0.5 line-clamp-1 text-sm",
+                            run.status === "failed"
+                              ? "text-destructive"
+                              : "text-foreground/80"
+                          )}
+                        >
+                          {runPreviewText(run)}
+                        </p>
+                      ) : null}
+                    </div>
+                    <ArrowRight01Icon
+                      aria-hidden
+                      className="size-4 shrink-0 text-muted-foreground"
+                    />
+                  </DialogPrimitive.Trigger>
+                  <Button
+                    aria-label={`Delete run from ${formatSessionRelativeTime(run.startedAt)}`}
+                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                    disabled={busy || run.status === "running"}
+                    onClick={() => onDeleteRun(run)}
+                    size="icon-sm"
+                    variant="ghost"
+                  >
+                    <Delete02Icon aria-hidden className="size-4" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+      <DialogPrimitive.Portal>
+        <DialogOverlay />
+        <DialogPrimitive.Popup className="data-open:slide-in-from-right data-closed:slide-out-to-right fixed inset-y-0 right-0 z-50 flex w-full max-w-3xl flex-col border-border border-l bg-background shadow-xl outline-none transition-transform duration-150 data-closed:animate-out data-open:animate-in motion-reduce:animate-none">
+          <div className="flex shrink-0 items-center gap-3 border-border border-b px-4 py-3">
+            {selectedRun ? <RunStatusIcon status={selectedRun.status} /> : null}
+            <DialogTitle className="min-w-0 flex-1 truncate text-sm">
+              {selectedRun
+                ? `${runStatusLabel(selectedRun.status)} · ${formatSessionTimestamp(selectedRun.startedAt)}`
+                : "Run conversation"}
+            </DialogTitle>
+            {selectedRun?.status === "failed" ? (
+              <Button
+                disabled={busy || running}
+                onClick={onRerun}
+                size="sm"
+                variant="ghost"
+              >
+                Run again
+              </Button>
+            ) : null}
+            <DialogPrimitive.Close
+              render={
+                <Button
+                  aria-label="Close run conversation"
+                  size="icon-sm"
+                  variant="ghost"
+                />
+              }
+            >
+              <Cancel01Icon aria-hidden className="size-4" />
+            </DialogPrimitive.Close>
+          </div>
+          {selectedRun?.deliveryError ? (
+            <p className="px-4 py-2 text-destructive text-sm" role="alert">
+              {selectedRun.deliveryError}
+            </p>
+          ) : null}
+          {selectedRun ? (
+            <ChatMessageList
+              actionsDisabled
+              className="min-h-0 flex-1"
+              emptyMessage={
+                selectedRun.status === "running"
+                  ? "Waiting for output…"
+                  : "No output returned."
+              }
+              key={selectedRun.id}
+              messages={automationRunMessages(selectedRun)}
+              profileId={profileId}
+              readOnly
+              streamActive={selectedRun.status === "running"}
+              turnStartedAt={selectedRun.startedAt}
+            />
+          ) : null}
+        </DialogPrimitive.Popup>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }
 
 function runStatusLabel(status: AutomationRunStatus): string {
-  if (status === "completed") {
-    return "Completed";
-  }
-
-  if (status === "failed") {
-    return "Failed";
-  }
-
-  return "Running";
-}
-
-function runCopyText(run: AutomationRunRecord): string {
-  const hasError = Boolean(run.error?.trim());
-  const hasOutput = Boolean(run.output?.trim());
-
-  return [hasError ? run.error : null, hasOutput ? run.output : null]
-    .filter(Boolean)
-    .join("\n\n");
-}
-
-function runExpandedRangeLabel(run: AutomationRunRecord): string {
-  const started = formatSessionTimestamp(run.startedAt);
-
-  if (run.completedAt) {
-    return `${started} → ${formatSessionTimestamp(run.completedAt)}`;
-  }
-
-  return started;
-}
-
-function runHasExpandableBody(run: AutomationRunRecord): boolean {
-  return Boolean(
-    run.output?.trim() ||
-      run.error?.trim() ||
-      run.deliveryError?.trim() ||
-      run.status === "running" ||
-      run.status === "failed"
-  );
-}
-
-function RunHistoryItemSummary({
-  run,
-  expanded,
-  hasBody,
-  onToggle,
-}: {
-  run: AutomationRunRecord;
-  expanded: boolean;
-  hasBody: boolean;
-  onToggle: () => void;
-}) {
-  const previewText = runPreviewText(run);
-  const duration = formatRunDuration(run.startedAt, run.completedAt);
-  const metaParts = [
-    runStatusLabel(run.status),
-    formatSessionRelativeTime(run.startedAt),
-    duration,
-    run.deliveryStatus === "failed" ? "Delivery failed" : null,
-  ].filter(Boolean);
-
-  return (
-    <button
-      aria-expanded={hasBody ? expanded : undefined}
-      aria-label={
-        hasBody
-          ? `${expanded ? "Collapse" : "Expand"} run from ${formatSessionRelativeTime(run.startedAt)}`
-          : `Run from ${formatSessionRelativeTime(run.startedAt)}`
-      }
-      className={cn(
-        "flex min-w-0 flex-1 items-center gap-2.5 text-left",
-        !hasBody && "cursor-default"
-      )}
-      disabled={!hasBody}
-      onClick={() => {
-        if (hasBody) {
-          onToggle();
-        }
-      }}
-      type="button"
-    >
-      <RunStatusIcon status={run.status} />
-
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground text-xs">
-          {run.read === false ? (
-            <span
-              aria-label="Unread"
-              className="size-1.5 shrink-0 rounded-full bg-primary"
-            />
-          ) : null}
-          <span
-            className="truncate"
-            title={formatSessionTimestamp(run.startedAt)}
-          >
-            {metaParts.join(" · ")}
-          </span>
-        </div>
-
-        {previewText && !expanded ? (
-          <p
-            className={cn(
-              "mt-0.5 line-clamp-1 text-sm",
-              run.status === "failed"
-                ? "text-destructive"
-                : "text-foreground/80"
-            )}
-          >
-            {previewText}
-          </p>
-        ) : null}
-      </div>
-
-      {hasBody ? (
-        <ArrowRight01Icon
-          aria-hidden
-          className={cn(
-            "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-            expanded && "rotate-90"
-          )}
-        />
-      ) : null}
-    </button>
-  );
-}
-
-function RunHistoryExpandedActions({
-  busy,
-  copyText,
-  isFailed,
-  running,
-  onCopy,
-  onRerun,
-}: {
-  busy: boolean;
-  copyText: string;
-  isFailed: boolean;
-  running: boolean;
-  onCopy: () => void;
-  onRerun: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-1">
-      {isFailed ? (
-        <Button
-          className="h-7 gap-1.5 px-2 text-muted-foreground text-xs"
-          disabled={busy || running}
-          onClick={(event) => {
-            event.stopPropagation();
-            onRerun();
-          }}
-          size="sm"
-          type="button"
-          variant="ghost"
-        >
-          {running ? (
-            <Spinner className="size-3.5" />
-          ) : (
-            <PlayIcon aria-hidden className="ml-px size-3.5" />
-          )}
-          Run again
-        </Button>
-      ) : null}
-      {copyText ? (
-        <Button
-          className="h-7 gap-1.5 px-2 text-muted-foreground text-xs"
-          onClick={(event) => {
-            event.stopPropagation();
-            onCopy();
-          }}
-          size="sm"
-          type="button"
-          variant="ghost"
-        >
-          <Copy01Icon aria-hidden className="size-3.5" />
-          Copy
-        </Button>
-      ) : null}
-    </div>
-  );
-}
-
-function RunProgressLog({ run }: { run: AutomationRunRecord }) {
-  const container = useRef<HTMLDivElement>(null);
-  const followOutput = useRef(true);
-  useEffect(() => {
-    if (container.current && followOutput.current) {
-      container.current.scrollTop = container.current.scrollHeight;
-    }
-  }, [run.progress]);
-
-  return (
-    <div
-      aria-label="Automation progress"
-      className="max-h-[min(70vh,28rem)] space-y-2 overflow-auto font-mono text-xs leading-relaxed"
-      onScroll={(event) => {
-        const element = event.currentTarget;
-        followOutput.current =
-          element.scrollHeight - element.scrollTop - element.clientHeight < 40;
-      }}
-      ref={container}
-      role="log"
-      // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users need to scroll the live log.
-      tabIndex={0}
-    >
-      {automationProgressLines(run.progress ?? []).map((line) => (
-        <div
-          className={cn(
-            line.type === "text"
-              ? "whitespace-pre-wrap break-words text-foreground"
-              : "truncate text-muted-foreground",
-            line.type === "error" && "text-destructive"
-          )}
-          key={line.id}
-          title={line.type === "text" ? undefined : line.text}
-        >
-          {line.text}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function RunHistoryOutput({ run }: { run: AutomationRunRecord }) {
-  const isRunning = run.status === "running";
-  const hasOutput = Boolean(run.output?.trim());
-  const hasError = Boolean(run.error?.trim());
-
-  if (isRunning && run.progress?.length) {
-    return <RunProgressLog run={run} />;
-  }
-
-  if (hasError && hasOutput) {
-    return (
-      <>
-        <p className="mb-3 whitespace-pre-wrap break-words text-destructive text-sm">
-          {run.error}
-        </p>
-        <div className="max-h-[min(70vh,28rem)] overflow-auto">
-          <MessageResponse>{run.output ?? ""}</MessageResponse>
-        </div>
-      </>
-    );
-  }
-
-  if (hasOutput) {
-    return (
-      <div className="max-h-[min(70vh,28rem)] overflow-auto">
-        <MessageResponse>{run.output ?? ""}</MessageResponse>
-      </div>
-    );
-  }
-
-  if (hasError) {
-    return (
-      <p className="whitespace-pre-wrap break-words text-destructive text-sm">
-        {run.error}
-      </p>
-    );
-  }
-
-  if (isRunning) {
-    return <p className="text-muted-foreground text-sm">Waiting for output…</p>;
-  }
-
-  return <p className="text-muted-foreground text-sm">No output returned.</p>;
-}
-
-function RunHistoryExpandedBody({
-  run,
-  busy,
-  running,
-  onRerun,
-}: {
-  run: AutomationRunRecord;
-  busy: boolean;
-  running: boolean;
-  onRerun: () => void;
-}) {
-  const copyText = runCopyText(run);
-
-  async function handleCopy() {
-    if (!copyText) {
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(copyText);
-    } catch {
-      // Clipboard may be unavailable outside secure context.
-    }
-  }
-
-  return (
-    <div className="pb-3 pl-7">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p
-          className="type-code text-muted-foreground"
-          title={formatSessionTimestamp(run.startedAt)}
-        >
-          {runExpandedRangeLabel(run)}
-        </p>
-        <RunHistoryExpandedActions
-          busy={busy}
-          copyText={copyText}
-          isFailed={run.status === "failed"}
-          onCopy={() => {
-            void handleCopy();
-          }}
-          onRerun={onRerun}
-          running={running}
-        />
-      </div>
-
-      {run.deliveryError?.trim() ? (
-        <p className="mb-3 whitespace-pre-wrap break-words text-destructive text-sm">
-          {run.deliveryError}
-        </p>
-      ) : null}
-
-      <RunHistoryOutput run={run} />
-    </div>
-  );
-}
-
-function RunHistoryItem({
-  run,
-  expanded,
-  busy,
-  running,
-  onToggle,
-  onDelete,
-  onRerun,
-}: {
-  run: AutomationRunRecord;
-  expanded: boolean;
-  busy: boolean;
-  running: boolean;
-  onToggle: () => void;
-  onDelete: () => void;
-  onRerun: () => void;
-}) {
-  const hasBody = runHasExpandableBody(run);
-
-  return (
-    <li className="min-w-0 px-4">
-      <div className="flex items-center gap-2 py-3">
-        <RunHistoryItemSummary
-          expanded={expanded}
-          hasBody={hasBody}
-          onToggle={onToggle}
-          run={run}
-        />
-
-        <Button
-          aria-label={`Delete run from ${formatSessionRelativeTime(run.startedAt)}`}
-          className="shrink-0 text-muted-foreground hover:text-destructive"
-          disabled={busy}
-          onClick={onDelete}
-          size="icon-sm"
-          type="button"
-          variant="ghost"
-        >
-          <Delete02Icon aria-hidden className="size-4" />
-        </Button>
-      </div>
-
-      {expanded && hasBody ? (
-        <RunHistoryExpandedBody
-          busy={busy}
-          onRerun={onRerun}
-          run={run}
-          running={running}
-        />
-      ) : null}
-    </li>
-  );
+  return status === "completed"
+    ? "Completed"
+    : status === "failed"
+      ? "Failed"
+      : "Running";
 }
 
 function RunStatusIcon({ status }: { status: AutomationRunStatus }) {

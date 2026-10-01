@@ -608,6 +608,7 @@ describe("AutomationRunner", () => {
           status: "running",
         });
         expect(runs[0]?.progress).toMatchObject([
+          { content: "Find news", role: "user" },
           { content: "Searching news", role: "assistant" },
           {
             role: "assistant",
@@ -632,7 +633,7 @@ describe("AutomationRunner", () => {
             toolCompletedAt: expect.any(Number),
           },
         ]);
-        expect(runs[0]?.progress?.[2]).not.toHaveProperty("toolCompletedAt");
+        expect(runs[0]?.progress?.[3]).not.toHaveProperty("toolCompletedAt");
         await expect(
           service.listRuns(automation.id, "other-org")
         ).rejects.toThrow();
@@ -646,7 +647,32 @@ describe("AutomationRunner", () => {
         status: fails ? "failed" : "completed",
       });
       expect(runner.getActiveRunCount()).toBe(0);
-      expect(runs[0]?.progress).toBeUndefined();
+      const reloadedService = new AutomationService(db, {
+        getUserTimezone: async () => "UTC",
+      });
+      const reloaded = (
+        await reloadedService.listRuns(automation.id, ORG_ID)
+      )[0]!;
+      expect(reloaded.progress).toEqual(runs[0]?.progress);
+      expect(reloaded.progress?.[0]).toMatchObject({
+        content: "Find news",
+        role: "user",
+      });
+      const unfinished = reloaded.progress?.find(
+        (item) => item.role === "tool" && item.toolCallId === "call-1"
+      );
+      expect(unfinished).toMatchObject({ toolCompletedAt: expect.any(Number) });
+      if (unfinished?.role === "tool") {
+        expect(JSON.parse(unfinished.content).error).toBeDefined();
+      }
+      if (!fails) {
+        expect(reloaded.progress?.at(-1)).toMatchObject({
+          content: "News summary",
+          role: "assistant",
+        });
+      }
+      await reloadedService.deleteRun(automation.id, reloaded.id, ORG_ID);
+      expect(await db.getAutomationRun(automation.id, reloaded.id)).toBeNull();
     }
   );
 

@@ -350,11 +350,32 @@ export class AutomationService {
       throw new Error("Automation run not found.");
     }
 
+    const completedAt = new Date().toISOString();
+    const progress = this.runProgress.get(runId)?.progress?.map((message) =>
+      message.role === "tool" && !message.toolCompletedAt
+        ? {
+            ...message,
+            content: JSON.stringify({
+              error: "Run ended before this tool completed.",
+            }),
+            toolCompletedAt: Date.parse(completedAt),
+          }
+        : { ...message }
+    );
+    if (progress && result.output && !result.error) {
+      const last = progress.at(-1);
+      if (last?.role === "assistant" && !last.toolCalls) {
+        last.content = result.output;
+      } else {
+        progress.push({ content: result.output, role: "assistant" });
+      }
+    }
     const updated = {
       ...run,
-      completedAt: new Date().toISOString(),
+      completedAt,
       error: result.error ?? null,
       output: result.output ?? null,
+      progress,
       status: result.error ? ("failed" as const) : ("completed" as const),
     };
 
@@ -476,6 +497,7 @@ function toRunRecord(
     startedAt: string;
     completedAt: string | null;
     output: string | null;
+    progress?: AutomationRunRecord["progress"];
     error: string | null;
     deliveryStatus?: string | null;
     deliveryError?: string | null;
@@ -491,6 +513,7 @@ function toRunRecord(
     error: run.error,
     id: run.id,
     output: run.output,
+    progress: run.progress,
     startedAt: run.startedAt,
     status: run.status,
   };

@@ -1,62 +1,58 @@
 import { expect, test } from "bun:test";
-import type { ChatMessage } from "@nakama/core/contract";
-import { automationProgressLines } from "./automations-page.shared";
+import type { AutomationRunRecord } from "@nakama/core/contract";
+import { automationRunMessages } from "./automations-page.shared";
 
-test("compact progress groups completed tools, retains text order, and exposes failures", () => {
-  const active: Extract<ChatMessage, { role: "tool" }> = {
-    content: "",
-    name: "bash",
-    role: "tool",
-    toolCallId: "b",
-    toolStartedAt: 1000,
+test("run conversations retain tools and text and only animate a running run", () => {
+  const run: AutomationRunRecord = {
+    automationId: "automation",
+    completedAt: null,
+    error: null,
+    id: "run",
+    output: null,
+    progress: [
+      { content: "Check files", role: "user" },
+      {
+        content: "",
+        role: "assistant",
+        toolCalls: [
+          { arguments: { command: "pwd" }, id: "call", name: "bash" },
+        ],
+      },
+      {
+        content: "",
+        name: "bash",
+        role: "tool",
+        toolCallId: "call",
+        toolStartedAt: 1000,
+      },
+    ],
+    startedAt: "2026-10-01T00:00:00Z",
+    status: "running",
   };
-  const messages: ChatMessage[] = [
-    { content: "Checking files", role: "assistant" },
-    {
-      content: "",
-      role: "assistant",
-      toolCalls: [
-        { arguments: { path: "README.md" }, id: "a", name: "read_file" },
-        { arguments: { command: "bun test" }, id: "b", name: "bash" },
-      ],
-    },
-    {
-      content: '"Large successful result"',
-      name: "read_file",
-      role: "tool",
-      toolCallId: "a",
-      toolCompletedAt: 2000,
-      toolStartedAt: 1000,
-    },
-    active,
-  ];
-  const running = automationProgressLines(messages);
-  expect(running.map((line) => line.type)).toEqual(["text", "tool"]);
-  expect(running[1]?.text).toContain("bash");
-  expect(running[1]?.text).toContain("bun test");
-  expect(running[1]?.text).toContain("1 done");
-  expect(JSON.stringify(running)).not.toContain("Large successful result");
-
-  active.content = JSON.stringify({ exitCode: 1, stderr: "Test failed" });
-  active.toolCompletedAt = 3000;
-  messages.push({ content: "Fixing the test", role: "assistant" });
-  const failed = automationProgressLines(messages);
-  expect(failed.map((line) => line.type)).toEqual([
-    "text",
-    "error",
-    "tool",
-    "text",
-  ]);
-  expect(failed[1]?.text).toContain("bash");
-  expect(failed[2]?.text).toContain("2 tools completed");
-  expect(failed[2]?.text).toContain("1 failed");
-  expect(failed.at(-1)?.text).toBe("Fixing the test");
-
-  active.content = JSON.stringify({ exitCode: 0 });
-  expect(automationProgressLines(messages).map((line) => line.type)).toEqual([
-    "text",
-    "tool",
-    "text",
-  ]);
-  expect(automationProgressLines([])).toEqual([]);
+  const live = automationRunMessages(run);
+  expect(live.map((item) => item.role)).toEqual(["user", "tool"]);
+  expect(live[1]).toMatchObject({
+    toolInput: { command: "pwd" },
+    toolStatus: "running",
+  });
+  run.progress!.push({ content: "Result", role: "assistant" });
+  expect(automationRunMessages(run).at(-1)?.streaming).toBe(true);
+  run.status = "completed";
+  const done = automationRunMessages(run);
+  expect(done[1]).toMatchObject({ id: live[1]!.id, toolStatus: "done" });
+  expect(done.at(-1)).toMatchObject({ content: "Result", streaming: false });
+  run.status = "failed";
+  run.error = "Disconnected";
+  expect(automationRunMessages(run).at(-1)).toMatchObject({
+    content: run.error,
+    failed: true,
+  });
+  run.progress = undefined;
+  run.error = null;
+  run.output = "Legacy output";
+  expect(automationRunMessages(run)).toHaveLength(1);
+  expect(automationRunMessages(run)[0]?.content).toBe(run.output);
+  run.status = "running";
+  run.output = null;
+  expect(automationRunMessages(run)[0]?.streaming).toBe(true);
 });

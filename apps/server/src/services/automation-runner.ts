@@ -60,13 +60,16 @@ export class AutomationRunner {
 
       const run = await this.automationService.createRun(automationId);
       let progress = "";
-      const messages: ChatMessage[] = [];
+      const messages: ChatMessage[] = [
+        { content: automation.prompt, role: "user" },
+      ];
       const publishProgress = () => {
         this.automationService.setRunProgress(run.id, {
           output: progress,
           progress: messages,
         });
       };
+      publishProgress();
 
       try {
         const output = await this.agentService.runAutomationPrompt(
@@ -84,6 +87,19 @@ export class AutomationRunner {
                 last.content = (last.content + delta).slice(-100_000);
               } else {
                 messages.push({ content: delta, role: "assistant" });
+              }
+              publishProgress();
+            },
+            onThinking: (delta) => {
+              const last = messages.at(-1);
+              if (last?.role === "assistant" && !last.toolCalls) {
+                last.thinking = ((last.thinking ?? "") + delta).slice(-100_000);
+              } else {
+                messages.push({
+                  content: "",
+                  role: "assistant",
+                  thinking: delta,
+                });
               }
               publishProgress();
             },
