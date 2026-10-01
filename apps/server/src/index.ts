@@ -355,6 +355,9 @@ const app = createHonoApp({
   composioService,
   databaseAdapter: database.adapter,
   mcpService,
+  // Windows cannot move an open SQLite file; POSIX restores keep the handle open as before.
+  onBeforeDataRestore:
+    process.platform === "win32" ? () => database.release() : undefined,
   onDataRestored: async () => {
     await database.reopen();
     await agent.reloadAfterDataRestore();
