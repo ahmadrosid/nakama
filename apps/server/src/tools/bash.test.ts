@@ -148,7 +148,12 @@ describe("bash tool", () => {
 
   afterEach(async () => {
     if (workspaceRoot) {
-      await rm(workspaceRoot, { force: true, recursive: true });
+      await rm(workspaceRoot, {
+        force: true,
+        maxRetries: 5,
+        recursive: true,
+        retryDelay: 100,
+      });
       workspaceRoot = "";
     }
   });
