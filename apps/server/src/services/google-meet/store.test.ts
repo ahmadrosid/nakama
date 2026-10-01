@@ -71,7 +71,10 @@ test("one active meeting per org, transcripts survive closing and cannot cross t
   expect(store.list("user-a", "profile-a")[0]?.preview).toBe("Hello");
   const file = join(dir, "transcripts", `meeting-${meeting.id}.txt`);
   expect(readFileSync(file, "utf8")).toBe("Hello\n");
-  expect(statSync(file).mode % 0o1000).toBe(0o600);
+  // Windows does not expose POSIX owner/group permission bits.
+  if (process.platform !== "win32") {
+    expect(statSync(file).mode % 0o1000).toBe(0o600);
+  }
   expect(store.list("user-a", "profile-a")[0]?.transcriptFile).toBe(
     `meeting-${meeting.id}.txt`
   );
