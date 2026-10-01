@@ -1,8 +1,107 @@
 import { expect, test } from "bun:test";
-import type { AutomationRunRecord } from "@nakama/core/contract";
+import type {
+  AutomationRunRecord,
+  StoredAutomation,
+} from "@nakama/core/contract";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
+import { useActiveChatProfileStore } from "@/context/active-chat-profile-store";
+import {
+  AuthContext,
+  type AuthContextValue,
+} from "@/context/auth-context-shared";
+import { queryKeys } from "@/lib/query-keys";
 import { RunHistoryList } from "./automations-components";
+import {
+  type AutomationsPageState,
+  useAutomationsPage,
+} from "./use-automations-page";
+
+test("automations follow the selected agent and Super Bot shows all", async () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+  const automations = ["agent-a", "agent-b", "super"].map(
+    (profileId): StoredAutomation => ({
+      createdAt: "2026-10-01T00:00:00Z",
+      description: "",
+      enabled: true,
+      id: profileId,
+      name: profileId,
+      profileId,
+      prompt: "Run task",
+      steps: [],
+      trigger: { type: "manual" },
+      updatedAt: "2026-10-01T00:00:00Z",
+      version: 1,
+    })
+  );
+  queryClient.setQueryData(queryKeys.automations.all, { automations });
+  queryClient.setQueryData(queryKeys.profiles.all, [
+    { id: "agent-a" },
+    { id: "agent-b" },
+    { id: "super", isSuper: true },
+  ]);
+  for (const automation of automations) {
+    queryClient.setQueryData(queryKeys.automations.runs(automation.id), []);
+  }
+  const previousState = useActiveChatProfileStore.getState();
+  useActiveChatProfileStore.setState({ profileId: "agent-a" });
+  let page!: AutomationsPageState;
+  function Probe() {
+    page = useAutomationsPage();
+    return null;
+  }
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter initialEntries={["/automations?automation=agent-b"]}>
+          <QueryClientProvider client={queryClient}>
+            <AuthContext.Provider
+              value={
+                { isAuthenticated: false, isLoading: false } as AuthContextValue
+              }
+            >
+              <Probe />
+            </AuthContext.Provider>
+          </QueryClientProvider>
+        </MemoryRouter>
+      )
+    );
+    expect(page.automations.map((item) => item.id)).toEqual(["agent-a"]);
+    expect(page.selected?.id).toBe("agent-a");
+    await act(async () =>
+      useActiveChatProfileStore.setState({ profileId: "super" })
+    );
+    expect(page.automations).toEqual(automations);
+    expect(page.selected?.id).toBe("agent-b");
+    await act(async () => page.setSearchQuery("agent-b"));
+    expect(page.filteredAutomations.map((item) => item.id)).toEqual([
+      "agent-b",
+    ]);
+    await act(async () =>
+      useActiveChatProfileStore.setState({ profileId: "agent-a" })
+    );
+    expect(page.filteredAutomations).toEqual([]);
+    expect(page.selected?.id).toBe("agent-a");
+    await act(async () =>
+      useActiveChatProfileStore.setState({ profileId: "empty-agent" })
+    );
+    expect(page.automations).toEqual([]);
+    expect(page.selected).toBeNull();
+    expect(page.selectedId).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    useActiveChatProfileStore.setState(previousState);
+    queryClient.clear();
+  }
+});
 
 test("keeps the run conversation mounted until the drawer finishes closing", async () => {
   const run: AutomationRunRecord = {
