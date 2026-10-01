@@ -21,6 +21,15 @@ const SPECIAL_PATH_PREFIXES = ["/dev/", "/proc/", "/sys/"];
 const realpathOnDisk: (filePath: string) => string =
   process.platform === "win32" ? realpathSync.native : realpathSync;
 
+/**
+ * NTFS matches names case-insensitively, and the part of a path that does not
+ * exist yet keeps whatever casing the caller typed, so containment checks fold
+ * case on Windows. POSIX filesystems are case-sensitive and compare as-is.
+ */
+export function comparablePath(filePath: string): string {
+  return process.platform === "win32" ? filePath.toLowerCase() : filePath;
+}
+
 export interface PathGuardOptions {
   allowedDirs?: string[];
   cwd?: string;
@@ -198,10 +207,14 @@ function getUserHome(): string {
 
 /** Length of the longest dir in `dirs` that contains `target`, or -1 for none. */
 function deepestMatch(target: string, dirs: string[]): number {
-  const normalized = target.endsWith(path.sep) ? target : target + path.sep;
+  const comparableTarget = comparablePath(target);
+  const normalized = comparableTarget.endsWith(path.sep)
+    ? comparableTarget
+    : comparableTarget + path.sep;
   let deepest = -1;
 
-  for (const dir of dirs) {
+  for (const rawDir of dirs) {
+    const dir = comparablePath(rawDir);
     const dirEnd = dir.endsWith(path.sep) ? dir : dir + path.sep;
     if (
       (normalized === dirEnd || normalized.startsWith(dirEnd)) &&

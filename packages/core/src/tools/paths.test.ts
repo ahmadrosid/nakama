@@ -141,4 +141,67 @@ describe("guardFilePath", () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  test.skipIf(process.platform !== "win32")(
+    "refuses another app user's directory in any casing on Windows",
+    async () => {
+      const root = await mkdtemp(path.join(tmpdir(), "nakama-app-users-case-"));
+      try {
+        const profile = path.join(root, "profile");
+        const users = path.join(profile, "users");
+        const mine = path.join(users, "aaa");
+        await mkdir(mine, { recursive: true });
+        await mkdir(path.join(users, "other", "artifacts"), {
+          recursive: true,
+        });
+        const options = {
+          allowedDirs: [profile, mine],
+          cwd: profile,
+          deniedDirs: [users],
+        };
+
+        // None of these files exists yet, so realpath cannot hand the guard
+        // the on-disk casing of the whole path. NTFS still opens every one of
+        // them inside users/other.
+        for (const attempt of [
+          "users/other/artifacts/new.md",
+          "USERS/other/artifacts/new.md",
+          "Users/OTHER/Artifacts/new.md",
+          path.join(profile, "USERS", "other", "new.md"),
+        ]) {
+          const refused = guardFilePath(attempt, null, 10, options);
+          await expect(refused).rejects.toBeInstanceOf(PathGuardError);
+          await expect(refused).rejects.toMatchObject({
+            code: "CROSS_TENANT",
+          });
+        }
+
+        const own = await guardFilePath(
+          "USERS/AAA/artifacts/new.md",
+          null,
+          10,
+          options
+        );
+        expect(own.resolved).toBe(
+          path.join(await realpath(mine), "artifacts", "new.md")
+        );
+
+        const note = await guardFilePath("notes/new.md", null, 10, options);
+        expect(note.resolved).toBe(
+          path.join(await realpath(profile), "notes", "new.md")
+        );
+
+        // A denied dir that does not exist yet keeps the casing it was given,
+        // so only a case-folded comparison catches a differently cased target.
+        const refused = guardFilePath("PRIVATE/new.md", null, 10, {
+          allowedDirs: [profile],
+          cwd: profile,
+          deniedDirs: [path.join(profile, "private")],
+        });
+        await expect(refused).rejects.toMatchObject({ code: "CROSS_TENANT" });
+      } finally {
+        await rm(root, { force: true, recursive: true });
+      }
+    }
+  );
 });
