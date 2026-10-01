@@ -51,33 +51,24 @@ jobs:
         with:
           bun-version: 1.4.0
 
-      - name: Restore installed dependencies
+      - name: Restore Bun downloads
         id: dependencies
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
-          path: |
-            node_modules
-            apps/*/node_modules
-            apps/platform/*/node_modules
-            packages/*/node_modules
-            packages/plugins/*/node_modules
-          key: dependencies-${{ runner.os }}-${{ runner.arch }}-bun-1.4.0-${{ hashFiles('bun.lock', 'bunfig.toml', '**/package.json', 'patches/**') }}
+          path: ~/.bun/install/cache
+          key: bun-downloads-${{ runner.os }}-${{ runner.arch }}-1.4.0-${{ hashFiles('bun.lock', 'patches/**') }}
+          restore-keys: bun-downloads-${{ runner.os }}-${{ runner.arch }}-1.4.0-
 
       - name: Install dependencies
-        if: steps.dependencies.outputs.cache-hit != 'true'
-        run: bun install --frozen-lockfile --ignore-scripts
+        # Recreate Windows junctions locally; tar archives do not preserve them.
+        run: bun install --frozen-lockfile --ignore-scripts --filter nakama --filter '@nakama/server...' --filter './packages/*' --filter './packages/plugins/*'
 
       # Save before tests: the non-blocking Windows failures must not discard it.
-      - name: Save installed dependencies
+      - name: Save Bun downloads
         if: steps.dependencies.outputs.cache-hit != 'true'
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
-          path: |
-            node_modules
-            apps/*/node_modules
-            apps/platform/*/node_modules
-            packages/*/node_modules
-            packages/plugins/*/node_modules
+          path: ~/.bun/install/cache
           key: ${{ steps.dependencies.outputs.cache-primary-key }}
 
       - name: Run tests
