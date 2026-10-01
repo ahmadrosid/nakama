@@ -352,7 +352,8 @@ function finalizePendingToolCalls(
 
 async function readOpenRouterStream(
   stream: AsyncIterable<ChatStreamChunk>,
-  handlers: StreamChatHandlers
+  handlers: StreamChatHandlers,
+  signal?: AbortSignal
 ): Promise<ChatCompletionResult> {
   let content = "";
   let thinking = "";
@@ -360,6 +361,8 @@ async function readOpenRouterStream(
   const pending = new Map<number, PendingToolCall>();
 
   for await (const chunk of stream) {
+    // Fetch cancellation does not discard chunks already buffered by the SDK.
+    signal?.throwIfAborted();
     usage =
       extractOpenAITokenUsage(
         (chunk as { usage?: Record<string, unknown> }).usage
@@ -369,11 +372,13 @@ async function readOpenRouterStream(
     if (delta?.reasoning) {
       thinking += delta.reasoning;
       handlers.onThinking?.(delta.reasoning);
+      signal?.throwIfAborted();
     }
 
     if (delta?.content) {
       content += delta.content;
       handlers.onChunk(delta.content);
+      signal?.throwIfAborted();
     }
 
     if (delta?.toolCalls) {
@@ -386,12 +391,14 @@ async function readOpenRouterStream(
 
           if (current) {
             notifyToolInputDelta(handlers, current, argDelta);
+            signal?.throwIfAborted();
           }
         }
       }
     }
   }
 
+  signal?.throwIfAborted();
   const toolCalls = finalizePendingToolCalls(pending);
   const thinkingText = thinking.trim() || undefined;
 
@@ -491,6 +498,7 @@ export function createOpenRouterProvider(
     name: "openrouter",
     streamChat(input: GenerateChatInput, handlers: StreamChatHandlers) {
       return withOpenRouterError(async () => {
+        input.signal?.throwIfAborted();
         const chatRequest = await buildChatRequestBase({
           customModels,
           messages: input.messages,
@@ -510,7 +518,7 @@ export function createOpenRouterProvider(
           { fetchOptions: { signal: input.signal } }
         );
 
-        return readOpenRouterStream(stream, handlers);
+        return readOpenRouterStream(stream, handlers, input.signal);
       });
     },
   };
