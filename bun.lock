@@ -247,6 +247,7 @@
   },
   "patchedDependencies": {
     "@electron/osx-sign@1.3.3": "patches/@electron%2Fosx-sign@1.3.3.patch",
+    "pm2@7.0.4": "patches/pm2@7.0.4.patch",
   },
   "overrides": {
     "@peculiar/asn1-schema": "2.9.5",
