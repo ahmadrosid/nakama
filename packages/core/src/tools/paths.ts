@@ -193,16 +193,17 @@ function getUserHome(): string {
 
 /** Length of the longest dir in `dirs` that contains `target`, or -1 for none. */
 function deepestMatch(target: string, dirs: string[]): number {
-  const normalized = target.endsWith(path.sep) ? target : target + path.sep;
   let deepest = -1;
 
   for (const dir of dirs) {
-    const dirEnd = dir.endsWith(path.sep) ? dir : dir + path.sep;
+    const relative = path.relative(dir, target);
     if (
-      (normalized === dirEnd || normalized.startsWith(dirEnd)) &&
-      dirEnd.length > deepest
+      relative !== ".." &&
+      !relative.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relative) &&
+      dir.length > deepest
     ) {
-      deepest = dirEnd.length;
+      deepest = dir.length;
     }
   }
 

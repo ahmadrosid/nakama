@@ -1435,7 +1435,7 @@ describe("profile organization transfer", () => {
         "Keep my memory"
       );
     } finally {
-      raw.close();
+      raw.close(true);
       database.close();
     }
   });

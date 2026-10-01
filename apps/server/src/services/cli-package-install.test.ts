@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runTimedInstallCommand } from "./cli-package-install";
 
+const testPosix = test.skipIf(process.platform === "win32");
+
 const STALLING_PLAN = {
   args: ["-c", "printf partial; exec sleep 5"],
   command: "sh",
@@ -123,54 +125,61 @@ describe("runTimedInstallCommand", () => {
       timedOut: false,
     });
   });
-  test("settles only once the timed-out installer has actually exited", async () => {
-    const startedAt = performance.now();
+  // Windows kills the process immediately rather than allowing a SIGTERM trap.
+  testPosix(
+    "settles only once the timed-out installer has actually exited",
+    async () => {
+      const startedAt = performance.now();
 
-    const result = await runTimedInstallCommand(
-      SIGTERM_IGNORING_PLAN,
-      undefined,
-      {
-        sigtermGraceMs: 200,
-        timeoutMs: 50,
-      }
-    );
-    const elapsedMs = performance.now() - startedAt;
+      const result = await runTimedInstallCommand(
+        SIGTERM_IGNORING_PLAN,
+        undefined,
+        {
+          sigtermGraceMs: 200,
+          timeoutMs: 50,
+        }
+      );
+      const elapsedMs = performance.now() - startedAt;
 
-    expect({
-      settledAfterTheEscalation: elapsedMs >= 250,
-      settledBeforeTheSelfExit: elapsedMs < 800,
-      timedOut: result.timedOut,
-    }).toEqual({
-      settledAfterTheEscalation: true,
-      settledBeforeTheSelfExit: true,
-      timedOut: true,
-    });
-  });
+      expect({
+        settledAfterTheEscalation: elapsedMs >= 250,
+        settledBeforeTheSelfExit: elapsedMs < 800,
+        timedOut: result.timedOut,
+      }).toEqual({
+        settledAfterTheEscalation: true,
+        settledBeforeTheSelfExit: true,
+        timedOut: true,
+      });
+    }
+  );
 
-  test("gives up waiting when the kill escalation has not landed yet", async () => {
-    const startedAt = performance.now();
+  testPosix(
+    "gives up waiting when the kill escalation has not landed yet",
+    async () => {
+      const startedAt = performance.now();
 
-    const result = await runTimedInstallCommand(
-      SIGTERM_IGNORING_PLAN,
-      undefined,
-      {
-        settleTimeoutMs: 150,
-        sigtermGraceMs: 10_000,
-        timeoutMs: 50,
-      }
-    );
-    const elapsedMs = performance.now() - startedAt;
+      const result = await runTimedInstallCommand(
+        SIGTERM_IGNORING_PLAN,
+        undefined,
+        {
+          settleTimeoutMs: 150,
+          sigtermGraceMs: 10_000,
+          timeoutMs: 50,
+        }
+      );
+      const elapsedMs = performance.now() - startedAt;
 
-    expect({
-      settledAfterTheSettleBound: elapsedMs >= 200,
-      settledBeforeTheSelfExit: elapsedMs < 800,
-      timedOut: result.timedOut,
-    }).toEqual({
-      settledAfterTheSettleBound: true,
-      settledBeforeTheSelfExit: true,
-      timedOut: true,
-    });
-  });
+      expect({
+        settledAfterTheSettleBound: elapsedMs >= 200,
+        settledBeforeTheSelfExit: elapsedMs < 800,
+        timedOut: result.timedOut,
+      }).toEqual({
+        settledAfterTheSettleBound: true,
+        settledBeforeTheSelfExit: true,
+        timedOut: true,
+      });
+    }
+  );
   test("does not wait out the settle bound for a process that already exited", async () => {
     const startedAt = performance.now();
 

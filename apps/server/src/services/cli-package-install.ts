@@ -96,6 +96,9 @@ export async function probeCliVersion(command: string): Promise<{
     try {
       child = spawn(command, ["--version"], {
         env: getToolExecutionEnv(),
+        shell:
+          process.platform === "win32" &&
+          /\.cmd$/i.test(Bun.which(command) ?? command),
         stdio: ["ignore", "pipe", "pipe"],
       });
     } catch {
@@ -172,6 +175,9 @@ export async function runTimedInstallCommand(
       // those grandchildren outlive a kill aimed at the direct child.
       detached: true,
       env: getToolExecutionEnv(),
+      shell:
+        process.platform === "win32" &&
+        /\.cmd$/i.test(Bun.which(plan.command) ?? plan.command),
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";

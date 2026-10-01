@@ -105,6 +105,20 @@ describe("profile sandbox helpers", () => {
         hostWorkspace: "/host/a",
       })
     ).toBe("/workspace/nested");
+    expect(
+      toGuestCwd({
+        guestWorkspace: "/workspace",
+        hostCwd: "C:\\host\\a\\nested",
+        hostWorkspace: "C:\\host\\a",
+      })
+    ).toBe("/workspace/nested");
+    expect(() =>
+      toGuestCwd({
+        guestWorkspace: "/workspace",
+        hostCwd: "C:\\host\\another",
+        hostWorkspace: "C:\\host\\a",
+      })
+    ).toThrow();
   });
 
   test("builds distinct sandbox names per profile", () => {

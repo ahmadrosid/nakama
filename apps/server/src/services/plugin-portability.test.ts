@@ -249,7 +249,7 @@ describe("plugin portability", () => {
       const identity = sourcePlugin
         .query("SELECT namespace,org_id FROM dataset")
         .get();
-      sourcePlugin.close();
+      sourcePlugin.close(true);
       const exported = await createNakamaDataExport({ rootDir: configDir });
       await restoreNakamaDataImport(exported.data, {
         confirm: true,
@@ -281,7 +281,7 @@ describe("plugin portability", () => {
       expect(
         snapshot.query("SELECT namespace,org_id FROM dataset").get()
       ).toEqual(identity);
-      snapshot.close();
+      snapshot.close(true);
       const credentials = join(
         getOrgPluginDataDir(ORG, "supermemory", restoreRoot),
         "connection.json"
@@ -384,7 +384,7 @@ describe("plugin portability", () => {
         .get() as { digest: string; lifecycle_state: string };
       expect(install.lifecycle_state).toBe("disabled");
       expect(install.digest.length).toBe(64);
-      restoredDb.close();
+      restoredDb.close(true);
 
       const restoredAdapter = await createSqliteDatabase(
         `file:${join(restoreRoot, "nakama.db")}`
@@ -411,7 +411,7 @@ describe("plugin portability", () => {
       expect(snapshot.query("SELECT id, body FROM items").all()).toEqual([
         { body: "kept", id: "n1" },
       ]);
-      snapshot.close();
+      snapshot.close(true);
       await restoredAdapter.close();
     } finally {
       await rm(restoreRoot, { force: true, recursive: true });
@@ -468,8 +468,8 @@ describe("plugin portability", () => {
         } else {
           process.env.DATABASE_URL = previousDatabaseUrl;
         }
-        live.close();
-        other.close();
+        live.close(true);
+        other.close(true);
         await rm(restoreRoot, { force: true, recursive: true });
       }
     }

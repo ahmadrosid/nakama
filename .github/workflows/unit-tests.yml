@@ -49,10 +49,11 @@ jobs:
         run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Run tests
-        # bash fails the step on the first failing suite; pwsh keeps only the last exit code.
+        # Run every suite and preserve any failure instead of hiding later results.
         shell: bash
         run: |
-          bun run --cwd apps/server test
-          bun run --cwd packages/core test
-          bun run --cwd packages/db test
-          bun run --cwd packages/agent test
+          status=0
+          for workspace in apps/server packages/core packages/db packages/agent; do
+            bun run --cwd "$workspace" test || status=1
+          done
+          exit "$status"

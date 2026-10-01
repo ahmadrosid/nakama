@@ -1066,7 +1066,7 @@ async function disableRestoredOrgPlugins(databasePath: string): Promise<void> {
       [new Date().toISOString()]
     );
   } finally {
-    db.close();
+    db.close(true);
   }
 }
 
