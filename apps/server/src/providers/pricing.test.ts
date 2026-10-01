@@ -299,6 +299,14 @@ describe("getExplicitModelPricing", () => {
     });
   });
 
+  test("keeps the Images rates for gpt-image-2 on a compatible endpoint without its own rates", () => {
+    expect(
+      getExplicitModelPricing("gpt-image-2", {
+        providerInstance: compatibleInstance,
+      })
+    ).toEqual({ inputPerMillionUsd: 5, outputPerMillionUsd: 30 });
+  });
+
   test("uses custom endpoint pricing even when the id exists in another catalog", () => {
     expect(
       getExplicitModelPricing("gpt-5.5", {
