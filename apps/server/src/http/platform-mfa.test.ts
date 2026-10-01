@@ -297,6 +297,7 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
   expect(disableWithBackupResponse.status).toBe(200);
 });
 
+// Real password checks and config-file I/O can exceed 5s on Windows runners.
 test("blocks API keys from mutating browser MFA enrollment", async () => {
   const { app, authService, databaseAdapter } = createMinimalHonoApp();
   const setupSession = await setupFreshInstallSession(
@@ -482,4 +483,4 @@ test("blocks API keys from mutating browser MFA enrollment", async () => {
     })
   );
   expect(unblockedProfiles.status).toBe(200);
-});
+}, 15_000);
