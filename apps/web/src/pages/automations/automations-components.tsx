@@ -534,16 +534,18 @@ export function RunHistoryList({
   onRerun: () => void;
 }) {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
   const selectedRun = runs.find((run) => run.id === selectedRunId);
   const groups = useMemo(() => groupRunsByDay(runs), [runs]);
   return (
     <DialogPrimitive.Root
-      onOpenChange={(open) => {
-        if (!open) {
+      onOpenChange={setOpen}
+      onOpenChangeComplete={(isOpen) => {
+        if (!isOpen) {
           setSelectedRunId(null);
         }
       }}
-      open={Boolean(selectedRun)}
+      open={open && Boolean(selectedRun)}
     >
       <div className="space-y-4">
         {groups.map((group) => (
@@ -620,8 +622,8 @@ export function RunHistoryList({
         ))}
       </div>
       <DialogPrimitive.Portal>
-        <DialogOverlay />
-        <DialogPrimitive.Popup className="data-open:slide-in-from-right data-closed:slide-out-to-right fixed inset-y-0 right-0 z-50 flex w-full max-w-3xl flex-col border-border border-l bg-background shadow-xl outline-none transition-transform duration-150 data-closed:animate-out data-open:animate-in motion-reduce:animate-none">
+        <DialogOverlay className="transition-opacity duration-200 ease-out data-closed:animate-none data-open:animate-none data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none" />
+        <DialogPrimitive.Popup className="fixed inset-y-0 right-0 z-50 flex w-full max-w-3xl translate-x-0 flex-col border-border border-l bg-background shadow-xl outline-none transition-transform duration-200 ease-out data-[ending-style]:translate-x-full data-[starting-style]:translate-x-full motion-reduce:transition-none">
           <div className="flex shrink-0 items-center gap-3 border-border border-b px-4 py-3">
             {selectedRun ? <RunStatusIcon status={selectedRun.status} /> : null}
             <DialogTitle className="min-w-0 flex-1 truncate text-sm">
