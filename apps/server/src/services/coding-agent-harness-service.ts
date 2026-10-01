@@ -862,8 +862,25 @@ async function runProbeCommand(
 
     const timeoutId = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
-      killTimeoutId = setTimeout(() => child.kill("SIGKILL"), SIGTERM_GRACE_MS);
+      if (process.platform === "win32" && child.pid) {
+        // Harnesses installed by npm are `.cmd` shims; ending cmd.exe alone
+        // leaves the node.exe under it running, so end the whole tree.
+        spawn(
+          path.join(
+            process.env.SystemRoot ?? "C:\\Windows",
+            "System32",
+            "taskkill.exe"
+          ),
+          ["/PID", String(child.pid), "/T", "/F"],
+          { stdio: "ignore", windowsHide: true }
+        ).once("error", () => child.kill("SIGKILL"));
+      } else {
+        child.kill("SIGTERM");
+        killTimeoutId = setTimeout(
+          () => child.kill("SIGKILL"),
+          SIGTERM_GRACE_MS
+        );
+      }
       // Resolve here rather than waiting for `close`: a child that ignores
       // SIGTERM never emits one, so the caller would wait past the timeout it
       // just set.
