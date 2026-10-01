@@ -6,6 +6,7 @@ import type {
   GenerateTextInput,
   GenerateTextResult,
   LlmToolDefinition,
+  OpenRouterRoutingSettings,
   ProviderChatOptions,
   ProviderClient,
   StreamChatHandlers,
@@ -44,6 +45,7 @@ export interface OpenRouterProviderOptions {
   /** Injected in tests to mock HTTP without touching global fetch. */
   fetcher?: Fetcher;
   model?: string;
+  openRouterRouting?: OpenRouterRoutingSettings;
 }
 
 type OpenAIMessage =
@@ -413,6 +415,16 @@ export function createOpenRouterProvider(
   const model = options.model ?? "anthropic/claude-sonnet-4-6";
   const customModels = options.customModels;
   const client = createOpenRouterClient(options.apiKey, options.fetcher);
+  // The SDK serializes camelCase policy names to the OpenRouter wire format.
+  const routing = options.openRouterRouting;
+  const provider =
+    routing && Object.values(routing).some((value) => value !== undefined)
+      ? {
+          dataCollection: routing.dataCollection,
+          requireParameters: routing.requireParameters,
+          zdr: routing.zdr,
+        }
+      : undefined;
 
   return {
     generateChat(input: GenerateChatInput) {
@@ -426,7 +438,13 @@ export function createOpenRouterProvider(
           tools: input.tools,
         });
         const result = await client.chat.send(
-          { chatRequest: { ...chatRequest, stream: false as const } },
+          {
+            chatRequest: {
+              ...chatRequest,
+              ...(provider ? { provider } : {}),
+              stream: false as const,
+            },
+          },
           { fetchOptions: { signal: input.signal } }
         );
 
@@ -442,6 +460,7 @@ export function createOpenRouterProvider(
       return withOpenRouterError(async () => {
         const result = await client.chat.send({
           chatRequest: {
+            ...(provider ? { provider } : {}),
             messages: [
               { content: system, role: "system" },
               { content: input.prompt, role: "user" },
@@ -481,7 +500,13 @@ export function createOpenRouterProvider(
           tools: input.tools,
         });
         const stream = await client.chat.send(
-          { chatRequest: { ...chatRequest, stream: true as const } },
+          {
+            chatRequest: {
+              ...chatRequest,
+              ...(provider ? { provider } : {}),
+              stream: true as const,
+            },
+          },
           { fetchOptions: { signal: input.signal } }
         );
 

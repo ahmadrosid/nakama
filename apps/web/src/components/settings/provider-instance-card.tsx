@@ -127,7 +127,11 @@ function ProviderInstanceTableRow({
           ) : null}
           {canManage ? (
             <ProviderActionButton
-              label="Manage models"
+              label={
+                card.isOpenRouter
+                  ? "Manage models and routing"
+                  : "Manage models"
+              }
               onClick={card.openManage}
             >
               <ListViewIcon className="size-3.5" />
@@ -201,6 +205,8 @@ function ProviderManageModelsFields({
           disabled={card.busy}
           modelsError={card.dialogError}
           onCustomModelsChange={card.handleManageModelsChange}
+          onRoutingChange={card.setOpenRouterRouting}
+          routing={card.openRouterRouting}
         />
       ) : null}
       {isShortlistBrowseProvider(card.providerType) ? (
@@ -299,6 +305,9 @@ function ProviderInstanceCardDialogs({
           onOpenChange={card.setManageOpen}
           onSave={() => void card.saveManageModels()}
           open={card.manageOpen}
+          title={
+            card.isOpenRouter ? "Manage models and routing" : "Manage models"
+          }
         >
           <ProviderManageModelsFields card={card} instance={instance} />
         </ProviderManageModelsDialog>
