@@ -56,6 +56,12 @@ const WORKER_DIST_SCRIPTS: Partial<Record<string, string>> = {
 };
 
 const VALID_WORKERS = Object.keys(WORKER_SCRIPTS);
+/**
+ * pm2 stops Windows processes with `taskkill /F`, so no signal handler runs.
+ * A "shutdown" message lets the worker clean up before pm2 escalates.
+ */
+const PM2_SHUTDOWN_OPTIONS =
+  process.platform === "win32" ? { shutdown_with_message: true } : {};
 
 export interface PluginWorkerRegistration {
   configDir?: string;
@@ -744,6 +750,7 @@ export class WorkerManagerService {
             name,
             output: join(worker.directory, "stdout.log"),
             script: process.env.NAKAMA_BUN_BIN ?? "bun",
+            ...PM2_SHUTDOWN_OPTIONS,
           },
           (error) => cb(error)
         )
@@ -873,6 +880,7 @@ export class WorkerManagerService {
               : {}),
             name: processName,
             script: "bun",
+            ...PM2_SHUTDOWN_OPTIONS,
           },
           (error) => cb(error)
         )

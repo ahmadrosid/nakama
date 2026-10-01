@@ -10,7 +10,8 @@ FROM --platform=$BUILDPLATFORM oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f
 WORKDIR /app
 
 COPY package.json bun.lock ./
-COPY patches/@electron%2Fosx-sign@1.3.3.patch patches/
+# The frozen install needs every patch package.json lists.
+COPY patches patches
 COPY apps apps
 COPY packages packages
 

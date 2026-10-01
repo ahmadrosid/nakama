@@ -61,6 +61,12 @@ import type {
 export interface SqliteDatabase {
   adapter: DatabaseAdapter;
   close(): void;
+  /**
+   * Finalizes every prepared statement and releases the file now. `close()`
+   * keeps the file open until those statements are garbage collected, and
+   * Windows cannot rename or delete an open SQLite file.
+   */
+  release(): void;
   reopen(): Promise<void>;
 }
 
@@ -569,6 +575,9 @@ export async function createSqliteDatabase(
   return {
     adapter: adapterProxy,
     close() {
+      db.close(true);
+    },
+    release() {
       db.close(true);
     },
     async reopen() {

@@ -1,5 +1,6 @@
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   flushPendingErrorReports,
@@ -150,8 +151,10 @@ agent.setServerTools({
     db: database.adapter,
     ensureSettingsLoaded: () => agent.ensureImageGenerationSettingsLoaded(),
     getUserConfig: () => agent.getUserConfig(),
-    recordUsage: (modelId, inputTokens, outputTokens) => {
-      llmUsageTracker.record(modelId, inputTokens, outputTokens);
+    recordUsage: (modelId, inputTokens, outputTokens, providerInstance) => {
+      llmUsageTracker.record(modelId, inputTokens, outputTokens, 0, {
+        providerInstance,
+      });
     },
   }),
   session: createSessionTools(agent),
@@ -355,6 +358,9 @@ const app = createHonoApp({
   composioService,
   databaseAdapter: database.adapter,
   mcpService,
+  // Windows cannot move an open SQLite file; POSIX restores keep the handle open as before.
+  onBeforeDataRestore:
+    process.platform === "win32" ? () => database.release() : undefined,
   onDataRestored: async () => {
     await database.reopen();
     await agent.reloadAfterDataRestore();
@@ -527,6 +533,40 @@ function isAddressInUseError(error: unknown): error is { code: string } {
   );
 }
 
+/**
+ * The daemon deletes pm2.pid when it exits, so a pid file that outlives
+ * killDaemon names a daemon still running from this runtime. Left alive, it
+ * keeps the desktop runtime's bun.exe locked and the next launch cannot rebuild it.
+ */
+function killLeftoverPm2Daemon(pidPath: string): void {
+  let pid: number;
+  try {
+    pid = Number.parseInt(readFileSync(pidPath, "utf8"), 10);
+  } catch {
+    return;
+  }
+  if (!(Number.isInteger(pid) && pid > 0)) {
+    return;
+  }
+  // Guard against a reused pid: only a bun process can be our daemon.
+  const task = spawnSync(
+    "tasklist",
+    ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"],
+    { encoding: "utf8", windowsHide: true }
+  );
+  if (
+    !task.stdout
+      ?.toLowerCase()
+      .includes(`"${basename(process.execPath).toLowerCase()}"`)
+  ) {
+    return;
+  }
+  spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], {
+    stdio: "ignore",
+    windowsHide: true,
+  });
+}
+
 function registerRuntimeCleanup(
   server: ReturnType<typeof Bun.serve>,
   serverUrl: string,
@@ -567,7 +607,12 @@ function registerRuntimeCleanup(
     ) {
       const { default: pm2 } = await import("pm2");
       await new Promise<void>((resolve) => {
-        const timeout = setTimeout(resolve, 3000);
+        // Connecting alone takes ~2.5s on Windows, so 3s ran out before pm2
+        // sent the daemon its kill request.
+        const timeout = setTimeout(
+          resolve,
+          process.platform === "win32" ? 5000 : 3000
+        );
         pm2.connect((error) => {
           if (error) {
             clearTimeout(timeout);
@@ -581,6 +626,9 @@ function registerRuntimeCleanup(
           });
         });
       });
+      if (process.platform === "win32") {
+        killLeftoverPm2Daemon(join(process.env.PM2_HOME, "pm2.pid"));
+      }
     }
     if (process.env.NAKAMA_DESKTOP === "1") {
       await Promise.race([
