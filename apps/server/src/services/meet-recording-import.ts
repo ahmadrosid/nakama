@@ -1,10 +1,9 @@
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { once } from "node:events";
 import { createWriteStream, readFileSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
 import { transcribeAudio } from "@nakama/core";
 import type { ComposioService } from "./composio-service";
@@ -103,35 +102,31 @@ async function saveDownload(value: unknown, path: string, signal: AbortSignal) {
   }
   const url = safeDownloadUrl(source.url);
   const response = await fetch(url, { redirect: "error", signal });
-  if (!(response.ok && response.body)) {
+  const { body } = response;
+  if (!(response.ok && body)) {
     throw new Error("Recording download failed.");
   }
   const declared = Number(response.headers.get("content-length"));
   if (declared > MAX_VIDEO_BYTES) {
     throw new Error("Recording is too large.");
   }
-  const writer = createWriteStream(path, { mode: 0o600 });
   let size = 0;
-  try {
-    for await (const chunk of response.body) {
-      signal.throwIfAborted();
-      size += chunk.byteLength;
-      if (size > MAX_VIDEO_BYTES) {
-        throw new Error("Recording is too large.");
+  await pipeline(
+    async function* () {
+      for await (const chunk of body) {
+        size += chunk.byteLength;
+        if (size > MAX_VIDEO_BYTES) {
+          throw new Error("Recording is too large.");
+        }
+        yield chunk;
       }
-      if (!writer.write(chunk)) {
-        await once(writer, "drain");
+      if (!size) {
+        throw new Error("Recording download was empty.");
       }
-    }
-    writer.end();
-    await once(writer, "finish");
-    if (!size) {
-      throw new Error("Recording download was empty.");
-    }
-  } catch (error) {
-    writer.destroy();
-    throw error;
-  }
+    },
+    createWriteStream(path, { mode: 0o600 }),
+    { signal }
+  );
 }
 
 export async function importMeetRecording(
@@ -163,7 +158,7 @@ export async function importMeetRecording(
     input.fileId
   );
   const directory = await mkdtemp(
-    join(tmpdir(), `nakama-meet-${process.pid}-${randomUUID()}-`)
+    join(tmpdir(), `nakama-meet-${process.pid}-`)
   );
   try {
     const video = join(directory, "recording");

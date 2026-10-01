@@ -17,6 +17,7 @@ import {
   resolveComposioApiKey,
   type UpdateProfileComposioToolkitsRequest,
 } from "@nakama/core";
+import type { MeetActionResults } from "@nakama/core/google-meet";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import type {
   DatabaseAdapter,
@@ -150,13 +151,7 @@ export class ComposioService {
       )
     );
     const messages = findMeetMessages(result).slice(0, 10);
-    const recordings: Array<{
-      fileId: string;
-      messageId: string;
-      name: string;
-      size: number;
-      date: string;
-    }> = [];
+    const recordings: MeetActionResults["recordings"]["recordings"] = [];
     const seen = new Set<string>();
     for (const message of messages) {
       const messageId = meetString(message.messageId ?? message.id);
@@ -1214,12 +1209,6 @@ function findMeetMessages(value: unknown): Record<string, unknown>[] {
     if (depth > 6 || !node || typeof node !== "object") {
       return;
     }
-    if (Array.isArray(node)) {
-      for (const child of node) {
-        visit(child, depth + 1);
-      }
-      return;
-    }
     const record = node as Record<string, unknown>;
     const id = meetString(record.messageId ?? record.id);
     if (
@@ -1280,11 +1269,7 @@ function extractMeetDriveIds(value: unknown): string[] {
       }
       return;
     }
-    if (Array.isArray(node)) {
-      for (const child of node) {
-        visit(child, depth + 1);
-      }
-    } else if (typeof node === "object") {
+    if (typeof node === "object") {
       for (const child of Object.values(node)) {
         visit(child, depth + 1);
       }

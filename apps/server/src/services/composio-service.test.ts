@@ -178,11 +178,15 @@ describe("ComposioService", () => {
             return {
               data: {
                 payload: {
-                  body: {
-                    data: Buffer.from(
-                      `https://drive.google.com/file/d/${fileId}/view`
-                    ).toString("base64url"),
-                  },
+                  parts: [
+                    {
+                      body: {
+                        data: Buffer.from(
+                          `https://drive.google.com/file/d/${fileId}/view`
+                        ).toString("base64url"),
+                      },
+                    },
+                  ],
                 },
               },
             };
