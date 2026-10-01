@@ -311,7 +311,7 @@ export async function vacuumPluginDatabaseInto(
   try {
     source.exec(`VACUUM INTO ${sqlQuote(targetPath)}`);
   } finally {
-    source.close();
+    source.close(true);
   }
 }
 
@@ -1795,7 +1795,7 @@ export class PluginService {
         (migration) => !applied.some((row) => row.id === migration.id)
       ).length;
     } finally {
-      db.close();
+      db.close(true);
     }
   }
 
@@ -2013,7 +2013,7 @@ export class PluginService {
       }
       try {
         const db = new Database(databasePath);
-        db.close();
+        db.close(true);
       } catch {
         return "database_unavailable";
       }
@@ -2741,7 +2741,7 @@ function applyPluginMigrations(
     }
     throw new PluginHostError("migration_failed", lifecycleErrorMessage(error));
   } finally {
-    db.close();
+    db.close(true);
   }
 }
 

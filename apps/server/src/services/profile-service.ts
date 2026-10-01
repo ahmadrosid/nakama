@@ -378,7 +378,7 @@ export class ProfileService {
     for (let suffix = 1; suffix <= CLONE_ID_ATTEMPTS; suffix++) {
       const candidate = suffix === 1 ? base : `${base}-${suffix}`;
 
-      if (!(await this.db.getProfile(candidate))) {
+      if (!(await this.isProfileIdTaken(candidate))) {
         return this.resolveNewProfileId(candidate, name);
       }
     }
@@ -1119,13 +1119,30 @@ export class ProfileService {
       );
     }
 
-    const existing = await this.db.getProfile(trimmed);
-
-    if (existing) {
+    if (await this.isProfileIdTaken(trimmed)) {
       throw new NakamaApiError("Profile id already exists.", 409);
     }
 
     return trimmed;
+  }
+
+  /**
+   * On Windows `Sales` and `sales` would share one profile folder, because
+   * NTFS names are case-insensitive, so there an id taken in any case is taken.
+   */
+  private async isProfileIdTaken(id: string): Promise<boolean> {
+    if (await this.db.getProfile(id)) {
+      return true;
+    }
+
+    if (process.platform !== "win32") {
+      return false;
+    }
+
+    const lowered = id.toLowerCase();
+    return (await this.db.listProfiles()).some(
+      (profile) => profile.id.toLowerCase() === lowered
+    );
   }
 
   private async requireProfile(

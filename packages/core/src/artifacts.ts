@@ -77,6 +77,12 @@ function getArtifactMetaPath(filePath: string): string {
   return `${filePath}${ARTIFACT_META_SUFFIX}`;
 }
 
+// The folder filter and API clients compare artifact names with `/`, so
+// Windows separators are normalised here.
+function artifactRelativeName(rootDir: string, filePath: string): string {
+  return path.relative(rootDir, filePath).split(path.sep).join("/");
+}
+
 function isArtifactMetaFile(filename: string): boolean {
   return filename.endsWith(ARTIFACT_META_SUFFIX);
 }
@@ -147,7 +153,7 @@ async function walkArtifacts(
       fileStat.mtime.toISOString()
     );
     files.push({
-      filename: path.relative(rootDir, absolutePath),
+      filename: artifactRelativeName(rootDir, absolutePath),
       mimeType: metadata.mimeType,
       path: absolutePath,
       sizeBytes: metadata.sizeBytes,
@@ -365,7 +371,7 @@ export async function writeArtifactFile(input: {
   const filePath = guarded.resolved;
   // The dashboard saves by absolute path, so error copy uses the relative name:
   // it is what the user sees in the UI, and it keeps server paths out of the toast.
-  const displayName = path.relative(resolvedArtifactsDir, filePath);
+  const displayName = artifactRelativeName(resolvedArtifactsDir, filePath);
   const fileStat = await stat(filePath).catch(() => null);
 
   if (!fileStat?.isFile()) {
@@ -407,7 +413,7 @@ export async function writeArtifactFile(input: {
   }
 
   return {
-    filename: path.relative(resolvedArtifactsDir, filePath),
+    filename: artifactRelativeName(resolvedArtifactsDir, filePath),
     profileId: input.profileId,
     sizeBytes: updated.size,
     updatedAt: savedAt,
@@ -441,7 +447,7 @@ export async function deleteArtifactFile(input: {
 
   return {
     deleted: true,
-    filename: path.relative(resolvedArtifactsDir, filePath),
+    filename: artifactRelativeName(resolvedArtifactsDir, filePath),
     profileId: input.profileId,
   };
 }

@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { getToolExecutionEnv } from "../lib/ensure-process-path";
 
 export const CLI_SIGTERM_GRACE_MS = 2000;
@@ -97,6 +98,7 @@ export async function probeCliVersion(command: string): Promise<{
       child = spawn(command, ["--version"], {
         env: getToolExecutionEnv(),
         stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
       });
     } catch {
       resolve({
@@ -169,10 +171,13 @@ export async function runTimedInstallCommand(
     const child = spawn(plan.command, plan.args, {
       // Its own process group, so a deadline can signal the whole install
       // rather than only the command we spawned. Installers shell out, and
-      // those grandchildren outlive a kill aimed at the direct child.
-      detached: true,
+      // those grandchildren outlive a kill aimed at the direct child. Windows
+      // has no process groups, and a detached `.cmd` shim there loses its
+      // piped stdout, so killTree uses taskkill instead.
+      detached: process.platform !== "win32",
       env: getToolExecutionEnv(),
       stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
     });
     let stdout = "";
     let stderr = "";
@@ -209,9 +214,24 @@ export async function runTimedInstallCommand(
     /**
      * Signals the whole process group. The `detached` above is what makes the
      * negative pid mean the group rather than the one child; the fallback
-     * covers a group that is already gone while the child is not.
+     * covers a group that is already gone while the child is not. Windows has
+     * no SIGTERM to grant grace to, so both steps force-kill the tree there.
      */
     const killTree = (killSignal: "SIGTERM" | "SIGKILL") => {
+      if (process.platform === "win32" && child.pid) {
+        const killer = spawn(
+          join(
+            process.env.SystemRoot ?? "C:\\Windows",
+            "System32",
+            "taskkill.exe"
+          ),
+          ["/PID", String(child.pid), "/T", "/F"],
+          { stdio: "ignore", windowsHide: true }
+        );
+        killer.once("error", () => child.kill("SIGKILL"));
+        return;
+      }
+
       if (child.pid) {
         try {
           process.kill(-child.pid, killSignal);

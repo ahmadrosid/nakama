@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runTimedInstallCommand } from "./cli-package-install";
@@ -123,54 +123,63 @@ describe("runTimedInstallCommand", () => {
       timedOut: false,
     });
   });
-  test("settles only once the timed-out installer has actually exited", async () => {
-    const startedAt = performance.now();
 
-    const result = await runTimedInstallCommand(
-      SIGTERM_IGNORING_PLAN,
-      undefined,
-      {
-        sigtermGraceMs: 200,
-        timeoutMs: 50,
-      }
-    );
-    const elapsedMs = performance.now() - startedAt;
+  // The two SIGTERM_IGNORING_PLAN tests are POSIX-only: Windows has no SIGTERM
+  // to trap, so the first kill step already force-kills the tree there.
+  test.skipIf(process.platform === "win32")(
+    "settles only once the timed-out installer has actually exited",
+    async () => {
+      const startedAt = performance.now();
 
-    expect({
-      settledAfterTheEscalation: elapsedMs >= 250,
-      settledBeforeTheSelfExit: elapsedMs < 800,
-      timedOut: result.timedOut,
-    }).toEqual({
-      settledAfterTheEscalation: true,
-      settledBeforeTheSelfExit: true,
-      timedOut: true,
-    });
-  });
+      const result = await runTimedInstallCommand(
+        SIGTERM_IGNORING_PLAN,
+        undefined,
+        {
+          sigtermGraceMs: 200,
+          timeoutMs: 50,
+        }
+      );
+      const elapsedMs = performance.now() - startedAt;
 
-  test("gives up waiting when the kill escalation has not landed yet", async () => {
-    const startedAt = performance.now();
+      expect({
+        settledAfterTheEscalation: elapsedMs >= 250,
+        settledBeforeTheSelfExit: elapsedMs < 800,
+        timedOut: result.timedOut,
+      }).toEqual({
+        settledAfterTheEscalation: true,
+        settledBeforeTheSelfExit: true,
+        timedOut: true,
+      });
+    }
+  );
 
-    const result = await runTimedInstallCommand(
-      SIGTERM_IGNORING_PLAN,
-      undefined,
-      {
-        settleTimeoutMs: 150,
-        sigtermGraceMs: 10_000,
-        timeoutMs: 50,
-      }
-    );
-    const elapsedMs = performance.now() - startedAt;
+  test.skipIf(process.platform === "win32")(
+    "gives up waiting when the kill escalation has not landed yet",
+    async () => {
+      const startedAt = performance.now();
 
-    expect({
-      settledAfterTheSettleBound: elapsedMs >= 200,
-      settledBeforeTheSelfExit: elapsedMs < 800,
-      timedOut: result.timedOut,
-    }).toEqual({
-      settledAfterTheSettleBound: true,
-      settledBeforeTheSelfExit: true,
-      timedOut: true,
-    });
-  });
+      const result = await runTimedInstallCommand(
+        SIGTERM_IGNORING_PLAN,
+        undefined,
+        {
+          settleTimeoutMs: 150,
+          sigtermGraceMs: 10_000,
+          timeoutMs: 50,
+        }
+      );
+      const elapsedMs = performance.now() - startedAt;
+
+      expect({
+        settledAfterTheSettleBound: elapsedMs >= 200,
+        settledBeforeTheSelfExit: elapsedMs < 800,
+        timedOut: result.timedOut,
+      }).toEqual({
+        settledAfterTheSettleBound: true,
+        settledBeforeTheSelfExit: true,
+        timedOut: true,
+      });
+    }
+  );
   test("does not wait out the settle bound for a process that already exited", async () => {
     const startedAt = performance.now();
 
@@ -192,33 +201,93 @@ describe("runTimedInstallCommand", () => {
    * The installer shells out and the grandchild outlives its parent. A kill
    * aimed at the direct child leaves that grandchild running, which is what
    * "the timeout does not cancel the install" meant in practice.
+   *
+   * POSIX-only: under Git Bash the `&` child is not a Windows child of the
+   * sh.exe spawned here (MSYS fork re-parents it to a short-lived helper), so
+   * no tree kill can reach it. The `.cmd` shim test below covers Windows.
    */
-  test("a timed-out install stops the processes it started, not just the one it spawned", async () => {
-    const marker = join(tmpdir(), `nakama-install-grandchild-${Date.now()}`);
-    rmSync(marker, { force: true });
+  test.skipIf(process.platform === "win32")(
+    "a timed-out install stops the processes it started, not just the one it spawned",
+    async () => {
+      const marker = join(tmpdir(), `nakama-install-grandchild-${Date.now()}`);
+      rmSync(marker, { force: true });
 
-    const result = await runTimedInstallCommand(
-      {
-        args: [
-          "-c",
-          `sh -c 'sleep 1.2; echo alive > ${marker}' & echo started; wait`,
-        ],
-        command: "sh",
-        displayCommand: "sh -c 'grandchild'",
-      },
-      undefined,
-      { settleTimeoutMs: 1000, sigtermGraceMs: 100, timeoutMs: 200 }
-    );
+      const result = await runTimedInstallCommand(
+        {
+          args: [
+            "-c",
+            `sh -c 'sleep 1.2; echo alive > ${marker}' & echo started; wait`,
+          ],
+          command: "sh",
+          displayCommand: "sh -c 'grandchild'",
+        },
+        undefined,
+        { settleTimeoutMs: 1000, sigtermGraceMs: 100, timeoutMs: 200 }
+      );
 
-    expect(result.timedOut).toBe(true);
+      expect(result.timedOut).toBe(true);
 
-    // Past the grandchild's own sleep: if the group was signalled it never
-    // wrote, and if only the direct child was signalled it has by now.
-    await Bun.sleep(1600);
-    const survived = existsSync(marker);
-    rmSync(marker, { force: true });
-    expect(survived).toBe(false);
-  }, 15_000);
+      // Past the grandchild's own sleep: if the group was signalled it never
+      // wrote, and if only the direct child was signalled it has by now.
+      await Bun.sleep(1600);
+      const survived = existsSync(marker);
+      rmSync(marker, { force: true });
+      expect(survived).toBe(false);
+    },
+    15_000
+  );
+
+  /**
+   * A global npm install on Windows runs through a `.cmd` shim: cmd.exe with
+   * node.exe under it. Ending cmd.exe alone leaves node.exe running.
+   */
+  test.skipIf(process.platform !== "win32")(
+    "a stopped install on Windows ends the node process under a .cmd shim",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "nakama-install-shim-"));
+      const marker = join(dir, "alive");
+      const grandchild = join(dir, "grandchild.js");
+      const shim = join(dir, "installer.cmd");
+      writeFileSync(
+        grandchild,
+        `console.log("started");\nsetTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(marker)}, "alive"), 1500);\n`
+      );
+      writeFileSync(
+        shim,
+        `@echo off\r\n"${process.execPath}" "${grandchild}"\r\n`
+      );
+      const controller = new AbortController();
+
+      try {
+        const result = await runTimedInstallCommand(
+          {
+            args: ["/d", "/c", shim],
+            command: "cmd.exe",
+            displayCommand: "installer.cmd",
+          },
+          (message) => {
+            // Stop only once node.exe is running, or there is nothing to prove.
+            if (message === "stdout: started") {
+              controller.abort();
+            }
+          },
+          {
+            settleTimeoutMs: 1000,
+            signal: controller.signal,
+            timeoutMs: 30_000,
+          }
+        );
+
+        expect(result.timedOut).toBe(true);
+        // Past the grandchild's own timer: had it survived, it has written.
+        await Bun.sleep(2500);
+        expect(existsSync(marker)).toBe(false);
+      } finally {
+        rmSync(dir, { force: true, recursive: true });
+      }
+    },
+    15_000
+  );
 
   test("an aborted signal ends the install without waiting for the deadline", async () => {
     const controller = new AbortController();

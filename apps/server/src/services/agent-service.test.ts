@@ -889,10 +889,21 @@ describe("AgentService coding delegation context", () => {
     const db = createInMemoryDatabaseAdapter();
     await installFakeOpenCode(tempBinDir);
     await Bun.write(
-      path.join(tempBinDir, "claude"),
-      "#!/bin/sh\necho claude\n"
+      path.join(
+        tempBinDir,
+        process.platform === "win32" ? "claude.cmd" : "claude"
+      ),
+      process.platform === "win32"
+        ? "@echo off\r\necho claude\r\n"
+        : "#!/bin/sh\necho claude\n"
     );
-    await chmod(path.join(tempBinDir, "claude"), 0o755);
+    await chmod(
+      path.join(
+        tempBinDir,
+        process.platform === "win32" ? "claude.cmd" : "claude"
+      ),
+      0o755
+    );
 
     await db.upsertWorkspaceSettings({
       codingAgentHarnesses: [
@@ -1588,6 +1599,13 @@ async function captureError(
 }
 
 async function installFakeOpenCode(binDir: string): Promise<void> {
+  if (process.platform === "win32") {
+    await writeFile(
+      path.join(binDir, "opencode.cmd"),
+      "@echo off\r\necho fake opencode\r\n"
+    );
+    return;
+  }
   const scriptPath = path.join(binDir, "opencode");
   await writeFile(
     scriptPath,

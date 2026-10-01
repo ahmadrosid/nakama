@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { chmodSync } from "node:fs";
+import { sep } from "node:path";
 import type { AgentQuestionnaire, ChatMessage } from "@nakama/core";
 import {
   derivePluginToolName,
@@ -574,7 +575,7 @@ export async function createSqliteDatabase(
   return {
     adapter: adapterProxy,
     close() {
-      db.close();
+      db.close(true);
     },
     release() {
       db.close(true);
@@ -586,7 +587,7 @@ export async function createSqliteDatabase(
       const previousDb = db;
       db = nextDb;
       adapter = nextAdapter;
-      previousDb.close();
+      previousDb.close(true);
     },
   };
 }
@@ -896,7 +897,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           successor.id
         );
       }
-      const workspacePrefix = `${workspaceFrom}/`;
+      const workspacePrefix = `${workspaceFrom}${sep}`;
       if (
         db
           .query(

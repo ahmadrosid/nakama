@@ -5,6 +5,7 @@ import {
   type ProviderInstance,
   type UserConfig,
 } from "@nakama/core";
+import { isCompatibleModelId } from "../providers/compatible-models";
 import { readApiKeyForInstance } from "../providers/create";
 import {
   IMAGE_GENERATION_MODEL_ID,
@@ -12,6 +13,7 @@ import {
   isAllowedImageGenerationSelection,
   modelSupportsImageGeneration,
 } from "../providers/models";
+import { decodeStoredModelSelection } from "./provider-instance-helpers";
 
 export const IMAGE_MODEL_REQUIRED_MESSAGE =
   "Configure an image generation model in Settings before generating images.";
@@ -40,8 +42,8 @@ export interface ResolvedImageGenerationSelection {
   apiKey: string;
   baseUrl: string;
   instance: ProviderInstance;
-  model: typeof IMAGE_GENERATION_MODEL_ID;
-  selection: typeof IMAGE_GENERATION_SELECTION;
+  model: string;
+  selection: string;
 }
 
 export interface ImageGenerationUsage {
@@ -135,9 +137,10 @@ export function resolveImageGenerationSelection(
   }
 
   if (!isAllowedImageGenerationSelection(imageModel)) {
-    throw new NakamaApiError(
-      "Configured image generation model is invalid. Update it in Settings.",
-      400
+    return resolveCompatibleImageGenerationSelection(
+      userConfig,
+      imageModel,
+      env
     );
   }
 
@@ -203,6 +206,57 @@ export function resolveImageGenerationSelection(
   };
 }
 
+/**
+ * `<providerId>::<modelId>` on one OpenAI-compatible provider that speaks the
+ * OpenAI Images API. The model must be one of that provider's custom models,
+ * since gateways often namespace ids (`cb/gpt-image-2`).
+ */
+function resolveCompatibleImageGenerationSelection(
+  userConfig: UserConfig | null | undefined,
+  imageModel: string,
+  env: Record<string, string | undefined>
+): ResolvedImageGenerationSelection {
+  const decoded = decodeStoredModelSelection(imageModel);
+  const instance = decoded
+    ? findProviderInstance(
+        { providers: userConfig?.providers ?? [] },
+        decoded.providerId
+      )
+    : null;
+  const baseUrl = instance?.baseUrl?.trim();
+
+  if (
+    !(
+      decoded &&
+      instance?.type === "openai_compatible" &&
+      baseUrl &&
+      isCompatibleModelId(decoded.modelId, instance.customModels)
+    )
+  ) {
+    throw new NakamaApiError(
+      "Configured image generation model is invalid. Update it in Settings.",
+      400
+    );
+  }
+
+  const apiKey = readApiKeyForInstance(instance, env)?.trim();
+
+  if (!apiKey) {
+    throw new NakamaApiError(
+      `API key is missing for provider "${instance.label}".`,
+      400
+    );
+  }
+
+  return {
+    apiKey,
+    baseUrl: normalizeBaseUrl(baseUrl),
+    instance,
+    model: decoded.modelId.trim(),
+    selection: imageModel,
+  };
+}
+
 export async function generateImageWithOpenAI(
   input: GenerateImageInput
 ): Promise<GenerateImageResult> {
@@ -212,9 +266,11 @@ export async function generateImageWithOpenAI(
     throw new NakamaApiError("Image prompt is required.", 400);
   }
 
-  const model = (input.model?.trim() || IMAGE_GENERATION_MODEL_ID) as string;
+  const model = input.model?.trim() || IMAGE_GENERATION_MODEL_ID;
 
-  if (model !== IMAGE_GENERATION_MODEL_ID) {
+  // api.openai.com serves only the allowlisted model; a custom base URL serves
+  // whatever custom model the resolver picked for it.
+  if (!input.baseUrl && model !== IMAGE_GENERATION_MODEL_ID) {
     throw new NakamaApiError(
       `Image generation model "${model}" is not supported.`,
       400

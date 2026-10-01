@@ -63,7 +63,7 @@ function utf8ByteLength(value: string): number {
 export function parseOrgMemoryContent(
   content?: string | null
 ): ParsedOrgMemory {
-  const lines = (content ?? "").split("\n");
+  const lines = (content ?? "").split(/\r?\n/);
   const preambleLines: string[] = [];
   const pinned: string[] = [];
   const sections: MemorySection[] = [];
@@ -126,7 +126,7 @@ export function parseOrgMemoryContent(
 
 function stripPinnedHeaderFromPreamble(preamble: string): string {
   return preamble
-    .split("\n")
+    .split(/\r?\n/)
     .filter((line) => !/^## Pinned\s*$/.test(line.trim()))
     .join("\n")
     .replace(/\n+$/, "")
@@ -140,7 +140,7 @@ export function normalizeParsedOrgMemory(
   const preambleLines: string[] = [];
   const rescuedPinned: string[] = [];
 
-  for (const line of parsed.preamble.split("\n")) {
+  for (const line of parsed.preamble.split(/\r?\n/)) {
     if (line.startsWith("- ")) {
       rescuedPinned.push(line.slice(2));
       continue;

@@ -23,6 +23,8 @@ describe("audit event coverage", () => {
     ["PATCH", "/v1/orgs/org_1/members/user_1", "member.role_update"],
     ["PUT", "/v1/settings/email", "settings.update"],
     ["PATCH", "/v1/providers/provider_1", "provider.update"],
+    ["DELETE", "/v1/platform/orgs/org_1/permanent", "organization.delete"],
+    ["DELETE", "/v1/platform/users/user_1", "user.erase"],
     ["DELETE", "/v1/profiles/profile_1", "profile.delete"],
     ["GET", "/v1/profiles/profile_1/pack/export", "profile.export"],
     ["POST", "/v1/platform/data/import/restore", "data.import"],
@@ -65,6 +67,12 @@ describe("audit event coverage", () => {
         "/v1/platform/plugins/releases",
         "/v1/platform/plugins/releases",
       ],
+      [
+        "DELETE",
+        "/v1/platform/orgs/:orgId/permanent",
+        "/v1/platform/orgs/org_1/permanent",
+      ],
+      ["DELETE", "/v1/platform/users/:userId", "/v1/platform/users/user_1"],
       ["POST", "/v1/profiles/:profileId/tools", "/v1/profiles/profile_1/tools"],
       [
         "DELETE",
@@ -202,6 +210,77 @@ describe("audit event API", () => {
         }),
       ])
     );
+  });
+
+  test("records permanent organization deletion and user erasure", async () => {
+    const { app, authService, databaseAdapter, orgService } =
+      createMinimalHonoApp();
+    const fetchApp = app as unknown as AppFetch;
+    const session = await loginPlatformAdminSession(
+      fetchApp,
+      authService,
+      databaseAdapter
+    );
+    const platformUser = await databaseAdapter.getUserByEmail(
+      "platform@example.com"
+    );
+    await orgService.createOrganization({
+      name: "Keep Audit Org",
+      slug: "keep-audit-org",
+    });
+    const created = await orgService.createOrganization({
+      name: "Erase Audit Org",
+      slug: "erase-audit-org",
+    });
+    await orgService.archiveOrganization(created.organization.id);
+
+    const now = new Date().toISOString();
+    await databaseAdapter.createUser({
+      createdAt: now,
+      email: "erase-audit-user@example.com",
+      id: "user_erase_audit",
+      passwordHash: await authService.hashPassword("erase-audit-password"),
+      updatedAt: now,
+    });
+
+    const headers = session.headers({ "X-CSRF-Token": session.csrfToken });
+    const deleteOrgResponse = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/platform/orgs/${created.organization.id}/permanent`,
+        { headers, method: "DELETE" }
+      )
+    );
+    const eraseUserResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/platform/users/user_erase_audit", {
+        headers,
+        method: "DELETE",
+      })
+    );
+
+    expect(deleteOrgResponse.status).toBe(204);
+    expect(eraseUserResponse.status).toBe(204);
+    expect(
+      await databaseAdapter.listAuditEvents({ action: "organization.delete" })
+    ).toEqual([
+      expect.objectContaining({
+        actorUserId: platformUser?.id,
+        metadata: { outcome: "success", status: 204 },
+        orgId: created.organization.id,
+        resourceId: created.organization.id,
+        resourceType: "organization",
+      }),
+    ]);
+    expect(
+      await databaseAdapter.listAuditEvents({ action: "user.erase" })
+    ).toEqual([
+      expect.objectContaining({
+        actorUserId: platformUser?.id,
+        metadata: { outcome: "success", status: 204 },
+        orgId: null,
+        resourceId: "user_erase_audit",
+        resourceType: "user",
+      }),
+    ]);
   });
 
   test("blocks organization admins from reading the ledger", async () => {

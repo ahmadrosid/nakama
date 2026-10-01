@@ -107,7 +107,7 @@ export function usePluginAgentAccess() {
   });
 }
 
-export async function savePluginAgentAccess(
+async function savePluginAgentAccess(
   orgId: string,
   pluginId: string,
   changes: Record<string, boolean>
@@ -181,14 +181,14 @@ export function useSavePluginAgentAccess() {
   });
 }
 
-export function orgPluginsQueryOptions(orgId: string) {
+function orgPluginsQueryOptions(orgId: string) {
   return queryOptions({
     queryFn: () => client.listOrgPlugins(orgId),
     queryKey: queryKeys.plugins.all(orgId),
   });
 }
 
-export function orgPluginQueryOptions(orgId: string, pluginId: string) {
+function orgPluginQueryOptions(orgId: string, pluginId: string) {
   return queryOptions({
     queryFn: () => client.getOrgPlugin(pluginId, orgId),
     queryKey: queryKeys.plugins.detail(orgId, pluginId),
