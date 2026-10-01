@@ -732,6 +732,41 @@ describe("file builtin tools", () => {
     ).toBe("index");
   });
 
+  test.skipIf(process.platform !== "win32")(
+    "forbidMemoryWrites refuses memory file names in any casing on Windows",
+    async () => {
+      tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-cognito-case-"));
+      const context = { ...PROFILE_CONTEXT, forbidMemoryWrites: true };
+
+      // MEMORY.md does not exist yet, so nothing canonicalises the caller's
+      // casing, and NTFS would create the one file memory is read from.
+      for (const target of [
+        "memory.md",
+        "Memory.MD",
+        "MEMORY-ARCHIVE/2026-09.md",
+        "memory-archive/2026-09.MD",
+      ]) {
+        await expect(
+          runWriteFile({ content: "learned", path: target }, context, {
+            workspaceRoot: tempDir,
+          })
+        ).rejects.toThrow(/cognito/i);
+      }
+      expect(await readdir(tempDir)).toEqual([]);
+
+      await runWriteFile(
+        { content: "mine", path: "notes/memory.md" },
+        context,
+        {
+          workspaceRoot: tempDir,
+        }
+      );
+      expect(
+        await readFile(path.join(tempDir, "notes", "memory.md"), "utf8")
+      ).toBe("mine");
+    }
+  );
+
   test("memory files stay writable when forbidMemoryWrites is unset", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-cognito-off-"));
 
