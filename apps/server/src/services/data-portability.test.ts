@@ -323,6 +323,52 @@ describe("Nakama data portability", () => {
     expect(await readFile(join(rootDir, "config.ini"), "utf8")).toBe("changed");
   });
 
+  test("restore disables plugins in the configured live database", async () => {
+    // The restore routes pass no databasePath, so the desktop app's
+    // sqlite/nakama.sqlite comes only from DATABASE_URL.
+    const sourceRoot = await mkdtemp(join(tmpdir(), "nakama-desktop-source-"));
+    const previousDatabaseUrl = process.env.DATABASE_URL;
+    try {
+      const sourceDatabase = join(sourceRoot, "sqlite", "nakama.sqlite");
+      await mkdir(join(sourceRoot, "sqlite"), { recursive: true });
+      const source = new Database(sourceDatabase, { create: true });
+      source.exec(
+        "CREATE TABLE org_plugins (org_id TEXT, plugin_id TEXT, lifecycle_state TEXT, revision INTEGER, pending_operation TEXT, updated_at TEXT)"
+      );
+      source.exec(
+        "INSERT INTO org_plugins VALUES ('org-1', 'notes', 'enabled', 1, NULL, '2026-09-30T00:00:00.000Z')"
+      );
+      source.close(true);
+      const exportResult = await createNakamaDataExport({
+        databasePath: sourceDatabase,
+        rootDir: sourceRoot,
+      });
+
+      const liveDatabase = join(rootDir, "sqlite", "nakama.sqlite");
+      process.env.DATABASE_URL = `file:${liveDatabase}`;
+      await restoreNakamaDataImport(exportResult.data, {
+        confirm: true,
+        rootDir,
+      });
+
+      const restored = new Database(liveDatabase, { readonly: true });
+      try {
+        expect(
+          restored.query("SELECT lifecycle_state FROM org_plugins").get()
+        ).toEqual({ lifecycle_state: "disabled" });
+      } finally {
+        restored.close(true);
+      }
+    } finally {
+      if (previousDatabaseUrl === undefined) {
+        delete process.env.DATABASE_URL;
+      } else {
+        process.env.DATABASE_URL = previousDatabaseUrl;
+      }
+      await rm(sourceRoot, { force: true, recursive: true });
+    }
+  });
+
   test("restore leaves the live database open when the archive is rejected", async () => {
     let closed = false;
     await expect(

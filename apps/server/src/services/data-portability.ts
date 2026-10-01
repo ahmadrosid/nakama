@@ -641,6 +641,10 @@ export async function restoreNakamaDataImport(
   const rootDir = resolveNakamaRootDir(options.rootDir);
   const entries = readZip(toBuffer(archive));
   const manifest = readManifest(entries);
+  const liveDatabasePath = pathInsideRoot(
+    rootDir,
+    resolveConfiguredDatabasePath(rootDir, options.databasePath)
+  );
 
   // Stage and back up inside rootDir so Docker volume mounts (e.g. /nakama/data)
   // are never renamed — rename(2) on a mount point returns EBUSY.
@@ -688,7 +692,10 @@ export async function restoreNakamaDataImport(
       await movePath(join(stagedRoot, name), join(rootDir, name));
     }
     restoreCommitted = true;
-    await finalizeRestoredPlugins(rootDir, options.databasePath);
+    await finalizeRestoredPlugins(
+      rootDir,
+      liveDatabasePath ?? options.databasePath
+    );
 
     if (backedUpEntries.length > 0) {
       try {
@@ -1111,6 +1118,22 @@ function toBuffer(value: Buffer | Uint8Array | ArrayBuffer): Buffer {
   }
 
   return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+}
+
+function pathInsideRoot(
+  rootDir: string,
+  path: string | null | undefined
+): string | null {
+  if (!path || path === ":memory:") {
+    return null;
+  }
+  const absolute = resolve(path);
+  const relativePath = relative(rootDir, absolute);
+  return relativePath &&
+    !relativePath.startsWith("..") &&
+    !isAbsolute(relativePath)
+    ? absolute
+    : null;
 }
 
 async function listMovableTopLevelEntries(rootDir: string): Promise<string[]> {
