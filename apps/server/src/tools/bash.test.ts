@@ -20,8 +20,8 @@ describe("host Bash discovery", () => {
     ProgramFiles: "C:\\Program Files",
     "ProgramFiles(x86)": "C:\\Program Files (x86)",
   };
-  const gitBash = "C:\\Program Files\\Git\\bin\\bash.exe";
-  const gitBashX86 = "C:\\Program Files (x86)\\Git\\bin\\bash.exe";
+  const gitBash = "C:\\Program Files\\Git\\usr\\bin\\bash.exe";
+  const gitBashX86 = "C:\\Program Files (x86)\\Git\\usr\\bin\\bash.exe";
   const pathBash = "C:\\msys64\\usr\\bin\\bash.exe";
 
   test("prefers Git Bash over PATH, including paths with spaces", () => {
@@ -148,7 +148,12 @@ describe("bash tool", () => {
 
   afterEach(async () => {
     if (workspaceRoot) {
-      await rm(workspaceRoot, { force: true, recursive: true });
+      await rm(workspaceRoot, {
+        force: true,
+        maxRetries: 5,
+        recursive: true,
+        retryDelay: 100,
+      });
       workspaceRoot = "";
     }
   });
@@ -156,10 +161,16 @@ describe("bash tool", () => {
   for (const mode of ["abort", "timeout"] as const) {
     test(`${mode} stops shell descendants and finishes the tool`, async () => {
       workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+      // A native child reports its own Windows PID, without MSYS fork/exec IDs.
+      await writeFile(
+        path.join(workspaceRoot, "child.cjs"),
+        'const fs = require("node:fs"); fs.writeFileSync("heartbeat", String(Date.now())); fs.writeFileSync("child.pid", String(process.pid)); setInterval(() => fs.writeFileSync("heartbeat", String(Date.now())), 20);'
+      );
       const controller = new AbortController();
       const pending = runBash(
         {
-          command: `sleep 30 & ${childPidCommand} > child.pid; wait`,
+          command: '"$NAKAMA_TEST_BUN" child.cjs & wait',
+          env: { NAKAMA_TEST_BUN: process.execPath },
           timeoutMs: mode === "timeout" ? 500 : 30_000,
         },
         {
@@ -179,7 +190,9 @@ describe("bash tool", () => {
         }
         const result = await Promise.race([
           pending,
-          Bun.sleep(2000).then(() => "hung"),
+          Bun.sleep(process.platform === "win32" ? 5000 : 2000).then(
+            () => "hung"
+          ),
         ]);
         expect(result).not.toBe("hung");
         if (mode === "abort") {
@@ -192,6 +205,14 @@ describe("bash tool", () => {
           await Bun.sleep(10);
         }
         expect(isProcessAlive(pid)).toBe(false);
+        const heartbeat = await readFile(
+          path.join(workspaceRoot, "heartbeat"),
+          "utf8"
+        );
+        await Bun.sleep(100);
+        expect(
+          await readFile(path.join(workspaceRoot, "heartbeat"), "utf8")
+        ).toBe(heartbeat);
       } finally {
         if (pid > 0 && isProcessAlive(pid)) {
           process.kill(pid, "SIGKILL");
@@ -199,7 +220,7 @@ describe("bash tool", () => {
         controller.abort();
         await pending;
       }
-    });
+    }, 10_000);
   }
 
   test("returns after shell exit when a quiet descendant holds the pipes", async () => {

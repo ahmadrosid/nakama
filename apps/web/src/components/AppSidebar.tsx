@@ -225,6 +225,188 @@ function SessionRowSkeletons() {
   );
 }
 
+function RecentChatRow({
+  session,
+  profileId,
+  onRename,
+  onDelete,
+  onTogglePin,
+}: {
+  session: ReturnType<typeof useHistorySessionsQuery>["data"][number];
+  profileId: string;
+  onRename: (target: SessionTarget) => void;
+  onDelete: (target: SessionTarget) => void;
+  onTogglePin: () => void;
+}) {
+  const location = useLocation();
+  const href = buildChatPath(profileId, session.id);
+  const title = session.title?.trim() || "Untitled chat";
+  return (
+    <div className="group relative flex min-w-0 items-center" key={session.id}>
+      <Link
+        aria-current={location.pathname === href ? "page" : undefined}
+        className="sidebar-nav-link min-w-0 flex-1 px-2 py-1.5 group-focus-within:pr-[60px] group-hover:pr-[60px]"
+        data-active={location.pathname === href || undefined}
+        title={session.active ? `${title} (still responding)` : title}
+        to={href}
+      >
+        <span className="sidebar-chat-title-clip min-w-0 flex-1 overflow-hidden">
+          <span
+            className={cn(
+              "sidebar-chat-title block w-max whitespace-nowrap",
+              session.active && "ai-rainbow-text"
+            )}
+          >
+            {title}
+          </span>
+        </span>
+      </Link>
+      <div className="absolute right-1 flex items-center opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                aria-label={`More actions for ${title}`}
+                className="size-7 text-muted-foreground hover:bg-black/10 dark:hover:bg-transparent"
+                size="icon-sm"
+                title="More actions"
+                variant="ghost"
+              />
+            }
+          >
+            <MoreHorizontalIcon aria-hidden="true" className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={() => onRename({ id: session.id, title })}
+            >
+              <PencilEdit02Icon aria-hidden="true" className="size-4" />
+              Rename
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-destructive"
+              onClick={() => onDelete({ id: session.id, title })}
+            >
+              <Delete02Icon aria-hidden="true" className="size-4" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button
+          aria-label={session.pinned ? `Unpin ${title}` : `Pin ${title}`}
+          className="size-7 text-muted-foreground hover:bg-black/10 dark:hover:bg-transparent"
+          onClick={onTogglePin}
+          size="icon-sm"
+          title={session.pinned ? "Unpin" : "Pin"}
+          variant="ghost"
+        >
+          {session.pinned ? (
+            <PinOffIcon aria-hidden="true" className="size-4" />
+          ) : (
+            <PinIcon aria-hidden="true" className="size-4" />
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function RecentChatSearch({
+  search,
+  searchQuery,
+  onChange,
+}: {
+  search: string;
+  searchQuery: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div
+      className={cn("relative shrink-0 px-2", searchQuery ? "mb-0" : "mb-3")}
+    >
+      {search ? (
+        <button
+          aria-label="Clear search"
+          className="absolute top-1/2 right-4 -translate-y-1/2 text-muted-foreground"
+          onClick={() => onChange("")}
+          type="button"
+        >
+          <Cancel01Icon aria-hidden className="size-4" />
+        </button>
+      ) : (
+        <Search01Icon
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 right-4.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+        />
+      )}
+      <Input
+        aria-label="Search chats"
+        className="border-border/60 bg-white pr-8 pl-2 shadow-none focus-visible:border-border/60 focus-visible:ring-0"
+        maxLength={MAX_SESSION_SEARCH_LENGTH}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            onChange("");
+          }
+        }}
+        placeholder="Search chats"
+        type="text"
+        value={search}
+      />
+    </div>
+  );
+}
+
+function PinnedChats({
+  sessions,
+  renderSession,
+}: {
+  sessions: ReturnType<typeof useHistorySessionsQuery>["data"];
+  renderSession: (
+    session: ReturnType<typeof useHistorySessionsQuery>["data"][number]
+  ) => React.ReactNode;
+}) {
+  const { collapsed: pinnedCollapsed, toggle: togglePinned } =
+    useLocalStorageFlag(
+      SIDEBAR_PINNED_COLLAPSED_KEY,
+      getInitialPinnedCollapsed
+    );
+  return sessions.length > 0 ? (
+    <div className="mb-3">
+      <div className="group mb-1.5 flex shrink-0 items-center gap-1 px-2">
+        <button
+          aria-expanded={!pinnedCollapsed}
+          className="sidebar-nav-group-label mb-0 w-auto gap-1.5 px-0 text-sm"
+          onClick={togglePinned}
+          type="button"
+        >
+          <span>Pinned</span>
+          <ArrowDown01Icon
+            aria-hidden="true"
+            className={cn(
+              "sidebar-nav-group-chevron size-3.5 opacity-0 transition-[opacity,transform] group-focus-within:opacity-100 group-hover:opacity-100",
+              pinnedCollapsed && "-rotate-90"
+            )}
+            strokeWidth={1.75}
+          />
+        </button>
+      </div>
+      <div
+        aria-hidden={pinnedCollapsed}
+        className={cn(
+          "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+          pinnedCollapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]"
+        )}
+        inert={pinnedCollapsed}
+      >
+        <div className="min-h-0 overflow-hidden">
+          {sessions.map(renderSession)}
+        </div>
+      </div>
+    </div>
+  ) : null;
+}
+
 function RecentChats() {
   const location = useLocation();
   const { activeOrg } = useAuth();
@@ -285,94 +467,24 @@ function RecentChats() {
     SIDEBAR_RECENTS_COLLAPSED_KEY,
     getInitialRecentsCollapsed
   );
-  const { collapsed: pinnedCollapsed, toggle: togglePinned } =
-    useLocalStorageFlag(
-      SIDEBAR_PINNED_COLLAPSED_KEY,
-      getInitialPinnedCollapsed
-    );
   const pinnedSessions = sessions.filter((session) => session.pinned);
   const recentSessions = sessions.filter((session) => !session.pinned);
-  const renderSession = (session: (typeof sessions)[number]) => {
-    const href = buildChatPath(profileId, session.id);
-    const title = session.title?.trim() || "Untitled chat";
-    return (
-      <div
-        className="group relative flex min-w-0 items-center"
-        key={session.id}
-      >
-        <Link
-          aria-current={location.pathname === href ? "page" : undefined}
-          className="sidebar-nav-link min-w-0 flex-1 px-2 py-1.5 group-focus-within:pr-[60px] group-hover:pr-[60px]"
-          data-active={location.pathname === href || undefined}
-          title={session.active ? `${title} (still responding)` : title}
-          to={href}
-        >
-          <span className="sidebar-chat-title-clip min-w-0 flex-1 overflow-hidden">
-            <span
-              className={cn(
-                "sidebar-chat-title block w-max whitespace-nowrap",
-                session.active && "ai-rainbow-text"
-              )}
-            >
-              {title}
-            </span>
-          </span>
-        </Link>
-        <div className="absolute right-1 flex items-center opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  aria-label={`More actions for ${title}`}
-                  className="size-7 text-muted-foreground hover:bg-black/10 dark:hover:bg-transparent"
-                  size="icon-sm"
-                  title="More actions"
-                  variant="ghost"
-                />
-              }
-            >
-              <MoreHorizontalIcon aria-hidden="true" className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => setRenameTarget({ id: session.id, title })}
-              >
-                <PencilEdit02Icon aria-hidden="true" className="size-4" />
-                Rename
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="text-destructive"
-                onClick={() => setDeleteTarget({ id: session.id, title })}
-              >
-                <Delete02Icon aria-hidden="true" className="size-4" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button
-            aria-label={session.pinned ? `Unpin ${title}` : `Pin ${title}`}
-            className="size-7 text-muted-foreground hover:bg-black/10 dark:hover:bg-transparent"
-            onClick={() =>
-              void updateSession.mutateAsync({
-                input: { pinned: !session.pinned },
-                profileId,
-                sessionId: session.id,
-              })
-            }
-            size="icon-sm"
-            title={session.pinned ? "Unpin" : "Pin"}
-            variant="ghost"
-          >
-            {session.pinned ? (
-              <PinOffIcon aria-hidden="true" className="size-4" />
-            ) : (
-              <PinIcon aria-hidden="true" className="size-4" />
-            )}
-          </Button>
-        </div>
-      </div>
-    );
-  };
+  const renderSession = (session: (typeof sessions)[number]) => (
+    <RecentChatRow
+      key={session.id}
+      onDelete={setDeleteTarget}
+      onRename={setRenameTarget}
+      onTogglePin={() =>
+        void updateSession.mutateAsync({
+          input: { pinned: !session.pinned },
+          profileId,
+          sessionId: session.id,
+        })
+      }
+      profileId={profileId}
+      session={session}
+    />
+  );
 
   const renderList = (rows: typeof sessions, emptyText: string | null) => (
     <div className="no-scrollbar min-h-0 overflow-y-auto">
@@ -395,40 +507,7 @@ function RecentChats() {
 
   return (
     <div className="mt-5 flex min-h-0 flex-1 flex-col">
-      {pinnedSessions.length > 0 ? (
-        <div className="mb-3">
-          <div className="group mb-1.5 flex shrink-0 items-center gap-1 px-2">
-            <button
-              aria-expanded={!pinnedCollapsed}
-              className="sidebar-nav-group-label mb-0 w-auto gap-1.5 px-0 text-sm"
-              onClick={togglePinned}
-              type="button"
-            >
-              <span>Pinned</span>
-              <ArrowDown01Icon
-                aria-hidden="true"
-                className={cn(
-                  "sidebar-nav-group-chevron size-3.5 opacity-0 transition-[opacity,transform] group-focus-within:opacity-100 group-hover:opacity-100",
-                  pinnedCollapsed && "-rotate-90"
-                )}
-                strokeWidth={1.75}
-              />
-            </button>
-          </div>
-          <div
-            aria-hidden={pinnedCollapsed}
-            className={cn(
-              "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
-              pinnedCollapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]"
-            )}
-            inert={pinnedCollapsed}
-          >
-            <div className="min-h-0 overflow-hidden">
-              {pinnedSessions.map(renderSession)}
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <PinnedChats renderSession={renderSession} sessions={pinnedSessions} />
       <div className="group mb-1.5 flex shrink-0 items-center gap-1 px-2">
         <button
           aria-expanded={!collapsed}
@@ -465,42 +544,11 @@ function RecentChats() {
         </div>
       </div>
       {!collapsed && sessions.length > 0 ? (
-        <div
-          className={cn(
-            "relative shrink-0 px-2",
-            searchQuery ? "mb-0" : "mb-3"
-          )}
-        >
-          {search ? (
-            <button
-              aria-label="Clear search"
-              className="absolute top-1/2 right-4 -translate-y-1/2 text-muted-foreground"
-              onClick={() => setSearch("")}
-              type="button"
-            >
-              <Cancel01Icon aria-hidden className="size-4" />
-            </button>
-          ) : (
-            <Search01Icon
-              aria-hidden
-              className="pointer-events-none absolute top-1/2 right-4.5 size-3.5 -translate-y-1/2 text-muted-foreground"
-            />
-          )}
-          <Input
-            aria-label="Search chats"
-            className="border-border/60 bg-white pr-8 pl-2 shadow-none focus-visible:border-border/60 focus-visible:ring-0"
-            maxLength={MAX_SESSION_SEARCH_LENGTH}
-            onChange={(event) => setSearch(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                setSearch("");
-              }
-            }}
-            placeholder="Search chats"
-            type="text"
-            value={search}
-          />
-        </div>
+        <RecentChatSearch
+          onChange={setSearch}
+          search={search}
+          searchQuery={searchQuery}
+        />
       ) : null}
       {!collapsed && searchQuery
         ? renderList(
