@@ -14,6 +14,24 @@ import {
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
+test("adds automation transcripts to existing databases idempotently", () => {
+  const db = new Database(":memory:");
+  try {
+    migrateDatabase(db);
+    db.exec("ALTER TABLE automation_runs DROP COLUMN progress");
+    migrateDatabase(db);
+    migrateDatabase(db);
+    const columns = db
+      .query("PRAGMA table_info(automation_runs)")
+      .all() as Array<{ name: string }>;
+    expect(columns.filter((column) => column.name === "progress")).toHaveLength(
+      1
+    );
+  } finally {
+    db.close();
+  }
+});
+
 describe("legacy profile id migration", () => {
   test("renames legacy default and super bot profiles and preserves references", () => {
     const db = new Database(":memory:");

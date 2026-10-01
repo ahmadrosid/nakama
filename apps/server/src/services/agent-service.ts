@@ -1568,7 +1568,8 @@ export class AgentService {
     profileId: string,
     prompt: string,
     automationId?: string,
-    automationRunId?: string
+    automationRunId?: string,
+    handlers?: Parameters<AgentChatSession["sendStream"]>[1]
   ): Promise<string> {
     if (!this._providerConfigured) {
       throw new Error("Provider is not configured.");
@@ -1613,7 +1614,7 @@ export class AgentService {
       userTimezone,
     });
 
-    return session.send(prompt);
+    return session.sendStream(prompt, handlers ?? { onChunk() {} });
   }
 
   async resolvePluginExecutionTools(

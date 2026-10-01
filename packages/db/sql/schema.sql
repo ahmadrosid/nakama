@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS automation_runs (
   started_at TEXT NOT NULL,
   completed_at TEXT,
   output TEXT,
+  progress TEXT,
   error TEXT,
   delivery_status TEXT,
   delivery_error TEXT,
