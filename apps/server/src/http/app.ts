@@ -25,6 +25,7 @@ import {
   registerComposioRoutes,
 } from "./routes/composio";
 import { registerDataPortabilityRoutes } from "./routes/data-portability";
+import { registerGoogleMeetRoutes } from "./routes/google-meet";
 import { registerInternalAutomationRoutes } from "./routes/internal-automations";
 import { registerInternalCuratorRoutes } from "./routes/internal-curator";
 import { registerMcpOAuthRoutes, registerMcpRoutes } from "./routes/mcp";
@@ -288,6 +289,7 @@ export function createHonoApp(options: ServerOptions) {
   registerSkillRoutes(app, options);
   registerToolRoutes(app, options);
   registerPluginRoutes(app, options);
+  registerGoogleMeetRoutes(app, options);
   registerAutomationRoutes(app, options);
   registerNotificationDestinationRoutes(app, options);
   registerTokenOptimizationRoutes(app, options);

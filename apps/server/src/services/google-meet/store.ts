@@ -9,7 +9,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { formatTranscript, type TranscriptSegment } from "./transcript-format";
+import {
+  formatTranscript,
+  type TranscriptSegment,
+} from "@nakama/core/google-meet";
 
 function comparableTranscriptText(text: string) {
   return text
@@ -18,30 +21,9 @@ function comparableTranscriptText(text: string) {
     .trim();
 }
 
-export type MeetingState =
-  | "queued"
-  | "joining"
-  | "recording"
-  | "transcribing"
-  | "finished"
-  | "failed";
-export interface Meeting {
-  actorId: string;
-  createdAt: number;
-  durationMinutes: number;
-  error: string | null;
-  id: string;
-  pendingSeconds?: number;
-  preview?: string | null;
-  profileId: string | null;
-  sourceName?: string | null;
-  state: MeetingState;
-  stopRequested: number;
-  title?: string | null;
-  transcriptFile?: string;
-  updatedAt: number;
-  url: string;
-}
+export type { Meeting } from "@nakama/core/google-meet";
+
+import type { Meeting, MeetingState } from "@nakama/core/google-meet";
 
 export class MeetingStore {
   private readonly db: Database;
@@ -241,12 +223,12 @@ export class MeetingStore {
       .query<Meeting, []>("SELECT * FROM meetings WHERE state='queued' LIMIT 1")
       .get();
   }
-  nextUntitled() {
+  nextUntitled(id?: string) {
     return this.db
-      .query<{ id: string; text: string }, []>(
-        "SELECT id, (SELECT group_concat(text, char(10)) FROM (SELECT text FROM segments WHERE meetingId=meetings.id ORDER BY sequence)) AS text FROM meetings WHERE title IS NULL AND state IN ('finished','failed') AND EXISTS (SELECT 1 FROM segments WHERE meetingId=meetings.id AND trim(text) != '') ORDER BY createdAt DESC LIMIT 1"
+      .query<{ id: string; text: string }, [string | null, string | null]>(
+        "SELECT id, (SELECT group_concat(text, char(10)) FROM (SELECT text FROM segments WHERE meetingId=meetings.id ORDER BY sequence)) AS text FROM meetings WHERE (? IS NULL OR id=?) AND title IS NULL AND state IN ('finished','failed') AND EXISTS (SELECT 1 FROM segments WHERE meetingId=meetings.id AND trim(text) != '') ORDER BY createdAt DESC LIMIT 1"
       )
-      .get();
+      .get(id ?? null, id ?? null);
   }
   setTitle(id: string, title: string) {
     this.db.query("UPDATE meetings SET title=? WHERE id=?").run(title, id);
@@ -335,7 +317,7 @@ export class MeetingStore {
           "UPDATE segments SET speakerName=?,startMs=COALESCE(startMs,?),endMs=COALESCE(endMs,?) WHERE sequence=?"
         )
         .run(
-          segment.speakerName,
+          segment.speakerName ?? null,
           segment.startMs ?? null,
           segment.endMs ?? null,
           match.sequence
@@ -351,7 +333,7 @@ export class MeetingStore {
           segment.text,
           segment.receivedAt,
           null,
-          segment.speakerName,
+          segment.speakerName ?? null,
           segment.startMs ?? null,
           segment.endMs ?? null
         );

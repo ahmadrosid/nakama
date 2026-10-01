@@ -106,7 +106,6 @@ const OFFICIAL_PLUGINS = new Map<
 >([
   ["workflows", { requiresHost: true, setupAction: "import_legacy" }],
   ["supermemory", { requiresHost: true }],
-  ["google-meet", { requiresHost: false }],
 ]);
 const lifecycleLocks = new Map<string, Promise<unknown>>();
 const BUN_BIN = process.env.NAKAMA_BUN_BIN ?? "bun";
@@ -526,6 +525,9 @@ export class PluginService {
       JSON.parse(Buffer.from(files.get(PLUGIN_MANIFEST_FILENAME)!).toString())
     );
     if (!validated.ok || validated.manifest.id !== pluginId) {
+      throw new PluginHostError("invalid_manifest");
+    }
+    if (validated.manifest.id === "google-meet") {
       throw new PluginHostError("invalid_manifest");
     }
     assertReferencedFilesExist(validated.manifest, files);
@@ -1375,6 +1377,9 @@ export class PluginService {
 
   async recoverPluginWorkers(): Promise<void> {
     for (const install of await this.db.listOrgPlugins()) {
+      if (install.pluginId === "google-meet") {
+        continue;
+      }
       if (install.lifecycleState !== "enabled" || !install.selectedVersion) {
         continue;
       }
@@ -1409,6 +1414,9 @@ export class PluginService {
     return withPluginMutation(async () => {
       const installs = await this.db.listOrgPlugins();
       for (const install of installs) {
+        if (install.pluginId === "google-meet") {
+          continue;
+        }
         try {
           await this.recoverOneInstall(install);
         } catch (error) {
@@ -1466,6 +1474,9 @@ export class PluginService {
     manifest: PluginManifest;
     releaseDir: string;
   }> {
+    if (pluginId === "google-meet") {
+      throw new PluginHostError("not_found");
+    }
     const gate = admissionGateFor(orgId, pluginId);
     return withAdmissionGate(gate, async () => {
       if (gate.closed) {
@@ -1625,10 +1636,7 @@ export class PluginService {
           input.context.pluginId === "workflows" &&
           input.context.actionKey === "run_workflow"
             ? 300_000
-            : input.context.pluginId === "google-meet" &&
-                input.context.actionKey === "upload"
-              ? 150_000
-              : undefined,
+            : undefined,
       },
       workspaceRoot: input.context.workspaceRoot,
     });
@@ -1639,6 +1647,9 @@ export class PluginService {
     pluginId: string,
     work: () => Promise<T>
   ): Promise<T> {
+    if (pluginId === "google-meet") {
+      return Promise.reject(new PluginHostError("not_found"));
+    }
     // Keep the lock through filesystem cleanup, after revision checks can no
     // longer protect an installation whose database record has been deleted.
     return withPluginDataLock(
@@ -2268,6 +2279,9 @@ async function inspectPluginPackage(
       packageJson.peerDependencies,
     ].some((deps) => Object.keys(deps ?? {}).length > 0)
   ) {
+    throw new PluginHostError("invalid_manifest");
+  }
+  if (validated.manifest.id === "google-meet") {
     throw new PluginHostError("invalid_manifest");
   }
   assertReferencedFilesExist(validated.manifest, files);

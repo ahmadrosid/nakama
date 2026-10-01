@@ -2,7 +2,10 @@ import { expect, spyOn, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { formatTranscript, type TranscriptSegment } from "./transcript-format";
+import {
+  formatTranscript,
+  type TranscriptSegment,
+} from "@nakama/core/google-meet";
 import { transcriptionConfig, transcriptionProviders } from "./transcription";
 
 test("legacy settings resolve to diarization without inheriting a chat model", () => {

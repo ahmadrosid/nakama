@@ -6,7 +6,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import type { TranscriptSegment } from "./transcript-format";
+import type { TranscriptSegment } from "@nakama/core/google-meet";
 
 export interface TranscriptionSession {
   close(): void | Promise<void>;

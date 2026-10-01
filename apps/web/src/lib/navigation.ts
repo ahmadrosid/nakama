@@ -22,6 +22,7 @@ import {
 type NavIcon = typeof SharedWifiIcon;
 
 export type PageId =
+  | "google-meet"
   | "chat"
   | "customize"
   | "usage"
@@ -82,6 +83,12 @@ export const NAV_GROUPS: NavGroup[] = [
         "Agent",
         "Manage bot configs and tool allowlists",
         UserSquareIcon
+      ),
+      navItem(
+        "google-meet",
+        "Google Meet",
+        "Capture and read meeting transcripts",
+        SharedWifiIcon
       ),
       navItem(
         "files",
@@ -162,6 +169,7 @@ export const SIDEBAR_PAGE_IDS: readonly PageId[] = [
   "files",
   "automations",
   "customize",
+  "google-meet",
 ];
 
 export const STANDALONE_PAGES: Partial<Record<PageId, NavItem>> = {
@@ -215,6 +223,9 @@ export function visibleNavGroups(access: {
 
   for (const group of NAV_GROUPS) {
     const items = group.items.filter((item) => {
+      if (item.id === "google-meet") {
+        return canAccessIntegrationsPage(access.orgRole);
+      }
       if (
         item.id === "usage" ||
         item.id === "plugin-management" ||
@@ -394,6 +405,7 @@ export const PAGE_PATHS: Record<PageId, string> = {
   chat: "/chat",
   customize: "/customize",
   files: "/files",
+  "google-meet": "/plugins/google-meet",
   mcp: "/customize/mcp",
   notifications: "/notifications",
   organization: "/organization",
@@ -445,6 +457,9 @@ export function findNavItem(pageId: PageId): NavItem | undefined {
 }
 
 export function pageIdFromPath(pathname: string): PageId | null {
+  if (pathname === "/plugins/google-meet") {
+    return "google-meet";
+  }
   if (pathname === "/tasks") {
     return "automations";
   }

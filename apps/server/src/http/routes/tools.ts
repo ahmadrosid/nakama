@@ -379,11 +379,14 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
     })
   );
 
-  app.get("/v1/tools", async (c) =>
-    json<ListToolsResponse>(
-      await agent.listTools(requireActiveOrgIdFromContext(c))
-    )
-  );
+  app.get("/v1/tools", async (c) => {
+    const orgId = requireActiveOrgIdFromContext(c);
+    // A failed Meet migration must not hide unrelated tools.
+    await options.googleMeetService
+      ?.ensureOrganization(orgId)
+      .catch(() => undefined);
+    return json<ListToolsResponse>(await agent.listTools(orgId));
+  });
 
   app.post("/v1/tools", async (c) => {
     requirePlatformAdminFromContext(c);

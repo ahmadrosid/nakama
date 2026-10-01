@@ -26,6 +26,7 @@ function createMockPm2() {
         cb(null, [])
     ),
     disconnect: mock(() => {}),
+    dump: mock((cb: (err: Error | null) => void) => cb(null)),
     flush: mock((_name: string, cb: (err: Error | null) => void) => cb(null)),
     list: mock((cb: (err: Error | null, list: unknown[]) => void) =>
       cb(null, [])
@@ -56,6 +57,43 @@ afterEach(async () => {
 });
 
 describe("WorkerManagerService", () => {
+  test("retires persisted Meet workers only in this config root and saves PM2 state", async () => {
+    const pm2 = createMockPm2();
+    (pm2.describe as ReturnType<typeof mock>).mockImplementation((_name, cb) =>
+      cb(null, [{ name: "old-meet" }])
+    );
+    (pm2.list as ReturnType<typeof mock>).mockImplementation((cb) =>
+      cb(null, [
+        {
+          name: "old-meet",
+          pm2_env: {
+            NAKAMA_PLUGIN_ID: "google-meet",
+            NAKAMA_PLUGIN_WORKER_ROOT: configDir,
+          },
+        },
+        {
+          name: "other-root",
+          pm2_env: {
+            NAKAMA_PLUGIN_ID: "google-meet",
+            NAKAMA_PLUGIN_WORKER_ROOT: "/elsewhere",
+          },
+        },
+        {
+          name: "other-plugin",
+          pm2_env: {
+            NAKAMA_PLUGIN_ID: "supermemory",
+            NAKAMA_PLUGIN_WORKER_ROOT: configDir,
+          },
+        },
+      ])
+    );
+    await new WorkerManagerService(projectRoot, pm2).retireGoogleMeetWorkers(
+      configDir!
+    );
+    expect(pm2.delete).toHaveBeenCalledTimes(1);
+    expect(pm2.delete).toHaveBeenCalledWith("old-meet", expect.any(Function));
+    expect(pm2.dump).toHaveBeenCalledTimes(1);
+  });
   test("isolates agent processes, desired state, and recovery", async () => {
     const first = { orgId: "org_a", profileId: "agent_a" };
     const second = { orgId: "org_a", profileId: "agent_b" };

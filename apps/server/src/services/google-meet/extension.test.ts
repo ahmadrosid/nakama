@@ -93,7 +93,10 @@ function extension() {
   };
   runInNewContext(
     readFileSync(
-      new URL("../extension/background.js", import.meta.url),
+      new URL(
+        "../../../../web/public/google-meet-extension/background.js",
+        import.meta.url
+      ),
       "utf8"
     ),
     { chrome, URL }
@@ -204,7 +207,10 @@ test("audio worklet encodes every mono sample as PCM16 and tolerates empty input
   let Processor: any;
   runInNewContext(
     readFileSync(
-      new URL("../extension/audio-worklet.js", import.meta.url),
+      new URL(
+        "../../../../web/public/google-meet-extension/audio-worklet.js",
+        import.meta.url
+      ),
       "utf8"
     ),
     {
@@ -257,7 +263,13 @@ test.each(["connected", "throw", "reject", "invalidated"])(
       pathname: "/customize",
     };
     runInNewContext(
-      readFileSync(new URL("../extension/content.js", import.meta.url), "utf8"),
+      readFileSync(
+        new URL(
+          "../../../../web/public/google-meet-extension/content.js",
+          import.meta.url
+        ),
+        "utf8"
+      ),
       {
         chrome: {
           runtime: {
@@ -306,7 +318,13 @@ test("popup shows setup progress and only the available capture action", async (
       return elements.get(selector);
     };
     await runInNewContext(
-      readFileSync(new URL("../extension/popup.js", import.meta.url), "utf8"),
+      readFileSync(
+        new URL(
+          "../../../../web/public/google-meet-extension/popup.js",
+          import.meta.url
+        ),
+        "utf8"
+      ),
       {
         chrome: {
           runtime: {
@@ -378,7 +396,10 @@ test.each([false, true])(
     const captureUrl = "wss://capture.example/capture?token=test";
     runInNewContext(
       readFileSync(
-        new URL("../extension/offscreen.js", import.meta.url),
+        new URL(
+          "../../../../web/public/google-meet-extension/offscreen.js",
+          import.meta.url
+        ),
         "utf8"
       ),
       {
@@ -556,7 +577,13 @@ test("popup renders live turns safely, restores on reopen and stops polling on c
       return elements.get(selector)!;
     };
     runInNewContext(
-      readFileSync(new URL("../extension/popup.js", import.meta.url), "utf8"),
+      readFileSync(
+        new URL(
+          "../../../../web/public/google-meet-extension/popup.js",
+          import.meta.url
+        ),
+        "utf8"
+      ),
       {
         chrome: {
           runtime: {

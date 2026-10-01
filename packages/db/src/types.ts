@@ -1212,6 +1212,8 @@ export interface DatabaseAdapter {
     profileId: string,
     assignments: StoredProfileComposioToolkitRecord[]
   ): Promise<void>;
+  /** Retire Meet plugin ownership without losing profile tool/skill assignments. */
+  retireGoogleMeetPlugin(orgId: string, skillDirectory: string): Promise<void>;
   revokeApiKey(id: string, revokedAt: string): Promise<boolean>;
   revokeArtifactShare(id: string, revokedAt: string): Promise<boolean>;
   revokeBrowserSessionBySessionTokenHash(

@@ -5,11 +5,7 @@ import { join } from "node:path";
 import { privateJson } from "./actions";
 import { MeetingStore } from "./store";
 import { transcriptionProviders } from "./transcription";
-import {
-  captureSession,
-  createStreamMeeting,
-  generateNextMeetingTitle,
-} from "./worker";
+import { createStreamMeeting, generateNextMeetingTitle } from "./worker";
 
 test.each([true, false])(
   "saved meetings get a persistent title with API success=%s",
@@ -129,24 +125,6 @@ test("streams PCM frames to OpenAI and persists the final transcript", async () 
   } finally {
     transcriptionProviders.openai = provider;
     store.close();
-    rmSync(directory, { force: true, recursive: true });
-  }
-});
-
-test("capture sessions ignore missing or malformed files", () => {
-  const directory = mkdtempSync(join(tmpdir(), "meet-session-"));
-  try {
-    expect(captureSession(directory)).toBeUndefined();
-    privateJson(join(directory, "capture.json"), {
-      expiresAt: 1,
-      meetingId: "meeting",
-      token: "token",
-    });
-    expect(captureSession(directory)).toMatchObject({
-      meetingId: "meeting",
-      token: "token",
-    });
-  } finally {
     rmSync(directory, { force: true, recursive: true });
   }
 });

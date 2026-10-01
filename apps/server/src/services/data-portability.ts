@@ -1027,6 +1027,15 @@ function skipRelativePathReason(
   const first = parts[0] ?? "";
   if (
     first === NAKAMA_EXPORT_MANIFEST ||
+    first === ".meet-rollback" ||
+    (parts[0] === "orgs" && parts[2] === "meet.staging") ||
+    (parts[0] === "orgs" &&
+      parts[2] === "meet" &&
+      ["audio", "capture.json", "cutover.json"].includes(parts[3] ?? "")) ||
+    (parts[0] === "orgs" &&
+      parts[2] === "plugins" &&
+      parts[3] === "google-meet" &&
+      snapshots.has(`orgs/${parts[1]}/meet/meetings.sqlite`)) ||
     first.startsWith(RESTORE_PREFIX) ||
     first.startsWith(BACKUP_PREFIX) ||
     first.startsWith(PLUGIN_SNAPSHOT_PREFIX)
@@ -1069,6 +1078,21 @@ async function snapshotOrgPluginDatabases(
   for (const org of await readdir(orgsDir, { withFileTypes: true })) {
     if (!org.isDirectory()) {
       continue;
+    }
+    const meetDirectory = join(orgsDir, org.name, "meet");
+    const meetDatabase = join(meetDirectory, "meetings.sqlite");
+    const legacyMeet = join(orgsDir, org.name, "plugins", "google-meet");
+    if (
+      (await pathExists(legacyMeet)) &&
+      !(await pathExists(join(meetDirectory, "migration.json")))
+    ) {
+      throw new Error("Resolve Google Meet migration before exporting data");
+    }
+    if (await pathExists(meetDatabase)) {
+      const relativePath = toZipPath(relative(rootDir, meetDatabase));
+      const target = join(snapshotParent, relativePath);
+      await vacuumPluginDatabaseInto(meetDatabase, target);
+      snapshots.set(relativePath, target);
     }
     const pluginsDir = join(orgsDir, org.name, "plugins");
     if (!(await pathExists(pluginsDir))) {

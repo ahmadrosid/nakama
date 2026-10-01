@@ -264,6 +264,7 @@ import type {
   XaiOAuthDeviceStartResponse,
 } from "@nakama/core/contract";
 import { withDisabledFetchIdle } from "@nakama/core/fetch-idle";
+import type { MeetAction, MeetActionResults } from "@nakama/core/google-meet";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { resolveServerUrl } from "@nakama/core/runtime";
 import { readBrowserOrigin, readCookie } from "./browser";
@@ -284,6 +285,20 @@ import type {
 } from "./types";
 
 export class NakamaClient {
+  invokeGoogleMeet<Action extends MeetAction>(
+    action: Action,
+    input: unknown,
+    orgId: string,
+    signal?: AbortSignal
+  ): Promise<MeetActionResults[Action]> {
+    return this.request(`/v1/meet/actions/${encodeURIComponent(action)}`, {
+      body: JSON.stringify(input ?? {}),
+      headers: { "X-Org-Id": orgId },
+      method: "POST",
+      signal,
+    });
+  }
+
   readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly credentials: RequestCredentials;

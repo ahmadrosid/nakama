@@ -256,7 +256,11 @@ export function registerDataPortabilityRoutes(
 
   app.get("/v1/platform/data/export", async (c) => {
     requirePlatformAdminFromContext(c);
-    const result = await createNakamaDataExport();
+    const result = options.googleMeetService
+      ? await options.googleMeetService.withSnapshot(() =>
+          createNakamaDataExport()
+        )
+      : await createNakamaDataExport();
     return new Response(result.data, {
       headers: {
         "Content-Disposition": `attachment; filename="${result.filename}"`,
@@ -292,36 +296,40 @@ export function registerDataPortabilityRoutes(
 
     let restore;
     try {
-      restore = await runWithPluginExportBarrier(async () => {
-        const { onBeforeDataRestore } = options;
-        let databaseReleased = false;
-        const result = await restoreNakamaDataImport(archive, {
-          afterFailedReplace: options.onDataRestored,
-          beforeReplace: onBeforeDataRestore
-            ? async () => {
-                databaseReleased = true;
-                await onBeforeDataRestore();
-              }
-            : undefined,
-          confirm: body.confirm,
-        });
-        // Drop registrations before reloading restored data; restored plugins stay disabled.
-        try {
-          await options.workerManager.clearPluginWorkers?.();
-        } catch (error) {
-          // The restore committed with the database released; reopen it before failing.
-          if (databaseReleased) {
-            await options.onDataRestored?.().catch(() => undefined);
+      const restoreOperation = () =>
+        runWithPluginExportBarrier(async () => {
+          const { onBeforeDataRestore } = options;
+          let databaseReleased = false;
+          const result = await restoreNakamaDataImport(archive, {
+            afterFailedReplace: options.onDataRestored,
+            beforeReplace: onBeforeDataRestore
+              ? async () => {
+                  databaseReleased = true;
+                  await onBeforeDataRestore();
+                }
+              : undefined,
+            confirm: body.confirm,
+          });
+          // Drop registrations before reloading restored data; restored plugins stay disabled.
+          try {
+            await options.workerManager.clearPluginWorkers?.();
+          } catch (error) {
+            // The restore committed with the database released; reopen it before failing.
+            if (databaseReleased) {
+              await options.onDataRestored?.().catch(() => undefined);
+            }
+            throw error;
           }
-          throw error;
-        }
-        try {
-          await options.onDataRestored?.();
-        } catch {
-          // Restore committed; workers remain unregistered until the host reloads.
-        }
-        return result;
-      });
+          try {
+            await options.onDataRestored?.();
+          } catch {
+            // Restore committed; workers remain unregistered until the host reloads.
+          }
+          return result;
+        });
+      restore = options.googleMeetService
+        ? await options.googleMeetService.withSnapshot(restoreOperation)
+        : await restoreOperation();
     } catch (error) {
       return errorResponse(formatImportError(error), 400);
     }
