@@ -553,6 +553,43 @@ function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
   );
 }
 
+function UploadFileButton({
+  uploading,
+  onUpload,
+}: {
+  uploading: boolean;
+  onUpload(file: File): Promise<void>;
+}) {
+  const uploadInput = React.useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <input
+        accept=".md,.markdown,.mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm"
+        aria-label="Upload audio or Markdown"
+        hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) {
+            void onUpload(file);
+          }
+        }}
+        ref={uploadInput}
+        type="file"
+      />
+      <Button
+        disabled={uploading}
+        onClick={() => uploadInput.current?.click()}
+        size="sm"
+        title="Audio up to 7 MB or Markdown up to 1 MB"
+        variant="outline"
+      >
+        {uploading ? "Importing…" : "Upload file"}
+      </Button>
+    </>
+  );
+}
+
 function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
   const [overview, setOverview] = React.useState<Overview | null>(null);
   const [error, setError] = React.useState("");
@@ -563,7 +600,6 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
   const [selected, setSelected] = React.useState<Meeting | null>(null);
   const [recordingPicker, setRecordingPicker] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
-  const uploadInput = React.useRef<HTMLInputElement>(null);
   async function upload(file: File) {
     setUploading(true);
     setError("");
@@ -771,29 +807,10 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
                         >
                           Import recording
                         </Button>
-                        <input
-                          accept=".md,.markdown,.mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm"
-                          aria-label="Upload audio or Markdown"
-                          hidden
-                          onChange={(event) => {
-                            const file = event.target.files?.[0];
-                            event.target.value = "";
-                            if (file) {
-                              void upload(file);
-                            }
-                          }}
-                          ref={uploadInput}
-                          type="file"
+                        <UploadFileButton
+                          onUpload={upload}
+                          uploading={uploading}
                         />
-                        <Button
-                          disabled={uploading}
-                          onClick={() => uploadInput.current?.click()}
-                          size="sm"
-                          title="Audio up to 7 MB or Markdown up to 1 MB"
-                          variant="outline"
-                        >
-                          {uploading ? "Importing…" : "Upload file"}
-                        </Button>
                       </>
                     )}
                   </div>
