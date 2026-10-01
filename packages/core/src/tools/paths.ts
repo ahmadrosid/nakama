@@ -30,6 +30,20 @@ export function comparablePath(filePath: string): string {
   return process.platform === "win32" ? filePath.toLowerCase() : filePath;
 }
 
+/**
+ * On NTFS a `:` after the drive root names an alternate data stream:
+ * `tool.js::$DATA` writes `tool.js` under a name no refusal matches, and
+ * `notes 10:30.md` hides its content in a stream of `notes 10`. POSIX allows
+ * `:` in file names, so only Windows refuses it.
+ */
+export function namesAlternateDataStream(absolutePath: string): boolean {
+  if (process.platform !== "win32") {
+    return false;
+  }
+  const { root } = path.parse(absolutePath);
+  return absolutePath.slice(root.length).includes(":");
+}
+
 export interface PathGuardOptions {
   allowedDirs?: string[];
   cwd?: string;
@@ -112,6 +126,13 @@ export async function guardFilePath(
         "SPECIAL_FILE"
       );
     }
+  }
+
+  if (namesAlternateDataStream(absolute)) {
+    throw new PathGuardError(
+      `Path names an NTFS alternate data stream: ${absolute}. File names cannot contain ":" on Windows.`,
+      "SPECIAL_FILE"
+    );
   }
 
   let realPath: string;
