@@ -80,4 +80,13 @@ function registerCleanupHandlers(cleanup: () => void | Promise<void>): void {
       process.exit(0);
     });
   }
+  // pm2 stops Windows workers with a "shutdown" message instead of a signal.
+  if (process.platform === "win32") {
+    process.on("message", async (message) => {
+      if (message === "shutdown") {
+        await cleanup();
+        process.exit(0);
+      }
+    });
+  }
 }
