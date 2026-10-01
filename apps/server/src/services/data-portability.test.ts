@@ -13,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { NakamaApiError } from "@nakama/core";
+import { createDatabase } from "@nakama/db";
 import * as fflate from "fflate";
 import {
   createNakamaDataExport,
@@ -259,6 +260,81 @@ describe("Nakama data portability", () => {
         name.startsWith(".nakama-restore-")
     );
     expect(leftovers).toEqual([]);
+  });
+
+  test("restore closes the live database before moving the data root", async () => {
+    // Windows cannot rename or delete an open SQLite file, so the server's
+    // handle must be released before live entries move to the backup.
+    const databasePath = join(rootDir, "sqlite", "nakama.sqlite");
+    const database = await createDatabase(`file:${databasePath}`);
+    try {
+      await writeFile(join(rootDir, "config.ini"), "original");
+      const exportResult = await createNakamaDataExport({
+        databasePath,
+        rootDir,
+      });
+      await writeFile(join(rootDir, "config.ini"), "changed");
+
+      let liveConfigWhenClosed: string | null = null;
+      await restoreNakamaDataImport(exportResult.data, {
+        beforeReplace: async () => {
+          liveConfigWhenClosed = await readFile(
+            join(rootDir, "config.ini"),
+            "utf8"
+          );
+          database.release();
+        },
+        confirm: true,
+        rootDir,
+      });
+
+      expect(liveConfigWhenClosed).toBe("changed");
+      expect(await readFile(join(rootDir, "config.ini"), "utf8")).toBe(
+        "original"
+      );
+      await database.reopen();
+      expect(await database.adapter.countHumanUsers()).toBe(0);
+    } finally {
+      database.release();
+    }
+  });
+
+  test("restore reopens the live database when it fails after closing it", async () => {
+    await writeFile(join(rootDir, "config.ini"), "original");
+    const exportResult = await createNakamaDataExport({ rootDir });
+    await writeFile(join(rootDir, "config.ini"), "changed");
+
+    const calls: string[] = [];
+    await expect(
+      restoreNakamaDataImport(exportResult.data, {
+        afterFailedReplace: async () => {
+          calls.push("reopen");
+        },
+        beforeReplace: async () => {
+          calls.push("close");
+          throw new Error("close failed");
+        },
+        confirm: true,
+        rootDir,
+      })
+    ).rejects.toThrow("close failed");
+
+    expect(calls).toEqual(["close", "reopen"]);
+    expect(await readFile(join(rootDir, "config.ini"), "utf8")).toBe("changed");
+  });
+
+  test("restore leaves the live database open when the archive is rejected", async () => {
+    let closed = false;
+    await expect(
+      restoreNakamaDataImport(Buffer.from("not a zip"), {
+        beforeReplace: () => {
+          closed = true;
+        },
+        confirm: true,
+        rootDir,
+      })
+    ).rejects.toThrow("Invalid ZIP archive.");
+    expect(closed).toBe(false);
   });
 
   test("restore requires explicit confirmation", async () => {

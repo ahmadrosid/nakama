@@ -84,6 +84,13 @@ export interface PreviewDataImportOptions {
 }
 
 export interface RestoreDataImportOptions {
+  /** Runs when a restore fails after `beforeReplace`, so the caller can reopen what is on disk. */
+  afterFailedReplace?: () => Promise<void> | void;
+  /**
+   * Runs once the archive is staged, before any live entry moves. Windows cannot
+   * rename or delete an open SQLite file, so the caller releases its handle here.
+   */
+  beforeReplace?: () => Promise<void> | void;
   confirm: boolean;
   databasePath?: string | null;
   rootDir?: string;
@@ -635,6 +642,7 @@ export async function restoreNakamaDataImport(
   const backedUpEntries: string[] = [];
   let backupComplete = false;
   let restoreCommitted = false;
+  let replaceStarted = false;
 
   try {
     await mkdir(stagedRoot, { mode: 0o700, recursive: true });
@@ -647,6 +655,12 @@ export async function restoreNakamaDataImport(
 
       await writeRestoredEntry(stagedRoot, entry);
       restoredFileCount += 1;
+    }
+
+    if (options.beforeReplace) {
+      // Set first: a hook that throws may already have released the handle.
+      replaceStarted = true;
+      await options.beforeReplace();
     }
 
     const existingEntries = await listMovableTopLevelEntries(rootDir);
@@ -713,6 +727,14 @@ export async function restoreNakamaDataImport(
         await rm(backupRoot, { force: true, recursive: true });
       } catch {
         // Keep backupRoot for manual recovery if rollback itself fails.
+      }
+    }
+
+    if (replaceStarted) {
+      try {
+        await options.afterFailedReplace?.();
+      } catch {
+        // Surface the restore failure, not the reopen failure.
       }
     }
 
