@@ -122,6 +122,4 @@ test("buildChatSystemPrompt gives messaging style to the four chat channels only
 
   const whatsapp = prompt([], { channel: "whatsapp", chatKind: "group" });
   expect(whatsapp).toContain("WhatsApp channel");
-  expect(whatsapp).toContain("do not say you cannot attach");
-  expect(whatsapp).toContain("WhatsApp document");
 });

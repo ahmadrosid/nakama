@@ -4,7 +4,6 @@ import {
   formatArtifactShareFooter,
   isAttachIntent,
   isAttachOnlyCommand,
-  isFreshReportRequest,
   mintDeliverableArtifacts,
   pushDeliverableArtifact,
   resolveArtifactForAttach,
@@ -35,105 +34,6 @@ describe("isAttachIntent", () => {
     expect(isAttachIntent("jangan kirim csv ke grup")).toBe(false);
     expect(isAttachIntent("tidak usah kirimkan file")).toBe(false);
   });
-});
-
-describe("isFreshReportRequest", () => {
-  test("matches time-bound report requests in both languages", () => {
-    expect(isFreshReportRequest("tolong kirim laporan harian")).toBe(true);
-    expect(isFreshReportRequest("send today's report")).toBe(true);
-    expect(isFreshReportRequest("kirim laporan terbaru")).toBe(true);
-    expect(isFreshReportRequest("buatkan laporan hari ini")).toBe(true);
-  });
-
-  test.each([
-    "kirim laporan bulanan",
-    "send the report monthly",
-    "kirim laporan dari 01-09-2026 sampai 27-09-2026",
-    "send the report from 2026-09-01 to 2026-09-27",
-    "send the report from 01/09/2026 to 27/09/2026",
-    "kirim laporan 01.09.2026 sampai 27.09.2026",
-    "send the report from 2026.09.01 to 2026.09.27",
-    "send the report for September 1 to 27, 2026",
-    "kirim laporan dari 1 sampai 27 September 2026",
-    "kirim laporan dari 1 Agustus sampai 2 Oktober 2026",
-    "send the report from 1st Sep. to 27th Sep. 2026",
-    "send the report from September 1st to 27th, 2026",
-    "send the report from Sep. 1st to 27th, 2026",
-    "send the report from September 2nd to 27th, 2026",
-    "send the report from September 3rd to 27th, 2026",
-    "send the report from September 4th to 27th, 2026",
-    "kirim laporan dalam 1 file .csv",
-    "kirim laporan dalam satu file",
-    "send the report in one CSV",
-    "send the report as a single file",
-  ])("routes report constraints to the agent: %s", (text) => {
-    expect(isFreshReportRequest(text)).toBe(true);
-  });
-
-  test("does not match plain attach or thanks", () => {
-    expect(isFreshReportRequest("kirim file rekap-well-test.csv")).toBe(false);
-    expect(isFreshReportRequest("send me the file")).toBe(false);
-    expect(isFreshReportRequest("thanks")).toBe(false);
-    expect(isFreshReportRequest("")).toBe(false);
-  });
-
-  test("ignores markers that only appear inside a filename", () => {
-    expect(isFreshReportRequest("kirim file daily-report.csv")).toBe(false);
-    expect(isFreshReportRequest("send me update-harga.csv")).toBe(false);
-    expect(isFreshReportRequest("kirim file laporan-terbaru.csv")).toBe(false);
-    expect(isFreshReportRequest("send me the latest-report.pdf")).toBe(false);
-    expect(isFreshReportRequest("kirim file laporan-bulanan.csv")).toBe(false);
-    expect(isFreshReportRequest("send report-2026-09-01.csv")).toBe(false);
-    expect(isFreshReportRequest("send report-01.09.2026.csv")).toBe(false);
-    expect(isFreshReportRequest('send file "September 1 to 27.csv"')).toBe(
-      false
-    );
-    expect(
-      isFreshReportRequest('send file "01.09.2026.csv" for September 1 to 27')
-    ).toBe(true);
-    expect(isFreshReportRequest('send file "monthly report.csv"')).toBe(false);
-    expect(isFreshReportRequest("kirim file 'laporan bulanan.csv'")).toBe(
-      false
-    );
-    expect(isFreshReportRequest("send file `monthly report.csv`")).toBe(false);
-    expect(
-      isFreshReportRequest('send file "monthly report.csv" in one file')
-    ).toBe(true);
-    expect(isFreshReportRequest("send monthly-report.csv in one file")).toBe(
-      true
-    );
-  });
-
-  test.each([
-    { expected: false, text: "send file monthly report.csv" },
-    { expected: false, text: "send file Monthly Report.csv" },
-    { expected: false, text: "send file September 1st to 27th.csv" },
-    { expected: false, text: "send file monthly report (1).csv, please" },
-    { expected: true, text: "send file monthly report.csv in one file" },
-    {
-      expected: true,
-      text: "send file monthly report.csv for September 1st to 27th",
-    },
-    {
-      expected: true,
-      text: "send file Monthly Report.csv for September 1st to 27th",
-    },
-    { expected: true, text: "send the latest monthly report.csv" },
-    { expected: true, text: "send file monthly report.csv.bak" },
-    { expected: true, text: "send file monthly invoice.csv" },
-  ])(
-    "checks constraints outside saved filenames: $text",
-    ({ text, expected }) => {
-      expect(
-        isFreshReportRequest(text, [
-          "report.csv",
-          "monthly report.csv",
-          "September 1st to 27th.csv",
-          "monthly report (1).csv",
-        ])
-      ).toBe(expected);
-    }
-  );
 });
 
 describe("isAttachOnlyCommand", () => {
