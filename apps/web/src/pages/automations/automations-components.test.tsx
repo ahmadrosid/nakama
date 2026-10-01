@@ -45,6 +45,10 @@ test("running rows only expand when there is output or an error", async () => {
     expect(runPreviewText(run)).toBeNull();
     expect(container.querySelectorAll(".animate-spin")).toHaveLength(1);
     expect(container.querySelector("[aria-expanded]")).toBeNull();
+    expect(container.querySelector("button span[title]")?.textContent).toBe(
+      "Running · just now"
+    );
+    expect(container.textContent?.match(/running/gi)).toHaveLength(1);
     for (const content of [
       { output: "Result" },
       { error: "Failure" },
