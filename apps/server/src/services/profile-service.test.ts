@@ -469,6 +469,27 @@ describe("profile service createProfile", () => {
     ).rejects.toThrow(/already exists/i);
   });
 
+  test.skipIf(process.platform !== "win32")(
+    "rejects ids that differ only by case, which share a folder on Windows",
+    async () => {
+      tempConfigDir = await mkdtemp(
+        path.join(os.tmpdir(), "nakama-profile-case-id-")
+      );
+      process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+
+      const service = new ProfileService(createInMemoryDatabaseAdapter());
+
+      await service.createProfile(ORG_ID, { id: "Sales", name: "Sales" });
+
+      await expect(
+        service.createProfile(ORG_ID, { id: "sales", name: "Sales 2" })
+      ).rejects.toMatchObject({
+        message: "Profile id already exists.",
+        status: 409,
+      });
+    }
+  );
+
   test("rejects invalid custom profile ids", async () => {
     const service = new ProfileService(createInMemoryDatabaseAdapter());
 
@@ -841,6 +862,21 @@ describe("profile service cloneProfile", () => {
 
     expect(second.profile.id).not.toBe(first.profile.id);
   });
+
+  test.skipIf(process.platform !== "win32")(
+    "skips a generated clone id taken in another case on Windows",
+    async () => {
+      const { service, sourceId } = await setup();
+      await service.createProfile(ORG_ID, {
+        id: "Research-Bot-Copy",
+        name: "Taken",
+      });
+
+      const clone = await service.cloneProfile(ORG_ID, sourceId, {});
+
+      expect(clone.profile.id).toBe("research-bot-copy-2");
+    }
+  );
 
   test("refuses to clone Super Bot and writes nothing", async () => {
     const { db, service } = await setup();
