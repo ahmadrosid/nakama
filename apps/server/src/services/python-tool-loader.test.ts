@@ -28,7 +28,7 @@ describe("resolvePythonBin", () => {
     }
   });
 
-  test("defaults to python3", () => {
+  test.skipIf(process.platform === "win32")("defaults to python3", () => {
     delete process.env.NAKAMA_PYTHON_BIN;
     expect(resolvePythonBin()).toBe("python3");
   });
@@ -69,6 +69,31 @@ describe("resolvePythonBin", () => {
     expect(resolvePythonBin("/usr/bin/python3")).toBe("/usr/bin/python3");
   });
 });
+
+describe.skipIf(process.platform !== "win32")(
+  "resolvePythonBin on Windows",
+  () => {
+    afterEach(() => {
+      if (originalPythonBin === undefined) {
+        delete process.env.NAKAMA_PYTHON_BIN;
+      } else {
+        process.env.NAKAMA_PYTHON_BIN = originalPythonBin;
+      }
+    });
+
+    test("defaults to python, because python3 is the Store stub", () => {
+      delete process.env.NAKAMA_PYTHON_BIN;
+      expect(resolvePythonBin()).toBe("python");
+    });
+
+    test("accepts an .exe suffix on bare names and nothing else", () => {
+      expect(resolvePythonBin("python.exe")).toBe("python.exe");
+      expect(resolvePythonBin("python3.13.exe")).toBe("python3.13.exe");
+      expect(() => resolvePythonBin("bash.exe")).toThrow(/bare name/i);
+      expect(() => resolvePythonBin("python.exe.bat")).toThrow(/bare name/i);
+    });
+  }
+);
 
 describe("python tool loader", () => {
   let configDir = "";

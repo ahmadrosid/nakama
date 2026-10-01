@@ -13,6 +13,7 @@ import { spawnJsonTool } from "./custom-tool-subprocess";
 
 /** Bare interpreter names allowed when NAKAMA_PYTHON_BIN has no path. */
 const ALLOWED_PYTHON_BASENAME = /^python(\d+(\.\d+)*)?$/;
+const ALLOWED_WINDOWS_PYTHON_BASENAME = /^python(\d+(\.\d+)*)?(\.exe)?$/i;
 
 /**
  * Absolute interpreter paths must resolve under one of these prefixes after
@@ -28,21 +29,31 @@ const ALLOWED_PYTHON_PATH_PREFIXES = [
   "/home/linuxbrew/.linuxbrew/Cellar/python",
 ] as const;
 
+function pythonBasenamePattern(): RegExp {
+  return process.platform === "win32"
+    ? ALLOWED_WINDOWS_PYTHON_BASENAME
+    : ALLOWED_PYTHON_BASENAME;
+}
+
 /**
- * Resolve NAKAMA_PYTHON_BIN (or the default `python3`) against the allowlist.
- * Called at spawn time so tests can change the env without reloading the module.
+ * Resolve NAKAMA_PYTHON_BIN (or the default `python3`, `python` on Windows)
+ * against the allowlist. Called at spawn time so tests can change the env
+ * without reloading the module.
  */
 export function resolvePythonBin(
   raw: string | undefined = process.env.NAKAMA_PYTHON_BIN
 ): string {
-  const value = raw?.trim() || "python3";
+  // Windows installers put `python.exe` on PATH; `python3` there is usually
+  // the Microsoft Store stub, which exits 49 without running anything.
+  const value =
+    raw?.trim() || (process.platform === "win32" ? "python" : "python3");
 
   if (value.includes("\0")) {
     throw new Error("NAKAMA_PYTHON_BIN contains a null byte.");
   }
 
   if (!(value.includes("/") || value.includes("\\"))) {
-    if (!ALLOWED_PYTHON_BASENAME.test(value)) {
+    if (!pythonBasenamePattern().test(value)) {
       throw new Error(
         `NAKAMA_PYTHON_BIN bare name must match python or python3…; got "${value}".`
       );
