@@ -169,7 +169,6 @@ export const SIDEBAR_PAGE_IDS: readonly PageId[] = [
   "files",
   "automations",
   "customize",
-  "google-meet",
 ];
 
 export const STANDALONE_PAGES: Partial<Record<PageId, NavItem>> = {
