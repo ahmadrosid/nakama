@@ -30,3 +30,29 @@ jobs:
           sudo chown root:root apps/desktop/node_modules/electron/dist/chrome-sandbox
           sudo chmod 4755 apps/desktop/node_modules/electron/dist/chrome-sandbox
           xvfb-run -a bun run test
+
+  # The desktop app ships on Windows, but only Linux gated changes so far.
+  # Non-blocking until the remaining Windows-only failures are fixed or skipped.
+  test-windows:
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.0
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Run tests
+        # bash fails the step on the first failing suite; pwsh keeps only the last exit code.
+        shell: bash
+        run: |
+          bun run --cwd apps/server test
+          bun run --cwd packages/core test
+          bun run --cwd packages/db test
+          bun run --cwd packages/agent test
