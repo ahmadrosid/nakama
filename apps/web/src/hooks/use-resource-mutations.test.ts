@@ -268,11 +268,13 @@ describe("artifact share controls with a stale share ID", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
     let controls: ReturnType<typeof useArtifactShareControls>;
+    const observedShares: boolean[] = [];
     function Probe() {
       controls = useArtifactShareControls({
         artifactPath: variables.path,
         profileId: variables.profileId,
       });
+      observedShares.push(controls.isShared);
       return null;
     }
     const render = (value: AuthContextValue) =>
@@ -288,6 +290,10 @@ describe("artifact share controls with a stale share ID", () => {
       await act(async () => render(accountA));
       await act(async () => controls.openViewShareDialog());
       expect(controls!.publishedUrl).toBe("https://example.com/s/account-a");
+
+      observedShares.length = 0;
+      await act(async () => render(accountB));
+      expect(observedShares[0]).toBe(false);
 
       await act(async () =>
         render({ ...accountA, activeOrg: null, user: null })

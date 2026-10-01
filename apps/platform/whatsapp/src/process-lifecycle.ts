@@ -24,6 +24,15 @@ export function registerProcessLifecycleHandlers(
       shutdown(0);
     });
   }
+  // pm2 stops Windows workers with a "shutdown" message instead of a signal.
+  if (process.platform === "win32") {
+    process.on("message", (message) => {
+      if (message === "shutdown") {
+        console.log("WhatsApp worker received shutdown. Shutting down.");
+        shutdown(0);
+      }
+    });
+  }
 
   process.on("uncaughtException", (error) => {
     console.error("WhatsApp worker uncaught exception.", error);

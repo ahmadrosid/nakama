@@ -13,7 +13,91 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { getProfileSoulDir, PathGuardError } from "@nakama/core";
-import { runBash } from "./bash";
+import { resolveHostBash, runBash } from "./bash";
+
+describe("host Bash discovery", () => {
+  const env = {
+    ProgramFiles: "C:\\Program Files",
+    "ProgramFiles(x86)": "C:\\Program Files (x86)",
+  };
+  const gitBash = "C:\\Program Files\\Git\\usr\\bin\\bash.exe";
+  const gitBashX86 = "C:\\Program Files (x86)\\Git\\usr\\bin\\bash.exe";
+  const pathBash = "C:\\msys64\\usr\\bin\\bash.exe";
+
+  test("prefers Git Bash over PATH, including paths with spaces", () => {
+    expect(
+      resolveHostBash(
+        "win32",
+        env,
+        () => true,
+        () => pathBash
+      )
+    ).toBe(gitBash);
+    expect(
+      resolveHostBash(
+        "win32",
+        env,
+        (file) => file === gitBashX86,
+        () => pathBash
+      )
+    ).toBe(gitBashX86);
+  });
+
+  test("falls back to native Bash on PATH", () => {
+    expect(
+      resolveHostBash(
+        "win32",
+        env,
+        () => false,
+        () => pathBash
+      )
+    ).toBe(pathBash);
+  });
+
+  test("rejects missing Bash and legacy WSL launchers", () => {
+    for (const shell of [
+      null,
+      "C:\\Windows\\System32\\bash.exe",
+      "c:/WINDOWS/Sysnative/bash.exe",
+    ]) {
+      expect(() =>
+        resolveHostBash(
+          "win32",
+          env,
+          () => false,
+          () => shell
+        )
+      ).toThrow();
+    }
+  });
+
+  test("keeps Unix Bash and falls back to PATH when needed", () => {
+    expect(
+      resolveHostBash(
+        "linux",
+        {},
+        () => true,
+        () => "/usr/bin/bash"
+      )
+    ).toBe("/bin/bash");
+    expect(
+      resolveHostBash(
+        "darwin",
+        {},
+        () => false,
+        () => "/opt/bin/bash"
+      )
+    ).toBe("/opt/bin/bash");
+    expect(() =>
+      resolveHostBash(
+        "linux",
+        {},
+        () => false,
+        () => null
+      )
+    ).toThrow();
+  });
+});
 
 async function waitForPositivePid(pidPath: string): Promise<number> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -39,12 +123,49 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
+// Git Bash's POSIX PIDs differ from the Windows PIDs used by process.kill.
+const childPidCommand =
+  process.platform === "win32" ? "cat /proc/$!/winpid" : "echo $!";
+
 describe("bash tool", () => {
   let workspaceRoot = "";
 
+  test("coding-agent commands preserve quoted arguments in a workspace with spaces", async () => {
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama bash "));
+    const result = await runBash(
+      {
+        codingAgent: true,
+        command: "printf '%s' 'quoted argument with spaces' > result.txt",
+      },
+      { orgId: "org_test", profileId: "profile_test" },
+      { backend: "host", workspaceRoot }
+    );
+    expect(result.exitCode).toBe(0);
+    expect(await readFile(path.join(workspaceRoot, "result.txt"), "utf8")).toBe(
+      "quoted argument with spaces"
+    );
+  });
+
   afterEach(async () => {
     if (workspaceRoot) {
-      await rm(workspaceRoot, { force: true, recursive: true });
+      // Bun 1.4 parses rm's maxRetries/retryDelay but does not apply them.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await rm(workspaceRoot, { force: true, recursive: true });
+          break;
+        } catch (error) {
+          if (
+            process.platform !== "win32" ||
+            attempt >= 5 ||
+            !["EBUSY", "EPERM", "ENOTEMPTY"].includes(
+              (error as NodeJS.ErrnoException).code ?? ""
+            )
+          ) {
+            throw error;
+          }
+          await Bun.sleep(100 * (attempt + 1));
+        }
+      }
       workspaceRoot = "";
     }
   });
@@ -52,10 +173,16 @@ describe("bash tool", () => {
   for (const mode of ["abort", "timeout"] as const) {
     test(`${mode} stops shell descendants and finishes the tool`, async () => {
       workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+      // A native child reports its own Windows PID, without MSYS fork/exec IDs.
+      await writeFile(
+        path.join(workspaceRoot, "child.cjs"),
+        'const fs = require("node:fs"); fs.writeFileSync("heartbeat", String(Date.now())); fs.writeFileSync("child.pid", String(process.pid)); setInterval(() => fs.writeFileSync("heartbeat", String(Date.now())), 20);'
+      );
       const controller = new AbortController();
       const pending = runBash(
         {
-          command: "sleep 30 & echo $! > child.pid; wait",
+          command: '"$NAKAMA_TEST_BUN" child.cjs & wait',
+          env: { NAKAMA_TEST_BUN: process.execPath },
           timeoutMs: mode === "timeout" ? 500 : 30_000,
         },
         {
@@ -75,7 +202,9 @@ describe("bash tool", () => {
         }
         const result = await Promise.race([
           pending,
-          Bun.sleep(2000).then(() => "hung"),
+          Bun.sleep(process.platform === "win32" ? 5000 : 2000).then(
+            () => "hung"
+          ),
         ]);
         expect(result).not.toBe("hung");
         if (mode === "abort") {
@@ -88,6 +217,14 @@ describe("bash tool", () => {
           await Bun.sleep(10);
         }
         expect(isProcessAlive(pid)).toBe(false);
+        const heartbeat = await readFile(
+          path.join(workspaceRoot, "heartbeat"),
+          "utf8"
+        );
+        await Bun.sleep(100);
+        expect(
+          await readFile(path.join(workspaceRoot, "heartbeat"), "utf8")
+        ).toBe(heartbeat);
       } finally {
         if (pid > 0 && isProcessAlive(pid)) {
           process.kill(pid, "SIGKILL");
@@ -95,13 +232,15 @@ describe("bash tool", () => {
         controller.abort();
         await pending;
       }
-    });
+    }, 10_000);
   }
 
   test("returns after shell exit when a quiet descendant holds the pipes", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
     const pending = runBash(
-      { command: "sleep 30 & echo $! > child.pid; echo done; exit 0" },
+      {
+        command: `sleep 30 & ${childPidCommand} > child.pid; echo done; exit 0`,
+      },
       { orgId: "org_test", profileId: "profile_test" },
       { backend: "host", workspaceRoot }
     );
@@ -189,8 +328,7 @@ describe("bash tool", () => {
     const controller = new AbortController();
     const pending = runBash(
       {
-        command:
-          "trap '' TERM; echo $$ > trapped.pid; while :; do sleep 1; done",
+        command: `trap '' TERM; ${process.platform === "win32" ? "cat /proc/$$/winpid" : "echo $$"} > trapped.pid; while :; do sleep 1; done`,
       },
       {
         orgId: "org_test",
@@ -226,13 +364,15 @@ describe("bash tool", () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
 
     const result = await runBash(
-      { command: "pwd" },
+      { command: process.platform === "win32" ? "pwd -W" : "pwd" },
       { orgId: "org_test", profileId: "profile_test" },
       { workspaceRoot }
     );
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe(await realpath(workspaceRoot));
+    expect(result.stdout.trim()).toBe(
+      (await realpath(workspaceRoot)).replaceAll("\\", "/")
+    );
     expect(result.timedOut).toBe(false);
   });
 
@@ -248,7 +388,7 @@ describe("bash tool", () => {
       for (const codingWorkspaceRoot of [undefined, workspaceRoot]) {
         for (const cwd of [undefined, ".", profileWorkspace]) {
           const result = await runBash(
-            { command: "pwd", cwd },
+            { command: process.platform === "win32" ? "pwd -W" : "pwd", cwd },
             {
               codingWorkspaceRoot,
               orgId: "org_test",
@@ -257,7 +397,9 @@ describe("bash tool", () => {
             { backend: "host" }
           );
           expect(result.exitCode).toBe(0);
-          expect(result.stdout.trim()).toBe(await realpath(profileWorkspace));
+          expect(result.stdout.trim()).toBe(
+            (await realpath(profileWorkspace)).replaceAll("\\", "/")
+          );
         }
       }
     } finally {
@@ -272,7 +414,7 @@ describe("bash tool", () => {
   test("ordinary commands use the active user workspace from context", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-user-"));
     const result = await runBash(
-      { command: "pwd" },
+      { command: process.platform === "win32" ? "pwd -W" : "pwd" },
       {
         orgId: "org_test",
         profileId: "profile_test",
@@ -282,7 +424,9 @@ describe("bash tool", () => {
     );
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe(await realpath(workspaceRoot));
+    expect(result.stdout.trim()).toBe(
+      (await realpath(workspaceRoot)).replaceAll("\\", "/")
+    );
   });
 
   test("CLI commands use the launch directory without coding-agent mode", async () => {
@@ -297,17 +441,27 @@ describe("bash tool", () => {
     await mkdir(nestedDir);
 
     for (const cwd of [undefined, ".", workspaceRoot, "nested"]) {
-      const result = await runBash({ command: "pwd", cwd }, context, {
-        backend: "host",
-      });
+      const result = await runBash(
+        { command: process.platform === "win32" ? "pwd -W" : "pwd", cwd },
+        context,
+        {
+          backend: "host",
+        }
+      );
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toBe(
-        await realpath(cwd === "nested" ? nestedDir : workspaceRoot)
+        (
+          await realpath(cwd === "nested" ? nestedDir : workspaceRoot)
+        ).replaceAll("\\", "/")
       );
     }
 
     await expect(
-      runBash({ command: "pwd", cwd: ".." }, context, { backend: "host" })
+      runBash(
+        { command: process.platform === "win32" ? "pwd -W" : "pwd", cwd: ".." },
+        context,
+        { backend: "host" }
+      )
     ).rejects.toBeInstanceOf(PathGuardError);
   });
 
@@ -318,7 +472,10 @@ describe("bash tool", () => {
     );
 
     const codingResult = await runBash(
-      { codingAgent: true, command: "pwd" },
+      {
+        codingAgent: true,
+        command: process.platform === "win32" ? "pwd -W" : "pwd",
+      },
       {
         codingWorkspaceRoot,
         orgId: "org_test",
@@ -326,7 +483,7 @@ describe("bash tool", () => {
       }
     );
     const ordinaryResult = await runBash(
-      { command: "pwd" },
+      { command: process.platform === "win32" ? "pwd -W" : "pwd" },
       {
         codingWorkspaceRoot,
         orgId: "org_test",
@@ -336,9 +493,11 @@ describe("bash tool", () => {
     );
 
     expect(codingResult.stdout.trim().split("\n")[0]).toBe(
-      await realpath(codingWorkspaceRoot)
+      (await realpath(codingWorkspaceRoot)).replaceAll("\\", "/")
     );
-    expect(ordinaryResult.stdout.trim()).toBe(await realpath(workspaceRoot));
+    expect(ordinaryResult.stdout.trim()).toBe(
+      (await realpath(workspaceRoot)).replaceAll("\\", "/")
+    );
     await rm(codingWorkspaceRoot, { force: true, recursive: true });
   });
 
@@ -348,13 +507,18 @@ describe("bash tool", () => {
     await mkdir(nestedDir, { recursive: true });
 
     const result = await runBash(
-      { command: "pwd", cwd: "nested" },
+      {
+        command: process.platform === "win32" ? "pwd -W" : "pwd",
+        cwd: "nested",
+      },
       { orgId: "org_test", profileId: "profile_test" },
       { workspaceRoot }
     );
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe(await realpath(nestedDir));
+    expect(result.stdout.trim()).toBe(
+      (await realpath(nestedDir)).replaceAll("\\", "/")
+    );
   });
 
   test("rejects cwd outside the profile workspace", async () => {
@@ -362,7 +526,10 @@ describe("bash tool", () => {
 
     await expect(
       runBash(
-        { command: "pwd", cwd: "/tmp" },
+        {
+          command: process.platform === "win32" ? "pwd -W" : "pwd",
+          cwd: "/tmp",
+        },
         { orgId: "org_test", profileId: "profile_test" },
         { workspaceRoot }
       )
@@ -370,9 +537,9 @@ describe("bash tool", () => {
   });
 
   test("requires profileId", async () => {
-    await expect(runBash({ command: "pwd" }, {})).rejects.toThrow(
-      "profileId is required."
-    );
+    await expect(
+      runBash({ command: process.platform === "win32" ? "pwd -W" : "pwd" }, {})
+    ).rejects.toThrow("profileId is required.");
   });
 
   test("accepts delegation-scale timeouts up to 30 minutes", async () => {
@@ -443,7 +610,7 @@ describe("bash tool", () => {
     expect(result.stdout).toContain("Patched the flaky test.");
     expect(result.stdout).toContain("All checks passed.");
     expect(result.stdout).toContain(
-      "Full coding-agent log: artifacts/coding-agent-runs/"
+      `Full coding-agent log: ${path.join("artifacts", "coding-agent-runs")}${path.sep}`
     );
     expect(result.stdout).not.toContain('...[truncated]\n{"type":"system"');
 

@@ -92,6 +92,7 @@ export async function spawnJsonTool(
         stdio: transport?.onHostRequest
           ? ["pipe", "pipe", "pipe", "ipc"]
           : ["pipe", "pipe", "pipe"],
+        windowsHide: true,
       });
       const hostAbort = new AbortController();
 

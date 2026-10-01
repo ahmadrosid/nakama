@@ -18,6 +18,8 @@ import {
   withFastCliProbes,
 } from "./coding-agent-test-fixtures";
 
+const testPosix = test.skipIf(process.platform === "win32");
+
 describe("agent-browser service", () => {
   const originalPath = process.env.PATH ?? "";
   const originalDisableFixPath = process.env.NAKAMA_DISABLE_FIX_PATH;
@@ -63,22 +65,27 @@ describe("agent-browser service", () => {
     expect(status.nextStep).toBeNull();
   });
 
-  test("a CLI that traps SIGTERM is killed once the version probe times out", async () => {
-    await withFastCliProbes(async () => {
-      await installFakeBinary(tempBinDir, "agent-browser", "stubborn");
-      const pidFile = join(tempBinDir, "pid");
+  // Windows terminates processes directly; it cannot exercise a SIGTERM trap.
+  testPosix(
+    "a CLI that traps SIGTERM is killed once the version probe times out",
+    async () => {
+      await withFastCliProbes(async () => {
+        await installFakeBinary(tempBinDir, "agent-browser", "stubborn");
+        const pidFile = join(tempBinDir, "pid");
 
-      const started = Date.now();
-      const statusPromise = getAgentBrowserStatus();
-      const pid = await waitForPidFile(pidFile, 2000);
-      const status = await statusPromise;
+        const started = Date.now();
+        const statusPromise = getAgentBrowserStatus();
+        const pid = await waitForPidFile(pidFile, 2000);
+        const status = await statusPromise;
 
-      expect(status.installed).toBe(false);
-      expect(status.ready).toBe(false);
-      expect(Date.now() - started).toBeLessThan(2000);
-      expect(await waitForExit(pid, 2000)).toBe(true);
-    });
-  }, 5000);
+        expect(status.installed).toBe(false);
+        expect(status.ready).toBe(false);
+        expect(Date.now() - started).toBeLessThan(2000);
+        expect(await waitForExit(pid, 2000)).toBe(true);
+      });
+    },
+    5000
+  );
 });
 
 describe("agent-browser settings routes", () => {
@@ -240,6 +247,16 @@ async function installFakeBinary(
     | "hangs"
     | "stubborn"
 ): Promise<void> {
+  if (
+    process.platform === "win32" &&
+    (mode === "ready" || mode === "noop" || mode === "installable")
+  ) {
+    await writeFile(
+      join(binDir, `${name}.cmd`),
+      "@echo off\r\necho agent-browser 1.0.0\r\nexit /b 0\r\n"
+    );
+    return;
+  }
   const scriptPath = join(binDir, name);
   let script = "";
 

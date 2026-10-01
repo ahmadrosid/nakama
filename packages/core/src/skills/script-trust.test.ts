@@ -38,6 +38,20 @@ describe("resolveSkillCodeExecutionPolicy", () => {
     expect(policy(directory, true)).toEqual({ executable: true, reason: null });
   });
 
+  test.skipIf(process.platform !== "win32")(
+    "a differently cased path to a profile's own skill stays inert on Windows",
+    () => {
+      // NTFS runs the same files whatever the casing, so a casing mismatch
+      // must not read as "not member-authored" and let the code run.
+      const directory = `${getProfileSkillsDir(ORG_ID, PROFILE_ID)}/notes`;
+
+      expect(policy(directory.toUpperCase()).executable).toBe(false);
+      expect(policy(directory.replace(/skills/g, "Skills")).executable).toBe(
+        false
+      );
+    }
+  );
+
   test("another profile's skills are not treated as this profile's", () => {
     const otherProfile = getProfileSkillsDir(ORG_ID, "profile_b");
 

@@ -51,25 +51,13 @@ export function ImageGeneration({
         className={canvasClass}
         role="img"
       >
-        {imageUrl ? (
-          <img alt={prompt} className={styles.igImage} src={imageUrl} />
-        ) : isFailed ? (
-          <div className={styles.igFailed}>
-            {error ? (
-              <span className={styles.igFailedDetail}>{error}</span>
-            ) : (
-              <span className={styles.igFailedLabel}>Generation failed</span>
-            )}
-          </div>
-        ) : isComplete ? (
-          <span aria-hidden className={styles.igDots} />
-        ) : (
-          <>
-            <span aria-hidden className={styles.igDots} />
-            <span aria-hidden className={styles.igGlow} />
-            <span className={styles.igRes}>{resolution}</span>
-          </>
-        )}
+        <ImageGenerationCanvasContent
+          done={isComplete}
+          error={isFailed ? error : null}
+          imageUrl={imageUrl}
+          prompt={prompt}
+          resolution={resolution}
+        />
       </div>
       <div className={styles.igMeta}>
         {isFailed ? (
@@ -84,5 +72,34 @@ export function ImageGeneration({
         <span className={styles.igPrompt}>“{prompt}”</span>
       </div>
     </div>
+  );
+}
+
+function ImageGenerationCanvasContent({
+  imageUrl,
+  error,
+  done,
+  prompt,
+  resolution,
+}: ImageGenerationProps) {
+  if (imageUrl) {
+    return <img alt={prompt} className={styles.igImage} src={imageUrl} />;
+  }
+  if (error) {
+    return (
+      <div className={styles.igFailed}>
+        <span className={styles.igFailedDetail}>{error}</span>
+      </div>
+    );
+  }
+  if (done) {
+    return <span aria-hidden className={styles.igDots} />;
+  }
+  return (
+    <>
+      <span aria-hidden className={styles.igDots} />
+      <span aria-hidden className={styles.igGlow} />
+      <span className={styles.igRes}>{resolution}</span>
+    </>
   );
 }

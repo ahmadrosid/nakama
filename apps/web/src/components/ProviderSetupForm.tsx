@@ -249,6 +249,8 @@ function OpenRouterModelFields({
       disabled={form.busy}
       modelsError={form.openRouterModelsError}
       onCustomModelsChange={form.handleOpenRouterModelsChange}
+      onRoutingChange={form.setOpenRouterRouting}
+      routing={form.openRouterRouting}
     />
   );
 }

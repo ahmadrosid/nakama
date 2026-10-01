@@ -69,6 +69,57 @@ function openManage(provider: ProviderInstanceSummary) {
 }
 
 describe("provider model management", () => {
+  test("loads, updates and clears per-instance routing", async () => {
+    let card: ReturnType<typeof useProviderInstanceCard>;
+    const updates: UpdateProviderRequest[] = [];
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const routing = {
+      dataCollection: "deny",
+      requireParameters: true,
+      zdr: true,
+    } as const;
+    function Probe() {
+      card = useProviderInstanceCard({
+        catalog: [],
+        instance: {
+          ...instance,
+          customModels: [{ id: "openai/gpt-6-luna" }],
+          openRouterRouting: routing,
+          type: "openrouter",
+        },
+        onDelete: async () => {},
+        onError: () => {},
+        onUpdate: async (_, request) => {
+          updates.push(request);
+        },
+      });
+      return null;
+    }
+    try {
+      await act(async () => root.render(<Probe />));
+      await act(async () => card.openManage());
+      expect(card!.openRouterRouting).toEqual(routing);
+      await act(async () =>
+        card.setOpenRouterRouting({ dataCollection: "allow", zdr: false })
+      );
+      await act(async () => card.saveManageModels());
+      expect(updates[0]?.openRouterRouting).toEqual({
+        dataCollection: "allow",
+        zdr: false,
+      });
+      await act(async () => card.openManage());
+      expect(card!.openRouterRouting).toEqual(routing);
+      await act(async () => card.setOpenRouterRouting({}));
+      await act(async () => card.saveManageModels());
+      expect(updates[1]?.openRouterRouting).toEqual({});
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
   test("Edit keeps the last model removed until a replacement is added", async () => {
     let card: ReturnType<typeof useProviderInstanceCard>;
     const updates: UpdateProviderRequest[] = [];

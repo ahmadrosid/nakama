@@ -14,6 +14,7 @@ import { emailTool } from "./email";
 import { extractDocumentTextTool } from "./extract-document-text";
 import { knowledgeBaseSearchTool } from "./knowledge-base-search";
 import {
+  comparablePath,
   getCustomToolsDir,
   guardFilePath,
   PathGuardError,
@@ -244,8 +245,15 @@ export function refuseMemoryFileWrite(
   const name = path
     .relative(resolveWithRealpath(workspaceRoot), resolvedPath)
     .replace(/\\/g, "/");
+  // NTFS opens `memory.md` as MEMORY.md, and a file that does not exist yet
+  // keeps the caller's casing through the path guard. The archive pattern is
+  // all lowercase, so the folded name matches it case-insensitively too.
+  const comparableName = comparablePath(name);
 
-  if (name !== "MEMORY.md" && !MEMORY_ARCHIVE_NAME.test(name)) {
+  if (
+    comparableName !== comparablePath("MEMORY.md") &&
+    !MEMORY_ARCHIVE_NAME.test(comparableName)
+  ) {
     return;
   }
 

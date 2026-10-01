@@ -600,10 +600,6 @@ function runExpandedRangeLabel(run: AutomationRunRecord): string {
     return `${started} → ${formatSessionTimestamp(run.completedAt)}`;
   }
 
-  if (run.status === "running") {
-    return `${started} · running`;
-  }
-
   return started;
 }
 
@@ -611,7 +607,7 @@ function runHasExpandableBody(run: AutomationRunRecord): boolean {
   return Boolean(
     run.output?.trim() ||
       run.error?.trim() ||
-      run.status === "running" ||
+      run.deliveryError?.trim() ||
       run.status === "failed"
   );
 }
@@ -645,7 +641,7 @@ function RunHistoryItemSummary({
           : `Run from ${formatSessionRelativeTime(run.startedAt)}`
       }
       className={cn(
-        "flex min-w-0 flex-1 items-start gap-2.5 text-left",
+        "flex min-w-0 flex-1 items-center gap-2.5 text-left",
         !hasBody && "cursor-default"
       )}
       disabled={!hasBody}
@@ -692,7 +688,7 @@ function RunHistoryItemSummary({
         <ArrowRight01Icon
           aria-hidden
           className={cn(
-            "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+            "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
             expanded && "rotate-90"
           )}
         />
@@ -761,15 +757,6 @@ function RunHistoryOutput({ run }: { run: AutomationRunRecord }) {
   const isRunning = run.status === "running";
   const hasOutput = Boolean(run.output?.trim());
   const hasError = Boolean(run.error?.trim());
-
-  if (isRunning && !hasOutput && !hasError) {
-    return (
-      <div className="flex items-center gap-2 text-muted-foreground text-sm">
-        <Loading03Icon aria-hidden className="size-4 animate-spin" />
-        Run in progress…
-      </div>
-    );
-  }
 
   if (hasError && hasOutput) {
     return (
@@ -885,7 +872,7 @@ function RunHistoryItem({
 
   return (
     <li className="min-w-0 px-4">
-      <div className="flex items-start gap-2 py-3">
+      <div className="flex items-center gap-2 py-3">
         <RunHistoryItemSummary
           expanded={expanded}
           hasBody={hasBody}
@@ -895,7 +882,7 @@ function RunHistoryItem({
 
         <Button
           aria-label={`Delete run from ${formatSessionRelativeTime(run.startedAt)}`}
-          className="mt-0.5 shrink-0 text-muted-foreground hover:text-destructive"
+          className="shrink-0 text-muted-foreground hover:text-destructive"
           disabled={busy}
           onClick={onDelete}
           size="icon-sm"
@@ -919,7 +906,7 @@ function RunHistoryItem({
 }
 
 function RunStatusIcon({ status }: { status: AutomationRunStatus }) {
-  const className = "mt-0.5 size-4 shrink-0";
+  const className = "size-4 shrink-0";
 
   if (status === "completed") {
     return (

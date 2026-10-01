@@ -14,6 +14,7 @@ import { readEnvValue } from "./config";
 import type {
   ChatgptOAuthCredentials,
   CustomModelEntry,
+  OpenRouterRoutingSettings,
   ProviderChatOptions,
   ThinkingEffort,
   ThinkingSettings,
@@ -55,6 +56,7 @@ export interface ProviderInstance {
   hostMode?: import("./contract").OllamaHostMode;
   id: string;
   label: string;
+  openRouterRouting?: OpenRouterRoutingSettings;
   type: UserProviderName;
   wireApi?: import("./contract").WireApi;
   xaiAccessToken?: string;
@@ -637,6 +639,37 @@ export function parseIniWithSections(raw: string): ParsedIniFile {
   return { global, sections };
 }
 
+export function validateOpenRouterRoutingSettings(
+  value: unknown
+): OpenRouterRoutingSettings {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new NakamaApiError("OpenRouter routing must be an object.", 400);
+  }
+  const settings: OpenRouterRoutingSettings = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry === undefined) {
+      continue;
+    }
+    if (
+      (key === "zdr" || key === "requireParameters") &&
+      typeof entry === "boolean"
+    ) {
+      settings[key] = entry;
+    } else if (
+      key === "dataCollection" &&
+      (entry === "allow" || entry === "deny")
+    ) {
+      settings.dataCollection = entry;
+    } else {
+      throw new NakamaApiError(
+        `Invalid OpenRouter routing setting: ${key}`,
+        400
+      );
+    }
+  }
+  return settings;
+}
+
 function loadProvidersFromSections(
   sections: Record<string, Record<string, string>>
 ): ProviderInstance[] {
@@ -700,6 +733,13 @@ function loadProvidersFromSections(
       ...(hostMode ? { hostMode } : {}),
       ...(wireApi ? { wireApi } : {}),
       ...(customModels ? { customModels } : {}),
+      ...(type === "openrouter" && values.openrouter_routing_json
+        ? {
+            openRouterRouting: validateOpenRouterRoutingSettings(
+              JSON.parse(values.openrouter_routing_json)
+            ),
+          }
+        : {}),
       createdAt,
     });
   }
@@ -733,6 +773,12 @@ function buildProviderSectionValues(
 
   if (provider.customModels?.length) {
     values.models_json = serializeCustomModels(provider.customModels);
+  }
+
+  if (provider.type === "openrouter" && provider.openRouterRouting) {
+    values.openrouter_routing_json = JSON.stringify(
+      validateOpenRouterRoutingSettings(provider.openRouterRouting)
+    );
   }
 
   if (provider.xaiAccessToken?.trim()) {

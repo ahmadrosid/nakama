@@ -20,7 +20,15 @@ export interface ServerOptions {
   composioService?: ComposioService | null;
   databaseAdapter?: DatabaseAdapter | null;
   mcpService: McpService;
-  /** Close/reopen SQLite and reload config after a data-root restore. */
+  /**
+   * Release the SQLite file before a restore moves the data root. Set only on
+   * Windows, which cannot move an open database.
+   */
+  onBeforeDataRestore?: () => void | Promise<void>;
+  /**
+   * Close/reopen SQLite and reload config after a data-root restore. Also runs
+   * when a restore fails after `onBeforeDataRestore`, to reopen what is on disk.
+   */
   onDataRestored?: () => Promise<void>;
   orgMemoryService?: OrgMemoryService | null;
   orgService?: OrgService | null;

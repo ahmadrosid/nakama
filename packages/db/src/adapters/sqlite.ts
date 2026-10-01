@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { chmodSync } from "node:fs";
+import { sep } from "node:path";
 import type { AgentQuestionnaire, ChatMessage } from "@nakama/core";
 import {
   derivePluginToolName,
@@ -60,6 +61,12 @@ import type {
 export interface SqliteDatabase {
   adapter: DatabaseAdapter;
   close(): void;
+  /**
+   * Finalizes every prepared statement and releases the file now. `close()`
+   * keeps the file open until those statements are garbage collected, and
+   * Windows cannot rename or delete an open SQLite file.
+   */
+  release(): void;
   reopen(): Promise<void>;
 }
 
@@ -568,7 +575,10 @@ export async function createSqliteDatabase(
   return {
     adapter: adapterProxy,
     close() {
-      db.close();
+      db.close(true);
+    },
+    release() {
+      db.close(true);
     },
     async reopen() {
       const nextDb = openPrivateDatabase(databasePath);
@@ -577,7 +587,7 @@ export async function createSqliteDatabase(
       const previousDb = db;
       db = nextDb;
       adapter = nextAdapter;
-      previousDb.close();
+      previousDb.close(true);
     },
   };
 }
@@ -887,7 +897,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           successor.id
         );
       }
-      const workspacePrefix = `${workspaceFrom}/`;
+      const workspacePrefix = `${workspaceFrom}${sep}`;
       if (
         db
           .query(
