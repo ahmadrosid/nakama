@@ -293,11 +293,28 @@ export function registerDataPortabilityRoutes(
     let restore;
     try {
       restore = await runWithPluginExportBarrier(async () => {
+        const { onBeforeDataRestore } = options;
+        let databaseReleased = false;
         const result = await restoreNakamaDataImport(archive, {
+          afterFailedReplace: options.onDataRestored,
+          beforeReplace: onBeforeDataRestore
+            ? async () => {
+                databaseReleased = true;
+                await onBeforeDataRestore();
+              }
+            : undefined,
           confirm: body.confirm,
         });
         // Drop registrations before reloading restored data; restored plugins stay disabled.
-        await options.workerManager.clearPluginWorkers?.();
+        try {
+          await options.workerManager.clearPluginWorkers?.();
+        } catch (error) {
+          // The restore committed with the database released; reopen it before failing.
+          if (databaseReleased) {
+            await options.onDataRestored?.().catch(() => undefined);
+          }
+          throw error;
+        }
         try {
           await options.onDataRestored?.();
         } catch {

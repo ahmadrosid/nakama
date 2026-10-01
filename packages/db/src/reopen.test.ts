@@ -74,4 +74,23 @@ describe("database reopen after restore", () => {
 
     database.close();
   }, 30_000);
+
+  test("release frees the sqlite file so its directory can move, then reopen recovers", async () => {
+    rootDir = await mkdtemp(join(tmpdir(), "nakama-db-release-"));
+    const database = await createDatabase(
+      `file:${join(rootDir, "sqlite", "nakama.sqlite")}`
+    );
+    expect(await database.adapter.countHumanUsers()).toBe(0);
+
+    database.release();
+
+    // close() would leave the prepared statements, and the file, alive.
+    await expect(database.adapter.countHumanUsers()).rejects.toThrow();
+    await rename(join(rootDir, "sqlite"), join(rootDir, "sqlite-moved"));
+    await rename(join(rootDir, "sqlite-moved"), join(rootDir, "sqlite"));
+
+    await database.reopen();
+    expect(await database.adapter.countHumanUsers()).toBe(0);
+    database.release();
+  }, 30_000);
 });

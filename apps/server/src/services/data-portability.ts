@@ -84,9 +84,20 @@ export interface PreviewDataImportOptions {
 }
 
 export interface RestoreDataImportOptions {
+  /** Runs when a restore fails after `beforeReplace`, so the caller can reopen what is on disk. */
+  afterFailedReplace?: () => Promise<void> | void;
+  /**
+   * Runs once the archive is staged, before any live entry moves. Windows cannot
+   * rename or delete an open SQLite file, so the caller releases its handle here.
+   */
+  beforeReplace?: () => Promise<void> | void;
   confirm: boolean;
   databasePath?: string | null;
+  /** Defaults to `PM2_HOME` in the desktop app. A live pm2 home that is a top-level entry stays in place. */
+  pm2Home?: string | null;
   rootDir?: string;
+  /** Defaults to `NAKAMA_SERVER_LOG` in the desktop app, its log for this process. */
+  serverLog?: string | null;
 }
 
 interface ZipEntry {
@@ -105,6 +116,15 @@ const RESTORE_PREFIX = ".nakama-restore-";
 const BACKUP_PREFIX = ".nakama-backup-";
 const PLUGIN_SNAPSHOT_PREFIX = ".nakama-plugin-snapshot-";
 const ORG_PLUGIN_SQLITE = /^orgs\/[^/]+\/plugins\/[^/]+\/db\/[^/]+\.sqlite$/;
+/**
+ * Where the main database sits inside a data root: the server default
+ * (`packages/core/src/config.ts`) and the desktop app (`apps/desktop/main.mjs`).
+ * An archive from one layout must land where the restoring install reads it.
+ */
+const MAIN_DATABASE_LAYOUTS: readonly string[] = [
+  "data/sqlite/nakama.sqlite",
+  "sqlite/nakama.sqlite",
+];
 
 function resolveNakamaRootDir(rootDir?: string): string {
   const raw = rootDir ?? getUserConfigDir();
@@ -116,15 +136,24 @@ function resolveNakamaRootDir(rootDir?: string): string {
   return resolve(raw);
 }
 
+function resolveConfiguredDatabasePath(
+  rootDir: string,
+  databasePath: string | null | undefined
+): string | null {
+  return databasePath === undefined
+    ? resolveDatabasePath(loadConfig().databaseUrl, { baseDir: rootDir })
+    : databasePath;
+}
+
 export async function createNakamaDataExport(
   options: CreateDataExportOptions = {}
 ): Promise<CreateDataExportResult> {
   const rootDir = resolveNakamaRootDir(options.rootDir);
   const createdAt = (options.now ?? new Date()).toISOString();
-  const configuredDatabasePath =
-    options.databasePath === undefined
-      ? resolveDatabasePath(loadConfig().databaseUrl, { baseDir: rootDir })
-      : options.databasePath;
+  const configuredDatabasePath = resolveConfiguredDatabasePath(
+    rootDir,
+    options.databasePath
+  );
 
   try {
     return await runWithPluginExportBarrier(
@@ -625,6 +654,30 @@ export async function restoreNakamaDataImport(
   const rootDir = resolveNakamaRootDir(options.rootDir);
   const entries = readZip(toBuffer(archive));
   const manifest = readManifest(entries);
+  const liveDatabasePath = pathInsideRoot(
+    rootDir,
+    resolveConfiguredDatabasePath(rootDir, options.databasePath)
+  );
+  // Live runtime state, not user data: replacing the pm2 home orphans the
+  // daemon, and replacing the log loses this session's diagnostics. Only the
+  // desktop app keeps these in its data root.
+  const desktop = process.env.NAKAMA_DESKTOP === "1";
+  const keptEntries = new Set<string>();
+  for (const live of [
+    options.pm2Home === undefined && desktop
+      ? process.env.PM2_HOME
+      : options.pm2Home,
+    options.serverLog === undefined && desktop
+      ? process.env.NAKAMA_SERVER_LOG
+      : options.serverLog,
+  ]) {
+    const inside = pathInsideRoot(rootDir, live);
+    const entry = inside ? relative(rootDir, inside) : "";
+    // Keep only an entry that is itself the live state, never a shared parent.
+    if (entry && !entry.includes(sep)) {
+      keptEntries.add(entry);
+    }
+  }
 
   // Stage and back up inside rootDir so Docker volume mounts (e.g. /nakama/data)
   // are never renamed — rename(2) on a mount point returns EBUSY.
@@ -635,6 +688,7 @@ export async function restoreNakamaDataImport(
   const backedUpEntries: string[] = [];
   let backupComplete = false;
   let restoreCommitted = false;
+  let replaceStarted = false;
 
   try {
     await mkdir(stagedRoot, { mode: 0o700, recursive: true });
@@ -648,8 +702,22 @@ export async function restoreNakamaDataImport(
       await writeRestoredEntry(stagedRoot, entry);
       restoredFileCount += 1;
     }
+    await moveArchiveDatabaseToLiveLayout(
+      stagedRoot,
+      rootDir,
+      liveDatabasePath
+    );
 
-    const existingEntries = await listMovableTopLevelEntries(rootDir);
+    if (options.beforeReplace) {
+      // Set first: a hook that throws may already have released the handle.
+      replaceStarted = true;
+      await options.beforeReplace();
+    }
+
+    const existingEntries = await listMovableTopLevelEntries(
+      rootDir,
+      keptEntries
+    );
     if (existingEntries.length > 0) {
       await mkdir(backupRoot, { mode: 0o700, recursive: true });
       for (const name of existingEntries) {
@@ -662,10 +730,15 @@ export async function restoreNakamaDataImport(
     }
 
     for (const name of await readdir(stagedRoot)) {
-      await movePath(join(stagedRoot, name), join(rootDir, name));
+      if (!keptEntries.has(name)) {
+        await movePath(join(stagedRoot, name), join(rootDir, name));
+      }
     }
     restoreCommitted = true;
-    await finalizeRestoredPlugins(rootDir, options.databasePath);
+    await finalizeRestoredPlugins(
+      rootDir,
+      liveDatabasePath ?? options.databasePath
+    );
 
     if (backedUpEntries.length > 0) {
       try {
@@ -688,7 +761,10 @@ export async function restoreNakamaDataImport(
     ) {
       try {
         if (backupComplete) {
-          for (const name of await listMovableTopLevelEntries(rootDir)) {
+          for (const name of await listMovableTopLevelEntries(
+            rootDir,
+            keptEntries
+          )) {
             await rm(join(rootDir, name), { force: true, recursive: true });
           }
           for (const name of backedUpEntries) {
@@ -713,6 +789,14 @@ export async function restoreNakamaDataImport(
         await rm(backupRoot, { force: true, recursive: true });
       } catch {
         // Keep backupRoot for manual recovery if rollback itself fails.
+      }
+    }
+
+    if (replaceStarted) {
+      try {
+        await options.afterFailedReplace?.();
+      } catch {
+        // Surface the restore failure, not the reopen failure.
       }
     }
 
@@ -1082,11 +1166,62 @@ function toBuffer(value: Buffer | Uint8Array | ArrayBuffer): Buffer {
   return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
 }
 
-async function listMovableTopLevelEntries(rootDir: string): Promise<string[]> {
+function pathInsideRoot(
+  rootDir: string,
+  path: string | null | undefined
+): string | null {
+  if (!path || path === ":memory:") {
+    return null;
+  }
+  const absolute = resolve(path);
+  const relativePath = relative(rootDir, absolute);
+  return relativePath &&
+    !relativePath.startsWith("..") &&
+    !isAbsolute(relativePath)
+    ? absolute
+    : null;
+}
+
+/**
+ * An archive from the other layout would otherwise restore its database where
+ * this install never reads it, and the reopen creates an empty one instead.
+ */
+async function moveArchiveDatabaseToLiveLayout(
+  stagedRoot: string,
+  rootDir: string,
+  liveDatabasePath: string | null
+): Promise<void> {
+  if (!liveDatabasePath) {
+    return;
+  }
+  const liveLayout = relative(rootDir, liveDatabasePath).split(sep).join("/");
+  const target = join(stagedRoot, liveLayout);
+  if (
+    !MAIN_DATABASE_LAYOUTS.includes(liveLayout) ||
+    (await pathExists(target))
+  ) {
+    return;
+  }
+
+  for (const layout of MAIN_DATABASE_LAYOUTS) {
+    const archived = join(stagedRoot, layout);
+    if (layout !== liveLayout && (await pathExists(archived))) {
+      await mkdir(dirname(target), { mode: 0o700, recursive: true });
+      await rename(archived, target);
+      return;
+    }
+  }
+}
+
+async function listMovableTopLevelEntries(
+  rootDir: string,
+  keptEntries: ReadonlySet<string>
+): Promise<string[]> {
   const entries = await readdir(rootDir);
   return entries.filter(
     (name) =>
       !(
+        keptEntries.has(name) ||
         name.startsWith(RESTORE_PREFIX) ||
         name.startsWith(BACKUP_PREFIX) ||
         name.startsWith(PLUGIN_SNAPSHOT_PREFIX)
