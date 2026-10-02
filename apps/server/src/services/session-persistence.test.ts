@@ -713,6 +713,41 @@ describe("chat and project storage", () => {
     );
     expect(first.workspaceRoot).toBe(second.workspaceRoot);
     expect(first.chatRoot).not.toBe(second.chatRoot);
+    await Bun.write(`${first.workspaceRoot}/references/shared.txt`, "shared");
+    await Bun.write(`${first.chatRoot}/inputs/local.txt`, "private input");
+    await Bun.write(`${first.outputRoot}/result.txt`, "private output");
+    const generated = await agent.chatWorkspaces.registerFile(
+      project.id,
+      "org_test",
+      ids[0],
+      `${first.outputRoot}/result.txt`
+    );
+    expect(generated.path).toBe(`chats/${ids[0]}/outputs/result.txt`);
+    const files = await agent.chatWorkspaces.files(project, ids[0]);
+    expect(files).toHaveLength(3);
+    expect(files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "references/shared.txt",
+          purpose: "reference",
+          sessionId: null,
+        }),
+        expect.objectContaining({
+          path: `chats/${ids[0]}/inputs/local.txt`,
+          purpose: "input",
+          sessionId: ids[0],
+        }),
+        expect.objectContaining({
+          id: generated.fileId,
+          path: generated.path,
+          purpose: "output",
+          sessionId: ids[0],
+        }),
+      ])
+    );
+    expect(await agent.chatWorkspaces.files(project, ids[1])).toEqual([
+      expect.objectContaining({ path: "references/shared.txt" }),
+    ]);
     const { createAttachmentSaver, createAttachmentLoader } = await import(
       "./attachment-service"
     );

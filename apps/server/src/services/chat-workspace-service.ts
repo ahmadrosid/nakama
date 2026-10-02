@@ -678,15 +678,17 @@ export class ChatWorkspaceService {
         if (paths.has(path)) {
           continue;
         }
+        const portablePath = path.split(sep).join("/");
         const ownerSession =
           workspace.kind === "chat"
             ? sessions[0]
             : sessions.find((session) =>
-                path.startsWith(`chats/${session.id}/`)
+                portablePath.startsWith(`chats/${session.id}/`)
               );
-        const purpose = path.startsWith("references/")
+        const purpose = portablePath.startsWith("references/")
           ? "reference"
-          : path.includes("/inputs/") || path.startsWith("inputs/")
+          : portablePath.includes("/inputs/") ||
+              portablePath.startsWith("inputs/")
             ? "input"
             : "output";
         const info = await stat(absolute);
@@ -756,7 +758,7 @@ export class ChatWorkspaceService {
         filename: file.filename ?? file.id,
         id: file.id,
         mediaType: file.mediaType,
-        path: file.storagePath,
+        path: file.storagePath.split(sep).join("/"),
         purpose: file.purpose ?? "input",
         sessionId: file.sessionId,
         sizeBytes: info.size,
@@ -838,7 +840,7 @@ export class ChatWorkspaceService {
     if (!file) {
       throw new NakamaApiError("File not found.", 404);
     }
-    return { fileId: file.id, path, workspaceId };
+    return { fileId: file.id, path: path.split(sep).join("/"), workspaceId };
   }
 
   async removeEmpty(workspace: StoredWorkspaceRecord): Promise<void> {
