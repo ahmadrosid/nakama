@@ -170,6 +170,7 @@ describe("resolveModel", () => {
   test("exposes current Anthropic limits and prices while preserving selections", () => {
     for (const [id, contextWindow, maxOutputTokens, input, output] of [
       ["claude-sonnet-5", 1_000_000, 128_000, 2, 10],
+      ["claude-sonnet-5-5", 1_000_000, 128_000, 2, 10],
       ["claude-opus-5", 1_000_000, 128_000, 5, 25],
       ["claude-opus-5-5", 1_000_000, 128_000, 4, 20],
       ["claude-haiku-4-5-20251001", 200_000, 64_000, 1, 5],
