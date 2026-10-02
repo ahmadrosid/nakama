@@ -122,6 +122,10 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
       );
     }
 
+    if (args.signal?.aborted) {
+      throw new Error("The operation was aborted");
+    }
+
     const handle = await sandbox.execStreamWith("/bin/sh", (opts) =>
       opts
         .args(["-lc", args.command])
@@ -140,6 +144,11 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
     let exitCode: number | null = null;
 
     try {
+      // An abort during execStreamWith cannot kill until the handle arrives.
+      if (args.signal?.aborted) {
+        onAbort();
+        throw new Error("The operation was aborted");
+      }
       // Stream events so a timeout still returns output buffered before the deadline
       // (same I/O contract as host bash).
       for await (const event of handle) {
@@ -151,6 +160,9 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
           exitCode = event.code;
         }
       }
+      if (args.signal?.aborted) {
+        throw new Error("The operation was aborted");
+      }
       return {
         exitCode,
         stderr: stderr.read(),
@@ -158,6 +170,9 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
         timedOut: false,
       };
     } catch (error) {
+      if (args.signal?.aborted) {
+        throw new Error("The operation was aborted");
+      }
       if (error instanceof ExecTimeoutError) {
         return {
           exitCode: null,
@@ -165,9 +180,6 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
           stdout: stdout.read(),
           timedOut: true,
         };
-      }
-      if (args.signal?.aborted) {
-        throw new Error("The operation was aborted");
       }
       throw error;
     } finally {
