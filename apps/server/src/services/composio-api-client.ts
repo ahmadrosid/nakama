@@ -218,7 +218,7 @@ export class ComposioApiClient {
     limit?: number;
   }): Promise<ComposioCatalogToolkit[]> {
     const limit = options?.limit ?? 200;
-    const response = await this.composio.toolkits.getToolkits({ limit });
+    const response = await this.composio.toolkits.get({ limit });
     const items = extractComposioListItems(response);
 
     return items
