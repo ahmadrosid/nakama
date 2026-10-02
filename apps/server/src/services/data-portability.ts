@@ -990,6 +990,13 @@ function validateArchivePath(path: string): void {
     throw new NakamaApiError(`Archive entry must be relative: ${path}`, 400);
   }
 
+  if (process.platform === "win32" && path.includes(":")) {
+    throw new NakamaApiError(
+      `Archive entry cannot name an NTFS alternate data stream: ${path}`,
+      400
+    );
+  }
+
   const normalized = normalize(path).split(sep).join("/");
   if (
     normalized === ".." ||
