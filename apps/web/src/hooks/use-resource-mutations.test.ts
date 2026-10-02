@@ -24,9 +24,62 @@ import { queryKeys } from "@/lib/query-keys";
 import {
   useArtifactsExist,
   useAssignToolMutation,
+  useDeleteSessionMutation,
   useRevokeArtifactShareMutation,
   useUnassignToolMutation,
+  useUpdateSessionMutation,
 } from "./use-resource-mutations";
+
+test.each(["rename", "pin", "delete"] as const)(
+  "%s chat refreshes project sessions and recents",
+  async (action) => {
+    const cache = new QueryClient();
+    const projectKey = ["sessions", "project", "org", "workspace"];
+    const recentKey = ["sessions", "profile", "org"];
+    cache.setQueryData(projectKey, { sessions: [{ id: "chat" }] });
+    cache.setQueryData(recentKey, { sessions: [{ id: "chat" }] });
+    const update = spyOn(client, "updateSession").mockResolvedValue(undefined);
+    const remove = spyOn(client, "deleteSession").mockResolvedValue(undefined);
+    let mutate: () => Promise<unknown> = async () => {};
+    function Probe() {
+      const updateSession = useUpdateSessionMutation();
+      const deleteSession = useDeleteSessionMutation();
+      mutate = () =>
+        action === "delete"
+          ? deleteSession.mutateAsync("chat")
+          : updateSession.mutateAsync({
+              input: action === "pin" ? { pinned: true } : { title: "Renamed" },
+              profileId: "profile",
+              sessionId: "chat",
+            });
+      return null;
+    }
+    try {
+      renderToString(
+        createElement(
+          QueryClientProvider,
+          { client: cache },
+          createElement(Probe)
+        )
+      );
+      await mutate();
+      if (action === "delete") {
+        expect(remove).toHaveBeenCalledWith("chat");
+      } else {
+        expect(update).toHaveBeenCalledWith(
+          "chat",
+          action === "pin" ? { pinned: true } : { title: "Renamed" }
+        );
+      }
+      expect(cache.getQueryState(projectKey)?.isInvalidated).toBe(true);
+      expect(cache.getQueryState(recentKey)?.isInvalidated).toBe(true);
+    } finally {
+      update.mockRestore();
+      remove.mockRestore();
+      cache.clear();
+    }
+  }
+);
 
 const revoke = spyOn(client, "revokeProfileArtifactShare");
 const publish = spyOn(client, "publishProfileArtifactShare");

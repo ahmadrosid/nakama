@@ -236,12 +236,14 @@ function SessionRowSkeletons() {
 }
 
 function RecentChatRow({
+  className,
   session,
   profileId,
   onRename,
   onDelete,
   onTogglePin,
 }: {
+  className?: string;
   session: ReturnType<typeof useHistorySessionsQuery>["data"][number];
   profileId: string;
   onRename: (target: SessionTarget) => void;
@@ -255,7 +257,10 @@ function RecentChatRow({
     <div className="group relative flex min-w-0 items-center" key={session.id}>
       <Link
         aria-current={location.pathname === href ? "page" : undefined}
-        className="sidebar-nav-link min-w-0 flex-1 px-2 py-1.5 group-focus-within:pr-[60px] group-hover:pr-[60px]"
+        className={cn(
+          "sidebar-nav-link min-w-0 flex-1 px-2 py-1.5 group-focus-within:pr-[60px] group-hover:pr-[60px]",
+          className
+        )}
         data-active={location.pathname === href || undefined}
         title={session.active ? `${title} (still responding)` : title}
         to={href}
@@ -288,13 +293,14 @@ function RecentChatRow({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
+              className="text-xs"
               onClick={() => onRename({ id: session.id, title })}
             >
               <PencilEdit02Icon aria-hidden="true" className="size-4" />
               Rename
             </DropdownMenuItem>
             <DropdownMenuItem
-              className="text-destructive"
+              className="text-destructive text-xs"
               onClick={() => onDelete({ id: session.id, title })}
             >
               <Delete02Icon aria-hidden="true" className="size-4" />
@@ -443,27 +449,10 @@ function SidebarProjects() {
             className={cn("size-3.5", collapsed && "-rotate-90")}
           />
         </button>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                aria-label="Projects options"
-                size="icon-sm"
-                variant="ghost"
-              />
-            }
-          >
-            <MoreHorizontalIcon className="size-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem render={<Link to="/projects" />}>
-              View all projects
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
         {activeOrg?.role !== "viewer" && (
           <Button
             aria-label="New project"
+            className="opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
             onClick={() => setCreating(true)}
             size="icon-sm"
             variant="ghost"
@@ -498,6 +487,10 @@ function SidebarProjectFolder({
 }) {
   const { activeOrg } = useAuth();
   const [expanded, setExpanded] = useState(true);
+  const updateSession = useUpdateSessionMutation();
+  const deleteSession = useDeleteSessionMutation();
+  const [deleteTarget, setDeleteTarget] = useState<SessionTarget | null>(null);
+  const [renameTarget, setRenameTarget] = useState<SessionTarget | null>(null);
   const location = useLocation();
   const href = `/projects/${workspace.id}`;
   const selected = location.pathname === href;
@@ -567,25 +560,58 @@ function SidebarProjectFolder({
             </p>
           )}
           {chats.data?.sessions.map((chat) => (
-            <Link
-              aria-current={
-                location.pathname === buildChatPath(chat.profileId, chat.id)
-                  ? "page"
-                  : undefined
-              }
-              className="sidebar-nav-link block truncate py-2 pr-2 pl-8 text-sm"
-              data-active={
-                location.pathname === buildChatPath(chat.profileId, chat.id) ||
-                undefined
-              }
+            <RecentChatRow
+              className="pl-8"
               key={chat.id}
-              to={buildChatPath(chat.profileId, chat.id)}
-            >
-              {chat.title ?? chat.preview ?? "Chat"}
-            </Link>
+              onDelete={setDeleteTarget}
+              onRename={setRenameTarget}
+              onTogglePin={() =>
+                void updateSession.mutateAsync({
+                  input: { pinned: !chat.pinned },
+                  profileId: chat.profileId,
+                  sessionId: chat.id,
+                })
+              }
+              profileId={chat.profileId}
+              session={chat}
+            />
           ))}
         </div>
       )}
+      <RecentChatsDialogs
+        deleteTarget={deleteTarget}
+        onDelete={async () => {
+          if (!deleteTarget) {
+            return;
+          }
+          await deleteSession.mutateAsync(deleteTarget.id);
+          setDeleteTarget(null);
+        }}
+        onRename={async (event) => {
+          event.preventDefault();
+          const chat = chats.data?.sessions.find(
+            (session) => session.id === renameTarget?.id
+          );
+          const title = renameTarget?.title.trim();
+          if (!(chat && title) || updateSession.isPending) {
+            return;
+          }
+          await updateSession.mutateAsync({
+            input: { title },
+            profileId: chat.profileId,
+            sessionId: chat.id,
+          });
+          setRenameTarget(null);
+        }}
+        onRenameTitleChange={(title) =>
+          setRenameTarget((current) =>
+            current ? { ...current, title } : current
+          )
+        }
+        renameTarget={renameTarget}
+        setDeleteTarget={setDeleteTarget}
+        setRenameTarget={setRenameTarget}
+      />
     </div>
   );
 }
