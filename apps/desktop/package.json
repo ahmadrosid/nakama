@@ -11,6 +11,7 @@
     "dev": "bun run build:runtime && electron .",
     "package": "bun run build:runtime && electron-builder --mac --arm64 --publish never",
     "package:store": "pwsh -NoProfile -File scripts/package-store.ps1",
+    "package:windows": "bun run build:runtime && electron-builder --win nsis --x64 --publish never",
     "test": "bun test scripts/publish-release.test.mjs tests/runtime.test.mjs && electron tests/smoke.mjs --smoke-test",
     "test:coverage": "bun test --coverage --coverage-reporter=text scripts/publish-release.test.mjs tests/runtime.test.mjs && electron tests/smoke.mjs --smoke-test",
     "test:runtime": "electron tests/smoke.mjs --smoke-test --runtime-test"
