@@ -506,7 +506,12 @@ export class ChatWorkspaceService {
     console.info("[startup] Scanning and indexing recovered files...");
     const files = await this.files(workspace);
     const aliases = files.flatMap((file) => {
-      const paths = [file.path, join(legacyRoot, file.path)];
+      const paths = [
+        file.path,
+        join(legacyRoot, file.path),
+        // Legacy shares also appended slash-separated paths to Windows roots.
+        `${legacyRoot}/${file.path}`,
+      ];
       if (file.path.startsWith("artifacts/")) {
         paths.push(file.path.slice("artifacts/".length));
       }
