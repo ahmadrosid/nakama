@@ -116,8 +116,8 @@ jobs:
           bun apps/desktop/scripts/publish-release.mjs
 
   windows-store:
-    needs: release
-    if: ${{ !cancelled() && (needs.release.result == 'success' || github.event_name == 'workflow_dispatch') }}
+    needs: publish
+    if: ${{ !cancelled() && (needs.publish.result == 'success' || github.event_name == 'workflow_dispatch') }}
     environment: code-signing
     runs-on: windows-latest
     timeout-minutes: 60
