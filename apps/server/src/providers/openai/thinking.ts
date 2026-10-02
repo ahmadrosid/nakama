@@ -57,12 +57,15 @@ export function openAIModelRequiresResponsesApi(model: string): boolean {
 
 /**
  * gpt-5.4+ and gpt-6 reject function tools with reasoning on Chat Completions.
- * GPT-6 Astra cannot set reasoning to none, so route tools via Responses.
+ * GPT-6 Astra and GPT-6.1 Sol cannot set reasoning to none; tools need Responses.
  */
 export function openAIModelRejectsChatToolsWithReasoning(
   model: string
 ): boolean {
   const slug = model.trim().toLowerCase();
+  if (slug.startsWith("gpt-6.1-sol")) {
+    return false;
+  }
   // gpt-5.4 … gpt-5.9, gpt-5.10+, gpt-5.6-luna, etc.
   return (
     /^gpt-5\.(?:[4-9]|\d{2,})/.test(slug) ||
