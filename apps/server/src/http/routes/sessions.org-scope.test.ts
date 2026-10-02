@@ -1,4 +1,6 @@
 import { describe, expect, spyOn, test } from "bun:test";
+import { mkdir } from "node:fs/promises";
+import { getChatWorkspaceDir } from "@nakama/core";
 import { deleteAttachmentBytes } from "@nakama/core/attachments/store";
 import {
   createInMemoryDatabaseAdapter,
@@ -105,6 +107,78 @@ const CROSS_ORG_ROUTES: Array<{
 ];
 
 describe("session routes are scoped to the caller's active org", () => {
+  test("project lists follow the selected agent while Super Bot sees all accessible projects", async () => {
+    const { app, agent, databaseAdapter } = await createScenario();
+    const user = await loginUserSession(
+      app,
+      "victim@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+    const superProfile = await seedOrgSuperBotProfile(
+      databaseAdapter,
+      VICTIM_ORG
+    );
+    const project = await agent.chatWorkspaces.create(
+      VICTIM_ORG,
+      "project",
+      "Agent project",
+      "user_victim"
+    );
+    await agent.createSession(
+      VICTIM_ORG,
+      "web",
+      "profile_victim",
+      "user_victim",
+      { workspaceId: project.id, orgRole: "admin" }
+    );
+    const unrelated = await agent.chatWorkspaces.create(
+      VICTIM_ORG,
+      "project",
+      "Other project",
+      "user_victim"
+    );
+    const recoveredId = `recovered-${VICTIM_ORG}-profile_victim`;
+    await databaseAdapter.upsertWorkspace({
+      ...project,
+      id: recoveredId,
+      access: "admin",
+    });
+    const foreign = await agent.chatWorkspaces.create(
+      ATTACKER_ORG,
+      "project",
+      "Foreign project",
+      "user_attacker"
+    );
+    const list = async (profileId: string) => {
+      const response = await app.fetch(
+        new Request(
+          `http://localhost:4310/v1/workspaces?profileId=${encodeURIComponent(profileId)}`,
+          {
+            headers: user.headers({}, VICTIM_ORG),
+          }
+        )
+      );
+      expect(response.status).toBe(200);
+      const result = (await response.json()) as {
+        workspaces: { id: string; kind: string }[];
+      };
+      return result.workspaces
+        .filter((item) => item.kind === "project")
+        .map((item) => item.id)
+        .sort();
+    };
+    expect(await list("profile_victim")).toEqual(
+      [project.id, recoveredId].sort()
+    );
+    expect(await list(superProfile.id)).toEqual(
+      [project.id, unrelated.id, recoveredId].sort()
+    );
+    expect(await list(superProfile.id)).not.toContain(foreign.id);
+    expect(await list("profile_attacker")).toEqual([]);
+    expect(await list("missing")).toEqual([]);
+  });
+
   test("remote images require browser auth and org membership, returning only image bytes", async () => {
     const { app } = await createScenario();
     const user = await loginUserSession(
@@ -572,146 +646,207 @@ describe("Super Bot sessions stay admin-only after they are created", () => {
   });
 });
 
-test("project routes keep owner files private, reject retired keys, and clean up pinned references", async () => {
-  const { app, databaseAdapter, agent } = await createScenario();
-  Object.assign(agent, {
-    createHarnessForProfile: () => ({
-      provider: {
-        name: "openai",
-        async generateChat() {
-          return {
-            assistantMessage: { role: "assistant", content: "Done" },
-            content: "Done",
-            toolCalls: [],
-          };
-        },
-      },
-    }),
-  });
-  await seedOrgAdmin(databaseAdapter, {
-    email: "project-owner@example.com",
-    orgId: VICTIM_ORG,
-    password: PASSWORD,
-    profileId: "project_owner_agent",
-    role: "member",
-    userId: "project_owner",
-  });
-  await seedOrgAdmin(databaseAdapter, {
-    email: "other-member@example.com",
-    orgId: VICTIM_ORG,
-    password: PASSWORD,
-    profileId: "other_member_agent",
-    role: "member",
-    userId: "other_member",
-  });
-  const owner = await loginUserSession(
-    app,
-    "project-owner@example.com",
-    PASSWORD,
-    VICTIM_ORG
-  );
-  const other = await loginUserSession(
-    app,
-    "other-member@example.com",
-    PASSWORD,
-    VICTIM_ORG
-  );
-  const request = (
-    path: string,
-    method = "GET",
-    body?: unknown,
-    browser = owner
-  ) =>
-    app.fetch(
-      new Request(`http://localhost:4310${path}`, {
-        method,
-        headers: browser.headers(
-          {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": browser.csrfToken,
+test.each([false, true])(
+  "project routes keep files private and support chats, uploads, pins and deletion (recovered: %s)",
+  async (recovered) => {
+    const { app, databaseAdapter, agent } = await createScenario();
+    Object.assign(agent, {
+      createHarnessForProfile: () => ({
+        provider: {
+          name: "openai",
+          async generateChat() {
+            return {
+              assistantMessage: { role: "assistant", content: "Done" },
+              content: "Done",
+              toolCalls: [],
+            };
           },
-          VICTIM_ORG
-        ),
-        ...(body ? { body: JSON.stringify(body) } : {}),
-      })
+        },
+      }),
+    });
+    await seedOrgAdmin(databaseAdapter, {
+      email: "project-owner@example.com",
+      orgId: VICTIM_ORG,
+      password: PASSWORD,
+      profileId: "project_owner_agent",
+      role: "member",
+      userId: "project_owner",
+    });
+    await seedOrgAdmin(databaseAdapter, {
+      email: "other-member@example.com",
+      orgId: VICTIM_ORG,
+      password: PASSWORD,
+      profileId: "other_member_agent",
+      role: "member",
+      userId: "other_member",
+    });
+    const owner = await loginUserSession(
+      app,
+      "project-owner@example.com",
+      PASSWORD,
+      VICTIM_ORG
     );
-  const created = await request("/v1/projects", "POST", {
-    name: "Reference project",
-  });
-  expect(created.status).toBe(201);
-  const { workspace } = (await created.json()) as { workspace: { id: string } };
-  const base = `/v1/workspaces/${workspace.id}`;
-  expect((await request(base, "GET", undefined, other)).status).toBe(404);
-  const privateList = await request("/v1/workspaces", "GET", undefined, other);
-  expect(JSON.stringify(await privateList.json())).not.toContain(workspace.id);
-  const uploaded = await request(`${base}/files`, "POST", {
-    filename: "reference.txt",
-    mediaType: "text/plain",
-    data: Buffer.from("Project reference").toString("base64"),
-  });
-  expect(uploaded.status).toBe(201);
-  const { attachmentId } = (await uploaded.json()) as { attachmentId: string };
-  const downloaded = await request(`${base}/files/${attachmentId}/content`);
-  expect(await downloaded.text()).toBe("Project reference");
-  expect(
-    (
-      await request(
-        `${base}/files/${attachmentId}/content`,
-        "GET",
-        undefined,
-        other
-      )
-    ).status
-  ).toBe(404);
-  expect(
-    (
-      await request(
-        `${base}/files/content?path=../../profiles/profile_victim/SOUL.md`
-      )
-    ).status
-  ).toBe(404);
-  const session = await request("/v1/sessions", "POST", {
-    channel: "web",
-    profileId: "project_owner_agent",
-    workspaceId: workspace.id,
-  });
-  expect(session.status).toBe(201);
-  const { sessionId } = (await session.json()) as { sessionId: string };
-  const send = await request(`/v1/sessions/${sessionId}/messages`, "POST", {
-    message: "Read reference",
-    attachmentIds: [attachmentId],
-  });
-  expect(send.status).toBe(200);
-  const messages = await request(`/v1/sessions/${sessionId}/messages`);
-  expect(JSON.stringify(await messages.json())).toContain(attachmentId);
-  expect(
-    (
-      await request(`${base}/pins`, "PUT", {
-        fileId: attachmentId,
-        pinned: true,
-      })
-    ).status
-  ).toBe(204);
-  expect(await (await request(`${base}/pins`)).json()).toEqual({
-    fileIds: [attachmentId],
-  });
-  expect((await request(base, "PATCH", { name: "Renamed" })).status).toBe(200);
-  expect(
-    (await request(`${base}/files/${attachmentId}`, "DELETE")).status
-  ).toBe(204);
-  expect(await (await request(`${base}/pins`)).json()).toEqual({ fileIds: [] });
-  expect((await request(base, "DELETE")).status).toBe(204);
-  expect(await databaseAdapter.getWorkspace(workspace.id)).toBeNull();
-  expect(await databaseAdapter.getSession(sessionId)).toBeNull();
-  for (const token of [
-    `nk_live_${"a".repeat(64)}`,
-    `nk_test_${"b".repeat(64)}`,
-  ]) {
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/profiles", {
-        headers: { Authorization: `Bearer ${token}`, "X-Org-Id": VICTIM_ORG },
-      })
+    const other = await loginUserSession(
+      app,
+      "other-member@example.com",
+      PASSWORD,
+      VICTIM_ORG
     );
-    expect(response.status).toBe(401);
+    const request = (
+      path: string,
+      method = "GET",
+      body?: unknown,
+      browser = owner,
+      extraHeaders: Record<string, string> = {}
+    ) =>
+      app.fetch(
+        new Request(`http://localhost:4310${path}`, {
+          method,
+          headers: browser.headers(
+            {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": browser.csrfToken,
+              ...extraHeaders,
+            },
+            VICTIM_ORG
+          ),
+          ...(body ? { body: JSON.stringify(body) } : {}),
+        })
+      );
+    const created = await request("/v1/projects", "POST", {
+      name: "Reference project",
+    });
+    expect(created.status).toBe(201);
+    const { workspace } = (await created.json()) as {
+      workspace: { id: string };
+    };
+    if (recovered) {
+      const original = (await databaseAdapter.getWorkspace(workspace.id))!;
+      workspace.id = `recovered-${VICTIM_ORG}-project_owner_agent`;
+      await databaseAdapter.upsertWorkspace({ ...original, id: workspace.id });
+      await mkdir(getChatWorkspaceDir(VICTIM_ORG, workspace.id), {
+        recursive: true,
+      });
+    }
+    const base = `/v1/workspaces/${workspace.id}`;
+    expect((await request(base, "GET", undefined, other)).status).toBe(404);
+    const privateList = await request(
+      "/v1/workspaces",
+      "GET",
+      undefined,
+      other
+    );
+    expect(JSON.stringify(await privateList.json())).not.toContain(
+      workspace.id
+    );
+    const uploaded = await request(`${base}/files`, "POST", {
+      filename: "reference.txt",
+      mediaType: "text/plain",
+      data: Buffer.from("Project reference").toString("base64"),
+    });
+    expect(uploaded.status).toBe(201);
+    const { attachmentId } = (await uploaded.json()) as {
+      attachmentId: string;
+    };
+    const downloaded = await request(`${base}/files/${attachmentId}/content`);
+    expect(await downloaded.text()).toBe("Project reference");
+    const record = (await databaseAdapter.getAttachment(attachmentId))!;
+    for (const url of [
+      `${base}/files/${attachmentId}/content`,
+      `${base}/files/content?path=${encodeURIComponent(record.storagePath)}&inline=1`,
+    ]) {
+      const partial = await request(url, "GET", undefined, owner, {
+        Range: "bytes=0-6",
+      });
+      expect(partial.status).toBe(206);
+      expect(partial.headers.get("Content-Range")).toBe("bytes 0-6/17");
+      expect(partial.headers.get("Accept-Ranges")).toBe("bytes");
+      expect(partial.headers.get("Cache-Control")).toBe("private, no-store");
+      expect(partial.headers.get("Content-Security-Policy")).toBe("sandbox");
+      expect(await partial.text()).toBe("Project");
+      const suffix = await request(url, "GET", undefined, owner, {
+        Range: "bytes=-9",
+      });
+      expect(suffix.status).toBe(206);
+      expect(await suffix.text()).toBe("reference");
+      const invalid = await request(url, "GET", undefined, owner, {
+        Range: "bytes=99-100",
+      });
+      expect(invalid.status).toBe(416);
+      const head = await request(url, "HEAD");
+      expect(head.status).toBe(200);
+      expect(head.headers.get("Content-Length")).toBe("17");
+      expect(await head.text()).toBe("");
+      expect(
+        (await request(url, "GET", undefined, other, { Range: "bytes=0-6" }))
+          .status
+      ).toBe(404);
+    }
+
+    expect(
+      (
+        await request(
+          `${base}/files/${attachmentId}/content`,
+          "GET",
+          undefined,
+          other
+        )
+      ).status
+    ).toBe(404);
+    expect(
+      (
+        await request(
+          `${base}/files/content?path=../../profiles/profile_victim/SOUL.md`
+        )
+      ).status
+    ).toBe(404);
+    const session = await request("/v1/sessions", "POST", {
+      channel: "web",
+      profileId: "project_owner_agent",
+      workspaceId: workspace.id,
+    });
+    expect(session.status).toBe(201);
+    const { sessionId } = (await session.json()) as { sessionId: string };
+    const send = await request(`/v1/sessions/${sessionId}/messages`, "POST", {
+      message: "Read reference",
+      attachmentIds: [attachmentId],
+    });
+    expect(send.status).toBe(200);
+    const messages = await request(`/v1/sessions/${sessionId}/messages`);
+    expect(JSON.stringify(await messages.json())).toContain(attachmentId);
+    expect(
+      (
+        await request(`${base}/pins`, "PUT", {
+          fileId: attachmentId,
+          pinned: true,
+        })
+      ).status
+    ).toBe(204);
+    expect(await (await request(`${base}/pins`)).json()).toEqual({
+      fileIds: [attachmentId],
+    });
+    expect((await request(base, "PATCH", { name: "Renamed" })).status).toBe(
+      200
+    );
+    expect(
+      (await request(`${base}/files/${attachmentId}`, "DELETE")).status
+    ).toBe(204);
+    expect(await (await request(`${base}/pins`)).json()).toEqual({
+      fileIds: [],
+    });
+    expect((await request(base, "DELETE")).status).toBe(204);
+    expect(await databaseAdapter.getWorkspace(workspace.id)).toBeNull();
+    expect(await databaseAdapter.getSession(sessionId)).toBeNull();
+    for (const token of [
+      `nk_live_${"a".repeat(64)}`,
+      `nk_test_${"b".repeat(64)}`,
+    ]) {
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/profiles", {
+          headers: { Authorization: `Bearer ${token}`, "X-Org-Id": VICTIM_ORG },
+        })
+      );
+      expect(response.status).toBe(401);
+    }
   }
-});
+);

@@ -205,19 +205,72 @@ export class ChatWorkspaceService {
   private readonly preparing = new Map<string, Promise<void>>();
   constructor(private readonly db: DatabaseAdapter) {}
 
-  async initialize(): Promise<void> {
+  async initialize(
+    prepareHistory: (sessionId: string) => Promise<unknown>
+  ): Promise<void> {
+    const sessions: StoredSessionRecord[] = [];
+    const receipts = new Map<string, string>();
     for (const session of await this.db.listSessions()) {
+      const workspace = session.workspaceId
+        ? await this.db.getWorkspace(session.workspaceId)
+        : null;
+      if (!workspace) {
+        continue;
+      }
+      const receipt = join(
+        getChatSessionDir(
+          workspace.orgId,
+          workspace.id,
+          session.id,
+          workspace.kind
+        ),
+        "history",
+        "workspace-migration-v1.done"
+      );
+      if (!(await Bun.file(receipt).exists())) {
+        sessions.push(session);
+        receipts.set(session.id, receipt);
+      }
+    }
+    console.info(
+      sessions.length
+        ? `[startup] Migrating ${sessions.length} pending chats...`
+        : "[startup] Chat migration already complete."
+    );
+    for (const [index, session] of sessions.entries()) {
       if (session.workspaceId) {
         await this.roots(session);
       }
+      if ((index + 1) % 25 === 0 || index === sessions.length - 1) {
+        console.info(`[startup] Chat folders: ${index + 1}/${sessions.length}`);
+      }
     }
-    for (const session of await this.db.listSessions()) {
+    if (sessions.length) {
+      console.info(
+        "[startup] Recovering chat file references and histories..."
+      );
+    }
+    for (const [index, session] of sessions.entries()) {
       if (session.workspaceId === `chat-${session.id}`) {
         await this.recoverSessionReferences(session);
       }
+      await prepareHistory(session.id);
+      await writeFile(receipts.get(session.id)!, "complete\n", {
+        flag: "wx",
+        mode: 0o600,
+      });
+      if ((index + 1) % 25 === 0 || index === sessions.length - 1) {
+        console.info(
+          `[startup] Chat references: ${index + 1}/${sessions.length}`
+        );
+      }
     }
     for (const org of await this.db.listOrganizations()) {
-      for (const profile of await this.db.listProfilesForOrg(org.id)) {
+      const profiles = await this.db.listProfilesForOrg(org.id);
+      for (const [index, profile] of profiles.entries()) {
+        console.info(
+          `[startup] Profile ${index + 1}/${profiles.length}: ${profile.name}`
+        );
         await this.recoverProfile(org.id, profile.id);
       }
     }
@@ -368,7 +421,23 @@ export class ChatWorkspaceService {
   }
 
   async recoverProfile(orgId: string, profileId: string): Promise<void> {
+    const id = `recovered-${orgId}-${profileId}`;
     const legacyRoot = getProfileSoulDir(orgId, profileId);
+    const completion = join(legacyRoot, ".workspace-recovery-v1.done");
+    if (await Bun.file(completion).exists()) {
+      return;
+    }
+    const existing = await this.db.getWorkspace(id);
+    if (
+      existing &&
+      (await Bun.file(
+        join(getChatWorkspaceDir(orgId, id), "migration-receipt.json")
+      ).exists())
+    ) {
+      await mkdir(legacyRoot, { mode: 0o700, recursive: true });
+      await writeFile(completion, "complete\n", { mode: 0o600 });
+      return;
+    }
     const entries = await readdir(legacyRoot, { withFileTypes: true }).catch(
       (error: NodeJS.ErrnoException) => {
         if (error.code === "ENOENT") {
@@ -378,6 +447,7 @@ export class ChatWorkspaceService {
       }
     );
     const identity = new Set([
+      ".workspace-recovery-v1.done",
       "SOUL.md",
       "STYLE.md",
       "INSTRUCTIONS.md",
@@ -394,16 +464,6 @@ export class ChatWorkspaceService {
       (entry) => !(identity.has(entry.name) || entry.isSymbolicLink())
     );
     if (candidates.length === 0) {
-      return;
-    }
-    const id = `recovered-${orgId}-${profileId}`;
-    const existing = await this.db.getWorkspace(id);
-    if (
-      existing &&
-      (await Bun.file(
-        join(getChatWorkspaceDir(orgId, id), "migration-receipt.json")
-      ).exists())
-    ) {
       return;
     }
     const now = new Date().toISOString();
@@ -423,7 +483,10 @@ export class ChatWorkspaceService {
     }
     const root = getChatWorkspaceDir(orgId, id);
     await mkdir(root, { mode: 0o700, recursive: true });
-    for (const entry of candidates) {
+    for (const [index, entry] of candidates.entries()) {
+      console.info(
+        `[startup] Copying legacy files ${index + 1}/${candidates.length}: ${entry.name}`
+      );
       await copyVerified(join(legacyRoot, entry.name), join(root, entry.name));
     }
     await this.db.upsertWorkspace(workspace);
@@ -440,6 +503,7 @@ export class ChatWorkspaceService {
         await this.db.updateAttachmentStorage(attachment.id, id, local);
       }
     }
+    console.info("[startup] Scanning and indexing recovered files...");
     const files = await this.files(workspace);
     const aliases = files.flatMap((file) => {
       const paths = [file.path, join(legacyRoot, file.path)];
@@ -448,6 +512,9 @@ export class ChatWorkspaceService {
       }
       return paths.map((path) => ({ fileId: file.id, path }));
     });
+    console.info(
+      `[startup] Restoring shares and pins for ${files.length} files...`
+    );
     await this.db.adoptLegacyFileBindings(orgId, profileId, id, aliases);
     await writeFile(
       join(root, "migration-receipt.json"),
@@ -460,6 +527,7 @@ export class ChatWorkspaceService {
       }),
       { mode: 0o600 }
     );
+    await writeFile(completion, "complete\n", { mode: 0o600 });
   }
 
   async create(
@@ -661,6 +729,7 @@ export class ChatWorkspaceService {
       for (const entry of await readdir(dir, { withFileTypes: true })) {
         if (
           entry.isSymbolicLink() ||
+          (dir === root && entry.name === "migration-receipt.json") ||
           entry.name === "history" ||
           entry.name.endsWith(".nakama-meta.json")
         ) {
@@ -733,6 +802,9 @@ export class ChatWorkspaceService {
     for (const file of await this.db.listAttachmentsForWorkspace(
       workspace.id
     )) {
+      if (file.storagePath === "migration-receipt.json") {
+        continue;
+      }
       if (sessionId && file.sessionId && file.sessionId !== sessionId) {
         continue;
       }

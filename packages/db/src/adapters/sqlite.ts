@@ -555,6 +555,8 @@ interface ArtifactShareRow {
 export function openPrivateDatabase(databasePath: string): Database {
   ensureDatabaseDirectory(databasePath);
   const db = new Database(databasePath, { create: true });
+  // Wait for brief locks from other connections, including during migration.
+  db.exec("PRAGMA busy_timeout = 5000");
 
   if (databasePath !== ":memory:") {
     chmodSync(databasePath, PRIVATE_FILE_MODE);
@@ -2856,10 +2858,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async adoptLegacyFileBindings(orgId, profileId, workspaceId, aliases) {
       db.transaction(() => {
         for (const alias of aliases) {
+          // Legacy aliases can have separate live links to the same file.
+          // Keep those links instead of colliding on the canonical file ID.
           db.query(
-            "UPDATE artifact_shares SET workspace_id = ?, file_id = ?, source_path = ? WHERE org_id = ? AND profile_id = ? AND workspace_id IS NULL AND source_path = ?"
+            `UPDATE artifact_shares SET workspace_id = ?, file_id = ?, source_path =
+              CASE WHEN EXISTS (SELECT 1 FROM artifact_shares WHERE org_id = ? AND profile_id = ? AND source_path = ? AND revoked_at IS NULL)
+              THEN source_path ELSE ? END
+              WHERE org_id = ? AND profile_id = ? AND workspace_id IS NULL AND source_path = ?`
           ).run(
             workspaceId,
+            alias.fileId,
+            orgId,
+            profileId,
             alias.fileId,
             alias.fileId,
             orgId,

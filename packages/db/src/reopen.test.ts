@@ -14,6 +14,68 @@ describe("database reopen after restore", () => {
     }
   });
 
+  test("database operations wait for a short lock held by another process", async () => {
+    rootDir = await mkdtemp(join(tmpdir(), "nakama-db-lock-"));
+    const path = join(rootDir, "nakama.sqlite");
+    const database = await createDatabase(`file:${path}`);
+    const now = new Date().toISOString();
+    const operations = [
+      async () => {
+        const connection = await createDatabase(`file:${path}`);
+        connection.close();
+      },
+      async () => expect(await database.adapter.countHumanUsers()).toBe(0),
+      async () => {
+        await database.adapter.createUser({
+          createdAt: now,
+          email: "locked@example.com",
+          id: "locked-user",
+          passwordHash: "hash",
+          updatedAt: now,
+        });
+        expect(
+          await database.adapter.getUserByEmail("locked@example.com")
+        ).not.toBeNull();
+      },
+      async () => {
+        await database.reopen();
+        expect(await database.adapter.countHumanUsers()).toBe(1);
+      },
+    ];
+    try {
+      for (const operation of operations) {
+        // A separate process must release the lock: SQLite blocks this thread.
+        const locker = Bun.spawn(
+          [
+            process.execPath,
+            "-e",
+            `
+          import { Database } from "bun:sqlite";
+          const db = new Database(process.argv[1]);
+          db.exec("BEGIN EXCLUSIVE");
+          console.log("locked");
+          setTimeout(() => { db.exec("COMMIT"); db.close(); }, 250);
+        `,
+            path,
+          ],
+          { stderr: "inherit", stdout: "pipe" }
+        );
+        try {
+          const reader = locker.stdout.getReader();
+          expect((await reader.read()).done).toBe(false);
+          reader.releaseLock();
+          await operation();
+          expect(await locker.exited).toBe(0);
+        } finally {
+          locker.kill();
+          await locker.exited;
+        }
+      }
+    } finally {
+      database.close();
+    }
+  }, 30_000);
+
   // 632ms locally, but it runs migrations twice against a real sqlite file and
   // has gone past bun's 5s default on a runner building nine workspaces at once.
   // The ENOENT that follows such a timeout is afterEach removing the temp dir

@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
-import { MemoryRouter, useNavigate } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { AppProvider } from "@/context/app-context";
 import { AuthProvider } from "@/context/auth-context";
 import { client } from "@/lib/client";
@@ -397,104 +397,145 @@ test.each(navigationScenarios)(
   }
 );
 
-test("switching chats does not refetch the profile list", async () => {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  const previousStorage = globalThis.localStorage;
-  const stored: Record<string, string> = {};
-  Object.defineProperty(globalThis, "localStorage", {
-    configurable: true,
-    value: {
-      getItem: (key: string) => stored[key] ?? null,
-      removeItem(key: string) {
-        delete stored[key];
-      },
-      setItem(key: string, value: string) {
-        stored[key] = value;
-      },
-    },
-  });
-  const spies = [
-    spyOn(client, "getMe").mockResolvedValue({
-      activeOrgId: "org1",
-      id: "u1",
-      isPlatformAdmin: false,
-      orgId: "org1",
-    } as never),
-    spyOn(client, "listUserOrgs").mockResolvedValue({
-      orgs: [{ id: "org1", name: "Org" }],
-    } as never),
-    spyOn(client, "getSessionMessages").mockResolvedValue({
-      channel: "web",
-      messageMeta: [],
-      messages: [],
-      model: null,
-      questionnaire: null,
-      todos: [],
-    } as never),
-    spyOn(client, "getSessionStatus").mockResolvedValue({
-      active: false,
-    } as never),
-    spyOn(client, "getThinkingSettings").mockResolvedValue({} as never),
-    spyOn(client, "getProfile").mockResolvedValue({
-      profile: { id: "p1", skills: [] },
-    } as never),
-  ];
-  const listProfiles = spyOn(client, "listProfiles").mockResolvedValue({
-    profiles: [{ id: "p1", name: "P1" }],
-  } as never);
-
-  let navigate!: ReturnType<typeof useNavigate>;
-  let page!: ChatPageState;
-  function Probe() {
-    navigate = useNavigate();
-    page = useChatPage();
-    return null;
-  }
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  const settle = () =>
-    act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 20));
+test.each([false, true])(
+  "switching chats preserves profiles and sends a project prompt once (project: %s)",
+  async (project) => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
     });
-
-  try {
-    await act(async () =>
-      root.render(
-        <MemoryRouter initialEntries={["/chat/p1/s1"]}>
-          <QueryClientProvider client={queryClient}>
-            <AuthProvider>
-              <AppProvider>
-                <Probe />
-              </AppProvider>
-            </AuthProvider>
-          </QueryClientProvider>
-        </MemoryRouter>
-      )
-    );
-    await settle();
-    expect(page.profiles.map((profile) => profile.id)).toEqual(["p1"]);
-    const afterMount = listProfiles.mock.calls.length;
-    expect(afterMount).toBe(1);
-
-    for (const path of ["/chat/p1/s2", "/chat/p1/s1", "/chat/p1/s2"]) {
-      await act(async () => navigate(path));
-      await settle();
-    }
-    expect(listProfiles).toHaveBeenCalledTimes(afterMount);
-  } finally {
-    await act(async () => root.unmount());
-    container.remove();
-    listProfiles.mockRestore();
-    for (const spy of spies) {
-      spy.mockRestore();
-    }
-    queryClient.clear();
+    const previousStorage = globalThis.localStorage;
+    const stored: Record<string, string> = {};
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
-      value: previousStorage,
+      value: {
+        getItem: (key: string) => stored[key] ?? null,
+        removeItem(key: string) {
+          delete stored[key];
+        },
+        setItem(key: string, value: string) {
+          stored[key] = value;
+        },
+      },
     });
+    const spies: ReturnType<typeof spyOn>[] = [
+      spyOn(client, "getMe").mockResolvedValue({
+        activeOrgId: "org1",
+        id: "u1",
+        isPlatformAdmin: false,
+        orgId: "org1",
+      } as never),
+      spyOn(client, "listUserOrgs").mockResolvedValue({
+        orgs: [{ id: "org1", name: "Org" }],
+      } as never),
+      spyOn(client, "getSessionMessages").mockResolvedValue({
+        channel: "web",
+        messageMeta: [],
+        messages: [],
+        model: null,
+        questionnaire: null,
+        todos: [],
+      } as never),
+      spyOn(client, "getSessionStatus").mockResolvedValue({
+        active: false,
+      } as never),
+      spyOn(client, "getThinkingSettings").mockResolvedValue({} as never),
+      spyOn(client, "getProfile").mockResolvedValue({
+        profile: { id: "p1", skills: [] },
+      } as never),
+    ];
+    const sent: Array<{ sessionId: string; text: string }> = [];
+    const createChatSession = client.createChatSession.bind(client);
+    spies.push(
+      spyOn(client, "createChatSession").mockImplementation((id, channel) => {
+        const session = createChatSession(id, channel);
+        session.sendStream = async (input) => {
+          sent.push({
+            sessionId: id,
+            text: typeof input === "string" ? input : input.message,
+          });
+          return "reply";
+        };
+        return session;
+      })
+    );
+    const listProfiles = spyOn(client, "listProfiles").mockResolvedValue({
+      profiles: [{ id: "p1", name: "P1" }],
+    } as never);
+
+    let navigate!: ReturnType<typeof useNavigate>;
+    let page!: ChatPageState;
+    function Probe() {
+      navigate = useNavigate();
+      page = useChatPage();
+      return null;
+    }
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const settle = () =>
+      act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+
+    try {
+      await act(async () =>
+        root.render(
+          <MemoryRouter
+            initialEntries={[
+              {
+                pathname: "/chat/p1/s1",
+                state: project
+                  ? {
+                      projectPrompt: {
+                        files: [],
+                        sessionId: "s1",
+                        text: "Use the project references",
+                      },
+                    }
+                  : null,
+              },
+            ]}
+          >
+            <QueryClientProvider client={queryClient}>
+              <AuthProvider>
+                <AppProvider>
+                  <Routes>
+                    <Route
+                      element={<Probe />}
+                      path="/chat/:profileId/:sessionId"
+                    />
+                  </Routes>
+                </AppProvider>
+              </AuthProvider>
+            </QueryClientProvider>
+          </MemoryRouter>
+        )
+      );
+      await settle();
+      expect(page.profiles.map((profile) => profile.id)).toEqual(["p1"]);
+      const afterMount = listProfiles.mock.calls.length;
+      expect(afterMount).toBe(1);
+
+      for (const path of ["/chat/p1/s2", "/chat/p1/s1", "/chat/p1/s2"]) {
+        await act(async () => navigate(path));
+        await settle();
+      }
+      expect(listProfiles).toHaveBeenCalledTimes(afterMount);
+      expect(sent).toEqual(
+        project ? [{ sessionId: "s1", text: "Use the project references" }] : []
+      );
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+      listProfiles.mockRestore();
+      for (const spy of spies) {
+        spy.mockRestore();
+      }
+      queryClient.clear();
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: previousStorage,
+      });
+    }
   }
-});
+);

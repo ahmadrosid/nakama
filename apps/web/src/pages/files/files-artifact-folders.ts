@@ -7,8 +7,8 @@ export type ArtifactFolderEntry = {
   prefix: string;
 };
 
-export type ArtifactFolderListing = {
-  files: ArtifactFile[];
+export type ArtifactFolderListing<T extends ArtifactFile = ArtifactFile> = {
+  files: T[];
   folders: ArtifactFolderEntry[];
 };
 
@@ -42,14 +42,14 @@ export function artifactFolderSegments(prefix: string): Array<{
   }));
 }
 
-export function listArtifactsInFolder(
-  artifacts: readonly ArtifactFile[],
+export function listArtifactsInFolder<T extends ArtifactFile>(
+  artifacts: readonly T[],
   folderPrefix: string
-): ArtifactFolderListing {
+): ArtifactFolderListing<T> {
   const prefix = normalizeArtifactFolderPrefix(folderPrefix);
   const prefixWithSlash = prefix ? `${prefix}/` : "";
   const folders = new Map<string, ArtifactFolderEntry>();
-  const files: ArtifactFile[] = [];
+  const files: T[] = [];
 
   for (const artifact of artifacts) {
     const relative = normalizeArtifactPath(artifact.filename);

@@ -1255,6 +1255,40 @@ export function useChatPage() {
     [executeSend, profileId, readOnlySession]
   );
 
+  const submittedProjectPrompt = useRef<string | null>(null);
+  useEffect(() => {
+    const prompt = location.state?.projectPrompt as
+      | { sessionId: string; text: string; files: FileUIPart[] }
+      | undefined;
+    if (
+      !prompt ||
+      session?.id !== prompt.sessionId ||
+      busy ||
+      readOnlySession ||
+      !profileId ||
+      submittedProjectPrompt.current === prompt.sessionId
+    ) {
+      return;
+    }
+    submittedProjectPrompt.current = prompt.sessionId;
+    navigate(`${location.pathname}${location.search}`, {
+      replace: true,
+      state: null,
+    });
+    if (messages.length === 0) {
+      void sendMessage(prompt.text, prompt.files);
+    }
+  }, [
+    location,
+    session,
+    busy,
+    readOnlySession,
+    profileId,
+    messages.length,
+    navigate,
+    sendMessage,
+  ]);
+
   /**
    * Branch the session at the checkpoint before `prompt`, then send `text` into
    * the branch.

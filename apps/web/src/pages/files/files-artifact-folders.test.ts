@@ -16,6 +16,37 @@ function artifact(
 }
 
 describe("listArtifactsInFolder", () => {
+  test("preserves project file IDs when equal filenames live in different folders", () => {
+    const files = [
+      {
+        ...artifact("references/notes.txt", ""),
+        id: "reference",
+        workspaceId: "project",
+      },
+      {
+        ...artifact("chats/one/inputs/notes.txt", ""),
+        id: "input",
+        workspaceId: "project",
+      },
+    ];
+    const root = listArtifactsInFolder(files, "");
+    expect(root.files).toEqual([]);
+    expect(root.folders.map((folder) => folder.name)).toEqual([
+      "chats",
+      "references",
+    ]);
+    expect(listArtifactsInFolder(files, "references").files[0]?.id).toBe(
+      "reference"
+    );
+    expect(listArtifactsInFolder(files, "chats/one/inputs").files[0]).toBe(
+      files[1]
+    );
+    expect(listArtifactsInFolder(files, "missing")).toEqual({
+      files: [],
+      folders: [],
+    });
+  });
+
   test("groups nested paths at the root", () => {
     const listing = listArtifactsInFolder(
       [

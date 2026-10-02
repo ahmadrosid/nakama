@@ -27,10 +27,10 @@ import {
   readArtifactFile,
   reportError,
 } from "@nakama/core";
+import { createFileResponse } from "@remix-run/response/file";
 import {
   createAttachmentSaver,
   deleteStoredAttachmentBytes,
-  readStoredAttachmentBytes,
 } from "../../services/attachment-service";
 import {
   assertWorkspaceAccess,
@@ -70,12 +70,34 @@ export function registerSessionRoutes(
   app.get("/v1/workspaces", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
     const access = workspaceAccess(c);
+    const profileId = c.req.query("profileId");
+    const profile = profileId
+      ? await options.databaseAdapter?.getProfile(profileId)
+      : null;
+    if (profileId && (!profile || profile.orgId !== orgId)) {
+      return json({ workspaces: [] });
+    }
+    const profileWorkspaces =
+      profile && !profile.isSuper
+        ? new Set(
+            ((await options.databaseAdapter?.listSessions()) ?? [])
+              .filter(
+                (session) =>
+                  (session.activeProfileId ?? session.profileId) === profile.id
+              )
+              .map((session) => session.workspaceId)
+          )
+        : null;
     const workspaces = (
       (await options.databaseAdapter?.listWorkspaces(orgId)) ?? []
     ).filter((workspace) => {
       try {
         assertWorkspaceAccess(workspace, access);
-        return true;
+        return (
+          !profileWorkspaces ||
+          profileWorkspaces.has(workspace.id) ||
+          workspace.id === `recovered-${orgId}-${profileId}`
+        );
       } catch {
         return false;
       }
@@ -173,9 +195,6 @@ export function registerSessionRoutes(
       c.req.raw,
       uploadSchema
     );
-    if (workspace.id.startsWith("recovered-")) {
-      return errorResponse("Recovered files are read-only.", 400);
-    }
     const db = options.databaseAdapter;
     if (!db) {
       return errorResponse("Storage unavailable.", 503);
@@ -223,9 +242,6 @@ export function registerSessionRoutes(
       c.req.param("workspaceId"),
       workspaceAccess(c)
     );
-    if (workspace.id.startsWith("recovered-")) {
-      throw new NakamaApiError("Recovered files are read-only.", 400);
-    }
     const body = await readJson<{ content: string }>(
       c.req.raw,
       z.object({ content: z.string().max(5_000_000) }).strict()
@@ -257,9 +273,6 @@ export function registerSessionRoutes(
       c.req.param("workspaceId"),
       workspaceAccess(c)
     );
-    if (workspace.id.startsWith("recovered-")) {
-      throw new NakamaApiError("Recovered files are read-only.", 400);
-    }
     const file = await options.databaseAdapter?.getAttachment(
       c.req.param("fileId")
     );
@@ -327,17 +340,24 @@ export function registerSessionRoutes(
     if (!file || file.workspaceId !== workspace.id) {
       return errorResponse("File not found.", 404);
     }
-    const bytes = await readStoredAttachmentBytes(file);
-    if (!bytes) {
+    const path = await resolveWorkspaceFile(
+      getChatWorkspaceDir(orgId, workspace.id),
+      file.storagePath
+    );
+    const content = Bun.file(path, { type: file.mediaType });
+    if (!(await content.exists())) {
       return errorResponse("File not found.", 404);
     }
-    return new Response(new Uint8Array(bytes), {
-      headers: {
-        "Content-Type": file.mediaType,
-        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.filename ?? file.id)}`,
-        "Cache-Control": "no-store",
-      },
+    const response = await createFileResponse(content as File, c.req.raw, {
+      acceptRanges: true,
+      cacheControl: "private, no-store",
     });
+    response.headers.set(
+      "Content-Disposition",
+      `attachment; filename*=UTF-8''${encodeURIComponent(file.filename ?? file.id)}`
+    );
+    response.headers.set("Content-Security-Policy", "sandbox");
+    return response;
   });
   app.get("/v1/workspaces/:workspaceId/files/content", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
@@ -350,22 +370,29 @@ export function registerSessionRoutes(
     if (!path) {
       return errorResponse("File path is required.", 400);
     }
+    const render =
+      c.req.query("render") === "markdown" ? "markdown" : undefined;
     const file = await readArtifactFile({
       orgId,
       profileId: "",
       directory: getChatWorkspaceDir(orgId, workspace.id),
       filename: path,
-      render: c.req.query("render") === "markdown" ? "markdown" : undefined,
+      headOnly: !render,
+      render,
     });
-    return new Response(new Uint8Array(file.bytes), {
-      headers: {
-        "Content-Type": file.contentType,
-        "Content-Security-Policy": "sandbox",
-        "X-Content-Type-Options": "nosniff",
-        "Cache-Control": "no-store",
-        "Content-Disposition": `${c.req.query("inline") === "1" ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(path.split("/").at(-1) ?? "file")}`,
-      },
+    const content = render
+      ? new File([new Uint8Array(file.bytes)], path, { type: file.contentType })
+      : Bun.file(file.filePath, { type: file.contentType });
+    const response = await createFileResponse(content as File, c.req.raw, {
+      acceptRanges: true,
+      cacheControl: "private, no-store",
     });
+    response.headers.set("Content-Security-Policy", "sandbox");
+    response.headers.set(
+      "Content-Disposition",
+      `${c.req.query("inline") === "1" ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(path.split("/").at(-1) ?? "file")}`
+    );
+    return response;
   });
   // createSession refuses Super Bot to non-admins. Every route that names an
   // existing session repeats the check, or holding the ID would be enough.

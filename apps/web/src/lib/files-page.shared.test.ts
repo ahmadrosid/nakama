@@ -62,12 +62,18 @@ describe("canPreviewWorkspaceEntry", () => {
     ).toBe(true);
   });
 
-  test("everything served raw is still capped", () => {
-    for (const kind of ["isImage", "isPdf", "isText", "isVideo"] as const) {
+  test("buffered image, PDF and text previews are capped", () => {
+    for (const kind of ["isImage", "isPdf", "isText"] as const) {
       expect(
         canPreviewWorkspaceEntry({ ...base, [kind]: true, sizeBytes: OVER_CAP })
       ).toBe(false);
     }
+  });
+
+  test("videos load directly in the player without the buffered preview cap", () => {
+    expect(
+      canPreviewWorkspaceEntry({ ...base, isVideo: true, sizeBytes: OVER_CAP })
+    ).toBe(true);
   });
 
   test("a small Word document is unchanged", () => {

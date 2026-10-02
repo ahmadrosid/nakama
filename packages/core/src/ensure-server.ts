@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { NAKAMA_API_VERSION } from "./contract";
 import { resolveServerUrl } from "./runtime";
 
-const STARTUP_TIMEOUT_MS = 30_000;
+const STARTUP_TIMEOUT_MS = 300_000;
 const POLL_INTERVAL_MS = 200;
 
 export interface EnsureServerResult {
@@ -38,7 +38,18 @@ export async function ensureServerRunning(
 
   console.warn("Starting Nakama server...");
 
-  const readyUrl = await waitForServer(STARTUP_TIMEOUT_MS);
+  const startedAt = Date.now();
+  const progress = setInterval(() => {
+    console.warn(
+      `Waiting for Nakama server (${Math.floor((Date.now() - startedAt) / 1000)}s)...`
+    );
+  }, 5000);
+  let readyUrl: string | null;
+  try {
+    readyUrl = await waitForServer(STARTUP_TIMEOUT_MS, child);
+  } finally {
+    clearInterval(progress);
+  }
 
   if (!readyUrl) {
     stopSpawnedServer(child);
@@ -104,10 +115,18 @@ async function isServerHealthy(serverUrl: string): Promise<boolean> {
   }
 }
 
-async function waitForServer(timeoutMs: number): Promise<string | null> {
+async function waitForServer(
+  timeoutMs: number,
+  child: Bun.Subprocess
+): Promise<string | null> {
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
+    if (child.exitCode !== null && child.exitCode !== 0) {
+      throw new Error(
+        `Nakama server exited with code ${child.exitCode}. See the error above.`
+      );
+    }
     const serverUrl = resolveServerUrl();
 
     if (await isServerHealthy(serverUrl)) {

@@ -773,10 +773,12 @@ export class NakamaClient {
     return this.createChatSession(response.sessionId, channel);
   }
 
-  async listChatWorkspaces(): Promise<{
+  async listChatWorkspaces(profileId?: string): Promise<{
     workspaces: import("@nakama/core").ChatWorkspace[];
   }> {
-    return this.request("/v1/workspaces");
+    return this.request(
+      `/v1/workspaces${profileId ? `?profileId=${encodeURIComponent(profileId)}` : ""}`
+    );
   }
   async createProject(
     name: string
@@ -799,6 +801,21 @@ export class NakamaClient {
       `/v1/workspaces/${encodeURIComponent(id)}/files${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ""}`
     );
   }
+  async readChatWorkspaceFile(
+    workspaceId: string,
+    path: string,
+    options: { render?: "markdown" } = {}
+  ): Promise<Blob> {
+    const query = new URLSearchParams({ path });
+    if (options.render) {
+      query.set("render", options.render);
+    }
+    const response = await this.fetchRaw(
+      `/v1/workspaces/${encodeURIComponent(workspaceId)}/files/content?${query}`
+    );
+    return response.blob();
+  }
+
   async uploadChatWorkspaceFile(
     id: string,
     input: {

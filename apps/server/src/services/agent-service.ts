@@ -1928,9 +1928,6 @@ export class AgentService {
             userId ?? null,
             profile.isSuper
           );
-    if (workspace?.id.startsWith("recovered-")) {
-      throw new NakamaApiError("Recovered files are read-only.", 400);
-    }
     if (
       options?.workspaceId &&
       profile.isSuper &&
@@ -2615,10 +2612,9 @@ export class AgentService {
         }
       }
     }
-    await this.chatWorkspaces.initialize();
-    for (const session of await this.db.listSessions()) {
-      await loadSessionHistory(this.db, session.id);
-    }
+    await this.chatWorkspaces.initialize((sessionId) =>
+      loadSessionHistory(this.db, sessionId)
+    );
   }
 
   async purgeWorkspace(workspaceId: string, orgId: string): Promise<void> {

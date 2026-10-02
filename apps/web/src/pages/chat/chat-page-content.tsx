@@ -6,7 +6,6 @@ import {
   DialogTitle,
 } from "@nakama/ui/dialog";
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
 import { ArtifactStreamingPanelBridge } from "@/components/chat/artifact-streaming-panel-bridge";
 import { ChatCognitoControl } from "@/components/chat/chat-cognito-control";
@@ -71,31 +70,18 @@ export function ChatPageContent(state: ChatPageState) {
   } = state;
 
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
-  const cognitoControl = state.workspaceId ? (
-    <div className="absolute top-2 right-3 z-20 rounded-full bg-background/80 px-3 py-1 backdrop-blur">
-      <Link className="text-sm underline" to={`/projects/${state.workspaceId}`}>
-        Files
-      </Link>
-    </div>
-  ) : shouldShowCognitoControl(cognito, isEmptyState) ? (
-    // Pinned to the column's top-right corner, which is the top right of the
-    // screen area. The backdrop keeps it readable over a scrolling transcript.
-    <div className="absolute top-2 right-3 z-20 rounded-full backdrop-blur sm:right-6">
-      {state.workspaceId && (
-        <Link
-          className="mr-3 text-sm underline"
-          to={`/projects/${state.workspaceId}`}
-        >
-          Files
-        </Link>
-      )}
-      <ChatCognitoControl
-        cognito={cognito}
-        disabled={busy || readOnlySession}
-        onCognitoChange={handleCognitoChange}
-      />
-    </div>
-  ) : null;
+  const cognitoControl =
+    !state.workspaceId && shouldShowCognitoControl(cognito, isEmptyState) ? (
+      // Pinned to the column's top-right corner, which is the top right of the
+      // screen area. The backdrop keeps it readable over a scrolling transcript.
+      <div className="absolute top-2 right-3 z-20 rounded-full backdrop-blur sm:right-6">
+        <ChatCognitoControl
+          cognito={cognito}
+          disabled={busy || readOnlySession}
+          onCognitoChange={handleCognitoChange}
+        />
+      </div>
+    ) : null;
 
   const { visible: showUsage } = useChatUsageVisible();
   const sessionUsage = useMemo(() => sumChatUsage(messages), [messages]);

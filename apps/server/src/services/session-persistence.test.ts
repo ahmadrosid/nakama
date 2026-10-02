@@ -1,8 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { mkdir, readFile } from "node:fs/promises";
 import { type AgentChatSession, createAgentChatSession } from "@nakama/agent";
 import {
   type ChatMessage,
+  getArtifactSharesDir,
   getGlobalSkillsDir,
   getProfileSoulDir,
   type ProviderClient,
@@ -641,6 +642,36 @@ describe("chat and project storage", () => {
     return { agent, db };
   }
 
+  test("startup skips completed chat migrations after restart and retries failures", async () => {
+    const { agent, db } = await setup();
+    await seedSession(db, "migration-retry", "workspace_agent", "org_test");
+    const messages = spyOn(db, "listMessagesForSession");
+    try {
+      messages
+        .mockResolvedValueOnce([])
+        .mockRejectedValueOnce(new Error("Temporary history read failure"));
+      await expect(agent.initializeChatStorage()).rejects.toThrow();
+      messages.mockRestore();
+      await agent.initializeChatStorage();
+    } finally {
+      messages.mockRestore();
+    }
+    const reads = spyOn(db, "listMessagesForSession");
+    try {
+      const restarted = new AgentService(null, null, db);
+      await restarted.initializeChatStorage();
+      expect(reads).not.toHaveBeenCalled();
+      await seedSession(db, "migration-new", "workspace_agent", "org_test");
+      await restarted.initializeChatStorage();
+      expect(reads).toHaveBeenCalledWith("migration-new");
+      expect(reads.mock.calls.some(([id]) => id === "migration-retry")).toBe(
+        false
+      );
+    } finally {
+      reads.mockRestore();
+    }
+  });
+
   test.each(["chat", "project"] as const)(
     "an assigned skill writes to each chat's output folder (%s)",
     async (kind) => {
@@ -1175,8 +1206,22 @@ export async function run(input, context) {
       revokedAt: null,
       sizeBytes: 8,
       sourcePath: "legacy.txt",
-      storagePath: "original-snapshot",
+      storagePath: `${getArtifactSharesDir("org_test")}/original-snapshot`,
       tokenHash: "original-token",
+    });
+    await db.createArtifactShare({
+      createdAt: now,
+      createdByUserId: "legacy-owner",
+      filename: "legacy.txt",
+      id: "legacy-alias-share",
+      mimeType: "text/plain",
+      orgId: "org_test",
+      profileId: "workspace_agent",
+      revokedAt: null,
+      sizeBytes: 8,
+      sourcePath: `${profileRoot}/artifacts/legacy.txt`,
+      storagePath: `${getArtifactSharesDir("org_test")}/alias-snapshot`,
+      tokenHash: "alias-token",
     });
     await agent.chatWorkspaces.recoverProfile("org_test", "workspace_agent");
     await agent.chatWorkspaces.recoverProfile("org_test", "workspace_agent");
@@ -1198,12 +1243,30 @@ export async function run(input, context) {
     expect(
       await db.listWorkspaceFilePins("org_test", "legacy-owner", workspace.id)
     ).toEqual([recovered.id]);
-    const [share] = await db.listArtifactSharesForWorkspace(workspace.id);
+    const shares = await db.listArtifactSharesForWorkspace(workspace.id);
+    expect(shares).toHaveLength(2);
+    expect(shares.every((share) => share.fileId === recovered.id)).toBe(true);
+    expect(shares.every((share) => share.revokedAt === null)).toBe(true);
+    const share = shares.find((item) => item.id === "legacy-share")!;
     expect(share.fileId).toBe(recovered.id);
     expect(share.tokenHash).toBe("original-token");
-    expect(share.storagePath).toBe("original-snapshot");
+    expect(share.storagePath).toBe(
+      `${getArtifactSharesDir("org_test")}/original-snapshot`
+    );
+    expect(
+      shares.find((item) => item.id === "legacy-alias-share")
+    ).toMatchObject({
+      storagePath: `${getArtifactSharesDir("org_test")}/alias-snapshot`,
+      tokenHash: "alias-token",
+    });
     expect(await readFile(`${profileRoot}/artifacts/legacy.txt`, "utf8")).toBe(
       "original"
     );
+    expect(files.some((file) => file.path === "migration-receipt.json")).toBe(
+      false
+    );
+    await agent.purgeWorkspace(workspace.id, "org_test");
+    await agent.chatWorkspaces.recoverProfile("org_test", "workspace_agent");
+    expect(await db.getWorkspace(workspace.id)).toBeNull();
   });
 });

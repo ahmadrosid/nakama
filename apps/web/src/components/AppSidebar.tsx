@@ -18,13 +18,15 @@ import {
 import { Input } from "@nakama/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Add01Icon,
   ArrowDown01Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
   Cancel01Icon,
   Delete02Icon,
+  Folder01Icon,
   MoreHorizontalIcon,
   PencilEdit02Icon,
   PinIcon,
@@ -34,6 +36,7 @@ import {
 import type { ElementType } from "react";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { NewProjectDialog } from "@/components/NewProjectDialog";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
@@ -415,28 +418,75 @@ function PinnedChats({
 }
 
 function SidebarProjects() {
+  const [creating, setCreating] = useState(false);
   const { activeOrg } = useAuth();
+  const [collapsed, setCollapsed] = useState(false);
+  const { profileId, orgId } = useActiveChatProfile();
   const projects = useQuery({
-    enabled: Boolean(activeOrg?.id),
-    queryFn: () => client.listChatWorkspaces(),
-    queryKey: ["chatWorkspaces", activeOrg?.id],
+    enabled: Boolean(profileId && activeOrg?.id && orgId === activeOrg.id),
+    queryFn: () => client.listChatWorkspaces(profileId ?? undefined),
+    queryKey: ["chatWorkspaces", activeOrg?.id, "profile", profileId],
   });
   return (
-    <div className="mt-5 shrink-0 px-2">
-      <Link className="sidebar-nav-group-label" to="/projects">
-        Projects
-      </Link>
-      {projects.isLoading && <SessionRowSkeletons />}
-      {projects.error && (
-        <p className="text-muted-foreground text-xs" role="status">
-          Couldn’t load projects.
-        </p>
+    <div className="mt-3 shrink-0">
+      {creating && <NewProjectDialog onClose={() => setCreating(false)} />}
+      <div className="group mb-1.5 flex shrink-0 items-center gap-1 px-2">
+        <button
+          aria-expanded={!collapsed}
+          className="sidebar-nav-group-label mb-0 flex-1 gap-1.5 px-0 text-sm"
+          onClick={() => setCollapsed(!collapsed)}
+          type="button"
+        >
+          Projects
+          <ArrowDown01Icon
+            aria-hidden
+            className={cn("size-3.5", collapsed && "-rotate-90")}
+          />
+        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                aria-label="Projects options"
+                size="icon-sm"
+                variant="ghost"
+              />
+            }
+          >
+            <MoreHorizontalIcon className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem render={<Link to="/projects" />}>
+              View all projects
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {activeOrg?.role !== "viewer" && (
+          <Button
+            aria-label="New project"
+            onClick={() => setCreating(true)}
+            size="icon-sm"
+            variant="ghost"
+          >
+            <Add01Icon className="size-4" />
+          </Button>
+        )}
+      </div>
+      {!collapsed && (
+        <>
+          {projects.isLoading && <SessionRowSkeletons />}
+          {projects.error && (
+            <p className="text-muted-foreground text-xs" role="status">
+              Couldn’t load projects.
+            </p>
+          )}
+          {projects.data?.workspaces
+            .filter((workspace) => workspace.kind === "project")
+            .map((workspace) => (
+              <SidebarProjectFolder key={workspace.id} workspace={workspace} />
+            ))}
+        </>
       )}
-      {projects.data?.workspaces
-        .filter((workspace) => workspace.kind === "project")
-        .map((workspace) => (
-          <SidebarProjectFolder key={workspace.id} workspace={workspace} />
-        ))}
     </div>
   );
 }
@@ -447,7 +497,10 @@ function SidebarProjectFolder({
   workspace: { id: string; name: string };
 }) {
   const { activeOrg } = useAuth();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
+  const location = useLocation();
+  const href = `/projects/${workspace.id}`;
+  const selected = location.pathname === href;
   const chats = useQuery({
     enabled: expanded,
     queryFn: () =>
@@ -460,29 +513,71 @@ function SidebarProjectFolder({
   });
   return (
     <div>
-      <div className="flex items-center">
+      <div
+        className={cn(
+          "group relative flex min-w-0 items-center rounded-md hover:bg-sidebar-accent",
+          selected && "bg-sidebar-accent"
+        )}
+      >
         <button
           aria-expanded={expanded}
-          aria-label={`Expand ${workspace.name}`}
-          className="px-2 py-1"
+          aria-label={`${expanded ? "Collapse" : "Expand"} ${workspace.name}`}
+          className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => setExpanded(!expanded)}
           type="button"
         >
-          {expanded ? "−" : "+"}
+          <Folder01Icon aria-hidden className="size-4" strokeWidth={1.75} />
         </button>
         <Link
-          className="block min-w-0 truncate rounded-md px-2 py-1.5 text-sm hover:bg-sidebar-accent"
-          to={`/projects/${workspace.id}`}
+          aria-current={selected ? "page" : undefined}
+          className="min-w-0 flex-1 truncate py-2 pr-16 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          title={workspace.name}
+          to={href}
         >
           {workspace.name}
         </Link>
+        {activeOrg?.role !== "viewer" && (
+          <div
+            className={cn(
+              "absolute right-1 flex items-center opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
+              selected && "opacity-100"
+            )}
+          >
+            <SidebarProjectActions workspace={workspace} />
+            <Button
+              aria-label={`New chat in ${workspace.name}`}
+              render={<Link to={href} />}
+              size="icon-sm"
+              variant="ghost"
+            >
+              <PencilEdit02Icon className="size-4" />
+            </Button>
+          </div>
+        )}
       </div>
       {expanded && (
-        <div className="pl-6">
+        <div>
           {chats.isLoading && <SessionRowSkeletons />}
+          {chats.error && (
+            <p
+              className="py-2 pl-8 text-muted-foreground text-xs"
+              role="status"
+            >
+              Couldn’t load chats.
+            </p>
+          )}
           {chats.data?.sessions.map((chat) => (
             <Link
-              className="block truncate rounded-md px-2 py-1 text-xs hover:bg-sidebar-accent"
+              aria-current={
+                location.pathname === buildChatPath(chat.profileId, chat.id)
+                  ? "page"
+                  : undefined
+              }
+              className="sidebar-nav-link block truncate py-2 pr-2 pl-8 text-sm"
+              data-active={
+                location.pathname === buildChatPath(chat.profileId, chat.id) ||
+                undefined
+              }
               key={chat.id}
               to={buildChatPath(chat.profileId, chat.id)}
             >
@@ -492,6 +587,140 @@ function SidebarProjectFolder({
         </div>
       )}
     </div>
+  );
+}
+
+function SidebarProjectActions({
+  workspace,
+}: {
+  workspace: { id: string; name: string };
+}) {
+  const { activeOrg } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
+  const [action, setAction] = useState<"rename" | "delete" | null>(null);
+  const [name, setName] = useState(workspace.name);
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (action === "delete") {
+        await client.deleteChatWorkspace(workspace.id);
+        if (location.pathname === `/projects/${workspace.id}`) {
+          navigate("/projects");
+        }
+      } else {
+        await client.updateChatWorkspace(workspace.id, name.trim());
+      }
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["chatWorkspaces", activeOrg?.id],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["sessions"] }),
+      ]);
+      setAction(null);
+    },
+  });
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              aria-label={`Project options for ${workspace.name}`}
+              size="icon-sm"
+              variant="ghost"
+            />
+          }
+        >
+          <MoreHorizontalIcon className="size-4" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onClick={() => {
+              mutation.reset();
+              setName(workspace.name);
+              setAction("rename");
+            }}
+          >
+            Rename
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              mutation.reset();
+              setAction("delete");
+            }}
+            variant="destructive"
+          >
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Dialog
+        onOpenChange={(open) => {
+          if (!(open || mutation.isPending)) {
+            setAction(null);
+          }
+        }}
+        open={action !== null}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {action === "delete" ? "Delete project?" : "Rename project"}
+            </DialogTitle>
+            {action === "delete" && (
+              <DialogDescription>
+                Delete “{workspace.name}”, all its chats, and its files?
+              </DialogDescription>
+            )}
+          </DialogHeader>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!mutation.isPending) {
+                mutation.mutate();
+              }
+            }}
+          >
+            {action === "rename" && (
+              <Input
+                aria-label="Project name"
+                maxLength={120}
+                onChange={(event) => setName(event.target.value)}
+                required
+                value={name}
+              />
+            )}
+            {mutation.error && (
+              <p className="mt-3 text-destructive text-sm" role="alert">
+                {formatError(mutation.error)}
+              </p>
+            )}
+            <DialogFooter className="mt-4">
+              <Button
+                disabled={mutation.isPending}
+                onClick={() => setAction(null)}
+                type="button"
+                variant="outline"
+              >
+                Cancel
+              </Button>
+              <Button
+                disabled={
+                  mutation.isPending || (action === "rename" && !name.trim())
+                }
+                type="submit"
+                variant={action === "delete" ? "destructive" : "default"}
+              >
+                {action === "delete" ? "Delete" : "Save"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -597,7 +826,7 @@ function RecentChats() {
   );
 
   return (
-    <div className="mt-5 flex min-h-0 flex-1 flex-col">
+    <div className="mt-3 flex min-h-0 flex-1 flex-col">
       {newChatError && (
         <p className="px-3 text-destructive text-xs" role="alert">
           {newChatError}

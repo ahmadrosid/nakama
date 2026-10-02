@@ -70,7 +70,10 @@ export function canPreviewWorkspaceEntry(input: {
   isWordDocument: boolean;
   sizeBytes: number;
 }): boolean {
-  const withinCap = input.isWordDocument || input.sizeBytes <= PREVIEW_BYTE_CAP;
+  const withinCap =
+    input.isVideo ||
+    input.isWordDocument ||
+    input.sizeBytes <= PREVIEW_BYTE_CAP;
 
   return (
     withinCap && (input.isImage || input.isVideo || input.isPdf || input.isText)

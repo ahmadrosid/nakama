@@ -173,7 +173,9 @@ await agent.ensureImageGenerationSettingsLoaded();
 // A restart drops the cognito session map, so whatever it was holding can no
 // longer be reached, let alone cleaned up on close.
 const sweptAttachments = await agent.sweepEphemeralAttachments();
+console.log("Preparing chat storage (legacy files may need migration)...");
 await agent.initializeChatStorage();
+console.log("Chat storage ready.");
 if (sweptAttachments > 0) {
   console.info(
     `[cognito] swept ${sweptAttachments} attachment(s) left by a previous run`
