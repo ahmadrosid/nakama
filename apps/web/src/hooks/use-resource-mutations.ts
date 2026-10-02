@@ -544,7 +544,11 @@ export function useHistorySessionsQuery(profileId: string, search?: string) {
     initialPageParam: null as string | null,
     // Typing on keeps the previous results up; a first search starts empty.
     placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[2] === "search" ? previous : undefined,
+      previousQuery?.queryKey[2] === "search" &&
+      previousQuery.queryKey[1] === profileId &&
+      previousQuery.queryKey.at(-1) === activeOrg?.id
+        ? previous
+        : undefined,
     queryFn: ({ pageParam }) => listSessionPage(profileId, pageParam, search),
     queryKey,
   });

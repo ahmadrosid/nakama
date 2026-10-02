@@ -764,7 +764,10 @@ function RecentChats() {
       profiles,
       search: location.search,
     }) ?? "";
-  const history = useHistorySessionsQuery("");
+  const history = useHistorySessionsQuery(
+    profileId,
+    profileId ? undefined : ""
+  );
   const navigate = useNavigate();
   const [newChatError, setNewChatError] = useState("");
   const [creatingChat, setCreatingChat] = useState(false);
@@ -781,7 +784,10 @@ function RecentChats() {
     return () => clearTimeout(timer);
   }, [search]);
   // Idle until there is a search, then its own paged list.
-  const results = useHistorySessionsQuery("", searchQuery);
+  const results = useHistorySessionsQuery(
+    profileId,
+    profileId ? searchQuery : ""
+  );
   const list = searchQuery ? results : history;
   const { data: sessions } = history;
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = list;
@@ -917,7 +923,7 @@ function RecentChats() {
       {!collapsed && searchQuery
         ? renderList(
             results.data.filter((session) => !session.pinned),
-            results.data.length === 0 ? "No chats match" : null
+            "No chats match"
           )
         : null}
       {searchQuery || collapsed

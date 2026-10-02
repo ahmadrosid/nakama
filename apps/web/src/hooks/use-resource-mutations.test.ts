@@ -25,6 +25,7 @@ import {
   useArtifactsExist,
   useAssignToolMutation,
   useDeleteSessionMutation,
+  useHistorySessionsQuery,
   useRevokeArtifactShareMutation,
   useUnassignToolMutation,
   useUpdateSessionMutation,
@@ -299,6 +300,62 @@ describe("artifact share controls with a stale share ID", () => {
     expect(publish).not.toHaveBeenCalled();
     expect(store.has(storageKey)).toBe(true);
   });
+
+  test.each([undefined, "find"])(
+    "chat history scopes requests and clears the previous agent's rows (search: %s)",
+    async (search) => {
+      const cache = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+        },
+      });
+      const key = search
+        ? [...queryKeys.sessionSearch("agent-a", search), "org"]
+        : [...queryKeys.sessions("agent-a"), "org"];
+      cache.setQueryData(key, {
+        pageParams: [null],
+        pages: [{ sessions: [{ id: "chat-a", profileId: "agent-a" }] }],
+      });
+      const list = spyOn(client, "listSessions").mockImplementation(
+        () => new Promise<never>(() => {})
+      );
+      const root = createRoot(document.createElement("div"));
+      let rows: string[] = [];
+      function Probe({ profileId }: { profileId: string }) {
+        rows = useHistorySessionsQuery(profileId, search).data.map(
+          (session) => session.id
+        );
+        return null;
+      }
+      const render = (profileId: string) =>
+        root.render(
+          createElement(
+            QueryClientProvider,
+            { client: cache },
+            createElement(
+              AuthContext.Provider,
+              { value: auth },
+              createElement(Probe, { profileId })
+            )
+          )
+        );
+      try {
+        await act(async () => render("agent-a"));
+        expect(rows).toEqual(["chat-a"]);
+        await act(async () => render("agent-b"));
+        expect(rows).toEqual([]);
+        expect(list).toHaveBeenCalledWith(
+          "agent-b",
+          expect.any(Array),
+          expect.objectContaining({ query: search })
+        );
+      } finally {
+        await act(async () => root.unmount());
+        list.mockRestore();
+        cache.clear();
+      }
+    }
+  );
 
   test("does not recover account A share after logout and account B login", async () => {
     const accountA = { ...auth, user: { ...auth.user!, id: "account-a" } };
