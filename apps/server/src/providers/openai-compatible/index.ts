@@ -11,7 +11,11 @@ import type {
   ToolCall,
   WireApi,
 } from "@nakama/core";
-import { fetchWithoutIdleTimeout, normalizeBaseUrl } from "@nakama/core";
+import {
+  fetchWithoutIdleTimeout,
+  NakamaApiError,
+  normalizeBaseUrl,
+} from "@nakama/core";
 import OpenAI from "openai";
 import {
   parseOpenAIToolCalls,
@@ -161,6 +165,28 @@ export function createOpenAICompatibleProvider(
   };
 }
 
+function formatProviderError(
+  label: string,
+  status: number,
+  body: string
+): Error {
+  const parsed = parseJsonRecord(body);
+  const detail = parsed.error ?? parsed;
+  if (
+    status === 403 &&
+    typeof detail === "object" &&
+    detail !== null &&
+    "type" in detail &&
+    detail.type === "FreeTierError"
+  ) {
+    return new NakamaApiError(
+      `${label} rejected this model: its free tier is only available inside OpenCode. Select an API-compatible model or another provider in Nakama.`,
+      422
+    );
+  }
+  return new Error(formatHttpErrorBody(label, status, body));
+}
+
 function formatSdkError(label: string, error: unknown): Error {
   if (error instanceof OpenAI.APIError) {
     const body =
@@ -169,7 +195,7 @@ function formatSdkError(label: string, error: unknown): Error {
         : error.error
           ? JSON.stringify(error.error)
           : error.message;
-    return new Error(formatHttpErrorBody(label, error.status ?? 0, body));
+    return formatProviderError(label, error.status ?? 0, body);
   }
 
   if (error instanceof Error) {
@@ -352,9 +378,7 @@ async function streamChatCompletion(options: {
   const bodyText = response.ok ? null : await response.text();
 
   if (!response.ok) {
-    throw new Error(
-      formatHttpErrorBody(options.label, response.status, bodyText ?? "")
-    );
+    throw formatProviderError(options.label, response.status, bodyText ?? "");
   }
 
   const contentType = response.headers.get("content-type") ?? "";

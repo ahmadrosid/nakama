@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { NakamaApiError } from "@nakama/core";
 import { streamFromChunks } from "../test-helpers";
 import { createOpenAICompatibleProvider } from "./index";
 
@@ -9,6 +10,44 @@ afterEach(() => {
 });
 
 describe("OpenAI-compatible provider", () => {
+  test.each(["stream", "chat", "text"] as const)(
+    "classifies OpenCode-only model access as a configuration error for %s",
+    async (mode) => {
+      const fetchMock = mock(async () =>
+        Response.json(
+          {
+            error: {
+              message: "Only available inside OpenCode",
+              type: "FreeTierError",
+            },
+          },
+          { status: 403 }
+        )
+      );
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+      const provider = createOpenAICompatibleProvider({
+        apiKey: "public",
+        baseUrl: "https://opencode.ai/zen/v1",
+        displayName: "OpenCode Zen",
+        model: "big-pickle",
+        supportsThinking: false,
+      });
+      const input = {
+        messages: [{ content: "Hi", role: "user" as const }],
+        system: "Be helpful.",
+      };
+      const result =
+        mode === "stream"
+          ? provider.streamChat(input, { onChunk: () => {} })
+          : mode === "chat"
+            ? provider.generateChat(input)
+            : provider.generateText({ prompt: "Hi", system: input.system });
+      await expect(result).rejects.toBeInstanceOf(NakamaApiError);
+      await expect(result).rejects.toMatchObject({ status: 422 });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    }
+  );
+
   test("sends reasoning config only when the model supports thinking", async () => {
     const fetchMock = mock(
       async (input: RequestInfo | URL, init?: RequestInit) => {
