@@ -1,4 +1,4 @@
-import { ExecTimeoutError, isInstalled, Sandbox } from "microsandbox";
+import { ExecTimeoutError, isRuntimeInstalled, Sandbox } from "microsandbox";
 import type {
   BashSandboxEnsureArgs,
   BashSandboxExecArgs,
@@ -46,7 +46,7 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
   async ensure(args: BashSandboxEnsureArgs): Promise<void> {
     let installed = false;
     try {
-      installed = isInstalled();
+      installed = isRuntimeInstalled();
     } catch (error) {
       const message = error instanceof Error ? error.message : "probe failed";
       throw new Error(
