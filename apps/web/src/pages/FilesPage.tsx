@@ -283,7 +283,7 @@ export function ProjectPage() {
                 defaultValue="chats"
                 key={`tabs-${workspace.id}`}
               >
-                <div className="flex items-center gap-3 border-border border-b">
+                <div className="flex items-center gap-3">
                   <Tabs.List
                     aria-label="Project content"
                     className="flex gap-4"
