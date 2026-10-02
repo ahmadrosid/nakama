@@ -3,6 +3,8 @@ import { mkdir, readFile } from "node:fs/promises";
 import { type AgentChatSession, createAgentChatSession } from "@nakama/agent";
 import {
   type ChatMessage,
+  getGlobalSkillsDir,
+  getProfileSoulDir,
   type ProviderClient,
   saveAttachmentBytes,
 } from "@nakama/core";
@@ -23,6 +25,7 @@ import {
   sessionHistoryArchivePath,
   wrapPersistedSession,
 } from "./session-persistence";
+import { SkillsService } from "./skills-service";
 
 const summaryProvider: ProviderClient = {
   async generateChat() {
@@ -637,6 +640,98 @@ describe("chat and project storage", () => {
     const agent = new AgentService(null, null, db);
     return { agent, db };
   }
+
+  test.each(["chat", "project"] as const)(
+    "an assigned skill writes to each chat's output folder (%s)",
+    async (kind) => {
+      const { db, agent } = await setup();
+      const skills = new SkillsService(db);
+      const { skill } = await skills.createSkill("org_test", {
+        body: "Write a report for the current chat.",
+        description: "Write a report",
+        name: "workspace-report",
+      });
+      const skillRoot = `${getGlobalSkillsDir()}/workspace-report`;
+      await Bun.write(`${skillRoot}/template.txt`, "Report");
+      await Bun.write(
+        `${skillRoot}/tool.js`,
+        `import { readFile, writeFile } from "node:fs/promises";
+export async function run(input, context) {
+  const template = await readFile(new URL("./template.txt", import.meta.url), "utf8");
+  await writeFile(context.outputRoot + "/report.txt", template + ": " + context.sessionId);
+  return { saved: true };
+}`
+      );
+      await db.assignSkillToProfile("workspace_agent", skill.id);
+      agent.setSkillsService(skills);
+      const provider: ProviderClient = {
+        ...summaryProvider,
+        async generateChat(input) {
+          if (input.messages.at(-1)?.role !== "user") {
+            return summaryProvider.generateChat(input);
+          }
+          expect(input.tools?.map((tool) => tool.name)).toContain(
+            "workspace-report"
+          );
+          const toolCalls = [
+            { arguments: {}, id: "report", name: "workspace-report" },
+          ];
+          return {
+            assistantMessage: { content: "", role: "assistant", toolCalls },
+            content: "",
+            toolCalls,
+          };
+        },
+      };
+      Object.assign(agent, {
+        _providerConfigured: true,
+        createHarnessForProfile: () => ({ provider }),
+      });
+      const project =
+        kind === "project"
+          ? await agent.chatWorkspaces.create(
+              "org_test",
+              "project",
+              "Reports",
+              null
+            )
+          : null;
+      const outputs = [];
+      for (let i = 0; i < 2; i++) {
+        const id = await agent.createSession(
+          "org_test",
+          "web",
+          "workspace_agent",
+          null,
+          {
+            orgRole: "admin",
+            workspaceId: project?.id,
+          }
+        );
+        const session = await agent.resolveSession(id, "org_test");
+        expect(session).not.toBeNull();
+        await session!.send({ message: "Write a report" });
+        const roots = await agent.chatWorkspaces.roots(
+          (await db.getSession(id))!
+        );
+        outputs.push({ id, path: `${roots.outputRoot}/report.txt` });
+      }
+      expect(outputs[0].path).not.toBe(outputs[1].path);
+      for (const output of outputs) {
+        expect(await readFile(output.path, "utf8")).toBe(
+          `Report: ${output.id}`
+        );
+      }
+      const identityRoot = getProfileSoulDir("org_test", "workspace_agent");
+      for (const root of [
+        skillRoot,
+        identityRoot,
+        `${identityRoot}/artifacts`,
+      ]) {
+        expect(await Bun.file(`${root}/report.txt`).exists()).toBe(false);
+      }
+    }
+  );
 
   test("new chats own distinct folders, output ids, and identity roots", async () => {
     const { db, agent } = await setup();
