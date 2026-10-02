@@ -54,9 +54,9 @@ const createSocket = mock((_config: baileys.UserFacingSocketConfig) => {
 
 mock.module("@whiskeysockets/baileys", () => ({
   ...baileys,
-  fetchLatestBaileysVersion: async () => ({
-    version: [2, 3000, 1_023_223_821],
-  }),
+  fetchLatestBaileysVersion: async () => {
+    throw new Error("GitHub version lookup is unavailable");
+  },
   makeWASocket: createSocket,
 }));
 

@@ -8,7 +8,6 @@ import {
   DEFAULT_CONNECTION_CONFIG,
   DisconnectReason,
   extractMessageContent,
-  fetchLatestBaileysVersion,
   getContentType,
   jidDecode,
   jidEncode,
@@ -48,7 +47,6 @@ export async function createWhatsAppSocket(
 ): Promise<WhatsAppSocketHandle> {
   const authDir = getWhatsAppConfigDir(deps.orgId) + "/auth";
   const { state, saveCreds } = await usePrivateMultiFileAuthState(authDir);
-  const { version } = await fetchLatestBaileysVersion();
 
   let socket: WASocket | null = null;
   let stopped = false;
@@ -139,7 +137,6 @@ export async function createWhatsAppSocket(
           syncType === proto.HistorySync.HistorySyncType.NON_BLOCKING_DATA ||
           syncType === proto.HistorySync.HistorySyncType.INITIAL_STATUS_V3,
         syncFullHistory: false,
-        version,
       });
 
       if (myGen !== generation || stopped) {
