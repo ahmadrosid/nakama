@@ -53,7 +53,7 @@ jobs:
 
       - name: Restore Bun downloads
         id: dependencies
-        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
           key: bun-downloads-${{ runner.os }}-${{ runner.arch }}-1.4.0-${{ hashFiles('bun.lock', 'patches/**') }}
@@ -66,7 +66,7 @@ jobs:
       # Save before tests: the non-blocking Windows failures must not discard it.
       - name: Save Bun downloads
         if: steps.dependencies.outputs.cache-hit != 'true'
-        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
           key: ${{ steps.dependencies.outputs.cache-primary-key }}
