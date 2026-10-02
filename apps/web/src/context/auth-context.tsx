@@ -22,15 +22,14 @@ import {
   nextOrgIdAfterArchive,
 } from "@/lib/org-archive";
 import { queryClient } from "@/lib/query-client";
-import { queryKeys } from "@/lib/query-keys";
 
-function refreshAuthenticatedQueries(): void {
-  queryClient.removeQueries({ queryKey: queryKeys.profiles.all });
-  queryClient.removeQueries({ queryKey: queryKeys.skills.all });
-  queryClient.removeQueries({
-    predicate: (query) => query.queryKey[0] === "sessions",
-  });
-  void queryClient.invalidateQueries();
+// Every cached payload belongs to the user and organization that fetched it, so
+// an identity change drops the whole cache instead of naming tenant-scoped keys
+// one at a time. Naming them is what left `notificationDestinations` behind.
+// Active queries refetch at once, and no row from the previous tenant renders
+// while that is in flight.
+function resetQueryCache(): void {
+  queryClient.clear();
 }
 
 async function loadSessionState(): Promise<{
@@ -53,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const session = await loadSessionState();
     setUser(session.user);
     setOrgs(session.orgs);
-    refreshAuthenticatedQueries();
+    resetQueryCache();
   }, []);
 
   useEffect(() => {
@@ -61,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((session) => {
         setUser(session.user);
         setOrgs(session.orgs);
-        refreshAuthenticatedQueries();
+        resetQueryCache();
       })
       .catch(() => {
         setUser(null);
@@ -126,12 +125,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     client.setOrgId(null);
     setUser(null);
     setOrgs([]);
+    resetQueryCache();
   }, []);
 
   const switchOrg = useCallback(async (orgId: string) => {
     const nextUser = await client.setActiveOrg(orgId);
     setUser(nextUser);
-    refreshAuthenticatedQueries();
+    resetQueryCache();
   }, []);
 
   const archiveOrg = useCallback(
@@ -149,7 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         client.setOrgId(null);
       }
-      refreshAuthenticatedQueries();
+      resetQueryCache();
     },
     [user?.isPlatformAdmin]
   );
@@ -167,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ]);
       setOrgs(nextOrgs);
       setUser(nextUser);
-      refreshAuthenticatedQueries();
+      resetQueryCache();
     },
     [user?.isPlatformAdmin]
   );
@@ -191,7 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const { orgs: nextOrgs } = await client.listUserOrgs();
       setOrgs(nextOrgs);
-      refreshAuthenticatedQueries();
+      resetQueryCache();
     },
     [orgs, user?.isPlatformAdmin]
   );
