@@ -29,7 +29,7 @@ export interface ArchiveMemoryResult {
 }
 
 export function parseMemoryContent(content: string): ParsedMemory {
-  const lines = content.split("\n");
+  const lines = content.split(/\r?\n/);
   const preambleLines: string[] = [];
   const sections: MemorySection[] = [];
   let currentDate: string | null = null;

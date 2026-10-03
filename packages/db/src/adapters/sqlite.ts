@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { chmodSync } from "node:fs";
+import { sep } from "node:path";
 import type { AgentQuestionnaire, ChatMessage } from "@nakama/core";
 import {
   derivePluginToolName,
@@ -35,6 +36,7 @@ import type {
   StoredOrgMemberRecord,
   StoredOrgMemoryProposal,
   StoredOrgPluginRecord,
+  StoredPasskeyRecord,
   StoredPluginReleaseRecord,
   StoredProfileChangeEvent,
   StoredProfileComposioToolkitRecord,
@@ -59,6 +61,12 @@ import type {
 export interface SqliteDatabase {
   adapter: DatabaseAdapter;
   close(): void;
+  /**
+   * Finalizes every prepared statement and releases the file now. `close()`
+   * keeps the file open until those statements are garbage collected, and
+   * Windows cannot rename or delete an open SQLite file.
+   */
+  release(): void;
   reopen(): Promise<void>;
 }
 
@@ -97,6 +105,7 @@ interface AutomationRunRow {
   error: string | null;
   id: string;
   output: string | null;
+  progress: string | null;
   started_at: string;
   status: string;
 }
@@ -255,7 +264,7 @@ interface WorkspaceSettingsRow {
 }
 
 interface NotificationDestinationRow {
-  channel: "telegram";
+  channel: StoredNotificationDestinationRecord["channel"];
   config: string;
   created_at: string;
   id: string;
@@ -359,11 +368,14 @@ interface UserRow {
   user_context?: string | null;
 }
 
-interface MfaBackupCodeRow {
-  code_hash: string;
+interface PasskeyRow {
+  counter: number;
   created_at: string;
+  credential_id: string;
   id: string;
-  used_at: string | null;
+  name: string;
+  public_key: string;
+  transports: string;
   user_id: string;
 }
 
@@ -394,6 +406,7 @@ interface ApiKeyRow {
 }
 
 interface OrganizationRow {
+  allowed_invite_domains: string;
   archived_at: string | null;
   created_at: string;
   id: string;
@@ -555,7 +568,10 @@ export async function createSqliteDatabase(
   return {
     adapter: adapterProxy,
     close() {
-      db.close();
+      db.close(true);
+    },
+    release() {
+      db.close(true);
     },
     async reopen() {
       const nextDb = openPrivateDatabase(databasePath);
@@ -564,10 +580,13 @@ export async function createSqliteDatabase(
       const previousDb = db;
       db = nextDb;
       adapter = nextAdapter;
-      previousDb.close();
+      previousDb.close(true);
     },
   };
 }
+
+/** How long claim rows block replays before prune (also caps table growth). */
+const NOTIFICATION_WEBHOOK_DELIVERY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listAutomationsStmt = db.prepare("SELECT * FROM automations");
@@ -605,13 +624,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     ORDER BY started_at DESC
     LIMIT 1
   `);
+  const getAutomationRunStmt = db.prepare(`
+    SELECT * FROM automation_runs
+    WHERE automation_id = ? AND id = ?
+    LIMIT 1
+  `);
   const insertAutomationRunStmt = db.prepare(`
-    INSERT INTO automation_runs (id, automation_id, status, started_at, completed_at, output, error, delivery_status, delivery_error)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO automation_runs (id, automation_id, status, started_at, completed_at, output, error, delivery_status, delivery_error, progress)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const updateAutomationRunStmt = db.prepare(`
     UPDATE automation_runs
-    SET status = ?, completed_at = ?, output = ?, error = ?, delivery_status = ?, delivery_error = ?
+    SET status = ?, completed_at = ?, output = ?, error = ?, delivery_status = ?, delivery_error = ?, progress = ?
     WHERE id = ?
   `);
   const deleteAutomationRunStmt = db.prepare(`
@@ -866,7 +890,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           successor.id
         );
       }
-      const workspacePrefix = `${workspaceFrom}/`;
+      const workspacePrefix = `${workspaceFrom}${sep}`;
       if (
         db
           .query(
@@ -1212,6 +1236,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     FROM mcp_servers
     INNER JOIN profile_mcp_servers ON profile_mcp_servers.server_id = mcp_servers.id
     WHERE profile_mcp_servers.profile_id = ?
+    AND mcp_servers.enabled = 1
     ORDER BY mcp_servers.name ASC
   `);
   const assignMcpServerStmt = db.prepare(`
@@ -1520,6 +1545,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const deleteNotificationDestinationStmt = db.prepare(`
     DELETE FROM notification_destinations WHERE id = ?
   `);
+  const claimNotificationWebhookDeliveryStmt = db.prepare(`
+    INSERT OR IGNORE INTO notification_webhook_deliveries (
+      destination_id,
+      event_id,
+      created_at
+    )
+    VALUES (?, ?, ?)
+  `);
+  const pruneNotificationWebhookDeliveriesStmt = db.prepare(`
+    DELETE FROM notification_webhook_deliveries
+    WHERE created_at < ?
+  `);
   const listComposioToolkitsForOrgStmt = db.prepare(`
     SELECT
       id,
@@ -1749,9 +1786,57 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET used_at = ?
     WHERE user_id = ? AND code_hash = ? AND used_at IS NULL
   `);
+  const countUnusedMfaBackupCodesStmt = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM user_mfa_backup_codes
+    WHERE user_id = ? AND used_at IS NULL
+  `);
   const deleteMfaBackupCodesStmt = db.prepare(`
     DELETE FROM user_mfa_backup_codes
     WHERE user_id = ?
+  `);
+  const createPasskeyStmt = db.prepare(`
+    INSERT INTO user_passkeys (
+      id, user_id, credential_id, public_key, counter, transports, name, created_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const createPasskeyChallengeStmt = db.prepare(`
+    INSERT INTO user_passkey_challenges (
+      challenge, user_id, type, expires_at, created_at
+    )
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  const deleteExpiredPasskeyChallengesStmt = db.prepare(`
+    DELETE FROM user_passkey_challenges
+    WHERE expires_at <= ?
+  `);
+  const consumePasskeyChallengeStmt = db.prepare(`
+    DELETE FROM user_passkey_challenges
+    WHERE challenge = ? AND type = ? AND expires_at > ?
+      AND (user_id = ? OR user_id IS NULL)
+  `);
+  const deletePasskeysStmt = db.prepare(
+    "DELETE FROM user_passkeys WHERE user_id = ?"
+  );
+  const getPasskeyStmt = db.prepare(`
+    SELECT id, user_id, credential_id, public_key, counter, transports, name, created_at
+    FROM user_passkeys
+    WHERE user_id = ? AND credential_id = ?
+  `);
+  const getPasskeyByCredentialIdStmt = db.prepare(`
+    SELECT id, user_id, credential_id, public_key, counter, transports, name, created_at
+    FROM user_passkeys
+    WHERE credential_id = ?
+  `);
+  const listPasskeysStmt = db.prepare(`
+    SELECT id, user_id, credential_id, public_key, counter, transports, name, created_at
+    FROM user_passkeys
+    WHERE user_id = ?
+    ORDER BY created_at ASC
+  `);
+  const updatePasskeyCounterStmt = db.prepare(`
+    UPDATE user_passkeys SET counter = ? WHERE user_id = ? AND credential_id = ?
   `);
 
   const getUserByEmailStmt = db.prepare("SELECT * FROM users WHERE email = ?");
@@ -2044,11 +2129,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     return deleteOrganizationStmt.run(orgId).changes > 0;
   });
   const upsertOrganizationStmt = db.prepare(`
-    INSERT INTO organizations (id, name, slug, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO organizations (id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       slug = excluded.slug,
+      allowed_invite_domains = excluded.allowed_invite_domains,
       monthly_llm_token_limit = excluded.monthly_llm_token_limit,
       monthly_llm_turn_limit = excluded.monthly_llm_turn_limit,
       monthly_llm_warning_percent = excluded.monthly_llm_warning_percent,
@@ -2083,18 +2169,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         OR org_llm_monthly_quota.reserved_tokens + excluded.reserved_tokens <= (SELECT monthly_llm_token_limit FROM organizations WHERE id = org_llm_monthly_quota.org_id));
   `);
   const listOrganizationsStmt = db.prepare(`
-    SELECT id, name, slug, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
+    SELECT id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     ORDER BY name ASC
   `);
   const getOrganizationBySlugStmt = db.prepare(`
-    SELECT id, name, slug, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
+    SELECT id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     WHERE slug = ?
     LIMIT 1
   `);
   const getOrganizationByIdStmt = db.prepare(`
-    SELECT id, name, slug, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
+    SELECT id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     WHERE id = ?
     LIMIT 1
@@ -2404,6 +2490,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       record.id,
       record.name,
       record.slug,
+      JSON.stringify(record.allowedInviteDomains ?? []),
       record.monthlyLlmTokenLimit ?? null,
       record.monthlyLlmTurnLimit ?? 0,
       record.monthlyLlmWarningPercent ?? 80,
@@ -2458,6 +2545,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       o.id,
       o.name,
       o.slug,
+      o.allowed_invite_domains,
       o.skills_write_approval,
       o.skills_post_turn_review,
       o.skills_curator_enabled,
@@ -2783,6 +2871,25 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       statement.get();
     },
 
+    async claimNotificationWebhookDelivery(destinationId, eventId, createdAt) {
+      // Bound ledger growth: drop rows outside the replay window before claim.
+      const createdAtMs = Date.parse(createdAt);
+      if (Number.isFinite(createdAtMs)) {
+        pruneNotificationWebhookDeliveriesStmt.run(
+          new Date(
+            createdAtMs - NOTIFICATION_WEBHOOK_DELIVERY_RETENTION_MS
+          ).toISOString()
+        );
+      }
+      return (
+        claimNotificationWebhookDeliveryStmt.run(
+          destinationId,
+          eventId,
+          createdAt
+        ).changes > 0
+      );
+    },
+
     async compareAndSetOrgPluginState(input) {
       return compareAndSetOrgPluginStateTx(input);
     },
@@ -2791,6 +2898,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
     async consumeMfaTotpStep(userId, step) {
       return consumeMfaTotpStepStmt.run(step, userId, step).changes > 0;
+    },
+    async consumePasskeyChallenge(challenge, userId, type, consumedAt) {
+      return (
+        consumePasskeyChallengeStmt.run(challenge, type, consumedAt, userId)
+          .changes > 0
+      );
     },
 
     async consumePasswordResetToken(tokenHash, passwordHash, consumedAt) {
@@ -2836,6 +2949,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           automationId: (row as { automation_id: string }).automation_id,
           unreadCount: Number((row as { unread_count: number }).unread_count),
         }));
+    },
+    async countUnusedMfaBackupCodes(userId) {
+      const row = countUnusedMfaBackupCodesStmt.get(userId) as {
+        count: number;
+      };
+      return Number(row.count);
     },
 
     async countUsers() {
@@ -2944,6 +3063,28 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.createdAt
       );
     },
+    async createPasskey(record) {
+      createPasskeyStmt.run(
+        record.id,
+        record.userId,
+        record.credentialId,
+        record.publicKey,
+        record.counter,
+        JSON.stringify(record.transports),
+        record.name,
+        record.createdAt
+      );
+    },
+    async createPasskeyChallenge(record) {
+      deleteExpiredPasskeyChallengesStmt.run(record.createdAt);
+      createPasskeyChallengeStmt.run(
+        record.challenge,
+        record.userId,
+        record.type,
+        record.expiresAt,
+        record.createdAt
+      );
+    },
 
     async createPasswordResetToken(record) {
       createPasswordResetTokenStmt.run(
@@ -3042,7 +3183,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const result = deleteComposioToolkitStmt.run(id);
       return result.changes > 0;
     },
-
     async deleteComposioUserConnection(id) {
       const result = deleteComposioUserConnectionStmt.run(id);
       return result.changes > 0;
@@ -3090,6 +3230,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async deleteOrgPlugin(orgId, pluginId, expectedRevision) {
       return deleteOrgPluginTx(orgId, pluginId, expectedRevision);
+    },
+
+    async deletePasskeys(userId) {
+      deletePasskeysStmt.run(userId);
     },
 
     async deletePluginRelease(pluginId, version) {
@@ -3205,6 +3349,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async getAutomation(id) {
       const row = getAutomationStmt.get(id) as AutomationRow | null;
       return row ? toAutomationRecord(row) : null;
+    },
+
+    async getAutomationRun(automationId, runId) {
+      const row = getAutomationRunStmt.get(
+        automationId,
+        runId
+      ) as AutomationRunRow | null;
+      return row ? toAutomationRunRecord(row) : null;
     },
 
     async getAutomationRunReadThrough(userId, orgId, automationId) {
@@ -3330,6 +3482,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async getOrgPlugin(orgId, pluginId) {
       const row = getOrgPluginStmt.get(orgId, pluginId) as OrgPluginRow | null;
       return row ? toOrgPluginRecord(row) : null;
+    },
+    async getPasskey(userId, credentialId) {
+      const row = getPasskeyStmt.get(userId, credentialId) as PasskeyRow | null;
+      return row ? toPasskeyRecord(row) : null;
+    },
+    async getPasskeyByCredentialId(credentialId) {
+      const row = getPasskeyByCredentialIdStmt.get(
+        credentialId
+      ) as PasskeyRow | null;
+      return row ? toPasskeyRecord(row) : null;
     },
 
     async getPendingOrgInvite(orgId, email) {
@@ -3605,7 +3767,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.output,
         record.error,
         record.deliveryStatus ?? null,
-        record.deliveryError ?? null
+        record.deliveryError ?? null,
+        record.progress ? JSON.stringify(record.progress) : null
       );
     },
 
@@ -3834,6 +3997,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           ? listOrgPluginsStmt.all()
           : listOrgPluginsForOrgStmt.all(orgId);
       return rows.map((row) => toOrgPluginRecord(row as OrgPluginRow));
+    },
+    async listPasskeys(userId) {
+      return listPasskeysStmt
+        .all(userId)
+        .map((row) => toPasskeyRecord(row as PasskeyRow));
     },
 
     async listPlatformAdminUsers() {
@@ -4225,6 +4393,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.error,
         record.deliveryStatus ?? null,
         record.deliveryError ?? null,
+        record.progress ? JSON.stringify(record.progress) : null,
         record.id
       );
     },
@@ -4258,6 +4427,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         id
       );
       return result.changes > 0;
+    },
+    async updatePasskeyCounter(userId, credentialId, counter) {
+      updatePasskeyCounterStmt.run(counter, userId, credentialId);
     },
 
     async updateSessionModel(sessionId, model) {
@@ -4560,6 +4732,9 @@ function toAutomationRunRecord(
     error: row.error,
     id: row.id,
     output: row.output,
+    progress: row.progress
+      ? (parseJson(row.progress) as StoredAutomationRunRecord["progress"])
+      : undefined,
     startedAt: row.started_at,
     status: row.status as StoredAutomationRunRecord["status"],
   };
@@ -5100,15 +5275,29 @@ function parseCodingAgentHarnesses(
     return [];
   }
 }
+function toPasskeyRecord(row: PasskeyRow): StoredPasskeyRecord {
+  let transports: string[] = [];
+  try {
+    transports = JSON.parse(row.transports) as string[];
+  } catch {
+    transports = [];
+  }
+  return {
+    counter: row.counter,
+    createdAt: row.created_at,
+    credentialId: row.credential_id,
+    id: row.id,
+    name: row.name,
+    publicKey: row.public_key,
+    transports,
+    userId: row.user_id,
+  };
+}
 
 function toNotificationDestinationRecord(
   row: NotificationDestinationRow
 ): StoredNotificationDestinationRecord {
-  return {
-    channel: row.channel,
-    config: JSON.parse(
-      row.config
-    ) as StoredNotificationDestinationRecord["config"],
+  const common = {
     createdAt: row.created_at,
     id: row.id,
     name: row.name,
@@ -5116,6 +5305,37 @@ function toNotificationDestinationRecord(
     secretHash: row.secret_hash,
     updatedAt: row.updated_at,
   };
+  switch (row.channel) {
+    case "telegram":
+      return {
+        ...common,
+        channel: row.channel,
+        config: JSON.parse(row.config) as Extract<
+          StoredNotificationDestinationRecord,
+          { channel: "telegram" }
+        >["config"],
+      };
+    case "discord":
+      return {
+        ...common,
+        channel: row.channel,
+        config: JSON.parse(row.config) as Extract<
+          StoredNotificationDestinationRecord,
+          { channel: "discord" }
+        >["config"],
+      };
+    case "whatsapp":
+      return {
+        ...common,
+        channel: row.channel,
+        config: JSON.parse(row.config) as Extract<
+          StoredNotificationDestinationRecord,
+          { channel: "whatsapp" }
+        >["config"],
+      };
+    default:
+      throw new Error("Unsupported notification destination channel.");
+  }
 }
 
 function normalizeOrgComposioToolkitStatus(
@@ -5194,6 +5414,7 @@ function toUserRecord(row: UserRow): StoredUserRecord {
 
 function toOrganizationRecord(row: OrganizationRow): StoredOrganizationRecord {
   return {
+    allowedInviteDomains: JSON.parse(row.allowed_invite_domains) as string[],
     archivedAt: row.archived_at,
     createdAt: row.created_at,
     id: row.id,

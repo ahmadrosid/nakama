@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
-import { rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { resolveCustomToolModulePath } from "./custom-tool-shared";
 import {
@@ -28,7 +29,7 @@ describe("resolvePythonBin", () => {
     }
   });
 
-  test("defaults to python3", () => {
+  test.skipIf(process.platform === "win32")("defaults to python3", () => {
     delete process.env.NAKAMA_PYTHON_BIN;
     expect(resolvePythonBin()).toBe("python3");
   });
@@ -56,19 +57,122 @@ describe("resolvePythonBin", () => {
     ).toThrow(/allowlist/i);
   });
 
-  test("accepts Homebrew Cellar python and python@ paths by prefix", () => {
-    expect(
-      resolvePythonBin("/opt/homebrew/Cellar/python@3.12/3.12.0/bin/python3")
-    ).toBe("/opt/homebrew/Cellar/python@3.12/3.12.0/bin/python3");
-    expect(
-      resolvePythonBin("/opt/homebrew/Cellar/python/3.12.0/bin/python3")
-    ).toBe("/opt/homebrew/Cellar/python/3.12.0/bin/python3");
-  });
+  test.skipIf(process.platform === "win32")(
+    "accepts Homebrew Cellar python and python@ paths by prefix",
+    () => {
+      expect(
+        resolvePythonBin("/opt/homebrew/Cellar/python@3.12/3.12.0/bin/python3")
+      ).toBe("/opt/homebrew/Cellar/python@3.12/3.12.0/bin/python3");
+      expect(
+        resolvePythonBin("/opt/homebrew/Cellar/python/3.12.0/bin/python3")
+      ).toBe("/opt/homebrew/Cellar/python/3.12.0/bin/python3");
+    }
+  );
 
-  test("accepts /usr/bin/python3 when present", () => {
-    expect(resolvePythonBin("/usr/bin/python3")).toBe("/usr/bin/python3");
-  });
+  test.skipIf(process.platform === "win32")(
+    "accepts /usr/bin/python3 when present",
+    () => {
+      expect(resolvePythonBin("/usr/bin/python3")).toBe("/usr/bin/python3");
+    }
+  );
 });
+
+describe.skipIf(process.platform !== "win32")(
+  "resolvePythonBin on Windows",
+  () => {
+    const originalLocalAppData = process.env.LOCALAPPDATA;
+    const originalProgramFiles = process.env.ProgramFiles;
+    let tempDir = "";
+
+    afterEach(async () => {
+      process.env.LOCALAPPDATA = originalLocalAppData;
+      process.env.ProgramFiles = originalProgramFiles;
+      if (originalPythonBin === undefined) {
+        delete process.env.NAKAMA_PYTHON_BIN;
+      } else {
+        process.env.NAKAMA_PYTHON_BIN = originalPythonBin;
+      }
+      if (tempDir) {
+        await rm(tempDir, { force: true, recursive: true });
+        tempDir = "";
+      }
+    });
+
+    // Canonical, because a runner's tmpdir can be an 8.3 short path that the
+    // resolver expands before comparing.
+    async function useFakeInstallRoots(): Promise<void> {
+      tempDir = realpathSync.native(
+        await mkdtemp(path.join(os.tmpdir(), "nakama-python-bin-"))
+      );
+      process.env.LOCALAPPDATA = path.join(tempDir, "Local");
+      process.env.ProgramFiles = path.join(tempDir, "Program Files");
+    }
+
+    async function fakeInterpreter(...segments: string[]): Promise<string> {
+      const file = path.join(tempDir, ...segments);
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, "", "utf8");
+      return file;
+    }
+
+    test("defaults to python, because python3 is the Store stub", () => {
+      delete process.env.NAKAMA_PYTHON_BIN;
+      expect(resolvePythonBin()).toBe("python");
+    });
+
+    test("accepts an .exe suffix on bare names and nothing else", () => {
+      expect(resolvePythonBin("python.exe")).toBe("python.exe");
+      expect(resolvePythonBin("python3.13.exe")).toBe("python3.13.exe");
+      expect(() => resolvePythonBin("bash.exe")).toThrow(/bare name/i);
+      expect(() => resolvePythonBin("python.exe.bat")).toThrow(/bare name/i);
+    });
+
+    test("accepts python.org install roots read from the environment", async () => {
+      await useFakeInstallRoots();
+      const perUser = await fakeInterpreter(
+        "Local",
+        "Programs",
+        "Python",
+        "Python313",
+        "python.exe"
+      );
+      const allUsers = await fakeInterpreter(
+        "Program Files",
+        "Python313-arm64",
+        "python.exe"
+      );
+
+      expect(resolvePythonBin(perUser)).toBe(perUser);
+      expect(resolvePythonBin(allUsers)).toBe(allUsers);
+      // NTFS is case-insensitive, so the comparison must be too.
+      expect(resolvePythonBin(perUser.toUpperCase())).toBe(
+        perUser.toUpperCase()
+      );
+    });
+
+    test("rejects interpreters outside the install roots", async () => {
+      await useFakeInstallRoots();
+      const sibling = await fakeInterpreter(
+        "Local",
+        "Programs",
+        "Pythonic",
+        "python.exe"
+      );
+      const unversioned = await fakeInterpreter(
+        "Program Files",
+        "PythonTools",
+        "python.exe"
+      );
+      const elsewhere = await fakeInterpreter("bin", "python.exe");
+
+      expect(() => resolvePythonBin(sibling)).toThrow(/allowlist/i);
+      expect(() => resolvePythonBin(unversioned)).toThrow(/allowlist/i);
+      expect(() => resolvePythonBin(elsewhere)).toThrow(/allowlist/i);
+      // A drive-less POSIX path would spawn C:\usr\bin\python.exe here.
+      expect(() => resolvePythonBin("/usr/bin/python3")).toThrow(/allowlist/i);
+    });
+  }
+);
 
 describe("python tool loader", () => {
   let configDir = "";

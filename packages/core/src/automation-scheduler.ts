@@ -1,4 +1,5 @@
 import { Cron } from "croner";
+import { AUTOMATION_RUN_AT_GRACE_MS } from "./automation-validate";
 import type { AutomationSchedule } from "./contract";
 import { DEFAULT_TIMEZONE } from "./user-config";
 
@@ -22,9 +23,13 @@ export interface AutomationSchedulerStatus {
 export class AutomationScheduler {
   private readonly jobs = new Map<string, Cron>();
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly dispatchedRunAt = new Set<string>();
   private started = false;
 
-  constructor(private readonly delegate: AutomationSchedulerDelegate) {}
+  constructor(
+    private readonly delegate: AutomationSchedulerDelegate,
+    private readonly now: () => number = Date.now
+  ) {}
 
   async start(): Promise<void> {
     if (this.started) {
@@ -45,6 +50,7 @@ export class AutomationScheduler {
     }
 
     this.jobs.clear();
+    this.dispatchedRunAt.clear();
     this.timers.clear();
     this.started = false;
   }
@@ -60,13 +66,17 @@ export class AutomationScheduler {
 
     this.jobs.clear();
     this.timers.clear();
+    await this.reloadSchedules();
+  }
 
+  private async reloadSchedules(): Promise<void> {
     const automations = await this.delegate.listScheduledAutomations();
     const defaultTimezone = await this.delegate.getDefaultTimezone();
 
+    const now = this.now();
     for (const automation of automations) {
       if (automation.runAt) {
-        this.scheduleRunAt(automation);
+        this.scheduleRunAt(automation, now);
         continue;
       }
 
@@ -105,19 +115,35 @@ export class AutomationScheduler {
       });
   }
 
-  private scheduleRunAt(automation: AutomationSchedule): void {
+  private scheduleRunAt(automation: AutomationSchedule, now: number): void {
     const at = Date.parse(automation.runAt ?? "");
     if (!Number.isFinite(at)) {
       return;
     }
 
-    const delay = at - Date.now();
-    if (delay <= 0 || delay > MAX_TIMEOUT_MS) {
+    const dispatchKey = `${automation.id}:${automation.runAt}`;
+    if (this.dispatchedRunAt.has(dispatchKey)) {
+      return;
+    }
+
+    const delay = at - now;
+    if (delay > MAX_TIMEOUT_MS) {
+      return;
+    }
+
+    if (delay <= 0) {
+      if (delay < -AUTOMATION_RUN_AT_GRACE_MS) {
+        return;
+      }
+
+      this.dispatchedRunAt.add(dispatchKey);
+      this.dispatch(automation);
       return;
     }
 
     const timer = setTimeout(() => {
       this.timers.delete(automation.id);
+      this.dispatchedRunAt.add(dispatchKey);
       this.dispatch(automation);
     }, delay);
 

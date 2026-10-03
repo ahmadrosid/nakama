@@ -22,6 +22,7 @@ import type { PluginService } from "./plugin-service";
 import { actorMayInvoke, PluginHostError } from "./plugin-service";
 
 export type ServerToolOverrides = {
+  googleMeet?: ToolDefinition[];
   generateImage?: ToolDefinition | null;
   session?: ToolDefinition[];
   subAgent?: ToolDefinition | null;
@@ -75,7 +76,11 @@ export async function resolveToolsFromStorage(
   options: ResolveStoredToolsOptions = {}
 ): Promise<ToolDefinition[]> {
   const builtinMap = new Map(
-    [...builtinTools, ...builtinOverrides].map((tool) => [tool.name, tool])
+    [
+      ...builtinTools,
+      ...builtinOverrides,
+      ...(options.serverTools?.googleMeet ?? []),
+    ].map((tool) => [tool.name, tool])
   );
   const serverTools = buildServerTools(
     db,

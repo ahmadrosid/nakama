@@ -151,6 +151,45 @@ describe("composio-callback-url", () => {
     }
   });
 
+  test("the desktop app ignores a public URL restored from another install", async () => {
+    // A backup restored into the desktop app carries the web install's URL,
+    // but the desktop UI is only ever served on loopback.
+    await persistWebPublicUrl("https://nakama.example.com");
+    const previousDesktop = process.env.NAKAMA_DESKTOP;
+    process.env.NAKAMA_DESKTOP = "1";
+    const request = new Request(
+      "http://127.0.0.1:50839/v1/sessions/session-1/messages",
+      { headers: { Origin: "http://127.0.0.1:50839" }, method: "POST" }
+    );
+
+    try {
+      expect(resolveRequestClientOrigin(request)).toBe(
+        "http://127.0.0.1:50839"
+      );
+      expect(resolveComposioCallbackBaseUrl({ request })).toBe(
+        "http://127.0.0.1:50839"
+      );
+    } finally {
+      if (previousDesktop === undefined) {
+        delete process.env.NAKAMA_DESKTOP;
+      } else {
+        process.env.NAKAMA_DESKTOP = previousDesktop;
+      }
+    }
+  });
+
+  test("outside the desktop app a saved public URL still refuses loopback", async () => {
+    await persistWebPublicUrl("https://nakama.example.com");
+    const request = new Request(
+      "http://127.0.0.1:50839/v1/sessions/session-1/messages",
+      { headers: { Origin: "http://127.0.0.1:50839" }, method: "POST" }
+    );
+
+    expect(() => resolveRequestClientOrigin(request)).toThrow(
+      "Origin is not allowed."
+    );
+  });
+
   test("a saved loopback URL accepts the loopback origin on a new port", () => {
     process.env.NAKAMA_WEB_PUBLIC_URL = "http://127.0.0.1:4391";
     const request = new Request(

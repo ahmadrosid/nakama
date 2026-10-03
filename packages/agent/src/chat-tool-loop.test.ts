@@ -10,6 +10,8 @@ import type {
   ToolDefinition,
 } from "@nakama/core";
 import {
+  persistInlineAttachmentsInContent,
+  rehydrateMessagesForProvider,
   runReadFile,
   toAnthropicUserContent,
   toOpenAIChatUserContent,
@@ -218,75 +220,229 @@ describe("agent chat tool loop", () => {
     }
   );
 
-  test("delivers images from a generic visual tool outside its JSON result", async () => {
-    const data =
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-    const calls: GenerateChatInput[] = [];
-    const provider: ProviderClient = {
-      async generateChat(input) {
-        calls.push(structuredClone(input));
-        return calls.length === 1
-          ? toolTurn([
-              {
-                arguments: {},
-                id: "observe1",
-                name: "computer_observe",
-              },
-            ])
-          : textReply("I can see it.");
+  test.each([
+    {
+      metadata: { frameId: "frame-1", height: 800, width: 1280 },
+      name: "computer_observe",
+    },
+    {
+      metadata: {
+        content: "School page",
+        finalUrl: "https://school.example/",
+        imageUrl: "https://school.example/photo.png?width=1200&format=png",
       },
-      async generateText() {
-        return { content: "unused" };
-      },
-      name: "openai",
-      async streamChat(input, handlers) {
-        const result = await this.generateChat(input);
-        handlers.onChunk(result.content);
-        return result;
-      },
-    };
-    const session = createAgentChatSession({
-      provider,
-      tools: [
-        {
-          description: "Observe the profile computer",
-          name: "computer_observe",
-          async run() {
-            return {
-              frameId: "frame-1",
-              height: 800,
-              images: [{ data, mediaType: "image/png" }],
-              width: 1280,
-            };
-          },
+      name: "web_fetch",
+    },
+  ])(
+    "delivers $name images outside JSON without losing metadata",
+    async ({ name, metadata }) => {
+      const data =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+      const calls: GenerateChatInput[] = [];
+      const provider: ProviderClient = {
+        async generateChat(input) {
+          calls.push(structuredClone(input));
+          return calls.length === 1
+            ? toolTurn([
+                {
+                  arguments: {},
+                  id: "observe1",
+                  name,
+                },
+              ])
+            : textReply("I can see it.");
         },
-      ],
-    });
+        async generateText() {
+          return { content: "unused" };
+        },
+        name: "openai",
+        async streamChat(input, handlers) {
+          const result = await this.generateChat(input);
+          handlers.onChunk(result.content);
+          return result;
+        },
+      };
+      const session = createAgentChatSession({
+        provider,
+        tools: [
+          {
+            description: "Return a verified image with source metadata",
+            name,
+            async run() {
+              return {
+                ...metadata,
+                images: [{ data, mediaType: "image/png" }],
+              };
+            },
+          },
+        ],
+      });
 
-    expect(await session.send("Observe the screen")).toBe("I can see it.");
-    expect(calls[1]!.messages.map((message) => message.role)).toEqual([
-      "user",
-      "assistant",
-      "tool",
-      "user",
-    ]);
-    const toolMessage = calls[1]!.messages[2]!;
-    expect(JSON.parse(String(toolMessage.content))).toEqual({
-      frameId: "frame-1",
-      height: 800,
-      width: 1280,
-    });
-    expect(calls[1]!.messages.at(-1)?.content).toEqual(
-      expect.arrayContaining([{ data, mediaType: "image/png", type: "image" }])
-    );
-    const persistedTool = session
-      .getHistory()
-      .find((message) => message.role === "tool");
-    expect(persistedTool?.content).not.toContain(data);
-    expect(persistedTool?.role === "tool" && persistedTool.attachments).toEqual(
-      [{ data, mediaType: "image/png", type: "image" }]
-    );
-  });
+      expect(await session.send("Observe the screen")).toBe("I can see it.");
+      expect(calls[1]!.messages.map((message) => message.role)).toEqual([
+        "user",
+        "assistant",
+        "tool",
+        "user",
+      ]);
+      const toolMessage = calls[1]!.messages[2]!;
+      expect(JSON.parse(String(toolMessage.content))).toEqual(metadata);
+      expect(calls[1]!.messages.at(-1)?.content).toEqual(
+        expect.arrayContaining([
+          { data, mediaType: "image/png", type: "image" },
+        ])
+      );
+      const persistedTool = session
+        .getHistory()
+        .find((message) => message.role === "tool");
+      expect(persistedTool?.content).not.toContain(data);
+      expect(
+        persistedTool?.role === "tool" && persistedTool.attachments
+      ).toEqual([{ data, mediaType: "image/png", type: "image" }]);
+    }
+  );
+
+  test.each(
+    ["web_fetch", "read_file", "computer_observe"].flatMap((name) =>
+      [false, true].flatMap((streaming) =>
+        [false, true].map((persisted) => ({ name, persisted, streaming }))
+      )
+    )
+  )(
+    "$name image replay (stream: $streaming, persisted: $persisted)",
+    async ({ name, persisted, streaming }) => {
+      const data = "aW1hZ2U=";
+      const imageUrl = "https://school.example/photo.png";
+      const calls: GenerateChatInput[] = [];
+      const saved = new Map<string, { bytes: Buffer; mediaType: string }>();
+      const loaded: string[] = [];
+      const options: Parameters<typeof createAgentChatSession>[1] = persisted
+        ? {
+            preprocessUserContent: (content) =>
+              persistInlineAttachmentsInContent(content, async (image) => {
+                const attachmentId = `image-${saved.size}`;
+                saved.set(attachmentId, image);
+                return { attachmentId, size: image.bytes.length };
+              }),
+            rehydrateMessagesForProvider: (messages) =>
+              rehydrateMessagesForProvider(messages, async (id) => {
+                loaded.push(id);
+                return saved.get(id) ?? null;
+              }),
+          }
+        : {};
+      let fetches = 0;
+      const provider: ProviderClient = {
+        async generateChat(input) {
+          calls.push(structuredClone(input));
+          if (calls.length === 1 || calls.length === 5) {
+            return toolTurn([
+              { arguments: {}, id: `image-${calls.length}`, name },
+            ]);
+          }
+          if (calls.length === 2) {
+            return toolTurn([{ arguments: {}, id: "extra", name: "sample" }]);
+          }
+          return textReply("Done");
+        },
+        async generateText() {
+          return { content: "unused" };
+        },
+        name: "openai",
+        async streamChat(input, handlers) {
+          const result = await this.generateChat(input);
+          handlers.onChunk(result.content);
+          return result;
+        },
+      };
+      const dependencies = {
+        provider,
+        tools: [
+          sampleTool,
+          {
+            description: "Return a page image",
+            name,
+            async run() {
+              fetches++;
+              return { images: [{ data, mediaType: "image/png" }], imageUrl };
+            },
+          },
+        ],
+      };
+      const uploadedImage = {
+        data: "dXBsb2Fk",
+        mediaType: "image/png",
+        type: "image" as const,
+      };
+      const session = createAgentChatSession(dependencies, {
+        ...options,
+        initialHistory: [{ content: [uploadedImage], role: "user" }],
+      });
+      const send = (target: typeof session, text: string) =>
+        streaming
+          ? target.sendStream(text, { onChunk() {} })
+          : target.send(text);
+      await send(session, "Inspect the image, then use the sample tool.");
+      await send(session, "Repeat the URL without fetching.");
+      const history = JSON.parse(JSON.stringify(session.getHistory()));
+      const restored = createAgentChatSession(dependencies, {
+        ...options,
+        initialHistory: history,
+      });
+      await send(restored, "Fetch the image again to inspect it.");
+      expect(fetches).toBe(2);
+      const imageCounts = calls.map(
+        (call) =>
+          call.messages
+            .flatMap((message) =>
+              Array.isArray(message.content) ? message.content : []
+            )
+            .filter((part) => part.type === "image" && part.data === data)
+            .length
+      );
+      expect(imageCounts).toEqual(
+        name === "web_fetch" ? [0, 1, 1, 0, 0, 1] : [0, 1, 1, 1, 1, 2]
+      );
+      for (const input of calls) {
+        expect(input.messages[0]?.content).toEqual([uploadedImage]);
+      }
+      for (const input of calls.slice(1)) {
+        const originalTool = input.messages.find(
+          (message) =>
+            message.role === "tool" && message.toolCallId === "image-1"
+        );
+        expect(JSON.parse(String(originalTool?.content)).imageUrl).toBe(
+          imageUrl
+        );
+      }
+      const storedTool = restored
+        .getHistory()
+        .find(
+          (message) =>
+            message.role === "tool" && message.toolCallId === "image-1"
+        );
+      expect(storedTool?.role === "tool" && storedTool.attachments).toEqual(
+        persisted
+          ? [
+              {
+                attachmentId: "image-0",
+                mediaType: "image/png",
+                size: 5,
+                type: "image_ref",
+              },
+            ]
+          : [{ data, mediaType: "image/png", type: "image" }]
+      );
+      if (persisted) {
+        expect(saved.size).toBe(2);
+        expect(loaded).toEqual(
+          name === "web_fetch"
+            ? ["image-0", "image-0", "image-1"]
+            : ["image-0", "image-0", "image-0", "image-0", "image-0", "image-1"]
+        );
+      }
+    }
+  );
 
   test.each([false, true])(
     "persists tool execution times (parallel: %s)",
@@ -368,8 +524,12 @@ describe("agent chat tool loop", () => {
               ]
             : [];
         return {
-          assistantMessage: { content: "", role: "assistant", toolCalls },
-          content: "",
+          assistantMessage: {
+            content: toolCalls.length ? "" : "ok",
+            role: "assistant",
+            toolCalls,
+          },
+          content: toolCalls.length ? "" : "ok",
           toolCalls,
         };
       },
@@ -479,6 +639,182 @@ describe("agent chat tool loop", () => {
         { content: "Think first", role: "user" },
         { content: reply, role: "assistant" },
       ]);
+    }
+  );
+
+  test.each([false, true])(
+    "checks quota before the empty retry (stream: %s)",
+    async (stream) => {
+      let calls = 0;
+      let checks = 0;
+      const provider: ProviderClient = {
+        ...createMockProvider([]),
+        async generateChat() {
+          calls += 1;
+          return textReply("");
+        },
+        async streamChat(input) {
+          return this.generateChat(input);
+        },
+      };
+      const session = createAgentChatSession(
+        { provider },
+        {
+          toolContext: {
+            async assertCanStartLlmTurn() {
+              checks += 1;
+              if (checks === 2) {
+                throw new Error("Quota exhausted");
+              }
+            },
+          },
+          tools: [sampleTool],
+        }
+      );
+      const reply = stream
+        ? session.sendStream("go", { onChunk() {} })
+        : session.send("go");
+      await expect(reply).rejects.toThrow();
+      expect(checks).toBe(2);
+      expect(calls).toBe(1);
+    }
+  );
+
+  test.each([false, true])(
+    "retains fetched images during the empty retry (stream: %s)",
+    async (stream) => {
+      const calls: GenerateChatInput[] = [];
+      const data = "aW1hZ2U=";
+      const provider: ProviderClient = {
+        ...createMockProvider([]),
+        async generateChat(input) {
+          calls.push(input);
+          if (calls.length === 1) {
+            return toolTurn([{ arguments: {}, id: "page", name: "web_fetch" }]);
+          }
+          return textReply(calls.length === 2 ? "" : "Final");
+        },
+        async streamChat(input, handlers) {
+          const result = await this.generateChat(input);
+          handlers.onChunk(result.content);
+          return result;
+        },
+      };
+      const session = createAgentChatSession({
+        provider,
+        tools: [
+          {
+            description: "Fetch page",
+            name: "web_fetch",
+            async run() {
+              return { images: [{ data, mediaType: "image/png" }] };
+            },
+          },
+        ],
+      });
+      const reply = stream
+        ? await session.sendStream("Describe the page", { onChunk() {} })
+        : await session.send("Describe the page");
+      expect(reply).toBe("Final");
+      expect(calls[2]?.tools?.length ?? 0).toBe(0);
+      expect(calls[2]?.messages.at(-1)?.content).toEqual(
+        expect.arrayContaining([
+          { data, mediaType: "image/png", type: "image" },
+        ])
+      );
+    }
+  );
+
+  test("asks once more without tools when the model ends with no text", async () => {
+    const seen: { tools: number; last: string }[] = [];
+    let call = 0;
+    const provider: ProviderClient = {
+      ...createMockProvider([]),
+      generateChat(input: GenerateChatInput) {
+        call += 1;
+        seen.push({
+          last: String(input.messages.at(-1)?.role),
+          tools: input.tools?.length ?? 0,
+        });
+        if (call === 1) {
+          return Promise.resolve(
+            toolTurn([
+              { arguments: { message: "hi" }, id: "c1", name: "sample" },
+            ])
+          );
+        }
+        return Promise.resolve(call === 2 ? textReply("") : textReply("Final"));
+      },
+    };
+    const session = createAgentChatSession(
+      { provider },
+      { tools: [sampleTool] }
+    );
+    const reply = await session.send("go");
+    expect(reply).toBe("Final");
+    expect(seen[2]?.tools).toBe(0);
+    expect(session.getHistory().at(-1)).toEqual({
+      content: "Final",
+      role: "assistant",
+    });
+    expect(
+      session
+        .getHistory()
+        .some((m) => m.role === "assistant" && !m.content && !m.toolCalls)
+    ).toBe(false);
+  });
+
+  test("returns non-empty text when the model stays silent", async () => {
+    let call = 0;
+    const provider: ProviderClient = {
+      ...createMockProvider([]),
+      generateChat() {
+        call += 1;
+        return Promise.resolve(textReply(""));
+      },
+    };
+    const session = createAgentChatSession(
+      { provider },
+      { tools: [sampleTool] }
+    );
+    const reply = await session.send("go");
+    expect(call).toBe(2);
+    expect(reply.length).toBeGreaterThan(0);
+    expect(session.getHistory().at(-1)).toEqual({
+      content: reply,
+      role: "assistant",
+    });
+  });
+
+  test.each(["", "Working"])(
+    "ends with a final message at the tool round limit (text: %s)",
+    async (content) => {
+      let call = 0;
+      const provider: ProviderClient = {
+        ...createMockProvider([]),
+        generateChat() {
+          call += 1;
+          const result = toolTurn([
+            { arguments: { message: "x" }, id: `c${call}`, name: "sample" },
+          ]);
+          return Promise.resolve({
+            ...result,
+            assistantMessage: { ...result.assistantMessage, content },
+            content,
+          });
+        },
+      };
+      const session = createAgentChatSession(
+        { provider },
+        { tools: [sampleTool] }
+      );
+      const reply = await session.send("loop forever");
+      expect(call).toBe(100);
+      expect(reply.length).toBeGreaterThan(0);
+      expect(session.getHistory().at(-1)).toEqual({
+        content: reply,
+        role: "assistant",
+      });
     }
   );
 

@@ -31,6 +31,10 @@ A quick tour of the redesigned dashboard: pick an agent, explore its instruction
 Open [ARCHITECTURE.md](./ARCHITECTURE.md) for the system design.
 Open the [docs site](https://ahmadrosid.github.io/nakama/) for the full guide.
 
+## Desktop downloads
+
+macOS downloads are available in [desktop releases](https://github.com/ahmadrosid/nakama/releases?q=desktop-v). Windows has no published installation link here yet; unsigned MSIX files in older releases are Partner Center uploads, not installable downloads. See [Windows installation](apps/desktop/README.md#windows-installation) for availability and alternatives.
+
 ## Quick start
 
 ### Try the demo

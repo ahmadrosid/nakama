@@ -44,6 +44,9 @@ const CHATGPT_MODELS: ProviderModelOption[] = [
   { default: true, id: "gpt-5.6-terra", name: "GPT-5.6 Terra" },
   { id: "gpt-5.6-sol", name: "GPT-5.6 Sol" },
   { id: "gpt-5.6-luna", name: "GPT-5.6 Luna" },
+  { id: "gpt-6.1-sol", name: "GPT-6.1 Sol" },
+  { id: "gpt-6-sol", name: "GPT-6 Sol" },
+  { id: "gpt-6-luna", name: "GPT-6 Luna" },
   { id: "gpt-6-astra", name: "GPT-6 Astra" },
   { id: "gpt-5.5", name: "GPT-5.5" },
 ].map((model) => ({
@@ -92,6 +95,16 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
   },
   {
     contextWindow: 1_000_000,
+    id: "claude-sonnet-5-5",
+    inputPerMillionUsd: 2,
+    maxOutputTokens: 128_000,
+    name: "Sonnet 5.5",
+    outputPerMillionUsd: 10,
+    provider: "anthropic",
+    supportsThinking: true,
+  },
+  {
+    contextWindow: 1_000_000,
     id: "claude-opus-5",
     inputPerMillionUsd: 5,
     maxOutputTokens: 128_000,
@@ -122,6 +135,16 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
   },
   // OpenAI API limits and base text prices: https://developers.openai.com/api/docs/models
   // GPT-6, Luna, GPT-5.5 and GPT-5.4 charge more above 272k input tokens.
+  {
+    contextWindow: 1_050_000,
+    id: "gpt-6.1-sol",
+    inputPerMillionUsd: 2,
+    maxOutputTokens: 128_000,
+    name: "GPT-6.1 Sol",
+    outputPerMillionUsd: 10,
+    provider: "openai",
+    supportsThinking: true,
+  },
   {
     contextWindow: 1_050_000,
     id: "gpt-6-sol",
@@ -1251,6 +1274,13 @@ export function modelSupportsTranscription(
   modelId: string,
   provider: ProviderName
 ): boolean {
+  // openai_compatible instances are self-hosted Whisper-style endpoints whose
+  // model id is user-defined; any non-empty id is accepted. First-party
+  // openai stays restricted to the allowlist.
+  if (provider === "openai_compatible") {
+    return Boolean(modelId.trim());
+  }
+
   if (provider !== "openai") {
     return false;
   }
@@ -1270,7 +1300,9 @@ export function modelSupportsImageGeneration(
   modelId: string,
   provider: ProviderName
 ): boolean {
-  if (provider !== "openai") {
+  // openai_compatible instances route through the OpenAI Images API against
+  // the configured baseUrl; both flavors use the same model allowlist.
+  if (provider !== "openai" && provider !== "openai_compatible") {
     return false;
   }
 
@@ -1280,5 +1312,11 @@ export function modelSupportsImageGeneration(
 export function isAllowedImageGenerationSelection(
   value: string | null | undefined
 ): boolean {
-  return value?.trim() === IMAGE_GENERATION_SELECTION;
+  const trimmed = value?.trim();
+  if (trimmed === IMAGE_GENERATION_SELECTION) {
+    return true;
+  }
+  // Self-hosted OpenAI-compatible backends carry a baseUrl and reuse the same
+  // Images API + model allowlist, selected via `openai_compatible::gpt-image-2`.
+  return trimmed === `openai_compatible::${IMAGE_GENERATION_MODEL_ID}`;
 }

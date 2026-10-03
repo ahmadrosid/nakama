@@ -15,6 +15,7 @@ import {
   type InfiniteData,
   useInfiniteQuery,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -692,6 +693,33 @@ export function useArtifactsQuery(profileId: string | null, folder = "") {
       "listing",
       folder,
     ],
+  });
+}
+
+/**
+ * Chat chips come from the transcript, which never learns that a file was
+ * deleted later. Returns false per artifact once the server confirms it is gone.
+ */
+export function useArtifactsExist(
+  artifacts: readonly { ownerProfileId?: string; path: string }[],
+  profileId: string | null | undefined,
+  enabled: boolean
+): boolean[] {
+  return useQueries({
+    // Unknown (loading or failed) keeps the chip: only a 404 hides it.
+    combine: (results) => results.map((result) => result.data !== false),
+    queries: artifacts.map((artifact) => {
+      const ownerId = artifact.ownerProfileId ?? profileId ?? "";
+      return {
+        enabled: enabled && Boolean(ownerId),
+        queryFn: () => client.hasProfileArtifact(ownerId, artifact.path),
+        queryKey: [
+          ...queryKeys.artifacts.profile(ownerId),
+          "exists",
+          artifact.path,
+        ],
+      };
+    }),
   });
 }
 

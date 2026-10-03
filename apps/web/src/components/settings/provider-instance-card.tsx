@@ -83,6 +83,19 @@ function providerModelCountLabel(modelCount: number): string {
   return modelCount === 1 ? "1 model" : `${modelCount} models`;
 }
 
+function providerKeyActionLabel(
+  card: ReturnType<typeof useProviderInstanceCard>,
+  hasApiKey: boolean
+): string {
+  if (card.isXaiOAuth) {
+    return hasApiKey ? "Reconnect Grok" : "Connect Grok";
+  }
+  if (card.isChatgpt) {
+    return hasApiKey ? "Reconnect ChatGPT" : "Connect ChatGPT";
+  }
+  return hasApiKey ? "Update key" : "Add key";
+}
+
 function ProviderInstanceTableRow({
   instance,
   card,
@@ -127,26 +140,18 @@ function ProviderInstanceTableRow({
           ) : null}
           {canManage ? (
             <ProviderActionButton
-              label="Manage models"
+              label={
+                card.isOpenRouter
+                  ? "Manage models and routing"
+                  : "Manage models"
+              }
               onClick={card.openManage}
             >
               <ListViewIcon className="size-3.5" />
             </ProviderActionButton>
           ) : null}
           <ProviderActionButton
-            label={
-              card.isXaiOAuth
-                ? instance.hasApiKey
-                  ? "Reconnect Grok"
-                  : "Connect Grok"
-                : card.isChatgpt
-                  ? instance.hasApiKey
-                    ? "Reconnect ChatGPT"
-                    : "Connect ChatGPT"
-                  : instance.hasApiKey
-                    ? "Update key"
-                    : "Add key"
-            }
+            label={providerKeyActionLabel(card, instance.hasApiKey)}
             onClick={() => card.setReplaceKeyOpen(true)}
           >
             <Key01Icon className="size-3.5" />
@@ -201,6 +206,8 @@ function ProviderManageModelsFields({
           disabled={card.busy}
           modelsError={card.dialogError}
           onCustomModelsChange={card.handleManageModelsChange}
+          onRoutingChange={card.setOpenRouterRouting}
+          routing={card.openRouterRouting}
         />
       ) : null}
       {isShortlistBrowseProvider(card.providerType) ? (
@@ -299,6 +306,9 @@ function ProviderInstanceCardDialogs({
           onOpenChange={card.setManageOpen}
           onSave={() => void card.saveManageModels()}
           open={card.manageOpen}
+          title={
+            card.isOpenRouter ? "Manage models and routing" : "Manage models"
+          }
         >
           <ProviderManageModelsFields card={card} instance={instance} />
         </ProviderManageModelsDialog>

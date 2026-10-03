@@ -40,7 +40,11 @@ Uncaught exceptions and unhandled rejections, from four processes: the server an
 
 Each report carries the error name and message, the stack trace, which process it came from, and the Bun version, platform, and architecture.
 
-**Not sent:** HTTP 4xx responses, a turn the user cancelled, and anything a user typed. A rejected request is not a defect, and reporting every bad password would bury the real crashes.
+**Not intentionally attached:** request bodies or prompts. HTTP 4xx responses
+and turns the user cancelled are not reported. Error messages and stack traces
+can still repeat user-derived or operational text that the scrubber does not
+recognize, so treat the tracker as a sensitive destination. A rejected request
+is not a defect, and reporting every bad password would bury the real crashes.
 
 ## What is stripped before it leaves
 

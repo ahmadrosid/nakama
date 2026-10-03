@@ -8,6 +8,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useAuth } from "@/context/use-auth";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -21,6 +22,19 @@ export function useNotificationDestinations(orgId: string) {
   return useQuery({
     ...notificationDestinationsQueryOptions(orgId),
     enabled: Boolean(orgId),
+  });
+}
+
+export function useNotificationWhatsAppSettings(
+  profileId: string,
+  enabled: boolean
+) {
+  const { activeOrg } = useAuth();
+  const orgId = activeOrg?.id ?? null;
+  return useQuery({
+    enabled: enabled && !!orgId && !!profileId,
+    queryFn: () => client.forOrg(orgId).getWhatsAppSettings(profileId),
+    queryKey: [...queryKeys.whatsapp.settings, orgId, profileId],
   });
 }
 

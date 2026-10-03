@@ -113,6 +113,10 @@ export function registerProfilePortabilityRoutes(
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
         },
+        413: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Profile pack exceeds a decompression limit",
+        },
         500: {
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
@@ -146,6 +150,10 @@ export function registerProfilePortabilityRoutes(
         403: {
           content: { "application/json": { schema: errorSchema } },
           description: "Error",
+        },
+        413: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Profile pack exceeds a decompression limit",
         },
         500: {
           content: { "application/json": { schema: errorSchema } },

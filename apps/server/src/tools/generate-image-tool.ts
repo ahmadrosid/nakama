@@ -5,6 +5,7 @@ import {
   inferArtifactMimeType,
   MAX_IMAGE_BYTES,
   NakamaApiError,
+  type ProviderInstance,
   pathExists,
   type ToolContext,
   type ToolDefinition,
@@ -24,10 +25,24 @@ export const GENERATE_IMAGE_TOOL_NAME = "generate_image";
 
 const DEFAULT_FILENAME = "generated-image.png";
 
-export interface GenerateImageToolInput {
-  filename?: string;
-  prompt: string;
-  size?: string;
+/** `@image` from the composer's @ menu, at a word start (not `me@image.dev`). */
+const IMAGE_MENTION_PATTERN = /(?:^|\s)@image(?=\s|$)/i;
+
+/**
+ * Turn instruction for a message tagged `@image`: generate now, or say why the
+ * agent cannot. Empty when the message carries no tag.
+ */
+export function formatImageMentionContext(
+  userMessage: string,
+  toolNames: readonly string[]
+): string {
+  if (!IMAGE_MENTION_PATTERN.test(userMessage)) {
+    return "";
+  }
+
+  return toolNames.includes(GENERATE_IMAGE_TOOL_NAME)
+    ? `The user tagged @image, so this turn is an image request. Call ${GENERATE_IMAGE_TOOL_NAME} right away with a detailed prompt built from their message (leave out the @image tag), then reply briefly. Do not answer with text only.`
+    : `The user tagged @image, but the ${GENERATE_IMAGE_TOOL_NAME} tool is not assigned to this agent. Tell them image generation is off here: assign the ${GENERATE_IMAGE_TOOL_NAME} tool to this agent and pick an image generation model in Settings.`;
 }
 
 export interface GenerateImageToolSuccess {
@@ -55,7 +70,8 @@ export interface GenerateImageToolDeps {
   recordUsage?: (
     modelId: string,
     inputTokens: number,
-    outputTokens: number
+    outputTokens: number,
+    providerInstance: ProviderInstance
   ) => void;
 }
 
@@ -144,8 +160,10 @@ export async function runGenerateImageTool(
   try {
     result = await generate({
       apiKey: selection.apiKey,
+      baseUrl: selection.baseUrl,
       model: selection.model,
       prompt,
+      signal: context.signal,
       size,
     });
   } catch (error) {
@@ -220,7 +238,8 @@ export async function runGenerateImageTool(
     deps.recordUsage(
       result.model,
       result.usage.inputTokens,
-      result.usage.outputTokens
+      result.usage.outputTokens,
+      selection.instance
     );
   }
 

@@ -144,6 +144,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     const isTopic = isTelegramTopicMessage(ctx);
 
     if (text && isStopCommand(text)) {
+      await authStore.reload();
+      if (!authStore.isAuthorized(userId)) {
+        return;
+      }
+
       if (!stopActiveStream(conversationKey)) {
         await telegram.send("Nothing to stop.");
       }

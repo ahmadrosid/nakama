@@ -33,6 +33,7 @@ import {
 } from "../org-guards";
 import {
   errorResponse,
+  getRequestAppUserScope,
   getRequestAuth,
   json,
   parseChannel,
@@ -55,8 +56,7 @@ export function registerSessionRoutes(
   const requireSessionAccess = async (
     c: Parameters<typeof requireActiveOrgIdFromContext>[0]
   ) => {
-    const auth = getRequestAuth(c);
-    const appUserId = c.req.header("X-Nakama-App-User-Id")?.trim();
+    const { appUserId, auth } = getRequestAppUserScope(c);
     if (auth.mode === "api-key" && !appUserId) {
       throw new NakamaApiError(
         "X-Nakama-App-User-Id is required for API-key session access.",
@@ -672,8 +672,7 @@ export function registerSessionRoutes(
 
   app.get("/v1/sessions", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
-    const auth = getRequestAuth(c);
-    const appUserId = c.req.header("X-Nakama-App-User-Id")?.trim();
+    const { appUserId, auth } = getRequestAppUserScope(c);
     if (auth.mode === "api-key" && !appUserId) {
       return errorResponse(
         "X-Nakama-App-User-Id is required for API-key session access.",

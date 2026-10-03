@@ -1,7 +1,9 @@
 import type { OrgMemberSummary, OrgRole } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
+import { Input } from "@nakama/ui/input";
 import { toast } from "@nakama/ui/toast";
-import { useReducer } from "react";
+import { type FormEvent, useEffect, useReducer, useState } from "react";
 import {
   type OrgMemberAddCredentials,
   OrgMemberAddDialog,
@@ -127,7 +129,7 @@ function orgMembersReducer(
 }
 
 export function OrgMembersCard() {
-  const { user, activeOrg } = useAuth();
+  const { user, activeOrg, updateOrg } = useAuth();
   const orgId = activeOrg?.id ?? null;
 
   const {
@@ -356,6 +358,14 @@ export function OrgMembersCard() {
             orgId={activeOrg.id}
           />
 
+          <InviteDomainsForm
+            allowedDomains={activeOrg.allowedInviteDomains ?? []}
+            key={activeOrg.id}
+            onSave={(domains) =>
+              updateOrg(activeOrg.id, { allowedInviteDomains: domains })
+            }
+          />
+
           {state.secretValue ? (
             <OrgMembersSecretBanner
               onCopy={() => void copySecret(state.secretValue!)}
@@ -401,6 +411,74 @@ export function OrgMembersCard() {
         updatePending={updateMemberMutation.isPending}
       />
     </>
+  );
+}
+
+function InviteDomainsForm({
+  allowedDomains,
+  onSave,
+}: {
+  allowedDomains: string[];
+  onSave: (domains: string[]) => Promise<void>;
+}) {
+  const domainsValue = allowedDomains.join(", ");
+  const [value, setValue] = useState(domainsValue);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setValue(domainsValue);
+  }, [domainsValue]);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(
+        value
+          .split(/[,\n]+/)
+          .map((domain) => domain.trim())
+          .filter(Boolean)
+      );
+      toast("Allowed invite domains saved.");
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form
+      className="flex flex-wrap items-end gap-3 px-4 py-3"
+      onSubmit={(event) => void handleSubmit(event)}
+    >
+      <div className="min-w-56 flex-1 space-y-1.5">
+        <label
+          className="font-medium text-foreground text-sm"
+          htmlFor="allowed-invite-domains"
+        >
+          Allowed invite domains
+        </label>
+        <Input
+          id="allowed-invite-domains"
+          onChange={(event) => setValue(event.target.value)}
+          value={value}
+        />
+        <p className="text-muted-foreground text-xs">
+          Separate domains with commas. Leave empty to allow any domain.
+        </p>
+        {error ? (
+          <p className="text-destructive text-sm" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+      <Button disabled={saving} type="submit" variant="outline">
+        Save domains
+      </Button>
+    </form>
   );
 }
 

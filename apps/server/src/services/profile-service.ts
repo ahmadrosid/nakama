@@ -1,5 +1,5 @@
 import { existsSync, lstatSync, mkdirSync, renameSync } from "node:fs";
-import { cp } from "node:fs/promises";
+import { cp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type {
   AssignMcpServerRequest,
@@ -34,6 +34,7 @@ import {
   createId,
   DEFAULT_KNOWLEDGE_SOURCES,
   deleteProfileAvatar,
+  ensureKnowledgeBaseDirs,
   getKnowledgeBaseDir,
   getProfileSharedDocumentIds,
   getProfileSoulDir,
@@ -139,6 +140,9 @@ async function copyKnowledgeBaseTo(
   sourceId: string,
   profileId: string
 ): Promise<void> {
+  // A legacy `data/knowledge-base` is only moved by KB operations, so migrate
+  // it before looking for the current-layout directory.
+  await ensureKnowledgeBaseDirs(orgId, sourceId);
   const from = getKnowledgeBaseDir(orgId, sourceId);
 
   if (!(await pathExists(from))) {
@@ -277,12 +281,43 @@ export class ProfileService {
       updatedAt: now,
     });
 
-    await this.copyProfileSoul(orgId, sourceId, profileId);
-    await this.copyProfileAssignments(sourceId, profileId);
-    await copyProfileAvatarTo(orgId, sourceId, profileId);
-    await copyKnowledgeBaseTo(orgId, sourceId, profileId);
+    try {
+      await this.copyProfileSoul(orgId, sourceId, profileId);
+      await this.copyProfileAssignments(sourceId, profileId);
+      await copyProfileAvatarTo(orgId, sourceId, profileId);
+      await copyKnowledgeBaseTo(orgId, sourceId, profileId);
+    } catch (error) {
+      await this.cleanupFailedClone(orgId, sourceId, profileId);
+      throw error;
+    }
 
     return this.getProfile(orgId, profileId);
+  }
+
+  private async cleanupFailedClone(
+    orgId: string,
+    sourceId: string,
+    profileId: string
+  ): Promise<void> {
+    await rm(getProfileSoulDir(orgId, profileId), {
+      force: true,
+      recursive: true,
+    });
+
+    for (const tool of await this.db.listToolsForProfile(sourceId)) {
+      await this.db.unassignToolFromProfile(profileId, tool.id);
+    }
+
+    for (const skill of await this.db.listSkillsForProfile(sourceId)) {
+      await this.db.unassignSkillFromProfile(profileId, skill.id);
+    }
+
+    for (const server of await this.db.listMcpServersForProfile(sourceId)) {
+      await this.db.unassignMcpServerFromProfile(profileId, server.id);
+    }
+
+    await this.db.replaceProfileComposioToolkits(profileId, []);
+    await this.db.deleteProfile(profileId);
   }
 
   private async copyProfileSoul(
@@ -347,7 +382,7 @@ export class ProfileService {
     for (let suffix = 1; suffix <= CLONE_ID_ATTEMPTS; suffix++) {
       const candidate = suffix === 1 ? base : `${base}-${suffix}`;
 
-      if (!(await this.db.getProfile(candidate))) {
+      if (!(await this.isProfileIdTaken(candidate))) {
         return this.resolveNewProfileId(candidate, name);
       }
     }
@@ -1088,13 +1123,30 @@ export class ProfileService {
       );
     }
 
-    const existing = await this.db.getProfile(trimmed);
-
-    if (existing) {
+    if (await this.isProfileIdTaken(trimmed)) {
       throw new NakamaApiError("Profile id already exists.", 409);
     }
 
     return trimmed;
+  }
+
+  /**
+   * On Windows `Sales` and `sales` would share one profile folder, because
+   * NTFS names are case-insensitive, so there an id taken in any case is taken.
+   */
+  private async isProfileIdTaken(id: string): Promise<boolean> {
+    if (await this.db.getProfile(id)) {
+      return true;
+    }
+
+    if (process.platform !== "win32") {
+      return false;
+    }
+
+    const lowered = id.toLowerCase();
+    return (await this.db.listProfiles()).some(
+      (profile) => profile.id.toLowerCase() === lowered
+    );
   }
 
   private async requireProfile(

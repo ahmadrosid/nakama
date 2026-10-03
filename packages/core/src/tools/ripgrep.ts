@@ -30,6 +30,12 @@ export function buildRipgrepArgs(options: {
   glob: string | null;
   regex: boolean;
   maxResults: number;
+  /**
+   * Paths to keep out of the walk, relative to `searchRoot`. Passed as negated
+   * globs, which stay exclusions: a positive glob would narrow the search to
+   * that pattern alone and quietly drop everything else.
+   */
+  excludes?: string[];
 }): string[] {
   const args = [
     "--json",
@@ -46,6 +52,10 @@ export function buildRipgrepArgs(options: {
 
   if (options.glob) {
     args.push("--glob", options.glob);
+  }
+
+  for (const exclude of options.excludes ?? []) {
+    args.push("--glob", `!${exclude}`);
   }
 
   args.push("--", options.query, options.searchRoot);
@@ -73,6 +83,7 @@ export async function runRipgrep(
     const child = spawn(command, args, {
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
     });
 
     let stderr = "";

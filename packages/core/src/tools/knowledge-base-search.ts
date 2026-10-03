@@ -109,7 +109,7 @@ export async function runKnowledgeBaseSearch(
   const unreadableField = unreadable.length > 0 ? { unreadable } : {};
   // Organization hits are relative to the organization root, not to the
   // profile workspace they used to be resolved against.
-  const organizationRoot = await resolveWorkspaceRoot(organizationTarget.root);
+  const organizationRoot = organizationTarget.root;
 
   if (backend) {
     // The memory backend indexes profile documents only, so attached

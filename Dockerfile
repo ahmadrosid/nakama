@@ -1,12 +1,17 @@
 # Nakama — one container: API, web dashboard, automation + task workers
 # Build & run: ./scripts/docker-build-run.sh
 
+# Keep image references literal so Dependabot can update all three pins.
+# Use patch-version tags so new Bun patches produce version updates.
+# Verify each proposed multi-arch digest with: docker buildx imagetools inspect <image>
+
 # --- Build architecture-independent web and JavaScript bundles once ---
-FROM --platform=$BUILDPLATFORM oven/bun:1.4-slim AS web-builder
+FROM --platform=$BUILDPLATFORM oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61 AS web-builder
 WORKDIR /app
 
 COPY package.json bun.lock ./
-COPY patches/@electron%2Fosx-sign@1.3.3.patch patches/
+# The frozen install needs every patch package.json lists.
+COPY patches patches
 COPY apps apps
 COPY packages packages
 
@@ -28,16 +33,16 @@ COPY --from=web-builder /app/apps/platform/whatsapp/dist /app/apps/platform/what
 COPY --from=web-builder /app/apps/platform/discord/dist /app/apps/platform/discord/dist
 COPY --from=web-builder /app/apps/platform/slack/dist /app/apps/platform/slack/dist
 
-FROM oven/bun:1.4-slim AS runtime-deps
+FROM oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61 AS runtime-deps
 RUN mkdir -p /runtime-deps \
   && printf '{"private":true}\n' > /runtime-deps/package.json \
   && cd /runtime-deps \
   && bun add --exact --production --ignore-scripts \
-    pm2@7.0.4 microsandbox@0.6.17 sharp@0.35.4 \
+    pm2@7.0.4 microsandbox@0.7.4 sharp@0.35.4 \
     @vscode/ripgrep@1.18.0 @firecrawl/anydoc@0.1.3
 
 # --- Production runtime (server + workspace packages + built static assets) ---
-FROM oven/bun:1.4-slim AS runtime
+FROM oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61 AS runtime
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates sudo python3 \

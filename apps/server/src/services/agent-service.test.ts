@@ -25,6 +25,7 @@ import { createMinimalHonoApp } from "../http/test-app-helpers";
 import { setupFreshInstallSession } from "../http/test-session-helpers";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
+import { createDefaultProfile } from "./agent-service-test-fixtures";
 import { LlmUsageTracker } from "./llm-usage-tracker";
 import { resolveDefaultModelForInstance } from "./provider-instance-helpers";
 import { sessionTurnRegistry } from "./session-turn-registry";
@@ -34,21 +35,6 @@ const TEST_ORG_ID = "org_test";
 import { SkillsService } from "./skills-service";
 
 const ORG_ID = "org_test";
-
-function createDefaultProfile(): StoredProfileRecord {
-  const now = new Date().toISOString();
-  return {
-    createdAt: now,
-    id: "profile_default",
-    isDefault: true,
-    isSuper: false,
-    model: null,
-    name: "Default",
-    orgId: ORG_ID,
-    systemPrompt: "You are helpful.",
-    updatedAt: now,
-  };
-}
 
 describe("Super Bot provider inheritance", () => {
   setupTestConfigDir("nakama-inherited-provider-");
@@ -420,7 +406,7 @@ describe("AgentService branching", () => {
     ).rejects.toThrow("messageIndex is out of bounds.");
   });
 
-  test("falls back to org default when the requested profile is missing", async () => {
+  test("falls back to org default only when no profile is requested", async () => {
     const database = await createSqliteDatabase(":memory:");
     const db = database.adapter;
     const now = new Date().toISOString();
@@ -447,11 +433,12 @@ describe("AgentService branching", () => {
       });
 
       const service = new AgentService(null, null, db);
-      const sessionId = await service.createSession(
-        ORG_ID,
-        "web",
-        "missing_profile"
-      );
+      await expect(
+        service.createSession(ORG_ID, "web", "missing_profile")
+      ).rejects.toMatchObject({ status: 404 });
+      expect(await db.listSessions()).toEqual([]);
+
+      const sessionId = await service.createSession(ORG_ID, "web");
       const session = await db.getSession(sessionId);
 
       expect(session?.profileId).toBe("profile_custom");
@@ -902,10 +889,21 @@ describe("AgentService coding delegation context", () => {
     const db = createInMemoryDatabaseAdapter();
     await installFakeOpenCode(tempBinDir);
     await Bun.write(
-      path.join(tempBinDir, "claude"),
-      "#!/bin/sh\necho claude\n"
+      path.join(
+        tempBinDir,
+        process.platform === "win32" ? "claude.cmd" : "claude"
+      ),
+      process.platform === "win32"
+        ? "@echo off\r\necho claude\r\n"
+        : "#!/bin/sh\necho claude\n"
     );
-    await chmod(path.join(tempBinDir, "claude"), 0o755);
+    await chmod(
+      path.join(
+        tempBinDir,
+        process.platform === "win32" ? "claude.cmd" : "claude"
+      ),
+      0o755
+    );
 
     await db.upsertWorkspaceSettings({
       codingAgentHarnesses: [
@@ -1601,6 +1599,13 @@ async function captureError(
 }
 
 async function installFakeOpenCode(binDir: string): Promise<void> {
+  if (process.platform === "win32") {
+    await writeFile(
+      path.join(binDir, "opencode.cmd"),
+      "@echo off\r\necho fake opencode\r\n"
+    );
+    return;
+  }
   const scriptPath = path.join(binDir, "opencode");
   await writeFile(
     scriptPath,

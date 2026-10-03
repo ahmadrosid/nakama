@@ -36,6 +36,7 @@ export function ImageGenerationToolRow({
     <div className="w-full max-w-full">
       <ImageGeneration
         aspect={state.aspect}
+        done={state.status === "done"}
         error={error}
         imageUrl={preview.url}
         prompt={state.prompt}
