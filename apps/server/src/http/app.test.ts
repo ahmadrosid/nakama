@@ -163,6 +163,23 @@ describe("createHonoApp", () => {
           (
             await app.fetch(
               new Request("http://localhost/v1/auth/me", {
+                body: JSON.stringify({ name: "Changed by retired key" }),
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                },
+                method: "PATCH",
+              })
+            )
+          ).status
+        ).toBe(401);
+        expect(await options.databaseAdapter.getUserById(user!.id)).toEqual(
+          user
+        );
+        expect(
+          (
+            await app.fetch(
+              new Request("http://localhost/v1/auth/me", {
                 headers: browser.headers(),
               })
             )
