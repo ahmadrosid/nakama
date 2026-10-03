@@ -142,6 +142,7 @@ export async function readStreamEvents(
       if (payload.type === "done") {
         sawDoneEvent = true;
         handlers.onDone?.();
+        throwIfAborted(signal);
         if (payload.contextUsage) {
           handlers.onContextUsage?.(payload.contextUsage);
         }
@@ -159,11 +160,11 @@ export async function readStreamEvents(
     }
   );
 
+  throwIfAborted(signal);
+
   if (sawDoneEvent) {
     return doneReply ?? "";
   }
-
-  throwIfAborted(signal);
 
   if (!reply) {
     throw new Error(
@@ -211,11 +212,11 @@ export async function readAgentBrowserInstallStream(
     signal
   );
 
+  throwIfAborted(signal);
+
   if (doneStatus) {
     return doneStatus;
   }
-
-  throwIfAborted(signal);
 
   if (status) {
     return status;
@@ -278,6 +279,7 @@ async function consumeSseEvents<TEvent extends { type: string }, TResult>(
           });
       });
 
+      throwIfAborted(signal);
       const { done, value } = readResult;
 
       if (done) {
@@ -297,6 +299,7 @@ async function consumeSseEvents<TEvent extends { type: string }, TResult>(
         buffer = buffer.slice(boundary + 2);
 
         for (const line of eventBlock.split("\n")) {
+          throwIfAborted(signal);
           if (line.startsWith(":") || !line.startsWith("data: ")) {
             continue;
           }
@@ -306,6 +309,7 @@ async function consumeSseEvents<TEvent extends { type: string }, TResult>(
 
           const payload = JSON.parse(line.slice(6)) as TEvent;
           const result = await onEvent(payload);
+          throwIfAborted(signal);
 
           if (result !== undefined) {
             return result;
