@@ -8,6 +8,13 @@ import { normalizeCreateNotificationDestinationRequest } from "@nakama/core/noti
 import { Button } from "@nakama/ui/button";
 import { ConfirmDialog } from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@nakama/ui/select";
 import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
 import {
@@ -191,6 +198,41 @@ function LatestSecret({
   );
 }
 
+const CHANNEL_LABELS: Record<NotificationDestinationChannel, string> = {
+  discord: "Discord",
+  telegram: "Telegram",
+  whatsapp: "WhatsApp",
+};
+
+function AgentSelect({
+  profiles,
+  value,
+  onChange,
+}: {
+  profiles: Array<{ id: string; name: string }>;
+  value: string;
+  onChange: (profileId: string) => void;
+}) {
+  const selected = profiles.find((profile) => profile.id === value);
+  return (
+    <Select
+      onValueChange={(next) => onChange(typeof next === "string" ? next : "")}
+      value={value}
+    >
+      <SelectTrigger className="w-full">
+        <SelectValue>{selected?.name ?? "Choose an agent"}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {profiles.map((profile) => (
+          <SelectItem key={profile.id} value={profile.id}>
+            {profile.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 function isWhatsAppRecipientReady(
   settings: ReturnType<typeof useNotificationWhatsAppSettings>
 ): boolean {
@@ -315,18 +357,11 @@ export function NotificationDestinationsCard() {
     <div className="space-y-8">
       <label className="flex flex-col gap-2 text-sm">
         Agent
-        <select
-          className="rounded-md border bg-background p-2"
-          onChange={(event) => setProfileId(event.target.value)}
+        <AgentSelect
+          onChange={setProfileId}
+          profiles={profiles}
           value={profileId}
-        >
-          <option value="">Choose an agent</option>
-          {profiles.map((profile) => (
-            <option key={profile.id} value={profile.id}>
-              {profile.name}
-            </option>
-          ))}
-        </select>
+        />
       </label>
       <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
         <p className="px-4 py-3 font-medium text-foreground text-sm">
@@ -336,19 +371,23 @@ export function NotificationDestinationsCard() {
           <span className="shrink-0 text-foreground text-sm sm:w-36">
             Channel
           </span>
-          <select
-            className="min-w-0 flex-1 rounded-md border bg-background p-2 text-sm"
-            onChange={(event) => {
-              setChannel(event.target.value as NotificationDestinationChannel);
+          <Select
+            onValueChange={(value) => {
+              setChannel(value as NotificationDestinationChannel);
               setTarget("");
               setFormError(null);
             }}
             value={channel}
           >
-            <option value="telegram">Telegram</option>
-            <option value="discord">Discord</option>
-            <option value="whatsapp">WhatsApp</option>
-          </select>
+            <SelectTrigger className="w-full min-w-0 flex-1">
+              <SelectValue>{CHANNEL_LABELS[channel]}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="telegram">Telegram</SelectItem>
+              <SelectItem value="discord">Discord</SelectItem>
+              <SelectItem value="whatsapp">WhatsApp</SelectItem>
+            </SelectContent>
+          </Select>
         </label>
         <label className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center">
           <span className="shrink-0 text-foreground text-sm sm:w-36">Name</span>
@@ -650,20 +689,11 @@ function NotificationDestinationItem({
             </label>
             <label className="flex flex-1 flex-col gap-1.5 text-xs">
               Agent
-              <select
-                className="rounded-md border bg-background p-2 text-sm"
-                onChange={(event) =>
-                  setDraft({ ...draft, profileId: event.target.value })
-                }
+              <AgentSelect
+                onChange={(profileId) => setDraft({ ...draft, profileId })}
+                profiles={profiles}
                 value={draft.profileId}
-              >
-                <option value="">Choose an agent</option>
-                {profiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.name}
-                  </option>
-                ))}
-              </select>
+              />
             </label>
             <div className="sm:col-span-2">
               <NotificationTargetFields
