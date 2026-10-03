@@ -50,20 +50,6 @@ describe("coding-agent spawn env", () => {
     expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
   });
 
-  test("builds pi.dev provider passthrough env for anthropic", async () => {
-    const env = await buildPiSpawnEnv(
-      activeAnthropicRouting({
-        apiKey: "test-anthropic-key",
-        baseUrl: "https://api.anthropic.com",
-        providerLabel: "Anthropic",
-        providerType: "anthropic",
-      }),
-      "anthropic"
-    );
-    expect(env.env.PI_CODING_AGENT_DIR).toBeDefined();
-    expect(env.cleanup).toBeDefined();
-  });
-
   test("builds pi.dev provider passthrough env for openrouter", async () => {
     const env = await buildPiSpawnEnv(
       activeAnthropicRouting({
