@@ -32,6 +32,35 @@ import {
 
 const PAIRED_JID = "1234567890@s.whatsapp.net";
 
+function defaultProfiles() {
+  return [
+    {
+      createdAt: new Date().toISOString(),
+      hasAvatar: false,
+      id: "default",
+      isSuper: false,
+      mcpServerCount: 0,
+      model: null,
+      name: "Default",
+      soulActive: false,
+      toolCount: 0,
+      updatedAt: new Date().toISOString(),
+    },
+    {
+      createdAt: new Date().toISOString(),
+      hasAvatar: false,
+      id: "profile_tensetutor",
+      isSuper: false,
+      mcpServerCount: 0,
+      model: null,
+      name: "Tense Tutor",
+      soulActive: false,
+      toolCount: 0,
+      updatedAt: new Date().toISOString(),
+    },
+  ];
+}
+
 function createMockSocket() {
   const sent: Array<{
     jid: string;
@@ -58,6 +87,34 @@ function createMockSocket() {
   return { sent, socket };
 }
 
+async function createTestHandler(
+  homeDir: string,
+  options: Omit<
+    Parameters<typeof createChatHandler>[0],
+    "authStore" | "client" | "sessionStore" | "orgStore" | "getSocket"
+  > = { config: { phoneNumber: "1234567890", profileId: "default" } },
+  clientOptions: Parameters<typeof createMockClient>[0] = {}
+) {
+  const authStore = new WhatsAppAuthStore();
+  await authStore.reload();
+  const mock = createMockClient(clientOptions);
+  const sessionStore = new SessionStore(
+    path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+  );
+  const orgStore = createTestOrgStore(homeDir);
+  await orgStore.load();
+  const { socket, sent } = createMockSocket();
+  const handler = createChatHandler({
+    ...options,
+    authStore,
+    client: mock.client,
+    getSocket: () => socket as any,
+    orgStore,
+    sessionStore,
+  });
+  return { ...mock, authStore, handler, orgStore, sent, sessionStore, socket };
+}
+
 function documentSendCount(
   sent: Array<{ content: Record<string, unknown> }>
 ): number {
@@ -77,23 +134,7 @@ describe("createChatHandler", () => {
         pairedJid: PAIRED_JID,
         phoneNumber: "1234567890",
       });
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-      const handle = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+      const { calls, handler: handle, sent } = await createTestHandler(homeDir);
       const download = spyOn(
         baileys,
         "downloadContentFromMessage"
@@ -252,50 +293,12 @@ describe("createChatHandler", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient({
-        profiles: [
-          {
-            createdAt: new Date().toISOString(),
-            hasAvatar: false,
-            id: "default",
-            isSuper: false,
-            mcpServerCount: 0,
-            model: null,
-            name: "Default",
-            soulActive: false,
-            toolCount: 0,
-            updatedAt: new Date().toISOString(),
-          },
-          {
-            createdAt: new Date().toISOString(),
-            hasAvatar: false,
-            id: "profile_tensetutor",
-            isSuper: false,
-            mcpServerCount: 0,
-            model: null,
-            name: "Tense Tutor",
-            soulActive: false,
-            toolCount: 0,
-            updatedAt: new Date().toISOString(),
-          },
-        ],
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
+      const {
+        calls,
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir, undefined, {
+        profiles: defaultProfiles(),
       });
 
       await handleMessage({ jid: "9999999999@s.whatsapp.net", text: "hello" });
@@ -312,24 +315,11 @@ describe("createChatHandler", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+      const {
+        calls,
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir);
 
       await handleMessage({ jid: "9999999999@s.whatsapp.net", text: "hello" });
       await handleMessage({ jid: "9999999999@s.whatsapp.net", text: "/start" });
@@ -348,50 +338,12 @@ describe("createChatHandler", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient({
-        profiles: [
-          {
-            createdAt: new Date().toISOString(),
-            hasAvatar: false,
-            id: "default",
-            isSuper: false,
-            mcpServerCount: 0,
-            model: null,
-            name: "Default",
-            soulActive: false,
-            toolCount: 0,
-            updatedAt: new Date().toISOString(),
-          },
-          {
-            createdAt: new Date().toISOString(),
-            hasAvatar: false,
-            id: "profile_tensetutor",
-            isSuper: false,
-            mcpServerCount: 0,
-            model: null,
-            name: "Tense Tutor",
-            soulActive: false,
-            toolCount: 0,
-            updatedAt: new Date().toISOString(),
-          },
-        ],
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
+      const {
+        calls,
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir, undefined, {
+        profiles: defaultProfiles(),
       });
 
       await handleMessage({ jid: "9999999999@s.whatsapp.net", text: "WRONG" });
@@ -409,50 +361,13 @@ describe("createChatHandler", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient({
-        profiles: [
-          {
-            createdAt: new Date().toISOString(),
-            hasAvatar: false,
-            id: "default",
-            isSuper: false,
-            mcpServerCount: 0,
-            model: null,
-            name: "Default",
-            soulActive: false,
-            toolCount: 0,
-            updatedAt: new Date().toISOString(),
-          },
-          {
-            createdAt: new Date().toISOString(),
-            hasAvatar: false,
-            id: "profile_tensetutor",
-            isSuper: false,
-            mcpServerCount: 0,
-            model: null,
-            name: "Tense Tutor",
-            soulActive: false,
-            toolCount: 0,
-            updatedAt: new Date().toISOString(),
-          },
-        ],
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-
-      const handleMessage = createChatHandler({
+      const {
+        calls,
         authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir, undefined, {
+        profiles: defaultProfiles(),
       });
 
       const pairJid = "1234567890@s.whatsapp.net";
@@ -475,51 +390,13 @@ describe("createChatHandler", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient({
-        profiles: [
-          {
-            createdAt: new Date().toISOString(),
-            hasAvatar: false,
-            id: "default",
-            isSuper: false,
-            mcpServerCount: 0,
-            model: null,
-            name: "Default",
-            soulActive: false,
-            toolCount: 0,
-            updatedAt: new Date().toISOString(),
-          },
-          {
-            createdAt: new Date().toISOString(),
-            hasAvatar: false,
-            id: "profile_tensetutor",
-            isSuper: false,
-            mcpServerCount: 0,
-            model: null,
-            name: "Tense Tutor",
-            soulActive: false,
-            toolCount: 0,
-            updatedAt: new Date().toISOString(),
-          },
-        ],
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      const { calls, handler: handleMessage } = await createTestHandler(
+        homeDir,
+        undefined,
+        {
+          profiles: defaultProfiles(),
+        }
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket } = createMockSocket();
-
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
 
       await handleMessage({ jid: PAIRED_JID, text: "hello agent" });
 
@@ -535,51 +412,15 @@ describe("createChatHandler", () => {
         phoneNumber: "6281379292556",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient({
-        profiles: [
-          {
-            createdAt: new Date().toISOString(),
-            hasAvatar: false,
-            id: "default",
-            isSuper: false,
-            mcpServerCount: 0,
-            model: null,
-            name: "Default",
-            soulActive: false,
-            toolCount: 0,
-            updatedAt: new Date().toISOString(),
-          },
-          {
-            createdAt: new Date().toISOString(),
-            hasAvatar: false,
-            id: "profile_tensetutor",
-            isSuper: false,
-            mcpServerCount: 0,
-            model: null,
-            name: "Tense Tutor",
-            soulActive: false,
-            toolCount: 0,
-            updatedAt: new Date().toISOString(),
-          },
-        ],
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      const { calls, handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: { phoneNumber: "6281379292556", profileId: "default" },
+        },
+        {
+          profiles: defaultProfiles(),
+        }
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket } = createMockSocket();
-
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "6281379292556", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
 
       await handleMessage({
         jid: "6281379292556:12@s.whatsapp.net",
@@ -598,24 +439,11 @@ describe("createChatHandler", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+      const {
+        calls,
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir);
 
       await handleMessage({ jid: PAIRED_JID, text: "/help" });
 
@@ -633,24 +461,11 @@ describe("createChatHandler", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+      const {
+        calls,
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir);
 
       await handleMessage({ jid: PAIRED_JID, text: "/clear" });
 
@@ -667,24 +482,11 @@ describe("createChatHandler", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+      const {
+        calls,
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir);
 
       await handleMessage({ jid: PAIRED_JID, text: "/compact" });
 
@@ -701,25 +503,13 @@ describe("createChatHandler", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls, getStreamControl } = createMockClient({
+      const {
+        calls,
+        getStreamControl,
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir, undefined, {
         streaming: true,
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
       });
 
       const chatPromise = handleMessage({
@@ -745,24 +535,7 @@ describe("createChatHandler", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+      const { handler: handleMessage, sent } = await createTestHandler(homeDir);
 
       await handleMessage({ jid: PAIRED_JID, text: "/stop" });
 
@@ -778,24 +551,11 @@ describe("createChatHandler", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+      const {
+        calls,
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir);
 
       await handleMessage({ jid: PAIRED_JID, text: "/unknown" });
 
@@ -813,9 +573,11 @@ describe("createChatHandler", () => {
         profileId: "missing_profile",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient({
+      const {
+        calls,
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir, undefined, {
         profiles: [
           {
             createdAt: new Date().toISOString(),
@@ -830,21 +592,6 @@ describe("createChatHandler", () => {
             updatedAt: new Date().toISOString(),
           },
         ],
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
       });
 
       await handleMessage({ jid: PAIRED_JID, text: "/new" });
@@ -864,23 +611,11 @@ describe("bridge API integration", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls, orgIds } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket } = createMockSocket();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+      const {
+        calls,
+        orgIds,
+        handler: handleMessage,
+      } = await createTestHandler(homeDir);
 
       await handleMessage({ jid: PAIRED_JID, text: "hello" });
 
@@ -900,23 +635,11 @@ describe("bridge API integration", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
+      const {
         orgStore,
-        sessionStore,
-      });
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir);
 
       await handleMessage({ jid: PAIRED_JID, text: "hello" });
 
@@ -934,24 +657,12 @@ describe("bridge API integration", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient({
+      const {
+        calls,
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir, undefined, {
         orgs: createMultiTestOrgs(),
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
       });
 
       await handleMessage({ jid: PAIRED_JID, text: "hello" });
@@ -971,24 +682,13 @@ describe("bridge API integration", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls, orgIds } = createMockClient({
+      const {
+        calls,
+        orgIds,
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir, undefined, {
         orgs: createMultiTestOrgs(),
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
       });
 
       await handleMessage({ jid: PAIRED_JID, text: "2" });
@@ -1049,23 +749,11 @@ describe("createChatHandler group chats", () => {
           phoneNumber: "1234567890",
         });
 
-        const authStore = new WhatsAppAuthStore();
-        await authStore.reload();
-        const { client, calls } = createMockClient();
-        const sessionStore = new SessionStore(
-          path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-        );
-        const orgStore = createTestOrgStore(homeDir);
-        await orgStore.load();
-        const { socket, sent } = createMockSocket();
-        const handleMessage = createChatHandler({
-          authStore,
-          client,
-          config: { phoneNumber: "1234567890", profileId: "default" },
-          getSocket: () => socket as any,
-          orgStore,
-          sessionStore,
-        });
+        const {
+          calls,
+          handler: handleMessage,
+          sent,
+        } = await createTestHandler(homeDir);
 
         await handleMessage(groupInbound({ senderJid, text: privateMessage }));
 
@@ -1103,23 +791,11 @@ describe("createChatHandler group chats", () => {
         requireGroupMention: false,
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+      const {
+        calls,
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir);
 
       await handleMessage(groupInbound({ text: "hello without mention" }));
 
@@ -1141,23 +817,11 @@ describe("createChatHandler group chats", () => {
         requireGroupMention: false,
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+      const {
+        calls,
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir);
 
       await handleMessage(groupInbound({ text: "hi" }));
       const botReply = sent.at(-1)?.text ?? "";
@@ -1184,23 +848,8 @@ describe("createChatHandler group chats", () => {
         requireGroupMention: false,
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+      const { calls, handler: handleMessage } =
+        await createTestHandler(homeDir);
 
       await handleMessage(
         groupInbound({
@@ -1220,23 +869,12 @@ describe("createChatHandler group chats", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
+      const {
+        calls,
         sessionStore,
-      });
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir);
 
       await handleMessage(
         groupInbound({
@@ -1263,23 +901,8 @@ describe("createChatHandler group chats", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket } = createMockSocket();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+      const { calls, handler: handleMessage } =
+        await createTestHandler(homeDir);
 
       await handleMessage(
         groupInbound({
@@ -1305,23 +928,12 @@ describe("createChatHandler group chats", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-      const handleMessage = createChatHandler({
+      const {
+        calls,
         authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir);
 
       await handleMessage(
         groupInbound({
@@ -1347,24 +959,14 @@ describe("createChatHandler group chats", () => {
         requireGroupMention: false,
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls, getStreamControl } = createMockClient({
-        streaming: true,
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-      const handleMessage = createChatHandler({
+      const {
+        calls,
+        getStreamControl,
         authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir, undefined, {
+        streaming: true,
       });
 
       const chatPromise = handleMessage(
@@ -1401,23 +1003,12 @@ describe("createChatHandler group chats", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-      const handleMessage = createChatHandler({
+      const {
+        calls,
         authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir);
 
       await handleMessage(
         groupInbound({
@@ -1440,23 +1031,11 @@ describe("createChatHandler group chats", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client } = createMockClient({ orgs: createMultiTestOrgs() });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
+      const { orgStore, handler: handleMessage } = await createTestHandler(
+        homeDir,
+        undefined,
+        { orgs: createMultiTestOrgs() }
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket } = createMockSocket();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
 
       await handleMessage(groupInbound({ text: "/org 1" }));
 
@@ -1472,23 +1051,11 @@ describe("createChatHandler group chats", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket } = createMockSocket();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
+      const {
+        calls,
         sessionStore,
-      });
+        handler: handleMessage,
+      } = await createTestHandler(homeDir);
 
       await handleMessage({ jid: PAIRED_JID, text: "hello privately" });
       await handleMessage(
@@ -1511,23 +1078,11 @@ describe("createChatHandler group chats", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket } = createMockSocket();
-      const handleMessage = createChatHandler({
+      const {
+        calls,
         authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+        handler: handleMessage,
+      } = await createTestHandler(homeDir);
 
       await handleMessage(
         groupInbound({
@@ -1550,23 +1105,8 @@ describe("createChatHandler group chats", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket } = createMockSocket();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+      const { calls, handler: handleMessage } =
+        await createTestHandler(homeDir);
 
       await handleMessage(
         groupInbound({
@@ -1588,23 +1128,11 @@ describe("createChatHandler group chats", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket, sent } = createMockSocket();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+      const {
+        calls,
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir);
 
       await handleMessage({ jid: PAIRED_JID, text: "7A2F629D" });
 
@@ -1623,23 +1151,8 @@ describe("createChatHandler group chats", () => {
         phoneNumber: "1234567890",
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket } = createMockSocket();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+      const { calls, handler: handleMessage } =
+        await createTestHandler(homeDir);
 
       await handleMessage(
         groupInbound({
@@ -1661,23 +1174,8 @@ describe("createChatHandler group chats", () => {
         requireGroupMention: false,
       });
 
-      const authStore = new WhatsAppAuthStore();
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const { socket } = createMockSocket();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { phoneNumber: "1234567890", profileId: "default" },
-        getSocket: () => socket as any,
-        orgStore,
-        sessionStore,
-      });
+      const { calls, handler: handleMessage } =
+        await createTestHandler(homeDir);
 
       await handleMessage(
         groupInbound({
