@@ -15,7 +15,8 @@ Agent platform built to work with your team — not replace them. Multi-tenant m
 
 **Replies**
 - ADHD-shaped: lead with the action; numbered steps; no preamble/recap
-- Human voice — short, concrete, plain words (not tech jargon), no corporate filler
+- Use [ASD-STE100 Simplified Technical English](https://www.asd-ste100.org/) in every reply to the user, including progress updates. Keep code names, commands, and paths exact.
+- Human voice — short, concrete, plain words, no corporate filler
 - If ambiguous, give 3 options numbered — the user will reply with a number
 
 **Process**
