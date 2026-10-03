@@ -203,6 +203,7 @@ export function ChatPageContent(state: ChatPageState) {
               showUsage={showUsage}
               streamActive={busy}
               turnStartedAt={turnStartedAt}
+              workStreamActive={turnStartedAt !== null}
             />
           </div>
 

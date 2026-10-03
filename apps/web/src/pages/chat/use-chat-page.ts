@@ -578,6 +578,7 @@ export function useChatPage() {
       releaseActiveStream();
       activeSessionIdRef.current = sessionId;
       setBusy(true);
+      setTurnStartedAt(null);
       setError(null);
       try {
         localStorage.setItem(sessionStorageKey(nextProfileId), sessionId);
