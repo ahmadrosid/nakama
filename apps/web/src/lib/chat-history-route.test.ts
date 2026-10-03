@@ -322,6 +322,16 @@ describe("chat history route helpers", () => {
           search: "",
         })
       ).toBe("session-profile");
+
+      expect(
+        readInitialDraftChatProfileId({
+          currentOrgId: "orgA",
+          currentProfileId: "profileA",
+          orgId: "orgB",
+          routeProfileId: "profileA",
+          search: "",
+        })
+      ).toBe("");
     } finally {
       Object.defineProperty(globalThis, "localStorage", {
         configurable: true,

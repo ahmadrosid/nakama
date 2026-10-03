@@ -179,15 +179,13 @@ export function useChatPage() {
     () => profilesQuery.data ?? [],
     [profilesQuery.data]
   );
-  const profileId =
-    activeOrg && storeOrgId !== activeOrg.id
-      ? ""
-      : (storeProfileId ??
-        readInitialDraftChatProfileId({
-          orgId: activeOrg?.id,
-          routeProfileId: parseChatRouteParams(params)?.profileId,
-          search: location.search,
-        }));
+  const profileId = readInitialDraftChatProfileId({
+    currentOrgId: storeOrgId,
+    currentProfileId: storeProfileId,
+    orgId: activeOrg?.id,
+    routeProfileId: routeSession?.profileId,
+    search: location.search,
+  });
   const [session, setSession] = useState<RemoteChatSession | null>(null);
   const [cognito, setCognito] = useState(false);
   const [sessionModel, setSessionModel] = useState<string | null>(null);
