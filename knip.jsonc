@@ -43,7 +43,10 @@
       ]
     },
     // Not in package.json#workspaces; Knip would skip it otherwise.
-    "docs/website": {}
+    "docs/website": {
+      "ignoreDependencies": ["react-dom", "@types/react-dom"],
+      "ignoreBinaries": ["next"]
+    }
   },
   // Ships with Windows; desktop quit uses it to confirm a leftover pid is bun.
   "ignoreBinaries": ["tasklist"],

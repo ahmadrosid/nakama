@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+source "$(dirname "$0")/capture-common.sh"
 SCREENSHOT_DIR="$(cd "$(dirname "$0")/.." && pwd)/public/screenshots"
 TEMP_CONFIG="/tmp/nakama-docs-error-tracking-screenshots-$$"
 COOKIE_JAR="/tmp/nakama-docs-error-tracking-cookies-$$.txt"
@@ -32,6 +33,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$SCREENSHOT_DIR" "$TEMP_CONFIG"
+ensure_current_web_build "$ROOT"
 
 # A Sentry-compatible ingest that accepts anything, so the test event in the
 # second shot reports a real delivery rather than a mocked-out success.
@@ -66,7 +68,7 @@ CSRF_VAL=$(awk '$6=="nakama_csrf"{print $7}' "$COOKIE_JAR")
 SESSION_VAL=$(awk '$6=="nakama_session"{print $7}' "$COOKIE_JAR")
 
 # Without a provider the SetupGuard redirects every page to the setup wizard, so
-# the Integrations tab never renders. The key is a placeholder and is never used.
+# the control center never renders. The key is a placeholder and is never used.
 curl -sf -b "$COOKIE_JAR" -X POST "${BASE_URL}/v1/providers" \
   -H 'Content-Type: application/json' \
   -H "X-CSRF-Token: ${CSRF_VAL}" \
@@ -81,7 +83,7 @@ $AB --session "$SESSION" cookies set nakama_csrf "$CSRF_VAL" \
 # ---------------------------------------------------------------------------
 # Shot 1: no DSN saved. The badge reads Off and nothing is sent.
 # ---------------------------------------------------------------------------
-$AB --session "$SESSION" open "${BASE_URL}/integrations?section=error-tracking"
+$AB --session "$SESSION" open "${BASE_URL}/customize/connections/error-tracking"
 $AB --session "$SESSION" wait 2500
 $AB --session "$SESSION" set viewport "$VIEWPORT_WIDTH" 620
 $AB --session "$SESSION" set media light
@@ -96,9 +98,9 @@ $AB --session "$SESSION" screenshot "$SCREENSHOT_DIR/error-tracking-empty.png"
 $AB --session "$SESSION" fill "#error-tracking-dsn" \
   "http://publickey@127.0.0.1:${INGEST_PORT}/42"
 $AB --session "$SESSION" wait 300
-$AB --session "$SESSION" find text "Save" click
+$AB --session "$SESSION" find role button click --name "Save" --exact
 $AB --session "$SESSION" wait 1500
-$AB --session "$SESSION" find text "Send test event" click
+$AB --session "$SESSION" find role button click --name "Send test event" --exact
 $AB --session "$SESSION" wait 2500
 $AB --session "$SESSION" set viewport "$VIEWPORT_WIDTH" 620
 $AB --session "$SESSION" set media light
