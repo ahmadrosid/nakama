@@ -11,7 +11,7 @@ import {
 } from "./shared";
 import type { AppEnv } from "./types";
 
-export const ORG_ID_HEADER = "x-org-id";
+const ORG_ID_HEADER = "x-org-id";
 const PLUGIN_UI_PATH = /^\/v1\/plugins\/ui\/([^/]+)(?:\/|$)/;
 const PLUGIN_ACTION_PATH = /^\/v1\/plugins\/[^/]+\/actions\/[^/]+$/;
 

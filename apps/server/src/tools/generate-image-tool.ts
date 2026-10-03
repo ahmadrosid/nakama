@@ -45,7 +45,7 @@ export function formatImageMentionContext(
     : `The user tagged @image, but the ${GENERATE_IMAGE_TOOL_NAME} tool is not assigned to this agent. Tell them image generation is off here: assign the ${GENERATE_IMAGE_TOOL_NAME} tool to this agent and pick an image generation model in Settings.`;
 }
 
-export interface GenerateImageToolSuccess {
+interface GenerateImageToolSuccess {
   attachmentId: string | null;
   mimeType: string;
   model: string;
@@ -53,7 +53,7 @@ export interface GenerateImageToolSuccess {
   sizeBytes: number;
 }
 
-export interface GenerateImageToolFailure {
+interface GenerateImageToolFailure {
   error: string;
 }
 

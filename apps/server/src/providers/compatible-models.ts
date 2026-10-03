@@ -20,7 +20,7 @@ function resolveOpenRouterCatalogThinking(entry: CustomModelEntry): boolean {
   return openRouterSlugSupportsThinking(entry.id);
 }
 
-export function openRouterCustomModelsToCatalog(
+function openRouterCustomModelsToCatalog(
   entries: CustomModelEntry[]
 ): ProviderModelOption[] {
   return entries.map((entry) => ({
@@ -51,7 +51,7 @@ function resolveCerebrasCatalogThinking(entry: CustomModelEntry): boolean {
   return false;
 }
 
-export function cerebrasCustomModelsToCatalog(
+function cerebrasCustomModelsToCatalog(
   entries: CustomModelEntry[]
 ): ProviderModelOption[] {
   return entries.map((entry) => ({
@@ -82,7 +82,7 @@ function resolveFireworksCatalogThinking(entry: CustomModelEntry): boolean {
   return false;
 }
 
-export function fireworksCustomModelsToCatalog(
+function fireworksCustomModelsToCatalog(
   entries: CustomModelEntry[]
 ): ProviderModelOption[] {
   const staticModels = AVAILABLE_MODELS.filter(
@@ -157,7 +157,7 @@ export function catalogCustomModelsToCatalog(
   });
 }
 
-export function customModelsToCatalog(
+function customModelsToCatalog(
   entries: CustomModelEntry[],
   provider: ProviderName = "openai_compatible"
 ): ProviderModelOption[] {
@@ -190,7 +190,7 @@ export function customModelsToCatalog(
   });
 }
 
-export function ensureCurrentModelInCatalog(
+function ensureCurrentModelInCatalog(
   catalog: ProviderModelOption[],
   currentModel: string | null | undefined,
   provider: ProviderName = "openai_compatible"

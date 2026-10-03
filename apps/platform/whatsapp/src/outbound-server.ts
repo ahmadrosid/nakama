@@ -20,7 +20,7 @@ function tokenMatches(provided: string | null, expected: string): boolean {
   return actual.length === wanted.length && timingSafeEqual(actual, wanted);
 }
 
-export interface WhatsAppOutboundSendHandle {
+interface WhatsAppOutboundSendHandle {
   sendMessage: (jid: string, content: { text: string }) => Promise<unknown>;
 }
 

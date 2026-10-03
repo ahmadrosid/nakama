@@ -2,7 +2,7 @@ import { truncateMailBody } from "./mail/types";
 
 /** Shared with email body truncation (`MAX_EMAIL_BODY_BYTES`). */
 export const ANYDOC_MAX_OUTPUT_BYTES = 256 * 1024;
-export const ANYDOC_TIMEOUT_MS = 10_000;
+const ANYDOC_TIMEOUT_MS = 10_000;
 export const ANYDOC_MAX_CONCURRENT = 2;
 /** Parked callers, each pinning its document bytes until a slot frees up. */
 export const ANYDOC_MAX_QUEUE = 32;

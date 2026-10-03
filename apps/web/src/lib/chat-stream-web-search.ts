@@ -7,7 +7,7 @@ import type { ChatListItem } from "@/lib/chat-history";
 export const WEB_SEARCH_TOOL_NAME = "web_search";
 
 /** Exa MCP tools are namespaced as `{server}__web_search_exa` (see packages/core/src/mcp/preinstalled.ts). */
-export const MCP_EXA_WEB_SEARCH_TOOL_PATTERN =
+const MCP_EXA_WEB_SEARCH_TOOL_PATTERN =
   /^[a-zA-Z0-9_-]+__web_search(?:_advanced)?_exa(?:_\d+)?$/;
 
 export function isWebSearchTool(tool: string | undefined): boolean {
@@ -158,7 +158,7 @@ function parseMcpTextContent(content: unknown): string | null {
 }
 
 /** Parse Exa MCP `web_search_exa` formatted text blocks (Title/URL fields separated by ---). */
-export function parseExaWebSearchTextResult(text: string): WebSearchSource[] {
+function parseExaWebSearchTextResult(text: string): WebSearchSource[] {
   const trimmed = text.trim();
   if (!trimmed || /^no search results found/i.test(trimmed)) {
     return [];

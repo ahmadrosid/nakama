@@ -105,7 +105,7 @@ export function groupRunsByDay(
   }));
 }
 
-export function formatRunDayLabel(value: string): string {
+function formatRunDayLabel(value: string): string {
   const date = new Date(value);
   const now = new Date();
 

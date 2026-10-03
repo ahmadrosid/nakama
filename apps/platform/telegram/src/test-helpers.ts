@@ -107,7 +107,7 @@ function isHtmlParseMode(options: unknown): options is { parse_mode: "HTML" } {
   );
 }
 
-export interface MockStreamControl {
+interface MockStreamControl {
   complete(reply?: string): void;
   fail(error?: Error): void;
   readonly signal: AbortSignal | undefined;

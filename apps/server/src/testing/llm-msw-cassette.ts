@@ -5,7 +5,7 @@ import { setupServer } from "msw/node";
 
 export type LlmCassetteMode = "auto" | "record" | "replay";
 
-export type LlmCassetteExchange = {
+type LlmCassetteExchange = {
   request: {
     method: string;
     url: string;
@@ -30,7 +30,7 @@ export type LlmCassette = {
 };
 
 /** Shared cassette root for all server LLM live tests. */
-export const LLM_CASSETTES_DIR = join(import.meta.dir, "cassettes");
+const LLM_CASSETTES_DIR = join(import.meta.dir, "cassettes");
 
 const server = setupServer();
 let cassetteQueue = Promise.resolve();
@@ -55,7 +55,7 @@ export function cassetteFilePath(
   return join(cassettesDir, `${name.replaceAll("/", "-")}.json`);
 }
 
-export function normalizeCassetteExchanges(
+function normalizeCassetteExchanges(
   cassette: LlmCassette
 ): LlmCassetteExchange[] {
   if (cassette.exchanges?.length) {
@@ -85,7 +85,7 @@ export async function loadCassette(
   return (await file.json()) as LlmCassette;
 }
 
-export async function saveCassette(
+async function saveCassette(
   filePath: string,
   cassette: LlmCassette
 ): Promise<void> {

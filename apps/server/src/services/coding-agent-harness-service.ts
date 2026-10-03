@@ -597,7 +597,7 @@ async function getHarnessRuntimeStatus(
   };
 }
 
-export function getCodingHarnessLoginCommand(
+function getCodingHarnessLoginCommand(
   kind: StoredCodingAgentHarnessKind
 ): string | null {
   if (kind === "codex") {

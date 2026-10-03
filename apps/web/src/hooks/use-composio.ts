@@ -29,7 +29,7 @@ export function isAllowedComposioRedirectUrl(url: string): boolean {
   }
 }
 
-export const composioSettingsQueryOptions = queryOptions({
+const composioSettingsQueryOptions = queryOptions({
   queryFn: () => client.getComposioSettings(),
   queryKey: queryKeys.composio.settings,
 });
@@ -56,7 +56,7 @@ export function useSaveComposioSettings() {
   });
 }
 
-export const composioToolkitsQueryOptions = queryOptions({
+const composioToolkitsQueryOptions = queryOptions({
   queryFn: () => client.listComposioToolkits(),
   queryKey: queryKeys.composio.toolkits,
 });

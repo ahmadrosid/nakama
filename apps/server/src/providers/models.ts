@@ -958,7 +958,7 @@ export function validateOllamaCustomModels(
   return models;
 }
 
-export function isCloudflareModelId(model: string): boolean {
+function isCloudflareModelId(model: string): boolean {
   return model.trim().startsWith("@cf/") || model.trim().startsWith("@hf/");
 }
 
@@ -978,7 +978,7 @@ export function validateCloudflareCustomModels(
   return models;
 }
 
-export function isOpenCodeGoModelId(model: string): boolean {
+function isOpenCodeGoModelId(model: string): boolean {
   return model.trim().startsWith("opencode-go/");
 }
 
@@ -1264,7 +1264,7 @@ export function modelSupportsVision(
   }
 }
 
-export const TRANSCRIPTION_MODEL_IDS = new Set([
+const TRANSCRIPTION_MODEL_IDS = new Set([
   "whisper-1",
   "gpt-4o-transcribe",
   "gpt-4o-mini-transcribe",
@@ -1294,7 +1294,7 @@ export const IMAGE_GENERATION_MODEL_ID = "gpt-image-2";
 /** Sole allowlisted workspace selection: provider type + model id. */
 export const IMAGE_GENERATION_SELECTION = `openai::${IMAGE_GENERATION_MODEL_ID}`;
 
-export const IMAGE_GENERATION_MODEL_IDS = new Set([IMAGE_GENERATION_MODEL_ID]);
+const IMAGE_GENERATION_MODEL_IDS = new Set([IMAGE_GENERATION_MODEL_ID]);
 
 export function modelSupportsImageGeneration(
   modelId: string,

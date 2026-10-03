@@ -11,7 +11,7 @@ import { createOpenAICompatibleProvider } from "../openai-compatible";
 
 export { fetchOllamaModels } from "./models";
 
-export function resolveOllamaBaseUrl(
+function resolveOllamaBaseUrl(
   instance: ProviderInstance | null | undefined
 ): string {
   const trimmed = instance?.baseUrl?.trim();

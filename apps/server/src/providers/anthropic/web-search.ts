@@ -30,7 +30,7 @@ import {
 const MAX_PAUSE_CONTINUATIONS = 5;
 const WEB_SEARCH_MAX_USES = 5;
 
-export function buildAnthropicTools(
+function buildAnthropicTools(
   tools: LlmToolDefinition[] | undefined,
   webSearch: boolean
 ): ToolUnion[] | undefined {

@@ -27,7 +27,7 @@ export const IMAGE_GENERATION_SIZES = [
 
 export type ImageGenerationSize = (typeof IMAGE_GENERATION_SIZES)[number];
 
-export const DEFAULT_IMAGE_GENERATION_SIZE: ImageGenerationSize = "1024x1024";
+const DEFAULT_IMAGE_GENERATION_SIZE: ImageGenerationSize = "1024x1024";
 
 const OPENAI_IMAGES_GENERATIONS_PATH = "/images/generations";
 const DEFAULT_OPENAI_IMAGES_BASE_URL = "https://api.openai.com/v1";

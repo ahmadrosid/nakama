@@ -11,7 +11,7 @@ export interface AttachmentsContext {
   remove: (id: string) => void;
 }
 
-export interface TextInputContext {
+interface TextInputContext {
   clear: () => void;
   setInput: (v: string) => void;
   value: string;
