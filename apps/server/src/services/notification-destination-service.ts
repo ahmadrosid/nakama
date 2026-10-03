@@ -1,4 +1,5 @@
 import {
+  type CreateNotificationDestinationRequest,
   createId,
   type ListNotificationDestinationsResponse,
   NakamaApiError,
@@ -24,19 +25,34 @@ export function notificationDestinationWebhookPath(
 function toSummary(
   record: StoredNotificationDestinationRecord
 ): NotificationDestinationSummary {
-  return {
-    channel: record.channel,
+  const common = {
     createdAt: record.createdAt,
     id: record.id,
     name: record.name,
-    telegram: {
-      chatId: record.config.chatId,
-      profileId: record.config.profileId,
-      topicId: record.config.topicId ?? null,
-    },
     updatedAt: record.updatedAt,
     webhookPath: notificationDestinationWebhookPath(record.id),
   };
+  if (record.channel === "telegram") {
+    return {
+      ...common,
+      channel: record.channel,
+      telegram: { ...record.config, topicId: record.config.topicId ?? null },
+    };
+  }
+  if (record.channel === "discord") {
+    return { ...common, channel: record.channel, discord: record.config };
+  }
+  return { ...common, channel: record.channel, whatsapp: record.config };
+}
+
+function destinationConfig(request: CreateNotificationDestinationRequest) {
+  if (request.channel === "telegram") {
+    return { channel: request.channel, config: request.telegram };
+  }
+  if (request.channel === "discord") {
+    return { channel: request.channel, config: request.discord };
+  }
+  return { channel: request.channel, config: request.whatsapp };
 }
 
 export class NotificationDestinationService {
@@ -63,16 +79,12 @@ export class NotificationDestinationService {
     input: unknown
   ): Promise<NotificationDestinationWithSecret> {
     const request = normalizeCreateNotificationDestinationRequest(input);
-    await this.requireChannelProfile(orgId, request.telegram.profileId);
+    const configured = destinationConfig(request);
+    await this.requireChannelProfile(orgId, configured.config.profileId);
     const apiKey = nanoid(32);
     const now = new Date().toISOString();
     const record: StoredNotificationDestinationRecord = {
-      channel: request.channel,
-      config: {
-        chatId: request.telegram.chatId,
-        profileId: request.telegram.profileId,
-        topicId: request.telegram.topicId ?? null,
-      },
+      ...configured,
       createdAt: now,
       id: createId("dest"),
       name: request.name,
@@ -95,15 +107,15 @@ export class NotificationDestinationService {
     input: unknown
   ): Promise<NotificationDestinationSummary> {
     const existing = await this.getOwnedRecord(orgId, destinationId);
-    const request = normalizeUpdateNotificationDestinationRequest(input);
-    await this.requireChannelProfile(orgId, request.telegram.profileId);
+    const request = normalizeUpdateNotificationDestinationRequest(
+      input,
+      existing.channel
+    );
+    const configured = destinationConfig(request);
+    await this.requireChannelProfile(orgId, configured.config.profileId);
     const updated: StoredNotificationDestinationRecord = {
       ...existing,
-      config: {
-        chatId: request.telegram.chatId,
-        profileId: request.telegram.profileId,
-        topicId: request.telegram.topicId ?? null,
-      },
+      ...configured,
       name: request.name,
       updatedAt: new Date().toISOString(),
     };

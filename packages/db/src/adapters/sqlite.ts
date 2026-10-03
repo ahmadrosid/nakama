@@ -264,7 +264,7 @@ interface WorkspaceSettingsRow {
 }
 
 interface NotificationDestinationRow {
-  channel: "telegram";
+  channel: StoredNotificationDestinationRecord["channel"];
   config: string;
   created_at: string;
   id: string;
@@ -5305,11 +5305,7 @@ function toPasskeyRecord(row: PasskeyRow): StoredPasskeyRecord {
 function toNotificationDestinationRecord(
   row: NotificationDestinationRow
 ): StoredNotificationDestinationRecord {
-  return {
-    channel: row.channel,
-    config: JSON.parse(
-      row.config
-    ) as StoredNotificationDestinationRecord["config"],
+  const common = {
     createdAt: row.created_at,
     id: row.id,
     name: row.name,
@@ -5317,6 +5313,37 @@ function toNotificationDestinationRecord(
     secretHash: row.secret_hash,
     updatedAt: row.updated_at,
   };
+  switch (row.channel) {
+    case "telegram":
+      return {
+        ...common,
+        channel: row.channel,
+        config: JSON.parse(row.config) as Extract<
+          StoredNotificationDestinationRecord,
+          { channel: "telegram" }
+        >["config"],
+      };
+    case "discord":
+      return {
+        ...common,
+        channel: row.channel,
+        config: JSON.parse(row.config) as Extract<
+          StoredNotificationDestinationRecord,
+          { channel: "discord" }
+        >["config"],
+      };
+    case "whatsapp":
+      return {
+        ...common,
+        channel: row.channel,
+        config: JSON.parse(row.config) as Extract<
+          StoredNotificationDestinationRecord,
+          { channel: "whatsapp" }
+        >["config"],
+      };
+    default:
+      throw new Error("Unsupported notification destination channel.");
+  }
 }
 
 function normalizeOrgComposioToolkitStatus(

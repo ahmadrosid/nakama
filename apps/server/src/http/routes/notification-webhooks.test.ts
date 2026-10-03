@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
-import { saveTelegramConfig } from "@nakama/core";
+import {
+  getDiscordConfigPath,
+  getWhatsAppConfigPath,
+  saveTelegramConfig,
+} from "@nakama/core";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { seedOrgAdmin } from "../test-session-helpers";
 
@@ -31,6 +35,120 @@ describe("notification webhook routes", () => {
     return createMinimalHonoApp({
       agent: {},
       systemStatus: {},
+    });
+  }
+
+  for (const channel of ["discord", "whatsapp"] as const) {
+    test(`${channel} webhooks retain authentication, validation, and replay protection`, async () => {
+      const originalFetch = globalThis.fetch;
+      const calls: Array<{ url: string; body: unknown; headers: Headers }> = [];
+      let providerStatus = 200;
+      globalThis.fetch = async (input, init) => {
+        calls.push({
+          url: String(input),
+          body: JSON.parse(String(init?.body)),
+          headers: new Headers(init?.headers),
+        });
+        return new Response("ok", { status: providerStatus });
+      };
+      try {
+        const { app, databaseAdapter, authService } = await createApp();
+        await seedOrgAdmin(databaseAdapter, {
+          orgId: "org_1",
+          profileId: "agent_1",
+        });
+        const owner = { orgId: "org_1", profileId: "agent_1" };
+        const configPath =
+          channel === "discord"
+            ? getDiscordConfigPath(owner)
+            : getWhatsAppConfigPath(owner);
+        await mkdir(path.dirname(configPath), { recursive: true });
+        await writeFile(
+          configPath,
+          channel === "discord"
+            ? "bot_token=test_discord_token\nprofile_id=agent_1\n"
+            : "profile_id=agent_1\npaired_jid=628123456789@s.whatsapp.net\noutbound_port=4312\noutbound_token=test_worker_token\n"
+        );
+        const configured =
+          channel === "discord"
+            ? {
+                channel,
+                config: {
+                  channelId: "12345678901234567890",
+                  profileId: "agent_1",
+                },
+              }
+            : { channel, config: { profileId: "agent_1" } };
+        await databaseAdapter.upsertNotificationDestination({
+          ...configured,
+          id: "dest_1",
+          name: "Ops",
+          orgId: "org_1",
+          secretHash: authService.hashToken("secret_key"),
+          createdAt: "2026-10-03T00:00:00.000Z",
+          updatedAt: "2026-10-03T00:00:00.000Z",
+        });
+        const notify = (
+          key: string | null,
+          payload: unknown = {
+            title: "Payment",
+            body: "Received",
+            level: "success",
+          },
+          apiKey = "secret_key"
+        ) =>
+          app.fetch(
+            new Request("http://localhost:4310/v1/notify/dest_1", {
+              method: "POST",
+              body: JSON.stringify(payload),
+              headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": apiKey,
+                ...(key ? { "Idempotency-Key": key } : {}),
+              },
+            })
+          );
+        expect((await notify("evt_wrong", undefined, "wrong")).status).toBe(
+          401
+        );
+        expect((await notify(null)).status).toBe(400);
+        expect((await notify("evt_bad_payload", { body: " " })).status).toBe(
+          400
+        );
+        expect(calls).toEqual([]);
+        expect((await notify("evt_1")).status).toBe(204);
+        expect((await notify("evt_1")).status).toBe(409);
+        expect(calls).toHaveLength(1);
+        expect(calls[0]?.url).toBe(
+          channel === "discord"
+            ? "https://discord.com/api/v10/channels/12345678901234567890/messages"
+            : "http://127.0.0.1:4312/send"
+        );
+        expect(calls[0]?.body).toEqual(
+          channel === "discord"
+            ? {
+                content: "✅ **Payment**\n\nReceived",
+                allowed_mentions: { parse: [] },
+              }
+            : { text: "✅ Payment\n\nReceived" }
+        );
+        expect(
+          calls[0]?.headers.get(
+            channel === "discord" ? "authorization" : "x-nakama-token"
+          )
+        ).toBe(
+          channel === "discord" ? "Bot test_discord_token" : "test_worker_token"
+        );
+        providerStatus = 503;
+        expect((await notify("evt_failure")).status).toBe(502);
+        expect((await notify("evt_failure")).status).toBe(409);
+        expect(calls).toHaveLength(2);
+        await databaseAdapter.deleteProfile("agent_1");
+        expect((await notify("evt_deleted_agent")).status).toBe(409);
+        expect(calls).toHaveLength(2);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
     });
   }
 

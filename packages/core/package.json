@@ -21,6 +21,7 @@
     "./channel-typing-loop": "./src/channel-typing-loop.ts",
     "./google-meet": "./src/google-meet.ts",
     "./contract": "./src/contract.ts",
+    "./notification-destinations": "./src/notification-destinations.ts",
     "./chat-stream-timeout": "./src/chat-stream-timeout.ts",
     "./config": "./src/config.ts",
     "./fs": "./src/fs.ts",
