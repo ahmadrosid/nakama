@@ -7,7 +7,7 @@ on:
     paths-ignore: ['apps/desktop/package.json']
   pull_request:
     # Markdown-only PRs change no code.
-    paths-ignore: ['**.md', '.agents/**']
+    paths-ignore: ['**.md', '.agents/**', 'docs/**']
 
 permissions:
   contents: read
