@@ -201,14 +201,6 @@ export async function isPendingBrowserMfa(
     return false;
   }
 
-  const activeOrgId =
-    orgId?.trim() ||
-    auth.activeOrgId?.trim() ||
-    auth.session?.activeOrgId?.trim();
-  if (!activeOrgId) {
-    return false;
-  }
-
   const user = await databaseAdapter.getUserById(auth.user.id);
   if (
     !user ||
@@ -218,17 +210,31 @@ export async function isPendingBrowserMfa(
     return false;
   }
 
-  const role =
-    auth.orgRole ??
-    (await databaseAdapter.getOrgMember(activeOrgId, auth.user.id))?.role;
-  if (!role) {
+  const policy = await loadMfaPolicy();
+  if (!(policy.enabled && policy.required)) {
     return false;
   }
 
-  const policy = await loadMfaPolicy();
-  return (
-    policy.enabled && policy.required && policy.enforcedRoles.includes(role)
-  );
+  // Platform-admin authority outlives every organization membership, so a
+  // required policy gates it on the account flag alone. Deriving this from the
+  // active org role instead let a non-member admin drive /v1/platform/*
+  // with nothing but a password.
+  if (auth.isPlatformAdmin) {
+    return true;
+  }
+
+  const activeOrgId =
+    orgId?.trim() ||
+    auth.activeOrgId?.trim() ||
+    auth.session?.activeOrgId?.trim();
+  if (!activeOrgId) {
+    return false;
+  }
+
+  const role =
+    auth.orgRole ??
+    (await databaseAdapter.getOrgMember(activeOrgId, auth.user.id))?.role;
+  return role ? policy.enforcedRoles.includes(role) : false;
 }
 
 export async function authenticateRequest(

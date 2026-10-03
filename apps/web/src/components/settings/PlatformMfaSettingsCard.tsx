@@ -132,6 +132,7 @@ export function PlatformMfaSettingsCard() {
             </p>
             <p className="text-muted-foreground text-xs">
               Choose which organization roles must use an authenticator.
+              Platform admins always must once enforcement is on.
             </p>
           </div>
           <div className="flex items-center gap-2">
