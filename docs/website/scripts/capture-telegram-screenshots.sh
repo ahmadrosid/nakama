@@ -63,6 +63,7 @@ SETUP_BODY=$(curl --fail-with-body -sS -c "$COOKIE_JAR" -X POST "${BASE_URL}/v1/
     \"webPublicUrl\": \"${BASE_URL}\"
   }")
 ORG_ID=$(printf '%s' "$SETUP_BODY" | bun -e 'const j=JSON.parse(await Bun.stdin.text()); process.stdout.write(j.activeOrgId);')
+PROFILE_ID=$(curl --fail-with-body -sS -b "$COOKIE_JAR" "${BASE_URL}/v1/profiles" | bun -e 'const j=JSON.parse(await Bun.stdin.text()); process.stdout.write(j.profiles[0].id);')
 
 CSRF_VAL=$(awk '$6=="nakama_csrf"{print $7}' "$COOKIE_JAR")
 SESSION_VAL=$(awk '$6=="nakama_session"{print $7}' "$COOKIE_JAR")
@@ -80,9 +81,9 @@ $AB --session "$SESSION" cookies set nakama_csrf "$CSRF_VAL" \
   --url "${BASE_URL}/" --sameSite Lax
 
 # ---------------------------------------------------------------------------
-# Step 2: Integrations -> Telegram, bot token entry (not yet saved).
+# Step 2: Agent → profile → Channels → Telegram, bot token entry (not yet saved).
 # ---------------------------------------------------------------------------
-$AB --session "$SESSION" open "${BASE_URL}/integrations"
+$AB --session "$SESSION" open "${BASE_URL}/profiles/${PROFILE_ID}/channels/telegram"
 $AB --session "$SESSION" wait 2500
 $AB --session "$SESSION" set viewport "$VIEWPORT_WIDTH" 560
 $AB --session "$SESSION" set media light
@@ -96,19 +97,19 @@ $AB --session "$SESSION" screenshot "$SCREENSHOT_DIR/telegram-bot-token.png"
 # ---------------------------------------------------------------------------
 # Seed only the isolated demo config: saving through HTTP validates the fake
 # token against Telegram and correctly rejects it.
-(cd "$ROOT" && NAKAMA_CONFIG_DIR="$TEMP_CONFIG" DOCS_ORG_ID="$ORG_ID" bun -e '
+(cd "$ROOT" && NAKAMA_CONFIG_DIR="$TEMP_CONFIG" DOCS_ORG_ID="$ORG_ID" DOCS_PROFILE_ID="$PROFILE_ID" bun -e '
   const { saveTelegramConfig } = await import("./packages/core/src/telegram-config.ts");
-  await saveTelegramConfig(process.env.DOCS_ORG_ID, {
+  await saveTelegramConfig({ orgId: process.env.DOCS_ORG_ID, profileId: process.env.DOCS_PROFILE_ID }, {
     botToken: "123456789:AAH-example-token-from-botfather",
   });
 ')
 
 # Start the bridge worker against the fake token so it emits real 401 errors
 # into its stderr log — exactly what a misconfigured bot looks like in prod.
-curl --fail-with-body -sS -b "$COOKIE_JAR" -X POST "${BASE_URL}/v1/workers/telegram/start" \
+curl --fail-with-body -sS -b "$COOKIE_JAR" -X POST "${BASE_URL}/v1/workers/telegram/start?profileId=${PROFILE_ID}" \
   -H "X-CSRF-Token: ${CSRF_VAL}" >/dev/null
 
-$AB --session "$SESSION" open "${BASE_URL}/integrations"
+$AB --session "$SESSION" open "${BASE_URL}/profiles/${PROFILE_ID}/channels/telegram"
 $AB --session "$SESSION" wait 2500
 $AB --session "$SESSION" set viewport "$VIEWPORT_WIDTH" 1100
 $AB --session "$SESSION" set media light

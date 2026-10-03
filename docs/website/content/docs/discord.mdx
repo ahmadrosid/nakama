@@ -16,8 +16,8 @@ The mental model is simple:
 With Discord enabled, users can:
 
 - chat with a Nakama profile in a private DM
-- use the bot in server channels and threads after DM pairing
-- keep every conversation attached to the connection’s agent
+- use the bot in server channels and threads after DM pairing or allowlisting
+- keep every conversation attached to the connection's profile
 - stop, clear, compact, or restart conversations
 - receive streaming replies with typing indicators and live todo progress
 
@@ -29,7 +29,7 @@ In the [Discord Developer Portal](https://discord.com/developers/applications), 
 
 | Value | Portal location | For Nakama? |
 | --- | --- | --- |
-| **Bot token** | **Bot** | Yes — paste in **Agents → your agent → Connections → Discord** |
+| **Bot token** | **Bot** | Yes — paste in **Agent → profile → Channels → Discord** |
 | **Message Content Intent** | **Bot → Privileged Gateway Intents** | Yes — turn the toggle **on** |
 | OAuth2 permissions | **OAuth2 → URL Generator** | Yes — invite the bot to your server |
 | Application ID, Public Key | General Information | No |
@@ -54,42 +54,39 @@ This toggle is required. Without it, the bridge worker logs `Used disallowed int
    - **Manage Threads** (recommended so `/close` can archive bot conversation threads)
 4. Copy the generated URL, open it, pick a server, and approve
 
-You can also use the **Invite bot to server** link on **Agents → your agent → Connections → Discord** after saving your token — Nakama generates an invite with the right permissions.
+You can also use the **Invite bot to server** link on **Agent → profile → Channels → Discord** after saving your token — Nakama generates an invite with the right permissions.
 
 Keep the token secret. If you enable Message Content Intent after the bot is already in a server, generate a fresh invite and add the bot again.
 
 ## Step 2: Save in Nakama
 
-Sign in as a platform admin and open **Agents → your agent → Connections → Discord**, then:
+An organization admin can open **Agent → profile → Channels → Discord** and select the profile that should answer. The route is scoped to that profile, so the connection is fixed to it; there is no separate default-profile selector. Then:
 
 1. Paste the bot token
-2. Choose the default Nakama profile for Discord replies
-3. Save — Nakama generates a pairing code on the same page
+2. Save — Nakama validates it with Discord and generates a pairing code on the same page
 
 ## Step 3: Pair your Discord account
 
 Pairing links your Discord user to Nakama so unlinked users cannot use the bot.
 
-1. Copy the pairing code from **Agents → your agent → Connections → Discord** (click **Regenerate** if needed)
+1. Copy the pairing code from **Agent → profile → Channels → Discord** (click **Regenerate** if needed)
 2. Open a private DM with your bot and send the code as a plain text message
 
-After a successful match, that user is linked and the code is cleared. Server channels require DM pairing first.
+After a successful match, that user is linked and the code is cleared. Server channels require the user to pair in a private DM or be on the profile's allowed-user list.
 
 ## Step 4: Start the Discord bridge
 
-On **Agents → your agent → Connections → Discord**, use the **Bridge worker** controls to start the worker.
+On **Agent → profile → Channels → Discord**, use the **Bridge worker** controls to start the worker. The worker is scoped to the organization and profile in the route.
 
 The bridge connects to Discord and forwards messages to your Nakama server.
 
 ## Optional: Direct allowlist instead of pairing
 
-Nakama also supports allowlisting Discord user IDs directly.
-
-This is useful when you want to pre-authorize specific users without the one-time pairing flow.
+Nakama also supports allowlisting Discord user IDs directly. This is useful when you want to pre-authorize specific users without the one-time pairing flow.
 
 To add users from the dashboard:
 
-1. Open **Agents → your agent → Connections → Discord**
+1. Open **Agent → profile → Channels → Discord**
 2. In **Allowed users**, click **Manage**
 3. Paste a Discord user snowflake ID and click **Add**
 
@@ -101,23 +98,23 @@ Private chat is the simplest mode.
 
 Once paired or allowlisted:
 
-- normal messages go to the Nakama agent
+- normal messages go to the Nakama profile
 - the bot keeps a Discord chat session
 - slash commands work immediately
 
-If an unlinked user opens the bot, Nakama asks for the pairing code instead of sending the message to the agent.
+If an unlinked user opens the bot, Nakama asks for the pairing code instead of sending the message to the profile. In server channels, Nakama stays quiet until that user pairs or is allowlisted.
 
 ## Server and thread behavior
 
 Nakama supports Discord servers, but it is intentionally conservative about when it replies.
 
-In a server channel, the bot responds only when the message is:
+In a server channel, the bot responds only when an authorized user sends:
 
 - a slash command from Discord's command menu
 - a reply to one of the bot's messages
 - a direct `@mention` of the bot, or of a Discord role the bot holds
 
-This keeps server channels usable without making the bot noisy.
+This keeps server channels usable without making the bot noisy. Mention or reply triggers alone do not bypass the paired-or-allowlisted requirement.
 
 ### Threads and profiles
 
@@ -125,18 +122,18 @@ In Discord threads, each thread keeps its own Nakama session.
 
 - In a parent server channel, every `@mention` or reply to the bot starts a **new** Discord thread (you do not need `/close` or `/new` first)
 - Continue chatting inside a bot-started thread without mentioning the bot again
-- The same user can have multiple open bot threads in one channel, and agent replies in different threads can run at the same time
-- Every thread uses the agent and organization that own this Discord connection
-- `/profile` and `/org` report that fixed owner
+- The same user can have multiple open bot threads in one channel, and profile replies in different threads can run at the same time
+- Every thread uses the profile and organization that own this Discord connection
+- `/profile` and `/org` are slash commands that report that fixed owner
 - `/close` inside a bot-started thread archives that thread only; other open bot threads stay usable
 - `/new` starts a fresh Nakama conversation in the current Discord thread (it does not open a new Discord thread)
 - threads the bot did not start stay quiet until you `@mention` the bot (or reply to it); that claims the thread so follow-ups work without another mention
 
-Replies in server channels are visible to everyone in that channel. Nakama prefixes those messages so the agent knows the reply is public.
+Replies in server channels are visible to everyone in that channel. Nakama prefixes those messages so the profile knows the reply is public.
 
-## Discord commands
+## Discord slash commands
 
-Session controls keep conversations within the owning agent.
+Session controls are Discord slash commands. Use Discord's command menu (`/`), not plain text commands. The connection is fixed to the profile selected by the channel route; the owner-reporting commands do not switch it.
 
 | Command | Type | What it does |
 | --- | --- | --- |
@@ -150,36 +147,54 @@ Session controls keep conversations within the owning agent.
 | `/resume` | Slash | Resume a conversation by the short ID `/sessions` shows |
 | `/close` | Slash | Close (archive) this bot conversation thread |
 | `/status` | Slash | Show server and model status |
-| `/org` | Text | Report the fixed organization |
-| `/profile` | Text | Report the fixed agent |
+| `/org` | Slash | Report the fixed organization |
+| `/profile` | Slash | Report the fixed profile |
 
-In servers, `@mention` the bot (or a role it holds) or reply to it to chat — each mention in a parent channel opens a new thread. Complete DM pairing first.
+Paired or allowlisted users can use the session commands. A paired user can also use the administrative `/allow` slash command to add another Discord user. Unlinked users can use `/start` and `/help` to get pairing instructions, but cannot use other commands or start server chat.
+
+In servers, `@mention` the bot (or a role it holds) or reply to it to chat — each mention in a parent channel opens a new thread. Complete DM pairing or allowlisting first.
 
 ## Reply formatting
 
-Agents can write normal Markdown-style replies. Nakama sends them as plain Discord text and splits long replies into multiple messages when needed.
+Profiles can write normal Markdown-style replies. Nakama sends them as plain Discord text and splits long replies into multiple messages when needed.
 
 Discord has a 2000-character limit per message. Nakama automatically chunks longer replies.
 
 ## Saved artifacts and share links
 
-When your agent saves a file for you with the `save-artifact` skill, Nakama posts a **Publish-style share link** after the reply in Discord.
+When your profile saves a file for you with the `save-artifact` skill, Nakama posts a **Publish-style share link** after the reply in Discord.
 
 - The link uses the same unguessable `/s/{token}` URLs as dashboard Publish — no Nakama login required to open it.
 - Anyone who can read the Discord message can open the link until the share is revoked from the web app.
 - Set **Web Public URL** in Nakama settings (or `NAKAMA_WEB_PUBLIC_URL`) so channel footers include absolute links.
 
-To receive the file itself in Discord, ask in plain language — for example, “send the file” or “attach the PDF”. The agent uses the Discord-only `send_discord_artifact` tool to upload a native attachment when the file is within Discord’s size limit. You can also type `/attach` as a shortcut for the most recent saved artifact. If the file is too large, use the share link instead.
+To receive the file itself in Discord, ask in plain language — for example, "send the file" or "attach the PDF". The profile uses the Discord-only `send_discord_artifact` tool to upload a native attachment when the file is within Discord’s size limit. You can also type `/attach` as a shortcut for the most recent saved artifact. If the file is too large, use the share link instead.
 
 Only successful artifact saves produce share links or attachments.
 
-## Connection ownership
+## Connection ownership and disconnect
 
-Each agent owns its bot, pairings, conversations, worker controls, and logs. Threads stay with that agent. Organization admins and platform admins can manage the connection. A bot already connected to another agent cannot be reused.
+Each profile owns its bot, pairings, conversations, worker controls, and logs. Threads stay with that profile. Organization admins and platform admins can manage the connection. A bot already connected to another profile cannot be reused.
 
-**Stop** keeps the configuration. **Disconnect** removes credentials and pairings; chat history remains. Disconnect before moving an agent to another organization. Clones and exports do not include connections.
+**Stop** keeps the configuration. **Disconnect** removes credentials, pairings, and the channel directory's session/thread data. Disconnect before moving a profile to another organization. Clones and exports do not include connections.
 
-If an older connection cannot be assigned automatically, it stays stopped. Claim it for an agent from **Integrations → Discord**. Installation-wide connections require a platform admin.
+If an older connection cannot be assigned automatically, it stays stopped. Claim it from **Agent → profile → Channels → Discord**. Installation-wide connections require a platform admin.
+
+## Rotating the bot token
+
+After you replace the Discord bot token, restart this profile's Discord worker. The long-lived gateway process keeps the token it loaded at startup, so saving alone does not rotate the running connection.
+
+## Running the worker directly
+
+The dashboard supplies the scope automatically. A direct run must set both values so the worker reads the correct profile-scoped config:
+
+```bash
+NAKAMA_CHANNEL_ORG_ID="org_your_org" \
+NAKAMA_CHANNEL_PROFILE_ID="your-profile" \
+bun run dev:discord
+```
+
+Save the Discord connection in the same Nakama config directory first. Set `NAKAMA_SERVER_URL` and `NAKAMA_CONFIG_DIR` as needed for a separate server or non-default config root.
 
 ## Troubleshooting
 
@@ -191,7 +206,7 @@ The Discord bridge cannot start because **Message Content Intent** is off for th
 
 1. [Discord Developer Portal](https://discord.com/developers/applications) → your app → **Bot**
 2. Under **Privileged Gateway Intents**, turn **Message Content Intent** **on**
-3. Save, then restart the Discord bridge worker in **Agents → your agent → Connections → Discord**
+3. Save, then restart the Discord bridge worker in **Agent → profile → Channels → Discord**
 
 If the bot was already in your server before you enabled the intent, generate a fresh invite (Step 1b) and add the bot again.
 
@@ -202,7 +217,7 @@ This is not something Nakama can enable for you — Discord only exposes this as
 Check these first:
 
 1. The bot token is saved correctly
-2. The Discord bridge worker is running (start it from **Agents → your agent → Connections → Discord**)
+2. The Discord bridge worker is running (start it from **Agent → profile → Channels → Discord**)
 3. The Nakama server is running
 4. The Discord user is paired or allowlisted
 
@@ -212,20 +227,21 @@ Usually one of these is true:
 
 - **Message Content Intent** is off — turn the toggle on under **Bot → Privileged Gateway Intents** (see Step 1a)
 - the bot was invited before Message Content Intent was enabled — re-invite with a fresh URL (Step 1b)
+- the user has not paired or been allowlisted
 - the message was not a slash command, reply, bot `@mention`, or `@mention` of a role the bot holds
-- the user has not completed DM pairing yet
 
 ### Mentions do not work in servers
 
 1. Turn **Message Content Intent** on (Step 1a), then re-invite the bot (Step 1b)
 2. Make sure only one Discord bridge worker is running
-3. `@mention` the bot user (or a role assigned to the bot) or reply to one of its messages
+3. Confirm the user is paired or allowlisted
+4. `@mention` the bot user (or a role assigned to the bot) or reply to one of its messages
 
 If Discord autocomplete offers both a **role** and the **bot user** with similar names, either works when the bot holds that role. Mentioning an unrelated role does not trigger a reply.
 
 ### Unlinked users get no server reply
 
-Server channels stay quiet until that Discord user pairs in a private DM. Pairing codes only work in DMs — paste one in a server and an authorized user still gets a short DM redirect.
+Server channels stay quiet until that Discord user pairs in a private DM or is added to the profile's allowed-user list. Pairing codes only work in DMs — paste one in a server and an authorized user still gets a short DM redirect.
 
 ## Next steps
 
