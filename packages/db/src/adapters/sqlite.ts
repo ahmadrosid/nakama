@@ -554,8 +554,7 @@ export async function createSqliteDatabase(
       db.close(true);
     },
     release() {
-      // Another open connection to the same file can hold a lock; strict close would throw.
-      db.close();
+      db.close(true);
     },
     async reopen() {
       const nextDb = openPrivateDatabase(databasePath);
