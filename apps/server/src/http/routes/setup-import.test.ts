@@ -36,6 +36,38 @@ async function createArchiveOverEntryLimit(): Promise<Buffer> {
 }
 
 describe("setup import routes", () => {
+  test("setup import rejects bodies that are not application/json", async () => {
+    const { app } = createApp();
+    const configPath = join(getUserConfigDir(), "config.ini");
+    await writeFile(configPath, "original");
+    const archive = (
+      await createNakamaDataExport({ rootDir: getUserConfigDir() })
+    ).data;
+    await writeFile(configPath, "changed");
+
+    const previewResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup/import/preview", {
+        body: JSON.stringify({ data: archive.toString("base64") }),
+        headers: { "Content-Type": "text/plain;charset=UTF-8" },
+        method: "POST",
+      })
+    );
+    const restoreResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup/import/restore", {
+        body: JSON.stringify({
+          confirm: true,
+          data: archive.toString("base64"),
+        }),
+        headers: { "Content-Type": "text/plain;charset=UTF-8" },
+        method: "POST",
+      })
+    );
+
+    expect(previewResponse.status).toBe(415);
+    expect(restoreResponse.status).toBe(415);
+    await expect(readFile(configPath, "utf8")).resolves.toBe("changed");
+  });
+
   test("fresh install can preview and restore import without authentication", async () => {
     const { app } = createApp();
     await writeFile(join(getUserConfigDir(), "config.ini"), "original");
