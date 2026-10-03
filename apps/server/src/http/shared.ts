@@ -9,9 +9,12 @@ import {
   type ChatTurnUsage,
   type ChatUsage,
   formatServerError,
+  HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES,
   LOCAL_CLIENT_EMAIL,
   NakamaApiError,
+  PLAIN_BROWSER_SESSION_COOKIE_NAMES,
   reportError,
+  browserSessionCookieNames as resolveBrowserSessionCookieNames,
   resolveChatFirstTokenTimeoutMs,
   resolveChatStreamTimeoutMs,
   type SendMessageInput,
@@ -32,8 +35,8 @@ import { loadMfaPolicy } from "../services/mfa-config";
 import { sessionTurnRegistry } from "../services/session-turn-registry";
 import type { AppEnv } from "./types";
 
-const SESSION_COOKIE_NAME = "nakama_session";
-const CSRF_COOKIE_NAME = "nakama_csrf";
+const LEGACY_COOKIE_NAMES = PLAIN_BROWSER_SESSION_COOKIE_NAMES;
+const HOST_BOUND_COOKIE_NAMES = HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES;
 const CSRF_HEADER_NAME = "x-csrf-token";
 const SESSION_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
@@ -279,7 +282,10 @@ export async function authenticateRequest(
     };
   }
 
-  const sessionToken = getRequestTokenFromCookies(request, SESSION_COOKIE_NAME);
+  const sessionToken = getRequestTokenFromCookies(
+    request,
+    resolveBrowserSessionCookieNames(isSecureRequest(request)).session
+  );
   if (!sessionToken) {
     const anthropicApiKey = request.headers.get("x-api-key")?.trim();
 
@@ -368,7 +374,10 @@ export function assertBrowserCsrf(
     return;
   }
 
-  const csrfToken = getRequestTokenFromCookies(request, CSRF_COOKIE_NAME);
+  const csrfToken = getRequestTokenFromCookies(
+    request,
+    resolveBrowserSessionCookieNames(isSecureRequest(request)).csrf
+  );
   const csrfHeader = request.headers.get(CSRF_HEADER_NAME);
 
   if (!(csrfToken && csrfHeader) || csrfToken !== csrfHeader.trim()) {
@@ -386,15 +395,17 @@ function applyBrowserSessionCookies(
   csrfToken: string,
   request: Request
 ): void {
+  const secure = isSecureRequest(request);
+  const names = resolveBrowserSessionCookieNames(secure);
   const cookieBase = {
     path: "/",
     sameSite: "Lax" as const,
-    secure: isSecureRequest(request),
+    secure,
   };
 
   appendSetCookie(
     headers,
-    buildCookie(SESSION_COOKIE_NAME, sessionToken, {
+    buildCookie(names.session, sessionToken, {
       ...cookieBase,
       httpOnly: true,
       maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
@@ -403,10 +414,40 @@ function applyBrowserSessionCookies(
 
   appendSetCookie(
     headers,
-    buildCookie(CSRF_COOKIE_NAME, csrfToken, {
+    buildCookie(names.csrf, csrfToken, {
       ...cookieBase,
       maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
     })
+  );
+
+  if (secure) {
+    // Drop the pre-migration unprefixed cookies so a host-only legacy cookie
+    // stops shadowing the host-bound one after the upgrade.
+    clearLegacyBrowserSessionCookies(headers);
+  }
+}
+
+function clearLegacyBrowserSessionCookies(headers: Headers): void {
+  // A browser matches a clear by name, domain and path, so one Secure clear
+  // from an HTTPS response removes the cookie whichever Secure flag the
+  // pre-migration copy was stored with.
+  const cookieBase = {
+    maxAge: 0,
+    path: "/",
+    sameSite: "Lax" as const,
+    secure: true,
+  };
+
+  appendSetCookie(
+    headers,
+    buildCookie(LEGACY_COOKIE_NAMES.session, "", {
+      ...cookieBase,
+      httpOnly: true,
+    })
+  );
+  appendSetCookie(
+    headers,
+    buildCookie(LEGACY_COOKIE_NAMES.csrf, "", { ...cookieBase })
   );
 }
 
@@ -452,30 +493,40 @@ export async function createBrowserSessionResponse(
 }
 
 export function clearBrowserSessionCookies(headers: Headers): void {
-  const cookieBase = {
-    path: "/",
-    sameSite: "Lax" as const,
-  };
+  const cookieBase = { maxAge: 0, path: "/", sameSite: "Lax" as const };
+
+  // `__Host-` cookies are Secure by definition, and browsers ignore them on
+  // http:// origins, so these clears are emitted unconditionally.
+  appendSetCookie(
+    headers,
+    buildCookie(HOST_BOUND_COOKIE_NAMES.session, "", {
+      ...cookieBase,
+      httpOnly: true,
+      secure: true,
+    })
+  );
+  appendSetCookie(
+    headers,
+    buildCookie(HOST_BOUND_COOKIE_NAMES.csrf, "", {
+      ...cookieBase,
+      secure: true,
+    })
+  );
 
   // Clear both Secure and non-Secure variants so logout still works if the
   // Secure decision differs between login and logout (proxy header drift).
   for (const secure of [true, false] as const) {
     appendSetCookie(
       headers,
-      buildCookie(SESSION_COOKIE_NAME, "", {
+      buildCookie(LEGACY_COOKIE_NAMES.session, "", {
         ...cookieBase,
         httpOnly: true,
-        maxAge: 0,
         secure,
       })
     );
     appendSetCookie(
       headers,
-      buildCookie(CSRF_COOKIE_NAME, "", {
-        ...cookieBase,
-        maxAge: 0,
-        secure,
-      })
+      buildCookie(LEGACY_COOKIE_NAMES.csrf, "", { ...cookieBase, secure })
     );
   }
 }

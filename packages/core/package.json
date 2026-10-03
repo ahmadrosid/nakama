@@ -11,6 +11,7 @@
     "./agent-todo": "./src/agent-todo.ts",
     "./api-error": "./src/api-error.ts",
     "./bridge-api": "./src/bridge-api.ts",
+    "./browser-session-cookies": "./src/browser-session-cookies.ts",
     "./channel-config-shared": "./src/channel-config-shared.ts",
     "./worker-heartbeat": "./src/worker-heartbeat.ts",
     "./channel-active-stream": "./src/channel-active-stream.ts",
