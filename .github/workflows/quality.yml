@@ -3,7 +3,7 @@ name: Quality
 on:
   pull_request:
     # Markdown-only PRs change no code.
-    paths-ignore: ['**.md', '.agents/**', 'docs/**']
+    paths-ignore: ['**.md', '.agents/**', 'docs/**', 'scripts/**']
 
 permissions:
   contents: read
