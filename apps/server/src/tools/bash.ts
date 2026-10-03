@@ -16,6 +16,7 @@ import {
   type ToolDefinition,
 } from "@nakama/core";
 import { mergeCodingAgentSpawnEnv } from "../services/coding-agent-spawn-env";
+import { killProcessTree } from "../services/custom-tool-subprocess";
 import {
   type BashBackendKind,
   resolveBashBackend,
@@ -288,37 +289,7 @@ function runShellCommand(
     let treeKilled: Promise<void> | undefined;
 
     const killCommand = () => {
-      if (!child.pid) {
-        return;
-      }
-      if (process.platform === "win32") {
-        treeKilled ??= new Promise<void>((done) => {
-          const killer = spawn(
-            path.join(
-              process.env.SystemRoot ?? "C:\\Windows",
-              "System32",
-              "taskkill.exe"
-            ),
-            ["/F", "/T", "/PID", String(child.pid)],
-            { stdio: "ignore", windowsHide: true }
-          );
-          killer.once("close", () => done());
-          killer.once("error", () => {
-            child.kill("SIGKILL");
-            done();
-          });
-        });
-        return;
-      }
-      try {
-        process.kill(-child.pid, "SIGKILL");
-      } catch {
-        try {
-          child.kill("SIGKILL");
-        } catch {
-          // already exited
-        }
-      }
+      treeKilled ??= killProcessTree(child, "SIGKILL");
     };
 
     const onAbort = () => {
