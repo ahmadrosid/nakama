@@ -33,12 +33,10 @@ jobs:
           sudo chmod 4755 apps/desktop/node_modules/electron/dist/chrome-sandbox
           xvfb-run -a bun run test
 
-  # The desktop app ships on Windows, but only Linux gated changes so far.
-  # Non-blocking until the remaining Windows-only failures are fixed or skipped.
+  # The desktop app ships on Windows, so Windows gates changes like Linux.
   test-windows:
     name: test-windows (${{ matrix.shard }}/4)
     runs-on: windows-latest
-    continue-on-error: true
     timeout-minutes: 10
     strategy:
       fail-fast: false
@@ -65,7 +63,7 @@ jobs:
         # Recreate Windows junctions locally; tar archives do not preserve them.
         run: bun install --frozen-lockfile --ignore-scripts --filter nakama --filter '@nakama/server...' --filter './packages/*' --filter './packages/plugins/*'
 
-      # Save before tests: the non-blocking Windows failures must not discard it.
+      # Save before tests: a failing run must not discard it.
       - name: Save Bun downloads
         if: steps.dependencies.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
