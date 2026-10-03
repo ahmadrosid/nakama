@@ -64,6 +64,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateAuditEventsTable);
   atomic(migrateProfileChangeEventsTable);
   atomic(migratePluginTables);
+  atomic(migrateRemoveGoogleMeetPlugin);
   atomic(migrateFilePinsTable);
   atomic(migrateNotificationWebhookDeliveriesTable);
 }
@@ -1830,6 +1831,17 @@ function migrateProfileChangeEventsTable(db: Database): void {
     CREATE INDEX IF NOT EXISTS profile_change_events_profile_created
       ON profile_change_events (profile_id, created_at DESC);
   `);
+}
+
+function migrateRemoveGoogleMeetPlugin(db: Database): void {
+  // Meet is built in. Remove obsolete plugin contributions and their cascading
+  // profile assignments; meeting databases and transcripts live outside this DB.
+  db.prepare("DELETE FROM tools WHERE plugin_id = ?").run("google-meet");
+  db.prepare("DELETE FROM skills WHERE plugin_id = ?").run("google-meet");
+  db.prepare("DELETE FROM org_plugins WHERE plugin_id = ?").run("google-meet");
+  db.prepare("DELETE FROM plugin_releases WHERE plugin_id = ?").run(
+    "google-meet"
+  );
 }
 
 function migratePluginTables(db: Database): void {

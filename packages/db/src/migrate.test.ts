@@ -14,6 +14,96 @@ import {
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
+test.each(["normal upgrade", "retry after failed cleanup"])(
+  "removes legacy Google Meet plugin records: %s",
+  (scenario) => {
+    const db = new Database(":memory:");
+    try {
+      migrateDatabase(db);
+      for (const orgId of ["org-a", "org-b"]) {
+        db.query(
+          "INSERT INTO organizations (id, name, slug, created_at, updated_at) VALUES (?, ?, ?, 'now', 'now')"
+        ).run(orgId, orgId, orgId);
+        db.query(
+          "INSERT INTO profiles (id, name, org_id, created_at, updated_at) VALUES (?, ?, ?, 'now', 'now')"
+        ).run(orgId, orgId, orgId);
+        for (const pluginId of ["google-meet", "notes"]) {
+          const id = `${orgId}-${pluginId}`;
+          db.query(
+            "INSERT INTO org_plugins (org_id, plugin_id, lifecycle_state, revision, created_at, updated_at) VALUES (?, ?, 'enabled', 1, 'now', 'now')"
+          ).run(orgId, pluginId);
+          db.query(
+            "INSERT INTO tools (id, name, description, handler_type, plugin_id, org_id, created_at, updated_at) VALUES (?, ?, '', 'plugin', ?, ?, 'now', 'now')"
+          ).run(id, id, pluginId, orgId);
+          db.query(
+            "INSERT INTO skills (id, name, description, source_path, plugin_id, org_id, created_at, updated_at) VALUES (?, ?, '', ?, ?, ?, 'now', 'now')"
+          ).run(id, id, id, pluginId, orgId);
+          db.query("INSERT INTO profile_tools VALUES (?, ?)").run(orgId, id);
+          db.query("INSERT INTO profile_skills VALUES (?, ?)").run(orgId, id);
+        }
+      }
+      for (const pluginId of ["google-meet", "notes"]) {
+        for (const version of ["1.0.0", "2.0.0"]) {
+          db.query(
+            "INSERT INTO plugin_releases (plugin_id, version, manifest, digest, created_at) VALUES (?, ?, '{}', '', 'now')"
+          ).run(pluginId, version);
+        }
+      }
+      db.exec(`
+        UPDATE profiles SET is_default = 1 WHERE id = 'org-a';
+        INSERT INTO tools (id, name, description, handler_type, org_id, created_at, updated_at)
+          VALUES ('builtin-meet', 'google_meet_status', '', 'builtin', 'org-a', 'now', 'now');
+        INSERT INTO skills (id, name, description, source_path, org_id, created_at, updated_at)
+          VALUES ('bundled-meet', 'google-meet', '', 'bundled/google-meet/SKILL.md', 'org-a', 'now', 'now');
+        INSERT INTO profile_tools VALUES ('org-a', 'builtin-meet');
+        INSERT INTO profile_skills VALUES ('org-a', 'bundled-meet');
+      `);
+      const tables = [
+        "tools",
+        "skills",
+        "org_plugins",
+        "plugin_releases",
+        "profile_tools",
+        "profile_skills",
+        "profiles",
+        "organizations",
+      ];
+      const before = tables.map((table) =>
+        db.query(`SELECT * FROM ${table}`).all()
+      );
+      if (scenario === "retry after failed cleanup") {
+        db.exec(`
+          CREATE TRIGGER fail_meet_cleanup BEFORE DELETE ON plugin_releases
+          WHEN OLD.plugin_id = 'google-meet'
+          BEGIN SELECT RAISE(ABORT, 'forced failure'); END;
+        `);
+        expect(() => migrateDatabase(db)).toThrow();
+        expect(
+          tables.map((table) => db.query(`SELECT * FROM ${table}`).all())
+        ).toEqual(before);
+        db.exec("DROP TRIGGER fail_meet_cleanup");
+      }
+      migrateDatabase(db);
+      migrateDatabase(db);
+      for (const [index, table] of tables.entries()) {
+        const retained = before[index].filter((row) => {
+          const record = row as Record<string, unknown>;
+          return (
+            record.plugin_id !== "google-meet" &&
+            !String(record.tool_id ?? record.skill_id ?? "").endsWith(
+              "-google-meet"
+            )
+          );
+        });
+        expect(db.query(`SELECT * FROM ${table}`).all()).toEqual(retained);
+      }
+      expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
+    } finally {
+      db.close();
+    }
+  }
+);
+
 test("adds automation transcripts to existing databases idempotently", () => {
   const db = new Database(":memory:");
   try {

@@ -98,47 +98,6 @@ describe("PluginService", () => {
     await rm(configDir, { force: true, recursive: true });
   });
 
-  test("excludes legacy Google Meet records from plugin catalogs", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const service = new PluginService(db, configDir);
-    const now = new Date().toISOString();
-    for (const pluginId of ["notes", "google-meet"]) {
-      await db.upsertPluginRelease({
-        createdAt: now,
-        digest: `sha256:${pluginId}`,
-        manifest: notesManifest({ id: pluginId }),
-        pluginId,
-        version: "1.0.0",
-      });
-    }
-    await db.publishOrgPluginRelease({
-      contributions: { skills: [], tools: [] },
-      databaseGeneration: "gen_1",
-      expectedRevision: 0,
-      lifecycleState: "enabled",
-      now,
-      orgId: "org-a",
-      pluginId: "google-meet",
-      selectedVersion: "1.0.0",
-    });
-
-    expect(
-      (await service.listApprovedPluginReleases()).map(
-        (release) => release.pluginId
-      )
-    ).toEqual(["notes"]);
-    expect(await service.listApprovedPluginReleases("google-meet")).toEqual([]);
-    for (const orgId of ["org-a", "org-b"]) {
-      expect(
-        (await service.listOrgPluginDetails(orgId)).map(
-          (detail) => detail.pluginId
-        )
-      ).toEqual(["notes"]);
-      expect(await service.getOrgPluginDetail(orgId, "google-meet")).toBeNull();
-    }
-    expect(await db.getOrgPlugin("org-a", "google-meet")).not.toBeNull();
-  });
-
   test("installs rebuilt Supermemory bytes without replacing another org's release", async () => {
     const db = createInMemoryDatabaseAdapter();
     const officialPackagesDir = join(configDir, "official");
