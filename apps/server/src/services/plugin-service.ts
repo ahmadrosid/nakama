@@ -1196,7 +1196,8 @@ export class PluginService {
   async listApprovedPluginReleases(
     pluginId?: string
   ): Promise<PluginReleaseSummary[]> {
-    return this.db.listPluginReleases(pluginId);
+    const releases = await this.db.listPluginReleases(pluginId);
+    return releases.filter((release) => release.pluginId !== "google-meet");
   }
 
   async listOrgPluginDetails(orgId: string): Promise<OrgPluginDetail[]> {
@@ -1222,6 +1223,10 @@ export class PluginService {
     orgId: string,
     pluginId: string
   ): Promise<OrgPluginDetail | null> {
+    // Google Meet is built in; legacy plugin records must not appear in catalogs.
+    if (pluginId === "google-meet") {
+      return null;
+    }
     const releases = await this.db.listPluginReleases(pluginId);
     const install = await this.db.getOrgPlugin(orgId, pluginId);
     if (releases.length === 0 && !install) {
