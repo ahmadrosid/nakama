@@ -11,6 +11,7 @@ const MAX_H = 100;
 const COLLAPSE_BEAT = 360;
 
 export interface ThinkingReasoningProps {
+  activityLabel?: string;
   children?: ReactNode;
   className?: string;
   isThinkingStreaming: boolean;
@@ -157,12 +158,11 @@ function ThinkingReasoningViewport({
 
 function useThinkingCollapse(isWorkActive: boolean, hasBody: boolean) {
   const [done, setDone] = useState(!isWorkActive && hasBody);
-  const [open, setOpen] = useState(isWorkActive);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     if (isWorkActive) {
       setDone(false);
-      setOpen(true);
       return;
     }
 
@@ -176,20 +176,16 @@ function useThinkingCollapse(isWorkActive: boolean, hasBody: boolean) {
     const delay = reducedMotion ? 0 : COLLAPSE_BEAT;
     const timerId = window.setTimeout(() => {
       setDone(true);
-      setOpen(false);
     }, delay);
 
     return () => window.clearTimeout(timerId);
   }, [hasBody, isWorkActive]);
 
   const toggle = () => {
-    if (!done) {
-      return;
-    }
     setOpen((current) => !current);
   };
 
-  return { done, expanded: done ? open : true, toggle };
+  return { done, expanded: open, toggle };
 }
 
 function thinkingLiveLabel(
@@ -204,6 +200,7 @@ function thinkingLiveLabel(
 }
 
 function ThinkingReasoningHeader({
+  activityLabel,
   done,
   expanded,
   elapsedSeconds,
@@ -211,6 +208,7 @@ function ThinkingReasoningHeader({
   isThinkingStreaming,
   onToggle,
 }: {
+  activityLabel?: string;
   done: boolean;
   expanded: boolean;
   elapsedSeconds: number | null;
@@ -221,49 +219,48 @@ function ThinkingReasoningHeader({
   return (
     <button
       aria-expanded={expanded}
-      aria-label="Toggle thought"
+      aria-label="Toggle activity"
       className={cn(
         styles.header,
-        done && styles.headerClickable,
+        styles.headerClickable,
         expanded && styles.headerExpanded
       )}
-      onClick={() => done && onToggle()}
+      onClick={onToggle}
       type="button"
     >
       {done ? (
         <span className={styles.label}>
-          <span className={styles.verb}>Thought</span>
+          <span className={styles.verb}>Activity</span>
           {elapsedSeconds === null
             ? null
             : ` for ${formatElapsedSeconds(elapsedSeconds)}`}
         </span>
       ) : (
         <span className={cn(styles.label, styles.shimmer)}>
-          {thinkingLiveLabel(
-            elapsedSeconds ?? 1,
-            hasChildren,
-            isThinkingStreaming
-          )}
+          {activityLabel ??
+            thinkingLiveLabel(
+              elapsedSeconds ?? 1,
+              hasChildren,
+              isThinkingStreaming
+            )}
         </span>
       )}
-      {done ? (
-        <svg
-          aria-hidden="true"
-          className={styles.chevron}
-          height="12"
-          viewBox="0 0 24 24"
-          width="12"
-        >
-          <path
-            d="m4.5 15.75 7.5-7.5 7.5 7.5"
-            fill="none"
-            stroke="currentColor"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="1.8"
-          />
-        </svg>
-      ) : null}
+      <svg
+        aria-hidden="true"
+        className={styles.chevron}
+        height="12"
+        viewBox="0 0 24 24"
+        width="12"
+      >
+        <path
+          d="m4.5 15.75 7.5-7.5 7.5 7.5"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.8"
+        />
+      </svg>
     </button>
   );
 }
@@ -283,6 +280,7 @@ function ThinkingReasoningBody({
 
   return (
     <div
+      aria-hidden={!expanded}
       className={cn(
         styles.collapsible,
         !expanded && styles.collapsibleCollapsed
@@ -315,6 +313,7 @@ function ThinkingReasoningBody({
 }
 
 export function ThinkingReasoning({
+  activityLabel,
   text,
   isThinkingStreaming,
   isWorkActive,
@@ -344,6 +343,7 @@ export function ThinkingReasoning({
   return (
     <div className={cn(styles.root, className)}>
       <ThinkingReasoningHeader
+        activityLabel={activityLabel}
         done={done}
         elapsedSeconds={
           thinkingDurationMs !== undefined &&

@@ -259,6 +259,7 @@ function OtherWorkGroup({
   profileId?: string | null;
 }) {
   const isThinkingStreaming = active && Boolean(thinking?.thinkingStreaming);
+  const runningTool = tools.findLast((tool) => tool.toolStatus === "running");
 
   if (!thinking) {
     return (
@@ -273,6 +274,9 @@ function OtherWorkGroup({
 
   return (
     <ThinkingReasoning
+      activityLabel={
+        runningTool ? toolActivityLabel(runningTool.tool) : undefined
+      }
       className="w-full max-w-full"
       isThinkingStreaming={isThinkingStreaming}
       isWorkActive={active}
@@ -295,6 +299,25 @@ function OtherWorkGroup({
   );
 }
 
+function toolActivityLabel(tool: string | undefined): string {
+  switch (tool) {
+    case "web_search":
+      return "Searching the web…";
+    case "web_fetch":
+      return "Reading webpage…";
+    case "knowledge_base_search":
+      return "Searching knowledge base…";
+    case "search_files":
+      return "Searching files…";
+    case "read_file":
+      return "Reading file…";
+    case "bash":
+      return "Running command…";
+    default:
+      return "Using tool…";
+  }
+}
+
 function ToolOnlyWorkGroup({
   isWorkActive,
   tools,
@@ -306,76 +329,63 @@ function ToolOnlyWorkGroup({
   modelLabel?: string | null;
   profileId?: string | null;
 }) {
-  const [open, setOpen] = useState(isWorkActive);
+  const [open, setOpen] = useState(false);
   const elapsedSeconds = useWorkDuration(isWorkActive, tools);
 
-  useEffect(() => {
-    if (isWorkActive) {
-      setOpen(true);
-      return;
-    }
-
-    const reducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-    const delay = reducedMotion ? 0 : 360;
-    const timerId = window.setTimeout(() => setOpen(false), delay);
-    return () => window.clearTimeout(timerId);
-  }, [isWorkActive]);
-
   const done = !isWorkActive;
-  const expanded = done ? open : true;
-  const toolLabel = tools.length === 1 ? "1 tool" : `${tools.length} tools`;
+  const expanded = open;
+  const toolLabel = `${tools.length} ${tools.length === 1 ? "step" : "steps"}`;
+  const runningTool = tools.findLast((tool) => tool.toolStatus === "running");
 
   return (
     <div className={cn(thinkingStyles.root, "w-full max-w-full")}>
       <button
         aria-expanded={expanded}
-        aria-label="Toggle tools"
+        aria-label="Toggle activity"
         className={cn(
           thinkingStyles.header,
-          done && thinkingStyles.headerClickable,
+          thinkingStyles.headerClickable,
           expanded && thinkingStyles.headerExpanded
         )}
-        onClick={() => done && setOpen((current) => !current)}
+        onClick={() => setOpen((current) => !current)}
         type="button"
       >
         {done ? (
           <span className={thinkingStyles.label}>
-            <span className={thinkingStyles.verb}>Used</span> {toolLabel}
+            <span className={thinkingStyles.verb}>Activity</span> · {toolLabel}
             {elapsedSeconds === null
               ? null
               : ` · ${formatElapsedSeconds(elapsedSeconds)}`}
           </span>
         ) : (
           <span className={cn(thinkingStyles.label, thinkingStyles.shimmer)}>
-            Working…
+            {runningTool ? toolActivityLabel(runningTool.tool) : "Working…"}
+            {` · ${toolLabel}`}
             {elapsedSeconds === null
               ? null
               : ` · ${formatElapsedSeconds(elapsedSeconds)}`}
           </span>
         )}
-        {done ? (
-          <svg
-            aria-hidden="true"
-            className={thinkingStyles.chevron}
-            height="12"
-            viewBox="0 0 24 24"
-            width="12"
-          >
-            <path
-              d="m4.5 15.75 7.5-7.5 7.5 7.5"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.8"
-            />
-          </svg>
-        ) : null}
+        <svg
+          aria-hidden="true"
+          className={thinkingStyles.chevron}
+          height="12"
+          viewBox="0 0 24 24"
+          width="12"
+        >
+          <path
+            d="m4.5 15.75 7.5-7.5 7.5 7.5"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.8"
+          />
+        </svg>
       </button>
 
       <div
+        aria-hidden={!expanded}
         className={cn(
           thinkingStyles.collapsible,
           !expanded && thinkingStyles.collapsibleCollapsed
