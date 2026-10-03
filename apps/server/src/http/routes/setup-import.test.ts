@@ -9,6 +9,7 @@ import {
   MAX_IMPORT_ENTRIES,
   previewNakamaDataImport,
 } from "../../services/data-portability";
+import { sessionTurnRegistry } from "../../services/session-turn-registry";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { loginPlatformAdminSession } from "../test-session-helpers";
@@ -36,6 +37,50 @@ async function createArchiveOverEntryLimit(): Promise<Buffer> {
 }
 
 describe("setup import routes", () => {
+  test("restore blocks traffic and waits for active turns before replacing data", async () => {
+    let stopped = false;
+    const { app } = createMinimalHonoApp({
+      onBeforeDataRestore: () => {
+        stopped = true;
+      },
+      onDataRestored: async () => {},
+    });
+    const archive = (
+      await createNakamaDataExport({ rootDir: getUserConfigDir() })
+    ).data;
+    sessionTurnRegistry.beginTurn("restore-drain-test");
+    const restoring = app.fetch(
+      new Request("http://localhost/v1/auth/setup/import/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          confirm: true,
+          data: archive.toString("base64"),
+        }),
+      })
+    );
+    try {
+      let status = 0;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        status = (await app.fetch(new Request("http://localhost/v1/auth/me")))
+          .status;
+        if (status === 503) {
+          break;
+        }
+        await Bun.sleep(5);
+      }
+      expect(status).toBe(503);
+      expect(stopped).toBe(false);
+    } finally {
+      sessionTurnRegistry.cancelTurn("restore-drain-test");
+    }
+    expect((await restoring).status).toBe(200);
+    expect(stopped).toBe(true);
+    expect(
+      (await app.fetch(new Request("http://localhost/v1/auth/me"))).status
+    ).toBe(401);
+  });
+
   test("fresh install can preview and restore import without authentication", async () => {
     const { app } = createApp();
     await writeFile(join(getUserConfigDir(), "config.ini"), "original");
@@ -114,6 +159,9 @@ describe("setup import routes", () => {
 
     expect(restoreResponse.status).toBe(200);
     expect(restoredCalls).toBe(1);
+    expect(
+      (await app.fetch(new Request("http://localhost/v1/auth/me"))).status
+    ).toBe(401);
     await expect(restoreResponse.json()).resolves.toMatchObject({
       requiresRestart: false,
       restoredFileCount: 1,
@@ -151,6 +199,9 @@ describe("setup import routes", () => {
     await expect(restoreResponse.json()).resolves.toMatchObject({
       requiresRestart: true,
     });
+    expect(
+      (await app.fetch(new Request("http://localhost/v1/auth/me"))).status
+    ).toBe(503);
     await expect(
       readFile(join(getUserConfigDir(), "config.ini"), "utf8")
     ).resolves.toBe("original");

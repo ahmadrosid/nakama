@@ -119,7 +119,6 @@ export interface StoredToolRecord {
 export interface StoredSessionRecord {
   agentQuestionnaire: AgentQuestionnaire | null;
   agentTodos: AgentTodo[];
-  appUserId?: string | null;
   channel: string;
   createdAt: string;
   id: string;
@@ -162,7 +161,6 @@ export interface StoredAttachmentRecord {
 }
 
 export interface StoredSessionSummaryRecord {
-  appUserId?: string | null;
   channel: string;
   createdAt: string;
   id: string;
@@ -527,20 +525,6 @@ export interface StoredOrgMemberRecord {
   userId: string;
 }
 
-export interface StoredApiKeyRecord {
-  createdAt: string;
-  createdByUserId: string;
-  environment: string;
-  expiresAt: string | null;
-  id: string;
-  keyPrefix: string;
-  lastUsedAt: string | null;
-  name: string;
-  orgId: string;
-  revokedAt: string | null;
-  secretHash: string;
-}
-
 export interface StoredUserOrganizationRecord {
   joinedAt: string;
   organization: StoredOrganizationRecord;
@@ -779,7 +763,6 @@ export interface DatabaseAdapter {
   ): Promise<AutomationUnreadCountRecord[]>;
   countUnusedMfaBackupCodes(userId: string): Promise<number>;
   countUsers(): Promise<number>;
-  createApiKey(record: StoredApiKeyRecord): Promise<void>;
 
   createArtifactShare(record: StoredArtifactShareRecord): Promise<void>;
   /** Append-only insert. Adapters must not expose update/delete for this table. */
@@ -805,7 +788,6 @@ export interface DatabaseAdapter {
 
   createSkillSuggestion(record: StoredSkillSuggestion): Promise<void>;
   createUser(record: StoredUserRecord): Promise<void>;
-  deleteApiKey(id: string): Promise<boolean>;
   deleteAttachment(id: string): Promise<boolean>;
   deleteAutomation(id: string): Promise<boolean>;
   deleteAutomationRun(automationId: string, runId: string): Promise<boolean>;
@@ -854,7 +836,6 @@ export interface DatabaseAdapter {
   getActiveAutomationRun(
     automationId: string
   ): Promise<StoredAutomationRunRecord | null>;
-  getApiKeyByPrefix(keyPrefix: string): Promise<StoredApiKeyRecord | null>;
   getArtifactShareById(
     orgId: string,
     profileId: string,
@@ -1026,7 +1007,6 @@ export interface DatabaseAdapter {
   insertAutomationRun(record: StoredAutomationRunRecord): Promise<void>;
   insertWorkflowRun(record: StoredWorkflowRunRecord): Promise<void>;
   insertWorkflowRunStep(record: StoredWorkflowRunStepRecord): Promise<void>;
-  listApiKeysForOrg(orgId: string): Promise<StoredApiKeyRecord[]>;
 
   listArtifactSharesForProfile(
     orgId: string,
@@ -1123,7 +1103,6 @@ export interface DatabaseAdapter {
         StoredSessionSummaryRecord,
         "createdAt" | "id" | "pinned" | "updatedAt"
       >;
-      appUserId?: string;
       limit?: number;
       /** Keeps the sessions whose title or user/assistant text contains it. */
       query?: string;
@@ -1205,7 +1184,6 @@ export interface DatabaseAdapter {
     profileId: string,
     assignments: StoredProfileComposioToolkitRecord[]
   ): Promise<void>;
-  revokeApiKey(id: string, revokedAt: string): Promise<boolean>;
   revokeArtifactShare(id: string, revokedAt: string): Promise<boolean>;
   revokeBrowserSessionBySessionTokenHash(
     sessionTokenHash: string,
@@ -1265,7 +1243,6 @@ export interface DatabaseAdapter {
     skillId: string
   ): Promise<boolean>;
   unassignToolFromProfile(profileId: string, toolId: string): Promise<boolean>;
-  updateApiKeyLastUsedAt(id: string, lastUsedAt: string): Promise<void>;
   updateArtifactShareSnapshot(
     id: string,
     snapshot: Pick<

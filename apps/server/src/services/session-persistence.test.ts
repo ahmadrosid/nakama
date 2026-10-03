@@ -1,8 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { mkdir, readFile, rm } from "node:fs/promises";
+import { join } from "node:path";
 import { type AgentChatSession, createAgentChatSession } from "@nakama/agent";
 import {
   type ChatMessage,
+  getUserConfigDir,
   type ProviderClient,
   saveAttachmentBytes,
 } from "@nakama/core";
@@ -88,6 +90,43 @@ async function seedSession(
 
 describe("session persistence", () => {
   setupTestConfigDir("nakama-history-archive-");
+
+  test("cached sessions and history tools recheck eligibility before exposing history", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await seedSession(db, "retired");
+    await seedSession(db, "target");
+    await archiveSessionHistory(db, "org_1", "retired", historyWithTool());
+    const tool = createReadSessionHistoryTool(db, "org_1", "retired");
+    expect(await tool.run({}, {})).toMatchObject({
+      content: expect.any(String),
+    });
+    const service = new AgentService(null, null, db);
+    await db.upsertProfile({
+      createdAt: "now",
+      id: "profile",
+      isDefault: true,
+      isSuper: false,
+      model: null,
+      name: "Test",
+      orgId: "org_1",
+      systemPrompt: "",
+      updatedAt: "now",
+    });
+    expect(await service.resolveSession("retired", "org_1")).not.toBeNull();
+    const originalGet = db.getSession.bind(db);
+    const read = spyOn(db, "getSession").mockImplementation((id) =>
+      id === "retired" ? Promise.resolve(null) : originalGet(id)
+    );
+    try {
+      expect(await service.resolveSession("retired", "org_1")).toBeNull();
+      await expect(tool.run({}, {})).rejects.toThrow();
+      await expect(
+        copySessionHistoryArchive(db, "org_1", "retired", "target")
+      ).rejects.toThrow();
+    } finally {
+      read.mockRestore();
+    }
+  });
 
   for (const stream of [false, true]) {
     test(`saves the user message before the provider fails (stream: ${stream})`, async () => {
@@ -261,7 +300,7 @@ describe("session persistence", () => {
       await readFile(sessionHistoryArchivePath("org_1", "session_1"), "utf8")
     );
     expect(archived.messages).toEqual(original);
-    const tool = createReadSessionHistoryTool("org_1", "session_1");
+    const tool = createReadSessionHistoryTool(db, "org_1", "session_1");
     let content = "";
     let offset = 0;
     for (;;) {
@@ -292,10 +331,10 @@ describe("session persistence", () => {
       role: "user",
     });
     await expect(
-      createReadSessionHistoryTool("org_2", "session_1").run({}, {})
+      createReadSessionHistoryTool(db, "org_2", "session_1").run({}, {})
     ).rejects.toThrow();
     await expect(
-      createReadSessionHistoryTool("org_1", "session_2").run({}, {})
+      createReadSessionHistoryTool(db, "org_1", "session_2").run({}, {})
     ).rejects.toThrow();
   });
 
@@ -518,6 +557,14 @@ describe("session persistence", () => {
         });
         await seedSession(db, profileId, profileId, orgId);
         await archiveSessionHistory(db, orgId, profileId, historyWithTool());
+        const retired = join(
+          getUserConfigDir(),
+          "retired-app-users",
+          orgId,
+          profileId
+        );
+        await mkdir(retired, { recursive: true });
+        await Bun.write(join(retired, "private.txt"), "retired data");
       }
       const path = sessionHistoryArchivePath("org_1", "deleted");
       await rm(path);
@@ -539,11 +586,34 @@ describe("session persistence", () => {
         copySessionHistoryArchive(db, "org_1", "kept", "deleted")
       ).rejects.toThrow();
       await expect(readFile(path)).rejects.toThrow();
+      await expect(
+        readFile(
+          join(
+            getUserConfigDir(),
+            "retired-app-users",
+            "org_1",
+            "deleted",
+            "private.txt"
+          )
+        )
+      ).rejects.toThrow();
       for (const [orgId, id] of [
         ["org_1", "kept"],
         ["org_2", "other"],
       ]) {
         expect(await db.getSession(id)).not.toBeNull();
+        expect(
+          await readFile(
+            join(
+              getUserConfigDir(),
+              "retired-app-users",
+              orgId,
+              id,
+              "private.txt"
+            ),
+            "utf8"
+          )
+        ).toBe("retired data");
         expect(
           JSON.parse(
             await readFile(sessionHistoryArchivePath(orgId, id), "utf8")

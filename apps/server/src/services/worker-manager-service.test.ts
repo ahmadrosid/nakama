@@ -315,6 +315,15 @@ describe("WorkerManagerService", () => {
   });
 
   describe("stopWorker", () => {
+    test("a restore pause stops the process and preserves desired recovery state", async () => {
+      await setWorkerDesiredRunning("automation", true);
+      const pm2 = createMockPm2();
+      const service = new WorkerManagerService(projectRoot, pm2);
+      await service.stopWorker("automation", null, true);
+      expect(pm2.stop).toHaveBeenCalled();
+      expect((await readWorkerDesiredState()).automation).toBe(true);
+    });
+
     test("stops worker by name", async () => {
       const mockPm2 = createMockPm2();
       const service = new WorkerManagerService(projectRoot, mockPm2);

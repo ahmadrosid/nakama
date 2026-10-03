@@ -113,6 +113,13 @@ export function deleteProfileWithHistoryArchives(
         force: true,
         recursive: true,
       });
+      await rm(
+        join(getUserConfigDir(), "retired-app-users", orgId, profileId),
+        {
+          force: true,
+          recursive: true,
+        }
+      );
       return db.deleteProfile(profileId);
     }
   );
@@ -126,7 +133,7 @@ export function copySessionHistoryArchive(
 ): Promise<void> {
   const source = sessionHistoryArchivePath(orgId, sourceId);
   return withArchiveLock(dirname(source), async () => {
-    if (!(await db.getSession(targetId))) {
+    if (!((await db.getSession(sourceId)) && (await db.getSession(targetId)))) {
       throw new Error("Session not found.");
     }
     try {
@@ -145,6 +152,7 @@ const readHistorySchema = z.object({
 });
 
 export function createReadSessionHistoryTool(
+  db: DatabaseAdapter,
   orgId: string,
   sessionId: string
 ): ToolDefinition {
@@ -155,6 +163,11 @@ export function createReadSessionHistoryTool(
     parallelSafe: true,
     parameters: jsonSchemaFromZod(readHistorySchema),
     async run(input) {
+      // The database also excludes retired sessions from normal reads.
+      // Validate before opening the archive, including a previously cached tool.
+      if (!(await db.getSession(sessionId))) {
+        throw new Error("Session not found.");
+      }
       const { offset, limit } = readHistorySchema.parse(input);
       const file = await open(sessionHistoryArchivePath(orgId, sessionId), "r");
       try {

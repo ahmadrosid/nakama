@@ -135,7 +135,6 @@ import {
   defaultOllamaBaseUrl,
   deleteArtifactFile,
   deleteAttachmentBytes,
-  ensureAppUserSoulDir,
   extractImageParts,
   findProviderInstance,
   getActiveProviderInstance,
@@ -374,7 +373,6 @@ interface CognitoSessionOptions {
 }
 
 export interface CreateSessionOptions {
-  appUserId?: string | null;
   codingWorkspaceRoot?: string;
   cognito?: boolean;
   excludeSuperBot?: boolean;
@@ -1867,7 +1865,6 @@ export class AgentService {
     const record: StoredSessionRecord = {
       agentQuestionnaire: null,
       agentTodos: [],
-      appUserId: options?.appUserId ?? null,
       channel,
       createdAt: new Date().toISOString(),
       id: sessionId,
@@ -1894,8 +1891,7 @@ export class AgentService {
       options?.orgRole,
       options?.isPlatformAdmin,
       options?.codingWorkspaceRoot,
-      cognito ? {} : undefined,
-      options?.appUserId
+      cognito ? {} : undefined
     );
 
     if (cognito) {
@@ -1922,18 +1918,9 @@ export class AgentService {
   async assertSessionProfileAccess(
     sessionId: string,
     orgId: string,
-    access: ChatProfileAccess,
-    appUserId?: string,
-    requireAppUser = false
+    access: ChatProfileAccess
   ): Promise<void> {
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
-    if (
-      record &&
-      requireAppUser &&
-      (!appUserId || record.appUserId !== appUserId)
-    ) {
-      throw new NakamaApiError("Session not found", 404);
-    }
     // A missing session is left to the route, which still answers 404.
     if (record) {
       this.assertChatProfileAccess(
@@ -2035,8 +2022,7 @@ export class AgentService {
       orgRole,
       isPlatformAdmin,
       undefined,
-      { initialHistory: [...entry.session.getHistory()] },
-      entry.record.appUserId
+      { initialHistory: [...entry.session.getHistory()] }
     );
 
     entry.record.model = model;
@@ -2199,7 +2185,6 @@ export class AgentService {
     await this.db.upsertSession({
       agentQuestionnaire: null,
       agentTodos: [],
-      appUserId: record.appUserId ?? null,
       channel: record.channel,
       createdAt: new Date().toISOString(),
       id: nextSessionId,
@@ -2239,8 +2224,7 @@ export class AgentService {
       branchOrgRole,
       branchIsPlatformAdmin,
       undefined,
-      undefined,
-      record.appUserId
+      undefined
     );
     this.sessions.set(nextSessionId, {
       channel,
@@ -2257,7 +2241,6 @@ export class AgentService {
     profileId: string,
     channels: AgentChannel | readonly AgentChannel[],
     access: ChatProfileAccess,
-    appUserId?: string,
     page?: { cursor?: string; limit: number },
     query?: string
   ): Promise<ListSessionsResponse> {
@@ -2272,7 +2255,6 @@ export class AgentService {
       typeof channels === "string" ? [channels] : channels,
       {
         after: cursor,
-        appUserId,
         // One row past the page tells whether another page follows.
         limit: page ? page.limit + 1 : undefined,
         query,
@@ -2414,8 +2396,7 @@ export class AgentService {
       resumeOrgRole,
       resumeIsPlatformAdmin,
       undefined,
-      undefined,
-      record.appUserId
+      undefined
     );
 
     this.sessions.set(sessionId, {
@@ -3170,6 +3151,7 @@ export class AgentService {
   async reloadAfterDataRestore(): Promise<void> {
     this.userConfig = await loadUserConfig();
     this.refreshHarness();
+    this.ephemeralSessions.clear();
     this.composioService?.reloadConfiguration();
     await this.llmUsageTracker?.reloadFromDatabase();
     this.visionSettingsPromise = null;
@@ -3730,14 +3712,12 @@ export class AgentService {
     profileId: string,
     filename: string,
     options: {
-      appUserId?: string | null;
       headOnly?: boolean;
       render?: "markdown";
     } = {}
   ) {
     await this.requireProfile(orgId, profileId);
     return readArtifactFile({
-      appUserId: options.appUserId,
       filename,
       headOnly: options.headOnly,
       orgId,
@@ -4111,18 +4091,13 @@ export class AgentService {
     orgRole?: OrgRole | null,
     isPlatformAdmin?: boolean,
     codingWorkspaceRoot?: string,
-    cognito?: CognitoSessionOptions,
-    appUserId?: string | null
+    cognito?: CognitoSessionOptions
   ): Promise<AgentChatSession> {
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireProfile(orgId, profileId);
-    const workspaceRoot = appUserId
-      ? await ensureAppUserSoulDir(orgId, profileId, appUserId)
-      : undefined;
     // skill_manage writes skills and expands /learn, both of which outlive the
     // chat, so a cognito session never gets it whatever the channel allows.
-    const includeSkillManageTools =
-      !(cognito || appUserId) && SKILL_MANAGE_CHANNELS[channel];
+    const includeSkillManageTools = !cognito && SKILL_MANAGE_CHANNELS[channel];
     const pluginOrgRole =
       channel === "telegram" ||
       channel === "whatsapp" ||
@@ -4144,7 +4119,7 @@ export class AgentService {
     if (channel === "discord" && tools.length > 0) {
       tools = [...tools, ...createSendDiscordArtifactTools()];
     }
-    if (channel === "whatsapp" && !appUserId && tools.length > 0) {
+    if (channel === "whatsapp" && tools.length > 0) {
       tools = [...tools, sendWhatsAppArtifactTool];
     }
     // Same table as the tools above on purpose: a channel that can manage
@@ -4159,8 +4134,7 @@ export class AgentService {
       profile.systemPrompt,
       orgRole,
       skillUsageContext,
-      !cognito,
-      workspaceRoot
+      !cognito
     );
     // Per-org override for the tool-output optimiser. Undefined leaves the
     // decision to the server's env var, so an operator who never opened the UI
@@ -4177,9 +4151,7 @@ export class AgentService {
       ? (cognito.initialHistory ?? [])
       : await loadSessionHistory(this.db, sessionId);
     const userTimezone = await this.getUserTimezone();
-    const userContext = appUserId
-      ? undefined
-      : await this.loadUserContextForUser(orgId, userId);
+    const userContext = await this.loadUserContextForUser(orgId, userId);
     const selectedModel = modelOverride
       ? this.normalizeSessionModelOverride(modelOverride)
       : profile.model;
@@ -4189,7 +4161,10 @@ export class AgentService {
     // helpers are also platform groups, so a profile that resolved to zero
     // tools must not receive them either.
     if (tools.length > 0) {
-      tools = [...tools, createReadSessionHistoryTool(orgId, sessionId)];
+      tools = [
+        ...tools,
+        createReadSessionHistoryTool(this.db, orgId, sessionId),
+      ];
     }
     const persistAttachment = createAttachmentSaver(this.db, {
       channel,
@@ -4384,7 +4359,7 @@ export class AgentService {
       toolContext: buildToolExecutionContext({
         assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
         channel,
-        ...this.memoryBackend.toolContext(orgId, profileId, workspaceRoot),
+        ...this.memoryBackend.toolContext(orgId, profileId),
         codingWorkspaceRoot,
         forbidMemoryWrites: cognito ? true : undefined,
         forbidProfileSkillMarkdownWrites: hasSkillManage,
@@ -4402,7 +4377,6 @@ export class AgentService {
         tokenOptimizerEnabled: tokenOptimizerEnabled ?? undefined,
         trackEphemeralAttachment,
         userId: userId ?? undefined,
-        workspaceRoot,
       }),
       tools,
       userContext,
@@ -4545,20 +4519,12 @@ export class AgentService {
     profilePrompt: string,
     orgRole?: OrgRole | null,
     usageContext?: import("./skills-service").SkillUsageRecordingContext,
-    recordSkillUsage = true,
-    workspaceRoot?: string
+    recordSkillUsage = true
   ): Promise<{ systemPrompt: string; soulActive: boolean }> {
     const stack = await loadSoulStack(
-      workspaceRoot ?? getProfileSoulDir(orgId, profileId),
+      getProfileSoulDir(orgId, profileId),
       (content) =>
-        this.memoryBackend.readMemory(
-          orgId,
-          profileId,
-          "MEMORY.md",
-          content,
-          workspaceRoot
-        ),
-      workspaceRoot ? getProfileSoulDir(orgId, profileId) : undefined
+        this.memoryBackend.readMemory(orgId, profileId, "MEMORY.md", content)
     );
     let systemPrompt = stack
       ? composeSoulSystemPrompt(stack, { profilePrompt })

@@ -10,8 +10,6 @@ import type {
 } from "@nakama/core/contract";
 
 export interface NakamaClientOptions {
-  /** Stable end-user scope used with API-key authentication. */
-  appUserId?: string | null;
   authToken?: string;
   baseUrl?: string;
   /** Browser-style origin for OAuth callbacks when this client has no window (e.g. Telegram bridge). */
