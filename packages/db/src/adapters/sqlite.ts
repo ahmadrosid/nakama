@@ -368,14 +368,6 @@ interface UserRow {
   user_context?: string | null;
 }
 
-interface MfaBackupCodeRow {
-  code_hash: string;
-  created_at: string;
-  id: string;
-  used_at: string | null;
-  user_id: string;
-}
-
 interface PasskeyRow {
   counter: number;
   created_at: string;

@@ -1,8 +1,3 @@
-export interface SetupOrganizationDraft {
-  name: string;
-  slug: string;
-}
-
 export interface SetupAccountDraft {
   email: string;
   name: string;
