@@ -8,7 +8,7 @@ import { formatBrowseCapabilities } from "@/components/model-browse-utils";
 import { useOpenRouterModels } from "@/hooks/use-openrouter-models";
 import type { OpenRouterModelRow } from "@/lib/openrouter-models";
 
-export type OpenRouterBrowseSelectHandler = (row: OpenRouterModelRow) => void;
+type OpenRouterBrowseSelectHandler = (row: OpenRouterModelRow) => void;
 
 interface OpenRouterModelsBrowseListProps {
   className?: string;

@@ -6,10 +6,9 @@ import {
   OversizedTelegramFileError,
 } from "./attachments";
 
-export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
-export const OVERSIZED_AUDIO_REPLY =
-  "Audio is too large. Maximum size is 25 MB.";
+const OVERSIZED_AUDIO_REPLY = "Audio is too large. Maximum size is 25 MB.";
 
 export function hasTelegramAudio(ctx: Context): boolean {
   return Boolean(ctx.message?.voice || ctx.message?.audio);

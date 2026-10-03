@@ -158,7 +158,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       mfaEnabled: z.boolean().optional(),
       mfaEnrolled: z.boolean().optional(),
       mfaRequired: z.boolean().optional(),
-      mode: z.enum(["api-key", "browser-session", "local-token"]).optional(),
+      mode: z.enum(["browser-session", "local-token"]).optional(),
       name: z.string().nullable().optional(),
       orgId: z.string().nullable().optional(),
       phone: z.string().nullable().optional(),
@@ -1371,6 +1371,12 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     }
 
     const auth = getRequestAuth(c);
+    if (auth.mode !== "browser-session") {
+      return errorResponse(
+        "Sign in through the dashboard to update your profile.",
+        403
+      );
+    }
     assertBrowserCsrf(c.req.raw, auth, authService);
 
     const body = await readJson<UpdateAuthProfileRequest>(
@@ -1546,10 +1552,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     }
 
     const auth = getRequestAuth(c);
-    const orgs = await orgService.listUserOrgs(
-      auth.user.id,
-      auth.mode === "api-key" ? (auth.activeOrgId ?? null) : undefined
-    );
+    const orgs = await orgService.listUserOrgs(auth.user.id);
     return json<ListUserOrgsResponse>(orgs);
   });
 

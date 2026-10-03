@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    # Desktop version bumps publish through desktop-v* tags instead.
+    paths-ignore: ['apps/desktop/package.json']
     tags:
       - "v*"
 

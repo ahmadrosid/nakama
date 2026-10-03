@@ -1,8 +1,5 @@
 export * from "./archive";
-export {
-  readBundledSkillBody,
-  readBundledSkillMarkdown,
-} from "./bundled/index";
+export { readBundledSkillBody } from "./bundled/index";
 export * from "./bundled/install";
 export * from "./bundled-names";
 export * from "./compose";
@@ -18,5 +15,6 @@ export * from "./match";
 export * from "./parse";
 export * from "./paths";
 export * from "./profile-org-override";
+export * from "./script-trust";
 export * from "./types";
 export * from "./write";

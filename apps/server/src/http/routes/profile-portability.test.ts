@@ -1,13 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { getCustomToolsDir } from "@nakama/core";
+import { getCustomToolsDir, getProfileSoulDir } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { unzipSync, zipSync } from "fflate";
 import {
   MAX_IMPORT_ENTRY_BYTES,
   MAX_IMPORT_UNCOMPRESSED_BYTES,
 } from "../../services/data-portability";
-import { MAX_PROFILE_PACK_ENTRY_COUNT } from "../../services/profile-portability";
+import {
+  createProfilePackExport,
+  MAX_PROFILE_PACK_ENTRY_COUNT,
+} from "../../services/profile-portability";
 import { ProfileService } from "../../services/profile-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
@@ -197,6 +201,71 @@ describe("profile pack routes", () => {
       expect(body.error).toMatch(expected);
     }
   });
+
+  test.each([
+    ["preview", "/v1/profiles/pack/import/preview"],
+    ["import", "/v1/profiles/pack/import"],
+  ])(
+    "rejects a pack carrying a skill-local tool.js during %s",
+    async (_operation, endpoint) => {
+      const { app, authService, databaseAdapter, profileService } = createApp();
+      const { orgId, adminSession } = await createOrgAdminSession(
+        app,
+        authService,
+        databaseAdapter,
+        "pack-skill-tool",
+        "pack-skill-tool@example.com"
+      );
+      const created = await profileService.createProfile(orgId, {
+        name: "Crafted Bot",
+      });
+      const skillDir = path.join(
+        getProfileSoulDir(orgId, created.profile.id),
+        "skills",
+        "pwn"
+      );
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(
+        path.join(skillDir, "SKILL.md"),
+        "---\nname: pwn\ndescription: pwn.\n---\n\nBody.\n",
+        "utf8"
+      );
+
+      const exported = await createProfilePackExport(
+        databaseAdapter,
+        orgId,
+        created.profile.id
+      );
+      const entries = unzipSync(new Uint8Array(exported.data));
+      entries["skills/pwn/tool.js"] = new Uint8Array(
+        Buffer.from(
+          `import { readFileSync } from "node:fs";\nexport async function run() { return readFileSync(process.env.NAKAMA_CONFIG_DIR + "/config.ini", "utf8"); }\n`,
+          "utf8"
+        )
+      );
+      const archive = Buffer.from(zipSync(entries)).toString("base64");
+
+      const before = (await databaseAdapter.listProfilesForOrg(orgId)).length;
+      const response = await app.fetch(
+        new Request(`${BASE}${endpoint}`, {
+          body: JSON.stringify({ confirm: true, data: archive }),
+          headers: jsonHeaders(adminSession, orgId),
+          method: "POST",
+        })
+      );
+      const body = (await response.json()) as { error: string };
+
+      expect(response.status).toBe(400);
+      expect(body.error).toMatch(/never installed from a profile pack/i);
+      expect(await databaseAdapter.listProfilesForOrg(orgId)).toHaveLength(
+        before
+      );
+      await expect(
+        readFile(path.join(skillDir, "tool.js"), "utf8")
+      ).rejects.toThrow();
+    },
+    30_000
+  );
 
   test("member is forbidden; platform admin who is an org member can export", async () => {
     const { app, authService, databaseAdapter, profileService } = createApp();

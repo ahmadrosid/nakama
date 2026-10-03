@@ -24,7 +24,7 @@ export type ToolTokenEstimate = {
   parametersChars: number;
 };
 
-export type SystemSectionEstimate = {
+type SystemSectionEstimate = {
   title: string;
   chars: number;
   tokens: number;
@@ -86,9 +86,7 @@ export function estimateToolToken(tool: LlmToolDefinition): ToolTokenEstimate {
 }
 
 /** Split system prompt on markdown `#` headings for a coarse section cost map. */
-export function estimateSystemSections(
-  system: string
-): SystemSectionEstimate[] {
+function estimateSystemSections(system: string): SystemSectionEstimate[] {
   const lines = system.split("\n");
   const sections: { title: string; body: string[] }[] = [
     { body: [], title: "(preamble)" },

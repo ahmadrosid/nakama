@@ -22,6 +22,7 @@ import {
   type UserConfig,
   validateCustomModels,
   validateDisplayName,
+  validateOpenRouterRoutingSettings,
   validateProviderApiKeyFormat,
   validateProviderInstanceLabel,
 } from "@nakama/core";
@@ -72,6 +73,9 @@ export function toProviderInstanceSummary(
     label: normalizeProviderInstanceLabel(instance.type, instance.label, []),
     type: instance.type,
     wireApi: instance.wireApi ?? null,
+    ...(instance.type === "openrouter" && instance.openRouterRouting
+      ? { openRouterRouting: instance.openRouterRouting }
+      : {}),
     ...(instance.customModels?.length
       ? { customModels: instance.customModels }
       : {}),
@@ -317,6 +321,16 @@ export function applyProviderInstanceUpdate(
 ): ProviderInstance {
   const next: ProviderInstance = { ...instance };
 
+  if (
+    instance.type === "openrouter" &&
+    request.openRouterRouting !== undefined
+  ) {
+    const routing = validateOpenRouterRoutingSettings(
+      request.openRouterRouting
+    );
+    next.openRouterRouting = Object.keys(routing).length ? routing : undefined;
+  }
+
   if (request.label !== undefined) {
     next.label = validateProviderInstanceLabel(request.label, instance.type);
   }
@@ -402,7 +416,12 @@ function buildProviderFieldsFromRequest(
   request: CreateProviderRequest
 ): Pick<
   ProviderInstance,
-  "baseUrl" | "customModels" | "label" | "hostMode" | "wireApi"
+  | "baseUrl"
+  | "customModels"
+  | "label"
+  | "hostMode"
+  | "wireApi"
+  | "openRouterRouting"
 > {
   const type = request.type;
 
@@ -485,7 +504,16 @@ function buildProviderFieldsFromRequest(
     const customModels = request.customModels?.length
       ? validateOpenRouterCustomModels(request.customModels)
       : undefined;
-    return { ...(customModels ? { customModels } : {}) };
+    const routing =
+      request.openRouterRouting === undefined
+        ? undefined
+        : validateOpenRouterRoutingSettings(request.openRouterRouting);
+    return {
+      ...(customModels ? { customModels } : {}),
+      ...(routing && Object.keys(routing).length
+        ? { openRouterRouting: routing }
+        : {}),
+    };
   }
 
   if (type === "cerebras") {
@@ -580,9 +608,7 @@ export function decodeStoredModelSelection(
   };
 }
 
-export function extractStoredModelId(
-  value: string | null | undefined
-): string | null {
+function extractStoredModelId(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
 
   if (!trimmed) {

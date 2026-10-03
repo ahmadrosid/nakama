@@ -158,6 +158,45 @@ test("chat stream request includes cookie CSRF protection", async () => {
   }
 });
 
+test("CSRF header prefers the host-bound cookie a sibling host cannot set", async () => {
+  const originalDocument = (
+    globalThis as typeof globalThis & { document?: { cookie: string } }
+  ).document;
+  // An attacker-planted parent-domain cookie is still readable from JS, so the
+  // client must send the host-bound one the server actually trusts.
+  (
+    globalThis as typeof globalThis & { document?: { cookie: string } }
+  ).document = {
+    cookie: "nakama_csrf=planted; __Host-nakama_csrf=host-bound",
+  };
+
+  const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
+    [];
+  const client = new NakamaClient({
+    baseUrl: "https://nakama.example.com",
+    fetch: async (input, init) => {
+      fetchCalls.push({ init, input });
+      return new Response('data: {"type":"done","reply":"ok"}\n\n', {
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    },
+  });
+
+  try {
+    await client
+      .createChatSession("session-1", "web")
+      .sendStream("hi", () => {});
+
+    expect(new Headers(fetchCalls[0]!.init?.headers).get("X-CSRF-Token")).toBe(
+      "host-bound"
+    );
+  } finally {
+    (
+      globalThis as typeof globalThis & { document?: { cookie: string } }
+    ).document = originalDocument;
+  }
+});
+
 test("automation run requests disable Bun fetch idle timeout", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
@@ -390,6 +429,29 @@ test("readProfileArtifactContent fetches artifact bytes with inline query", asyn
   expect(headers.get("X-Org-Id")).toBe("org_test");
   expect(result.contentType).toBe("text/markdown");
   expect(new TextDecoder().decode(result.data)).toBe("# Report");
+});
+
+test("hasProfileArtifact reads a 404 as deleted and rethrows other failures", async () => {
+  const methods: Array<string | undefined> = [];
+  let status = 200;
+  const client = new NakamaClient({
+    authToken: "local-auth-token",
+    baseUrl: "http://localhost:4310",
+    fetch: async (_input, init) => {
+      methods.push(init?.method);
+      return new Response(null, { status });
+    },
+    orgId: "org_test",
+  });
+
+  expect(await client.hasProfileArtifact("profile_1", "report.md")).toBe(true);
+  status = 404;
+  expect(await client.hasProfileArtifact("profile_1", "report.md")).toBe(false);
+  status = 500;
+  await expect(
+    client.hasProfileArtifact("profile_1", "report.md")
+  ).rejects.toMatchObject({ status: 500 });
+  expect(methods).toEqual(["HEAD", "HEAD", "HEAD"]);
 });
 
 test("data import helpers upload base64 archive data", async () => {
@@ -685,4 +747,69 @@ test("listSessions asks for several channels and a page in one request", async (
     "?channels=web&profileId=agent-a&limit=30&cursor=next",
     "?channels=web&profileId=agent-a&limit=30&q=budget+plan",
   ]);
+});
+
+test("artifact download budget stops declared and chunked oversize bodies", async () => {
+  for (const declared of [undefined, "100", "1"]) {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true;
+      },
+      start(controller) {
+        controller.enqueue(new Uint8Array(5));
+      },
+    });
+    const client = new NakamaClient({
+      fetch: (async () =>
+        new Response(body, {
+          headers: declared ? { "Content-Length": declared } : {},
+        })) as unknown as typeof fetch,
+    });
+    await expect(
+      client.readProfileArtifactContent("profile", "report.csv", {
+        maxBytes: 4,
+      })
+    ).rejects.toThrow();
+    expect(cancelled).toBe(true);
+  }
+  const client = new NakamaClient({
+    fetch: (async () => new Response("1234")) as unknown as typeof fetch,
+  });
+  expect(
+    new TextDecoder().decode(
+      (
+        await client.readProfileArtifactContent("profile", "report.csv", {
+          maxBytes: 4,
+        })
+      ).data
+    )
+  ).toBe("1234");
+});
+
+test("artifact download cancellation aborts a pending body read and forwards the signal", async () => {
+  const controller = new AbortController();
+  let cancelled = false;
+  let requestSignal: AbortSignal | null | undefined;
+  const client = new NakamaClient({
+    fetch: (async (_input, init) => {
+      requestSignal = init?.signal;
+      return new Response(
+        new ReadableStream({
+          cancel() {
+            cancelled = true;
+          },
+        })
+      );
+    }) as typeof fetch,
+  });
+  const download = client.readProfileArtifactContent("profile", "report.csv", {
+    maxBytes: 10,
+    signal: controller.signal,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  controller.abort();
+  await expect(download).rejects.toThrow();
+  expect(requestSignal).toBe(controller.signal);
+  expect(cancelled).toBe(true);
 });

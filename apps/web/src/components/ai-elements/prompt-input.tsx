@@ -51,7 +51,6 @@ import { readFileAsDataUrl } from "@/lib/read-file-as-data-url";
 export type {
   AttachmentsContext,
   PromptInputControllerProps,
-  TextInputContext,
 } from "@/components/ai-elements/prompt-input-context";
 
 export { usePromptInputController } from "@/components/ai-elements/prompt-input-context";
@@ -171,7 +170,7 @@ export const usePromptInputAttachments = () => {
   return context;
 };
 
-export interface PromptInputMessage {
+interface PromptInputMessage {
   files: FileUIPart[];
   text: string;
 }

@@ -14,7 +14,11 @@ test.each([false, true])(
   async (branchOverride) => {
     const queryClient = new QueryClient();
     const sessionsKey = ["sessions", "default"];
+    const ownArtifactKey = ["artifacts", "default", "exists", "report.md"];
+    const otherArtifactKey = ["artifacts", "other", "exists", "report.md"];
     queryClient.setQueryData(sessionsKey, []);
+    queryClient.setQueryData(ownArtifactKey, true);
+    queryClient.setQueryData(otherArtifactKey, true);
     const previousStorage = globalThis.localStorage;
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
@@ -96,6 +100,12 @@ test.each([false, true])(
       );
       expect(createSession).toHaveBeenCalledTimes(branchOverride ? 0 : 1);
       expect(queryClient.getQueryState(sessionsKey)?.isInvalidated).toBe(true);
+      expect(queryClient.getQueryState(ownArtifactKey)?.isInvalidated).toBe(
+        true
+      );
+      expect(queryClient.getQueryState(otherArtifactKey)?.isInvalidated).toBe(
+        true
+      );
     } finally {
       createSession.mockRestore();
       getMessages.mockRestore();

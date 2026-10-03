@@ -152,6 +152,55 @@ describe("OrgService", () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
+  test("stores normalized allowed invite domains for an organization", async () => {
+    const { databaseAdapter, orgService } = createOrgService();
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-invite-domains",
+    });
+
+    const updated = await orgService.updateOrganization(
+      created.organization.id,
+      { allowedInviteDomains: [" Acme.COM ", "partner.example", "acme.com"] }
+    );
+
+    expect(updated.allowedInviteDomains).toEqual([
+      "acme.com",
+      "partner.example",
+    ]);
+    expect(
+      (await databaseAdapter.getOrganizationById(created.organization.id))
+        ?.allowedInviteDomains
+    ).toEqual(["acme.com", "partner.example"]);
+  });
+
+  test("rejects malformed invite-domain settings without replacing the policy", async () => {
+    const { databaseAdapter, orgService } = createOrgService();
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-invalid-invite-domains",
+    });
+    await orgService.updateOrganization(created.organization.id, {
+      allowedInviteDomains: ["acme.com"],
+    });
+
+    for (const allowedInviteDomains of [
+      ["*.acme.com"],
+      [""],
+      "acme.com" as unknown as string[],
+    ]) {
+      await expect(
+        orgService.updateOrganization(created.organization.id, {
+          allowedInviteDomains,
+        })
+      ).rejects.toMatchObject({ status: 400 });
+    }
+    expect(
+      (await databaseAdapter.getOrganizationById(created.organization.id))
+        ?.allowedInviteDomains
+    ).toEqual(["acme.com"]);
+  });
+
   test("updates organization consolidate flag", async () => {
     const { orgService } = createOrgService();
 
@@ -555,6 +604,79 @@ describe("OrgService", () => {
     expect(accepted.user.email).toBe("legacy@acme.com");
     expect(accepted.orgId).toBe(created.organization.id);
     expect(accepted.role).toBe("member");
+  });
+
+  test("only creates invites for allowed email domains", async () => {
+    const sent: string[] = [];
+    const { databaseAdapter, orgService } = createOrgService({
+      send: async (input) => {
+        sent.push(input.to);
+        return { ok: true };
+      },
+    });
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-invite-restriction",
+    });
+    await orgService.updateOrganization(created.organization.id, {
+      allowedInviteDomains: ["acme.com"],
+    });
+
+    await expect(
+      orgService.createInvite({
+        email: "guest@other.com",
+        invitedByUserId: "user_platform",
+        orgId: created.organization.id,
+        role: "member",
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    expect(
+      await databaseAdapter.getPendingOrgInvite(
+        created.organization.id,
+        "guest@other.com"
+      )
+    ).toBeNull();
+    expect(sent).toEqual([]);
+
+    const allowed = await orgService.createInvite({
+      email: "guest@ACME.COM",
+      invitedByUserId: "user_platform",
+      orgId: created.organization.id,
+      role: "member",
+    });
+    expect(allowed.invite.email).toBe("guest@acme.com");
+    expect(sent).toEqual(["guest@acme.com"]);
+  });
+
+  test("rejects an existing invite if the allowed domains change before acceptance", async () => {
+    const { databaseAdapter, orgService } = createOrgService();
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-invite-policy-change",
+    });
+    const invite = await orgService.createInvite({
+      email: "guest@other.com",
+      invitedByUserId: "user_platform",
+      orgId: created.organization.id,
+      role: "member",
+    });
+    await orgService.updateOrganization(created.organization.id, {
+      allowedInviteDomains: ["acme.com"],
+    });
+
+    await expect(
+      orgService.acceptInvite({
+        password: "secret123",
+        token: invite.token!,
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    expect(await databaseAdapter.getUserByEmail("guest@other.com")).toBeNull();
+    expect(
+      await databaseAdapter.getPendingOrgInvite(
+        created.organization.id,
+        "guest@other.com"
+      )
+    ).not.toBeNull();
   });
 
   test("emails an invite link without returning its raw token", async () => {
@@ -1093,6 +1215,20 @@ describe("OrgService", () => {
     const orgDir = getOrgConfigDir(bootstrapped.organization.id);
     await mkdir(orgDir, { recursive: true });
     await writeFile(join(orgDir, "private-data.txt"), "private data");
+    const retiredDir = join(
+      getUserConfigDir(),
+      "retired-app-users",
+      bootstrapped.organization.id
+    );
+    const keptRetired = join(
+      getUserConfigDir(),
+      "retired-app-users",
+      kept.organization.id
+    );
+    await mkdir(retiredDir, { recursive: true });
+    await mkdir(keptRetired, { recursive: true });
+    await writeFile(join(retiredDir, "private.txt"), "retired data");
+    await writeFile(join(keptRetired, "private.txt"), "kept data");
     const deletedProfile = (
       await databaseAdapter.listProfilesForOrg(bootstrapped.organization.id)
     )[0]!;
@@ -1135,6 +1271,10 @@ describe("OrgService", () => {
       )
     ).toMatchObject({ activeOrgId: null });
     await expect(access(orgDir)).rejects.toThrow();
+    await expect(access(retiredDir)).rejects.toThrow();
+    expect(await readFile(join(keptRetired, "private.txt"), "utf8")).toBe(
+      "kept data"
+    );
   });
 
   test("permanent deletion removes tool secrets from the global config", async () => {

@@ -28,6 +28,24 @@ With WhatsApp enabled, users can:
 - stop an in-progress reply
 - receive replies with simple WhatsApp-friendly formatting
 
+## Reports and saved files
+
+Ask naturally: “send that file again” or “create the September report in one CSV.”
+The agent selects the matching file, or creates the requested output first. It
+sends only the selected documents. “Save only” keeps a file without sending it.
+`/attach` resends the most recent saved artifact without an agent reply.
+
+For an existing agent, an admin should open **Agents → your agent → Tools** and
+assign **list_artifacts** so it can find saved files when the conversation no
+longer contains their names. This shared tool lists only the active workspace's
+artifacts and also works in other chat channels. New default agents receive it
+automatically; upgrades preserve existing assignments.
+
+The agent needs its file creation and reading tools to build or inspect reports.
+Without those tools or source data, it may ask for missing information. Document
+uploads are limited to 16 MiB. If an upload's delivery is unconfirmed, check the
+chat before asking to resend it.
+
 ## Reply formatting
 
 Agents can still write normal Markdown-style replies, but Nakama simplifies them for WhatsApp.

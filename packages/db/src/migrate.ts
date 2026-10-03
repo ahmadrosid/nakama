@@ -29,12 +29,13 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateUsersTable);
   atomic(migratePasskeyTables);
   atomic(migrateOrgTables);
-  atomic(migrateApiKeysTable);
+  atomic((database) => database.exec("DROP TABLE IF EXISTS api_keys"));
   atomic(migrateLegacyUserContextToOrgMembers);
   atomic(migrateOrgMemoryProposalsTable);
   atomic(migrateSkillProposalsTable);
   atomic(migrateSkillSuggestionsTable);
   atomic(migrateSkillsWriteApprovalColumns);
+  atomic(migrateOrganizationAllowedInviteDomains);
   atomic(migrateSkillsPostTurnReviewColumns);
   atomic(migrateAutomationsEnabledColumn);
   atomic(migrateSkillsCuratorColumns);
@@ -63,7 +64,9 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateAuditEventsTable);
   atomic(migrateProfileChangeEventsTable);
   atomic(migratePluginTables);
+  atomic(migrateRemoveGoogleMeetPlugin);
   atomic(migrateFilePinsTable);
+  atomic(migrateNotificationWebhookDeliveriesTable);
 }
 
 function migrateSessionAppUserId(db: Database): void {
@@ -594,28 +597,6 @@ function migrateOrgTables(db: Database): void {
   }
 }
 
-function migrateApiKeysTable(db: Database): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS api_keys (
-      id TEXT PRIMARY KEY NOT NULL,
-      org_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      environment TEXT NOT NULL,
-      key_prefix TEXT NOT NULL,
-      secret_hash TEXT NOT NULL,
-      created_by_user_id TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      expires_at TEXT,
-      last_used_at TEXT,
-      revoked_at TEXT,
-      FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
-      FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE CASCADE
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS api_keys_prefix_unique ON api_keys (key_prefix);
-    CREATE INDEX IF NOT EXISTS api_keys_org_id ON api_keys (org_id, created_at DESC);
-  `);
-}
-
 /**
  * Pre-org installs stored USER.md on users.user_context. Writes moved to
  * org_members (#550); copy any remaining legacy values into memberships that
@@ -769,6 +750,17 @@ function migrateSkillsWriteApprovalColumns(db: Database): void {
     )
   ) {
     db.exec("ALTER TABLE profiles ADD COLUMN skills_write_approval INTEGER;");
+  }
+}
+
+function migrateOrganizationAllowedInviteDomains(db: Database): void {
+  const columns = db
+    .prepare("PRAGMA table_info(organizations)")
+    .all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === "allowed_invite_domains")) {
+    db.exec(
+      "ALTER TABLE organizations ADD COLUMN allowed_invite_domains TEXT NOT NULL DEFAULT '[]';"
+    );
   }
 }
 
@@ -1541,6 +1533,10 @@ function migrateAutomationRunsTable(db: Database): void {
     .all() as Array<{ name: string }>;
   const columnNames = new Set(columns.map((column) => column.name));
 
+  if (!columnNames.has("progress")) {
+    db.exec("ALTER TABLE automation_runs ADD COLUMN progress TEXT;");
+  }
+
   if (!columnNames.has("delivery_status")) {
     db.exec(`
       ALTER TABLE automation_runs ADD COLUMN delivery_status TEXT;
@@ -1815,6 +1811,17 @@ function migrateProfileChangeEventsTable(db: Database): void {
   `);
 }
 
+function migrateRemoveGoogleMeetPlugin(db: Database): void {
+  // Meet is built in. Remove obsolete plugin contributions and their cascading
+  // profile assignments; meeting databases and transcripts live outside this DB.
+  db.prepare("DELETE FROM tools WHERE plugin_id = ?").run("google-meet");
+  db.prepare("DELETE FROM skills WHERE plugin_id = ?").run("google-meet");
+  db.prepare("DELETE FROM org_plugins WHERE plugin_id = ?").run("google-meet");
+  db.prepare("DELETE FROM plugin_releases WHERE plugin_id = ?").run(
+    "google-meet"
+  );
+}
+
 function migratePluginTables(db: Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS plugin_releases (
@@ -1923,5 +1930,20 @@ CREATE TABLE IF NOT EXISTS file_pins (
   path TEXT NOT NULL,
   PRIMARY KEY (org_id, user_id, profile_id, path)
 );
+  `);
+}
+
+function migrateNotificationWebhookDeliveriesTable(db: Database): void {
+  db.exec(`
+CREATE TABLE IF NOT EXISTS notification_webhook_deliveries (
+  destination_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (destination_id, event_id),
+  FOREIGN KEY (destination_id) REFERENCES notification_destinations (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS notification_webhook_deliveries_created_at
+  ON notification_webhook_deliveries (created_at);
   `);
 }

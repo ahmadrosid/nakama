@@ -41,6 +41,11 @@ export function createMockClient(
     profiles?: ProfileSummary[];
     orgs?: UserOrgSummary[];
     messages?: ChatMessage[];
+    toolEvents?: Parameters<NonNullable<StreamHandlers["onToolEnd"]>>[0][];
+    done?: boolean;
+    reply?: string;
+    streamError?: Error;
+    getMessagesError?: Error;
   } = {}
 ) {
   const calls = {
@@ -69,11 +74,19 @@ export function createMockClient(
     calls.sendStream += 1;
     calls.streamInputs.push(_input);
 
-    if (!options.streaming) {
-      return "Agent reply";
-    }
-
     const streamHandlers = handlers as StreamHandlers;
+    if (!options.streaming) {
+      for (const event of options.toolEvents ?? []) {
+        streamHandlers.onToolEnd?.(event);
+      }
+      if (options.streamError) {
+        throw options.streamError;
+      }
+      if (options.done !== false) {
+        streamHandlers.onDone?.();
+      }
+      return options.reply ?? "Agent reply";
+    }
 
     return new Promise<string>((resolve, reject) => {
       let settled = false;
@@ -84,6 +97,7 @@ export function createMockClient(
             return;
           }
           settled = true;
+          streamHandlers.onDone?.();
           resolve(reply);
         },
         fail(error = new Error("Stream failed")) {
@@ -170,6 +184,9 @@ export function createMockClient(
     createAutomation: async () => ({}),
     getMessages: async () => {
       calls.getMessages += 1;
+      if (options.getMessagesError) {
+        throw options.getMessagesError;
+      }
       return options.messages ?? [];
     },
     id: "session_test",
@@ -190,6 +207,7 @@ export function createMockClient(
       calls.profileIds.push(options.profileId ?? "default");
       return session;
     },
+    forOrg: () => client,
     getModels: async () => ({
       currentProviderId: null,
       displayName: null,
@@ -317,7 +335,7 @@ export async function waitForStreamControl(
   throw new Error("Timed out waiting for stream control");
 }
 
-export { createDefaultTestOrgs, createMultiTestOrgs };
+export { createMultiTestOrgs };
 
 export function createTestOrgStore(homeDir: string): ChannelOrgStore {
   return createSharedTestOrgStore(homeDir, "whatsapp");

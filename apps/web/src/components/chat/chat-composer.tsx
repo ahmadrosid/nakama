@@ -70,7 +70,8 @@ import { useAuth } from "@/context/use-auth";
 import type { ChatStatus, FileUIPart } from "@/lib/ai-ui-types";
 import {
   type ComposerAddCommandAction,
-  type ComposerSlashSuggestion,
+  type ComposerSuggestion,
+  filterComposerMentionSuggestions,
   filterComposerSlashSuggestions,
   findActiveSkillSlashRange,
   matchComposerAddCommand,
@@ -722,15 +723,19 @@ function ChatComposerTextarea({
   const [slashRange, setSlashRange] = useState<SkillSlashRange | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const suggestions = useMemo(
-    () =>
-      slashRange
-        ? filterComposerSlashSuggestions(availableSkills, slashRange.query, {
-            enableAddCommands: onAddCommand != null,
-          })
-        : [],
-    [availableSkills, onAddCommand, slashRange]
-  );
+  const mentionOpen =
+    slashRange !== null && controller.textInput.value[slashRange.start] === "@";
+  const suggestions = useMemo(() => {
+    if (!slashRange) {
+      return [];
+    }
+
+    return mentionOpen
+      ? filterComposerMentionSuggestions(slashRange.query)
+      : filterComposerSlashSuggestions(availableSkills, slashRange.query, {
+          enableAddCommands: onAddCommand != null,
+        });
+  }, [availableSkills, mentionOpen, onAddCommand, slashRange]);
   const pickerOpen = Boolean(slashRange && !disabled && suggestions.length > 0);
   const safeActiveIndex =
     suggestions.length === 0
@@ -738,17 +743,25 @@ function ChatComposerTextarea({
       : Math.min(activeIndex, suggestions.length - 1);
 
   const updateSlashRange = useCallback((value: string, cursorIndex: number) => {
-    setSlashRange(findActiveSkillSlashRange(value, cursorIndex));
+    setSlashRange(
+      findActiveSkillSlashRange(value, cursorIndex) ??
+        findActiveSkillSlashRange(value, cursorIndex, "@")
+    );
     setActiveIndex(0);
   }, []);
 
   const selectSuggestion = useCallback(
-    (suggestion: ComposerSlashSuggestion) => {
+    (suggestion: ComposerSuggestion) => {
       const textarea = textareaRef.current;
       const value = controller.textInput.value;
       const cursorIndex = textarea?.selectionStart ?? value.length;
       const activeRange =
-        slashRange ?? findActiveSkillSlashRange(value, cursorIndex);
+        slashRange ??
+        findActiveSkillSlashRange(
+          value,
+          cursorIndex,
+          suggestion.kind === "mention" ? "@" : "/"
+        );
 
       if (!activeRange) {
         return;
@@ -773,17 +786,24 @@ function ChatComposerTextarea({
       }
 
       const next =
-        suggestion.kind === "command"
-          ? replaceSlashRangeWithReservedCommand(
-              value,
-              activeRange,
-              suggestion.command
-            )
-          : replaceSlashRangeWithSkillInvocation(
+        suggestion.kind === "skill"
+          ? replaceSlashRangeWithSkillInvocation(
               value,
               activeRange,
               suggestion.skill
-            );
+            )
+          : suggestion.kind === "mention"
+            ? replaceSlashRangeWithReservedCommand(
+                value,
+                activeRange,
+                suggestion.mention,
+                "@"
+              )
+            : replaceSlashRangeWithReservedCommand(
+                value,
+                activeRange,
+                suggestion.command
+              );
       controller.textInput.setInput(next.value);
       setSlashRange(null);
       setActiveIndex(0);

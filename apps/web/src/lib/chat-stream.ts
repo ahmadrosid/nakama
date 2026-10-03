@@ -18,7 +18,7 @@ import {
 import { addChatUsage } from "@/lib/chat-usage";
 import { createClientId } from "@/lib/client-id";
 
-export function formatBashToolResult(result: unknown): string | null {
+function formatBashToolResult(result: unknown): string | null {
   if (typeof result !== "object" || result === null) {
     return null;
   }
@@ -51,7 +51,7 @@ export function formatBashToolResult(result: unknown): string | null {
   return parts.length > 0 ? parts.join("\n\n") : null;
 }
 
-export function formatDefaultToolResult(result: unknown): string | null {
+function formatDefaultToolResult(result: unknown): string | null {
   if (result == null) {
     return null;
   }
@@ -171,7 +171,7 @@ export function parseProfileCreatedResult(
   return profile as CreatedProfileSummary;
 }
 
-export type SubAgentToolStatus = "success" | "fail" | "timeout";
+type SubAgentToolStatus = "success" | "fail" | "timeout";
 
 export interface ParsedSubAgentResult {
   error?: string;
@@ -298,7 +298,7 @@ export function formatSubAgentToolResult(result: unknown): string | null {
   return null;
 }
 
-export function formatToolSummary(
+function formatToolSummary(
   tool: string | undefined,
   input?: Record<string, unknown>
 ): string | null {
@@ -507,9 +507,7 @@ export function deriveChatStatus(
 }
 
 /** Messages after the latest user message (current assistant turn). */
-export function latestAssistantTurnMessages(
-  messages: ChatListItem[]
-): ChatListItem[] {
+function latestAssistantTurnMessages(messages: ChatListItem[]): ChatListItem[] {
   return messages.slice(
     messages.findLastIndex((message) => message?.role === "user") + 1
   );

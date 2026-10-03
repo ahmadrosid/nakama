@@ -8,7 +8,6 @@ import {
 import {
   createWorkerHeartbeatStore,
   isHeartbeatAlive,
-  isProcessAlive,
   type WorkerHeartbeatBase,
 } from "./worker-heartbeat";
 
@@ -16,7 +15,7 @@ export interface DiscordWorkerHeartbeat extends WorkerHeartbeatBase {
   connected?: boolean;
 }
 
-export { isHeartbeatAlive, isProcessAlive };
+export { isHeartbeatAlive };
 
 export function createDiscordWorkerHeartbeat(scope: ChannelConfigScope = null) {
   return createWorkerHeartbeatStore<DiscordWorkerHeartbeat>({
@@ -28,12 +27,9 @@ export function createDiscordWorkerHeartbeat(scope: ChannelConfigScope = null) {
   });
 }
 const store = createDiscordWorkerHeartbeat();
-
-export const getDiscordWorkerHeartbeatPath = store.getPath;
 export const parseDiscordWorkerHeartbeat = store.parse;
 export const readDiscordWorkerHeartbeat = store.read;
 export const clearDiscordWorkerHeartbeat = store.clear;
-export const isDiscordWorkerRunning = store.isRunning;
 
 export function resolveDiscordWorkerStatus(
   settings: DiscordSettingsPublic,

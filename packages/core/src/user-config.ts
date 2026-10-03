@@ -14,6 +14,7 @@ import { readEnvValue } from "./config";
 import type {
   ChatgptOAuthCredentials,
   CustomModelEntry,
+  OpenRouterRoutingSettings,
   ProviderChatOptions,
   ThinkingEffort,
   ThinkingSettings,
@@ -39,7 +40,6 @@ export type { UserProviderName } from "./provider-resolution";
 export {
   apiKeyEnvVarForProvider,
   isDiscoveryModelProvider,
-  parseProviderName,
   resolveProvider,
 } from "./provider-resolution";
 
@@ -55,6 +55,7 @@ export interface ProviderInstance {
   hostMode?: import("./contract").OllamaHostMode;
   id: string;
   label: string;
+  openRouterRouting?: OpenRouterRoutingSettings;
   type: UserProviderName;
   wireApi?: import("./contract").WireApi;
   xaiAccessToken?: string;
@@ -348,29 +349,6 @@ export async function loadUserVisionSettings(): Promise<VisionSettings> {
   return { model: readVisionModel(parseIniWithSections(raw).global) };
 }
 
-export async function saveUserVisionSettings(
-  settings: VisionSettings
-): Promise<void> {
-  const model = settings.model?.trim() || null;
-  const existing = await loadUserConfig();
-
-  if (existing) {
-    await saveUserConfig({ ...existing, visionModel: model });
-    return;
-  }
-
-  const raw = await readTextOrNull(getUserConfigPath());
-  const parsed =
-    raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
-  const lines = buildConfigIniLines(parsed.global, parsed.sections, {
-    vision_model: model ?? "",
-  });
-
-  await writeTextFile(getUserConfigPath(), lines.join("\n"), {
-    ensureDir: getUserConfigDir(),
-  });
-}
-
 export async function loadUserTranscriptionSettings(): Promise<TranscriptionSettings> {
   const raw = await readTextOrNull(getUserConfigPath());
 
@@ -637,6 +615,37 @@ export function parseIniWithSections(raw: string): ParsedIniFile {
   return { global, sections };
 }
 
+export function validateOpenRouterRoutingSettings(
+  value: unknown
+): OpenRouterRoutingSettings {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new NakamaApiError("OpenRouter routing must be an object.", 400);
+  }
+  const settings: OpenRouterRoutingSettings = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry === undefined) {
+      continue;
+    }
+    if (
+      (key === "zdr" || key === "requireParameters") &&
+      typeof entry === "boolean"
+    ) {
+      settings[key] = entry;
+    } else if (
+      key === "dataCollection" &&
+      (entry === "allow" || entry === "deny")
+    ) {
+      settings.dataCollection = entry;
+    } else {
+      throw new NakamaApiError(
+        `Invalid OpenRouter routing setting: ${key}`,
+        400
+      );
+    }
+  }
+  return settings;
+}
+
 function loadProvidersFromSections(
   sections: Record<string, Record<string, string>>
 ): ProviderInstance[] {
@@ -700,6 +709,13 @@ function loadProvidersFromSections(
       ...(hostMode ? { hostMode } : {}),
       ...(wireApi ? { wireApi } : {}),
       ...(customModels ? { customModels } : {}),
+      ...(type === "openrouter" && values.openrouter_routing_json
+        ? {
+            openRouterRouting: validateOpenRouterRoutingSettings(
+              JSON.parse(values.openrouter_routing_json)
+            ),
+          }
+        : {}),
       createdAt,
     });
   }
@@ -733,6 +749,12 @@ function buildProviderSectionValues(
 
   if (provider.customModels?.length) {
     values.models_json = serializeCustomModels(provider.customModels);
+  }
+
+  if (provider.type === "openrouter" && provider.openRouterRouting) {
+    values.openrouter_routing_json = JSON.stringify(
+      validateOpenRouterRoutingSettings(provider.openRouterRouting)
+    );
   }
 
   if (provider.xaiAccessToken?.trim()) {

@@ -71,6 +71,8 @@ export interface AutomationRunRecord {
   error: string | null;
   id: string;
   output: string | null;
+  /** Chat transcript, updated live and retained when the run completes. */
+  progress?: ChatMessage[];
   /** Present when the API resolves read state for the current user. */
   read?: boolean;
   startedAt: string;
@@ -313,10 +315,6 @@ export interface CodingHarnessSettingsResponse {
   providerPassthroughEnabled: boolean;
 }
 
-export interface UpdateCodingHarnessSettingsRequest {
-  providerPassthroughEnabled: boolean;
-}
-
 export interface TokenOptimizationTurnArm {
   arm: string;
   /** Turns whose token count came from an estimate, not the provider. */
@@ -489,16 +487,12 @@ export interface AuthUserResponse {
   backupCodesEnabled?: boolean;
   email: string;
   id: string;
-  /**
-   * What this credential may do, not what its owner may do. An API key minted
-   * by a platform admin is de-privileged, so it reports false here.
-   */
   isPlatformAdmin?: boolean;
   mfaEnabled?: boolean;
   mfaEnrolled?: boolean;
   mfaRequired?: boolean;
-  /** Which credential answered, which is what explains the flag above. */
-  mode?: "api-key" | "browser-session" | "local-token";
+  /** Credential used for this request. */
+  mode?: "browser-session" | "local-token";
   name?: string | null;
   orgId?: string | null;
   passkeyEnabled?: boolean;
@@ -565,6 +559,7 @@ export type OrgRole = "admin" | "member" | "viewer";
 export type ChannelType = "telegram" | "whatsapp" | "discord";
 
 export interface OrganizationSummary {
+  allowedInviteDomains?: string[];
   archivedAt?: string | null;
   createdAt: string;
   id: string;
@@ -594,6 +589,7 @@ export interface CreateOrganizationRequest {
 }
 
 export interface UpdateOrganizationRequest {
+  allowedInviteDomains?: string[];
   monthlyLlmTokenLimit?: number;
   monthlyLlmTurnLimit?: number;
   monthlyLlmWarningPercent?: number;
@@ -761,36 +757,6 @@ export interface RevokeBrowserSessionsResponse {
   revoked: number;
 }
 
-export interface ApiKeySummary {
-  createdAt: string;
-  environment: "live" | "test";
-  expiresAt: string | null;
-  id: string;
-  keyPrefix: string;
-  lastUsedAt: string | null;
-  name: string;
-  revokedAt: string | null;
-}
-
-export interface CreateApiKeyRequest {
-  expiresAt?: string | null;
-  name: string;
-}
-
-export interface CreateApiKeyResponse {
-  key: ApiKeySummary;
-  secret: string;
-}
-
-export interface ListApiKeysResponse {
-  keys: ApiKeySummary[];
-}
-
-export interface RotateApiKeyResponse {
-  key: ApiKeySummary;
-  secret: string;
-}
-
 export interface OrgMemoryResponse {
   content: string;
 }
@@ -914,7 +880,8 @@ export type SkillProposalAction =
   | "delete"
   | "edit"
   | "write_file"
-  | "remove_file";
+  | "remove_file"
+  | "approve_code";
 
 export interface SkillProposal {
   action: SkillProposalAction;
@@ -1026,27 +993,7 @@ export interface ResetPasswordRequest {
   token: string;
 }
 
-export interface ChannelOrgMappingSummary {
-  channel: ChannelType;
-  channelUserId: string;
-  createdAt: string;
-  orgId: string;
-  userId: string;
-}
-
-export interface CreateChannelOrgMappingRequest {
-  channel: ChannelType;
-  channelUserId: string;
-  userId: string;
-}
-
-export interface ListChannelOrgMappingsResponse {
-  mappings: ChannelOrgMappingSummary[];
-}
-
 export interface CreateSessionRequest {
-  /** Stable end-user identifier supplied by a trusted backend using an API key. */
-  appUserId?: string;
   channel: AgentChannel;
   codingWorkspaceRoot?: string;
   /**
@@ -1459,10 +1406,6 @@ export interface ListWorkflowsResponse {
   workflows: StoredWorkflow[];
 }
 
-export interface WorkflowResponse {
-  workflow: StoredWorkflow;
-}
-
 export interface CreateWorkflowRequest {
   description: string;
   enabled?: boolean;
@@ -1743,7 +1686,10 @@ export interface SendErrorTrackingTestResponse {
   delivered: boolean;
 }
 
-export type NotificationDestinationChannel = "telegram";
+export type NotificationDestinationChannel =
+  | "telegram"
+  | "discord"
+  | "whatsapp";
 
 export type NotificationWebhookLevel = "info" | "success" | "warning" | "error";
 
@@ -1753,15 +1699,26 @@ export interface TelegramNotificationDestinationConfig {
   topicId?: number | null;
 }
 
-export interface NotificationDestinationSummary {
-  channel: NotificationDestinationChannel;
+export interface DiscordNotificationDestinationConfig {
+  channelId: string;
+  profileId: string;
+}
+
+export interface WhatsAppNotificationDestinationConfig {
+  profileId: string;
+}
+
+export type NotificationDestinationSummary = {
   createdAt: string;
   id: string;
   name: string;
-  telegram: TelegramNotificationDestinationConfig;
   updatedAt: string;
   webhookPath: string;
-}
+} & (
+  | { channel: "telegram"; telegram: TelegramNotificationDestinationConfig }
+  | { channel: "discord"; discord: DiscordNotificationDestinationConfig }
+  | { channel: "whatsapp"; whatsapp: WhatsAppNotificationDestinationConfig }
+);
 
 export interface NotificationDestinationWithSecret {
   apiKey: string;
@@ -1772,16 +1729,21 @@ export interface ListNotificationDestinationsResponse {
   destinations: NotificationDestinationSummary[];
 }
 
-export interface CreateNotificationDestinationRequest {
-  channel: NotificationDestinationChannel;
+export type CreateNotificationDestinationRequest = {
   name: string;
-  telegram: TelegramNotificationDestinationConfig;
-}
+} & (
+  | { channel: "telegram"; telegram: TelegramNotificationDestinationConfig }
+  | { channel: "discord"; discord: DiscordNotificationDestinationConfig }
+  | { channel: "whatsapp"; whatsapp: WhatsAppNotificationDestinationConfig }
+);
 
-export interface UpdateNotificationDestinationRequest {
+export type UpdateNotificationDestinationRequest = {
   name: string;
-  telegram: TelegramNotificationDestinationConfig;
-}
+} & (
+  | { channel?: "telegram"; telegram: TelegramNotificationDestinationConfig }
+  | { channel: "discord"; discord: DiscordNotificationDestinationConfig }
+  | { channel: "whatsapp"; whatsapp: WhatsAppNotificationDestinationConfig }
+);
 
 export interface RegenerateNotificationDestinationKeyResponse {
   apiKey: string;
@@ -1830,15 +1792,6 @@ export interface SendEmailTestResponse {
   ok: true;
   to: string;
 }
-
-export type CodingAgentProviderPassthroughSummary = {
-  active: boolean;
-  configured: boolean;
-  compatible: boolean;
-  providerLabel: string | null;
-  model: string | null;
-  message?: string | null;
-};
 
 export interface AgentBrowserStatusResponse {
   installCommand: string;
@@ -1947,6 +1900,12 @@ export interface ProviderModelOption {
   supportsVision?: boolean;
 }
 
+export interface OpenRouterRoutingSettings {
+  dataCollection?: "allow" | "deny";
+  requireParameters?: boolean;
+  zdr?: boolean;
+}
+
 export interface ProviderInstanceSummary {
   baseUrl?: string | null;
   createdAt: string;
@@ -1956,6 +1915,7 @@ export interface ProviderInstanceSummary {
   id: string;
   label: string;
   modelCount: number;
+  openRouterRouting?: OpenRouterRoutingSettings;
   type: ProviderName;
   wireApi?: WireApi | null;
 }
@@ -1973,6 +1933,7 @@ export interface CreateProviderRequest {
   hostMode?: OllamaHostMode;
   label?: string;
   model?: string;
+  openRouterRouting?: OpenRouterRoutingSettings;
   type: ProviderName;
   wireApi?: WireApi;
   xaiOAuth?: XaiOAuthCredentials;
@@ -1991,6 +1952,8 @@ export interface UpdateProviderRequest {
   customModels?: CustomModelEntry[];
   hostMode?: OllamaHostMode;
   label?: string;
+  /** Replaces the routing settings; {} clears request-level overrides. */
+  openRouterRouting?: OpenRouterRoutingSettings;
   wireApi?: WireApi;
   xaiOAuth?: XaiOAuthCredentials;
 }
@@ -2462,8 +2425,6 @@ export interface ListWorkspaceFilesResponse {
 }
 
 export interface ListArtifactsOptions {
-  /** Scopes the listing to one end user's artifacts, when the caller names one. */
-  appUserId?: string | null;
   folder?: string;
   limit?: number;
   offset?: number;

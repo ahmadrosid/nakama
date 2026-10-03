@@ -416,24 +416,13 @@ describe("super bot assign_tool_to_profile", () => {
           _orgId: string,
           profileId: string
         ): Promise<ProfileResponse> {
-          return {
-            profile: {
-              createdAt: "2026-01-01T00:00:00.000Z",
-              hasAvatar: false,
-              id: profileId,
-              isSuper: false,
-              mcpServerCount: 0,
-              mcpServers: [],
-              model: null,
-              name: "Default Bot",
-              skills: [],
-              soulActive: false,
-              systemPrompt: "You are helpful.",
-              toolCount: 1,
-              tools: [],
-              updatedAt: "2026-01-01T00:00:00.000Z",
-            },
-          };
+          return profileResponse({
+            id: profileId,
+            name: "Default Bot",
+            soulActive: false,
+            systemPrompt: "You are helpful.",
+            toolCount: 1,
+          });
         },
       },
       sessionState
@@ -488,24 +477,13 @@ describe("super bot assign_tool_to_profile", () => {
         ): Promise<ProfileResponse> {
           assignCalls += 1;
 
-          return {
-            profile: {
-              createdAt: "2026-01-01T00:00:00.000Z",
-              hasAvatar: false,
-              id: profileId,
-              isSuper: false,
-              mcpServerCount: 0,
-              mcpServers: [],
-              model: null,
-              name: "Other Bot",
-              skills: [],
-              soulActive: false,
-              systemPrompt: "You are helpful.",
-              toolCount: 1,
-              tools: [],
-              updatedAt: "2026-01-01T00:00:00.000Z",
-            },
-          };
+          return profileResponse({
+            id: profileId,
+            name: "Other Bot",
+            soulActive: false,
+            systemPrompt: "You are helpful.",
+            toolCount: 1,
+          });
         },
       },
       sessionState
@@ -595,24 +573,10 @@ describe("super bot create_profile", () => {
           _orgId: string,
           request: CreateProfileRequest
         ): Promise<ProfileResponse> {
-          return {
-            profile: {
-              createdAt: "2026-01-01T00:00:00.000Z",
-              hasAvatar: false,
-              id: "gary",
-              isSuper: false,
-              mcpServerCount: 0,
-              mcpServers: [],
-              model: null,
-              name: request.name,
-              skills: [],
-              soulActive: true,
-              systemPrompt: "",
-              toolCount: 0,
-              tools: [],
-              updatedAt: "2026-01-01T00:00:00.000Z",
-            },
-          };
+          return profileResponse({
+            id: "gary",
+            name: request.name,
+          });
         },
       },
       sessionState
@@ -641,24 +605,10 @@ describe("super bot create_profile", () => {
           request: CreateProfileRequest
         ): Promise<ProfileResponse> {
           capturedRequests.push(request);
-          return {
-            profile: {
-              createdAt: "2026-01-01T00:00:00.000Z",
-              hasAvatar: false,
-              id: "gary",
-              isSuper: false,
-              mcpServerCount: 0,
-              mcpServers: [],
-              model: null,
-              name: request.name,
-              skills: [],
-              soulActive: true,
-              systemPrompt: "",
-              toolCount: 0,
-              tools: [],
-              updatedAt: "2026-01-01T00:00:00.000Z",
-            },
-          };
+          return profileResponse({
+            id: "gary",
+            name: request.name,
+          });
         },
       },
       sessionState
@@ -687,24 +637,12 @@ describe("super bot create_profile", () => {
       ): Promise<ProfileResponse> {
         capturedRequests.push(request);
 
-        return {
-          profile: {
-            createdAt: "2026-01-01T00:00:00.000Z",
-            hasAvatar: false,
-            id: "support-bot",
-            isSuper: request.isSuper ?? false,
-            mcpServerCount: 0,
-            mcpServers: [],
-            model: request.model ?? null,
-            name: request.name,
-            skills: [],
-            soulActive: true,
-            systemPrompt: request.systemPrompt ?? "",
-            toolCount: 0,
-            tools: [],
-            updatedAt: "2026-01-01T00:00:00.000Z",
-          },
-        };
+        return profileResponse({
+          isSuper: request.isSuper ?? false,
+          model: request.model ?? null,
+          name: request.name,
+          systemPrompt: request.systemPrompt ?? "",
+        });
       },
     });
 
@@ -742,24 +680,12 @@ describe("super bot create_profile", () => {
       ): Promise<ProfileResponse> {
         capturedRequests.push(request);
 
-        return {
-          profile: {
-            createdAt: "2026-01-01T00:00:00.000Z",
-            hasAvatar: false,
-            id: "support-bot",
-            isSuper: request.isSuper ?? false,
-            mcpServerCount: 0,
-            mcpServers: [],
-            model: request.model ?? null,
-            name: request.name,
-            skills: [],
-            soulActive: true,
-            systemPrompt: request.systemPrompt ?? "",
-            toolCount: 0,
-            tools: [],
-            updatedAt: "2026-01-01T00:00:00.000Z",
-          },
-        };
+        return profileResponse({
+          isSuper: request.isSuper ?? false,
+          model: request.model ?? null,
+          name: request.name,
+          systemPrompt: request.systemPrompt ?? "",
+        });
       },
     });
 
@@ -851,24 +777,10 @@ describe("super bot update_profile", () => {
           request: UpdateProfileRequest
         ): Promise<ProfileResponse> {
           captured.push({ orgId, profileId, request });
-          return {
-            profile: {
-              createdAt: "2026-01-01T00:00:00.000Z",
-              hasAvatar: false,
-              id: profileId,
-              isSuper: false,
-              mcpServerCount: 0,
-              mcpServers: [],
-              model: null,
-              name: "Support Bot",
-              skills: [],
-              soulActive: true,
-              systemPrompt: request.systemPrompt ?? "",
-              toolCount: 0,
-              tools: [],
-              updatedAt: "2026-01-01T00:00:00.000Z",
-            },
-          };
+          return profileResponse({
+            id: profileId,
+            systemPrompt: request.systemPrompt ?? "",
+          });
         },
       },
       sessionState
@@ -898,24 +810,9 @@ describe("super bot update_profile", () => {
         request: UpdateProfileRequest
       ): Promise<ProfileResponse> {
         captured.push(request);
-        return {
-          profile: {
-            createdAt: "2026-01-01T00:00:00.000Z",
-            hasAvatar: false,
-            id: "support-bot",
-            isSuper: false,
-            mcpServerCount: 0,
-            mcpServers: [],
-            model: null,
-            name: "Support Bot",
-            skills: [],
-            soulActive: true,
-            systemPrompt: request.systemPrompt ?? "",
-            toolCount: 0,
-            tools: [],
-            updatedAt: "2026-01-01T00:00:00.000Z",
-          },
-        };
+        return profileResponse({
+          systemPrompt: request.systemPrompt ?? "",
+        });
       },
     });
 
@@ -936,24 +833,9 @@ describe("super bot update_profile", () => {
         request: UpdateProfileRequest
       ): Promise<ProfileResponse> {
         captured.push(request);
-        return {
-          profile: {
-            createdAt: "2026-01-01T00:00:00.000Z",
-            hasAvatar: false,
-            id: "support-bot",
-            isSuper: false,
-            mcpServerCount: 0,
-            mcpServers: [],
-            model: null,
-            name: "Support Bot",
-            skills: [],
-            soulActive: true,
-            systemPrompt: "You are support.",
-            toolCount: 0,
-            tools: [],
-            updatedAt: "2026-01-01T00:00:00.000Z",
-          },
-        };
+        return profileResponse({
+          systemPrompt: "You are support.",
+        });
       },
     });
 
@@ -1016,6 +898,30 @@ describe("super bot update_profile", () => {
     expect(updateProfileCalled).toBe(false);
   });
 });
+
+function profileResponse(
+  overrides: Partial<ProfileResponse["profile"]> = {}
+): ProfileResponse {
+  return {
+    profile: {
+      createdAt: "2026-01-01T00:00:00.000Z",
+      hasAvatar: false,
+      id: "support-bot",
+      isSuper: false,
+      mcpServerCount: 0,
+      mcpServers: [],
+      model: null,
+      name: "Support Bot",
+      skills: [],
+      soulActive: true,
+      systemPrompt: "",
+      toolCount: 0,
+      tools: [],
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      ...overrides,
+    },
+  };
+}
 
 function createTestTools(
   profileService: Partial<

@@ -1,6 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import * as core from "@nakama/core";
 import { getProfileArtifactsDir, writeArtifactFile } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
@@ -414,5 +415,65 @@ describe("artifact share routes", () => {
     expect(await shareResponse.text()).toBe(
       "# Draft\n\nSaved from the dashboard.\n"
     );
+  });
+
+  test("failed snapshot replacement preserves the public share", async () => {
+    const { app, databaseAdapter } = createApp();
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    const orgId = session.orgId!;
+    const profileId = "profile_share_replace_fail";
+
+    await seedProfileArtifact({
+      content: "# Original share\n",
+      databaseAdapter,
+      filename: "report.md",
+      name: "Share Replace Fail",
+      orgId,
+      profileId,
+    });
+
+    const publishResponse = await app.fetch(
+      publishArtifactShareRequest({
+        body: { path: "report.md" },
+        orgId,
+        profileId,
+        session,
+      })
+    );
+    expect(publishResponse.status).toBe(201);
+    const { token } = (await publishResponse.json()) as { token: string };
+
+    const writeSpy = spyOn(
+      core,
+      "writeArtifactShareSnapshot"
+    ).mockImplementation(async (input) => {
+      expect(input.filename).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-report\.md$/i
+      );
+      throw new Error("simulated snapshot write failure");
+    });
+
+    try {
+      const saveResponse = await app.fetch(
+        saveArtifactRequest({
+          content: "# Original share\n\nShould not replace.\n",
+          orgId,
+          path: "report.md",
+          profileId,
+          session,
+        })
+      );
+      expect(saveResponse.status).toBeGreaterThanOrEqual(500);
+
+      const shareResponse = await app.fetch(
+        new Request(
+          `http://localhost:4310/v1/public/artifact-shares/${encodeURIComponent(token)}`
+        )
+      );
+      expect(shareResponse.status).toBe(200);
+      expect(await shareResponse.text()).toBe("# Original share\n");
+    } finally {
+      writeSpy.mockRestore();
+    }
   });
 });

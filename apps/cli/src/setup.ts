@@ -11,7 +11,11 @@ import {
 } from "@earendil-works/pi-tui";
 import { NakamaApiError, NakamaClient } from "@nakama/client";
 import {
+  type BrowserSessionCookieNames,
+  browserSessionCookieNames,
   getUserConfigPath,
+  HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES,
+  PLAIN_BROWSER_SESSION_COOKIE_NAMES,
   type ProviderModelOption,
   promptForProviderConfig,
   type UserProviderName,
@@ -460,7 +464,16 @@ export async function createRemoteConnection(
   const baseUrl = normalizeServerUrl(serverUrl);
   const store = options.secretStore ?? Bun.secrets;
   const key = { name: baseUrl, service: "nakama-cli" };
-  let tokens: { session: string; csrf: string } | null = null;
+  // HTTPS servers issue host-bound cookies and refuse the unprefixed pair, so
+  // the scheme of the server URL decides the names the CLI replays (#1345).
+  const schemeCookieNames = browserSessionCookieNames(
+    new URL(baseUrl).protocol === "https:"
+  );
+  let tokens: {
+    cookieNames: BrowserSessionCookieNames;
+    csrf: string;
+    session: string;
+  } | null = null;
   let saved: string | null;
   try {
     saved = await store.get(key);
@@ -473,7 +486,15 @@ export async function createRemoteConnection(
     try {
       const parsed = JSON.parse(saved);
       if (validCookieToken(parsed.session) && validCookieToken(parsed.csrf)) {
-        tokens = { csrf: parsed.csrf, session: parsed.session };
+        // Entries stored before host-bound cookies carry no names; the server
+        // scheme decides, and a wrong guess only costs one re-login.
+        const stored = parsed.cookieNames;
+        const cookieNames =
+          typeof stored?.session === "string" &&
+          typeof stored?.csrf === "string"
+            ? { csrf: stored.csrf, session: stored.session }
+            : schemeCookieNames;
+        tokens = { cookieNames, csrf: parsed.csrf, session: parsed.session };
       }
     } catch {
       // An obsolete or corrupt entry is replaced at the next login.
@@ -501,7 +522,7 @@ export async function createRemoteConnection(
       if (tokens) {
         headers.set(
           "Cookie",
-          `nakama_session=${tokens.session}; nakama_csrf=${tokens.csrf}`
+          `${tokens.cookieNames.session}=${tokens.session}; ${tokens.cookieNames.csrf}=${tokens.csrf}`
         );
         if (
           !["GET", "HEAD", "OPTIONS"].includes(
@@ -538,12 +559,27 @@ export async function createRemoteConnection(
             .map((cookie) => cookie.split(";")[0])
             .join("; ")
         );
-        const session = cookies.get("nakama_session");
-        const csrf = cookies.get("nakama_csrf");
+        const hostSession = cookies.get(
+          HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES.session
+        );
+        const hostCsrf = cookies.get(
+          HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES.csrf
+        );
+        const session =
+          hostSession ??
+          cookies.get(PLAIN_BROWSER_SESSION_COOKIE_NAMES.session);
+        const csrf =
+          hostCsrf ?? cookies.get(PLAIN_BROWSER_SESSION_COOKIE_NAMES.csrf);
         if (!(validCookieToken(session) && validCookieToken(csrf))) {
           throw new Error("Server did not return a valid login session.");
         }
-        tokens = { csrf, session };
+        tokens = {
+          cookieNames: hostSession
+            ? HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES
+            : PLAIN_BROWSER_SESSION_COOKIE_NAMES,
+          csrf,
+          session,
+        };
       }
       return response;
     }) as typeof fetch,

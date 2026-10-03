@@ -39,7 +39,7 @@ class FrameComponent implements Component {
   }
 }
 
-export function getVisiblePinnedInputRows(
+function getVisiblePinnedInputRows(
   inputRows: number,
   terminalRows: number
 ): number {
@@ -48,7 +48,7 @@ export function getVisiblePinnedInputRows(
   return Math.min(rows, maxVisibleRows);
 }
 
-export function getTerminalRows(): number {
+function getTerminalRows(): number {
   return process.stdout.rows ?? 24;
 }
 

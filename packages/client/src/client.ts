@@ -4,6 +4,10 @@ import {
   readApiErrorDetails,
   readApiErrorMessage,
 } from "@nakama/core/api-error";
+import {
+  HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES,
+  PLAIN_BROWSER_SESSION_COOKIE_NAMES,
+} from "@nakama/core/browser-session-cookies";
 import type {
   AcceptOrgInviteRequest,
   AcceptOrgInviteResponse,
@@ -41,8 +45,6 @@ import type {
   ComposioToolkitSummary,
   ConfigureProviderRequest,
   ConfigureProviderResponse,
-  CreateApiKeyRequest,
-  CreateApiKeyResponse,
   CreateAutomationRequest,
   CreateMcpServerRequest,
   CreateNotificationDestinationRequest,
@@ -84,7 +86,6 @@ import type {
   InvokePluginActionRequest,
   InvokePluginActionResponse,
   KnowledgeBaseDuplicateAction,
-  ListApiKeysResponse,
   ListArtifactsResponse,
   ListAutomationRunsResponse,
   ListAutomationsResponse,
@@ -162,7 +163,6 @@ import type {
   RestoreOrgMemoryHistoryResponse,
   RevokeArtifactShareResponse,
   RevokeBrowserSessionsResponse,
-  RotateApiKeyResponse,
   RotateLocalAuthTokenResponse,
   RunAutomationResponse,
   RunSkillCuratorInternalRequest,
@@ -264,6 +264,7 @@ import type {
   XaiOAuthDeviceStartResponse,
 } from "@nakama/core/contract";
 import { withDisabledFetchIdle } from "@nakama/core/fetch-idle";
+import type { MeetAction, MeetActionResults } from "@nakama/core/google-meet";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { resolveServerUrl } from "@nakama/core/runtime";
 import { readBrowserOrigin, readCookie } from "./browser";
@@ -284,6 +285,20 @@ import type {
 } from "./types";
 
 export class NakamaClient {
+  invokeGoogleMeet<Action extends MeetAction>(
+    action: Action,
+    input: unknown,
+    orgId: string,
+    signal?: AbortSignal
+  ): Promise<MeetActionResults[Action]> {
+    return this.request(`/v1/meet/actions/${encodeURIComponent(action)}`, {
+      body: JSON.stringify(input ?? {}),
+      headers: { "X-Org-Id": orgId },
+      method: "POST",
+      signal,
+    });
+  }
+
   readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly credentials: RequestCredentials;
@@ -762,10 +777,12 @@ export class NakamaClient {
   }
 
   async getSessionMessages(
-    sessionId: string
+    sessionId: string,
+    options: { signal?: AbortSignal } = {}
   ): Promise<SessionMessagesResponse> {
     return this.request<SessionMessagesResponse>(
-      `/v1/sessions/${encodeURIComponent(sessionId)}/messages`
+      `/v1/sessions/${encodeURIComponent(sessionId)}/messages`,
+      { signal: options.signal }
     );
   }
 
@@ -1454,7 +1471,12 @@ export class NakamaClient {
   async readProfileArtifactContent(
     profileId: string,
     artifactPath: string,
-    options: { inline?: boolean; render?: "markdown" } = {}
+    options: {
+      inline?: boolean;
+      render?: "markdown";
+      signal?: AbortSignal;
+      maxBytes?: number;
+    } = {}
   ): Promise<{ contentType: string; data: ArrayBuffer }> {
     const query = new URLSearchParams({ path: artifactPath });
     if (options.inline) {
@@ -1465,14 +1487,83 @@ export class NakamaClient {
     }
 
     const response = await this.fetchRaw(
-      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`
+      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`,
+      { signal: options.signal }
     );
 
+    let data: ArrayBuffer;
+    if (options.maxBytes === undefined) {
+      data = await response.arrayBuffer();
+    } else {
+      const maxBytes = options.maxBytes;
+      if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+        await response.body?.cancel();
+        throw new Error("maxBytes must be a nonnegative integer.");
+      }
+      const reader = response.body?.getReader();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      const onAbort = () => {
+        void reader?.cancel().catch(() => {});
+      };
+      options.signal?.addEventListener("abort", onAbort, { once: true });
+      try {
+        if (Number(response.headers.get("Content-Length")) > maxBytes) {
+          throw new Error("Artifact exceeds the download byte budget.");
+        }
+        while (reader) {
+          options.signal?.throwIfAborted();
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+          size += value.byteLength;
+          if (size > maxBytes) {
+            throw new Error("Artifact exceeds the download byte budget.");
+          }
+          chunks.push(value);
+        }
+        options.signal?.throwIfAborted();
+        const bytes = new Uint8Array(size);
+        let offset = 0;
+        for (const chunk of chunks) {
+          bytes.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
+        data = bytes.buffer;
+      } catch (error) {
+        await reader?.cancel().catch(() => {});
+        throw error;
+      } finally {
+        options.signal?.removeEventListener("abort", onAbort);
+        reader?.releaseLock();
+      }
+    }
     return {
       contentType:
         response.headers.get("Content-Type") ?? "application/octet-stream",
-      data: await response.arrayBuffer(),
+      data,
     };
+  }
+
+  async hasProfileArtifact(
+    profileId: string,
+    artifactPath: string
+  ): Promise<boolean> {
+    const query = new URLSearchParams({ path: artifactPath });
+
+    try {
+      await this.fetchRaw(
+        `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`,
+        { method: "HEAD" }
+      );
+      return true;
+    } catch (error) {
+      if (error instanceof NakamaApiError && error.status === 404) {
+        return false;
+      }
+      throw error;
+    }
   }
 
   async writeProfileArtifactContent(
@@ -1650,8 +1741,8 @@ export class NakamaClient {
 
         return response.automation;
       },
-      getMessages: async () => {
-        const response = await this.getSessionMessages(sessionId);
+      getMessages: async (options) => {
+        const response = await this.getSessionMessages(sessionId, options);
         return response.messages;
       },
       id: sessionId,
@@ -3016,39 +3107,6 @@ export class NakamaClient {
     );
   }
 
-  async createApiKey(
-    orgId: string,
-    request: CreateApiKeyRequest
-  ): Promise<CreateApiKeyResponse> {
-    return this.request<CreateApiKeyResponse>(
-      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys`,
-      { body: JSON.stringify(request), method: "POST" }
-    );
-  }
-
-  async listApiKeys(orgId: string): Promise<ListApiKeysResponse> {
-    return this.request<ListApiKeysResponse>(
-      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys`
-    );
-  }
-
-  async rotateApiKey(
-    orgId: string,
-    keyId: string
-  ): Promise<RotateApiKeyResponse> {
-    return this.request<RotateApiKeyResponse>(
-      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys/${encodeURIComponent(keyId)}/rotate`,
-      { method: "POST" }
-    );
-  }
-
-  async deleteApiKey(orgId: string, keyId: string): Promise<void> {
-    await this.request(
-      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys/${encodeURIComponent(keyId)}`,
-      { method: "DELETE" }
-    );
-  }
-
   async addOrgMember(
     orgId: string,
     request: AddOrgMemberRequest
@@ -3484,7 +3542,12 @@ export class NakamaClient {
     }
 
     if (isMutatingMethod(method)) {
-      const csrfToken = readCookie("nakama_csrf");
+      // HTTPS deployments issue the host-bound cookie; plain HTTP uses the
+      // unprefixed one. A cookie planted by a sibling host is never read on
+      // HTTPS because the server only trusts the prefixed name there.
+      const csrfToken =
+        readCookie(HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES.csrf) ??
+        readCookie(PLAIN_BROWSER_SESSION_COOKIE_NAMES.csrf);
       if (csrfToken) {
         merged["X-CSRF-Token"] = csrfToken;
       }

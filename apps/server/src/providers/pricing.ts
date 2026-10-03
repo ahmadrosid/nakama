@@ -98,13 +98,16 @@ export function getExplicitModelPricing(
   modelId: string,
   context: PricingContext = {}
 ): ModelPricing | null {
-  const imagePricing = IMAGE_GENERATION_PRICING[modelId];
-  if (imagePricing) {
-    return imagePricing;
-  }
+  const imagePricing = IMAGE_GENERATION_PRICING[modelId] ?? null;
 
   if (isUserPriced(context)) {
-    return getCustomModelPricing(modelId, context);
+    // A gateway serving gpt-image-2 under that exact id bills its own rates,
+    // not OpenAI's list price.
+    return getCustomModelPricing(modelId, context) ?? imagePricing;
+  }
+
+  if (imagePricing) {
+    return imagePricing;
   }
 
   const provider = context.provider ?? context.providerInstance?.type;

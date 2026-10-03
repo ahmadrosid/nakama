@@ -33,6 +33,29 @@ const openaiConfig = (overrides?: Partial<UserConfig>): UserConfig => ({
 
 const imagesUrl = "https://api.openai.com/v1/images/generations";
 
+const gatewayConfig = (overrides?: Partial<UserConfig>): UserConfig => ({
+  defaultProviderId: "p-openai",
+  providers: [
+    ...openaiConfig().providers,
+    {
+      apiKey: "gateway-key",
+      baseUrl: "https://gateway.example/v1/",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      customModels: [
+        {
+          id: "cb/gpt-image-2",
+          inputPerMillionUsd: 2,
+          outputPerMillionUsd: 40,
+        },
+      ],
+      id: "p-gateway",
+      label: "Gateway",
+      type: "openai_compatible",
+    },
+  ],
+  ...overrides,
+});
+
 describe("resolveImageGenerationSelection", () => {
   test("returns null when image model is not configured", () => {
     expect(resolveImageGenerationSelection(openaiConfig())).toBeNull();
@@ -53,6 +76,83 @@ describe("resolveImageGenerationSelection", () => {
       resolveImageGenerationSelection(
         openaiConfig({ imageModel: "openai::dall-e-3" })
       )
+    ).toThrow(NakamaApiError);
+  });
+
+  test("resolves openai_compatible::gpt-image-2 with a baseUrl", () => {
+    const resolved = resolveImageGenerationSelection({
+      defaultProviderId: "p-local",
+      imageModel: "openai_compatible::gpt-image-2",
+      providers: [
+        {
+          apiKey: "local-key",
+          baseUrl: "http://100.64.0.1:8000/v1",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          id: "p-local",
+          label: "Local",
+          type: "openai_compatible",
+        },
+      ],
+    });
+    expect(resolved?.instance.type).toBe("openai_compatible");
+    expect(resolved?.baseUrl).toBe("http://100.64.0.1:8000/v1");
+    expect(resolved?.apiKey).toBe("local-key");
+  });
+
+  test("rejects openai_compatible::gpt-image-2 without a baseUrl", () => {
+    expect(() =>
+      resolveImageGenerationSelection({
+        defaultProviderId: "p-local",
+        imageModel: "openai_compatible::gpt-image-2",
+        providers: [
+          {
+            apiKey: "local-key",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            id: "p-local",
+            label: "Local",
+            type: "openai_compatible",
+          },
+        ],
+      })
+    ).toThrow(NakamaApiError);
+  });
+
+  test("resolves <providerId>::<modelId> on an OpenAI-compatible provider", () => {
+    const resolved = resolveImageGenerationSelection(
+      gatewayConfig({ imageModel: "p-gateway::cb/gpt-image-2" })
+    );
+    expect(resolved?.instance.id).toBe("p-gateway");
+    expect(resolved?.model).toBe("cb/gpt-image-2");
+    expect(resolved?.baseUrl).toBe("https://gateway.example/v1");
+    expect(resolved?.apiKey).toBe("gateway-key");
+  });
+
+  test("rejects a model the compatible provider does not list", () => {
+    expect(() =>
+      resolveImageGenerationSelection(
+        gatewayConfig({ imageModel: "p-gateway::cb/dall-e-3" })
+      )
+    ).toThrow(NakamaApiError);
+  });
+
+  test("rejects <providerId>::<modelId> on a provider that is not OpenAI-compatible", () => {
+    expect(() =>
+      resolveImageGenerationSelection(
+        gatewayConfig({ imageModel: "p-openai::gpt-image-2" })
+      )
+    ).toThrow(NakamaApiError);
+  });
+
+  test("rejects a compatible provider without a baseUrl", () => {
+    const config = gatewayConfig({ imageModel: "p-gateway::cb/gpt-image-2" });
+    expect(() =>
+      resolveImageGenerationSelection({
+        ...config,
+        providers: config.providers.map((provider) => ({
+          ...provider,
+          baseUrl: undefined,
+        })),
+      })
     ).toThrow(NakamaApiError);
   });
 
@@ -120,6 +220,89 @@ describe("generateImageWithOpenAI", () => {
       })
     ).rejects.toThrow(NakamaApiError);
   });
+
+  test("routes to the configured baseUrl instead of api.openai.com", async () => {
+    let requestedUrl = "";
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requestedUrl = String(input);
+      // Return a minimal valid Images API payload.
+      return new Response(
+        JSON.stringify({
+          data: [{ b64_json: Buffer.from("png").toString("base64") }],
+        }),
+        { headers: { "Content-Type": "application/json" }, status: 200 }
+      );
+    }) as typeof fetch;
+
+    try {
+      await generateImageWithOpenAI({
+        apiKey: "local-key",
+        baseUrl: "http://100.64.0.1:8000/v1",
+        prompt: "a cat",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(requestedUrl).toBe("http://100.64.0.1:8000/v1/images/generations");
+  });
+
+  test("sends a custom model id to a custom baseUrl", async () => {
+    let requestedModel = "";
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (
+      _input: RequestInfo | URL,
+      init?: RequestInit
+    ) => {
+      requestedModel = JSON.parse(String(init?.body)).model;
+      return new Response(
+        JSON.stringify({
+          data: [{ b64_json: Buffer.from("png").toString("base64") }],
+        }),
+        { headers: { "Content-Type": "application/json" }, status: 200 }
+      );
+    }) as typeof fetch;
+
+    try {
+      const result = await generateImageWithOpenAI({
+        apiKey: "gateway-key",
+        baseUrl: "https://gateway.example/v1",
+        model: "cb/gpt-image-2",
+        prompt: "a cat",
+      });
+      expect(result.model).toBe("cb/gpt-image-2");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(requestedModel).toBe("cb/gpt-image-2");
+  });
+});
+
+describe("generateImageWithOpenAI cancellation", () => {
+  test("a cancelled turn aborts the provider request", async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = ((_url: string, init: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () =>
+          reject(new DOMException("aborted", "AbortError"))
+        );
+      })) as typeof fetch;
+
+    try {
+      const turn = new AbortController();
+      const pending = generateImageWithOpenAI({
+        apiKey: "test-key",
+        prompt: "a cat",
+        signal: turn.signal,
+      });
+      turn.abort();
+      await expect(pending).rejects.toThrow("aborted");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
 });
 
 describe("AgentService image generation settings", () => {
@@ -176,6 +359,41 @@ describe("AgentService image generation settings", () => {
   });
 });
 
+describe("AgentService compatible image model settings", () => {
+  test("saves a custom model listed on an OpenAI-compatible provider", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new AgentService(gatewayConfig(), null, db);
+
+    await expect(
+      service.setImageGenerationSettings({ model: "p-gateway::cb/gpt-image-2" })
+    ).resolves.toEqual({
+      imageGeneration: { model: "p-gateway::cb/gpt-image-2" },
+    });
+    expect(await db.getWorkspaceSettings()).toMatchObject({
+      imageModel: "p-gateway::cb/gpt-image-2",
+    });
+  });
+
+  test("rejects a model the provider does not list and keeps the stored one", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new AgentService(gatewayConfig(), null, db);
+    await service.setImageGenerationSettings({
+      model: "p-gateway::cb/gpt-image-2",
+    });
+
+    await expect(
+      service.setImageGenerationSettings({ model: "p-gateway::cb/dall-e-3" })
+    ).rejects.toMatchObject({ status: 400 });
+
+    expect(await db.getWorkspaceSettings()).toMatchObject({
+      imageModel: "p-gateway::cb/gpt-image-2",
+    });
+    expect(await service.getImageGenerationSettings()).toEqual({
+      imageGeneration: { model: "p-gateway::cb/gpt-image-2" },
+    });
+  });
+});
+
 describe("AgentService image generation usage (AE5)", () => {
   test("successful generate increments gpt-image-2 stats and estimated cost", async () => {
     const db = createInMemoryDatabaseAdapter();
@@ -215,6 +433,38 @@ describe("AgentService image generation usage (AE5)", () => {
       }),
     ]);
   });
+
+  // gpt-image-2 shares its id with the OpenAI image rates table.
+  test.each(["cb/gpt-image-2", "gpt-image-2"])(
+    "a custom image model %s is priced from its own rates",
+    async (modelId) => {
+      const db = createInMemoryDatabaseAdapter();
+      const tracker = await LlmUsageTracker.create(db);
+      const config = gatewayConfig({ imageModel: `p-gateway::${modelId}` });
+      config.providers[1].customModels = [
+        { id: modelId, inputPerMillionUsd: 2, outputPerMillionUsd: 40 },
+      ];
+      const service = new AgentService(config, null, db, tracker);
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (async () =>
+        new Response(
+          JSON.stringify({
+            data: [{ b64_json: Buffer.from("png").toString("base64") }],
+            usage: { input_tokens: 10, output_tokens: 100 },
+          }),
+          { headers: { "Content-Type": "application/json" }, status: 200 }
+        )) as unknown as typeof fetch;
+
+      try {
+        await service.generateImage({ prompt: "a cat" });
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+
+      // 10 input at $2/M plus 100 output at $40/M, not the $1/$3 fallback.
+      expect(tracker.getStats().estimatedCostUsd).toBeCloseTo(0.004_02, 10);
+    }
+  );
 
   test("failed OpenAI response does not increment usage", async () => {
     const db = createInMemoryDatabaseAdapter();

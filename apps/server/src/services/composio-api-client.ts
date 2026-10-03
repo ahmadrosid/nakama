@@ -93,9 +93,7 @@ export function parseLinkRedirectUrl(response: unknown): string | null {
   return null;
 }
 
-export function parseConnectionRequestId(
-  response: unknown
-): string | undefined {
+function parseConnectionRequestId(response: unknown): string | undefined {
   if (!response || typeof response !== "object") {
     return;
   }

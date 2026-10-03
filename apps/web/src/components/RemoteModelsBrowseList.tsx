@@ -9,7 +9,7 @@ export interface RemoteModelRow {
   supportsVision?: boolean;
 }
 
-export type RemoteBrowseSelectHandler = (row: RemoteModelRow) => void;
+type RemoteBrowseSelectHandler = (row: RemoteModelRow) => void;
 
 const EMPTY_ROWS: RemoteModelRow[] = [];
 

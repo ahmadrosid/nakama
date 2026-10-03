@@ -65,6 +65,21 @@ Read `stage:` before you start. `stage: now` is ready. `stage: next` is sized bu
 
 Hit a bug that has no issue? Open one with the [issue templates](https://github.com/ahmadrosid/nakama/issues/new/choose). A repro someone else can run beats a description.
 
+### Before you start building
+
+Four questions. Any answer of no is worth raising in the issue first, where it
+costs nothing.
+
+1. Is the issue's `stage:` label `now`? The table above says what the other two
+   values mean.
+2. Can an existing package hold the change? AGENTS.md asks for edit over extract,
+   and CI fails on a new workspace unless the PR carries the `new-package` label.
+3. Does it assume a folder, machine or service the server cannot reach at runtime?
+   A deployment is Docker, Kubernetes or the bundled desktop build, and those do
+   not see the same filesystem.
+4. Does the new abstraction have more than one caller today? A cache, a dedupe, a
+   guard or a factory with a single call site gets deleted in review.
+
 ## Workflow
 
 **Claim the issue before you build.** Comment on it and wait to be assigned. An
@@ -103,7 +118,7 @@ git push -u origin HEAD
 gh pr create
 ```
 
-Put `Fixes #123` in the body so the issue closes on merge.
+Put `Fixes #123` in the body so the issue closes on merge. CI checks that a PR references an issue at all, because the issue thread is where direction gets settled and hearing "we are not doing that" there is much cheaper than hearing it after the code exists. `part of #123` counts when the PR does not close the issue. A change with genuinely no issue, such as a typo or a release, takes the `no-issue` label instead.
 
 5. PR body uses the ADHD PR format in [`.agents/skills/adhd-pr-description/SKILL.md`](./.agents/skills/adhd-pr-description/SKILL.md): outcome lead, Before/After, Why safe (≤3), residual risk, tight test plan. Agents opening PRs via `ce-commit-push-pr` must follow that skill.
 

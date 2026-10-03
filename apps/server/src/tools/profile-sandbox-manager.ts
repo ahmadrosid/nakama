@@ -51,14 +51,16 @@ export function toGuestCwd(args: {
     return guestWorkspace;
   }
 
-  const prefix = hostWorkspace.endsWith("/")
-    ? hostWorkspace
-    : `${hostWorkspace}/`;
-  if (!hostCwd.startsWith(prefix)) {
+  const normalizedWorkspace = hostWorkspace.replaceAll("\\", "/");
+  const normalizedCwd = hostCwd.replaceAll("\\", "/");
+  const prefix = normalizedWorkspace.endsWith("/")
+    ? normalizedWorkspace
+    : `${normalizedWorkspace}/`;
+  if (!normalizedCwd.startsWith(prefix)) {
     throw new Error("cwd must resolve under the profile workspace.");
   }
 
-  const relative = hostCwd.slice(prefix.length);
+  const relative = normalizedCwd.slice(prefix.length);
   return relative
     ? `${guestWorkspace.replace(/\/$/, "")}/${relative}`
     : guestWorkspace;

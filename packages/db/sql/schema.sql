@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS automation_runs (
   started_at TEXT NOT NULL,
   completed_at TEXT,
   output TEXT,
+  progress TEXT,
   error TEXT,
   delivery_status TEXT,
   delivery_error TEXT,
@@ -192,6 +193,18 @@ CREATE TABLE IF NOT EXISTS notification_destinations (
 
 CREATE INDEX IF NOT EXISTS notification_destinations_org_id
   ON notification_destinations (org_id);
+
+-- Idempotency ledger for public POST /v1/notify/:destinationId (claim before send).
+CREATE TABLE IF NOT EXISTS notification_webhook_deliveries (
+  destination_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (destination_id, event_id),
+  FOREIGN KEY (destination_id) REFERENCES notification_destinations (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS notification_webhook_deliveries_created_at
+  ON notification_webhook_deliveries (created_at);
 
 CREATE TABLE IF NOT EXISTS mcp_servers (
   id TEXT PRIMARY KEY NOT NULL,
@@ -322,6 +335,7 @@ CREATE TABLE IF NOT EXISTS user_passkey_challenges (
 );
 
 CREATE TABLE IF NOT EXISTS organizations (
+  allowed_invite_domains TEXT NOT NULL DEFAULT '[]',
   id TEXT PRIMARY KEY NOT NULL,
   name TEXT NOT NULL,
   slug TEXT NOT NULL,
@@ -366,25 +380,6 @@ CREATE TABLE IF NOT EXISTS org_invites (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS org_invites_token_hash_unique ON org_invites (token_hash);
-
-CREATE TABLE IF NOT EXISTS api_keys (
-  id TEXT PRIMARY KEY NOT NULL,
-  org_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  environment TEXT NOT NULL,
-  key_prefix TEXT NOT NULL,
-  secret_hash TEXT NOT NULL,
-  created_by_user_id TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  expires_at TEXT,
-  last_used_at TEXT,
-  revoked_at TEXT,
-  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
-  FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE CASCADE
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS api_keys_prefix_unique ON api_keys (key_prefix);
-CREATE INDEX IF NOT EXISTS api_keys_org_id ON api_keys (org_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS org_memory_proposals (
   id TEXT PRIMARY KEY NOT NULL,

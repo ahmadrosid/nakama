@@ -1,11 +1,8 @@
 export { NakamaApiError, NakamaAuthExpiredError } from "@nakama/core/api-error";
 export { NakamaClient } from "./client";
 export type {
-  NakamaClientOptions,
   RemoteChatSession,
   SendMessageArg,
-  SendStreamOptions,
-  StreamHandler,
   StreamHandlers,
 } from "./types";
 

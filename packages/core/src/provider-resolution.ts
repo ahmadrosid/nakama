@@ -35,7 +35,6 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
 ] as const;
 
 export {
-  DISCOVERY_MODEL_PROVIDERS,
   defaultDiscoveryBaseUrl,
   isDiscoveryModelProvider,
 } from "./discovery-providers";

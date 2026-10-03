@@ -15,10 +15,10 @@ function formatDisplayUrlFromHref(url: string): string {
   }
 }
 
-export const WEB_FETCH_TOOL_NAME = "web_fetch";
+const WEB_FETCH_TOOL_NAME = "web_fetch";
 
 /** Exa MCP fetch tool: `{server}__web_fetch_exa`. */
-export const MCP_EXA_WEB_FETCH_TOOL_PATTERN =
+const MCP_EXA_WEB_FETCH_TOOL_PATTERN =
   /^[a-zA-Z0-9_-]+__web_fetch_exa(?:_\d+)?$/;
 
 export function isWebFetchTool(tool: string | undefined): boolean {

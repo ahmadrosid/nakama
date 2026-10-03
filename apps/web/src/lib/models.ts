@@ -113,9 +113,7 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
   ];
 
 /** Custom OpenAI-compatible endpoints can be added more than once; builtins are one instance each. */
-export function allowsMultipleProviderInstances(
-  provider: SelectedProvider
-): boolean {
+function allowsMultipleProviderInstances(provider: SelectedProvider): boolean {
   return provider === "openai_compatible" || provider === "ollama";
 }
 
@@ -351,7 +349,7 @@ export function defaultOllamaSetupBaseUrl(hostMode: OllamaHostMode): string {
 
 const OPENCODE_GO_MODEL_ID_PATTERN = /^opencode-go\/[\w.-]+$/;
 
-export function validateOpenCodeGoModelId(model: string): string | null {
+function validateOpenCodeGoModelId(model: string): string | null {
   const trimmed = model.trim();
 
   if (!trimmed) {
@@ -509,7 +507,7 @@ export function resolveOpenRouterSetupModel(
   return valid.find((row) => row.default)?.id ?? valid[0]?.id ?? "";
 }
 
-export function validateCustomOpenRouterModel(model: string): string | null {
+function validateCustomOpenRouterModel(model: string): string | null {
   const trimmed = model.trim();
 
   if (!trimmed) {
@@ -542,6 +540,7 @@ export function buildCreateProviderRequest(options: {
   baseUrl?: string;
   hostMode?: OllamaHostMode;
   customModels?: ConfigureProviderRequest["customModels"];
+  openRouterRouting?: CreateProviderRequest["openRouterRouting"];
   wireApi?: WireApi;
   chatgptOAuth?: CreateProviderRequest["chatgptOAuth"];
   xaiOAuth?: CreateProviderRequest["xaiOAuth"];
@@ -572,6 +571,13 @@ export function buildCreateProviderRequest(options: {
       : {}),
     ...(options.baseUrl?.trim() ? { baseUrl: options.baseUrl.trim() } : {}),
     ...(options.hostMode ? { hostMode: options.hostMode } : {}),
+    ...(options.provider === "openrouter" &&
+    options.openRouterRouting &&
+    Object.values(options.openRouterRouting).some(
+      (value) => value !== undefined
+    )
+      ? { openRouterRouting: options.openRouterRouting }
+      : {}),
     ...(customModels ? { customModels } : {}),
     ...(options.wireApi === "responses" ? { wireApi: options.wireApi } : {}),
   };
@@ -640,7 +646,7 @@ export function groupModelsByProvider(models: ProviderModelOption[]): Array<{
   return [...groups.values()];
 }
 
-export const UNSET_MODEL_VALUE = "";
+const UNSET_MODEL_VALUE = "";
 
 export function profileModelSelectionValue(
   modelId: string | null,

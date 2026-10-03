@@ -1,7 +1,35 @@
 import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "./index";
+import type { StoredNotificationDestinationRecord } from "./types";
 
 describe("notification destinations", () => {
+  test("round trips Discord and WhatsApp config with organization isolation", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const configs = [
+      {
+        channel: "discord",
+        config: { channelId: "12345678901234567890", profileId: "agent_1" },
+      },
+      { channel: "whatsapp", config: { profileId: "agent_1" } },
+    ] as const;
+    for (const configured of configs) {
+      const record: StoredNotificationDestinationRecord = {
+        ...configured,
+        createdAt: "2026-10-03T00:00:00.000Z",
+        id: `dest_${configured.channel}`,
+        name: "Ops",
+        orgId: "org_1",
+        secretHash: "hash",
+        updatedAt: "2026-10-03T00:00:00.000Z",
+      };
+      await db.upsertNotificationDestination(record);
+      expect(await db.getNotificationDestination(record.id)).toEqual(record);
+    }
+    expect(await db.listNotificationDestinationsForOrg("org_1")).toHaveLength(
+      2
+    );
+    expect(await db.listNotificationDestinationsForOrg("org_2")).toEqual([]);
+  });
   test("persists and lists org-scoped telegram destinations", async () => {
     const db = createInMemoryDatabaseAdapter();
 

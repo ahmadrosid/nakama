@@ -1,5 +1,6 @@
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   flushPendingErrorReports,
@@ -47,6 +48,7 @@ import {
   createDatabase,
   type Database,
   ensureBundledSkillsAssigned,
+  resolveDatabasePath,
   seedDatabase,
 } from "@nakama/db";
 import { createHonoApp, MAX_HTTP_REQUEST_BODY_LIMIT_BYTES } from "./http/app";
@@ -63,6 +65,8 @@ import { AutomationRunner } from "./services/automation-runner";
 import { AutomationService } from "./services/automation-service";
 import { resolveComposioCallbackBaseUrl } from "./services/composio-callback-url";
 import { ComposioService } from "./services/composio-service";
+import { retireAppUserData } from "./services/data-portability";
+import { GoogleMeetService } from "./services/google-meet/service";
 import { LlmUsageTracker } from "./services/llm-usage-tracker";
 import { McpClientManager } from "./services/mcp-client-manager";
 import {
@@ -123,6 +127,11 @@ const database = await createDatabase(config.databaseUrl, {
 
 await seedDatabase(database.adapter);
 
+await retireAppUserData(
+  getUserConfigDir(),
+  resolveDatabasePath(config.databaseUrl, { baseDir: getUserConfigDir() })
+);
+
 // Runs are only completed by the process that started them, so a crash or a
 // kill leaves rows claiming work nothing is doing. Settle them before serving.
 // ponytail: correct while this is a single process; two servers would mean one
@@ -145,15 +154,23 @@ const agent = new AgentService(
   database.adapter,
   llmUsageTracker
 );
+const googleMeetService = new GoogleMeetService(
+  database.adapter,
+  getUserConfigDir(),
+  (request, signal) => agent.transcribeAudio(request, signal)
+);
 agent.setServerTools({
   generateImage: createGenerateImageTool({
     db: database.adapter,
     ensureSettingsLoaded: () => agent.ensureImageGenerationSettingsLoaded(),
     getUserConfig: () => agent.getUserConfig(),
-    recordUsage: (modelId, inputTokens, outputTokens) => {
-      llmUsageTracker.record(modelId, inputTokens, outputTokens);
+    recordUsage: (modelId, inputTokens, outputTokens, providerInstance) => {
+      llmUsageTracker.record(modelId, inputTokens, outputTokens, 0, {
+        providerInstance,
+      });
     },
   }),
+  googleMeet: googleMeetService.tools(),
   session: createSessionTools(agent),
   subAgent: createSubAgentTool(agent),
 });
@@ -253,15 +270,22 @@ agent.setChannelOwnerCleanup((orgId, profileId) =>
 );
 const orgService = new OrgService(database.adapter, authService);
 orgService.beforeArchiveChannels = async (orgId) => {
-  const owners = (await database.adapter.listProfilesForOrg(orgId)).map(
-    (profile) => ({ orgId, profileId: profile.id })
-  );
+  const releaseMeet = googleMeetService.pauseOrganization(orgId);
+  const owners: Array<{ orgId: string; profileId: string }> = [];
   const release = () => {
+    releaseMeet();
     for (const owner of owners) {
       workerManager.allowProfileChannels(owner);
     }
   };
   try {
+    owners.push(
+      ...(await database.adapter.listProfilesForOrg(orgId)).map((profile) => ({
+        orgId,
+        profileId: profile.id,
+      }))
+    );
+    await googleMeetService.stopOrganization(orgId);
     for (const owner of owners) {
       await workerManager.disableProfileChannels(owner);
     }
@@ -277,6 +301,7 @@ const pluginService = new PluginService(database.adapter, getUserConfigDir(), {
   onHostRequest: createPluginAgentHost(database.adapter, agent),
   workerManager,
 });
+await googleMeetService.initialize();
 try {
   await pluginService.recoverInterruptedPluginOperations();
 } catch (error) {
@@ -354,10 +379,21 @@ const app = createHonoApp({
   automationService,
   composioService,
   databaseAdapter: database.adapter,
+  googleMeetService,
   mcpService,
+  // Windows cannot move an open SQLite file; POSIX restores keep the handle open as before.
+  onBeforeDataRestore: async () => {
+    await workerManager.pauseDataWorkers();
+    await googleMeetService.close();
+    if (process.platform === "win32") {
+      database.release();
+    }
+  },
   onDataRestored: async () => {
     await database.reopen();
     await agent.reloadAfterDataRestore();
+    await googleMeetService.reopen();
+    await workerManager.recoverDesiredWorkers();
   },
   orgMemoryService,
   orgService,
@@ -385,7 +421,8 @@ const shutdownRuntime = registerRuntimeCleanup(
   server,
   serverUrl,
   database,
-  mcpClientManager
+  mcpClientManager,
+  googleMeetService
 );
 // Stop before recovering workers if Electron disappeared during initialization.
 if (process.env.NAKAMA_DESKTOP === "1" && !process.connected) {
@@ -527,11 +564,46 @@ function isAddressInUseError(error: unknown): error is { code: string } {
   );
 }
 
+/**
+ * The daemon deletes pm2.pid when it exits, so a pid file that outlives
+ * killDaemon names a daemon still running from this runtime. Left alive, it
+ * keeps the desktop runtime's bun.exe locked and the next launch cannot rebuild it.
+ */
+function killLeftoverPm2Daemon(pidPath: string): void {
+  let pid: number;
+  try {
+    pid = Number.parseInt(readFileSync(pidPath, "utf8"), 10);
+  } catch {
+    return;
+  }
+  if (!(Number.isInteger(pid) && pid > 0)) {
+    return;
+  }
+  // Guard against a reused pid: only a bun process can be our daemon.
+  const task = spawnSync(
+    "tasklist",
+    ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"],
+    { encoding: "utf8", windowsHide: true }
+  );
+  if (
+    !task.stdout
+      ?.toLowerCase()
+      .includes(`"${basename(process.execPath).toLowerCase()}"`)
+  ) {
+    return;
+  }
+  spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], {
+    stdio: "ignore",
+    windowsHide: true,
+  });
+}
+
 function registerRuntimeCleanup(
   server: ReturnType<typeof Bun.serve>,
   serverUrl: string,
   database: Database,
-  mcpClientManager: McpClientManager
+  mcpClientManager: McpClientManager,
+  googleMeetService: GoogleMeetService
 ): () => Promise<void> {
   let cleanedUp = false;
 
@@ -555,6 +627,7 @@ function registerRuntimeCleanup(
       return;
     }
     stopping = true;
+    await googleMeetService.close();
     if (process.env.NAKAMA_DESKTOP === "1") {
       // A quit during startup must not race workers being recreated after shutdown.
       await workerRecovery.catch(() => {});
@@ -567,7 +640,12 @@ function registerRuntimeCleanup(
     ) {
       const { default: pm2 } = await import("pm2");
       await new Promise<void>((resolve) => {
-        const timeout = setTimeout(resolve, 3000);
+        // Connecting alone takes ~2.5s on Windows, so 3s ran out before pm2
+        // sent the daemon its kill request.
+        const timeout = setTimeout(
+          resolve,
+          process.platform === "win32" ? 5000 : 3000
+        );
         pm2.connect((error) => {
           if (error) {
             clearTimeout(timeout);
@@ -581,6 +659,9 @@ function registerRuntimeCleanup(
           });
         });
       });
+      if (process.platform === "win32") {
+        killLeftoverPm2Daemon(join(process.env.PM2_HOME, "pm2.pid"));
+      }
     }
     if (process.env.NAKAMA_DESKTOP === "1") {
       await Promise.race([

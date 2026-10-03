@@ -112,7 +112,7 @@ async function fetchFireworksDiscoverRows(options: {
   }
 }
 
-export function fireworksDiscoverQueryOptions(options: {
+function fireworksDiscoverQueryOptions(options: {
   providerId?: string;
   apiKey?: string;
 }) {
