@@ -65,6 +65,10 @@ import {
 
 const MAX_TOOL_ITERATIONS = 100;
 const MAX_TURN_OUTPUT_TOKENS = 200_000;
+const EMPTY_REPLY_NUDGE =
+  "Reply to the user now with a final answer based on the work so far.";
+const EMPTY_REPLY_NOTICE =
+  "The model finished without writing a reply. Send another message to continue.";
 
 export interface StreamHandlers {
   onChunk: (delta: string) => void;
@@ -776,7 +780,20 @@ async function runConversation(
     );
 
     if (!enableToolLoop || result.toolCalls.length === 0) {
-      return result.content;
+      if (!enableToolLoop || result.content.trim()) {
+        return result.content;
+      }
+      return await closeEmptyTurn({
+        handlers,
+        history,
+        mode,
+        onTurnUsage,
+        provider,
+        providerOptions,
+        rehydrateMessagesForProvider,
+        signal,
+        systemPrompt,
+      });
     }
 
     const toolHistoryStart = history.length;
@@ -796,8 +813,19 @@ async function runConversation(
     );
   }
 
-  if (producedTokens >= MAX_TURN_OUTPUT_TOKENS) {
-    const notice = `${stoppedReply ? "\n\n" : ""}Stopped because this turn reached its output budget. Send another message to continue.`;
+  const hitBudget = producedTokens >= MAX_TURN_OUTPUT_TOKENS;
+  const lastAssistant = [...history]
+    .reverse()
+    .find(
+      (message): message is Extract<ChatMessage, { role: "assistant" }> =>
+        message.role === "assistant"
+    );
+  const reachedToolLimit = !(hitBudget || lastAssistant?.content.trim());
+  if (hitBudget || reachedToolLimit) {
+    const reason = hitBudget
+      ? "its output budget"
+      : `its limit of ${MAX_TOOL_ITERATIONS} tool rounds`;
+    const notice = `${stoppedReply ? "\n\n" : ""}Stopped because this turn reached ${reason}. Send another message to continue.`;
     const content = stoppedReply + notice;
     history.push({ content, role: "assistant" });
     if (mode === "stream") {
@@ -806,14 +834,58 @@ async function runConversation(
     return content;
   }
 
-  const lastAssistant = [...history]
-    .reverse()
-    .find(
-      (message): message is Extract<ChatMessage, { role: "assistant" }> =>
-        message.role === "assistant"
-    );
-
   return lastAssistant?.content ?? "";
+}
+
+// The model ended its turn with no text. Ask once more without tools so the
+// user gets an answer; if that is empty too, say so instead of returning "".
+async function closeEmptyTurn(input: {
+  handlers?: StreamHandlers;
+  history: ChatMessage[];
+  mode: "send" | "stream";
+  onTurnUsage?: (usage: ChatUsage) => void;
+  provider: ProviderClient;
+  providerOptions?: ProviderChatOptions;
+  rehydrateMessagesForProvider?: (
+    messages: readonly ChatMessage[]
+  ) => Promise<ChatMessage[]>;
+  signal?: AbortSignal;
+  systemPrompt: string;
+}): Promise<string> {
+  const { history, mode, handlers } = input;
+  // Drop the empty assistant message, and keep the nudge out of saved history.
+  history.pop();
+  const retry = await generateReply(
+    input.provider,
+    input.systemPrompt,
+    [...history, { content: EMPTY_REPLY_NUDGE, role: "user" }],
+    undefined,
+    input.providerOptions,
+    mode,
+    handlers,
+    input.rehydrateMessagesForProvider,
+    input.signal
+  );
+  input.signal?.throwIfAborted();
+  if (retry.usage) {
+    handlers?.onUsage?.(retry.usage);
+    input.onTurnUsage?.(retry.usage);
+  }
+
+  if (retry.content.trim()) {
+    history.push(
+      retry.usage
+        ? { ...retry.assistantMessage, usage: retry.usage }
+        : retry.assistantMessage
+    );
+    return retry.content;
+  }
+
+  history.push({ content: EMPTY_REPLY_NOTICE, role: "assistant" });
+  if (mode === "stream") {
+    handlers?.onChunk(EMPTY_REPLY_NOTICE);
+  }
+  return EMPTY_REPLY_NOTICE;
 }
 
 async function executeToolCalls(
