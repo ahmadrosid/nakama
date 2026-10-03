@@ -791,7 +791,7 @@ export class NakamaClient {
       method: "POST",
     });
 
-    return this.forAppUser(appUserId).createChatSession(
+    return this.forAppUser(appUserId ?? null).createChatSession(
       response.sessionId,
       channel
     );
