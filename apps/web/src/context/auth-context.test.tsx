@@ -40,9 +40,9 @@ test("a tenant's cached data does not survive logout or an org switch", async ()
   const root = createRoot(container);
 
   // Org A's destination list: Telegram chat ids and webhook paths that org B
-  // must never see, under a query key that carries no tenant.
+  // must never see, under Org A's scoped query key.
   const seedOrgA = () =>
-    queryClient.setQueryData(queryKeys.notificationDestinations.all, [
+    queryClient.setQueryData(queryKeys.notificationDestinations(ORG_A.id), [
       { id: "dest-a", name: "Org A ops", telegramChatId: "-100123" },
     ]);
 
@@ -60,7 +60,7 @@ test("a tenant's cached data does not survive logout or an org switch", async ()
       await auth?.logout();
     });
     expect(
-      queryClient.getQueryData(queryKeys.notificationDestinations.all)
+      queryClient.getQueryData(queryKeys.notificationDestinations(ORG_A.id))
     ).toBeUndefined();
 
     seedOrgA();
@@ -68,7 +68,7 @@ test("a tenant's cached data does not survive logout or an org switch", async ()
       await auth?.switchOrg(ORG_B.id);
     });
     expect(
-      queryClient.getQueryData(queryKeys.notificationDestinations.all)
+      queryClient.getQueryData(queryKeys.notificationDestinations(ORG_A.id))
     ).toBeUndefined();
   } finally {
     await act(async () => root.unmount());

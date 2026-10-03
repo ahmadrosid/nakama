@@ -26,6 +26,7 @@ import {
   ViewOffIcon,
 } from "hugeicons-react";
 import { useEffect, useState } from "react";
+import { useAuth } from "@/context/use-auth";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
   useCreateNotificationDestination,
@@ -249,6 +250,13 @@ function isDestinationRequestValid(value: unknown): boolean {
 }
 
 export function NotificationDestinationsCard() {
+  const { activeOrg } = useAuth();
+  const orgId = activeOrg?.id ?? "";
+
+  return <NotificationDestinationsCardForOrg key={orgId} orgId={orgId} />;
+}
+
+function NotificationDestinationsCardForOrg({ orgId }: { orgId: string }) {
   const { data: profiles = [] } = useProfilesQuery();
   const [profileId, setProfileId] = useState("");
   const [channel, setChannel] =
@@ -259,10 +267,10 @@ export function NotificationDestinationsCard() {
     channel === "whatsapp"
   );
   const whatsappReady = isWhatsAppRecipientReady(whatsapp);
-  const { data, isLoading, error } = useNotificationDestinations();
-  const createMutation = useCreateNotificationDestination();
-  const rotateMutation = useRegenerateNotificationDestinationKey();
-  const deleteMutation = useDeleteNotificationDestination();
+  const { data, isLoading, error } = useNotificationDestinations(orgId);
+  const createMutation = useCreateNotificationDestination(orgId);
+  const rotateMutation = useRegenerateNotificationDestinationKey(orgId);
+  const deleteMutation = useDeleteNotificationDestination(orgId);
   const [deleteTarget, setDeleteTarget] =
     useState<NotificationDestinationSummary | null>(null);
 
@@ -448,6 +456,7 @@ export function NotificationDestinationsCard() {
               latestSecret={latestSecret}
               onDelete={() => setDeleteTarget(destination)}
               onRotate={() => handleRotate(destination.id)}
+              orgId={orgId}
               profiles={profiles}
               rotatePending={rotateMutation.isPending}
             />
@@ -531,6 +540,7 @@ function NotificationTargetFields({
 }
 
 function NotificationDestinationItem({
+  orgId,
   destination,
   profiles,
   latestSecret,
@@ -539,6 +549,7 @@ function NotificationDestinationItem({
   onRotate,
   onDelete,
 }: {
+  orgId: string;
   destination: NotificationDestinationSummary;
   profiles: Array<{ id: string; name: string }>;
   latestSecret: NotificationDestinationWithSecret | null;
@@ -547,7 +558,7 @@ function NotificationDestinationItem({
   onRotate: () => void;
   onDelete: () => void;
 }) {
-  const updateMutation = useUpdateNotificationDestination();
+  const updateMutation = useUpdateNotificationDestination(orgId);
   const [draft, setDraft] = useState<{
     name: string;
     profileId: string;
