@@ -48,6 +48,32 @@ afterEach(() => {
   resetChatLocksForTests();
 });
 
+async function createTestHandler(
+  homeDir: string,
+  options: Omit<
+    Parameters<typeof createChatHandler>[0],
+    "authStore" | "client" | "sessionStore" | "orgStore"
+  > = { config: TEST_CONFIG, getBotInfo: () => TEST_BOT_INFO },
+  clientOptions: Parameters<typeof createMockClient>[0] = {}
+) {
+  const authStore = new TelegramAuthStore(null);
+  await authStore.reload();
+  const mock = createMockClient(clientOptions);
+  const sessionStore = new SessionStore(
+    path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+  );
+  const orgStore = createTestOrgStore(homeDir);
+  await orgStore.load();
+  const handler = createChatHandler({
+    ...options,
+    authStore,
+    client: mock.client,
+    orgStore,
+    sessionStore,
+  });
+  return { ...mock, authStore, handler, orgStore, sessionStore };
+}
+
 async function waitForCondition(
   condition: () => boolean,
   message: string,
@@ -84,22 +110,8 @@ describe("createChatHandler group chats", () => {
           pairedUserIds: [42],
         });
 
-        const authStore = new TelegramAuthStore(null);
-        await authStore.reload();
-        const { client, calls } = createMockClient();
-        const sessionStore = new SessionStore(
-          path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
-        );
-        const orgStore = createTestOrgStore(homeDir);
-        await orgStore.load();
-        const handleMessage = createChatHandler({
-          authStore,
-          client,
-          config: TEST_CONFIG,
-          getBotInfo: () => TEST_BOT_INFO,
-          orgStore,
-          sessionStore,
-        });
+        const { calls, handler: handleMessage } =
+          await createTestHandler(homeDir);
 
         const { ctx, replies } = createMessageContext({
           chatId: -100_123,
@@ -141,22 +153,8 @@ describe("createChatHandler group chats", () => {
         pairedUserIds: [42],
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        getBotInfo: () => TEST_BOT_INFO,
-        orgStore,
-        sessionStore,
-      });
+      const { calls, handler: handleMessage } =
+        await createTestHandler(homeDir);
 
       const { ctx, replies, replyOptions } = createMessageContext({
         chatId: -100_123,
@@ -183,9 +181,17 @@ describe("createChatHandler group chats", () => {
         profileId: "research",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls, getLastCreateSessionProfileId } = createMockClient(
+      const {
+        calls,
+        getLastCreateSessionProfileId,
+        sessionStore,
+        handler: handleMessage,
+      } = await createTestHandler(
+        homeDir,
+        {
+          config: { ...TEST_CONFIG, profileId: "research" },
+          getBotInfo: () => TEST_BOT_INFO,
+        },
         {
           profiles: [
             { id: "default", isDefault: true, name: "Default Bot" },
@@ -193,19 +199,6 @@ describe("createChatHandler group chats", () => {
           ],
         }
       );
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { ...TEST_CONFIG, profileId: "research" },
-        getBotInfo: () => TEST_BOT_INFO,
-        orgStore,
-        sessionStore,
-      });
 
       const topic10 = createMessageContext({
         chatId: -100_123,
@@ -242,26 +235,16 @@ describe("createChatHandler group chats", () => {
         pairedUserIds: [42],
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, getLastCreateSessionProfileId } = createMockClient({
+      const {
+        getLastCreateSessionProfileId,
+        sessionStore,
+        orgStore,
+        handler: handleMessage,
+      } = await createTestHandler(homeDir, undefined, {
         profiles: [
           { id: "default", isDefault: true, name: "Default Bot" },
           { id: "research", name: "Research Bot" },
         ],
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        getBotInfo: () => TEST_BOT_INFO,
-        orgStore,
-        sessionStore,
       });
 
       const switchTopic10 = createMessageContext({
@@ -300,27 +283,16 @@ describe("createChatHandler group chats", () => {
         pairedUserIds: [42],
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client } = createMockClient({
-        profiles: [
-          { id: "default", isDefault: true, name: "Default Bot" },
-          { id: "research", name: "Research Bot" },
-        ],
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { handler: handleMessage } = await createTestHandler(
+        homeDir,
+        undefined,
+        {
+          profiles: [
+            { id: "default", isDefault: true, name: "Default Bot" },
+            { id: "research", name: "Research Bot" },
+          ],
+        }
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        getBotInfo: () => TEST_BOT_INFO,
-        orgStore,
-        sessionStore,
-      });
 
       const switchTopic10 = createMessageContext({
         chatId: -100_123,
@@ -351,33 +323,22 @@ describe("createChatHandler group chats", () => {
         pairedUserIds: [42],
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client } = createMockClient({
-        profiles: [
-          {
-            id: "default",
-            isDefault: true,
-            model: "local::base",
-            name: "Default Bot",
-          },
-          { id: "research", model: "local::research", name: "Research Bot" },
-        ],
-        providerConfigured: true,
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { handler: handleMessage } = await createTestHandler(
+        homeDir,
+        undefined,
+        {
+          profiles: [
+            {
+              id: "default",
+              isDefault: true,
+              model: "local::base",
+              name: "Default Bot",
+            },
+            { id: "research", model: "local::research", name: "Research Bot" },
+          ],
+          providerConfigured: true,
+        }
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        getBotInfo: () => TEST_BOT_INFO,
-        orgStore,
-        sessionStore,
-      });
 
       const switchTopic10 = createMessageContext({
         chatId: -100_123,
@@ -410,26 +371,15 @@ describe("createChatHandler group chats", () => {
         pairedUserIds: [42],
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, getLastCreateSessionProfileId } = createMockClient({
+      const {
+        getLastCreateSessionProfileId,
+        sessionStore,
+        handler: handleMessage,
+      } = await createTestHandler(homeDir, undefined, {
         profiles: [
           { id: "default", isDefault: true, name: "Default Bot" },
           { id: "support", name: "Support Bot" },
         ],
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        getBotInfo: () => TEST_BOT_INFO,
-        orgStore,
-        sessionStore,
       });
 
       const switchGroup = createMessageContext({
@@ -581,24 +531,13 @@ describe("createChatHandler group chats", () => {
         pairedUserIds: [42],
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, getStreamControl } = createMockClient({
+      const {
+        getStreamControl,
+        authStore,
+        handler: handleMessage,
+      } = await createTestHandler(homeDir, undefined, {
         autoComplete: false,
         streaming: true,
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        getBotInfo: () => TEST_BOT_INFO,
-        orgStore,
-        sessionStore,
       });
 
       const chatAttempt = createMessageContext({
@@ -641,22 +580,11 @@ describe("createChatHandler group chats", () => {
         handshakeCode: "ABCD1234",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
+      const {
+        calls,
         authStore,
-        client,
-        config: TEST_CONFIG,
-        getBotInfo: () => TEST_BOT_INFO,
-        orgStore,
-        sessionStore,
-      });
+        handler: handleMessage,
+      } = await createTestHandler(homeDir);
 
       const { ctx, replies } = createMessageContext({
         chatId: -100_123,
@@ -683,22 +611,11 @@ describe("createChatHandler group chats", () => {
         pairedUserIds: [42],
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client } = createMockClient({ orgs: createMultiTestOrgs() });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { orgStore, handler: handleMessage } = await createTestHandler(
+        homeDir,
+        undefined,
+        { orgs: createMultiTestOrgs() }
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        getBotInfo: () => TEST_BOT_INFO,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx } = createMessageContext({
         chatId: -100_123,
@@ -722,21 +639,13 @@ describe("createChatHandler security", () => {
         handshakeCode: "ABCD1234",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { calls, handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {}
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx, replies } = createMessageContext({ text: "hello" });
       delete (ctx as { from?: unknown }).from;
@@ -755,21 +664,13 @@ describe("createChatHandler security", () => {
         handshakeCode: "ABCD1234",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { calls, handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {}
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx, replies } = createMessageContext({
         text: "Tell me a joke",
@@ -792,21 +693,17 @@ describe("createChatHandler security", () => {
         handshakeCode: "ABCD1234",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
+      const {
+        calls,
         authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
+        handler: handleMessage,
+      } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {}
+      );
 
       const { ctx, replies } = createMessageContext({
         text: "DEADBEEF",
@@ -830,21 +727,17 @@ describe("createChatHandler security", () => {
         handshakeCode: "ABCD1234",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
+      const {
+        calls,
         authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
+        handler: handleMessage,
+      } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {}
+      );
 
       const pairAttempt = createMessageContext({
         text: "ab cd 12 34",
@@ -880,25 +773,19 @@ describe("createChatHandler security", () => {
         profileId: "missing_profile",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls, getLastCreateSessionProfileId } = createMockClient(
+      const {
+        calls,
+        getLastCreateSessionProfileId,
+        handler: handleMessage,
+      } = await createTestHandler(
+        homeDir,
+        {
+          config: { ...TEST_CONFIG, profileId: "missing_profile" },
+        },
         {
           profiles: [{ id: "default", model: null }],
         }
       );
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: { ...TEST_CONFIG, profileId: "missing_profile" },
-        orgStore,
-        sessionStore,
-      });
 
       const pairAttempt = createMessageContext({
         text: "ABCD1234",
@@ -925,21 +812,13 @@ describe("createChatHandler security", () => {
         handshakeCode: "ABCD1234",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { authStore, handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {}
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const firstUser = createMessageContext({
         text: "ABCD1234",
@@ -966,21 +845,13 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { calls, handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {}
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx, replies } = createMessageContext({
         text: "/compact",
@@ -1002,21 +873,13 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { calls, handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {}
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx, replies } = createMessageContext({
         text: "hello agent",
@@ -1038,24 +901,20 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls, getStreamControl } = createMockClient({
-        autoComplete: false,
-        streaming: true,
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const {
+        calls,
+        getStreamControl,
+        handler: handleMessage,
+      } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {
+          autoComplete: false,
+          streaming: true,
+        }
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const chatAttempt = createMessageContext({
         text: "hello agent",
@@ -1094,21 +953,13 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {}
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx, replies } = createMessageContext({
         text: "/stop",
@@ -1128,41 +979,33 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client } = createMockClient({
-        steps: [
-          {
-            todos: [
-              { content: "Plan changes", id: "plan", status: "in_progress" },
-              { content: "Ship update", id: "ship", status: "pending" },
-            ],
-            type: "todos",
-          },
-          {
-            todos: [
-              { content: "Plan changes", id: "plan", status: "completed" },
-              { content: "Ship update", id: "ship", status: "completed" },
-            ],
-            type: "todos",
-          },
-          { todos: [], type: "todos" },
-          { reply: "Done", type: "resolve" },
-        ],
-        streaming: true,
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {
+          steps: [
+            {
+              todos: [
+                { content: "Plan changes", id: "plan", status: "in_progress" },
+                { content: "Ship update", id: "ship", status: "pending" },
+              ],
+              type: "todos",
+            },
+            {
+              todos: [
+                { content: "Plan changes", id: "plan", status: "completed" },
+                { content: "Ship update", id: "ship", status: "completed" },
+              ],
+              type: "todos",
+            },
+            { todos: [], type: "todos" },
+            { reply: "Done", type: "resolve" },
+          ],
+          streaming: true,
+        }
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx, replies, edits } = createMessageContext({
         text: "hello agent",
@@ -1197,28 +1040,20 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client } = createMockClient({
-        steps: [
-          { delta: "Agent ", type: "chunk" },
-          { delta: "reply", type: "chunk" },
-          { reply: "Agent reply", type: "resolve" },
-        ],
-        streaming: true,
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {
+          steps: [
+            { delta: "Agent ", type: "chunk" },
+            { delta: "reply", type: "chunk" },
+            { reply: "Agent reply", type: "resolve" },
+          ],
+          streaming: true,
+        }
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx, replies, edits } = createMessageContext({
         text: "hello agent",
@@ -1239,33 +1074,30 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, getStreamControl } = createMockClient({
-        autoComplete: false,
-        steps: [
+      const { getStreamControl, handler: handleMessage } =
+        await createTestHandler(
+          homeDir,
           {
-            todos: [
-              { content: "Plan changes", id: "plan", status: "in_progress" },
-              { content: "Ship update", id: "ship", status: "pending" },
-            ],
-            type: "todos",
+            config: TEST_CONFIG,
           },
-        ],
-        streaming: true,
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
+          {
+            autoComplete: false,
+            steps: [
+              {
+                todos: [
+                  {
+                    content: "Plan changes",
+                    id: "plan",
+                    status: "in_progress",
+                  },
+                  { content: "Ship update", id: "ship", status: "pending" },
+                ],
+                type: "todos",
+              },
+            ],
+            streaming: true,
+          }
+        );
 
       const chatAttempt = createMessageContext({
         text: "hello agent",
@@ -1312,33 +1144,25 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client } = createMockClient({
-        steps: [
-          {
-            todos: [
-              { content: "Plan changes", id: "plan", status: "in_progress" },
-              { content: "Ship update", id: "ship", status: "pending" },
-            ],
-            type: "todos",
-          },
-          { message: "Boom", type: "error" },
-        ],
-        streaming: true,
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {
+          steps: [
+            {
+              todos: [
+                { content: "Plan changes", id: "plan", status: "in_progress" },
+                { content: "Ship update", id: "ship", status: "pending" },
+              ],
+              type: "todos",
+            },
+            { message: "Boom", type: "error" },
+          ],
+          streaming: true,
+        }
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx, replies, edits } = createMessageContext({
         text: "hello agent",
@@ -1368,40 +1192,32 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client } = createMockClient({
-        steps: [
-          {
-            todos: [
-              { content: "Plan changes", id: "plan", status: "in_progress" },
-              { content: "Ship update", id: "ship", status: "pending" },
-            ],
-            type: "todos",
-          },
-          {
-            todos: [
-              { content: "Plan changes", id: "plan", status: "in_progress" },
-              { content: "Ship update", id: "ship", status: "pending" },
-            ],
-            type: "todos",
-          },
-          { reply: "Done", type: "resolve" },
-        ],
-        streaming: true,
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {
+          steps: [
+            {
+              todos: [
+                { content: "Plan changes", id: "plan", status: "in_progress" },
+                { content: "Ship update", id: "ship", status: "pending" },
+              ],
+              type: "todos",
+            },
+            {
+              todos: [
+                { content: "Plan changes", id: "plan", status: "in_progress" },
+                { content: "Ship update", id: "ship", status: "pending" },
+              ],
+              type: "todos",
+            },
+            { reply: "Done", type: "resolve" },
+          ],
+          streaming: true,
+        }
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx, replies, edits } = createMessageContext({
         text: "hello agent",
@@ -1431,21 +1247,13 @@ describe("createChatHandler security", () => {
         handshakeCode: "ABCD1234",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { calls, handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {}
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx, replies } = createMessageContext({
         text: "/start",
@@ -1467,21 +1275,13 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { calls, handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {}
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx, replies } = createMessageContext({
         text: "/start@NakamaBot",
@@ -1502,21 +1302,13 @@ describe("createChatHandler security", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { calls, handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {}
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx, replies } = createMessageContext({
         text: "ABCD1234",
@@ -1539,21 +1331,17 @@ describe("bridge API integration", () => {
         pairedUserIds: [1001],
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls, orgIds } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const {
+        calls,
+        orgIds,
+        handler: handleMessage,
+      } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {}
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx } = createMessageContext({ text: "hello", userId: 1001 });
       await handleMessage(ctx);
@@ -1574,21 +1362,13 @@ describe("bridge API integration", () => {
         pairedUserIds: [1001],
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { orgStore, handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {}
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx, replies } = createMessageContext({
         text: "hello",
@@ -1610,23 +1390,15 @@ describe("bridge API integration", () => {
         pairedUserIds: [1001],
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls } = createMockClient({
-        orgs: createMultiTestOrgs(),
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { calls, handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {
+          orgs: createMultiTestOrgs(),
+        }
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx, replies } = createMessageContext({
         text: "hello",
@@ -1647,23 +1419,19 @@ describe("bridge API integration", () => {
         pairedUserIds: [1001],
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls, orgIds } = createMockClient({
-        orgs: createMultiTestOrgs(),
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const {
+        calls,
+        orgIds,
+        handler: handleMessage,
+      } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {
+          orgs: createMultiTestOrgs(),
+        }
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const pick = createMessageContext({ text: "2", userId: 1001 });
       await handleMessage(pick.ctx);
@@ -1686,26 +1454,18 @@ describe("bridge API integration", () => {
         pairedUserIds: [1001],
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client } = createMockClient({
-        profiles: [
-          { id: "default", isDefault: true, name: "Default Bot" },
-          { id: "research", name: "Research Bot" },
-        ],
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {
+          profiles: [
+            { id: "default", isDefault: true, name: "Default Bot" },
+            { id: "research", name: "Research Bot" },
+          ],
+        }
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx, replies } = createMessageContext({
         text: "/profile",
@@ -1726,26 +1486,18 @@ describe("bridge API integration", () => {
         pairedUserIds: [1001],
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client } = createMockClient({
-        profiles: [
-          { id: "default", isDefault: true, name: "Default Bot" },
-          { id: "super_bot", isSuper: true, name: "Super Bot" },
-        ],
-      });
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {
+          profiles: [
+            { id: "default", isDefault: true, name: "Default Bot" },
+            { id: "super_bot", isSuper: true, name: "Super Bot" },
+          ],
+        }
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx, replies } = createMessageContext({
         text: "/profile",
@@ -1766,9 +1518,16 @@ describe("bridge API integration", () => {
         pairedUserIds: [1001],
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls, getLastCreateSessionProfileId } = createMockClient(
+      const {
+        calls,
+        getLastCreateSessionProfileId,
+        sessionStore,
+        handler: handleMessage,
+      } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
         {
           profiles: [
             { id: "default", isDefault: true, name: "Default Bot" },
@@ -1776,18 +1535,6 @@ describe("bridge API integration", () => {
           ],
         }
       );
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
-      );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const chat = createMessageContext({ text: "hello", userId: 1001 });
       await handleMessage(chat.ctx);
@@ -2043,21 +1790,13 @@ describe("createChatHandler document attachments", () => {
 
       fetchSpy = spyOn(globalThis, "fetch");
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { calls, handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {}
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx, replies } = createDocumentContext({
         fileName: "sheet.xlsx",
@@ -2132,21 +1871,13 @@ describe("createChatHandler document attachments", () => {
         botToken: "1234567890:TEST",
       });
 
-      const authStore = new TelegramAuthStore(null);
-      await authStore.reload();
-      const { client, calls } = createMockClient();
-      const sessionStore = new SessionStore(
-        path.join(homeDir, ".nakama", "telegram", "chat-sessions.json")
+      const { calls, handler: handleMessage } = await createTestHandler(
+        homeDir,
+        {
+          config: TEST_CONFIG,
+        },
+        {}
       );
-      const orgStore = createTestOrgStore(homeDir);
-      await orgStore.load();
-      const handleMessage = createChatHandler({
-        authStore,
-        client,
-        config: TEST_CONFIG,
-        orgStore,
-        sessionStore,
-      });
 
       const { ctx, replies } = createMessageContext({ userId: 4242 });
       (ctx as { message: Record<string, unknown> }).message = {
