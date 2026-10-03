@@ -1,17 +1,14 @@
+import { Database } from "bun:sqlite";
 import { describe, expect, spyOn, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { NakamaClient } from "@nakama/client";
-import {
-  loadLocalAuthToken,
-  NakamaApiError,
-  verifyLocalAuthToken,
-} from "@nakama/core";
+import { loadLocalAuthToken, verifyLocalAuthToken } from "@nakama/core";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
+  seedDatabase,
 } from "@nakama/db";
 import { AuthService } from "../services/auth-service";
 import { GoogleMeetService } from "../services/google-meet/service";
@@ -70,31 +67,11 @@ function expectCookiesSecure(setCookies: string[], expected: boolean): void {
 function createServerOptions() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const authService = new AuthService();
-  let sessionAppUserId: string | undefined;
   return {
     agent: {
-      assertSessionProfileAccess: async (
-        _sessionId: string,
-        _orgId: string,
-        _access: unknown,
-        appUserId: string | undefined,
-        requireAppUser = false
-      ) => {
-        if (requireAppUser && appUserId !== sessionAppUserId) {
-          throw new NakamaApiError("Session not found", 404);
-        }
-      },
+      assertSessionProfileAccess: async () => {},
       beginSessionTurn: async () => true,
-      createSession: async (
-        _orgId: string,
-        _channel: string,
-        _profileId: string,
-        _userId: string,
-        options: { appUserId?: string } = {}
-      ) => {
-        sessionAppUserId = options.appUserId;
-        return "session_1";
-      },
+      createSession: async () => "session_1",
       getProfile: async () => ({ profile: { id: "default" } }),
       getSessionMessages: async () => ({
         channel: "web",
@@ -139,6 +116,191 @@ function createServerOptions() {
 }
 
 describe("createHonoApp", () => {
+  test("a formerly valid stored backend key is rejected while its owner can still sign in", async () => {
+    const root = await mkdtemp(join(tmpdir(), "retired-key-auth-"));
+    const filename = join(root, "nakama.sqlite");
+    const database = await createSqliteDatabase(`file:${filename}`);
+    const options = {
+      ...createServerOptions(),
+      databaseAdapter: database.adapter,
+    };
+    options.orgService = new OrgService(database.adapter, options.authService);
+    const app = createHonoApp(options);
+    try {
+      await seedDatabase(database.adapter);
+      const browser = await setupFreshInstallSession(
+        app,
+        options.databaseAdapter
+      );
+      const user =
+        await options.databaseAdapter.getUserByEmail("admin@example.com");
+      const raw = new Database(filename);
+      const token = `nk_live_${"a".repeat(64)}`;
+      try {
+        raw.exec(
+          "CREATE TABLE api_keys (id TEXT, org_id TEXT, name TEXT, environment TEXT, key_prefix TEXT, secret_hash TEXT, created_by_user_id TEXT, created_at TEXT, last_used_at TEXT, expires_at TEXT, revoked_at TEXT)"
+        );
+        raw
+          .query(
+            "INSERT INTO api_keys VALUES ('key',?,'Old app','live',?,?,?,'now',NULL,NULL,NULL)"
+          )
+          .run(
+            browser.orgId,
+            token.slice(0, 20),
+            options.authService.hashToken(token),
+            user!.id
+          );
+        expect(
+          (
+            await app.fetch(
+              new Request("http://localhost/v1/auth/me", {
+                headers: { Authorization: `Bearer ${token}` },
+              })
+            )
+          ).status
+        ).toBe(401);
+        expect(
+          (
+            await app.fetch(
+              new Request("http://localhost/v1/auth/me", {
+                body: JSON.stringify({ name: "Changed by retired key" }),
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                },
+                method: "PATCH",
+              })
+            )
+          ).status
+        ).toBe(401);
+        expect(await options.databaseAdapter.getUserById(user!.id)).toEqual(
+          user
+        );
+        expect(
+          (
+            await app.fetch(
+              new Request("http://localhost/v1/auth/me", {
+                headers: browser.headers(),
+              })
+            )
+          ).status
+        ).toBe(200);
+      } finally {
+        raw.close(true);
+      }
+    } finally {
+      database.release();
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  test("removed backend keys and routes reject access, and stale app-user inputs create no sessions", async () => {
+    const options = createServerOptions();
+    let created = 0;
+    options.agent.createSession = async () => {
+      created += 1;
+      return "session_1";
+    };
+    const app = createHonoApp(options);
+    const session = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
+    );
+    for (const token of [
+      `nk_live_${"a".repeat(64)}`,
+      `nk_test_${"b".repeat(64)}`,
+    ]) {
+      expect(
+        (
+          await app.fetch(
+            new Request(
+              "http://localhost/v1/sessions?profileId=default&channel=web",
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "X-Nakama-App-User-Id": "alice",
+                },
+              }
+            )
+          )
+        ).status
+      ).toBe(401);
+    }
+    for (const [method, suffix] of [
+      ["GET", ""],
+      ["POST", ""],
+      ["POST", "/old/rotate"],
+      ["DELETE", "/old"],
+    ]) {
+      expect(
+        (
+          await app.fetch(
+            new Request(
+              `http://localhost/v1/orgs/${session.orgId}/api-keys${suffix}`,
+              {
+                headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
+                method,
+              }
+            )
+          )
+        ).status
+      ).toBe(404);
+    }
+    for (const appUserId of ["alice", "", null]) {
+      expect(
+        (
+          await app.fetch(
+            new Request("http://localhost/v1/sessions", {
+              body: JSON.stringify({
+                appUserId,
+                channel: "web",
+                profileId: "default",
+              }),
+              headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
+              method: "POST",
+            })
+          )
+        ).status
+      ).toBe(400);
+    }
+    for (const path of [
+      "/v1/sessions?profileId=default&channel=web",
+      "/v1/sessions/old/messages",
+      "/v1/attachments/old/content",
+      "/v1/profiles/default/artifacts",
+      "/v1/profiles/default/artifacts/content?filename=old.md",
+    ]) {
+      expect(
+        (
+          await app.fetch(
+            new Request(`http://localhost${path}`, {
+              headers: session.headers({ "X-Nakama-App-User-Id": "" }),
+            })
+          )
+        ).status
+      ).toBe(400);
+    }
+    expect(created).toBe(0);
+    expect(
+      (
+        await app.fetch(
+          new Request("http://localhost/v1/sessions", {
+            body: JSON.stringify({ channel: "web", profileId: "default" }),
+            headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
+            method: "POST",
+          })
+        )
+      ).status
+    ).toBe(201);
+    expect(created).toBe(1);
+    const spec = await (
+      await app.fetch(new Request("http://localhost/openapi.json"))
+    ).text();
+    expect(spec.includes("api-keys")).toBe(false);
+    expect(spec.includes("appUserId")).toBe(false);
+    expect(spec.includes('"api-key"')).toBe(false);
+  });
+
   test("built-in Meet routes use current org roles and reject spoofed actor fields", async () => {
     const options = createServerOptions();
     const root = await mkdtemp(join(tmpdir(), "meet-http-"));
@@ -467,52 +629,6 @@ describe("createHonoApp", () => {
       delete process.env.NAKAMA_CONFIG_DIR;
       await rm(configDir, { force: true, recursive: true });
     }
-  });
-
-  test("resolves org context from a backend API key and rejects conflicts", async () => {
-    const options = createServerOptions();
-    await options.databaseAdapter.createUser({
-      createdAt: new Date().toISOString(),
-      email: "owner@example.com",
-      id: "user_owner",
-      passwordHash: "unused",
-      updatedAt: new Date().toISOString(),
-    });
-    await seedOrgForUser(options.databaseAdapter, "owner@example.com");
-    const user =
-      await options.databaseAdapter.getUserByEmail("owner@example.com");
-    const token = `nk_live_${"a".repeat(64)}`;
-    await options.databaseAdapter.createApiKey({
-      createdAt: new Date().toISOString(),
-      createdByUserId: user!.id,
-      environment: "live",
-      expiresAt: null,
-      id: "key_test",
-      keyPrefix: token.slice(0, 20),
-      lastUsedAt: null,
-      name: "Test app",
-      orgId: TEST_ORG_ID,
-      revokedAt: null,
-      secretHash: options.authService.hashToken(token),
-    });
-    const app = createHonoApp(options);
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/profiles", {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-    );
-    expect(response.status).toBe(200);
-
-    const conflict = await app.fetch(
-      new Request("http://localhost:4310/v1/profiles", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "X-Org-Id": "org_other",
-        },
-      })
-    );
-    expect(conflict.status).toBe(400);
   });
 
   test("rejects invalid bearer auth with 401 instead of 500", async () => {
@@ -1371,220 +1487,6 @@ describe("createHonoApp", () => {
     });
   });
 
-  test("API-key auth responses expose only the key's organization", async () => {
-    const options = createServerOptions();
-    const app = createHonoApp(options);
-    const adminSession = await setupFreshInstallSession(
-      app,
-      options.databaseAdapter
-    );
-    const admin =
-      await options.databaseAdapter.getUserByEmail("admin@example.com");
-    if (!(admin && adminSession.orgId)) {
-      throw new Error("Expected setup admin");
-    }
-    expect(admin.isPlatformAdmin).toBe(true);
-    const secondOrg = await options.orgService.createOrganization(
-      { name: "Other Org", slug: "other-org" },
-      admin.id
-    );
-    expect(secondOrg.organization.id).not.toBe(adminSession.orgId);
-
-    const secret = `nk_live_${"c".repeat(64)}`;
-    await options.databaseAdapter.createApiKey({
-      createdAt: new Date().toISOString(),
-      createdByUserId: admin.id,
-      environment: "live",
-      expiresAt: null,
-      id: "key_auth_me_test",
-      keyPrefix: secret.slice(0, 20),
-      lastUsedAt: null,
-      name: "auth/me test",
-      orgId: adminSession.orgId,
-      revokedAt: null,
-      secretHash: options.authService.hashToken(secret),
-    });
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/auth/me", {
-        headers: {
-          Authorization: `Bearer ${secret}`,
-          "X-Org-Id": adminSession.orgId,
-        },
-      })
-    );
-    const body = (await response.json()) as {
-      activeOrgId?: string;
-      isPlatformAdmin?: boolean;
-      mode?: string;
-      orgId?: string;
-    };
-
-    // The key was minted by a platform admin and is de-privileged anyway, which
-    // is what every admin guard already enforces. Reporting the owner's flag
-    // told an operator the opposite.
-    expect(response.status).toBe(200);
-    expect(body.isPlatformAdmin).toBe(false);
-    expect(body.mode).toBe("api-key");
-    expect(body.activeOrgId).toBe(adminSession.orgId);
-    expect(body.orgId).toBe(adminSession.orgId);
-
-    const orgsResponse = await app.fetch(
-      new Request("http://localhost:4310/v1/auth/orgs", {
-        headers: { Authorization: `Bearer ${secret}` },
-      })
-    );
-    const orgsBody = (await orgsResponse.json()) as {
-      orgs: Array<{ id: string }>;
-    };
-    expect(orgsResponse.status).toBe(200);
-    expect(orgsBody.orgs.map((org) => org.id)).toEqual([adminSession.orgId]);
-
-    const browserOrgsResponse = await app.fetch(
-      new Request("http://localhost:4310/v1/auth/orgs", {
-        headers: adminSession.headers(),
-      })
-    );
-    const browserOrgsBody = (await browserOrgsResponse.json()) as {
-      orgs: Array<{ id: string }>;
-    };
-    expect(browserOrgsBody.orgs.map((org) => org.id).sort()).toEqual(
-      [adminSession.orgId, secondOrg.organization.id].sort()
-    );
-
-    // A browser session for the same admin still reports the admin it is.
-    const sessionResponse = await app.fetch(
-      new Request("http://localhost:4310/v1/auth/me", {
-        headers: adminSession.headers({}, adminSession.orgId),
-      })
-    );
-    const sessionBody = (await sessionResponse.json()) as {
-      isPlatformAdmin?: boolean;
-      mode?: string;
-    };
-    expect(sessionBody.isPlatformAdmin).toBe(true);
-    expect(sessionBody.mode).toBe("browser-session");
-  });
-
-  test("API keys cannot mutate the human owner's profile", async () => {
-    const options = createServerOptions();
-    const app = createHonoApp(options);
-    const adminSession = await setupFreshInstallSession(
-      app,
-      options.databaseAdapter
-    );
-    const admin =
-      await options.databaseAdapter.getUserByEmail("admin@example.com");
-    if (!(admin && adminSession.orgId)) {
-      throw new Error("Expected setup admin");
-    }
-    const userBefore = await options.databaseAdapter.getUserById(admin.id);
-    if (!userBefore) {
-      throw new Error("Expected setup admin record");
-    }
-
-    const secret = `nk_live_${"e".repeat(64)}`;
-    await options.databaseAdapter.createApiKey({
-      createdAt: new Date().toISOString(),
-      createdByUserId: admin.id,
-      environment: "live",
-      expiresAt: null,
-      id: "key_update_auth_me_test",
-      keyPrefix: secret.slice(0, 20),
-      lastUsedAt: null,
-      name: "update auth/me test",
-      orgId: adminSession.orgId,
-      revokedAt: null,
-      secretHash: options.authService.hashToken(secret),
-    });
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/auth/me", {
-        body: JSON.stringify({
-          name: "Changed by API key",
-          phone: "+15555550199",
-        }),
-        headers: {
-          Authorization: `Bearer ${secret}`,
-          "Content-Type": "application/json",
-          "X-Org-Id": adminSession.orgId,
-        },
-        method: "PATCH",
-      })
-    );
-
-    expect(response.status).toBe(403);
-    expect(await options.databaseAdapter.getUserById(admin.id)).toEqual(
-      userBefore
-    );
-  });
-
-  test("API-key client creates and accesses an app-user session", async () => {
-    const options = createServerOptions();
-    const app = createHonoApp(options);
-    const adminSession = await setupFreshInstallSession(
-      app,
-      options.databaseAdapter
-    );
-    const admin =
-      await options.databaseAdapter.getUserByEmail("admin@example.com");
-    if (!(admin && adminSession.orgId)) {
-      throw new Error("Expected setup admin");
-    }
-
-    const secret = `nk_live_${"b".repeat(64)}`;
-    await options.databaseAdapter.createApiKey({
-      createdAt: new Date().toISOString(),
-      createdByUserId: admin.id,
-      environment: "live",
-      expiresAt: null,
-      id: "key_session_test",
-      keyPrefix: secret.slice(0, 20),
-      lastUsedAt: null,
-      name: "Session test",
-      orgId: adminSession.orgId,
-      revokedAt: null,
-      secretHash: options.authService.hashToken(secret),
-    });
-
-    const apiKeyHeaders = {
-      Authorization: `Bearer ${secret}`,
-      "Content-Type": "application/json",
-    };
-    const client = new NakamaClient({
-      authToken: secret,
-      baseUrl: "http://localhost:4310",
-      fetch: (async (input, init) =>
-        app.fetch(new Request(input, init))) as typeof fetch,
-      orgId: adminSession.orgId,
-    });
-    const missingCreateAppUser = await client
-      .createSession("web")
-      .catch((error: unknown) => error);
-    expect(missingCreateAppUser).toMatchObject({ status: 400 });
-    const session = await client.createSession("web", {
-      appUserId: "alice-123",
-    });
-    const messages = await session.getMessages();
-
-    expect(messages).toEqual([]);
-
-    expect(missingCreateAppUser).toBeInstanceOf(Error);
-
-    const wrongAppUser = await app.fetch(
-      new Request(`http://localhost:4310/v1/sessions/${session.id}/messages`, {
-        headers: { ...apiKeyHeaders, "X-Nakama-App-User-Id": "bob-123" },
-      })
-    );
-    expect(wrongAppUser.status).toBe(404);
-    const missingAppUser = await app.fetch(
-      new Request(`http://localhost:4310/v1/sessions/${session.id}/messages`, {
-        headers: apiKeyHeaders,
-      })
-    );
-    expect(missingAppUser.status).toBe(400);
-  });
-
   test("GET /v1/sessions rejects missing or invalid channel", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
@@ -1634,7 +1536,7 @@ describe("createHonoApp", () => {
     );
     const listCalls: unknown[][] = [];
     options.agent.listSessions = async (...args: unknown[]) => {
-      // Everything after orgId and profileId: channels, auth, appUserId, page,
+      // Everything after orgId and profileId: channels, auth, page,
       // query.
       listCalls.push(args.slice(2));
       return { nextCursor: null, sessions: [] };
@@ -1664,11 +1566,10 @@ describe("createHonoApp", () => {
       [
         ["web", "telegram"],
         expect.anything(),
-        undefined,
         { cursor: "abc", limit: 30 },
         undefined,
       ],
-      ["web", expect.anything(), undefined, undefined, undefined],
+      ["web", expect.anything(), undefined, undefined],
     ]);
   });
 
@@ -1681,7 +1582,7 @@ describe("createHonoApp", () => {
     );
     const queries: unknown[] = [];
     options.agent.listSessions = async (...args: unknown[]) => {
-      queries.push(args[6]);
+      queries.push(args[5]);
       return { nextCursor: null, sessions: [] };
     };
     const list = (q: string) =>

@@ -5,6 +5,7 @@ import {
   type EmailOutboundAdapter,
   getOrgConfigDir,
   getProfileSoulDir,
+  getUserConfigDir,
   NakamaApiError,
 } from "@nakama/core";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
@@ -1205,6 +1206,20 @@ describe("OrgService", () => {
     const orgDir = getOrgConfigDir(bootstrapped.organization.id);
     await mkdir(orgDir, { recursive: true });
     await writeFile(join(orgDir, "private-data.txt"), "private data");
+    const retiredDir = join(
+      getUserConfigDir(),
+      "retired-app-users",
+      bootstrapped.organization.id
+    );
+    const keptRetired = join(
+      getUserConfigDir(),
+      "retired-app-users",
+      kept.organization.id
+    );
+    await mkdir(retiredDir, { recursive: true });
+    await mkdir(keptRetired, { recursive: true });
+    await writeFile(join(retiredDir, "private.txt"), "retired data");
+    await writeFile(join(keptRetired, "private.txt"), "kept data");
     const deletedProfile = (
       await databaseAdapter.listProfilesForOrg(bootstrapped.organization.id)
     )[0]!;
@@ -1247,6 +1262,10 @@ describe("OrgService", () => {
       )
     ).toMatchObject({ activeOrgId: null });
     await expect(access(orgDir)).rejects.toThrow();
+    await expect(access(retiredDir)).rejects.toThrow();
+    expect(await readFile(join(keptRetired, "private.txt"), "utf8")).toBe(
+      "kept data"
+    );
   });
 
   test("refuses to permanently delete an active org", async () => {

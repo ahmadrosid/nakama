@@ -221,9 +221,8 @@ test("workspace rename requires platform admin access and updates pins for every
 });
 
 function createApp() {
-  const listCalls: Array<{ appUserId?: string }> = [];
+  const listCalls: Array<Record<string, unknown>> = [];
   const readCalls: Array<{
-    appUserId?: string;
     headOnly?: boolean;
     render?: "markdown";
   }> = [];
@@ -243,7 +242,7 @@ function createApp() {
     listProfileArtifacts: async (
       _orgId: string,
       _profileId: string,
-      options: { appUserId?: string } = {}
+      options: Record<string, unknown> = {}
     ) => {
       listCalls.push(options);
       return {
@@ -258,7 +257,6 @@ function createApp() {
       _profileId: string,
       filename: string,
       options: {
-        appUserId?: string;
         headOnly?: boolean;
         render?: "markdown";
       } = {}
@@ -319,62 +317,6 @@ describe("profile artifact content auth", () => {
     expect(response.headers.get("Content-Type")).toBe("text/markdown");
     expect(response.headers.get("Content-Disposition")).toContain("inline");
     expect(await response.text()).toBe("# Report");
-  });
-
-  test("app-user artifact content is API-key-only", async () => {
-    const { app, authService, databaseAdapter, readCalls } = createApp();
-    const memberSession = await setupFreshInstallSession(
-      app,
-      databaseAdapter,
-      "app-user-artifact@example.com",
-      "member"
-    );
-    const url =
-      "http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=report.md";
-    const browserResponse = await app.fetch(
-      new Request(url, {
-        headers: memberSession.headers(
-          { "X-Nakama-App-User-Id": "alice" },
-          memberSession.orgId
-        ),
-      })
-    );
-
-    expect(browserResponse.status).toBe(400);
-    expect(readCalls).toEqual([]);
-
-    const owner = await databaseAdapter.getUserByEmail(
-      "app-user-artifact@example.com"
-    );
-    if (!(owner && memberSession.orgId)) {
-      throw new Error("Expected artifact test owner");
-    }
-    const secret = `nk_live_${"2".repeat(64)}`;
-    await databaseAdapter.createApiKey({
-      createdAt: new Date().toISOString(),
-      createdByUserId: owner.id,
-      environment: "live",
-      expiresAt: null,
-      id: "key_artifact_app_user_test",
-      keyPrefix: secret.slice(0, 20),
-      lastUsedAt: null,
-      name: "Artifact app user test",
-      orgId: memberSession.orgId,
-      revokedAt: null,
-      secretHash: authService.hashToken(secret),
-    });
-    const apiKeyResponse = await app.fetch(
-      new Request(url, {
-        headers: {
-          Authorization: `Bearer ${secret}`,
-          "X-Nakama-App-User-Id": "alice",
-          "X-Org-Id": memberSession.orgId,
-        },
-      })
-    );
-
-    expect(apiKeyResponse.status).toBe(200);
-    expect(readCalls).toEqual([{ appUserId: "alice", render: undefined }]);
   });
 
   test("serves artifact content with a Unicode filename", async () => {
@@ -450,8 +392,8 @@ describe("profile artifact content auth", () => {
     expect(await present.text()).toBe("");
     expect((await head("missing.md")).status).toBe(404);
     expect(readCalls).toEqual([
-      { appUserId: undefined, headOnly: true, render: undefined },
-      { appUserId: undefined, headOnly: true, render: undefined },
+      { headOnly: true, render: undefined },
+      { headOnly: true, render: undefined },
     ]);
   });
 
@@ -566,23 +508,6 @@ describe("profile artifact content auth", () => {
     );
 
     expect(response.status).toBe(200);
-  });
-
-  test("platform admin browser sessions cannot select an app-user artifact scope", async () => {
-    const { app, databaseAdapter, listCalls } = createApp();
-    const adminSession = await setupFreshInstallSession(app, databaseAdapter);
-
-    const response = await app.fetch(
-      new Request("http://localhost:4310/v1/profiles/profile_1/artifacts", {
-        headers: adminSession.headers(
-          { "X-Nakama-App-User-Id": "alice" },
-          adminSession.orgId
-        ),
-      })
-    );
-
-    expect(response.status).toBe(400);
-    expect(listCalls).toEqual([]);
   });
 });
 

@@ -45,8 +45,6 @@ import type {
   ComposioToolkitSummary,
   ConfigureProviderRequest,
   ConfigureProviderResponse,
-  CreateApiKeyRequest,
-  CreateApiKeyResponse,
   CreateAutomationRequest,
   CreateMcpServerRequest,
   CreateNotificationDestinationRequest,
@@ -88,7 +86,6 @@ import type {
   InvokePluginActionRequest,
   InvokePluginActionResponse,
   KnowledgeBaseDuplicateAction,
-  ListApiKeysResponse,
   ListArtifactsResponse,
   ListAutomationRunsResponse,
   ListAutomationsResponse,
@@ -166,7 +163,6 @@ import type {
   RestoreOrgMemoryHistoryResponse,
   RevokeArtifactShareResponse,
   RevokeBrowserSessionsResponse,
-  RotateApiKeyResponse,
   RotateLocalAuthTokenResponse,
   RunAutomationResponse,
   RunSkillCuratorInternalRequest,
@@ -307,12 +303,10 @@ export class NakamaClient {
   private readonly fetchImpl: typeof fetch;
   private readonly credentials: RequestCredentials;
   private readonly clientOrigin: string | null;
-  private appUserId: string | null;
   private authToken: string | null;
   private orgId: string | null;
 
   constructor(options: NakamaClientOptions = {}) {
-    this.appUserId = options.appUserId?.trim() || null;
     this.baseUrl = (options.baseUrl ?? resolveServerUrl()).replace(/\/$/, "");
     const fetchFn = options.fetch ?? fetch;
     this.fetchImpl = ((input, init) => fetchFn(input, init)) as typeof fetch;
@@ -326,19 +320,6 @@ export class NakamaClient {
     this.authToken = token;
   }
 
-  /** Independent request scope; changing its app user never changes the parent client. */
-  forAppUser(appUserId: string | null): NakamaClient {
-    return new NakamaClient({
-      appUserId,
-      authToken: this.authToken ?? undefined,
-      baseUrl: this.baseUrl,
-      clientOrigin: this.clientOrigin ?? undefined,
-      credentials: this.credentials,
-      fetch: this.fetchImpl,
-      orgId: this.orgId,
-    });
-  }
-
   setOrgId(orgId: string | null): void {
     this.orgId = orgId?.trim() || null;
   }
@@ -346,7 +327,6 @@ export class NakamaClient {
   /** Independent request scope; changing its org never changes the parent client. */
   forOrg(orgId: string | null): NakamaClient {
     return new NakamaClient({
-      appUserId: this.appUserId,
       authToken: this.authToken ?? undefined,
       baseUrl: this.baseUrl,
       clientOrigin: this.clientOrigin ?? undefined,
@@ -782,10 +762,8 @@ export class NakamaClient {
     channel: AgentChannel,
     options: Omit<CreateSessionRequest, "channel"> = {}
   ): Promise<RemoteChatSession> {
-    const appUserId = options.appUserId ?? this.appUserId ?? undefined;
     const response = await this.request<CreateSessionResponse>("/v1/sessions", {
       body: JSON.stringify({
-        appUserId,
         channel,
         codingWorkspaceRoot: options.codingWorkspaceRoot,
         cognito: options.cognito,
@@ -795,10 +773,7 @@ export class NakamaClient {
       method: "POST",
     });
 
-    return this.forAppUser(appUserId ?? null).createChatSession(
-      response.sessionId,
-      channel
-    );
+    return this.createChatSession(response.sessionId, channel);
   }
 
   async getSessionMessages(
@@ -3132,39 +3107,6 @@ export class NakamaClient {
     );
   }
 
-  async createApiKey(
-    orgId: string,
-    request: CreateApiKeyRequest
-  ): Promise<CreateApiKeyResponse> {
-    return this.request<CreateApiKeyResponse>(
-      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys`,
-      { body: JSON.stringify(request), method: "POST" }
-    );
-  }
-
-  async listApiKeys(orgId: string): Promise<ListApiKeysResponse> {
-    return this.request<ListApiKeysResponse>(
-      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys`
-    );
-  }
-
-  async rotateApiKey(
-    orgId: string,
-    keyId: string
-  ): Promise<RotateApiKeyResponse> {
-    return this.request<RotateApiKeyResponse>(
-      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys/${encodeURIComponent(keyId)}/rotate`,
-      { method: "POST" }
-    );
-  }
-
-  async deleteApiKey(orgId: string, keyId: string): Promise<void> {
-    await this.request(
-      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys/${encodeURIComponent(keyId)}`,
-      { method: "DELETE" }
-    );
-  }
-
   async addOrgMember(
     orgId: string,
     request: AddOrgMemberRequest
@@ -3593,10 +3535,6 @@ export class NakamaClient {
 
     if (this.authToken) {
       merged["Authorization"] = `Bearer ${this.authToken}`;
-    }
-
-    if (this.appUserId && !merged["X-Nakama-App-User-Id"]) {
-      merged["X-Nakama-App-User-Id"] = this.appUserId;
     }
 
     if (this.orgId && !merged["X-Org-Id"]) {

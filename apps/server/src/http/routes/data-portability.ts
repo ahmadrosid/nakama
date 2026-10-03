@@ -320,11 +320,7 @@ export function registerDataPortabilityRoutes(
             }
             throw error;
           }
-          try {
-            await options.onDataRestored?.();
-          } catch {
-            // Restore committed; workers remain unregistered until the host reloads.
-          }
+          await options.onDataRestored?.();
           return result;
         });
       restore = options.googleMeetService

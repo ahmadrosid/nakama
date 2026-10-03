@@ -28,7 +28,6 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@nakama/client": "workspace:*",
     "@types/pacote": "^11.1.8",
     "msw": "^2.15.0"
   }

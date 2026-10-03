@@ -487,16 +487,12 @@ export interface AuthUserResponse {
   backupCodesEnabled?: boolean;
   email: string;
   id: string;
-  /**
-   * What this credential may do, not what its owner may do. An API key minted
-   * by a platform admin is de-privileged, so it reports false here.
-   */
   isPlatformAdmin?: boolean;
   mfaEnabled?: boolean;
   mfaEnrolled?: boolean;
   mfaRequired?: boolean;
-  /** Which credential answered, which is what explains the flag above. */
-  mode?: "api-key" | "browser-session" | "local-token";
+  /** Credential used for this request. */
+  mode?: "browser-session" | "local-token";
   name?: string | null;
   orgId?: string | null;
   passkeyEnabled?: boolean;
@@ -761,36 +757,6 @@ export interface RevokeBrowserSessionsResponse {
   revoked: number;
 }
 
-export interface ApiKeySummary {
-  createdAt: string;
-  environment: "live" | "test";
-  expiresAt: string | null;
-  id: string;
-  keyPrefix: string;
-  lastUsedAt: string | null;
-  name: string;
-  revokedAt: string | null;
-}
-
-export interface CreateApiKeyRequest {
-  expiresAt?: string | null;
-  name: string;
-}
-
-export interface CreateApiKeyResponse {
-  key: ApiKeySummary;
-  secret: string;
-}
-
-export interface ListApiKeysResponse {
-  keys: ApiKeySummary[];
-}
-
-export interface RotateApiKeyResponse {
-  key: ApiKeySummary;
-  secret: string;
-}
-
 export interface OrgMemoryResponse {
   content: string;
 }
@@ -1028,8 +994,6 @@ export interface ResetPasswordRequest {
 }
 
 export interface CreateSessionRequest {
-  /** Stable end-user identifier supplied by a trusted backend using an API key. */
-  appUserId?: string;
   channel: AgentChannel;
   codingWorkspaceRoot?: string;
   /**
@@ -2461,8 +2425,6 @@ export interface ListWorkspaceFilesResponse {
 }
 
 export interface ListArtifactsOptions {
-  /** Scopes the listing to one end user's artifacts, when the caller names one. */
-  appUserId?: string | null;
   folder?: string;
   limit?: number;
   offset?: number;

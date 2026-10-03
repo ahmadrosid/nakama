@@ -12,10 +12,9 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { readArtifactFile } from "../artifacts";
 import { convertDocxToMarkdown } from "../docx-text";
 import { getGlobalSkillsDir } from "../skills/paths";
-import { ensureAppUserSoulDir, getProfileSoulDir } from "../soul/resolve";
+import { getProfileSoulDir } from "../soul/resolve";
 import {
   PathGuardError,
   runDeleteFile,
@@ -1181,74 +1180,6 @@ describe("file builtin tools", () => {
     await expect(
       runReadFile({ path: "/etc/nakama-should-fail" }, PROFILE_CONTEXT, opts)
     ).rejects.toThrow(/relative path under the active profile workspace/i);
-  });
-  test("an app user's artifacts are written under that user's folder", async () => {
-    configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-appuser-"));
-    process.env.NAKAMA_CONFIG_DIR = configDir;
-    const appUserId = "app-user-42";
-    const userRoot = await ensureAppUserSoulDir(
-      PROFILE_CONTEXT.orgId,
-      PROFILE_CONTEXT.profileId,
-      appUserId
-    );
-    const context = buildToolExecutionContext({
-      ...PROFILE_CONTEXT,
-      workspaceRoot: userRoot,
-    });
-
-    const docx = await runWriteDocx(
-      { markdown: "# Draft", path: "artifacts/draft.docx" },
-      context
-    );
-    const text = await runWriteFile(
-      { content: "notes", path: "artifacts/notes.txt" },
-      context
-    );
-
-    expect(docx.path).toBe(
-      await realpath(path.join(userRoot, "artifacts", "draft.docx"))
-    );
-    expect(text.path).toBe(
-      await realpath(path.join(userRoot, "artifacts", "notes.txt"))
-    );
-    // The read side resolves the same folder, so the file it names is reachable.
-    await expect(
-      readArtifactFile({
-        appUserId,
-        filename: "draft.docx",
-        orgId: PROFILE_CONTEXT.orgId,
-        profileId: PROFILE_CONTEXT.profileId,
-      })
-    ).resolves.toMatchObject({ filePath: docx.path });
-  });
-
-  test("everything outside artifacts stays on the profile for an app user", async () => {
-    configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-appuser-"));
-    process.env.NAKAMA_CONFIG_DIR = configDir;
-    const profileRoot = getProfileSoulDir(
-      PROFILE_CONTEXT.orgId,
-      PROFILE_CONTEXT.profileId
-    );
-    const userRoot = await ensureAppUserSoulDir(
-      PROFILE_CONTEXT.orgId,
-      PROFILE_CONTEXT.profileId,
-      "app-user-42"
-    );
-    const context = buildToolExecutionContext({
-      ...PROFILE_CONTEXT,
-      workspaceRoot: userRoot,
-    });
-
-    // The knowledge base and the soul stack live on the profile, and an app-user
-    // session still has to reach them.
-    const written = await runWriteFile(
-      { content: "shared", path: "knowledge-base/policy.md" },
-      context
-    );
-
-    expect(written.path).toBe(
-      await realpath(path.join(profileRoot, "knowledge-base", "policy.md"))
-    );
   });
 
   test("a session with no app user writes artifacts where it always did", async () => {
