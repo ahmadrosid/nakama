@@ -855,6 +855,30 @@ describe("profile service cloneProfile", () => {
     ).toBe("kb body");
   });
 
+  test("clone migrates legacy knowledge base", async () => {
+    const { service, sourceId } = await setup();
+    const legacyDir = path.join(soulDirOf(sourceId), "data", "knowledge-base");
+    await rm(path.join(soulDirOf(sourceId), "knowledge-base"), {
+      force: true,
+      recursive: true,
+    });
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(
+      path.join(legacyDir, "doc_1--notes.txt"),
+      "kb body",
+      "utf8"
+    );
+
+    const { profile } = await service.cloneProfile(ORG_ID, sourceId, {});
+
+    expect(
+      await readFile(
+        path.join(soulDirOf(profile.id), "knowledge-base", "doc_1--notes.txt"),
+        "utf8"
+      )
+    ).toBe("kb body");
+  });
+
   test("gives each clone a unique id", async () => {
     const { service, sourceId } = await setup();
     const first = await service.cloneProfile(ORG_ID, sourceId, {});
