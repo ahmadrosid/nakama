@@ -3,9 +3,17 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
-import { MemoryRouter, useNavigate } from "react-router-dom";
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+import { useActiveChatProfileStore } from "@/context/active-chat-profile-store";
 import { AppProvider } from "@/context/app-context";
 import { AuthProvider } from "@/context/auth-context";
+import { useAuth } from "@/context/use-auth";
 import { client } from "@/lib/client";
 import { type ChatPageState, useChatPage } from "./use-chat-page";
 
@@ -496,5 +504,144 @@ test("switching chats does not refetch the profile list", async () => {
       configurable: true,
       value: previousStorage,
     });
+  }
+});
+
+test("switching orgs clears the old chat while new profiles load", async () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const previousStorage = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "localStorage"
+  );
+  const stored: Record<string, string> = {};
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => stored[key] ?? null,
+      removeItem(key: string) {
+        delete stored[key];
+      },
+      setItem(key: string, value: string) {
+        stored[key] = value;
+      },
+    },
+  });
+  const previousProfile = useActiveChatProfileStore.getState();
+  useActiveChatProfileStore.setState({ orgId: "orgA", profileId: "profileA" });
+  const nextProfiles = Promise.withResolvers<{
+    profiles: { id: string; name: string }[];
+  }>();
+  const user = (orgId: string) => ({
+    activeOrgId: orgId,
+    id: "user",
+    isPlatformAdmin: false,
+    orgId,
+  });
+  const spies = [
+    spyOn(client, "getMe").mockResolvedValue(user("orgA") as never),
+    spyOn(client, "listUserOrgs").mockResolvedValue({
+      orgs: [
+        { id: "orgA", name: "A" },
+        { id: "orgB", name: "B" },
+      ],
+    } as never),
+    spyOn(client, "setActiveOrg").mockImplementation(async () => {
+      client.setOrgId("orgB");
+      return user("orgB") as never;
+    }),
+    spyOn(client, "getSessionMessages").mockResolvedValue({
+      channel: "web",
+      messageMeta: [],
+      messages: [{ content: "Org A message", role: "user" }],
+      model: null,
+      questionnaire: null,
+      todos: [],
+    } as never),
+    spyOn(client, "getSessionStatus").mockResolvedValue({
+      active: false,
+    } as never),
+    spyOn(client, "getThinkingSettings").mockResolvedValue({} as never),
+    spyOn(client, "getProfile").mockResolvedValue({
+      profile: { id: "profileA", skills: [] },
+    } as never),
+  ];
+  const listProfiles = spyOn(client, "listProfiles").mockImplementation(
+    async () =>
+      listProfiles.mock.calls.length === 1
+        ? ({ profiles: [{ id: "profileA", name: "A" }] } as never)
+        : (nextProfiles.promise as never)
+  );
+  let page!: ChatPageState;
+  let switchOrg!: ReturnType<typeof useAuth>["switchOrg"];
+  let pathname = "";
+  function Probe() {
+    page = useChatPage();
+    switchOrg = useAuth().switchOrg;
+    pathname = useLocation().pathname;
+    return null;
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const settle = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter initialEntries={["/chat/profileA/sessionA"]}>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <AppProvider>
+                <Routes>
+                  <Route
+                    element={<Probe />}
+                    path="/chat/:profileId?/:sessionId?"
+                  />
+                </Routes>
+              </AppProvider>
+            </AuthProvider>
+          </QueryClientProvider>
+        </MemoryRouter>
+      )
+    );
+    await settle();
+    expect(page.session?.id).toBe("sessionA");
+    expect(page.messages).toHaveLength(1);
+    const getMessages = spies[3];
+    expect(getMessages).toHaveBeenCalledTimes(1);
+
+    await act(async () => switchOrg("orgB"));
+    expect(listProfiles).toHaveBeenCalledTimes(2);
+    expect(pathname).toBe("/chat");
+    expect(page.session).toBeNull();
+    expect(page.messages).toEqual([]);
+    expect(page.profileId).toBe("");
+    expect(getMessages).toHaveBeenCalledTimes(1);
+
+    await act(async () =>
+      nextProfiles.resolve({ profiles: [{ id: "profileB", name: "B" }] })
+    );
+    await settle();
+    expect(page.profileId).toBe("profileB");
+    expect(getMessages).toHaveBeenCalledTimes(1);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    listProfiles.mockRestore();
+    for (const spy of spies) {
+      spy.mockRestore();
+    }
+    queryClient.clear();
+    useActiveChatProfileStore.setState(previousProfile);
+    if (previousStorage) {
+      Object.defineProperty(globalThis, "localStorage", previousStorage);
+    } else {
+      Reflect.deleteProperty(globalThis, "localStorage");
+    }
   }
 });

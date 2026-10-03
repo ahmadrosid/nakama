@@ -166,25 +166,28 @@ export function useChatPage() {
   const [searchParams] = useSearchParams();
   const routeSession = useMemo(() => parseChatRouteParams(params), [params]);
   const { health, models } = useAppContext();
-  const { user, activeOrg } = useAuth();
+  const { user, activeOrg, isLoading: authLoading } = useAuth();
   const canManageInstallSettings = user?.isPlatformAdmin === true;
   const {
+    orgId: storeOrgId,
     profileId: storeProfileId,
     setProfileId,
     syncForOrg,
   } = useActiveChatProfile();
-  const profilesQuery = useProfilesQuery();
+  const profilesQuery = useProfilesQuery(activeOrg?.id ?? null);
   const profiles = useMemo(
     () => profilesQuery.data ?? [],
     [profilesQuery.data]
   );
   const profileId =
-    storeProfileId ??
-    readInitialDraftChatProfileId({
-      orgId: activeOrg?.id,
-      routeProfileId: parseChatRouteParams(params)?.profileId,
-      search: location.search,
-    });
+    activeOrg && storeOrgId !== activeOrg.id
+      ? ""
+      : (storeProfileId ??
+        readInitialDraftChatProfileId({
+          orgId: activeOrg?.id,
+          routeProfileId: parseChatRouteParams(params)?.profileId,
+          search: location.search,
+        }));
   const [session, setSession] = useState<RemoteChatSession | null>(null);
   const [cognito, setCognito] = useState(false);
   const [sessionModel, setSessionModel] = useState<string | null>(null);
@@ -231,6 +234,8 @@ export function useChatPage() {
   // Read inside sendMessage, which is memoised on other deps.
   const cognitoRef = useRef(cognito);
   const sessionLoadRef = useRef(0);
+  const sessionOrgRef = useRef<string | null | undefined>(undefined);
+  const orgRouteResetRef = useRef(false);
 
   /**
    * Hand the current stream back before the page moves to another chat.
@@ -473,6 +478,41 @@ export function useChatPage() {
     },
     [location.pathname, navigate, releaseActiveStream, restoreLastChatModel]
   );
+
+  useLayoutEffect(() => {
+    if (authLoading) {
+      return;
+    }
+    const nextOrgId = activeOrg?.id ?? null;
+    if (sessionOrgRef.current === undefined) {
+      sessionOrgRef.current = nextOrgId;
+      return;
+    }
+    if (sessionOrgRef.current === nextOrgId) {
+      return;
+    }
+    sessionOrgRef.current = nextOrgId;
+    sessionLoadRef.current += 1;
+    loadedRouteRef.current = null;
+    orgRouteResetRef.current = Boolean(routeSession);
+    releaseActiveStream();
+    activeSessionIdRef.current = null;
+    messageQueueRef.current = [];
+    isSendingRef.current = false;
+    setQueuedMessages([]);
+    setSession(null);
+    setMessages([]);
+    setAgentTodos([]);
+    setAgentQuestionnaire(null);
+    setContextUsage(null);
+    setSessionModel(null);
+    setError(null);
+    setBusy(false);
+    setTurnStartedAt(null);
+    if (routeSession) {
+      navigate(buildChatBasePath(), { replace: true });
+    }
+  }, [activeOrg?.id, authLoading, navigate, releaseActiveStream, routeSession]);
 
   const handleThinkingEffortChange = useCallback(
     (effort: ThinkingEffort) => {
@@ -846,7 +886,13 @@ export function useChatPage() {
   ]);
 
   useEffect(() => {
-    if (!profileId || routeSession) {
+    if (
+      !profileId ||
+      authLoading ||
+      routeSession ||
+      (activeOrg?.id &&
+        !profilesQuery.data?.some((profile) => profile.id === profileId))
+    ) {
       return;
     }
     if (skipNextProfileSessionRef.current) {
@@ -854,10 +900,28 @@ export function useChatPage() {
       return;
     }
     enterDraftChat(profileId);
-  }, [profileId, routeSession, enterDraftChat]);
+  }, [
+    profileId,
+    routeSession,
+    enterDraftChat,
+    profilesQuery.data,
+    activeOrg?.id,
+    authLoading,
+  ]);
 
   useEffect(() => {
     if (!routeSession) {
+      orgRouteResetRef.current = false;
+      return;
+    }
+    if (
+      authLoading ||
+      orgRouteResetRef.current ||
+      (activeOrg?.id &&
+        !profilesQuery.data?.some(
+          (profile) => profile.id === routeSession.profileId
+        ))
+    ) {
       return;
     }
     const routeKey = `${routeSession.profileId}:${routeSession.sessionId}`;
@@ -867,9 +931,18 @@ export function useChatPage() {
     loadedRouteRef.current = routeKey;
     skipNextProfileSessionRef.current = true;
     void resumeSession(routeSession.profileId, routeSession.sessionId);
-  }, [routeSession, resumeSession]);
+  }, [
+    routeSession,
+    resumeSession,
+    profilesQuery.data,
+    activeOrg?.id,
+    authLoading,
+  ]);
 
   useEffect(() => {
+    if (orgRouteResetRef.current) {
+      return;
+    }
     if (profilesQuery.error) {
       setError(formatError(profilesQuery.error));
       return;
