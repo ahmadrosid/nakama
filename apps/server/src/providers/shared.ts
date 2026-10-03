@@ -360,3 +360,16 @@ export function formatHttpErrorBody(
 
   return `${label} request failed (${status}): ${trimmed.slice(0, 500)}`;
 }
+
+export class ProviderHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+    readonly partialOutput = false,
+    readonly retryAfterMs?: number
+  ) {
+    super(message);
+    this.name = "ProviderHttpError";
+  }
+}

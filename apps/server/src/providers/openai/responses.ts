@@ -17,6 +17,7 @@ import {
   buildTokenUsage,
   formatHttpErrorBody,
   normalizeThinkingEffort,
+  ProviderHttpError,
   parseJsonRecord,
   readRecord,
   readSseEvents,
@@ -69,8 +70,27 @@ export async function generateOpenAIResponsesChat(options: {
   });
 
   if (!response.ok) {
-    throw new Error(
-      formatHttpErrorBody(label, response.status, await response.text())
+    const errorBody = await response.text();
+    let code: string | undefined;
+    try {
+      const parsed = JSON.parse(errorBody) as {
+        error?: { code?: unknown; type?: unknown };
+      };
+      const error = parsed.error;
+      if (typeof error?.code === "string") {
+        code = error.code;
+      } else if (typeof error?.type === "string") {
+        code = error.type;
+      }
+    } catch {
+      /* provider may return plain text */
+    }
+    throw new ProviderHttpError(
+      formatHttpErrorBody(label, response.status, errorBody),
+      response.status,
+      code,
+      false,
+      parseRetryAfter(response.headers.get("retry-after"))
     );
   }
 
@@ -95,6 +115,20 @@ export async function generateOpenAIResponsesChat(options: {
     options.handlers,
     payload.usage
   );
+}
+
+function parseRetryAfter(value: string | null): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) {
+    return Math.max(0, seconds * 1000);
+  }
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp)
+    ? Math.max(0, timestamp - Date.now())
+    : undefined;
 }
 
 async function buildResponsesRequestBody(
@@ -406,6 +440,7 @@ async function readOpenAIResponsesStream(
   let usage: ChatCompletionResult["usage"];
   const output: ResponseItem[] = [];
   const outputIndex = new Map<string, ResponseItem>();
+  let emitted = false;
 
   await readSseEvents(body, ({ data }) => {
     const payload = JSON.parse(data) as Record<string, unknown>;
@@ -425,12 +460,14 @@ async function readOpenAIResponsesStream(
     if (type === "response.output_text.delta") {
       const delta = String(payload.delta ?? "");
       content += delta;
+      emitted ||= delta.length > 0;
       handlers?.onChunk(delta);
     }
 
     if (type === "response.reasoning_summary_text.delta") {
       const delta = String(payload.delta ?? "");
       thinking += delta;
+      emitted ||= delta.length > 0;
       handlers?.onThinking?.(delta);
     }
 
@@ -453,8 +490,22 @@ async function readOpenAIResponsesStream(
       }
 
       if (item.type === "web_search_call") {
+        emitted = true;
         emitWebSearchToolEvent(item, handlers);
       }
+    }
+
+    if (type === "response.failed" || type === "error") {
+      const error = readRecord(responseRecord.error ?? payload.error);
+      const code = typeof error.code === "string" ? error.code : undefined;
+      throw new ProviderHttpError(
+        typeof error.message === "string"
+          ? error.message
+          : "ChatGPT response failed.",
+        typeof error.status === "number" ? error.status : 500,
+        code,
+        emitted
+      );
     }
   });
 

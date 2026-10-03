@@ -100,10 +100,14 @@ function ProviderInstanceTableRow({
   instance,
   card,
   canManage,
+  chatgptPosition,
+  onMoveChatgpt,
 }: {
   instance: ProviderInstanceSummary;
   card: ReturnType<typeof useProviderInstanceCard>;
   canManage: boolean;
+  chatgptPosition?: { index: number; count: number };
+  onMoveChatgpt?: (direction: -1 | 1) => void;
 }) {
   const endpoint = instance.baseUrl?.trim() || null;
 
@@ -113,6 +117,13 @@ function ProviderInstanceTableRow({
         <p className="truncate font-medium text-foreground text-sm">
           {instance.label}
         </p>
+        {instance.type === "chatgpt" &&
+        instance.accountStatus === "rate_limited" ? (
+          <p className="text-amber-300 text-xs">Temporarily limited</p>
+        ) : instance.type === "chatgpt" &&
+          instance.accountStatus === "reauth_required" ? (
+          <p className="text-destructive text-xs">Reconnect required</p>
+        ) : null}
       </td>
       <td className="px-3 py-2.5 align-middle">
         {endpoint ? (
@@ -133,6 +144,24 @@ function ProviderInstanceTableRow({
       </td>
       <td className="px-3 py-2.5 align-middle">
         <div className="flex items-center justify-end gap-0.5">
+          {chatgptPosition && onMoveChatgpt ? (
+            <>
+              <ProviderActionButton
+                disabled={chatgptPosition.index === 0}
+                label="Move ChatGPT account up"
+                onClick={() => onMoveChatgpt(-1)}
+              >
+                ↑
+              </ProviderActionButton>
+              <ProviderActionButton
+                disabled={chatgptPosition.index === chatgptPosition.count - 1}
+                label="Move ChatGPT account down"
+                onClick={() => onMoveChatgpt(1)}
+              >
+                ↓
+              </ProviderActionButton>
+            </>
+          ) : null}
           {card.isCompatibleLike ? (
             <ProviderActionButton label="Edit" onClick={card.openEdit}>
               <Edit03Icon className="size-3.5" />
@@ -266,6 +295,11 @@ function ProviderInstanceCardDialogs({
         dialogError={card.dialogError}
         instance={instance}
         onApiKeyChange={card.setApiKey}
+        onChatgptModelsChange={(models) => {
+          if (models.length > 0) {
+            card.setChatgptModels(models);
+          }
+        }}
         onChatgptOAuthChange={card.setChatgptOAuth}
         onOpenChange={card.setReplaceKeyOpen}
         onSave={() => void card.handleReplaceKey()}
@@ -324,6 +358,8 @@ export function ProviderInstanceCard({
   onDelete,
   onError,
   isSole = false,
+  chatgptPosition,
+  onMoveChatgpt,
 }: {
   instance: ProviderInstanceSummary;
   catalog: ProviderModelOption[];
@@ -334,6 +370,8 @@ export function ProviderInstanceCard({
   onDelete: (providerId: string) => Promise<void>;
   onError: (error: string | null) => void;
   isSole?: boolean;
+  chatgptPosition?: { index: number; count: number };
+  onMoveChatgpt?: (direction: -1 | 1) => void;
 }) {
   const card = useProviderInstanceCard({
     catalog,
@@ -349,7 +387,9 @@ export function ProviderInstanceCard({
       <ProviderInstanceTableRow
         canManage={canManage}
         card={card}
+        chatgptPosition={chatgptPosition}
         instance={instance}
+        onMoveChatgpt={onMoveChatgpt}
       />
       <ProviderInstanceCardDialogs
         canManage={canManage}

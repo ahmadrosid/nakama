@@ -1,5 +1,6 @@
 import type {
   ChatgptOAuthCredentials,
+  CustomModelEntry,
   OpenRouterRoutingSettings,
   ProviderInstanceSummary,
   ProviderModelOption,
@@ -56,6 +57,9 @@ export function useProviderInstanceCard({
   const [xaiOAuth, setXaiOAuth] = useState<XaiOAuthCredentials | null>(null);
   const [chatgptOAuth, setChatgptOAuth] =
     useState<ChatgptOAuthCredentials | null>(null);
+  const [chatgptModels, setChatgptModels] = useState<CustomModelEntry[]>(
+    instance.customModels ?? []
+  );
   const [showApiKey, setShowApiKey] = useState(false);
   const [editLabel, setEditLabel] = useState("");
   const [editBaseUrl, setEditBaseUrl] = useState("");
@@ -150,7 +154,7 @@ export function useProviderInstanceCard({
         return;
       }
 
-      await runUpdate({ chatgptOAuth }, () => {
+      await runUpdate({ chatgptOAuth, customModels: chatgptModels }, () => {
         setReplaceKeyOpen(false);
         setChatgptOAuth(null);
       });
@@ -249,6 +253,7 @@ export function useProviderInstanceCard({
     apiKey,
     busy,
     catalogModelsForType,
+    chatgptModels,
     chatgptOAuth,
     deleteOpen,
     dialogError,
@@ -277,6 +282,7 @@ export function useProviderInstanceCard({
     saveCompatible,
     saveManageModels,
     setApiKey,
+    setChatgptModels,
     setChatgptOAuth,
     setDeleteOpen,
     setEditBaseUrl,

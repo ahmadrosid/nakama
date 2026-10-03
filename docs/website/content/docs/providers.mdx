@@ -44,7 +44,7 @@ Nakama supports these built-in provider types:
 | Provider | Notes |
 |---|---|
 | OpenAI | GPT models; required for OpenAI audio transcription (Telegram voice notes); can also drive local image-generation and transcription endpoints via a custom base URL |
-| ChatGPT (Plus/Pro) | Sign in with ChatGPT; uses your plan quota via Codex (not API credits). One account per Nakama instance |
+| ChatGPT (Plus/Pro) | Sign in with ChatGPT; uses your plan quota via Codex (not API credits). Multiple accounts with automatic failover |
 | Grok (SuperGrok / Premium+) | Sign in with your xAI subscription; API eligibility depends on your plan |
 | Anthropic | Claude models |
 | OpenRouter | Route to many models through one API key |
@@ -65,7 +65,7 @@ Nakama supports these built-in provider types:
 | OpenCode Go | OpenCode Go endpoint |
 | Custom (OpenAI-compatible) | Any OpenAI-compatible API; multiple instances allowed |
 
-Most built-in types allow one configured instance each. **Ollama** and **Custom (OpenAI-compatible)** can be added multiple times (for example local Ollama plus a remote compatible endpoint).
+Most built-in types allow one configured instance each. **ChatGPT (Plus/Pro)**, **Ollama**, and **Custom (OpenAI-compatible)** can be added multiple times (for example several ChatGPT accounts or local Ollama plus a remote compatible endpoint).
 
 ## Provider-specific features
 
@@ -88,10 +88,22 @@ Platform admins manage provider credentials globally. Org members use the models
 
 ChatGPT Plus/Pro is **not** an OpenAI API key. In **Settings → LLM providers**, choose **ChatGPT (Plus/Pro)**, click **Sign in with ChatGPT**, open the device link, enter the code, then save.
 
-- One ChatGPT account covers the whole Nakama instance (operator use, not per-user login)
+- Connected ChatGPT accounts are shared across the whole Nakama instance (operator use, not per-user login)
 - Usage comes from your ChatGPT plan quota, not pay-as-you-go API billing
 - Whisper transcription and image generation still need a regular OpenAI API-key provider or an OpenAI-compatible provider with a base URL
 - Coding-agent provider passthrough does not apply to this provider type — use **Integrations → Coding agents → harness login** with `codex login` for Codex CLI subscription use
+
+### Connect multiple accounts
+
+Keep chats running when an account reaches its usage limit by connecting another ChatGPT account.
+
+1. In **Settings → LLM providers → Add provider**, choose **ChatGPT (Plus/Pro)**.
+2. Click **Sign in with ChatGPT**, open the device link, and sign in with the additional account. Enter the code, then save.
+3. Repeat for each account. Use **Move ChatGPT account up** or **Move ChatGPT account down** to set the fallback order.
+
+Nakama tries the selected account first. If it is rate-limited, reaches its usage limit, or needs to sign in again, Nakama tries the other connected accounts in order. Each fallback account must have the same model configured. Rate-limited accounts are temporarily skipped, then become eligible again after their cooldown.
+
+If every eligible account is unavailable, the request ends with an error. Reconnect accounts that need to sign in again in **Settings → LLM providers**. A reply that has already started streaming is not retried on another account.
 
 ## Grok (SuperGrok / Premium+)
 

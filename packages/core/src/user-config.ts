@@ -720,9 +720,9 @@ function loadProvidersFromSections(
     });
   }
 
-  return providers.sort((left, right) =>
-    left.createdAt.localeCompare(right.createdAt)
-  );
+  // Provider section order is the configured priority order (including
+  // ChatGPT account failover), so preserve it across restarts.
+  return providers;
 }
 
 function buildProviderSectionValues(

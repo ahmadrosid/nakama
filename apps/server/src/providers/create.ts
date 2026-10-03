@@ -255,6 +255,7 @@ export function readApiKeyForInstance(
 }
 
 export interface CreateProviderForInstanceOptions {
+  fallbackInstances?: ProviderInstance[];
   onChatgptTokenRefresh?: (
     instanceId: string,
     oauth: ChatgptOAuthCredentials
@@ -299,10 +300,36 @@ export function createProviderForInstance(
     }
 
     return createChatgptProvider({
+      fallbacks: (options?.fallbackInstances ?? [])
+        .filter(
+          (candidate) =>
+            candidate.id !== instance.id &&
+            candidate.type === "chatgpt" &&
+            isChatgptProviderConnected(candidate) &&
+            candidate.customModels?.some((entry) => entry.id === model)
+        )
+        .map((candidate) => ({
+          getOAuth: () => {
+            const latest =
+              options?.resolveInstance?.(candidate.id) ?? candidate;
+            return readChatgptOAuthFromInstance(latest);
+          },
+          instanceId: candidate.id,
+          label: candidate.label,
+          model,
+          ...(options?.onChatgptTokenRefresh
+            ? {
+                onTokenRefresh: (oauth: ChatgptOAuthCredentials) =>
+                  options.onChatgptTokenRefresh!(candidate.id, oauth),
+              }
+            : {}),
+        })),
       getOAuth: () => {
         const latest = options?.resolveInstance?.(instance.id) ?? instance;
         return readChatgptOAuthFromInstance(latest);
       },
+      instanceId: instance.id,
+      label: instance.label,
       model,
       ...(options?.onChatgptTokenRefresh
         ? {
@@ -341,7 +368,8 @@ export function createProviderForInstance(
 
 export function createProviderFromActiveConfig(
   userConfig: UserConfig | null | undefined,
-  env: Record<string, string | undefined> = process.env
+  env: Record<string, string | undefined> = process.env,
+  options?: CreateProviderForInstanceOptions
 ): ProviderClient | null {
   const instance = getActiveProviderInstance(userConfig);
 
@@ -355,5 +383,8 @@ export function createProviderFromActiveConfig(
     return null;
   }
 
-  return createProviderForInstance(instance, model, env);
+  return createProviderForInstance(instance, model, env, {
+    fallbackInstances: userConfig?.providers,
+    ...options,
+  });
 }

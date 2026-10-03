@@ -170,6 +170,11 @@ const INSTALL_WRITES: { body?: unknown; method: string; path: string }[] = [
   },
   { body: { provider: "openai" }, method: "POST", path: "/v1/providers" },
   {
+    body: { providerIds: [] },
+    method: "PUT",
+    path: "/v1/providers/chatgpt-order",
+  },
+  {
     body: { baseUrl: "http://attacker.example.com/v1" },
     method: "PATCH",
     path: "/v1/providers/provider_1",
