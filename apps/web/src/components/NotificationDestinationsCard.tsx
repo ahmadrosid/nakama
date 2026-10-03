@@ -194,7 +194,7 @@ function LatestSecret({
 function isWhatsAppRecipientReady(
   settings: ReturnType<typeof useNotificationWhatsAppSettings>
 ): boolean {
-  return !!settings.data?.pairedJid && !settings.isFetching && !settings.error;
+  return !!settings.data?.pairedJid && !settings.isLoading && !settings.error;
 }
 
 function isDestinationRequestValid(value: unknown): boolean {
@@ -446,7 +446,7 @@ function NotificationTargetFields({
       <div className="space-y-1 text-sm">
         <p>
           Recipient:{" "}
-          {whatsapp.isFetching
+          {whatsapp.isLoading
             ? "Loading…"
             : whatsapp.data?.pairedJid || "Not paired"}
         </p>
