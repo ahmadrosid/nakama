@@ -629,8 +629,6 @@ export async function writeDiscordConfigIni(
   await writeFile(path.join(dir, "config.ini"), lines.join("\n"), "utf8");
 }
 
-export { createDefaultTestOrgs };
-
 export function createTestOrgStore(homeDir: string): ChannelOrgStore {
   return createSharedTestOrgStore(homeDir, "discord");
 }

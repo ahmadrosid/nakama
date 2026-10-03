@@ -82,6 +82,10 @@ const SkillDetailPage = lazyPage(
 );
 const StatusPage = lazyPage(() => import("@/pages/StatusPage"), "StatusPage");
 const LlmUsageTab = lazyPage(() => import("@/pages/StatusPage"), "LlmUsageTab");
+const GoogleMeetPage = lazyPage(
+  () => import("@/pages/GoogleMeetPage"),
+  "GoogleMeetPage"
+);
 const PluginPage = lazyPage(() => import("@/pages/PluginPage"), "PluginPage");
 const PluginsPage = lazyPage(
   () => import("@/pages/PluginsPage"),
@@ -209,6 +213,10 @@ function AppShell() {
                       path="/system/plugins/:pluginId"
                     />
                   </Route>
+                  <Route
+                    element={<GoogleMeetPage />}
+                    path="/plugins/google-meet"
+                  />
                   <Route element={<PluginPage />} path="/plugins/:pluginId" />
                   <Route element={<PlatformAdminGuard allowOrgAdmin />}>
                     <Route element={<ProfilesPage />} path="/profiles" />

@@ -33,6 +33,21 @@ describe("org memory parse/rebuild", () => {
     expect(rebuilt).toBe(content);
   });
 
+  test("parses pinned and dated sections from a CRLF file", () => {
+    const content =
+      "## Org Memory\r\n\r\n## Pinned\r\n\r\n- pinned fact\r\n\r\n## 2026-07-25\r\n\r\n- dated fact\r\n";
+    const parsed = parseOrgMemoryContent(content);
+
+    expect(parsed.preamble).toBe("## Org Memory");
+    expect(parsed.pinned).toEqual(["pinned fact"]);
+    expect(parsed.sections).toEqual([
+      { bullets: ["dated fact"], date: "2026-07-25" },
+    ]);
+    expect(rebuildOrgMemoryContent(parsed)).toBe(
+      content.replaceAll("\r\n", "\n")
+    );
+  });
+
   test("rebuild adds the preamble when missing", () => {
     const rebuilt = rebuildOrgMemoryContent({
       pinned: ["a fact"],

@@ -107,7 +107,7 @@ export function usePluginAgentAccess() {
   });
 }
 
-export async function savePluginAgentAccess(
+async function savePluginAgentAccess(
   orgId: string,
   pluginId: string,
   changes: Record<string, boolean>
@@ -181,14 +181,14 @@ export function useSavePluginAgentAccess() {
   });
 }
 
-export function orgPluginsQueryOptions(orgId: string) {
+function orgPluginsQueryOptions(orgId: string) {
   return queryOptions({
     queryFn: () => client.listOrgPlugins(orgId),
     queryKey: queryKeys.plugins.all(orgId),
   });
 }
 
-export function orgPluginQueryOptions(orgId: string, pluginId: string) {
+function orgPluginQueryOptions(orgId: string, pluginId: string) {
   return queryOptions({
     queryFn: () => client.getOrgPlugin(pluginId, orgId),
     queryKey: queryKeys.plugins.detail(orgId, pluginId),
@@ -231,41 +231,6 @@ export function useInstallOfficialPlugin() {
       });
     }
   );
-}
-
-export function useInstallGoogleMeet(orgId: string, expectedRevision?: number) {
-  const queryClient = useQueryClient();
-  const install = useMutation({
-    mutationFn: async () =>
-      expectedRevision === undefined
-        ? client.installOfficialPlugin("google-meet", orgId)
-        : client.reinstallOfficialPlugin(
-            "google-meet",
-            expectedRevision,
-            orgId
-          ),
-    onSettled: async () => {
-      await invalidateOrgPlugins(queryClient, orgId);
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.plugins.releases,
-      });
-    },
-  });
-  const dependencies: {
-    data: {
-      state: "ready";
-      steps: Array<{
-        id: string;
-        label: string;
-        state: "failed" | "installing" | "pending" | "ready";
-      }>;
-    };
-    isLoading: boolean;
-  } = {
-    data: { state: "ready" as const, steps: [] },
-    isLoading: false,
-  };
-  return { dependencies, install };
 }
 
 export function useReinstallOfficialPlugin() {

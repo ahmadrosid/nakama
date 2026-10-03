@@ -868,7 +868,10 @@ describe("plugin lifecycle", () => {
         getOrgPluginDataDir("org-a", "notes", configDir),
         "started"
       );
-      for (let i = 0; i < 100 && !existsSync(marker); i++) {
+      for (let i = 0; i < 300; i++) {
+        if (existsSync(marker) && (await Bun.file(marker).text())) {
+          break;
+        }
         await Bun.sleep(10);
       }
       expect(await Bun.file(marker).text()).toBe("org-a");

@@ -1,6 +1,7 @@
 import {
   NakamaApiError,
   NakamaAuthExpiredError,
+  readApiErrorDetails,
   readApiErrorMessage,
 } from "@nakama/core/api-error";
 import type {
@@ -115,6 +116,7 @@ import type {
   ListWorkspaceFilesResponse,
   MarkAutomationRunsReadResponse,
   McpServerResponse,
+  MfaBackupCodesResponse,
   MfaPolicyResponse,
   MfaTotpStartResponse,
   MfaTotpVerifyResponse,
@@ -132,6 +134,10 @@ import type {
   OrgMemorySearchRequest,
   OrgMemorySearchResponse,
   OrgPluginDetail,
+  PasskeyAuthenticationOptionsResponse,
+  PasskeyCredentialResponse,
+  PasskeyRegistrationOptionsResponse,
+  PasskeyVerificationResponse,
   PatchSkillRequest,
   PinOrgMemoryRequest,
   PluginContributionChangePreview,
@@ -258,6 +264,7 @@ import type {
   XaiOAuthDeviceStartResponse,
 } from "@nakama/core/contract";
 import { withDisabledFetchIdle } from "@nakama/core/fetch-idle";
+import type { MeetAction, MeetActionResults } from "@nakama/core/google-meet";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { resolveServerUrl } from "@nakama/core/runtime";
 import { readBrowserOrigin, readCookie } from "./browser";
@@ -278,14 +285,30 @@ import type {
 } from "./types";
 
 export class NakamaClient {
+  invokeGoogleMeet<Action extends MeetAction>(
+    action: Action,
+    input: unknown,
+    orgId: string,
+    signal?: AbortSignal
+  ): Promise<MeetActionResults[Action]> {
+    return this.request(`/v1/meet/actions/${encodeURIComponent(action)}`, {
+      body: JSON.stringify(input ?? {}),
+      headers: { "X-Org-Id": orgId },
+      method: "POST",
+      signal,
+    });
+  }
+
   readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly credentials: RequestCredentials;
   private readonly clientOrigin: string | null;
+  private appUserId: string | null;
   private authToken: string | null;
   private orgId: string | null;
 
   constructor(options: NakamaClientOptions = {}) {
+    this.appUserId = options.appUserId?.trim() || null;
     this.baseUrl = (options.baseUrl ?? resolveServerUrl()).replace(/\/$/, "");
     const fetchFn = options.fetch ?? fetch;
     this.fetchImpl = ((input, init) => fetchFn(input, init)) as typeof fetch;
@@ -299,6 +322,19 @@ export class NakamaClient {
     this.authToken = token;
   }
 
+  /** Independent request scope; changing its app user never changes the parent client. */
+  forAppUser(appUserId: string | null): NakamaClient {
+    return new NakamaClient({
+      appUserId,
+      authToken: this.authToken ?? undefined,
+      baseUrl: this.baseUrl,
+      clientOrigin: this.clientOrigin ?? undefined,
+      credentials: this.credentials,
+      fetch: this.fetchImpl,
+      orgId: this.orgId,
+    });
+  }
+
   setOrgId(orgId: string | null): void {
     this.orgId = orgId?.trim() || null;
   }
@@ -306,6 +342,7 @@ export class NakamaClient {
   /** Independent request scope; changing its org never changes the parent client. */
   forOrg(orgId: string | null): NakamaClient {
     return new NakamaClient({
+      appUserId: this.appUserId,
       authToken: this.authToken ?? undefined,
       baseUrl: this.baseUrl,
       clientOrigin: this.clientOrigin ?? undefined,
@@ -741,8 +778,10 @@ export class NakamaClient {
     channel: AgentChannel,
     options: Omit<CreateSessionRequest, "channel"> = {}
   ): Promise<RemoteChatSession> {
+    const appUserId = options.appUserId ?? this.appUserId ?? undefined;
     const response = await this.request<CreateSessionResponse>("/v1/sessions", {
       body: JSON.stringify({
+        appUserId,
         channel,
         codingWorkspaceRoot: options.codingWorkspaceRoot,
         cognito: options.cognito,
@@ -752,14 +791,19 @@ export class NakamaClient {
       method: "POST",
     });
 
-    return this.createChatSession(response.sessionId, channel);
+    return this.forAppUser(appUserId ?? null).createChatSession(
+      response.sessionId,
+      channel
+    );
   }
 
   async getSessionMessages(
-    sessionId: string
+    sessionId: string,
+    options: { signal?: AbortSignal } = {}
   ): Promise<SessionMessagesResponse> {
     return this.request<SessionMessagesResponse>(
-      `/v1/sessions/${encodeURIComponent(sessionId)}/messages`
+      `/v1/sessions/${encodeURIComponent(sessionId)}/messages`,
+      { signal: options.signal }
     );
   }
 
@@ -1448,7 +1492,12 @@ export class NakamaClient {
   async readProfileArtifactContent(
     profileId: string,
     artifactPath: string,
-    options: { inline?: boolean; render?: "markdown" } = {}
+    options: {
+      inline?: boolean;
+      render?: "markdown";
+      signal?: AbortSignal;
+      maxBytes?: number;
+    } = {}
   ): Promise<{ contentType: string; data: ArrayBuffer }> {
     const query = new URLSearchParams({ path: artifactPath });
     if (options.inline) {
@@ -1459,14 +1508,83 @@ export class NakamaClient {
     }
 
     const response = await this.fetchRaw(
-      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`
+      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`,
+      { signal: options.signal }
     );
 
+    let data: ArrayBuffer;
+    if (options.maxBytes === undefined) {
+      data = await response.arrayBuffer();
+    } else {
+      const maxBytes = options.maxBytes;
+      if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+        await response.body?.cancel();
+        throw new Error("maxBytes must be a nonnegative integer.");
+      }
+      const reader = response.body?.getReader();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      const onAbort = () => {
+        void reader?.cancel().catch(() => {});
+      };
+      options.signal?.addEventListener("abort", onAbort, { once: true });
+      try {
+        if (Number(response.headers.get("Content-Length")) > maxBytes) {
+          throw new Error("Artifact exceeds the download byte budget.");
+        }
+        while (reader) {
+          options.signal?.throwIfAborted();
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+          size += value.byteLength;
+          if (size > maxBytes) {
+            throw new Error("Artifact exceeds the download byte budget.");
+          }
+          chunks.push(value);
+        }
+        options.signal?.throwIfAborted();
+        const bytes = new Uint8Array(size);
+        let offset = 0;
+        for (const chunk of chunks) {
+          bytes.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
+        data = bytes.buffer;
+      } catch (error) {
+        await reader?.cancel().catch(() => {});
+        throw error;
+      } finally {
+        options.signal?.removeEventListener("abort", onAbort);
+        reader?.releaseLock();
+      }
+    }
     return {
       contentType:
         response.headers.get("Content-Type") ?? "application/octet-stream",
-      data: await response.arrayBuffer(),
+      data,
     };
+  }
+
+  async hasProfileArtifact(
+    profileId: string,
+    artifactPath: string
+  ): Promise<boolean> {
+    const query = new URLSearchParams({ path: artifactPath });
+
+    try {
+      await this.fetchRaw(
+        `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`,
+        { method: "HEAD" }
+      );
+      return true;
+    } catch (error) {
+      if (error instanceof NakamaApiError && error.status === 404) {
+        return false;
+      }
+      throw error;
+    }
   }
 
   async writeProfileArtifactContent(
@@ -1644,8 +1762,8 @@ export class NakamaClient {
 
         return response.automation;
       },
-      getMessages: async () => {
-        const response = await this.getSessionMessages(sessionId);
+      getMessages: async (options) => {
+        const response = await this.getSessionMessages(sessionId, options);
         return response.messages;
       },
       id: sessionId,
@@ -2508,7 +2626,12 @@ export class NakamaClient {
   async login(
     email: string,
     password: string,
-    mfa?: { backupCode?: string; mfaCode?: string }
+    mfa?: {
+      backupCode?: string;
+      mfaCode?: string;
+      passkey?: PasskeyCredentialResponse;
+      passkeyChallenge?: string;
+    }
   ): Promise<AuthUserResponse> {
     const response = await this.request<AuthUserResponse>("/v1/auth/login", {
       body: JSON.stringify({ email, password, ...mfa }),
@@ -2517,6 +2640,15 @@ export class NakamaClient {
 
     this.applyAuthUserResponse(response);
     return response;
+  }
+  async getPasskeyLoginOptions(): Promise<PasskeyAuthenticationOptionsResponse> {
+    return this.request<PasskeyAuthenticationOptionsResponse>(
+      "/v1/auth/passkey/login/options",
+      {
+        body: JSON.stringify({}),
+        method: "POST",
+      }
+    );
   }
   async getMfaPolicy(): Promise<MfaPolicyResponse> {
     return this.request<MfaPolicyResponse>("/v1/settings/mfa");
@@ -2535,6 +2667,53 @@ export class NakamaClient {
 
   async startTotp(): Promise<MfaTotpStartResponse> {
     return this.request<MfaTotpStartResponse>("/v1/auth/mfa/totp/start", {
+      method: "POST",
+    });
+  }
+  async generateBackupCodes(input: {
+    mfaCode?: string;
+    passkey?: PasskeyCredentialResponse;
+    passkeyChallenge?: string;
+    password?: string;
+  }): Promise<MfaBackupCodesResponse> {
+    return this.request<MfaBackupCodesResponse>("/v1/auth/mfa/backup-codes", {
+      body: JSON.stringify(input),
+      method: "POST",
+    });
+  }
+
+  async startPasskey(): Promise<PasskeyRegistrationOptionsResponse> {
+    return this.request<PasskeyRegistrationOptionsResponse>(
+      "/v1/auth/mfa/passkey/start",
+      { method: "POST" }
+    );
+  }
+
+  async verifyPasskey(
+    challenge: string,
+    credential: PasskeyCredentialResponse,
+    name?: string
+  ): Promise<PasskeyVerificationResponse> {
+    return this.request<PasskeyVerificationResponse>(
+      "/v1/auth/mfa/passkey/verify",
+      {
+        body: JSON.stringify({
+          challenge,
+          credential,
+          ...(name ? { name } : {}),
+        }),
+        method: "POST",
+      }
+    );
+  }
+
+  async disablePasskey(input: {
+    backupCode?: string;
+    challenge?: string;
+    credential?: PasskeyCredentialResponse;
+  }): Promise<{ enabled: boolean }> {
+    return this.request<{ enabled: boolean }>("/v1/auth/mfa/passkey/disable", {
+      body: JSON.stringify(input),
       method: "POST",
     });
   }
@@ -3412,6 +3591,10 @@ export class NakamaClient {
       merged["Authorization"] = `Bearer ${this.authToken}`;
     }
 
+    if (this.appUserId && !merged["X-Nakama-App-User-Id"]) {
+      merged["X-Nakama-App-User-Id"] = this.appUserId;
+    }
+
     if (this.orgId && !merged["X-Org-Id"]) {
       merged["X-Org-Id"] = this.orgId;
     }
@@ -3430,8 +3613,10 @@ async function createApiError(
   response: Response,
   path: string
 ): Promise<NakamaApiError> {
-  const message = await readApiErrorMessage(response);
-  return new NakamaApiError(message, response.status, path);
+  const details = await readApiErrorDetails(response);
+  return new NakamaApiError(details.message, response.status, path, undefined, {
+    totpEnabled: details.totpEnabled,
+  });
 }
 
 function isMutatingMethod(method: string): boolean {

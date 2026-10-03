@@ -10,6 +10,8 @@ import type {
 } from "@nakama/core/contract";
 
 export interface NakamaClientOptions {
+  /** Stable end-user scope used with API-key authentication. */
+  appUserId?: string | null;
   authToken?: string;
   baseUrl?: string;
   /** Browser-style origin for OAuth callbacks when this client has no window (e.g. Telegram bridge). */
@@ -24,6 +26,8 @@ export type StreamHandler = (delta: string) => void;
 export interface StreamHandlers {
   onChunk: StreamHandler;
   onContextUsage?: (usage: ChatContextUsage) => void;
+  /** Only called when the server sends its terminal done event. */
+  onDone?: () => void;
   onQuestionnaireUpdated?: (questionnaire: AgentQuestionnaire | null) => void;
   onSubAgentActivity?: (event: {
     parentToolCallId: string;
@@ -63,7 +67,7 @@ export interface RemoteChatSession {
   clear(): Promise<void>;
   compact(options?: { force?: boolean }): Promise<CompactionResponse>;
   createAutomation(prompt: string): Promise<AutomationDefinition>;
-  getMessages(): Promise<ChatMessage[]>;
+  getMessages(options?: { signal?: AbortSignal }): Promise<ChatMessage[]>;
   id: string;
   purge(): Promise<void>;
   send(input: SendMessageArg): Promise<string>;

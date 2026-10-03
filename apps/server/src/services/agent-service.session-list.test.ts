@@ -1,26 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { StoredProfileRecord } from "@nakama/db";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
+import { createDefaultProfile } from "./agent-service-test-fixtures";
 import { sessionTurnRegistry } from "./session-turn-registry";
 
 const ORG_ID = "org_test";
-
-function createDefaultProfile(): StoredProfileRecord {
-  const now = new Date().toISOString();
-  return {
-    createdAt: now,
-    id: "profile_default",
-    isDefault: true,
-    isSuper: false,
-    model: null,
-    name: "Default",
-    orgId: ORG_ID,
-    systemPrompt: "You are helpful.",
-    updatedAt: now,
-  };
-}
 
 async function createService(): Promise<{
   db: ReturnType<typeof createInMemoryDatabaseAdapter>;

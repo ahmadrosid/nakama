@@ -20,6 +20,7 @@ export interface ComposerSuggestion {
 
 export interface ComposerState {
   cursorVisible: boolean;
+  imageCount?: number;
   prefix: string;
   selectedIndex: number;
   suggestions: ComposerSuggestion[];
@@ -46,16 +47,31 @@ export function buildComposerLines(
     const padding = " ".repeat(
       Math.max(0, composerWidth - visibleLength(content))
     );
-    return styledLine(`${content}${padding}`, { background: "surface" });
+    return {
+      segments: `${content}${padding}`
+        .split(/(\[(?:Text|Image) #\d+\])/)
+        .flatMap(
+          (part) =>
+            styledLine(part, {
+              background: "surface",
+              ...(/^\[(?:Text|Image) #\d+\]$/.test(part)
+                ? { color: "cyan" as const }
+                : {}),
+            }).segments
+        ),
+    };
   };
   const pendingLines = formatPendingDisplayLines(
     state.pendingMessages,
     width
   ).map((line) => styledLine(line, { dim: true }));
-  const display = normalizePastedText(state.composer.value);
-  const inputWidth = state.composer.cursorVisible
-    ? Math.max(1, composerWidth - 1)
-    : composerWidth;
+  const images = Array.from(
+    { length: state.composer.imageCount ?? 0 },
+    (_, index) => `[Image #${index + 1}] `
+  ).join("");
+  const display = images + normalizePastedText(state.composer.value);
+  // Reserve cursor space during both blink phases so input never reflows.
+  const inputWidth = Math.max(1, composerWidth - 1);
   const inputLines = splitInputDisplayLines(
     display,
     state.composer.prefix.length,

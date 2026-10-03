@@ -165,6 +165,16 @@ const COMMANDS_WITH_ARGS = new Set([
   "/user",
 ]);
 
+export function resolveSlashCommand(line: string): SlashCommand | null {
+  return (
+    SLASH_COMMANDS.find(
+      ({ name }) =>
+        line === name ||
+        (COMMANDS_WITH_ARGS.has(name) && line.startsWith(`${name} `))
+    ) ?? null
+  );
+}
+
 const commandSearch = new uFuzzy({
   compare: () => 0,
   intraIns: Number.POSITIVE_INFINITY,

@@ -19,6 +19,10 @@ export function registerInternalAutomationRoutes(
       return errorResponse("Authentication required", 401);
     }
 
+    // Use one request-time snapshot so a runAt that becomes due while the
+    // response is assembled is still returned inside the scheduler's grace window.
+    const now = Date.now();
+
     const automations = await automationService.listAll();
     const archivedOrgIds = new Set(
       orgService
@@ -32,7 +36,7 @@ export function registerInternalAutomationRoutes(
     const schedules: AutomationSchedule[] = automations
       .filter(
         (automation): automation is StoredAutomation & { orgId: string } =>
-          isWorkerSchedulable(automation) &&
+          isWorkerSchedulable(automation, now) &&
           Boolean(automation.orgId) &&
           !archivedOrgIds.has(automation.orgId)
       )

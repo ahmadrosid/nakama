@@ -6,6 +6,39 @@ import { join } from "node:path";
 import { getUserConfigDir, saveUserConfig } from "@nakama/core";
 import { NakamaAuthExpiredError, NakamaClient } from "./index";
 
+test.each(["http://localhost:4310", "https://nakama.example.com"])(
+  "CLI images are uploaded in the request body to %s",
+  async (baseUrl) => {
+    const requests: Request[] = [];
+    const client = new NakamaClient({
+      authToken: "test-token",
+      baseUrl,
+      fetch: async (input, init) => {
+        requests.push(new Request(input, init));
+        return new Response('data: {"type":"done","reply":"ok"}\n\n', {
+          headers: { "Content-Type": "text/event-stream" },
+        });
+      },
+      orgId: "org-a",
+    });
+    const images = [{ data: "aW1hZ2U=", mediaType: "image/png" }];
+    const session = client.createChatSession("session-1", "cli");
+    await session.sendStream({ images, message: "Describe this" }, () => {});
+    expect(requests).toHaveLength(1);
+    const request = requests[0]!;
+    expect(request.url).toBe(
+      `${baseUrl}/v1/sessions/session-1/messages?stream=true`
+    );
+    expect(request.headers.get("Authorization")).toBe("Bearer test-token");
+    expect(request.headers.get("X-Org-Id")).toBe("org-a");
+    expect(await request.json()).toMatchObject({
+      images,
+      message: "Describe this",
+      stream: true,
+    });
+  }
+);
+
 test("scoped clients keep session requests in their original organization", async () => {
   const requests: Request[] = [];
   const client = new NakamaClient({
@@ -29,6 +62,38 @@ test("scoped clients keep session requests in their original organization", asyn
       (request) => request.headers.get("Authorization") === "Bearer test-token"
     )
   ).toBe(true);
+});
+
+test("forwards appUserId and preserves it on later session requests", async () => {
+  const requests: Request[] = [];
+  const client = new NakamaClient({
+    authToken: "api-key",
+    baseUrl: "http://localhost:4310",
+    fetch: (async (input, init) => {
+      requests.push(new Request(input, init));
+      if (new URL(String(input)).pathname === "/v1/sessions") {
+        return Response.json({ sessionId: "session_1" }, { status: 201 });
+      }
+      return Response.json({
+        channel: "web",
+        messageMeta: [],
+        messages: [],
+        model: null,
+        questionnaire: null,
+        todos: [],
+      });
+    }) as typeof fetch,
+    orgId: "org_1",
+  });
+
+  const session = await client.createSession("web", { appUserId: "alice" });
+  await session.getMessages();
+
+  expect(await requests[0]!.json()).toEqual({
+    appUserId: "alice",
+    channel: "web",
+  });
+  expect(requests[1]!.headers.get("X-Nakama-App-User-Id")).toBe("alice");
 });
 
 test("plugin access requests retain their explicit organization", async () => {
@@ -359,6 +424,29 @@ test("readProfileArtifactContent fetches artifact bytes with inline query", asyn
   expect(new TextDecoder().decode(result.data)).toBe("# Report");
 });
 
+test("hasProfileArtifact reads a 404 as deleted and rethrows other failures", async () => {
+  const methods: Array<string | undefined> = [];
+  let status = 200;
+  const client = new NakamaClient({
+    authToken: "local-auth-token",
+    baseUrl: "http://localhost:4310",
+    fetch: async (_input, init) => {
+      methods.push(init?.method);
+      return new Response(null, { status });
+    },
+    orgId: "org_test",
+  });
+
+  expect(await client.hasProfileArtifact("profile_1", "report.md")).toBe(true);
+  status = 404;
+  expect(await client.hasProfileArtifact("profile_1", "report.md")).toBe(false);
+  status = 500;
+  await expect(
+    client.hasProfileArtifact("profile_1", "report.md")
+  ).rejects.toMatchObject({ status: 500 });
+  expect(methods).toEqual(["HEAD", "HEAD", "HEAD"]);
+});
+
 test("data import helpers upload base64 archive data", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
@@ -652,4 +740,69 @@ test("listSessions asks for several channels and a page in one request", async (
     "?channels=web&profileId=agent-a&limit=30&cursor=next",
     "?channels=web&profileId=agent-a&limit=30&q=budget+plan",
   ]);
+});
+
+test("artifact download budget stops declared and chunked oversize bodies", async () => {
+  for (const declared of [undefined, "100", "1"]) {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true;
+      },
+      start(controller) {
+        controller.enqueue(new Uint8Array(5));
+      },
+    });
+    const client = new NakamaClient({
+      fetch: (async () =>
+        new Response(body, {
+          headers: declared ? { "Content-Length": declared } : {},
+        })) as unknown as typeof fetch,
+    });
+    await expect(
+      client.readProfileArtifactContent("profile", "report.csv", {
+        maxBytes: 4,
+      })
+    ).rejects.toThrow();
+    expect(cancelled).toBe(true);
+  }
+  const client = new NakamaClient({
+    fetch: (async () => new Response("1234")) as unknown as typeof fetch,
+  });
+  expect(
+    new TextDecoder().decode(
+      (
+        await client.readProfileArtifactContent("profile", "report.csv", {
+          maxBytes: 4,
+        })
+      ).data
+    )
+  ).toBe("1234");
+});
+
+test("artifact download cancellation aborts a pending body read and forwards the signal", async () => {
+  const controller = new AbortController();
+  let cancelled = false;
+  let requestSignal: AbortSignal | null | undefined;
+  const client = new NakamaClient({
+    fetch: (async (_input, init) => {
+      requestSignal = init?.signal;
+      return new Response(
+        new ReadableStream({
+          cancel() {
+            cancelled = true;
+          },
+        })
+      );
+    }) as typeof fetch,
+  });
+  const download = client.readProfileArtifactContent("profile", "report.csv", {
+    maxBytes: 10,
+    signal: controller.signal,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  controller.abort();
+  await expect(download).rejects.toThrow();
+  expect(requestSignal).toBe(controller.signal);
+  expect(cancelled).toBe(true);
 });

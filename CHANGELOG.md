@@ -9,6 +9,10 @@ Entries marked *(in review)* come from a pull request that is open but not merge
 
 ## [Unreleased]
 
+### Fixed
+
+- Member-authored skill code stays inert until an admin reviews its exact files, and its subprocess no longer inherits the deployment config dir ([#1270]) *(in review)*
+
 ## [0.4.10] - 2026-09-08
 
 ### Added
@@ -1066,3 +1070,4 @@ First tagged release. The baseline it established:
 [#920]: https://github.com/ahmadrosid/nakama/pull/920
 [#921]: https://github.com/ahmadrosid/nakama/pull/921
 [#926]: https://github.com/ahmadrosid/nakama/pull/926
+[#1270]: https://github.com/ahmadrosid/nakama/issues/1270

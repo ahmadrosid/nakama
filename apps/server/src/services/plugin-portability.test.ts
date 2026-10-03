@@ -89,7 +89,8 @@ function notesBundle(): ReturnType<typeof pluginPackage> {
 function hangBundle(): ReturnType<typeof pluginPackage> {
   return pluginPackage({
     "actions/hang.js": Buffer.from(`
-export async function run() {
+export async function run(input, context) {
+  await context.host({ op: "profiles" });
   await new Promise(() => {});
 }
 `),
@@ -186,6 +187,7 @@ describe("plugin portability", () => {
     process.env.NAKAMA_CONFIG_DIR = configDir;
   });
 
+  // Wait for admission to drain before deleting files; retry transient Windows locks.
   afterEach(async () => {
     await resetPluginAdmissionForTests();
     if (originalConfigDir === undefined) {
@@ -193,8 +195,13 @@ describe("plugin portability", () => {
     } else {
       process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     }
-    await rm(configDir, { force: true, recursive: true });
-  });
+    await rm(configDir, {
+      force: true,
+      maxRetries: 5,
+      recursive: true,
+      retryDelay: 100,
+    });
+  }, 30_000);
 
   test("Supermemory backup preserves namespace and restricts restored credentials", async () => {
     const source = await createSqliteDatabase(
@@ -249,7 +256,7 @@ describe("plugin portability", () => {
       const identity = sourcePlugin
         .query("SELECT namespace,org_id FROM dataset")
         .get();
-      sourcePlugin.close();
+      sourcePlugin.close(true);
       const exported = await createNakamaDataExport({ rootDir: configDir });
       await restoreNakamaDataImport(exported.data, {
         confirm: true,
@@ -281,12 +288,14 @@ describe("plugin portability", () => {
       expect(
         snapshot.query("SELECT namespace,org_id FROM dataset").get()
       ).toEqual(identity);
-      snapshot.close();
+      snapshot.close(true);
       const credentials = join(
         getOrgPluginDataDir(ORG, "supermemory", restoreRoot),
         "connection.json"
       );
-      expect((await stat(credentials)).mode % 512).toBe(0o600);
+      if (process.platform !== "win32") {
+        expect((await stat(credentials)).mode % 512).toBe(0o600);
+      }
       await chmod(credentials, 0o644);
       expect(
         (
@@ -297,7 +306,9 @@ describe("plugin portability", () => {
           })
         ).result
       ).toEqual({ configured: true, url: "http://localhost:6767" });
-      expect((await stat(credentials)).mode % 512).toBe(0o600);
+      if (process.platform !== "win32") {
+        expect((await stat(credentials)).mode % 512).toBe(0o600);
+      }
       await restored.adapter.upsertOrganization({
         createdAt: now,
         id: DEST,
@@ -384,7 +395,7 @@ describe("plugin portability", () => {
         .get() as { digest: string; lifecycle_state: string };
       expect(install.lifecycle_state).toBe("disabled");
       expect(install.digest.length).toBe(64);
-      restoredDb.close();
+      restoredDb.close(true);
 
       const restoredAdapter = await createSqliteDatabase(
         `file:${join(restoreRoot, "nakama.db")}`
@@ -411,7 +422,7 @@ describe("plugin portability", () => {
       expect(snapshot.query("SELECT id, body FROM items").all()).toEqual([
         { body: "kept", id: "n1" },
       ]);
-      snapshot.close();
+      snapshot.close(true);
       await restoredAdapter.close();
     } finally {
       await rm(restoreRoot, { force: true, recursive: true });
@@ -468,8 +479,8 @@ describe("plugin portability", () => {
         } else {
           process.env.DATABASE_URL = previousDatabaseUrl;
         }
-        live.close();
-        other.close();
+        live.close(true);
+        other.close(true);
         await rm(restoreRoot, { force: true, recursive: true });
       }
     }
@@ -618,7 +629,14 @@ describe("plugin portability", () => {
   test("export fails and releases the barrier when a plugin write cannot drain", async () => {
     const controller = new AbortController();
     const db = createInMemoryDatabaseAdapter();
-    const service = new PluginService(db, configDir, { drainTimeoutMs: 80 });
+    let started = Promise.withResolvers<void>();
+    const service = new PluginService(db, configDir, {
+      drainTimeoutMs: 80,
+      onHostRequest: async () => {
+        started.resolve();
+        return [];
+      },
+    });
     await service.installPluginPackage(hangBundle());
     const added = await service.addOrgPlugin(ORG, "hang");
     await service.enableOrgPlugin(ORG, "hang", added.revision);
@@ -632,14 +650,16 @@ describe("plugin portability", () => {
       signal: controller.signal,
     });
 
-    await Bun.sleep(30);
-    await expect(
-      createNakamaDataExport({ drainTimeoutMs: 80, rootDir: configDir })
-    ).rejects.toMatchObject({ status: 503 });
+    const pending = [hung];
+    let settled = Promise.allSettled(pending);
+    try {
+      await Promise.race([started.promise, hung]);
+      await expect(
+        createNakamaDataExport({ drainTimeoutMs: 80, rootDir: configDir })
+      ).rejects.toMatchObject({ status: 503 });
 
-    let rejected: unknown;
-    const second = service
-      .invokePluginAction({
+      started = Promise.withResolvers<void>();
+      const second = service.invokePluginAction({
         access: "ui",
         actionKey: "hang",
         actor: ACTOR,
@@ -647,15 +667,10 @@ describe("plugin portability", () => {
         orgId: ORG,
         pluginId: "hang",
         signal: controller.signal,
-      })
-      .catch((error) => {
-        rejected = error;
       });
-    await Bun.sleep(40);
-    expect(rejected).toBeUndefined();
-
-    const settled = Promise.allSettled([hung, second]);
-    try {
+      pending.push(second);
+      settled = Promise.allSettled(pending);
+      await Promise.race([started.promise, second]);
       await resetPluginAdmissionForTests();
       expect(
         await Promise.race([

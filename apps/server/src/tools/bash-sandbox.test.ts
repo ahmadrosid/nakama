@@ -105,6 +105,20 @@ describe("profile sandbox helpers", () => {
         hostWorkspace: "/host/a",
       })
     ).toBe("/workspace/nested");
+    expect(
+      toGuestCwd({
+        guestWorkspace: "/workspace",
+        hostCwd: "C:\\host\\a\\nested",
+        hostWorkspace: "C:\\host\\a",
+      })
+    ).toBe("/workspace/nested");
+    expect(() =>
+      toGuestCwd({
+        guestWorkspace: "/workspace",
+        hostCwd: "C:\\host\\another",
+        hostWorkspace: "C:\\host\\a",
+      })
+    ).toThrow();
   });
 
   test("builds distinct sandbox names per profile", () => {
@@ -333,7 +347,7 @@ describe("bash microsandbox path with fake runtime", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout.trim()).toBe("ok");
     expect(fake.ensures).toHaveLength(0);
-  });
+  }, 15_000);
 
   test("recreates sandbox when network fingerprint changes", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-msb-"));

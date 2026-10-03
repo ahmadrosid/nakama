@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS automation_runs (
   started_at TEXT NOT NULL,
   completed_at TEXT,
   output TEXT,
+  progress TEXT,
   error TEXT,
   delivery_status TEXT,
   delivery_error TEXT,
@@ -192,6 +193,18 @@ CREATE TABLE IF NOT EXISTS notification_destinations (
 
 CREATE INDEX IF NOT EXISTS notification_destinations_org_id
   ON notification_destinations (org_id);
+
+-- Idempotency ledger for public POST /v1/notify/:destinationId (claim before send).
+CREATE TABLE IF NOT EXISTS notification_webhook_deliveries (
+  destination_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (destination_id, event_id),
+  FOREIGN KEY (destination_id) REFERENCES notification_destinations (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS notification_webhook_deliveries_created_at
+  ON notification_webhook_deliveries (created_at);
 
 CREATE TABLE IF NOT EXISTS mcp_servers (
   id TEXT PRIMARY KEY NOT NULL,
@@ -294,7 +307,35 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_mfa_backup_codes_hash_unique
 CREATE INDEX IF NOT EXISTS user_mfa_backup_codes_user_idx
   ON user_mfa_backup_codes (user_id, used_at);
 
+CREATE TABLE IF NOT EXISTS user_passkeys (
+  id TEXT PRIMARY KEY NOT NULL,
+  user_id TEXT NOT NULL,
+  credential_id TEXT NOT NULL,
+  public_key TEXT NOT NULL,
+  counter INTEGER NOT NULL DEFAULT 0,
+  transports TEXT NOT NULL DEFAULT '[]',
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_passkeys_credential_unique
+  ON user_passkeys (credential_id);
+
+CREATE INDEX IF NOT EXISTS user_passkeys_user_idx
+  ON user_passkeys (user_id);
+
+CREATE TABLE IF NOT EXISTS user_passkey_challenges (
+  challenge TEXT PRIMARY KEY NOT NULL,
+  user_id TEXT,
+  type TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS organizations (
+  allowed_invite_domains TEXT NOT NULL DEFAULT '[]',
   id TEXT PRIMARY KEY NOT NULL,
   name TEXT NOT NULL,
   slug TEXT NOT NULL,

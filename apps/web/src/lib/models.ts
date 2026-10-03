@@ -542,6 +542,7 @@ export function buildCreateProviderRequest(options: {
   baseUrl?: string;
   hostMode?: OllamaHostMode;
   customModels?: ConfigureProviderRequest["customModels"];
+  openRouterRouting?: CreateProviderRequest["openRouterRouting"];
   wireApi?: WireApi;
   chatgptOAuth?: CreateProviderRequest["chatgptOAuth"];
   xaiOAuth?: CreateProviderRequest["xaiOAuth"];
@@ -572,6 +573,13 @@ export function buildCreateProviderRequest(options: {
       : {}),
     ...(options.baseUrl?.trim() ? { baseUrl: options.baseUrl.trim() } : {}),
     ...(options.hostMode ? { hostMode: options.hostMode } : {}),
+    ...(options.provider === "openrouter" &&
+    options.openRouterRouting &&
+    Object.values(options.openRouterRouting).some(
+      (value) => value !== undefined
+    )
+      ? { openRouterRouting: options.openRouterRouting }
+      : {}),
     ...(customModels ? { customModels } : {}),
     ...(options.wireApi === "responses" ? { wireApi: options.wireApi } : {}),
   };

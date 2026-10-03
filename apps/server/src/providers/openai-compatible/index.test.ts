@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { streamFromChunks } from "../test-helpers";
 import { createOpenAICompatibleProvider } from "./index";
 
 const originalFetch = globalThis.fetch;
@@ -6,20 +7,6 @@ const originalFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = originalFetch;
 });
-
-function streamFromChunks(chunks: string[]): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
-
-  return new ReadableStream({
-    start(controller) {
-      for (const chunk of chunks) {
-        controller.enqueue(encoder.encode(chunk));
-      }
-
-      controller.close();
-    },
-  });
-}
 
 describe("OpenAI-compatible provider", () => {
   test("sends reasoning config only when the model supports thinking", async () => {

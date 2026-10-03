@@ -459,4 +459,31 @@ describe("syncWhatsAppOwnerPairing", () => {
       expect(saved?.pairedLid).toBe("104784384290844@lid");
     });
   });
+
+  test("claims one owner JID across concurrent owners", async () => {
+    await withTempHomedir("nakama-whatsapp-claim-race-", async () => {
+      const first = { orgId: "org_a", profileId: "a" };
+      const second = { orgId: "org_b", profileId: "b" };
+      await saveWhatsAppConfig({ profileId: "a" }, first);
+      await saveWhatsAppConfig({ profileId: "b" }, second);
+
+      const results = await Promise.allSettled([
+        syncWhatsAppOwnerPairing(
+          { ownerJid: "6281379292556@s.whatsapp.net" },
+          first
+        ),
+        syncWhatsAppOwnerPairing(
+          { ownerJid: "6281379292556@s.whatsapp.net" },
+          second
+        ),
+      ]);
+
+      expect(
+        results.filter((result) => result.status === "fulfilled")
+      ).toHaveLength(1);
+      expect(
+        results.filter((result) => result.status === "rejected")
+      ).toHaveLength(1);
+    });
+  });
 });

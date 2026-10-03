@@ -61,10 +61,6 @@ function normalizeSourceDocumentIds(
   return ids;
 }
 
-export interface OrgMemoryContent {
-  content: string;
-}
-
 export type OrgMemorySearchTier = "pinned" | "recent-log" | "archive";
 
 export interface OrgMemorySearchMatch {

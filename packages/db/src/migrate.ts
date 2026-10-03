@@ -27,6 +27,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateMcpTables);
   atomic(migrateSkillsTables);
   atomic(migrateUsersTable);
+  atomic(migratePasskeyTables);
   atomic(migrateOrgTables);
   atomic(migrateApiKeysTable);
   atomic(migrateLegacyUserContextToOrgMembers);
@@ -34,6 +35,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateSkillProposalsTable);
   atomic(migrateSkillSuggestionsTable);
   atomic(migrateSkillsWriteApprovalColumns);
+  atomic(migrateOrganizationAllowedInviteDomains);
   atomic(migrateSkillsPostTurnReviewColumns);
   atomic(migrateAutomationsEnabledColumn);
   atomic(migrateSkillsCuratorColumns);
@@ -62,7 +64,9 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateAuditEventsTable);
   atomic(migrateProfileChangeEventsTable);
   atomic(migratePluginTables);
+  atomic(migrateRemoveGoogleMeetPlugin);
   atomic(migrateFilePinsTable);
+  atomic(migrateNotificationWebhookDeliveriesTable);
 }
 
 function migrateSessionAppUserId(db: Database): void {
@@ -402,6 +406,58 @@ function migrateUsersTable(db: Database): void {
   `);
 }
 
+function migratePasskeyTables(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_passkeys (
+      id TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT NOT NULL,
+      credential_id TEXT NOT NULL,
+      public_key TEXT NOT NULL,
+      counter INTEGER NOT NULL DEFAULT 0,
+      transports TEXT NOT NULL DEFAULT '[]',
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS user_passkeys_credential_unique
+      ON user_passkeys (credential_id);
+    CREATE INDEX IF NOT EXISTS user_passkeys_user_idx
+      ON user_passkeys (user_id);
+    CREATE TABLE IF NOT EXISTS user_passkey_challenges (
+      challenge TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT,
+      type TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    );
+  `);
+
+  const columns = db
+    .prepare("PRAGMA table_info(user_passkey_challenges)")
+    .all() as Array<{ name: string; notnull: number }>;
+  if (columns.find((column) => column.name === "user_id")?.notnull) {
+    db.exec(`
+      ALTER TABLE user_passkey_challenges
+        RENAME TO user_passkey_challenges_legacy;
+      CREATE TABLE user_passkey_challenges (
+        challenge TEXT PRIMARY KEY NOT NULL,
+        user_id TEXT,
+        type TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+      );
+      INSERT INTO user_passkey_challenges (
+        challenge, user_id, type, expires_at, created_at
+      )
+      SELECT challenge, user_id, type, expires_at, created_at
+      FROM user_passkey_challenges_legacy;
+      DROP TABLE user_passkey_challenges_legacy;
+    `);
+  }
+}
+
 function migrateLlmUsageModelStatsTable(db: Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS llm_usage_model_stats (
@@ -716,6 +772,17 @@ function migrateSkillsWriteApprovalColumns(db: Database): void {
     )
   ) {
     db.exec("ALTER TABLE profiles ADD COLUMN skills_write_approval INTEGER;");
+  }
+}
+
+function migrateOrganizationAllowedInviteDomains(db: Database): void {
+  const columns = db
+    .prepare("PRAGMA table_info(organizations)")
+    .all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === "allowed_invite_domains")) {
+    db.exec(
+      "ALTER TABLE organizations ADD COLUMN allowed_invite_domains TEXT NOT NULL DEFAULT '[]';"
+    );
   }
 }
 
@@ -1488,6 +1555,10 @@ function migrateAutomationRunsTable(db: Database): void {
     .all() as Array<{ name: string }>;
   const columnNames = new Set(columns.map((column) => column.name));
 
+  if (!columnNames.has("progress")) {
+    db.exec("ALTER TABLE automation_runs ADD COLUMN progress TEXT;");
+  }
+
   if (!columnNames.has("delivery_status")) {
     db.exec(`
       ALTER TABLE automation_runs ADD COLUMN delivery_status TEXT;
@@ -1762,6 +1833,17 @@ function migrateProfileChangeEventsTable(db: Database): void {
   `);
 }
 
+function migrateRemoveGoogleMeetPlugin(db: Database): void {
+  // Meet is built in. Remove obsolete plugin contributions and their cascading
+  // profile assignments; meeting databases and transcripts live outside this DB.
+  db.prepare("DELETE FROM tools WHERE plugin_id = ?").run("google-meet");
+  db.prepare("DELETE FROM skills WHERE plugin_id = ?").run("google-meet");
+  db.prepare("DELETE FROM org_plugins WHERE plugin_id = ?").run("google-meet");
+  db.prepare("DELETE FROM plugin_releases WHERE plugin_id = ?").run(
+    "google-meet"
+  );
+}
+
 function migratePluginTables(db: Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS plugin_releases (
@@ -1870,5 +1952,20 @@ CREATE TABLE IF NOT EXISTS file_pins (
   path TEXT NOT NULL,
   PRIMARY KEY (org_id, user_id, profile_id, path)
 );
+  `);
+}
+
+function migrateNotificationWebhookDeliveriesTable(db: Database): void {
+  db.exec(`
+CREATE TABLE IF NOT EXISTS notification_webhook_deliveries (
+  destination_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (destination_id, event_id),
+  FOREIGN KEY (destination_id) REFERENCES notification_destinations (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS notification_webhook_deliveries_created_at
+  ON notification_webhook_deliveries (created_at);
   `);
 }

@@ -1,6 +1,7 @@
 import type {
   AgentQuestionnaire,
   AgentTodo,
+  ChatMessage,
   OrgPluginLifecycleState,
   OrgPluginSummary,
   OrgRole,
@@ -33,6 +34,7 @@ export interface StoredAutomationRunRecord {
   error: string | null;
   id: string;
   output: string | null;
+  progress?: ChatMessage[];
   startedAt: string;
   status: AutomationRunStatus;
 }
@@ -241,20 +243,21 @@ export interface StoredCodingAgentHarnessRecord {
   probeCache?: StoredCodingAgentHarnessProbeCache | null;
 }
 
-export interface StoredNotificationDestinationRecord {
-  channel: "telegram";
-  config: {
-    profileId?: string;
-    chatId: number;
-    topicId?: number | null;
-  };
+export type StoredNotificationDestinationRecord = {
   createdAt: string;
   id: string;
   name: string;
   orgId: string;
   secretHash: string;
   updatedAt: string;
-}
+} & (
+  | {
+      channel: "telegram";
+      config: { profileId?: string; chatId: number; topicId?: number | null };
+    }
+  | { channel: "discord"; config: { profileId: string; channelId: string } }
+  | { channel: "whatsapp"; config: { profileId: string } }
+);
 
 export type StoredOrgComposioToolkitStatus = "disabled" | "enabled";
 
@@ -427,7 +430,26 @@ export interface StoredMfaBackupCode {
   userId: string;
 }
 
-export type { OrgPluginLifecycleState } from "@nakama/core";
+export interface StoredPasskeyRecord {
+  counter: number;
+  createdAt: string;
+  credentialId: string;
+  id: string;
+  name: string;
+  publicKey: string;
+  transports: string[];
+  userId: string;
+}
+
+export type PasskeyChallengeType = "authentication" | "registration";
+
+export interface StoredPasskeyChallenge {
+  challenge: string;
+  createdAt: string;
+  expiresAt: string;
+  type: PasskeyChallengeType;
+  userId: string | null;
+}
 
 export type StoredPluginReleaseRecord = PluginReleaseSummary;
 
@@ -478,6 +500,7 @@ export interface PublishOrgPluginReleaseInput {
 }
 
 export interface StoredOrganizationRecord {
+  allowedInviteDomains?: string[];
   archivedAt?: string | null;
   createdAt: string;
   id: string;
@@ -600,7 +623,8 @@ export type SkillProposalAction =
   | "delete"
   | "edit"
   | "write_file"
-  | "remove_file";
+  | "remove_file"
+  | "approve_code";
 
 export interface StoredSkillProposal {
   action: SkillProposalAction;
@@ -658,14 +682,6 @@ export interface StoredArtifactShareRecord {
   tokenHash: string;
 }
 
-export interface StoredChannelOrgMappingRecord {
-  channel: ChannelType;
-  channelUserId: string;
-  createdAt: string;
-  orgId: string;
-  userId: string;
-}
-
 export interface StoredBrowserSessionRecord {
   activeOrgId?: string | null;
   createdAt: string;
@@ -716,6 +732,16 @@ export interface DatabaseAdapter {
   }): Promise<boolean>;
   /** Verify the live connection can read the migrated schema. */
   checkHealth(): Promise<void>;
+  /**
+   * Atomically claims an idempotency key for a notification webhook delivery.
+   * Prunes rows older than the replay window, then returns true on first claim
+   * and false on replay within that window.
+   */
+  claimNotificationWebhookDelivery(
+    destinationId: string,
+    eventId: string,
+    createdAt: string
+  ): Promise<boolean>;
   compareAndSetOrgPluginState(
     input: CompareAndSetOrgPluginStateInput
   ): Promise<PluginPublishResult>;
@@ -725,6 +751,12 @@ export interface DatabaseAdapter {
     usedAt: string
   ): Promise<boolean>;
   consumeMfaTotpStep(userId: string, step: number): Promise<boolean>;
+  consumePasskeyChallenge(
+    challenge: string,
+    userId: string | null,
+    type: PasskeyChallengeType,
+    consumedAt: string
+  ): Promise<boolean>;
   consumePasswordResetToken(
     tokenHash: string,
     passwordHash: string,
@@ -745,6 +777,7 @@ export interface DatabaseAdapter {
     userId: string,
     orgId: string
   ): Promise<AutomationUnreadCountRecord[]>;
+  countUnusedMfaBackupCodes(userId: string): Promise<number>;
   countUsers(): Promise<number>;
   createApiKey(record: StoredApiKeyRecord): Promise<void>;
 
@@ -758,6 +791,8 @@ export interface DatabaseAdapter {
   createOrgInvite(record: StoredOrgInviteRecord): Promise<void>;
 
   createOrgMemoryProposal(record: StoredOrgMemoryProposal): Promise<void>;
+  createPasskey(record: StoredPasskeyRecord): Promise<void>;
+  createPasskeyChallenge(record: StoredPasskeyChallenge): Promise<void>;
 
   createPasswordResetToken(
     record: StoredPasswordResetTokenRecord
@@ -787,6 +822,7 @@ export interface DatabaseAdapter {
     pluginId: string,
     expectedRevision: number
   ): Promise<boolean>;
+  deletePasskeys(userId: string): Promise<void>;
   deletePluginRelease(pluginId: string, version: string): Promise<boolean>;
   deleteProfile(id: string): Promise<boolean>;
   deleteSession(id: string): Promise<boolean>;
@@ -829,6 +865,10 @@ export interface DatabaseAdapter {
   ): Promise<StoredArtifactShareRecord | null>;
   getAttachment(id: string): Promise<StoredAttachmentRecord | null>;
   getAutomation(id: string): Promise<StoredAutomationRecord | null>;
+  getAutomationRun(
+    automationId: string,
+    runId: string
+  ): Promise<StoredAutomationRunRecord | null>;
 
   getAutomationRunReadThrough(
     userId: string,
@@ -875,6 +915,13 @@ export interface DatabaseAdapter {
     orgId: string,
     pluginId: string
   ): Promise<StoredOrgPluginRecord | null>;
+  getPasskey(
+    userId: string,
+    credentialId: string
+  ): Promise<StoredPasskeyRecord | null>;
+  getPasskeyByCredentialId(
+    credentialId: string
+  ): Promise<StoredPasskeyRecord | null>;
   getPendingOrgInvite(
     orgId: string,
     email: string
@@ -1046,6 +1093,7 @@ export interface DatabaseAdapter {
     status?: OrgMemoryProposalStatus
   ): Promise<StoredOrgMemoryProposal[]>;
   listOrgPlugins(orgId?: string): Promise<StoredOrgPluginRecord[]>;
+  listPasskeys(userId: string): Promise<StoredPasskeyRecord[]>;
 
   listPlatformAdminUsers(): Promise<StoredUserRecord[]>;
 
@@ -1247,6 +1295,11 @@ export interface DatabaseAdapter {
       pinned?: boolean;
     }
   ): Promise<boolean>;
+  updatePasskeyCounter(
+    userId: string,
+    credentialId: string,
+    counter: number
+  ): Promise<void>;
   updateSessionModel(sessionId: string, model: string | null): Promise<boolean>;
   updateSessionPinned(sessionId: string, pinned: boolean): Promise<boolean>;
   updateSessionQuestionnaire(

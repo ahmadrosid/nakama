@@ -1,10 +1,10 @@
 import { NakamaApiError } from "./api-error";
 import type {
   CreateNotificationDestinationRequest,
+  NotificationDestinationChannel,
   NotificationWebhookLevel,
   NotificationWebhookRequest,
   TelegramNotificationDestinationConfig,
-  UpdateNotificationDestinationRequest,
 } from "./contract";
 
 function isNonZeroInteger(value: unknown): value is number {
@@ -30,6 +30,9 @@ function normalizeTelegramConfig(
 
   if (!isNonZeroInteger(chatId)) {
     throw new Error(`${fieldName}.chatId must be a non-zero integer.`);
+  }
+  if (!profileId) {
+    throw new Error(`${fieldName}.profileId is required.`);
   }
 
   const topicId = record.topicId;
@@ -112,33 +115,59 @@ export function normalizeCreateNotificationDestinationRequest(
     throw new Error("name must be a non-empty string.");
   }
 
-  if (record.channel !== "telegram") {
-    throw new Error('channel must be "telegram".');
+  const channel = record.channel;
+  if (
+    channel !== "telegram" &&
+    channel !== "discord" &&
+    channel !== "whatsapp"
+  ) {
+    throw new Error("Unsupported notification channel.");
   }
 
-  return {
-    channel: "telegram",
-    name: name.trim(),
-    telegram: normalizeTelegramConfig(record.telegram, "telegram"),
-  };
+  for (const key of ["telegram", "discord", "whatsapp"]) {
+    if (key !== channel && record[key] !== undefined) {
+      throw new Error("Destination config must match its channel.");
+    }
+  }
+  if (channel === "telegram") {
+    return {
+      channel,
+      name: name.trim(),
+      telegram: normalizeTelegramConfig(record.telegram, channel),
+    };
+  }
+  const config = record[channel];
+  if (typeof config !== "object" || config === null) {
+    throw new Error(`${channel} must be an object.`);
+  }
+  const fields = config as Record<string, unknown>;
+  const profileId =
+    typeof fields.profileId === "string" ? fields.profileId.trim() : "";
+  if (!profileId) {
+    throw new Error(`${channel}.profileId is required.`);
+  }
+  if (channel === "whatsapp") {
+    return { channel, name: name.trim(), whatsapp: { profileId } };
+  }
+  const channelId =
+    typeof fields.channelId === "string" ? fields.channelId.trim() : "";
+  if (!/^\d{17,20}$/.test(channelId)) {
+    throw new Error("discord.channelId must be a 17–20 digit string.");
+  }
+  return { channel, discord: { channelId, profileId }, name: name.trim() };
 }
 
 export function normalizeUpdateNotificationDestinationRequest(
-  value: unknown
-): UpdateNotificationDestinationRequest {
+  value: unknown,
+  channel: NotificationDestinationChannel = "telegram"
+): CreateNotificationDestinationRequest {
   if (typeof value !== "object" || value === null) {
     throw new Error("destination request must be an object.");
   }
 
   const record = value as Record<string, unknown>;
-  const name = record.name;
-
-  if (typeof name !== "string" || !name.trim()) {
-    throw new Error("name must be a non-empty string.");
+  if (record.channel !== undefined && record.channel !== channel) {
+    throw new Error("A destination's channel cannot be changed.");
   }
-
-  return {
-    name: name.trim(),
-    telegram: normalizeTelegramConfig(record.telegram, "telegram"),
-  };
+  return normalizeCreateNotificationDestinationRequest({ ...record, channel });
 }

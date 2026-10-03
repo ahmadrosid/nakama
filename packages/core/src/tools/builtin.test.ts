@@ -3,6 +3,7 @@ import {
   copyFile,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   realpath,
   rm,
@@ -731,6 +732,41 @@ describe("file builtin tools", () => {
     ).toBe("index");
   });
 
+  test.skipIf(process.platform !== "win32")(
+    "forbidMemoryWrites refuses memory file names in any casing on Windows",
+    async () => {
+      tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-cognito-case-"));
+      const context = { ...PROFILE_CONTEXT, forbidMemoryWrites: true };
+
+      // MEMORY.md does not exist yet, so nothing canonicalises the caller's
+      // casing, and NTFS would create the one file memory is read from.
+      for (const target of [
+        "memory.md",
+        "Memory.MD",
+        "MEMORY-ARCHIVE/2026-09.md",
+        "memory-archive/2026-09.MD",
+      ]) {
+        await expect(
+          runWriteFile({ content: "learned", path: target }, context, {
+            workspaceRoot: tempDir,
+          })
+        ).rejects.toThrow(/cognito/i);
+      }
+      expect(await readdir(tempDir)).toEqual([]);
+
+      await runWriteFile(
+        { content: "mine", path: "notes/memory.md" },
+        context,
+        {
+          workspaceRoot: tempDir,
+        }
+      );
+      expect(
+        await readFile(path.join(tempDir, "notes", "memory.md"), "utf8")
+      ).toBe("mine");
+    }
+  );
+
   test("memory files stay writable when forbidMemoryWrites is unset", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-cognito-off-"));
 
@@ -793,6 +829,51 @@ describe("file builtin tools", () => {
       })
     ).rejects.toThrow(/tool\.js.*Phase 1/);
   });
+
+  test.skipIf(process.platform !== "win32")(
+    "file tools refuse NTFS stream names that alias protected files on Windows",
+    async () => {
+      tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-skill-tool-ads-"));
+      await mkdir(path.join(tempDir, "skills", "notes"), { recursive: true });
+
+      // NTFS writes `tool.js::$DATA` to tool.js itself, and `notes 10:30.md`
+      // to a hidden stream of a file named `notes 10`.
+      for (const target of [
+        "skills/notes/tool.js::$DATA",
+        "skills/notes/tool.ts::$DATA",
+        "notes 10:30.md",
+      ]) {
+        await expect(
+          runWriteFile(
+            { content: "export default {};", path: target },
+            PROFILE_CONTEXT,
+            { workspaceRoot: tempDir }
+          )
+        ).rejects.toMatchObject({ code: "SPECIAL_FILE" });
+      }
+      await expect(
+        runWriteFile(
+          { content: "learned", path: "MEMORY.md::$DATA" },
+          { ...PROFILE_CONTEXT, forbidMemoryWrites: true },
+          { workspaceRoot: tempDir }
+        )
+      ).rejects.toMatchObject({ code: "SPECIAL_FILE" });
+      expect(await readdir(path.join(tempDir, "skills", "notes"))).toEqual([]);
+      expect(await readdir(tempDir)).toEqual(["skills"]);
+
+      await runWriteFile(
+        { content: "plain", path: "skills/notes/helper.md" },
+        PROFILE_CONTEXT,
+        { workspaceRoot: tempDir }
+      );
+      expect(
+        await readFile(
+          path.join(tempDir, "skills", "notes", "helper.md"),
+          "utf8"
+        )
+      ).toBe("plain");
+    }
+  );
 
   test("write_docx produces a real Word archive that reads back as markdown", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-docx-"));

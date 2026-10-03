@@ -2,9 +2,11 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getUserConfigDir } from "@nakama/core";
+import { unzipSync, zipSync } from "fflate";
 import * as dataPortability from "../../services/data-portability";
 import {
   createNakamaDataExport,
+  MAX_IMPORT_ENTRIES,
   previewNakamaDataImport,
 } from "../../services/data-portability";
 import { setupTestConfigDir } from "../../test-config-dir";
@@ -20,6 +22,17 @@ function createApp() {
       providerConfigured: true,
     },
   });
+}
+
+async function createArchiveOverEntryLimit(): Promise<Buffer> {
+  const archive = (
+    await createNakamaDataExport({ rootDir: getUserConfigDir() })
+  ).data;
+  const entries = unzipSync(archive);
+  for (let index = 0; index < MAX_IMPORT_ENTRIES; index += 1) {
+    entries[`empty-${index}.txt`] = new Uint8Array();
+  }
+  return Buffer.from(zipSync(entries, { level: 0 }));
 }
 
 describe("setup import routes", () => {
@@ -143,6 +156,85 @@ describe("setup import routes", () => {
     ).resolves.toBe("original");
   });
 
+  test("setup restore releases the database before files move and reopens after", async () => {
+    const calls: string[] = [];
+    const { app } = createMinimalHonoApp({
+      agent: {
+        listProfiles: async () => ({ profiles: [{ id: "default" }] }),
+        providerConfigured: true,
+      },
+      onBeforeDataRestore: async () => {
+        const live = await readFile(
+          join(getUserConfigDir(), "config.ini"),
+          "utf8"
+        );
+        calls.push(`release:${live}`);
+      },
+      onDataRestored: async () => {
+        calls.push("reopen");
+      },
+    });
+
+    await writeFile(join(getUserConfigDir(), "config.ini"), "original");
+    const archive = (
+      await createNakamaDataExport({ rootDir: getUserConfigDir() })
+    ).data;
+    await writeFile(join(getUserConfigDir(), "config.ini"), "changed");
+
+    const restoreResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup/import/restore", {
+        body: JSON.stringify({
+          confirm: true,
+          data: archive.toString("base64"),
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+
+    expect(restoreResponse.status).toBe(200);
+    expect(calls).toEqual(["release:changed", "reopen"]);
+  });
+
+  test("setup restore reopens the database when it fails after releasing it", async () => {
+    let reopened = 0;
+    const { app } = createMinimalHonoApp({
+      agent: {
+        listProfiles: async () => ({ profiles: [{ id: "default" }] }),
+        providerConfigured: true,
+      },
+      onBeforeDataRestore: () => {
+        throw new Error("release failed");
+      },
+      onDataRestored: async () => {
+        reopened += 1;
+      },
+    });
+
+    await writeFile(join(getUserConfigDir(), "config.ini"), "original");
+    const archive = (
+      await createNakamaDataExport({ rootDir: getUserConfigDir() })
+    ).data;
+    await writeFile(join(getUserConfigDir(), "config.ini"), "changed");
+
+    const restoreResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup/import/restore", {
+        body: JSON.stringify({
+          confirm: true,
+          data: archive.toString("base64"),
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+
+    expect(restoreResponse.status).toBe(400);
+    expect(reopened).toBe(1);
+    await expect(
+      readFile(join(getUserConfigDir(), "config.ini"), "utf8")
+    ).resolves.toBe("changed");
+  });
+
   test("setup import is blocked after the first admin account exists", async () => {
     const { app, authService, databaseAdapter } = createApp();
     await loginPlatformAdminSession(app, authService, databaseAdapter);
@@ -186,6 +278,31 @@ describe("setup import routes", () => {
     await expect(
       readFile(join(getUserConfigDir(), "config.ini"), "utf8")
     ).resolves.toBe("keep");
+  });
+
+  test("setup preview and restore reject archives over the entry limit", async () => {
+    const { app } = createApp();
+    const configPath = join(getUserConfigDir(), "config.ini");
+    await writeFile(configPath, "keep");
+    const archive = await createArchiveOverEntryLimit();
+    const data = archive.toString("base64");
+
+    const previewResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup/import/preview", {
+        body: JSON.stringify({ data }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+    const restoreResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup/import/restore", {
+        body: JSON.stringify({ confirm: true, data }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+    expect(restoreResponse.status).toBe(400);
+    await expect(readFile(configPath, "utf8")).resolves.toBe("keep");
   });
 
   test("wrong-typed setup import body is rejected before decoding", async () => {

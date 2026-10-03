@@ -1,12 +1,16 @@
-import { stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { lstat, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import {
   getProfileArtifactsDir,
+  getProfileSoulDir,
   guardFilePath,
   inferArtifactMimeType,
   PathGuardError,
   type ToolContext,
   type ToolDefinition,
+  WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES,
 } from "@nakama/core";
 import {
   DISCORD_ARTIFACT_ATTACHMENT_MAX_BYTES,
@@ -163,3 +167,86 @@ export const sendDiscordArtifactTool: ToolDefinition<
 export function createSendDiscordArtifactTools(): ToolDefinition[] {
   return [sendDiscordArtifactTool];
 }
+
+export const sendWhatsAppArtifactTool: ToolDefinition<SendDiscordArtifactInput> =
+  {
+    description:
+      "Select a completed artifact for delivery to this WhatsApp conversation after the current agent turn completes. Use for sending or resending the matching file. This prepares delivery; it does not confirm an upload. Finish any edits before selecting the file.",
+    name: "send_whatsapp_artifact",
+    parameters: sendDiscordArtifactTool.parameters,
+    async run(input, context) {
+      try {
+        if (context.channel !== "whatsapp") {
+          throw new Error("Only available in WhatsApp chats.");
+        }
+        const { orgId, profileId } = requireOrgAndProfile(context);
+        const soulDir = getProfileSoulDir(orgId, profileId);
+        if (
+          context.workspaceRoot &&
+          (await realpath(context.workspaceRoot)) !== (await realpath(soulDir))
+        ) {
+          throw new Error("WhatsApp delivery requires the profile workspace.");
+        }
+        const relativePath = normalizeArtifactRelativePath(input.path);
+        if (
+          path.isAbsolute(relativePath) ||
+          /^[a-z]:/i.test(relativePath) ||
+          relativePath.includes("\\")
+        ) {
+          throw new Error("Artifact path must be relative.");
+        }
+        const artifactsDir = getProfileArtifactsDir(orgId, profileId);
+        if ((await lstat(artifactsDir)).isSymbolicLink()) {
+          throw new Error("The artifacts folder must not be a symlink.");
+        }
+        // Do not permit an artifacts-root symlink to another profile/workspace.
+        await guardFilePath(artifactsDir, null, undefined, {
+          allowedDirs: [soulDir],
+          cwd: soulDir,
+        });
+        const guarded = await guardFilePath(relativePath, null, undefined, {
+          allowedDirs: [artifactsDir],
+          cwd: artifactsDir,
+        });
+        const fileStat = await stat(guarded.resolved);
+        if (!fileStat.isFile()) {
+          throw new Error("Artifact must be a regular file.");
+        }
+        if (fileStat.size > WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES) {
+          throw new Error(
+            "Artifact exceeds the 16 MiB WhatsApp upload budget."
+          );
+        }
+        const digest = createHash("sha256");
+        let sizeBytes = 0;
+        for await (const chunk of createReadStream(guarded.resolved, {
+          signal: context.signal,
+        })) {
+          sizeBytes += chunk.length;
+          if (sizeBytes > WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES) {
+            throw new Error(
+              "Artifact exceeds the 16 MiB WhatsApp upload budget."
+            );
+          }
+          digest.update(chunk);
+        }
+        return {
+          filename: path.basename(relativePath),
+          mimeType: inferArtifactMimeType(relativePath),
+          ok: true,
+          path: relativePath,
+          sha256: digest.digest("hex"),
+          sizeBytes,
+          status: "prepared",
+        };
+      } catch (error) {
+        return {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Could not prepare artifact.",
+          ok: false,
+        };
+      }
+    },
+  };

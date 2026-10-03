@@ -469,6 +469,27 @@ describe("profile service createProfile", () => {
     ).rejects.toThrow(/already exists/i);
   });
 
+  test.skipIf(process.platform !== "win32")(
+    "rejects ids that differ only by case, which share a folder on Windows",
+    async () => {
+      tempConfigDir = await mkdtemp(
+        path.join(os.tmpdir(), "nakama-profile-case-id-")
+      );
+      process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+
+      const service = new ProfileService(createInMemoryDatabaseAdapter());
+
+      await service.createProfile(ORG_ID, { id: "Sales", name: "Sales" });
+
+      await expect(
+        service.createProfile(ORG_ID, { id: "sales", name: "Sales 2" })
+      ).rejects.toMatchObject({
+        message: "Profile id already exists.",
+        status: 409,
+      });
+    }
+  );
+
   test("rejects invalid custom profile ids", async () => {
     const service = new ProfileService(createInMemoryDatabaseAdapter());
 
@@ -834,6 +855,30 @@ describe("profile service cloneProfile", () => {
     ).toBe("kb body");
   });
 
+  test("clone migrates legacy knowledge base", async () => {
+    const { service, sourceId } = await setup();
+    const legacyDir = path.join(soulDirOf(sourceId), "data", "knowledge-base");
+    await rm(path.join(soulDirOf(sourceId), "knowledge-base"), {
+      force: true,
+      recursive: true,
+    });
+    await mkdir(legacyDir, { recursive: true });
+    await writeFile(
+      path.join(legacyDir, "doc_1--notes.txt"),
+      "kb body",
+      "utf8"
+    );
+
+    const { profile } = await service.cloneProfile(ORG_ID, sourceId, {});
+
+    expect(
+      await readFile(
+        path.join(soulDirOf(profile.id), "knowledge-base", "doc_1--notes.txt"),
+        "utf8"
+      )
+    ).toBe("kb body");
+  });
+
   test("gives each clone a unique id", async () => {
     const { service, sourceId } = await setup();
     const first = await service.cloneProfile(ORG_ID, sourceId, {});
@@ -841,6 +886,21 @@ describe("profile service cloneProfile", () => {
 
     expect(second.profile.id).not.toBe(first.profile.id);
   });
+
+  test.skipIf(process.platform !== "win32")(
+    "skips a generated clone id taken in another case on Windows",
+    async () => {
+      const { service, sourceId } = await setup();
+      await service.createProfile(ORG_ID, {
+        id: "Research-Bot-Copy",
+        name: "Taken",
+      });
+
+      const clone = await service.cloneProfile(ORG_ID, sourceId, {});
+
+      expect(clone.profile.id).toBe("research-bot-copy-2");
+    }
+  );
 
   test("refuses to clone Super Bot and writes nothing", async () => {
     const { db, service } = await setup();
@@ -911,6 +971,32 @@ describe("profile service cloneProfile", () => {
     await expect(
       service.cloneProfile(ORG_ID, "does-not-exist", {})
     ).rejects.toThrow(/not found/i);
+  });
+
+  test("failed clone removes partial profile and workspace", async () => {
+    const { db, service, sourceId } = await setup();
+    const kbDir = path.join(soulDirOf(sourceId), "knowledge-base");
+    await mkdir(kbDir, { recursive: true });
+    await writeFile(path.join(kbDir, "doc_1--notes.txt"), "kb body", "utf8");
+
+    const destId = "ghost-clone";
+    const destKbPath = path.join(soulDirOf(destId), "knowledge-base");
+    await mkdir(path.dirname(destKbPath), { recursive: true });
+    await writeFile(destKbPath, "blocker", "utf8");
+
+    await expect(
+      service.cloneProfile(ORG_ID, sourceId, { id: destId })
+    ).rejects.toThrow();
+
+    expect(await db.getProfile(destId)).toBeFalsy();
+    await expect(access(soulDirOf(destId))).rejects.toThrow();
+    expect(await db.listToolsForProfile(destId)).toHaveLength(0);
+
+    const retry = await service.cloneProfile(ORG_ID, sourceId, {
+      id: destId,
+    });
+    expect(retry.profile.id).toBe(destId);
+    expect(retry.profile.tools.length).toBeGreaterThan(0);
   });
 });
 
@@ -1409,7 +1495,7 @@ describe("profile organization transfer", () => {
         "Keep my memory"
       );
     } finally {
-      raw.close();
+      raw.close(true);
       database.close();
     }
   });

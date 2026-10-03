@@ -38,7 +38,7 @@ describe("org memory tools", () => {
     const [searchTool] = createOrgMemoryTools(service);
     await expect(
       searchTool.run({ query: "x" }, context("org_a", "viewer"))
-    ).rejects.toThrow("Viewers cannot access org memory.");
+    ).rejects.toMatchObject({ status: 403 });
   });
 
   test("org_memory_search with undefined orgRole throws (deny-by-default)", async () => {
@@ -46,7 +46,7 @@ describe("org memory tools", () => {
     const [searchTool] = createOrgMemoryTools(service);
     await expect(
       searchTool.run({ query: "x" }, context("org_a", undefined))
-    ).rejects.toThrow("organization role");
+    ).rejects.toMatchObject({ status: 403 });
   });
 
   test("org_memory_search with missing orgId throws", async () => {
@@ -92,7 +92,7 @@ describe("org memory tools", () => {
     const proposeTool = createOrgMemoryTools(service)[2];
     await expect(
       proposeTool.run({ bullet: "fact" }, context("org_a", "viewer"))
-    ).rejects.toThrow("Viewers cannot access org memory.");
+    ).rejects.toMatchObject({ status: 403 });
   });
 
   describe("propose_org_memory source documents", () => {

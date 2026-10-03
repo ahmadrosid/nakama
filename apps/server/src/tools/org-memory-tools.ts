@@ -4,7 +4,7 @@ import {
   type KnowledgeBaseDocument,
   listKnowledgeBaseDocuments,
   listOrganizationKnowledgeBaseDocuments,
-  type OrgRole,
+  requireToolNotViewer,
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
@@ -28,17 +28,10 @@ function requireOrgId(context: ToolContext): string {
  */
 function requireOrgMemoryAccess(context: ToolContext): {
   orgId: string;
-  role: OrgRole;
 } {
   const orgId = requireOrgId(context);
-  const role = context.orgRole;
-  if (role === undefined || role === null) {
-    throw new Error("Org memory tools require an organization role.");
-  }
-  if (role === "viewer") {
-    throw new Error("Viewers cannot access org memory.");
-  }
-  return { orgId, role };
+  requireToolNotViewer(context);
+  return { orgId };
 }
 
 function readString(input: unknown, key: string): string | null {

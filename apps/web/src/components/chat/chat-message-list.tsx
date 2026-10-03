@@ -43,6 +43,7 @@ import { ToolCredentialCard } from "@/components/chat/chat-add-capabilities-dial
 import { ChatUsageBadge } from "@/components/chat/chat-usage-badge";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
+import { useArtifactsExist } from "@/hooks/use-resource-mutations";
 import { extractTurnArtifacts } from "@/lib/chat-artifacts";
 import {
   type ChatListItem,
@@ -120,6 +121,7 @@ interface ChatMessageListProps {
   onEditMessage?: (message: ChatListItem, text: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
   profileId?: string | null;
+  readOnly?: boolean;
   sessionId?: string;
   showThinking?: boolean;
   /** Show tokens and estimated cost under each completed assistant turn. */
@@ -144,6 +146,7 @@ function ChatMessageListSession({
   modelLabel,
   branchingMessageId,
   actionsDisabled = false,
+  readOnly = false,
   streamActive = false,
   turnStartedAt = null,
   onBranchMessage,
@@ -286,6 +289,7 @@ function ChatMessageListSession({
             onContinueToolSetup={onContinueToolSetup}
             onRetryMessage={onRetryMessage}
             profileId={profileId}
+            readOnly={readOnly}
             sessionId={sessionId}
             showAwaiting={
               turnIndex === turns.length - 1 && awaitingLabel === "Working…"
@@ -302,6 +306,7 @@ function ChatMessageListSession({
     [
       sessionId,
       onContinueToolSetup,
+      readOnly,
       actionsDisabled,
       awaitingLabel,
       branchingMessageId,
@@ -365,6 +370,7 @@ function ChatMessageListSession({
 }
 
 function AssistantTurn({
+  readOnly = false,
   sessionId,
   onContinueToolSetup,
   workStreamActive,
@@ -381,6 +387,7 @@ function AssistantTurn({
   onBranchMessage,
   onRetryMessage,
 }: {
+  readOnly?: boolean;
   sessionId?: string;
   onContinueToolSetup?: (setupId: string) => Promise<void>;
   workStreamActive: boolean;
@@ -403,11 +410,16 @@ function AssistantTurn({
   const artifactTurnKey = messages.map(({ message }) => message.id).join(":");
   const anchorMessage = findAssistantTurnAnchor(turnMessages);
   const turnComplete = isAssistantTurnComplete(turnMessages);
+  const interactiveTurnComplete = !readOnly && turnComplete;
+  // A later tool call (`rm`, delete_file) or the Files page can remove a file
+  // the transcript still names; its chip would only open a 404.
+  const artifactExists = useArtifactsExist(artifacts, profileId, turnComplete);
+  const liveArtifacts = artifacts.filter((_, index) => artifactExists[index]);
   // Wait for the full SSE reply (tools + final summary), not the brief gap after tool_end.
-  const showArtifacts = turnComplete && artifacts.length > 0;
+  const showArtifacts = turnComplete && liveArtifacts.length > 0;
   const showActions =
     !streamActive &&
-    turnComplete &&
+    interactiveTurnComplete &&
     anchorMessage != null &&
     !anchorMessage.failed;
   const retryDisabled =
@@ -435,7 +447,7 @@ function AssistantTurn({
         <TurnAwaitingElapsed startedAt={turnStartedAt} />
       ) : null}
       {!workStreamActive &&
-        turnComplete &&
+        interactiveTurnComplete &&
         turnMessages
           .filter((message) => message.toolResult != null)
           .map((message) => (
@@ -449,8 +461,8 @@ function AssistantTurn({
           ))}
       {profileId && showArtifacts ? (
         <div className="flex flex-wrap gap-2">
-          {artifacts.map((artifact) => {
-            const chipId = `${artifactTurnKey}:${artifact.path}`;
+          {liveArtifacts.map((artifact) => {
+            const chipId = `${artifactTurnKey}:${artifact.ownerProfileId ?? profileId}:${artifact.path}`;
 
             return (
               <ArtifactAttachmentPreview
@@ -463,8 +475,11 @@ function AssistantTurn({
           })}
         </div>
       ) : null}
-      <CreatedProfiles complete={turnComplete} messages={turnMessages} />
-      {showActions && anchorMessage ? (
+      <CreatedProfiles
+        complete={interactiveTurnComplete}
+        messages={turnMessages}
+      />
+      {showActions ? (
         <AssistantMessageActions
           actionsDisabled={actionsDisabled}
           busy={branchingMessageId === anchorMessage.id}

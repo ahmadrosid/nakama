@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { GenerateChatInput } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentService } from "../../services/agent-service";
+import { createDefaultProfile } from "../../services/agent-service-test-fixtures";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { loginUserSession, seedOrgAdmin } from "../test-session-helpers";
@@ -191,5 +192,35 @@ describe("POST /v1/sessions with cognito", () => {
     );
 
     expect(response.status).toBe(400);
+  });
+
+  test("an explicitly missing profile cannot fall back to the default bot", async () => {
+    const { app, databaseAdapter, session } = await createScenario();
+    await databaseAdapter.upsertProfile({
+      ...createDefaultProfile(),
+      orgId: ORG_ID,
+    });
+
+    for (const profileId of ["missing-profile", "   "]) {
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/sessions", {
+          body: JSON.stringify({ channel: "web", cognito: true, profileId }),
+          headers: session.headers({
+            "Content-Type": "application/json",
+            "X-CSRF-Token": session.csrfToken,
+          }),
+          method: "POST",
+        })
+      );
+      expect(response.status).toBe(404);
+    }
+    expect(await databaseAdapter.listSessions()).toEqual([]);
+
+    // Omitting the profile still selects the organization's default bot.
+    const defaultId = await createSessionOverHttp(app, session, {
+      cognito: true,
+      profileId: undefined,
+    });
+    expect(defaultId).toBeTruthy();
   });
 });

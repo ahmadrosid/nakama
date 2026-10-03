@@ -2,13 +2,19 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { loadLocalAuthToken, verifyLocalAuthToken } from "@nakama/core";
+import { NakamaClient } from "@nakama/client";
+import {
+  loadLocalAuthToken,
+  NakamaApiError,
+  verifyLocalAuthToken,
+} from "@nakama/core";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
 } from "@nakama/db";
 import { AuthService } from "../services/auth-service";
+import { GoogleMeetService } from "../services/google-meet/service";
 import { OrgService } from "../services/org-service";
 import { setupTestConfigDir } from "../test-config-dir";
 import {
@@ -64,11 +70,43 @@ function expectCookiesSecure(setCookies: string[], expected: boolean): void {
 function createServerOptions() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const authService = new AuthService();
+  let sessionAppUserId: string | undefined;
   return {
     agent: {
+      assertSessionProfileAccess: async (
+        _sessionId: string,
+        _orgId: string,
+        _access: unknown,
+        appUserId: string | undefined,
+        requireAppUser = false
+      ) => {
+        if (requireAppUser && appUserId !== sessionAppUserId) {
+          throw new NakamaApiError("Session not found", 404);
+        }
+      },
       beginSessionTurn: async () => true,
-      createSession: async () => "session_1",
+      createSession: async (
+        _orgId: string,
+        _channel: string,
+        _profileId: string,
+        _userId: string,
+        options: { appUserId?: string } = {}
+      ) => {
+        sessionAppUserId = options.appUserId;
+        return "session_1";
+      },
       getProfile: async () => ({ profile: { id: "default" } }),
+      getSessionMessages: async () => ({
+        channel: "web",
+        contextUsage: null,
+        messageMeta: [],
+        messages: [],
+        model: null,
+        questionnaire: null,
+        todos: [],
+      }),
+      getSessionQuestionnaire: async () => null,
+      getSessionTodos: async () => [],
       getWhatsAppSettings: async () => ({ enabled: false }),
       listProfiles: async () => ({ profiles: [{ id: "default" }] }),
       listSessions: async (
@@ -101,6 +139,59 @@ function createServerOptions() {
 }
 
 describe("createHonoApp", () => {
+  test("built-in Meet routes use current org roles and reject spoofed actor fields", async () => {
+    const options = createServerOptions();
+    const root = await mkdtemp(join(tmpdir(), "meet-http-"));
+    const googleMeetService = new GoogleMeetService(
+      options.databaseAdapter,
+      root,
+      async () => ({ text: "Speech" })
+    );
+    try {
+      const app = createHonoApp({ ...options, googleMeetService });
+      const session = await setupFreshInstallSession(
+        app,
+        options.databaseAdapter
+      );
+      const user =
+        await options.databaseAdapter.getUserByEmail("admin@example.com");
+      const request = (action: string, input = {}) =>
+        app.fetch(
+          new Request(`http://localhost:4310/v1/meet/actions/${action}`, {
+            body: JSON.stringify(input),
+            headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
+            method: "POST",
+          })
+        );
+      expect((await request("meetings")).status).toBe(200);
+      expect(
+        (await request("meetings", { actorId: "someone-else" })).status
+      ).toBe(400);
+      expect((await request("toString")).status).toBe(404);
+      await options.databaseAdapter.upsertOrgMember({
+        createdAt: new Date().toISOString(),
+        orgId: session.orgId,
+        role: "member",
+        userId: user!.id,
+      });
+      expect((await request("meetings")).status).toBe(200);
+      expect((await request("configure", { enabled: false })).status).toBe(403);
+      await options.databaseAdapter.upsertOrgMember({
+        createdAt: new Date().toISOString(),
+        orgId: session.orgId,
+        role: "viewer",
+        userId: user!.id,
+      });
+      expect((await request("meetings")).status).toBe(403);
+      expect(
+        (await request("upload", { content: "YQ==", filename: "notes.md" }))
+          .status
+      ).toBe(403);
+    } finally {
+      await googleMeetService.close();
+      await rm(root, { force: true, recursive: true });
+    }
+  });
   test("rejects oversized request bodies before public route handlers", async () => {
     const app = createHonoApp(createServerOptions());
 
@@ -945,6 +1036,48 @@ describe("createHonoApp", () => {
 
     expect(response.status).toBe(415);
   });
+  test("accept-invite rejects a body that is not application/json", async () => {
+    const options = createServerOptions();
+    options.orgService = new OrgService(
+      options.databaseAdapter,
+      options.authService,
+      { send: async () => ({ error: "Email unavailable.", ok: false }) }
+    );
+    const app = createHonoApp(options);
+    const session = await setupFreshInstallSession(
+      app,
+      options.databaseAdapter
+    );
+    const admin =
+      await options.databaseAdapter.getUserByEmail("admin@example.com");
+    const invite = await options.orgService.createInvite({
+      email: "invitee@example.com",
+      invitedByUserId: admin!.id,
+      orgId: session.orgId!,
+      role: "member",
+    });
+
+    const response = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/accept-invite", {
+        body: JSON.stringify({ password: "secret123", token: invite.token }),
+        headers: { "Content-Type": "text/plain;charset=UTF-8" },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(415);
+    expect(extractSetCookies(response)).toEqual([]);
+
+    const accepted = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/accept-invite", {
+        body: JSON.stringify({ password: "secret123", token: invite.token }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+    expect(accepted.status).toBe(200);
+    expect(extractSetCookies(accepted).length).toBeGreaterThan(0);
+  });
 
   test("logout clears both Secure and non-Secure session cookies", async () => {
     const options = createServerOptions();
@@ -1230,7 +1363,7 @@ describe("createHonoApp", () => {
     });
   });
 
-  test("auth/me reports what the credential may do, not what its owner may do", async () => {
+  test("API-key auth responses expose only the key's organization", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
     const adminSession = await setupFreshInstallSession(
@@ -1243,6 +1376,11 @@ describe("createHonoApp", () => {
       throw new Error("Expected setup admin");
     }
     expect(admin.isPlatformAdmin).toBe(true);
+    const secondOrg = await options.orgService.createOrganization(
+      { name: "Other Org", slug: "other-org" },
+      admin.id
+    );
+    expect(secondOrg.organization.id).not.toBe(adminSession.orgId);
 
     const secret = `nk_live_${"c".repeat(64)}`;
     await options.databaseAdapter.createApiKey({
@@ -1268,8 +1406,10 @@ describe("createHonoApp", () => {
       })
     );
     const body = (await response.json()) as {
+      activeOrgId?: string;
       isPlatformAdmin?: boolean;
       mode?: string;
+      orgId?: string;
     };
 
     // The key was minted by a platform admin and is de-privileged anyway, which
@@ -1278,6 +1418,31 @@ describe("createHonoApp", () => {
     expect(response.status).toBe(200);
     expect(body.isPlatformAdmin).toBe(false);
     expect(body.mode).toBe("api-key");
+    expect(body.activeOrgId).toBe(adminSession.orgId);
+    expect(body.orgId).toBe(adminSession.orgId);
+
+    const orgsResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/orgs", {
+        headers: { Authorization: `Bearer ${secret}` },
+      })
+    );
+    const orgsBody = (await orgsResponse.json()) as {
+      orgs: Array<{ id: string }>;
+    };
+    expect(orgsResponse.status).toBe(200);
+    expect(orgsBody.orgs.map((org) => org.id)).toEqual([adminSession.orgId]);
+
+    const browserOrgsResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/orgs", {
+        headers: adminSession.headers(),
+      })
+    );
+    const browserOrgsBody = (await browserOrgsResponse.json()) as {
+      orgs: Array<{ id: string }>;
+    };
+    expect(browserOrgsBody.orgs.map((org) => org.id).sort()).toEqual(
+      [adminSession.orgId, secondOrg.organization.id].sort()
+    );
 
     // A browser session for the same admin still reports the admin it is.
     const sessionResponse = await app.fetch(
@@ -1346,7 +1511,7 @@ describe("createHonoApp", () => {
     );
   });
 
-  test("API-key sessions require an app user id", async () => {
+  test("API-key client creates and accesses an app-user session", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
     const adminSession = await setupFreshInstallSession(
@@ -1378,38 +1543,38 @@ describe("createHonoApp", () => {
       Authorization: `Bearer ${secret}`,
       "Content-Type": "application/json",
     };
-    const headers = {
-      ...apiKeyHeaders,
-      "X-Org-Id": adminSession.orgId,
-    };
+    const client = new NakamaClient({
+      authToken: secret,
+      baseUrl: "http://localhost:4310",
+      fetch: (async (input, init) =>
+        app.fetch(new Request(input, init))) as typeof fetch,
+      orgId: adminSession.orgId,
+    });
+    const missingCreateAppUser = await client
+      .createSession("web")
+      .catch((error: unknown) => error);
+    expect(missingCreateAppUser).toMatchObject({ status: 400 });
+    const session = await client.createSession("web", {
+      appUserId: "alice-123",
+    });
+    const messages = await session.getMessages();
+
+    expect(messages).toEqual([]);
+
+    expect(missingCreateAppUser).toBeInstanceOf(Error);
+
+    const wrongAppUser = await app.fetch(
+      new Request(`http://localhost:4310/v1/sessions/${session.id}/messages`, {
+        headers: { ...apiKeyHeaders, "X-Nakama-App-User-Id": "bob-123" },
+      })
+    );
+    expect(wrongAppUser.status).toBe(404);
     const missingAppUser = await app.fetch(
-      new Request("http://localhost:4310/v1/sessions", {
-        body: JSON.stringify({ channel: "web", profileId: "default" }),
-        headers,
-        method: "POST",
+      new Request(`http://localhost:4310/v1/sessions/${session.id}/messages`, {
+        headers: apiKeyHeaders,
       })
     );
     expect(missingAppUser.status).toBe(400);
-
-    const created = await app.fetch(
-      new Request("http://localhost:4310/v1/sessions", {
-        body: JSON.stringify({
-          appUserId: "alice-123",
-          channel: "web",
-        }),
-        headers: apiKeyHeaders,
-        method: "POST",
-      })
-    );
-    expect(created.status).toBe(201);
-
-    const missingHeader = await app.fetch(
-      new Request(
-        "http://localhost:4310/v1/sessions?profileId=default&channel=web",
-        { headers }
-      )
-    );
-    expect(missingHeader.status).toBe(400);
   });
 
   test("GET /v1/sessions rejects missing or invalid channel", async () => {
@@ -1838,6 +2003,26 @@ describe("createHonoApp", () => {
         new Request("http://localhost:4310/v1/skills", { headers: orgHeaders })
       );
       expect(skillsResponse.status).toBe(403);
+    });
+    test("returns generic passkey options without authentication", async () => {
+      const app = createHonoApp(createServerOptions());
+      const response = await app.fetch(
+        new Request("http://localhost:4310/v1/auth/passkey/login/options", {
+          body: "{}",
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        })
+      );
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        challenge: string;
+        options: { allowCredentials?: unknown };
+        totpEnabled?: unknown;
+      };
+      expect(body.challenge).toBeString();
+      expect(body.options.allowCredentials).toBeUndefined();
+      expect(body.totpEnabled).toBeUndefined();
     });
   });
 });

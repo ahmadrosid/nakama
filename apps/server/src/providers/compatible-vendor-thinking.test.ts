@@ -3,24 +3,13 @@ import { CEREBRAS_CHAT_BASE_URL } from "./cerebras";
 import { compatibleModelSupportsThinking } from "./compatible-models";
 import { FIREWORKS_INFERENCE_BASE_URL } from "./fireworks";
 import { createOpenAICompatibleProvider } from "./openai-compatible";
+import { streamFromChunks } from "./test-helpers";
 
 const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
 });
-
-function streamFromChunks(chunks: string[]): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
-  return new ReadableStream({
-    start(controller) {
-      for (const chunk of chunks) {
-        controller.enqueue(encoder.encode(chunk));
-      }
-      controller.close();
-    },
-  });
-}
 
 const VENDORS = [
   {

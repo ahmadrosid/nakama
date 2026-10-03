@@ -1,0 +1,141 @@
+---
+title: "Outbound connections"
+description: "Know which Nakama features contact external services, what triggers them, and what data can leave your deployment."
+---
+
+Nakama is self-hosted, but self-hosted does not mean offline. A model request,
+channel worker, connected mailbox, network tool, plugin, or update check can
+send data to another service.
+
+The base server does not send telemetry. It contacts an external service only
+after a feature is configured or invoked. The packaged desktop app is the one
+default exception: it checks the Nakama GitHub release feed for updates.
+
+This inventory lets operators answer two questions before enabling a feature:
+
+1. Which destination must the deployment be allowed to reach?
+2. Which user or organization data can cross that boundary?
+
+## How to read the inventory
+
+| Mode | Meaning |
+| --- | --- |
+| **Always on** | The installed component contacts the destination without a user invoking that feature. |
+| **Configured** | No call occurs until an operator supplies credentials or enables the integration. Once running, the integration may keep a connection open or retry automatically. |
+| **Opt-in** | A user, admin, agent, or automation explicitly starts the operation. |
+
+A row can have two modes. For example, enabling a channel is an operator
+choice, then its worker keeps a connection open without another click.
+
+## Inventory
+
+| Feature | Mode | Destination | Data that can leave Nakama |
+| --- | --- | --- | --- |
+| Packaged desktop updates | **Always on** | Nakama releases on GitHub | Update metadata request, desktop version, platform, and normal HTTP metadata. The check runs at startup and every six hours; Windows Store builds are excluded. |
+| LLM chat and text generation | **Configured**, then **opt-in** or automation-driven | The selected provider or custom base URL | System prompt, conversation history, tool definitions, tool results, selected files or images, model settings, and generated output. Automations and coding-agent helper calls use the same provider boundary. |
+| ChatGPT subscription connection | **Opt-in**, then **configured** | OpenAI device authorization, token, Codex model, and Codex inference endpoints | Device authorization state, OAuth tokens, model requests, prompts, history, tools, attachments, and responses. |
+| xAI subscription connection | **Opt-in**, then **configured** | xAI device authorization, token, model, and inference endpoints | Device authorization state, OAuth tokens, model requests, prompts, history, tools, attachments, and responses. |
+| Public model catalogs | **Opt-in** | `models.dev`, OpenRouter, or Cerebras public catalog endpoints | IP address and normal HTTP metadata. These catalog calls do not include a saved provider API key. Results are cached in memory for 30 minutes. |
+| Provider model discovery | **Opt-in** | The selected provider's `/models` endpoint, including custom and local URLs | Provider API key when one is configured, requested endpoint, and normal HTTP metadata. Discovered model IDs are stored in the provider configuration. |
+| Audio transcription | **Configured**, then **opt-in** | The configured OpenAI provider's transcription base URL | Raw audio bytes, filename, media type, selected model, and API key. |
+| Image generation | **Configured**, then **opt-in** | OpenAI Images API | Image prompt, requested size and model, API key, and the generated image response. |
+| Hosted model web search | **Configured**, then **opt-in** | The active LLM provider | Search query and the surrounding model request. Provider-hosted search follows that provider's retention and browsing rules. |
+| Custom web search | **Configured**, then **opt-in** | Exa, Firecrawl, or the operator-supplied search endpoint | Search query and API key. Search results return to the model as tool output. |
+| `web_fetch` | **Opt-in** | Any public HTTP or HTTPS URL selected by the user or agent | Requested URL, normal HTTP metadata, and any information encoded in that URL. The tool blocks private and reserved destinations and revalidates redirects, but it intentionally has broad public-web egress. |
+| Remote images rendered in chat | **Opt-in** when a chat view loads a remote Markdown image | The image's public HTTPS URL, fetched through the Nakama server | Requested URL, server IP address, normal HTTP metadata, and any information encoded in the URL. The proxy blocks private/reserved destinations, revalidates redirects and DNS, accepts only HTTPS on port 443, and validates bounded raster-image responses. This path does not require `web_fetch` to be assigned. |
+| Agent-browser installation | **Opt-in**, platform admin only | The npm registry and the browser download destinations used by `agent-browser install` | Package and browser version, host platform, IP address, and normal download metadata. |
+| Browser automation | **Opt-in** | Sites selected by the user or agent, plus any subresources those sites load | Page requests, browser storage, uploaded content, typed data, and credentials entered in that browser session. Browser traffic is not limited to hosts visible in a prompt. |
+| Coding agents and host `bash` | **Opt-in** | Destinations contacted by Codex, Claude Code, OpenCode, pi, Cursor Agent, package managers, git, or invoked commands | Repository content, prompts, provider credentials passed to the selected harness, command arguments, and anything the spawned process reads and transmits. This egress is not statically enumerable. |
+| Telegram managed-bot pairing | **Opt-in**, org admin or platform admin | The configured manager service or `getnakama.cloud`; the Telegram Bot API when a self-hosted manager token is used | Pairing action and identifier, short-lived pairing bearer secret, suggested bot username, and resulting user/bot identifiers and token. Pairing starts before a channel token is configured. |
+| Telegram channel | **Configured**, then continuously connected or polled | Telegram Bot API and Telegram file endpoints | Bot token, chat and user identifiers, messages, files, typing state, and delivery results. |
+| Discord channel | **Configured**, then continuously connected | Discord gateway, REST API, and Discord-hosted attachment URLs | Bot token, server/channel/user identifiers, messages, commands, files, typing state, and delivery results. |
+| Slack channel | **Configured**, then continuously connected | Slack Web API at `slack.com/api` and the Socket Mode WebSocket URL returned by Slack | Bot and app tokens, workspace/channel/member identifiers, message text, thread IDs, reactions, pairing checks, and delivery results. The current bridge sends text only; it does not transfer files or images. |
+| WhatsApp channel | **Configured**, then continuously connected | WhatsApp Web endpoints selected by Baileys | Linked-device credentials, account and chat identifiers, messages, media, receipts, and protocol metadata. The worker also retrieves compatible WhatsApp Web version information when it starts. |
+| Notifications | **Configured**, then **opt-in** or automation-driven | The configured Telegram, Discord, WhatsApp, or email destination | Notification text, artifact link or attachment, destination identifiers, and delivery metadata. |
+| Composio | **Configured**, then **opt-in** | Composio's API, OAuth destination, and the session MCP URL returned by Composio | API key, Nakama user identifier, toolkit and connected-account identifiers, OAuth state and callback URL, tool arguments, and tool results. The connected SaaS may receive the action data through Composio. |
+| HTTP MCP servers | **Configured**, then **opt-in** | The exact URL configured by an admin; preinstalled choices include Exa, Firecrawl, and Currency MCP | Configured headers, tool discovery requests, tool name, tool arguments, and returned content. MCP OAuth can also contact authorization and token endpoints discovered for that server. |
+| Stdio MCP servers | **Configured**, then **opt-in** | A local child process; that process may contact any destination allowed by the host | Tool arguments and results, plus any files, environment values, or network data the configured process accesses. Nakama cannot inventory a child process's own egress. |
+| Email tool and email notifications | **Configured**, then **opt-in** | Operator-supplied IMAP and SMTP servers | Mailbox credentials, folder and search operations, message bodies and attachments, recipients, subjects, and sent content. TLS certificate verification is enabled. |
+| Error tracking | **Configured** | The ingest endpoint encoded in the saved Sentry-compatible DSN | Scrubbed error name, message and stack, process, Bun version, platform, and architecture. Request bodies and prompts are not intentionally attached, and HTTP 4xx responses and cancelled turns are excluded. Error messages or stacks can still contain user-derived or operational text that the scrubber does not recognize, so treat the sink as sensitive; see [Error tracking](/error-tracking). |
+| API reference UI | **Opt-in** when `/docs` is opened | jsDelivr, Scalar fonts, and Scalar's vector registry | Viewer IP address, browser metadata, referrer allowed by browser policy, and API-reference search requests. The OpenAPI document itself is served by the local Nakama server. |
+| Chat YouTube embeds | **Opt-in** when a rendered chat message contains a recognized YouTube URL | `youtube-nocookie.com` and media subresources selected by YouTube | Video identifier, viewer IP address, browser metadata, and referrer allowed by browser policy. The iframe is lazy-loaded but does not require a separate click. |
+| GitHub skill installation | **Opt-in** | GitHub archive or git endpoints for the selected public repository | Repository owner, name, ref, and normal download metadata. The downloaded skill content is stored locally. |
+| npm plugin package installation | **Opt-in**, platform admin only | `registry.npmjs.org` metadata and tarball endpoints | Exact package name and version plus normal HTTP metadata. Nakama requires an HTTPS registry tarball, verifies its published integrity, and does not run package install scripts. |
+| Token optimiser runtime install | **Opt-in** | The pinned `omni` release and checksum on GitHub | Requested Nakama-supported platform target, pinned version, and normal HTTP metadata. The download occurs only when the binary is absent, the feature is enabled, and automatic install is allowed. |
+| Supermemory plugin | **Configured**, then used with memory or knowledge search | A local or operator-supplied Supermemory endpoint; an automatic worker can also download its pinned server from GitHub and use the configured OpenAI-compatible provider | Memory and knowledge-base text, semantic queries, document identifiers, provider key, and content sent for extraction or embedding. |
+| Google Meet | **Configured**, then **opt-in** | Google Meet in the browser, the configured capture WebSocket, and OpenAI transcription and chat endpoints | Meeting audio chunks, transcript text, meeting metadata, OpenAI key, and summary prompts and responses. |
+| Skill scripts, custom tools, and plugins | **Configured**, then **opt-in** | Any destination implemented by the installed JavaScript, TypeScript, Python, worker, or action code | Any tool input, workspace data, credentials, and environment values that code can read. Declared skill scripts and tool modules can run as host code after the applicable review and assignment; this egress is not statically enumerable. |
+| CLI remote-server connection | **Configured** | The operator-selected Nakama server URL | Login credentials, session token, org context, chat requests, files, and API responses. The CLI refuses to send its saved session to a different origin. |
+| Desktop remote-server connection | **Configured** with `NAKAMA_DESKTOP_URL` | The operator-selected Nakama web origin | Normal browser traffic to that Nakama deployment, including login, org context, chat requests, files, and API responses. |
+
+## Built-in model destinations
+
+The LLM row above resolves to one configured provider at a time. Built-in
+defaults cover:
+
+- OpenAI, Anthropic, Gemini, OpenRouter, DeepSeek, Together AI, Mistral,
+  Perplexity, xAI, Cerebras, Fireworks, Cloudflare Workers AI, OpenCode Go,
+  Vercel AI Gateway, Xiaomi MiMo, and Volcengine Doubao
+- Qwen/DashScope, MiniMax, Moonshot, and Zhipu in their configured global or
+  China-region variants
+- Ollama on localhost, Ollama Cloud, or an operator-supplied base URL
+- any operator-supplied OpenAI-compatible endpoint
+
+An overridden base URL replaces the default destination for providers that
+support overrides. Build an egress rule from the saved configuration, not only
+from this list.
+
+## What is not a fixed destination
+
+Some features are deliberately programmable. A truthful inventory cannot turn
+them into a short host allowlist:
+
+- public URLs requested through `web_fetch`
+- remote image URLs rendered in chat
+- sites and subresources opened by browser automation
+- operator-supplied HTTP MCP and provider URLs
+- network clients started by stdio MCP, skill scripts, custom tools, plugins,
+  `bash`, or coding agents
+- IMAP and SMTP hosts supplied by an operator
+- subresources loaded by browsed sites or embedded third-party content
+
+If your environment requires fixed egress, leave those capabilities unassigned
+or run Nakama behind a policy-enforcing proxy or firewall. Application settings
+are not a substitute for a network boundary around child processes.
+
+## What stays local by default
+
+- The server does not send product analytics or usage telemetry.
+- HTTP metrics remain local until `NAKAMA_METRICS=true`, and Nakama does not push
+  them to a collector.
+- Session history, SQLite data, profile workspaces, org memory, attachments, and
+  plugin data remain in the configured data root unless a configured provider,
+  tool, channel, plugin, share, export, or user action sends them elsewhere.
+- Automation and channel workers call the local Nakama API over loopback. Those
+  internal calls are not third-party egress.
+
+## Audit basis
+
+This inventory was verified against
+[`1a1113fc`](https://github.com/ahmadrosid/nakama/commit/1a1113fc6eb59b938a501e1d9d7e2f05e522f06e).
+The review followed production network call sites and the clients they construct,
+including raw HTTP, provider SDKs, WebSockets, MCP transports, IMAP/SMTP,
+channel libraries, plugin downloads, spawned coding harnesses, and the desktop
+updater. It did not treat a search for literal `https://` strings as an
+inventory.
+
+Recheck the inventory whenever a provider, channel, plugin, tool, MCP transport,
+desktop updater, or network-capable dependency changes. A useful review compares
+new production `fetch` calls and network-client construction with every row
+above, then follows wrappers until the trigger and transmitted data are known.
+
+## Related material
+
+- [Deployment hardening](/deployment-hardening)
+- [Providers](/providers)
+- [Built-in tools](/builtin-tools)
+- [MCP servers](/mcp)
+- [Composio](/composio)
+- [Using plugins](/plugins)
+- [Error tracking](/error-tracking)
+- [Threat model](https://github.com/ahmadrosid/nakama/blob/main/THREAT_MODEL.md)
