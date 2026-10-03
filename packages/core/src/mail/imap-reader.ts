@@ -1,7 +1,6 @@
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { MAX_DOCUMENT_BYTES } from "../message-content";
-import { sanitizeMailError } from "./sanitize";
 import type { MailboxConfig } from "./types";
 import {
   formatMailAddress,
@@ -288,8 +287,4 @@ export function createImapReader(config: MailboxConfig): MailReader {
       }
     },
   };
-}
-
-export function mapImapError(err: unknown): Error {
-  return new Error(sanitizeMailError(err));
 }

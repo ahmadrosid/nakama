@@ -20,7 +20,6 @@ import { loadSavedCliOrgId, saveCliProfileId } from "./cli-config";
 import {
   effectiveModelState,
   formatSlashCommands,
-  isActiveModelOption,
   resolveModelSwitchTarget,
   resolveSlashCommand,
   resolveSuggestions,
@@ -1419,42 +1418,6 @@ async function printStatus(
   for (const line of formatStatusLines(health, models, profile)) {
     write(line);
   }
-}
-
-async function printModels(
-  client: NakamaClient,
-  write: (text: string) => void = printLine,
-  profile: ProfileSummary | null = null,
-  cachedModels: ModelsResponse | null = null
-): Promise<void> {
-  const models = cachedModels ?? (await client.getModels());
-
-  if (!models.provider || models.models.length === 0) {
-    write("No models available.");
-    return;
-  }
-
-  const active = profile
-    ? effectiveModelState(profile, models)
-    : { modelId: null, providerId: models.currentProviderId };
-
-  write(`Provider: ${models.provider}`);
-  write(`Current: ${active.modelId ?? "none"}`);
-
-  for (const model of models.models) {
-    const markers = [
-      isActiveModelOption(model, active) ? "*" : " ",
-      model.default ? "(default)" : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
-
-    write(
-      `${markers} ${model.name} [${model.providerLabel ?? model.provider}] (${model.id})`
-    );
-  }
-
-  write("Use /model <id> or /model <provider-id>::<id> to switch.");
 }
 
 function formatError(error: unknown): string {
