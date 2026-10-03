@@ -180,7 +180,6 @@ interface ToolRow {
 interface SessionRow {
   agent_questionnaire: string | null;
   agent_todos: string;
-  app_user_id?: string | null;
   channel: string;
   created_at: string;
   id: string;
@@ -216,7 +215,6 @@ interface AttachmentRow {
 }
 
 interface SessionSummaryRow {
-  app_user_id?: string | null;
   channel: string;
   created_at: string;
   first_user_payload: string | null;

@@ -491,7 +491,7 @@ export interface AuthUserResponse {
   mfaEnabled?: boolean;
   mfaEnrolled?: boolean;
   mfaRequired?: boolean;
-  /** Which credential answered, which is what explains the flag above. */
+  /** Credential used for this request. */
   mode?: "browser-session" | "local-token";
   name?: string | null;
   orgId?: string | null;
