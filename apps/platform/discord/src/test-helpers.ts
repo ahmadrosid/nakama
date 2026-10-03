@@ -602,6 +602,8 @@ export async function writeDiscordConfigIni(
     pairedUserIds?: string[];
     allowedUserIds?: string[];
     handshakeCode?: string | null;
+    /** Defaults to a live window so a fixture code can actually be used. */
+    handshakeExpiresAt?: string | null;
   }
 ): Promise<void> {
   const dir = path.join(homeDir, ".nakama", "discord");
@@ -623,6 +625,10 @@ export async function writeDiscordConfigIni(
 
   if (config.handshakeCode) {
     lines.push(`handshake_code=${config.handshakeCode}`);
+  }
+
+  if (config.handshakeExpiresAt) {
+    lines.push(`handshake_expires_at=${config.handshakeExpiresAt}`);
   }
 
   lines.push("");

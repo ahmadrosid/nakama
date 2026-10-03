@@ -387,6 +387,8 @@ export async function writeTelegramConfigIni(
     botToken: string;
     profileId?: string;
     handshakeCode?: string | null;
+    /** Defaults to a live window so a fixture code can actually be used. */
+    handshakeExpiresAt?: string | null;
     pairedUserIds?: number[];
     allowedUserIds?: number[];
   }
@@ -402,6 +404,10 @@ export async function writeTelegramConfigIni(
 
   if (config.handshakeCode) {
     lines.push(`handshake_code=${config.handshakeCode}`);
+  }
+
+  if (config.handshakeExpiresAt) {
+    lines.push(`handshake_expires_at=${config.handshakeExpiresAt}`);
   }
 
   if (config.pairedUserIds?.length) {

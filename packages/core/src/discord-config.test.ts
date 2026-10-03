@@ -1,18 +1,19 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   buildDiscordInviteUrl,
-  generateHandshakeCode,
+  generatePairingCode,
   isDiscordUserAuthorized,
   loadDiscordConfigFile,
   loadDiscordSettingsPublic,
   maskBotToken,
-  normalizeHandshakeInput,
   parseAllowedUserIds,
+  regenerateDiscordHandshake,
   resolveDiscordApplicationId,
   resolveDiscordConfigFromSources,
   saveDiscordConfig,
   verifyAndPairDiscordUser,
 } from "./discord-config";
+import { normalizePairingCode } from "./pairing-code";
 import {
   describeSharedChannelConfigTests,
   withTempHomedir,
@@ -176,12 +177,13 @@ describeSharedChannelConfigTests({
     allowlistValue: "123456789012345678, 987654321098765432",
     botTokenKey: "DISCORD_BOT_TOKEN",
   },
-  generateHandshakeCode,
+  generatePairingCode,
   isUserAuthorized: isDiscordUserAuthorized,
   loadConfigFile: loadDiscordConfigFile,
   mask: maskBotToken,
   name: "discord",
-  normalize: normalizeHandshakeInput,
+  normalize: normalizePairingCode,
+  regenerate: () => regenerateDiscordHandshake(null),
   resolveConfigFromSources: resolveDiscordConfigFromSources,
   resolveFile: {
     allowedUserIds: ["999999999999999999"],
