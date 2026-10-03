@@ -13,7 +13,7 @@ import {
 import { useActiveChatProfileStore } from "@/context/active-chat-profile-store";
 import { AppProvider } from "@/context/app-context";
 import { AuthProvider } from "@/context/auth-context";
-import { useAuth } from "@/context/use-auth";
+import { AuthContext } from "@/context/auth-context-shared";
 import { client } from "@/lib/client";
 import { type ChatPageState, useChatPage } from "./use-chat-page";
 
@@ -515,50 +515,28 @@ test("switching orgs clears the old chat while new profiles load", async () => {
     globalThis,
     "localStorage"
   );
-  const stored: Record<string, string> = {};
   Object.defineProperty(globalThis, "localStorage", {
     configurable: true,
-    value: {
-      getItem: (key: string) => stored[key] ?? null,
-      removeItem(key: string) {
-        delete stored[key];
-      },
-      setItem(key: string, value: string) {
-        stored[key] = value;
-      },
-    },
+    value: window.localStorage,
   });
   const previousProfile = useActiveChatProfileStore.getState();
   useActiveChatProfileStore.setState({ orgId: "orgA", profileId: "profileA" });
+  queryClient.setQueryData(
+    ["profiles", "orgA"],
+    [{ id: "profileA", name: "A" }]
+  );
   const nextProfiles = Promise.withResolvers<{
     profiles: { id: string; name: string }[];
   }>();
-  const user = (orgId: string) => ({
-    activeOrgId: orgId,
-    id: "user",
-    isPlatformAdmin: false,
-    orgId,
-  });
+  const getMessages = spyOn(client, "getSessionMessages").mockResolvedValue({
+    channel: "web",
+    messageMeta: [],
+    messages: [{ content: "Org A message", role: "user" }],
+    model: null,
+    questionnaire: null,
+    todos: [],
+  } as never);
   const spies = [
-    spyOn(client, "getMe").mockResolvedValue(user("orgA") as never),
-    spyOn(client, "listUserOrgs").mockResolvedValue({
-      orgs: [
-        { id: "orgA", name: "A" },
-        { id: "orgB", name: "B" },
-      ],
-    } as never),
-    spyOn(client, "setActiveOrg").mockImplementation(async () => {
-      client.setOrgId("orgB");
-      return user("orgB") as never;
-    }),
-    spyOn(client, "getSessionMessages").mockResolvedValue({
-      channel: "web",
-      messageMeta: [],
-      messages: [{ content: "Org A message", role: "user" }],
-      model: null,
-      questionnaire: null,
-      todos: [],
-    } as never),
     spyOn(client, "getSessionStatus").mockResolvedValue({
       active: false,
     } as never),
@@ -568,55 +546,55 @@ test("switching orgs clears the old chat while new profiles load", async () => {
     } as never),
   ];
   const listProfiles = spyOn(client, "listProfiles").mockImplementation(
-    async () =>
-      listProfiles.mock.calls.length === 1
-        ? ({ profiles: [{ id: "profileA", name: "A" }] } as never)
-        : (nextProfiles.promise as never)
+    () => nextProfiles.promise as never
   );
   let page!: ChatPageState;
-  let switchOrg!: ReturnType<typeof useAuth>["switchOrg"];
   let pathname = "";
   function Probe() {
     page = useChatPage();
-    switchOrg = useAuth().switchOrg;
     pathname = useLocation().pathname;
     return null;
   }
   const container = document.createElement("div");
-  document.body.append(container);
   const root = createRoot(container);
   const settle = () =>
     act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
+  const renderForOrg = (orgId: string) => (
+    <MemoryRouter initialEntries={["/chat/profileA/sessionA"]}>
+      <QueryClientProvider client={queryClient}>
+        <AuthContext.Provider
+          value={
+            {
+              activeOrg: { id: orgId, name: orgId },
+              isAuthenticated: true,
+              isLoading: false,
+              user: { activeOrgId: orgId, id: "user", orgId },
+            } as never
+          }
+        >
+          <AppProvider>
+            <Routes>
+              <Route element={<Probe />} path="/chat/:profileId?/:sessionId?" />
+            </Routes>
+          </AppProvider>
+        </AuthContext.Provider>
+      </QueryClientProvider>
+    </MemoryRouter>
+  );
 
   try {
-    await act(async () =>
-      root.render(
-        <MemoryRouter initialEntries={["/chat/profileA/sessionA"]}>
-          <QueryClientProvider client={queryClient}>
-            <AuthProvider>
-              <AppProvider>
-                <Routes>
-                  <Route
-                    element={<Probe />}
-                    path="/chat/:profileId?/:sessionId?"
-                  />
-                </Routes>
-              </AppProvider>
-            </AuthProvider>
-          </QueryClientProvider>
-        </MemoryRouter>
-      )
-    );
+    client.setOrgId("orgA");
+    await act(async () => root.render(renderForOrg("orgA")));
     await settle();
     expect(page.session?.id).toBe("sessionA");
     expect(page.messages).toHaveLength(1);
-    const getMessages = spies[3];
     expect(getMessages).toHaveBeenCalledTimes(1);
 
-    await act(async () => switchOrg("orgB"));
-    expect(listProfiles).toHaveBeenCalledTimes(2);
+    client.setOrgId("orgB");
+    await act(async () => root.render(renderForOrg("orgB")));
+    expect(listProfiles).toHaveBeenCalledTimes(1);
     expect(pathname).toBe("/chat");
     expect(page.session).toBeNull();
     expect(page.messages).toEqual([]);
@@ -631,7 +609,8 @@ test("switching orgs clears the old chat while new profiles load", async () => {
     expect(getMessages).toHaveBeenCalledTimes(1);
   } finally {
     await act(async () => root.unmount());
-    container.remove();
+    client.setOrgId(null);
+    getMessages.mockRestore();
     listProfiles.mockRestore();
     for (const spy of spies) {
       spy.mockRestore();
