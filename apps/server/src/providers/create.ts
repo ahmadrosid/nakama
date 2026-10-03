@@ -45,7 +45,7 @@ const DEFAULT_QWEN_CN_BASE_URL =
 const DEFAULT_PERPLEXITY_BASE_URL = "https://api.perplexity.ai";
 const DEFAULT_XAI_BASE_URL = "https://api.x.ai/v1";
 
-export interface CreateProviderOptions {
+interface CreateProviderOptions {
   apiKey: string;
   instance?: ProviderInstance | null;
   model?: string;

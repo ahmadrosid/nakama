@@ -158,7 +158,7 @@ export function isChatSessionPath(pathname: string): boolean {
   return chatProfileIdFromPath(pathname) !== null;
 }
 
-export const ACTIVE_CHAT_PROFILE_STORAGE_KEY = "nakama:active-chat-profile";
+const ACTIVE_CHAT_PROFILE_STORAGE_KEY = "nakama:active-chat-profile";
 
 export function activeChatProfileStorageKey(orgId?: string | null): string {
   return orgId

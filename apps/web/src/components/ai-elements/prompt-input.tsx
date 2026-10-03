@@ -170,7 +170,7 @@ export const usePromptInputAttachments = () => {
   return context;
 };
 
-export interface PromptInputMessage {
+interface PromptInputMessage {
   files: FileUIPart[];
   text: string;
 }

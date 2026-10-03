@@ -9,7 +9,7 @@ export interface OpenRouterApiPricing {
   web_search?: string;
 }
 
-export interface OpenRouterApiModel {
+interface OpenRouterApiModel {
   architecture?: {
     input_modalities?: string[];
   };
@@ -91,7 +91,7 @@ export function isOpenRouterModelDeprecated(
   return Number.isFinite(year) && year < OPENROUTER_SENTINEL_EXPIRATION_YEAR;
 }
 
-export function normalizeOpenRouterModel(
+function normalizeOpenRouterModel(
   entry: OpenRouterApiModel
 ): OpenRouterModelRow {
   const inputModalities = entry.architecture?.input_modalities ?? [];
@@ -121,7 +121,7 @@ export function normalizeOpenRouterModels(
   return data.map(normalizeOpenRouterModel).sort(compareOpenRouterModelRows);
 }
 
-export function compareOpenRouterModelRows(
+function compareOpenRouterModelRows(
   a: OpenRouterModelRow,
   b: OpenRouterModelRow
 ): number {

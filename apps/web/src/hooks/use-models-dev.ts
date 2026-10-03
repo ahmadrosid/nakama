@@ -162,7 +162,7 @@ export function parseModelsDevCatalog(
   return rows;
 }
 
-export const modelsDevQueryOptions = queryOptions({
+const modelsDevQueryOptions = queryOptions({
   queryFn: fetchModelsDev,
   queryKey: queryKeys.modelsDev,
   staleTime: 1000 * 60 * 30,

@@ -608,9 +608,7 @@ export function decodeStoredModelSelection(
   };
 }
 
-export function extractStoredModelId(
-  value: string | null | undefined
-): string | null {
+function extractStoredModelId(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
 
   if (!trimmed) {

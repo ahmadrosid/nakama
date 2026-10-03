@@ -1,11 +1,11 @@
 export const SITE_NAME = "Nakama";
-export const SITE_TAGLINE = "AI agents that work with your team.";
+const SITE_TAGLINE = "AI agents that work with your team.";
 export const SITE_DESCRIPTION =
   "Nakama is an open-source platform for teams to build and run AI agents with their own memory, tools, and workspaces. Self-host or use managed hosting.";
 export const SITE_URL =
   process.env.NAKAMA_DOCS_SITE_URL ?? "https://ahmadrosid.github.io/nakama";
-export const AUTHOR_NAME = "Ahmad Rosid";
-export const AUTHOR_ROLE = "Creator and maintainer of Nakama";
+const AUTHOR_NAME = "Ahmad Rosid";
+const AUTHOR_ROLE = "Creator and maintainer of Nakama";
 export const OG_IMAGE_URL = `${SITE_URL}/nakama-demo.png`;
 
 export function slugToRelativePath(slug: string[]): string {
@@ -25,12 +25,12 @@ export function slugToRelativePath(slug: string[]): string {
   return `${slug.join("/")}.md`;
 }
 
-export function getCanonicalUrl(relativePath: string) {
+function getCanonicalUrl(relativePath: string) {
   const cleanPath = relativePath.replace(/index\.md$/, "").replace(/\.md$/, "");
   return cleanPath ? `${SITE_URL}/${cleanPath}` : `${SITE_URL}/`;
 }
 
-export function getMarkdownUrl(relativePath: string) {
+function getMarkdownUrl(relativePath: string) {
   return `${SITE_URL}/${relativePath}`;
 }
 
@@ -131,7 +131,7 @@ export function buildLlmsTxt(pages: PageMetadata[]) {
     "This file is the entry point for Nakama product documentation.",
     "When a user asks about Nakama setup, behavior, integrations, or troubleshooting:",
     `1. You are reading the index now, or fetch ${SITE_URL}/llms.txt if you do not have it yet.`,
-    '2. Pick the best page from the inventory below.',
+    "2. Pick the best page from the inventory below.",
     `3. web_fetch the matching .md page (for example ${SITE_URL}/telegram/index.md).`,
     "4. Do not use knowledge_base_search for these URLs — that tool only searches uploaded profile documents.",
     "5. Answer from the fetched page. Do not guess steps that are not in the docs.",

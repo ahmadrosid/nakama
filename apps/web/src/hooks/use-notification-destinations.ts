@@ -12,7 +12,7 @@ import { useAuth } from "@/context/use-auth";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
-export const notificationDestinationsQueryOptions = (orgId: string) =>
+const notificationDestinationsQueryOptions = (orgId: string) =>
   queryOptions({
     queryFn: () => client.forOrg(orgId).listNotificationDestinations(),
     queryKey: queryKeys.notificationDestinations(orgId),

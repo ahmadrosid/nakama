@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { getUserConfigDir, readTextOrNull, writeTextFile } from "@nakama/core";
 import { stripAnsi, visibleLength } from "./text-measure";
 
-export type NamedColor = "default" | "cyan" | "yellow" | "red" | "green";
-export type NamedBackgroundColor = "surface";
+type NamedColor = "default" | "cyan" | "yellow" | "red" | "green";
+type NamedBackgroundColor = "surface";
 export type Theme = "dark" | "light";
 
 export interface TextStyle {
@@ -20,7 +20,7 @@ export interface TextStyle {
   underline?: boolean;
 }
 
-export interface StyledSegment {
+interface StyledSegment {
   style?: TextStyle;
   text: string;
 }
@@ -30,7 +30,7 @@ export interface StyledLine {
 }
 
 /** Persistable CLI runtime hints under `~/.nakama/cli-state.json`. */
-export interface CliState {
+interface CliState {
   macosTheme?: Theme;
   /** mtimeMs of `~/Library/Preferences/.GlobalPreferences.plist` when cached. */
   macosThemePrefsMtimeMs?: number;

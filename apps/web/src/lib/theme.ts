@@ -8,7 +8,7 @@ export function isTheme(value: string | null | undefined): value is Theme {
   return value === "light" || value === "dark" || value === "system";
 }
 
-export function getStoredTheme(): Theme | null {
+function getStoredTheme(): Theme | null {
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
     return isTheme(stored) ? stored : null;
@@ -17,7 +17,7 @@ export function getStoredTheme(): Theme | null {
   }
 }
 
-export function getSystemTheme(): ResolvedTheme {
+function getSystemTheme(): ResolvedTheme {
   if (typeof window === "undefined") {
     return "dark";
   }

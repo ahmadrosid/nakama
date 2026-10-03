@@ -16,9 +16,7 @@ import type {
 } from "@nakama/db";
 import type { AuthService } from "./auth-service";
 
-export function notificationDestinationWebhookPath(
-  destinationId: string
-): string {
+function notificationDestinationWebhookPath(destinationId: string): string {
   return `/v1/notify/${encodeURIComponent(destinationId)}`;
 }
 

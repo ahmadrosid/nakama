@@ -5,7 +5,7 @@ import { client, formatError } from "@/lib/client";
 import { buildSuperBotFixDraft } from "@/lib/tool-playground-draft";
 import { buildExampleParametersJson } from "@/lib/tool-playground-params";
 
-export type ToolPlaygroundRunState =
+type ToolPlaygroundRunState =
   | { status: "idle" }
   | { status: "running" }
   | { status: "success"; result: unknown; parameters: Record<string, unknown> }

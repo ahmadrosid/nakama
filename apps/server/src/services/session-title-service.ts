@@ -3,7 +3,7 @@ import type { ChatMessage, UserConfig } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 import { createProviderForProfile } from "./provider-instance-helpers";
 
-export const SESSION_TITLE_FALLBACK = "Untitled";
+const SESSION_TITLE_FALLBACK = "Untitled";
 
 export class SessionTitleService {
   private readonly inFlight = new Set<string>();

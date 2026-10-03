@@ -68,7 +68,7 @@ const navItem = (
   label,
 });
 
-export const NAV_GROUPS: NavGroup[] = [
+const NAV_GROUPS: NavGroup[] = [
   {
     id: "chat",
     items: [
@@ -161,7 +161,7 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
+const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 
 export const SIDEBAR_PAGE_IDS: readonly PageId[] = [
   "chat",
@@ -182,7 +182,7 @@ export const STANDALONE_PAGES: Partial<Record<PageId, NavItem>> = {
 
 export const SETUP_PATH = "/setup";
 
-export const PLATFORM_ADMIN_PAGE_IDS: ReadonlySet<PageId> = new Set([
+const PLATFORM_ADMIN_PAGE_IDS: ReadonlySet<PageId> = new Set([
   "files",
   "soul",
   "mcp",
@@ -252,12 +252,12 @@ export function visibleNavGroups(access: {
 const queryPath = (path: string, params: Record<string, string>): string =>
   `${path}?${new URLSearchParams(params)}`;
 
-export const toolsTabPath = (): string => PAGE_PATHS.tools;
+const toolsTabPath = (): string => PAGE_PATHS.tools;
 
 export const pluginManagementPath = (): string =>
   PAGE_PATHS["plugin-management"];
 
-export const PLUGIN_PAGE_PREFIX = "/plugins";
+const PLUGIN_PAGE_PREFIX = "/plugins";
 
 export function pluginPagePath(pluginId: string): string {
   return `${PLUGIN_PAGE_PREFIX}/${encodeURIComponent(pluginId)}`;

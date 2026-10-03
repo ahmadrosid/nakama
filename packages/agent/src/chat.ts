@@ -70,7 +70,7 @@ const EMPTY_REPLY_NUDGE =
 const EMPTY_REPLY_NOTICE =
   "The model finished without writing a reply. Send another message to continue.";
 
-export interface StreamHandlers {
+interface StreamHandlers {
   onChunk: (delta: string) => void;
   onSubAgentActivity?: (event: {
     parentToolCallId: string;
@@ -100,7 +100,7 @@ export interface StreamHandlers {
   onUsage?: (usage: ChatUsage) => void;
 }
 
-export type SendMessageArg = string | SendMessageInput;
+type SendMessageArg = string | SendMessageInput;
 
 export interface AgentChatSession {
   clear(): void;
@@ -119,14 +119,14 @@ export interface AgentChatSession {
   ): Promise<string>;
 }
 
-export interface SendStreamOptions {
+interface SendStreamOptions {
   /** Persist the accepted user message before any provider call. */
   onUserMessage?: () => Promise<void>;
   /** Cancels the turn: stops the tool loop and asks running tools to abort. */
   signal?: AbortSignal;
 }
 
-export interface ResolvePromptContextInput {
+interface ResolvePromptContextInput {
   userMessage?: string;
 }
 

@@ -29,7 +29,7 @@ export function requireOrgAdminFromContext(
   return auth;
 }
 
-export function requireOrgAdminOrPlatformAdmin(auth: RequestAuthContext): void {
+function requireOrgAdminOrPlatformAdmin(auth: RequestAuthContext): void {
   if (auth.orgRole === "admin" || auth.isPlatformAdmin) {
     return;
   }

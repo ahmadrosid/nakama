@@ -12,7 +12,7 @@ export type ArtifactFolderListing = {
   folders: ArtifactFolderEntry[];
 };
 
-export function normalizeArtifactPath(value: string): string {
+function normalizeArtifactPath(value: string): string {
   return value.replaceAll("\\", "/").replace(/^\/+|\/+$/g, "");
 }
 

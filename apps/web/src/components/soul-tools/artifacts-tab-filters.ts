@@ -10,7 +10,7 @@ import {
   resolveArtifactMimeType,
 } from "@/lib/chat-artifacts";
 
-export const ARTIFACT_TYPE_FILTERS = [
+const ARTIFACT_TYPE_FILTERS = [
   "all",
   "markdown",
   "html",
