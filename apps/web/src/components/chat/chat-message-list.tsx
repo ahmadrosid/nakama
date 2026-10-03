@@ -129,10 +129,11 @@ interface ChatMessageListProps {
   /** True while the assistant reply SSE stream is in flight. */
   streamActive?: boolean;
   turnStartedAt?: string | null;
+  workStreamActive?: boolean;
 }
 
 export function ChatMessageList(props: ChatMessageListProps) {
-  const sessionAnchor = props.messages[0]?.id ?? "empty";
+  const sessionAnchor = props.sessionId ?? props.messages[0]?.id ?? "empty";
   return <ChatMessageListSession key={sessionAnchor} {...props} />;
 }
 
@@ -149,6 +150,7 @@ function ChatMessageListSession({
   readOnly = false,
   streamActive = false,
   turnStartedAt = null,
+  workStreamActive = streamActive,
   onBranchMessage,
   onEditMessage,
   onRetryMessage,
@@ -298,7 +300,9 @@ function ChatMessageListSession({
             showUsage={showUsage}
             streamActive={streamActive}
             turnStartedAt={turnStartedAt}
-            workStreamActive={streamActive && turnIndex === turns.length - 1}
+            workStreamActive={
+              workStreamActive && turnIndex === turns.length - 1
+            }
           />
         </div>
       );
@@ -320,6 +324,7 @@ function ChatMessageListSession({
       showUsage,
       streamActive,
       turnStartedAt,
+      workStreamActive,
       turns.length,
     ]
   );
