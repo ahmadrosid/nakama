@@ -6,6 +6,8 @@ on:
     # Desktop version bumps are checked by Desktop Release; PR checks still run.
     paths-ignore: ['apps/desktop/package.json']
   pull_request:
+    # Markdown-only PRs change no code.
+    paths-ignore: ['**.md', '.agents/**']
 
 permissions:
   contents: read
