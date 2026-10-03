@@ -689,6 +689,7 @@ async function runConversation(
 ): Promise<string> {
   let producedTokens = 0;
   let stoppedReply = "";
+  let finalReplyOnly = false;
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
     signal?.throwIfAborted();
     if (producedTokens >= MAX_TURN_OUTPUT_TOKENS) {
@@ -696,13 +697,16 @@ async function runConversation(
     }
     const { localTools: iterationTools } = partitionTools(tools);
     const llmTools =
-      enableToolLoop && iterationTools.length
+      enableToolLoop && !finalReplyOnly && iterationTools.length
         ? toLlmToolDefinitions(iterationTools)
         : undefined;
+    const iterationPrompt = finalReplyOnly
+      ? `${systemPrompt}\n\n${EMPTY_REPLY_NUDGE}`
+      : systemPrompt;
     const reservedTokens =
       estimateHistoryTokens(
         history,
-        `${systemPrompt}\n\nToday is ${formatCurrentDate()}.`,
+        `${iterationPrompt}\n\nToday is ${formatCurrentDate()}.`,
         llmTools,
         providerReplaysThinking(provider.name)
       ) + Math.max(0, MAX_TURN_OUTPUT_TOKENS - producedTokens);
@@ -711,10 +715,12 @@ async function runConversation(
     const toolGroupId = createId("toolgroup");
     const result = await generateReply(
       provider,
-      systemPrompt,
+      iterationPrompt,
       history,
       llmTools,
-      providerOptions,
+      finalReplyOnly
+        ? { ...providerOptions, webSearch: false }
+        : providerOptions,
       mode,
       handlers,
       rehydrateMessagesForProvider,
@@ -726,7 +732,7 @@ async function runConversation(
       result.usage?.inputTokens ??
       estimateHistoryTokens(
         history,
-        `${systemPrompt}\n\nToday is ${formatCurrentDate()}.`,
+        `${iterationPrompt}\n\nToday is ${formatCurrentDate()}.`,
         llmTools,
         providerReplaysThinking(provider.name)
       );
@@ -773,6 +779,21 @@ async function runConversation(
       stoppedReply = result.content;
       break;
     }
+    if (
+      enableToolLoop &&
+      result.toolCalls.length === 0 &&
+      !result.content.trim()
+    ) {
+      if (!finalReplyOnly) {
+        finalReplyOnly = true;
+        continue;
+      }
+      history.push({ content: EMPTY_REPLY_NOTICE, role: "assistant" });
+      if (mode === "stream") {
+        handlers?.onChunk(EMPTY_REPLY_NOTICE);
+      }
+      return EMPTY_REPLY_NOTICE;
+    }
     history.push(
       result.usage
         ? { ...result.assistantMessage, usage: result.usage }
@@ -780,20 +801,7 @@ async function runConversation(
     );
 
     if (!enableToolLoop || result.toolCalls.length === 0) {
-      if (!enableToolLoop || result.content.trim()) {
-        return result.content;
-      }
-      return await closeEmptyTurn({
-        handlers,
-        history,
-        mode,
-        onTurnUsage,
-        provider,
-        providerOptions,
-        rehydrateMessagesForProvider,
-        signal,
-        systemPrompt,
-      });
+      return result.content;
     }
 
     const toolHistoryStart = history.length;
@@ -813,79 +821,17 @@ async function runConversation(
     );
   }
 
-  const hitBudget = producedTokens >= MAX_TURN_OUTPUT_TOKENS;
-  const lastAssistant = [...history]
-    .reverse()
-    .find(
-      (message): message is Extract<ChatMessage, { role: "assistant" }> =>
-        message.role === "assistant"
-    );
-  const reachedToolLimit = !(hitBudget || lastAssistant?.content.trim());
-  if (hitBudget || reachedToolLimit) {
-    const reason = hitBudget
+  const reason =
+    producedTokens >= MAX_TURN_OUTPUT_TOKENS
       ? "its output budget"
       : `its limit of ${MAX_TOOL_ITERATIONS} tool rounds`;
-    const notice = `${stoppedReply ? "\n\n" : ""}Stopped because this turn reached ${reason}. Send another message to continue.`;
-    const content = stoppedReply + notice;
-    history.push({ content, role: "assistant" });
-    if (mode === "stream") {
-      handlers?.onChunk(notice);
-    }
-    return content;
-  }
-
-  return lastAssistant?.content ?? "";
-}
-
-// The model ended its turn with no text. Ask once more without tools so the
-// user gets an answer; if that is empty too, say so instead of returning "".
-async function closeEmptyTurn(input: {
-  handlers?: StreamHandlers;
-  history: ChatMessage[];
-  mode: "send" | "stream";
-  onTurnUsage?: (usage: ChatUsage) => void;
-  provider: ProviderClient;
-  providerOptions?: ProviderChatOptions;
-  rehydrateMessagesForProvider?: (
-    messages: readonly ChatMessage[]
-  ) => Promise<ChatMessage[]>;
-  signal?: AbortSignal;
-  systemPrompt: string;
-}): Promise<string> {
-  const { history, mode, handlers } = input;
-  // Drop the empty assistant message, and keep the nudge out of saved history.
-  history.pop();
-  const retry = await generateReply(
-    input.provider,
-    input.systemPrompt,
-    [...history, { content: EMPTY_REPLY_NUDGE, role: "user" }],
-    undefined,
-    input.providerOptions,
-    mode,
-    handlers,
-    input.rehydrateMessagesForProvider,
-    input.signal
-  );
-  input.signal?.throwIfAborted();
-  if (retry.usage) {
-    handlers?.onUsage?.(retry.usage);
-    input.onTurnUsage?.(retry.usage);
-  }
-
-  if (retry.content.trim()) {
-    history.push(
-      retry.usage
-        ? { ...retry.assistantMessage, usage: retry.usage }
-        : retry.assistantMessage
-    );
-    return retry.content;
-  }
-
-  history.push({ content: EMPTY_REPLY_NOTICE, role: "assistant" });
+  const notice = `${stoppedReply ? "\n\n" : ""}Stopped because this turn reached ${reason}. Send another message to continue.`;
+  const content = stoppedReply + notice;
+  history.push({ content, role: "assistant" });
   if (mode === "stream") {
-    handlers?.onChunk(EMPTY_REPLY_NOTICE);
+    handlers?.onChunk(notice);
   }
-  return EMPTY_REPLY_NOTICE;
+  return content;
 }
 
 async function executeToolCalls(
