@@ -51,6 +51,7 @@ import {
   seedOrgSuperBotProfile,
 } from "@nakama/db";
 import type { AuthService } from "./auth-service";
+import { deleteOrgToolCredentials } from "./custom-tool-shared";
 import { loadMfaPolicy } from "./mfa-config";
 
 const LAST_MEMBERSHIP_MESSAGE =
@@ -174,6 +175,7 @@ export class OrgService {
     }
     // Keep the database row available for a safe retry if disk cleanup fails.
     await rm(getOrgConfigDir(orgId), { force: true, recursive: true });
+    await deleteOrgToolCredentials(orgId);
     await rm(join(getUserConfigDir(), "retired-app-users", orgId), {
       force: true,
       recursive: true,
