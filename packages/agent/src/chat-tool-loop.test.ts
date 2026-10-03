@@ -642,6 +642,89 @@ describe("agent chat tool loop", () => {
     }
   );
 
+  test.each([false, true])(
+    "checks quota before the empty retry (stream: %s)",
+    async (stream) => {
+      let calls = 0;
+      let checks = 0;
+      const provider: ProviderClient = {
+        ...createMockProvider([]),
+        async generateChat() {
+          calls += 1;
+          return textReply("");
+        },
+        async streamChat(input) {
+          return this.generateChat(input);
+        },
+      };
+      const session = createAgentChatSession(
+        { provider },
+        {
+          toolContext: {
+            async assertCanStartLlmTurn() {
+              checks += 1;
+              if (checks === 2) {
+                throw new Error("Quota exhausted");
+              }
+            },
+          },
+          tools: [sampleTool],
+        }
+      );
+      const reply = stream
+        ? session.sendStream("go", { onChunk() {} })
+        : session.send("go");
+      await expect(reply).rejects.toThrow();
+      expect(checks).toBe(2);
+      expect(calls).toBe(1);
+    }
+  );
+
+  test.each([false, true])(
+    "retains fetched images during the empty retry (stream: %s)",
+    async (stream) => {
+      const calls: GenerateChatInput[] = [];
+      const data = "aW1hZ2U=";
+      const provider: ProviderClient = {
+        ...createMockProvider([]),
+        async generateChat(input) {
+          calls.push(input);
+          if (calls.length === 1) {
+            return toolTurn([{ arguments: {}, id: "page", name: "web_fetch" }]);
+          }
+          return textReply(calls.length === 2 ? "" : "Final");
+        },
+        async streamChat(input, handlers) {
+          const result = await this.generateChat(input);
+          handlers.onChunk(result.content);
+          return result;
+        },
+      };
+      const session = createAgentChatSession({
+        provider,
+        tools: [
+          {
+            description: "Fetch page",
+            name: "web_fetch",
+            async run() {
+              return { images: [{ data, mediaType: "image/png" }] };
+            },
+          },
+        ],
+      });
+      const reply = stream
+        ? await session.sendStream("Describe the page", { onChunk() {} })
+        : await session.send("Describe the page");
+      expect(reply).toBe("Final");
+      expect(calls[2]?.tools?.length ?? 0).toBe(0);
+      expect(calls[2]?.messages.at(-1)?.content).toEqual(
+        expect.arrayContaining([
+          { data, mediaType: "image/png", type: "image" },
+        ])
+      );
+    }
+  );
+
   test("asks once more without tools when the model ends with no text", async () => {
     const seen: { tools: number; last: string }[] = [];
     let call = 0;
@@ -703,31 +786,37 @@ describe("agent chat tool loop", () => {
     });
   });
 
-  test("returns non-empty text when the tool round limit is reached", async () => {
-    let call = 0;
-    const provider: ProviderClient = {
-      ...createMockProvider([]),
-      generateChat() {
-        call += 1;
-        return Promise.resolve(
-          toolTurn([
+  test.each(["", "Working"])(
+    "ends with a final message at the tool round limit (text: %s)",
+    async (content) => {
+      let call = 0;
+      const provider: ProviderClient = {
+        ...createMockProvider([]),
+        generateChat() {
+          call += 1;
+          const result = toolTurn([
             { arguments: { message: "x" }, id: `c${call}`, name: "sample" },
-          ])
-        );
-      },
-    };
-    const session = createAgentChatSession(
-      { provider },
-      { tools: [sampleTool] }
-    );
-    const reply = await session.send("loop forever");
-    expect(call).toBe(100);
-    expect(reply.length).toBeGreaterThan(0);
-    expect(session.getHistory().at(-1)).toEqual({
-      content: reply,
-      role: "assistant",
-    });
-  });
+          ]);
+          return Promise.resolve({
+            ...result,
+            assistantMessage: { ...result.assistantMessage, content },
+            content,
+          });
+        },
+      };
+      const session = createAgentChatSession(
+        { provider },
+        { tools: [sampleTool] }
+      );
+      const reply = await session.send("loop forever");
+      expect(call).toBe(100);
+      expect(reply.length).toBeGreaterThan(0);
+      expect(session.getHistory().at(-1)).toEqual({
+        content: reply,
+        role: "assistant",
+      });
+    }
+  );
 
   test("handles a single tool call then a final reply", async () => {
     const provider = createMockProvider([
