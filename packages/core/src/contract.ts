@@ -1748,7 +1748,10 @@ export interface SendErrorTrackingTestResponse {
   delivered: boolean;
 }
 
-export type NotificationDestinationChannel = "telegram";
+export type NotificationDestinationChannel =
+  | "telegram"
+  | "discord"
+  | "whatsapp";
 
 export type NotificationWebhookLevel = "info" | "success" | "warning" | "error";
 
@@ -1758,15 +1761,26 @@ export interface TelegramNotificationDestinationConfig {
   topicId?: number | null;
 }
 
-export interface NotificationDestinationSummary {
-  channel: NotificationDestinationChannel;
+export interface DiscordNotificationDestinationConfig {
+  channelId: string;
+  profileId: string;
+}
+
+export interface WhatsAppNotificationDestinationConfig {
+  profileId: string;
+}
+
+export type NotificationDestinationSummary = {
   createdAt: string;
   id: string;
   name: string;
-  telegram: TelegramNotificationDestinationConfig;
   updatedAt: string;
   webhookPath: string;
-}
+} & (
+  | { channel: "telegram"; telegram: TelegramNotificationDestinationConfig }
+  | { channel: "discord"; discord: DiscordNotificationDestinationConfig }
+  | { channel: "whatsapp"; whatsapp: WhatsAppNotificationDestinationConfig }
+);
 
 export interface NotificationDestinationWithSecret {
   apiKey: string;
@@ -1777,16 +1791,21 @@ export interface ListNotificationDestinationsResponse {
   destinations: NotificationDestinationSummary[];
 }
 
-export interface CreateNotificationDestinationRequest {
-  channel: NotificationDestinationChannel;
+export type CreateNotificationDestinationRequest = {
   name: string;
-  telegram: TelegramNotificationDestinationConfig;
-}
+} & (
+  | { channel: "telegram"; telegram: TelegramNotificationDestinationConfig }
+  | { channel: "discord"; discord: DiscordNotificationDestinationConfig }
+  | { channel: "whatsapp"; whatsapp: WhatsAppNotificationDestinationConfig }
+);
 
-export interface UpdateNotificationDestinationRequest {
+export type UpdateNotificationDestinationRequest = {
   name: string;
-  telegram: TelegramNotificationDestinationConfig;
-}
+} & (
+  | { channel?: "telegram"; telegram: TelegramNotificationDestinationConfig }
+  | { channel: "discord"; discord: DiscordNotificationDestinationConfig }
+  | { channel: "whatsapp"; whatsapp: WhatsAppNotificationDestinationConfig }
+);
 
 export interface RegenerateNotificationDestinationKeyResponse {
   apiKey: string;

@@ -243,20 +243,21 @@ export interface StoredCodingAgentHarnessRecord {
   probeCache?: StoredCodingAgentHarnessProbeCache | null;
 }
 
-export interface StoredNotificationDestinationRecord {
-  channel: "telegram";
-  config: {
-    profileId?: string;
-    chatId: number;
-    topicId?: number | null;
-  };
+export type StoredNotificationDestinationRecord = {
   createdAt: string;
   id: string;
   name: string;
   orgId: string;
   secretHash: string;
   updatedAt: string;
-}
+} & (
+  | {
+      channel: "telegram";
+      config: { profileId?: string; chatId: number; topicId?: number | null };
+    }
+  | { channel: "discord"; config: { profileId: string; channelId: string } }
+  | { channel: "whatsapp"; config: { profileId: string } }
+);
 
 export type StoredOrgComposioToolkitStatus = "disabled" | "enabled";
 
