@@ -208,10 +208,24 @@ export function pickKnownProfileId(
 
 /** Initial profile for draft `/chat` before profiles list loads. */
 export function readInitialDraftChatProfileId(input: {
+  currentOrgId?: string | null;
+  currentProfileId?: string | null;
   search: string;
   orgId?: string | null;
   routeProfileId?: string | null;
 }): string {
+  if (
+    input.orgId &&
+    input.currentOrgId !== undefined &&
+    input.currentOrgId !== input.orgId
+  ) {
+    return "";
+  }
+
+  if (input.currentProfileId !== undefined && input.currentProfileId !== null) {
+    return input.currentProfileId;
+  }
+
   if (input.routeProfileId) {
     return input.routeProfileId;
   }

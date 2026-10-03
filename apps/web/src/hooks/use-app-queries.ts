@@ -484,8 +484,16 @@ export function useModelsQuery(options?: { enabled?: boolean }) {
   });
 }
 
-export function useProfilesQuery() {
-  return useQuery(profilesQueryOptions);
+export function useProfilesQuery(orgId?: string | null) {
+  return useQuery({
+    enabled: orgId === undefined || Boolean(orgId),
+    queryFn: async () => (await client.listProfiles()).profiles,
+    queryKey:
+      orgId === undefined
+        ? queryKeys.profiles.all
+        : [...queryKeys.profiles.all, orgId],
+    staleTime: defaultStaleTime,
+  });
 }
 
 export function useProfileQuery(profileId: string | null) {
