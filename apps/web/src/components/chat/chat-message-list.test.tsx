@@ -4,7 +4,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { ThemeProvider } from "@/context/theme-context";
 import type { ChatListItem } from "@/lib/chat-history";
-import type { MessageTurn } from "@/lib/chat-message-turns";
+import { type MessageTurn, turnKey } from "@/lib/chat-message-turns";
 
 mock.module("react-virtuoso", () => ({
   Virtuoso: ({
@@ -16,7 +16,7 @@ mock.module("react-virtuoso", () => ({
   }) => (
     <div>
       {data.map((item, index) => (
-        <div key={index}>{itemContent(index, item)}</div>
+        <div key={turnKey(item)}>{itemContent(index, item)}</div>
       ))}
     </div>
   ),
