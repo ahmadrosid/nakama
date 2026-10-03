@@ -92,7 +92,7 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahm
 
 Orgs isolate profiles, sessions, automations, tools, MCP, skills, usage (`org_id` — see `packages/db/sql/schema.sql`, `migrateTenantOrgScope`).
 
-**Org context:** every authed call except `/v1/auth/*` and `/v1/platform/*` needs `X-Org-Id` (`@nakama/client`) or `active_org_id` cookie (`POST /v1/auth/active-org`). Middleware: `org-middleware.ts`; guards: `org-guards.ts`.
+**Org context:** every authed call except `/v1/auth/*` and `/v1/platform/*` needs `X-Org-Id` (`@nakama/client`) or the active org stored on the browser session (`active_org_id`, set by `POST /v1/auth/active-org`). Middleware: `org-middleware.ts`; guards: `org-guards.ts`.
 
 | Change | Where |
 |---|---|
