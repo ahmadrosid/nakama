@@ -524,8 +524,12 @@ describe("agent chat tool loop", () => {
               ]
             : [];
         return {
-          assistantMessage: { content: "", role: "assistant", toolCalls },
-          content: "",
+          assistantMessage: {
+            content: toolCalls.length ? "" : "ok",
+            role: "assistant",
+            toolCalls,
+          },
+          content: toolCalls.length ? "" : "ok",
           toolCalls,
         };
       },
@@ -637,6 +641,93 @@ describe("agent chat tool loop", () => {
       ]);
     }
   );
+
+  test("asks once more without tools when the model ends with no text", async () => {
+    const seen: { tools: number; last: string }[] = [];
+    let call = 0;
+    const provider: ProviderClient = {
+      ...createMockProvider([]),
+      generateChat(input: GenerateChatInput) {
+        call += 1;
+        seen.push({
+          last: String(input.messages.at(-1)?.role),
+          tools: input.tools?.length ?? 0,
+        });
+        if (call === 1) {
+          return Promise.resolve(
+            toolTurn([
+              { arguments: { message: "hi" }, id: "c1", name: "sample" },
+            ])
+          );
+        }
+        return Promise.resolve(call === 2 ? textReply("") : textReply("Final"));
+      },
+    };
+    const session = createAgentChatSession(
+      { provider },
+      { tools: [sampleTool] }
+    );
+    const reply = await session.send("go");
+    expect(reply).toBe("Final");
+    expect(seen[2]?.tools).toBe(0);
+    expect(session.getHistory().at(-1)).toEqual({
+      content: "Final",
+      role: "assistant",
+    });
+    expect(
+      session
+        .getHistory()
+        .some((m) => m.role === "assistant" && !m.content && !m.toolCalls)
+    ).toBe(false);
+  });
+
+  test("returns non-empty text when the model stays silent", async () => {
+    let call = 0;
+    const provider: ProviderClient = {
+      ...createMockProvider([]),
+      generateChat() {
+        call += 1;
+        return Promise.resolve(textReply(""));
+      },
+    };
+    const session = createAgentChatSession(
+      { provider },
+      { tools: [sampleTool] }
+    );
+    const reply = await session.send("go");
+    expect(call).toBe(2);
+    expect(reply.length).toBeGreaterThan(0);
+    expect(session.getHistory().at(-1)).toEqual({
+      content: reply,
+      role: "assistant",
+    });
+  });
+
+  test("returns non-empty text when the tool round limit is reached", async () => {
+    let call = 0;
+    const provider: ProviderClient = {
+      ...createMockProvider([]),
+      generateChat() {
+        call += 1;
+        return Promise.resolve(
+          toolTurn([
+            { arguments: { message: "x" }, id: `c${call}`, name: "sample" },
+          ])
+        );
+      },
+    };
+    const session = createAgentChatSession(
+      { provider },
+      { tools: [sampleTool] }
+    );
+    const reply = await session.send("loop forever");
+    expect(call).toBe(100);
+    expect(reply.length).toBeGreaterThan(0);
+    expect(session.getHistory().at(-1)).toEqual({
+      content: reply,
+      role: "assistant",
+    });
+  });
 
   test("handles a single tool call then a final reply", async () => {
     const provider = createMockProvider([
