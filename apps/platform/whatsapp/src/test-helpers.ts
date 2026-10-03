@@ -335,7 +335,7 @@ export async function waitForStreamControl(
   throw new Error("Timed out waiting for stream control");
 }
 
-export { createDefaultTestOrgs, createMultiTestOrgs };
+export { createMultiTestOrgs };
 
 export function createTestOrgStore(homeDir: string): ChannelOrgStore {
   return createSharedTestOrgStore(homeDir, "whatsapp");

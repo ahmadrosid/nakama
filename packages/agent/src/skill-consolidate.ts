@@ -33,7 +33,7 @@ function truncate(value: string, max: number): string {
   return `${value.slice(0, max).trimEnd()}\n…`;
 }
 
-export function buildSkillConsolidatePrompt(input: {
+function buildSkillConsolidatePrompt(input: {
   losers?: SkillConsolidateBodyInput[];
   mode: SkillConsolidateMode;
   winner: SkillConsolidateBodyInput;

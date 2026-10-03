@@ -414,27 +414,6 @@ export function toDataUrl(mediaType: string, base64: string): string {
   return `data:${mediaType};base64,${base64}`;
 }
 
-export function imageAttachmentFromBase64(
-  mediaType: string,
-  base64: string
-): ImageAttachment {
-  const data = base64.includes(",") ? (base64.split(",")[1] ?? base64) : base64;
-  return { data, mediaType };
-}
-
-export function documentAttachmentFromBase64(
-  filename: string,
-  mediaType: string,
-  base64: string
-): DocumentAttachment {
-  const data = base64.includes(",") ? (base64.split(",")[1] ?? base64) : base64;
-  return {
-    data,
-    filename,
-    mediaType: normalizeDocumentMediaType(mediaType, filename),
-  };
-}
-
 type ProviderContentBlock = Record<string, unknown>;
 
 async function mapResolvedUserContent(

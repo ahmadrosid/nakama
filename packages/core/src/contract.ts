@@ -315,10 +315,6 @@ export interface CodingHarnessSettingsResponse {
   providerPassthroughEnabled: boolean;
 }
 
-export interface UpdateCodingHarnessSettingsRequest {
-  providerPassthroughEnabled: boolean;
-}
-
 export interface TokenOptimizationTurnArm {
   arm: string;
   /** Turns whose token count came from an estimate, not the provider. */
@@ -1031,24 +1027,6 @@ export interface ResetPasswordRequest {
   token: string;
 }
 
-export interface ChannelOrgMappingSummary {
-  channel: ChannelType;
-  channelUserId: string;
-  createdAt: string;
-  orgId: string;
-  userId: string;
-}
-
-export interface CreateChannelOrgMappingRequest {
-  channel: ChannelType;
-  channelUserId: string;
-  userId: string;
-}
-
-export interface ListChannelOrgMappingsResponse {
-  mappings: ChannelOrgMappingSummary[];
-}
-
 export interface CreateSessionRequest {
   /** Stable end-user identifier supplied by a trusted backend using an API key. */
   appUserId?: string;
@@ -1464,10 +1442,6 @@ export interface ListWorkflowsResponse {
   workflows: StoredWorkflow[];
 }
 
-export interface WorkflowResponse {
-  workflow: StoredWorkflow;
-}
-
 export interface CreateWorkflowRequest {
   description: string;
   enabled?: boolean;
@@ -1854,15 +1828,6 @@ export interface SendEmailTestResponse {
   ok: true;
   to: string;
 }
-
-export type CodingAgentProviderPassthroughSummary = {
-  active: boolean;
-  configured: boolean;
-  compatible: boolean;
-  providerLabel: string | null;
-  model: string | null;
-  message?: string | null;
-};
 
 export interface AgentBrowserStatusResponse {
   installCommand: string;

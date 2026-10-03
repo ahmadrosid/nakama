@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { rename, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
 import {
   assertChannelPath,
   type ChannelConfigScope,
@@ -13,7 +13,6 @@ import {
   resetChannelConversationState,
 } from "./channel-config-shared";
 import {
-  ensureDir,
   parseIni,
   pathExists,
   readDirectoryOrEmpty,
@@ -673,23 +672,6 @@ export async function listWhatsAppConfigOrgIds(): Promise<string[]> {
     }
   }
   return configured;
-}
-
-/** Called with the oldest organization, after stopping the legacy worker. */
-export async function claimLegacyWhatsAppConfig(
-  orgId: string
-): Promise<boolean> {
-  const legacyDir = getWhatsAppConfigDir();
-  const targetDir = getWhatsAppConfigDir(orgId);
-  if (
-    !(await pathExists(getWhatsAppConfigPath())) ||
-    (await pathExists(targetDir))
-  ) {
-    return false;
-  }
-  await ensureDir(dirname(targetDir));
-  await rename(legacyDir, targetDir);
-  return true;
 }
 
 /** Persist the ephemeral loopback port allocated to this account's worker. */

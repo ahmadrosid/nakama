@@ -9,7 +9,6 @@ import {
 } from "./whatsapp-config";
 import {
   createWorkerHeartbeatStore,
-  isProcessAlive,
   type WorkerHeartbeatBase,
 } from "./worker-heartbeat";
 
@@ -28,13 +27,6 @@ export function createWhatsAppWorkerHeartbeat(
   });
 }
 const store = createWhatsAppWorkerHeartbeat();
-
-export const getWhatsAppWorkerHeartbeatPath = store.getPath;
-export const parseWhatsAppWorkerHeartbeat = store.parse;
-export const readWhatsAppWorkerHeartbeat = store.read;
-export const clearWhatsAppWorkerHeartbeat = store.clear;
-export const isWhatsAppWorkerRunning = store.isRunning;
-export const isWhatsAppProcessAlive = isProcessAlive;
 export const isWhatsAppHeartbeatAlive = store.isAlive;
 
 export function getWhatsAppQrCodePath(
@@ -54,19 +46,6 @@ export function resolveWhatsAppWorkerStatus(
   const ok = !configured || running;
 
   return { configured, connected, ok, paired, qrCode, running };
-}
-
-export async function writeWhatsAppWorkerHeartbeat(
-  pid = process.pid,
-  updatedAt = new Date().toISOString(),
-  connected = false,
-  orgId: ChannelConfigScope = null
-): Promise<void> {
-  await createWhatsAppWorkerHeartbeat(orgId).write({
-    connected,
-    pid,
-    updatedAt,
-  });
 }
 
 export async function writeWhatsAppQrCode(

@@ -19,7 +19,6 @@ import type {
   ListProfilesResponse,
   ListToolsResponse,
   MoveProfileRequest,
-  ProfileDetail,
   ProfileResponse,
   ProfileSummary,
   ToolDetail,
@@ -1265,8 +1264,6 @@ function toToolDetail(record: StoredToolRecord): ToolDetail {
     updatedAt: record.updatedAt,
   };
 }
-
-export type { ProfileDetail };
 
 function readToolHandlerType(handlerType: string | undefined): CustomToolType {
   if (handlerType === undefined) {
