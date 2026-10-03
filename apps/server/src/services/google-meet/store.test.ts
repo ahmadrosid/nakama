@@ -169,15 +169,29 @@ test("rejects arbitrary URLs and invalid durations before queuing a browser", ()
 test("history limits apply after actor and profile access filters", () => {
   const own = store.create(meetingUrl, "me", "mine", 1);
   store.update(own.id, "finished");
-  for (let i = 0; i < 100; i++) {
-    const other = store.create(own.url, "other", "theirs", 1);
-    store.update(other.id, "finished");
+  const db = new Database(join(dir, "meetings.sqlite"));
+  try {
+    db.transaction(() => {
+      const insert = db.query(
+        "INSERT INTO meetings (id,actorId,profileId,url,state,createdAt,updatedAt,durationMinutes) VALUES (?,'other','theirs',?,'finished',?,?,1)"
+      );
+      for (let i = 0; i < 100; i++) {
+        insert.run(
+          String(i),
+          own.url,
+          own.createdAt + i + 1,
+          own.createdAt + i + 1
+        );
+      }
+    })();
+  } finally {
+    db.close();
   }
   expect(store.list("me", "mine").map((row) => row.id)).toEqual([own.id]);
   expect(store.list("me", "theirs")).toEqual([]);
   expect(store.list(null, "mine").map((row) => row.id)).toEqual([own.id]);
   expect(store.list()).toHaveLength(100);
-}, 15_000);
+});
 
 test("titles and transcript text survive reopening the database", () => {
   const meeting = store.create(meetingUrl, "me", undefined, 1);

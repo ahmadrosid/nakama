@@ -1,6 +1,7 @@
 import type {
   AgentQuestionnaire,
   AgentTodo,
+  ChatMessage,
   OrgPluginLifecycleState,
   OrgPluginSummary,
   OrgRole,
@@ -33,6 +34,7 @@ export interface StoredAutomationRunRecord {
   error: string | null;
   id: string;
   output: string | null;
+  progress?: ChatMessage[];
   startedAt: string;
   status: AutomationRunStatus;
 }

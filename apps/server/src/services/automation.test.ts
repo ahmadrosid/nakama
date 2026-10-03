@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { NakamaApiError } from "@nakama/core";
 import type { createInMemoryDatabaseAdapter } from "@nakama/db";
+import type { AgentService } from "./agent-service";
 import { AutomationDeliveryService } from "./automation-delivery-service";
 import { AutomationRunner } from "./automation-runner";
 import { AutomationService } from "./automation-service";
@@ -545,6 +546,136 @@ test("automation list reflects a run starting and finishing", async () => {
 });
 
 describe("AutomationRunner", () => {
+  test.each([false, true])(
+    "exposes progress before completion (fails: %s)",
+    async (fails) => {
+      const db = await createTestDb();
+      const service = new AutomationService(db, {
+        getUserTimezone: async () => "UTC",
+      });
+      const automation = await service.create(
+        ORG_ID,
+        {
+          description: "Live progress",
+          name: "Live task",
+          prompt: "Find news",
+          trigger: { type: "manual" },
+        },
+        PROFILE_ID
+      );
+      const started = Promise.withResolvers<void>();
+      const finish = Promise.withResolvers<void>();
+      const runner = new AutomationRunner(service, {
+        runAutomationPrompt: async (
+          _orgId: string,
+          _profileId: string,
+          _prompt: string,
+          _automationId?: string,
+          _runId?: string,
+          handlers?: Parameters<AgentService["runAutomationPrompt"]>[5]
+        ) => {
+          handlers?.onChunk("Searching ");
+          handlers?.onChunk("news");
+          handlers?.onToolStart?.({
+            input: { command: "pwd" },
+            tool: "bash",
+            toolCallId: "call-1",
+          });
+          handlers?.onToolStart?.({
+            input: { path: "README.md" },
+            tool: "read_file",
+            toolCallId: "call-2",
+          });
+          handlers?.onToolEnd?.({
+            result: { error: "Not found" },
+            tool: "read_file",
+            toolCallId: "call-2",
+          });
+          started.resolve();
+          await finish.promise;
+          if (fails) {
+            throw new Error("Provider disconnected");
+          }
+          return "News summary";
+        },
+      } as never);
+      const pending = runner.run(automation.id);
+      await started.promise;
+      try {
+        const runs = await service.listRuns(automation.id, ORG_ID);
+        expect(runs[0]).toMatchObject({
+          output: "Searching news",
+          status: "running",
+        });
+        expect(runs[0]?.progress).toMatchObject([
+          { content: "Find news", role: "user" },
+          { content: "Searching news", role: "assistant" },
+          {
+            role: "assistant",
+            toolCalls: [
+              { arguments: { command: "pwd" }, id: "call-1", name: "bash" },
+            ],
+          },
+          {
+            content: "",
+            role: "tool",
+            toolCallId: "call-1",
+            toolStartedAt: expect.any(Number),
+          },
+          {
+            role: "assistant",
+            toolCalls: [{ id: "call-2", name: "read_file" }],
+          },
+          {
+            content: JSON.stringify({ error: "Not found" }),
+            role: "tool",
+            toolCallId: "call-2",
+            toolCompletedAt: expect.any(Number),
+          },
+        ]);
+        expect(runs[0]?.progress?.[3]).not.toHaveProperty("toolCompletedAt");
+        await expect(
+          service.listRuns(automation.id, "other-org")
+        ).rejects.toThrow();
+      } finally {
+        finish.resolve();
+        await pending;
+      }
+      const runs = await service.listRuns(automation.id, ORG_ID);
+      expect(runs[0]).toMatchObject({
+        output: fails ? "Searching news" : "News summary",
+        status: fails ? "failed" : "completed",
+      });
+      expect(runner.getActiveRunCount()).toBe(0);
+      const reloadedService = new AutomationService(db, {
+        getUserTimezone: async () => "UTC",
+      });
+      const reloaded = (
+        await reloadedService.listRuns(automation.id, ORG_ID)
+      )[0]!;
+      expect(reloaded.progress).toEqual(runs[0]?.progress);
+      expect(reloaded.progress?.[0]).toMatchObject({
+        content: "Find news",
+        role: "user",
+      });
+      const unfinished = reloaded.progress?.find(
+        (item) => item.role === "tool" && item.toolCallId === "call-1"
+      );
+      expect(unfinished).toMatchObject({ toolCompletedAt: expect.any(Number) });
+      if (unfinished?.role === "tool") {
+        expect(JSON.parse(unfinished.content).error).toBeDefined();
+      }
+      if (!fails) {
+        expect(reloaded.progress?.at(-1)).toMatchObject({
+          content: "News summary",
+          role: "assistant",
+        });
+      }
+      await reloadedService.deleteRun(automation.id, reloaded.id, ORG_ID);
+      expect(await db.getAutomationRun(automation.id, reloaded.id)).toBeNull();
+    }
+  );
+
   test("writes completed run records", async () => {
     const db = await createTestDb();
     const service = new AutomationService(db, {

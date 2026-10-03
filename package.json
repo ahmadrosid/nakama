@@ -1,6 +1,6 @@
 {
   "name": "nakama",
-  "version": "0.4.34",
+  "version": "0.4.37",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -43,14 +43,14 @@
     "libsignal": "6.0.0"
   },
   "dependencies": {
-    "@simplewebauthn/server": "^14.0.2"
+    "@simplewebauthn/server": "^14.0.3"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
     "@types/bun": "^1.4.2",
     "husky": "^9.1.7",
     "jscpd": "4.3.0",
-    "knip": "6.32.2",
+    "knip": "6.38.0",
     "react-doctor": "0.9.14",
     "ultracite": "7.11.0"
   },

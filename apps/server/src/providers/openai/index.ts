@@ -214,7 +214,8 @@ function usesResponsesApi(
   // gpt-5.4+ reject tools + reasoning_effort on chat/completions; Responses supports both.
   if (
     (input.tools?.length ?? 0) > 0 &&
-    (openAIModelRejectsChatToolsWithReasoning(model) ||
+    (model.trim().toLowerCase().startsWith("gpt-6.1-sol") ||
+      openAIModelRejectsChatToolsWithReasoning(model) ||
       openAIModelSupportsThinking(model, customModels))
   ) {
     return true;
@@ -371,9 +372,11 @@ async function buildChatCompletionRequestBody(options: {
   const hasTools = provider !== "perplexity" && Boolean(options.tools?.length);
   if (
     hasTools &&
-    options.model.trim().toLowerCase().startsWith("gpt-6-astra")
+    (options.model.trim().toLowerCase().startsWith("gpt-6-astra") ||
+      (provider === "openai" &&
+        options.model.trim().toLowerCase().startsWith("gpt-6.1-sol")))
   ) {
-    throw new Error("GPT-6 Astra requires the Responses API for tools.");
+    throw new Error(`${options.model} requires the Responses API for tools.`);
   }
 
   return {

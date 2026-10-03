@@ -138,6 +138,7 @@ export function AutomationDetailPanel(state: DetailState) {
             busy={busy}
             onDeleteRun={setDeleteRunTarget}
             onRerun={() => void handleRun(selected.id)}
+            profileId={selected.profileId}
             running={runningId === selected.id}
             runs={runs}
           />

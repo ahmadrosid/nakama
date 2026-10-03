@@ -37,7 +37,7 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.3.14
+          bun-version: 1.4.0
 
       - name: Install dependencies
         run: bun install --frozen-lockfile --ignore-scripts
@@ -45,26 +45,69 @@ jobs:
       - name: Install FFmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
+      - name: Set up Electron
+        run: |
+          bun apps/desktop/node_modules/electron/install.js
+          sudo chown root:root apps/desktop/node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 apps/desktop/node_modules/electron/dist/chrome-sandbox
+
       - name: Run tests with coverage
-        run: bun test --coverage --coverage-reporter=text | tee coverage.txt
+        id: coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p coverage
+          status=0
+          # Match the root workspace globs, but keep each workspace's config and report.
+          for workspace in apps/* apps/platform/* packages/* packages/plugins/*; do
+            [ -f "$workspace/package.json" ] || continue
+            bun -e 'process.exit(require("./" + process.argv[1]).scripts?.test ? 0 : 1)' "$workspace/package.json" || continue
+            report="coverage/${workspace//\//-}"
+            workspace_status=0
+            if [ "$workspace" = apps/desktop ]; then
+              # The compound script must pass coverage flags to Bun, not Electron.
+              xvfb-run -a bun run --cwd "$workspace" test:coverage 2>&1 | tee "$report.txt" || workspace_status=$?
+            else
+              bun run --cwd "$workspace" test --coverage --coverage-reporter=text 2>&1 | tee "$report.txt" || workspace_status=$?
+            fi
+            echo "$workspace_status" > "$report.status"
+            if [ "$workspace_status" -ne 0 ]; then status=1; fi
+          done
+          exit "$status"
 
       - name: Publish summary
         if: always()
+        shell: bash
+        env:
+          TEST_OUTCOME: ${{ steps.coverage.outcome }}
         run: |
-          table() {
-            awk '/^File .*% Funcs/{p=1} /^ *[0-9]+ (pass|fail)/{p=0} p' coverage.txt
-          }
+          shopt -s nullglob
+          reports=(coverage/*.txt)
           {
             echo '## Coverage'
-            echo '```'
-            table | head -3
-            echo '```'
-            echo '<details><summary>Per-file</summary>'
-            echo
-            echo '```'
-            table
-            echo '```'
-            echo '</details>'
+            echo "Test step: **$TEST_OUTCOME** (advisory; Unit Tests is the merge gate)."
+            echo 'Reports are per workspace, not averaged. Electron smoke tests run without Bun coverage.'
+            if [ "${#reports[@]}" -eq 0 ]; then
+              echo 'No coverage reports produced. Check the setup and test logs.'
+            fi
+            for report in "${reports[@]}"; do
+              echo
+              echo "### ${report#coverage/}"
+              echo "Exit status: $(cat "${report%.txt}.status" 2>/dev/null || echo unknown)"
+              if grep -q '^All files' "$report"; then
+                echo '```text'
+                awk '/^File .*% Funcs/ || /^All files/' "$report"
+                echo '```'
+                echo '<details><summary>Per-file coverage</summary>'
+                echo
+                echo '```text'
+                awk '/^File .*% Funcs/{p=1} p && /^$/{p=0} p' "$report"
+                echo '```'
+                echo '</details>'
+              else
+                echo 'No coverage table produced. Check the test logs.'
+              fi
+            done
           } >> "$GITHUB_STEP_SUMMARY"
 
   test-mass:

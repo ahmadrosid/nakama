@@ -1379,6 +1379,21 @@
   font-size: 14px;
   font-weight: 500;
 }
+.meet-form .meet-enable {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.meet-enable > img {
+  flex-shrink: 0;
+}
+.meet-enable-copy {
+  flex: 1;
+  min-width: 0;
+}
 .meet-list {
   padding: 0;
   margin: 0;

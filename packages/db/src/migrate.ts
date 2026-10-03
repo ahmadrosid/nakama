@@ -1554,6 +1554,10 @@ function migrateAutomationRunsTable(db: Database): void {
     .all() as Array<{ name: string }>;
   const columnNames = new Set(columns.map((column) => column.name));
 
+  if (!columnNames.has("progress")) {
+    db.exec("ALTER TABLE automation_runs ADD COLUMN progress TEXT;");
+  }
+
   if (!columnNames.has("delivery_status")) {
     db.exec(`
       ALTER TABLE automation_runs ADD COLUMN delivery_status TEXT;

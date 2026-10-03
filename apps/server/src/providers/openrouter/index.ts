@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import type {
   ChatCompletionResult,
   ChatMessage,
@@ -24,7 +25,10 @@ import type {
   ChatStreamToolCall,
   ChatToolCall,
 } from "@openrouter/sdk/models";
-import { OpenRouterError } from "@openrouter/sdk/models/errors";
+import {
+  OpenRouterError,
+  SDKValidationError,
+} from "@openrouter/sdk/models/errors";
 import { toOpenAIMessages } from "../openai";
 import {
   buildChatCompletionResult,
@@ -38,6 +42,7 @@ import { openRouterModelSupportsThinking } from "./thinking";
 const OPENROUTER_REFERER = "https://github.com/ahmadrosid/nakama";
 const OPENROUTER_APP_TITLE = "Nakama";
 const PROVIDER_LABEL = "OpenRouter";
+const STREAM_RETRY_DELAY_MS = 100;
 
 export interface OpenRouterProviderOptions {
   apiKey: string;
@@ -72,6 +77,10 @@ function createOpenRouterClient(apiKey: string, fetcher?: Fetcher): OpenRouter {
 }
 
 function formatOpenRouterError(error: unknown): Error {
+  if (error instanceof SDKValidationError) {
+    return new Error(`${PROVIDER_LABEL} returned an invalid response.`);
+  }
+
   if (error instanceof OpenRouterError) {
     return new Error(
       `${PROVIDER_LABEL} request failed (${error.statusCode}): ${error.body}`
@@ -303,6 +312,23 @@ interface PendingToolCall {
   name: string;
 }
 
+class OpenRouterStreamError extends Error {
+  readonly code: number;
+
+  constructor(
+    error: NonNullable<ChatStreamChunk["error"]>,
+    readonly outputStarted: boolean
+  ) {
+    const message = error.message
+      .replace(/[\u0000-\u001f\u007f]/g, " ")
+      .slice(0, 300);
+    super(
+      `${PROVIDER_LABEL} stream failed (${error.code}): ${message || "Unknown error."}`
+    );
+    this.code = error.code;
+  }
+}
+
 function mergePendingToolCall(
   pending: Map<number, PendingToolCall>,
   toolDelta: ChatStreamToolCall
@@ -352,7 +378,8 @@ function finalizePendingToolCalls(
 
 async function readOpenRouterStream(
   stream: AsyncIterable<ChatStreamChunk>,
-  handlers: StreamChatHandlers
+  handlers: StreamChatHandlers,
+  signal?: AbortSignal
 ): Promise<ChatCompletionResult> {
   let content = "";
   let thinking = "";
@@ -360,20 +387,37 @@ async function readOpenRouterStream(
   const pending = new Map<number, PendingToolCall>();
 
   for await (const chunk of stream) {
+    // Fetch cancellation does not discard chunks already buffered by the SDK.
+    signal?.throwIfAborted();
+    const delta = chunk.choices?.[0]?.delta;
+    const outputStarted = Boolean(
+      content ||
+        thinking ||
+        pending.size ||
+        delta?.content ||
+        delta?.reasoning ||
+        delta?.toolCalls?.length
+    );
+
+    if (chunk.error) {
+      throw new OpenRouterStreamError(chunk.error, outputStarted);
+    }
+
     usage =
       extractOpenAITokenUsage(
         (chunk as { usage?: Record<string, unknown> }).usage
       ) ?? usage;
-    const delta = chunk.choices?.[0]?.delta;
 
     if (delta?.reasoning) {
       thinking += delta.reasoning;
       handlers.onThinking?.(delta.reasoning);
+      signal?.throwIfAborted();
     }
 
     if (delta?.content) {
       content += delta.content;
       handlers.onChunk(delta.content);
+      signal?.throwIfAborted();
     }
 
     if (delta?.toolCalls) {
@@ -386,12 +430,14 @@ async function readOpenRouterStream(
 
           if (current) {
             notifyToolInputDelta(handlers, current, argDelta);
+            signal?.throwIfAborted();
           }
         }
       }
     }
   }
 
+  signal?.throwIfAborted();
   const toolCalls = finalizePendingToolCalls(pending);
   const thinkingText = thinking.trim() || undefined;
 
@@ -491,6 +537,7 @@ export function createOpenRouterProvider(
     name: "openrouter",
     streamChat(input: GenerateChatInput, handlers: StreamChatHandlers) {
       return withOpenRouterError(async () => {
+        input.signal?.throwIfAborted();
         const chatRequest = await buildChatRequestBase({
           customModels,
           messages: input.messages,
@@ -499,18 +546,38 @@ export function createOpenRouterProvider(
           system: input.system,
           tools: input.tools,
         });
-        const stream = await client.chat.send(
-          {
-            chatRequest: {
-              ...chatRequest,
-              ...(provider ? { provider } : {}),
-              stream: true as const,
-            },
+        const request = {
+          chatRequest: {
+            ...chatRequest,
+            ...(provider ? { provider } : {}),
+            stream: true as const,
           },
-          { fetchOptions: { signal: input.signal } }
-        );
+        };
 
-        return readOpenRouterStream(stream, handlers);
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            const stream = await client.chat.send(request, {
+              fetchOptions: { signal: input.signal },
+              retries: { strategy: "none" },
+            });
+            return await readOpenRouterStream(stream, handlers, input.signal);
+          } catch (error) {
+            if (
+              !(
+                error instanceof OpenRouterStreamError &&
+                error.code === 429 &&
+                !error.outputStarted &&
+                attempt === 0
+              )
+            ) {
+              throw error;
+            }
+
+            await delay(STREAM_RETRY_DELAY_MS, undefined, {
+              signal: input.signal,
+            });
+          }
+        }
       });
     },
   };

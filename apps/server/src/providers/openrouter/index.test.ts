@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createAgentChatSession } from "@nakama/agent";
 import {
   loadUserConfig,
   type OpenRouterRoutingSettings,
@@ -43,11 +44,23 @@ function chatCompletionResponse(
   });
 }
 
-function streamChunk(delta: Record<string, unknown>): string {
+function streamChunk(delta: Record<string, unknown>, error?: unknown): string {
   return `data:${JSON.stringify({
     choices: [{ delta, finish_reason: null, index: 0 }],
     created: 1_700_000_000,
+    error,
     id: "chunk-1",
+    model: "anthropic/claude-sonnet-4-6",
+    object: "chat.completion.chunk",
+  })}\r\n\r\n`;
+}
+
+function streamError(error: unknown): string {
+  return `data:${JSON.stringify({
+    choices: [],
+    created: 1_700_000_000,
+    error,
+    id: "chunk-error",
     model: "anthropic/claude-sonnet-4-6",
     object: "chat.completion.chunk",
   })}\r\n\r\n`;
@@ -588,6 +601,615 @@ describe("createOpenRouterProvider", () => {
     expect(result.assistantMessage.thinking).toBe("Plan");
     expect(chunks).toEqual(["Hi"]);
     expect(thinking).toEqual(["Plan"]);
+  });
+
+  test("retries one streamed 429 before output with the same request", async () => {
+    const bodies: string[] = [];
+    const cancel = mock(() => {});
+    const fetchMock = mock(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request =
+          input instanceof Request ? input : new Request(input, init);
+        bodies.push(await request.text());
+        if (bodies.length === 1) {
+          return new Response(
+            new ReadableStream({
+              cancel,
+              start(controller) {
+                controller.enqueue(
+                  new TextEncoder().encode(
+                    streamChunk({ role: "assistant" }) +
+                      streamError({
+                        code: 429,
+                        message: "temporarily rate-limited upstream",
+                      })
+                  )
+                );
+              },
+            }),
+            { headers: { "Content-Type": "text/event-stream" } }
+          );
+        }
+        expect(cancel).toHaveBeenCalledTimes(1);
+        return new Response(
+          streamChunk({ content: "recovered" }) + "data:[DONE]\r\n\r\n",
+          { headers: { "Content-Type": "text/event-stream" } }
+        );
+      }
+    );
+    const provider = createOpenRouterProvider({
+      apiKey: "test-key",
+      fetcher: fetchMock as typeof fetch,
+      model: "openai/gpt-6-luna",
+      openRouterRouting: {
+        dataCollection: "deny",
+        requireParameters: true,
+        zdr: true,
+      },
+    });
+    const chunks: string[] = [];
+
+    const result = await provider.streamChat(
+      {
+        messages: [{ content: "hi", role: "user" }],
+        system: "test",
+      },
+      { onChunk: (chunk) => chunks.push(chunk) }
+    );
+
+    expect(result.content).toBe("recovered");
+    expect(chunks).toEqual(["recovered"]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(bodies[0]!)).toMatchObject({
+      model: "openai/gpt-6-luna",
+      provider: {
+        data_collection: "deny",
+        require_parameters: true,
+        zdr: true,
+      },
+    });
+    expect(bodies[1]).toBe(bodies[0]);
+  });
+
+  test("stops after the retried streamed 429 and hides metadata", async () => {
+    const fetchMock = mock(
+      async () =>
+        new Response(
+          streamError({
+            code: 429,
+            message: "temporarily rate-limited upstream",
+            metadata: {
+              apiKey: "must-not-leak",
+              error_type: "rate_limit_exceeded",
+              provider_code: "must-not-leak",
+            },
+          }),
+          { headers: { "Content-Type": "text/event-stream" } }
+        )
+    );
+    const provider = createOpenRouterProvider({
+      apiKey: "test-key",
+      fetcher: fetchMock as typeof fetch,
+    });
+
+    const error = await provider
+      .streamChat(
+        { messages: [{ content: "hi", role: "user" }], system: "test" },
+        { onChunk() {} }
+      )
+      .catch((cause: unknown) => cause);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(String(error)).toContain("429");
+    expect(String(error)).toContain("temporarily rate-limited upstream");
+    expect(String(error)).not.toContain("must-not-leak");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test.each([
+    ["text", { content: "partial" }],
+    ["thinking", { reasoning: "partial plan" }],
+    [
+      "tool call",
+      {
+        tool_calls: [
+          {
+            function: {
+              arguments: '{"path":"a.txt"}',
+              name: "write_file",
+            },
+            id: "call_1",
+            index: 0,
+            type: "function",
+          },
+        ],
+      },
+    ],
+  ])(
+    "rejects a streamed error after a %s delta without retrying",
+    async (_, delta) => {
+      const fetchMock = mock(
+        async () =>
+          new Response(
+            streamChunk(delta) +
+              streamError({ code: 429, message: "rate limited after output" }),
+            { headers: { "Content-Type": "text/event-stream" } }
+          )
+      );
+      const provider = createOpenRouterProvider({
+        apiKey: "test-key",
+        fetcher: fetchMock as typeof fetch,
+      });
+
+      await expect(
+        provider.streamChat(
+          { messages: [{ content: "hi", role: "user" }], system: "test" },
+          { onChunk() {} }
+        )
+      ).rejects.toThrow("429");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  test("does not retry a non-transient streamed error", async () => {
+    const fetchMock = mock(
+      async () =>
+        new Response(streamError({ code: 400, message: "invalid request" }), {
+          headers: { "Content-Type": "text/event-stream" },
+        })
+    );
+    const provider = createOpenRouterProvider({
+      apiKey: "test-key",
+      fetcher: fetchMock as typeof fetch,
+    });
+
+    await expect(
+      provider.streamChat(
+        { messages: [{ content: "hi", role: "user" }], system: "test" },
+        { onChunk() {} }
+      )
+    ).rejects.toThrow("400");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("cancels during the streamed 429 retry delay", async () => {
+    const controller = new AbortController();
+    const cancelled = Promise.withResolvers<void>();
+    const fetchMock = mock(
+      async () =>
+        new Response(
+          new ReadableStream({
+            cancel() {
+              cancelled.resolve();
+            },
+            start(stream) {
+              stream.enqueue(
+                new TextEncoder().encode(
+                  streamError({ code: 429, message: "rate limited" })
+                )
+              );
+            },
+          }),
+          { headers: { "Content-Type": "text/event-stream" } }
+        )
+    );
+    const provider = createOpenRouterProvider({
+      apiKey: "test-key",
+      fetcher: fetchMock as typeof fetch,
+    });
+    const promise = provider.streamChat(
+      {
+        messages: [{ content: "hi", role: "user" }],
+        signal: controller.signal,
+        system: "test",
+      },
+      { onChunk() {} }
+    );
+    await cancelled.promise;
+    // The reader has consumed the error; the next task runs during the delay.
+    setTimeout(() => controller.abort(), 0);
+
+    await expect(promise).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([false, true])(
+    "does not add SDK retries for an HTTP error (after SSE retry: %s)",
+    async (afterStreamError) => {
+      let requests = 0;
+      const fetchMock = mock(async () => {
+        requests += 1;
+        if (afterStreamError && requests === 1) {
+          return new Response(
+            streamError({ code: 429, message: "rate limited" }),
+            { headers: { "Content-Type": "text/event-stream" } }
+          );
+        }
+        return new Response("upstream unavailable", { status: 503 });
+      });
+      const provider = createOpenRouterProvider({
+        apiKey: "test-key",
+        fetcher: fetchMock as typeof fetch,
+      });
+
+      await expect(
+        provider.streamChat(
+          { messages: [{ content: "hi", role: "user" }], system: "test" },
+          { onChunk() {} }
+        )
+      ).rejects.toThrow("503");
+      expect(fetchMock).toHaveBeenCalledTimes(afterStreamError ? 2 : 1);
+    }
+  );
+
+  test("rejects an error alongside a tool delta before notifying handlers", async () => {
+    const chunk = streamChunk(
+      {
+        tool_calls: [
+          {
+            function: { arguments: '{"path":"a.txt"}', name: "write_file" },
+            id: "call_1",
+            index: 0,
+            type: "function",
+          },
+        ],
+      },
+      { code: 429, message: "rate limited" }
+    );
+    const fetchMock = mock(
+      async () =>
+        new Response(chunk, {
+          headers: { "Content-Type": "text/event-stream" },
+        })
+    );
+    const provider = createOpenRouterProvider({
+      apiKey: "test-key",
+      fetcher: fetchMock as typeof fetch,
+    });
+    const onToolInputDelta = mock(() => {});
+
+    await expect(
+      provider.streamChat(
+        { messages: [{ content: "hi", role: "user" }], system: "test" },
+        { onChunk() {}, onToolInputDelta }
+      )
+    ).rejects.toThrow("429");
+    expect(onToolInputDelta).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("bounds streamed error messages and removes control characters", async () => {
+    const provider = createOpenRouterProvider({
+      apiKey: "test-key",
+      fetcher: async () =>
+        new Response(
+          streamError({ code: 400, message: `bad\n\u001b${"x".repeat(400)}` }),
+          { headers: { "Content-Type": "text/event-stream" } }
+        ),
+    });
+    const error = await provider
+      .streamChat(
+        { messages: [{ content: "hi", role: "user" }], system: "test" },
+        { onChunk() {} }
+      )
+      .catch((cause: unknown) => cause);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(String(error)).toContain("400");
+    expect(String(error)).not.toMatch(/[\u0000-\u001f\u007f]/);
+    expect(String(error).length).toBeLessThan(350);
+  });
+
+  test("safely rejects a malformed streamed error", async () => {
+    const fetchMock = mock(
+      async () =>
+        new Response(
+          streamError({ code: "private-code", message: { token: "secret" } }),
+          { headers: { "Content-Type": "text/event-stream" } }
+        )
+    );
+    const provider = createOpenRouterProvider({
+      apiKey: "test-key",
+      fetcher: fetchMock as typeof fetch,
+    });
+
+    const error = await provider
+      .streamChat(
+        { messages: [{ content: "hi", role: "user" }], system: "test" },
+        { onChunk() {} }
+      )
+      .catch((cause: unknown) => cause);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(String(error)).not.toContain("private-code");
+    expect(String(error)).not.toContain("secret");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("rejects cancellation between buffered chunks without a tool preview", async () => {
+    const abort = new AbortController();
+    let requests = 0;
+    const server = Bun.serve({
+      fetch() {
+        requests += 1;
+        return new Response(
+          streamChunk({ content: "partial" }) +
+            streamChunk({
+              tool_calls: [
+                {
+                  function: {
+                    arguments: '{"path":"a.txt"}',
+                    name: "write_file",
+                  },
+                  id: "call_cancelled",
+                  index: 0,
+                  type: "function",
+                },
+              ],
+            }) +
+            "data:[DONE]\r\n\r\n",
+          { headers: { "Content-Type": "text/event-stream" } }
+        );
+      },
+      hostname: "127.0.0.1",
+      port: 0,
+    });
+    try {
+      const provider = createOpenRouterProvider({
+        apiKey: "offline-test",
+        fetcher: (input, init) => {
+          const request =
+            input instanceof Request ? input : new Request(input, init);
+          return fetch(new Request(server.url, request));
+        },
+      });
+      const onToolInputDelta = mock(() => {});
+      await expect(
+        provider.streamChat(
+          {
+            messages: [{ content: "hi", role: "user" }],
+            signal: abort.signal,
+            system: "test",
+          },
+          {
+            onChunk() {
+              abort.abort();
+            },
+            onToolInputDelta,
+          }
+        )
+      ).rejects.toMatchObject({ name: "AbortError" });
+      expect(onToolInputDelta).not.toHaveBeenCalled();
+      expect(requests).toBe(1);
+    } finally {
+      await server.stop(true);
+    }
+  });
+
+  test.each([
+    ["thinking", ["thinking"]],
+    ["text", ["thinking", "text"]],
+    ["tool", ["thinking", "text", "call_1"]],
+    [undefined, ["thinking", "text", "call_1", "call_2"]],
+  ] satisfies [string | undefined, string[]][])(
+    "stops callbacks within one chunk when aborted from %s",
+    async (abortAt, expectedCallbacks) => {
+      const abort = new AbortController();
+      const callbacks: string[] = [];
+      const provider = createOpenRouterProvider({
+        apiKey: "offline-test",
+        fetcher: async () =>
+          new Response(
+            streamChunk({
+              content: "answer",
+              reasoning: "plan",
+              tool_calls: [0, 1].map((index) => ({
+                function: {
+                  arguments: `{"path":"${index}.txt"}`,
+                  name: "write_file",
+                },
+                id: `call_${index + 1}`,
+                index,
+                type: "function",
+              })),
+            }) + "data:[DONE]\r\n\r\n",
+            { headers: { "Content-Type": "text/event-stream" } }
+          ),
+      });
+      const promise = provider.streamChat(
+        {
+          messages: [{ content: "hi", role: "user" }],
+          signal: abort.signal,
+          system: "test",
+        },
+        {
+          onChunk() {
+            callbacks.push("text");
+            if (abortAt === "text") {
+              abort.abort();
+            }
+          },
+          onThinking() {
+            callbacks.push("thinking");
+            if (abortAt === "thinking") {
+              abort.abort();
+            }
+          },
+          onToolInputDelta(event) {
+            callbacks.push(event.toolCallId);
+            if (abortAt === "tool") {
+              abort.abort();
+            }
+          },
+        }
+      );
+      if (abortAt) {
+        await expect(promise).rejects.toMatchObject({ name: "AbortError" });
+      } else {
+        expect(await promise).toMatchObject({
+          assistantMessage: { thinking: "plan" },
+          content: "answer",
+          toolCalls: [
+            { arguments: { path: "0.txt" }, id: "call_1", name: "write_file" },
+            { arguments: { path: "1.txt" }, id: "call_2", name: "write_file" },
+          ],
+        });
+      }
+      expect(callbacks).toEqual(expectedCallbacks);
+    }
+  );
+
+  test("rejects an already aborted stream before invoking fetch", async () => {
+    const abort = new AbortController();
+    abort.abort();
+    const fetcher = mock(
+      async () =>
+        new Response(streamChunk({ content: "late" }) + "data:[DONE]\r\n\r\n", {
+          headers: { "Content-Type": "text/event-stream" },
+        })
+    );
+    const provider = createOpenRouterProvider({
+      apiKey: "offline-test",
+      fetcher,
+    });
+    await expect(
+      provider.streamChat(
+        {
+          messages: [{ content: "hi", role: "user" }],
+          signal: abort.signal,
+          system: "test",
+        },
+        { onChunk() {} }
+      )
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  test("does not emit a buffered chunk when cancellation arrives with the response", async () => {
+    const abort = new AbortController();
+    const onChunk = mock(() => {});
+    const provider = createOpenRouterProvider({
+      apiKey: "offline-test",
+      fetcher: async () => {
+        abort.abort();
+        return new Response(
+          streamChunk({ content: "late" }) + "data:[DONE]\r\n\r\n",
+          {
+            headers: { "Content-Type": "text/event-stream" },
+          }
+        );
+      },
+    });
+    await expect(
+      provider.streamChat(
+        {
+          messages: [{ content: "hi", role: "user" }],
+          signal: abort.signal,
+          system: "test",
+        },
+        { onChunk }
+      )
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(onChunk).not.toHaveBeenCalled();
+  });
+
+  test("rejects cancellation while finishing the stream after its last tool delta", async () => {
+    const abort = new AbortController();
+    const delivered = Promise.withResolvers<void>();
+    const onToolInputDelta = mock(() => delivered.resolve());
+    const cancel = mock(async () => {
+      await delivered.promise;
+      abort.abort();
+    });
+    const provider = createOpenRouterProvider({
+      apiKey: "offline-test",
+      fetcher: async () =>
+        new Response(
+          new ReadableStream({
+            cancel,
+            start(controller) {
+              controller.enqueue(
+                new TextEncoder().encode(
+                  streamChunk({
+                    tool_calls: [
+                      {
+                        function: {
+                          arguments: '{"path":"a.txt"}',
+                          name: "write_file",
+                        },
+                        id: "call_late",
+                        index: 0,
+                        type: "function",
+                      },
+                    ],
+                  }) + "data:[DONE]\r\n\r\n"
+                )
+              );
+            },
+          }),
+          { headers: { "Content-Type": "text/event-stream" } }
+        ),
+    });
+    await expect(
+      provider.streamChat(
+        {
+          messages: [{ content: "hi", role: "user" }],
+          signal: abort.signal,
+          system: "test",
+        },
+        { onChunk() {}, onToolInputDelta }
+      )
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(onToolInputDelta).toHaveBeenCalledTimes(1);
+  });
+
+  test("cancelled buffered output never executes a tool through the agent", async () => {
+    const abort = new AbortController();
+    const run = mock(async () => ({ saved: true }));
+    const provider = createOpenRouterProvider({
+      apiKey: "offline-test",
+      fetcher: async () =>
+        new Response(
+          streamChunk({ content: "partial" }) +
+            streamChunk({
+              tool_calls: [
+                {
+                  function: {
+                    arguments: '{"path":"a.txt"}',
+                    name: "write_file",
+                  },
+                  id: "call_cancelled",
+                  index: 0,
+                  type: "function",
+                },
+              ],
+            }) +
+            "data:[DONE]\r\n\r\n",
+          { headers: { "Content-Type": "text/event-stream" } }
+        ),
+    });
+    const tools = [
+      {
+        description: "Write",
+        name: "write_file",
+        parameters: { type: "object" },
+        run,
+      },
+    ];
+    const session = createAgentChatSession({ provider, tools }, { tools });
+    await expect(
+      session.sendStream(
+        "hi",
+        {
+          onChunk() {
+            abort.abort();
+          },
+        },
+        { signal: abort.signal }
+      )
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(run).not.toHaveBeenCalled();
   });
 
   test("throws on empty generateText response", async () => {

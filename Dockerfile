@@ -38,7 +38,7 @@ RUN mkdir -p /runtime-deps \
   && printf '{"private":true}\n' > /runtime-deps/package.json \
   && cd /runtime-deps \
   && bun add --exact --production --ignore-scripts \
-    pm2@7.0.4 microsandbox@0.6.17 sharp@0.35.4 \
+    pm2@7.0.4 microsandbox@0.7.4 sharp@0.35.4 \
     @vscode/ripgrep@1.18.0 @firecrawl/anydoc@0.1.3
 
 # Keep FFmpeg's video libraries out of the runtime image. These pinned static
