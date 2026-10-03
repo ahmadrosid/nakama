@@ -1,8 +1,4 @@
-import type {
-  AgentChannel,
-  ChatMessage,
-  MessageContentPart,
-} from "../contract";
+import type { ChatMessage, MessageContentPart } from "../contract";
 import {
   MAX_DOCUMENT_BYTES,
   MAX_IMAGE_BYTES,
@@ -34,56 +30,6 @@ export interface LoadedAttachmentBytes {
 export type LoadAttachmentBytes = (
   attachmentId: string
 ) => Promise<LoadedAttachmentBytes | null>;
-
-export function messageContentHasImageRefs(
-  content: string | MessageContentPart[]
-): boolean {
-  return countUserImageRefs(content) > 0;
-}
-
-export function messageContentHasDocumentRefs(
-  content: string | MessageContentPart[]
-): boolean {
-  return countUserDocumentRefs(content) > 0;
-}
-
-export function countUserImageRefs(
-  content: string | MessageContentPart[]
-): number {
-  if (typeof content === "string") {
-    return 0;
-  }
-
-  return content.filter((part) => part.type === "image_ref").length;
-}
-
-export function countUserDocumentRefs(
-  content: string | MessageContentPart[]
-): number {
-  if (typeof content === "string") {
-    return 0;
-  }
-
-  return content.filter((part) => part.type === "document_ref").length;
-}
-
-export function messagesIncludeUserImageRefs(
-  messages: readonly ChatMessage[]
-): boolean {
-  return messages.some(
-    (message) =>
-      message.role === "user" && messageContentHasImageRefs(message.content)
-  );
-}
-
-export function messagesIncludeUserDocumentRefs(
-  messages: readonly ChatMessage[]
-): boolean {
-  return messages.some(
-    (message) =>
-      message.role === "user" && messageContentHasDocumentRefs(message.content)
-  );
-}
 
 export function messageContentHasInlineAttachments(
   content: string | MessageContentPart[]
@@ -266,11 +212,4 @@ export async function rehydrateMessagesForProvider(
   }
 
   return result;
-}
-
-export interface AttachmentPersistenceContext {
-  channel: AgentChannel;
-  orgId: string;
-  profileId: string;
-  sessionId: string;
 }

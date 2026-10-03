@@ -40,7 +40,6 @@ export type { UserProviderName } from "./provider-resolution";
 export {
   apiKeyEnvVarForProvider,
   isDiscoveryModelProvider,
-  parseProviderName,
   resolveProvider,
 } from "./provider-resolution";
 
@@ -348,29 +347,6 @@ export async function loadUserVisionSettings(): Promise<VisionSettings> {
   }
 
   return { model: readVisionModel(parseIniWithSections(raw).global) };
-}
-
-export async function saveUserVisionSettings(
-  settings: VisionSettings
-): Promise<void> {
-  const model = settings.model?.trim() || null;
-  const existing = await loadUserConfig();
-
-  if (existing) {
-    await saveUserConfig({ ...existing, visionModel: model });
-    return;
-  }
-
-  const raw = await readTextOrNull(getUserConfigPath());
-  const parsed =
-    raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
-  const lines = buildConfigIniLines(parsed.global, parsed.sections, {
-    vision_model: model ?? "",
-  });
-
-  await writeTextFile(getUserConfigPath(), lines.join("\n"), {
-    ensureDir: getUserConfigDir(),
-  });
 }
 
 export async function loadUserTranscriptionSettings(): Promise<TranscriptionSettings> {

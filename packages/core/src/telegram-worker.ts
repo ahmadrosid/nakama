@@ -9,11 +9,9 @@ import {
 import {
   createWorkerHeartbeatStore,
   isHeartbeatAlive,
-  isProcessAlive,
 } from "./worker-heartbeat";
 
-export type { WorkerHeartbeatBase as TelegramWorkerHeartbeat } from "./worker-heartbeat";
-export { isHeartbeatAlive, isProcessAlive };
+export { isHeartbeatAlive };
 
 /** One heartbeat per identity: the file lives beside the config it belongs to. */
 export function createTelegramWorkerHeartbeat(orgId: TelegramConfigScope) {

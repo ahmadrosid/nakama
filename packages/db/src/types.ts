@@ -451,8 +451,6 @@ export interface StoredPasskeyChallenge {
   userId: string | null;
 }
 
-export type { OrgPluginLifecycleState } from "@nakama/core";
-
 export type StoredPluginReleaseRecord = PluginReleaseSummary;
 
 export interface StoredOrgPluginRecord extends OrgPluginSummary {
@@ -682,14 +680,6 @@ export interface StoredArtifactShareRecord {
   sourcePath: string;
   storagePath: string;
   tokenHash: string;
-}
-
-export interface StoredChannelOrgMappingRecord {
-  channel: ChannelType;
-  channelUserId: string;
-  createdAt: string;
-  orgId: string;
-  userId: string;
 }
 
 export interface StoredBrowserSessionRecord {

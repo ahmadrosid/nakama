@@ -453,8 +453,6 @@ async function readOpenRouterStream(
   });
 }
 
-export { openRouterModelSupportsThinking } from "./thinking";
-
 export function createOpenRouterProvider(
   options: OpenRouterProviderOptions
 ): ProviderClient {

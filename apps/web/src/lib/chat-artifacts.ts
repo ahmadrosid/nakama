@@ -13,7 +13,6 @@ export {
   isTextArtifactMimeType,
   isUnknownArtifactMimeType,
   isVideoArtifactMimeType,
-  LEGACY_DOC_UNSUPPORTED_MESSAGE,
   looksLikeUtf8Text,
   resolveArtifactMimeType,
 } from "@nakama/core/artifact-mime";
