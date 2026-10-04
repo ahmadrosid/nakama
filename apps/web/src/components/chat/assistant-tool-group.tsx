@@ -3,6 +3,7 @@ import { cn } from "@nakama/ui/utils";
 import {
   ArrowDown01Icon,
   ArrowRight01Icon,
+  ComputerTerminal01Icon,
   Rotate02Icon,
   Wrench01Icon,
 } from "hugeicons-react";
@@ -285,6 +286,7 @@ function OtherWorkGroup({
       thinkingDurationMs={
         tools.length === 0 && !active ? thinking.thinkingDurationMs : undefined
       }
+      toolCount={tools.length}
     >
       {tools.map((tool, index) => (
         <TimelineStep isLast={index === tools.length - 1} key={tool.id}>
@@ -329,7 +331,7 @@ function ToolOnlyWorkGroup({
   modelLabel?: string | null;
   profileId?: string | null;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const elapsedSeconds = useWorkDuration(isWorkActive, tools);
 
   const done = !isWorkActive;
@@ -352,7 +354,7 @@ function ToolOnlyWorkGroup({
       >
         {done ? (
           <span className={thinkingStyles.label}>
-            <span className={thinkingStyles.verb}>Activity</span> · {toolLabel}
+            <span className={thinkingStyles.verb}>{toolLabel}</span>
             {elapsedSeconds === null
               ? null
               : ` · ${formatElapsedSeconds(elapsedSeconds)}`}
@@ -392,7 +394,12 @@ function ToolOnlyWorkGroup({
         )}
       >
         <div className={thinkingStyles.inner}>
-          <div className={thinkingStyles.timeline}>
+          <div
+            className={cn(
+              thinkingStyles.timeline,
+              thinkingStyles.timelineWithTools
+            )}
+          >
             <div className={thinkingStyles.tools}>
               {tools.map((tool, index) => (
                 <TimelineStep isLast={index === tools.length - 1} key={tool.id}>
@@ -839,16 +846,21 @@ function ToolTimelineDetails({
   isError,
   isRunning,
   output,
+  query,
 }: {
   command: string | null;
   isError: boolean;
   isRunning: boolean;
   output: string | null;
+  query: string | null;
 }) {
   return (
-    <div className="mt-2 space-y-2">
+    <div className="mt-2 space-y-2 pl-5">
       {command ? (
         <DetailBlock content={command} label="Command" tone="command" />
+      ) : null}
+      {query ? (
+        <DetailBlock content={query} label="Query" tone="command" />
       ) : null}
       <ToolTimelineOutput
         command={command}
@@ -870,10 +882,14 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
     message.toolStatus === "done"
       ? formatToolResult(message.tool, message.toolResult)
       : null;
+  const query =
+    typeof message.toolInput?.query === "string"
+      ? message.toolInput.query.trim() || null
+      : null;
   const isError =
     message.toolStatus === "done" &&
     isToolResultError(message.toolResult, output);
-  const hasDetails = Boolean(isRunning || command || output);
+  const hasDetails = Boolean(isRunning || command || query || output);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   return (
@@ -881,6 +897,7 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
       <CollapsibleTrigger
         className="pl-0"
         disabled={!hasDetails}
+        isBash={message.tool === "bash"}
         label={formatToolActionLabel(message.tool, message.toolInput)}
         labelClassName={isError ? "text-red-600 dark:text-red-400" : undefined}
         onToggle={() => {
@@ -896,18 +913,10 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
           isError={isError}
           isRunning={isRunning}
           output={output}
+          query={query}
         />
       ) : null}
     </div>
-  );
-}
-
-function DefaultToolIcon({ className }: { className?: string }) {
-  return (
-    <Wrench01Icon
-      aria-hidden
-      className={cn("size-3.5 shrink-0 text-muted-foreground", className)}
-    />
   );
 }
 
@@ -917,6 +926,7 @@ function CollapsibleTrigger({
   label,
   labelClassName,
   disabled = false,
+  isBash,
   className,
 }: {
   open: boolean;
@@ -924,6 +934,7 @@ function CollapsibleTrigger({
   label: string;
   labelClassName?: string;
   disabled?: boolean;
+  isBash: boolean;
   className?: string;
 }) {
   return (
@@ -937,7 +948,16 @@ function CollapsibleTrigger({
       onClick={onToggle}
       type="button"
     >
-      <DefaultToolIcon />
+      <span
+        aria-hidden="true"
+        className="relative z-10 flex h-5 w-3.5 shrink-0 items-center justify-center bg-background"
+      >
+        {isBash ? (
+          <ComputerTerminal01Icon className="size-3.5 text-muted-foreground opacity-50" />
+        ) : (
+          <Wrench01Icon className="size-3.5 text-muted-foreground opacity-50" />
+        )}
+      </span>
       <span className={cn("min-w-0 flex-1 truncate", labelClassName)}>
         {label}
       </span>
@@ -994,7 +1014,7 @@ function DetailBlock({
       </div>
       <pre
         className={cn(
-          "max-h-64 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed",
+          "max-h-32 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed",
           tone === "error"
             ? "text-red-700 dark:text-red-300"
             : tone === "output"

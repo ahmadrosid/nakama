@@ -9,7 +9,11 @@ function splitSentences(paragraph: string): string[] {
 }
 
 export function splitThinkingLines(text: string): string[] {
-  const normalized = text.replace(/\r\n/g, "\n").trim();
+  const normalized = text
+    .replace(/\r\n/g, "\n")
+    .replace(/\*{4,}/g, "\n")
+    .replace(/\*\*/g, "")
+    .trim();
   if (!normalized) {
     return [];
   }

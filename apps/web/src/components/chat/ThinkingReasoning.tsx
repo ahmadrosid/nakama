@@ -19,6 +19,7 @@ export interface ThinkingReasoningProps {
   startedAt?: string;
   text: string;
   thinkingDurationMs?: number;
+  toolCount?: number;
 }
 
 function useThinkingElapsed(
@@ -156,9 +157,19 @@ function ThinkingReasoningViewport({
   );
 }
 
-function useThinkingCollapse(isWorkActive: boolean, hasBody: boolean) {
+function useThinkingCollapse(
+  isWorkActive: boolean,
+  hasBody: boolean,
+  hasTools: boolean
+) {
   const [done, setDone] = useState(!isWorkActive && hasBody);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(hasTools);
+
+  useEffect(() => {
+    if (hasTools) {
+      setOpen(true);
+    }
+  }, [hasTools]);
 
   useEffect(() => {
     if (isWorkActive) {
@@ -206,6 +217,7 @@ function ThinkingReasoningHeader({
   elapsedSeconds,
   hasChildren,
   isThinkingStreaming,
+  stepCount,
   onToggle,
 }: {
   activityLabel?: string;
@@ -214,6 +226,7 @@ function ThinkingReasoningHeader({
   elapsedSeconds: number | null;
   hasChildren: boolean;
   isThinkingStreaming: boolean;
+  stepCount: number;
   onToggle: () => void;
 }) {
   return (
@@ -230,7 +243,11 @@ function ThinkingReasoningHeader({
     >
       {done ? (
         <span className={styles.label}>
-          <span className={styles.verb}>Activity</span>
+          <span className={styles.verb}>
+            {stepCount > 0
+              ? `${stepCount} ${stepCount === 1 ? "step" : "steps"}`
+              : "Activity"}
+          </span>
           {elapsedSeconds === null
             ? null
             : ` for ${formatElapsedSeconds(elapsedSeconds)}`}
@@ -243,6 +260,9 @@ function ThinkingReasoningHeader({
               hasChildren,
               isThinkingStreaming
             )}
+          {stepCount > 0
+            ? ` · ${stepCount} ${stepCount === 1 ? "step" : "steps"}`
+            : null}
         </span>
       )}
       <svg
@@ -268,15 +288,17 @@ function ThinkingReasoningHeader({
 function ThinkingReasoningBody({
   children,
   expanded,
+  hasTools,
   isWorkActive,
   sentences,
 }: {
   children?: ReactNode;
   expanded: boolean;
+  hasTools: boolean;
   isWorkActive: boolean;
   sentences: string[];
 }) {
-  const showTimeline = sentences.length > 0 || Boolean(children);
+  const showTimeline = sentences.length > 0 || hasTools;
 
   return (
     <div
@@ -288,14 +310,20 @@ function ThinkingReasoningBody({
     >
       <div className={styles.inner}>
         {showTimeline ? (
-          <div className={styles.timeline}>
+          <div
+            className={cn(
+              styles.timeline,
+              hasTools && styles.timelineWithTools,
+              sentences.length > 0 && styles.timelineWithReasoning
+            )}
+          >
             {sentences.length > 0 ? (
               <ThinkingReasoningViewport
                 isWorkActive={isWorkActive}
                 sentences={sentences}
               />
             ) : null}
-            {children ? (
+            {hasTools ? (
               <div
                 className={cn(
                   styles.tools,
@@ -321,6 +349,7 @@ export function ThinkingReasoning({
   thinkingDurationMs,
   className,
   children,
+  toolCount = 0,
 }: ThinkingReasoningProps) {
   const displayText = useRafCoalescedValue(text, isThinkingStreaming);
   const trimmed = displayText.trim();
@@ -328,11 +357,16 @@ export function ThinkingReasoning({
     () => splitThinkingLines(displayText),
     [displayText]
   );
-  const hasBody = sentences.length > 0 || Boolean(children);
+  const hasBody = sentences.length > 0 || toolCount > 0;
+  const stepCount = toolCount + (sentences.length > 0 ? 1 : 0);
   const elapsedSeconds = useThinkingElapsed(isWorkActive, startedAt);
-  const { done, expanded, toggle } = useThinkingCollapse(isWorkActive, hasBody);
+  const { done, expanded, toggle } = useThinkingCollapse(
+    isWorkActive,
+    hasBody,
+    toolCount > 0
+  );
 
-  if (isWorkActive && isThinkingStreaming && !trimmed && !children) {
+  if (isWorkActive && isThinkingStreaming && !trimmed && toolCount === 0) {
     return <ThinkingState className={className} />;
   }
 
@@ -353,12 +387,14 @@ export function ThinkingReasoning({
             : elapsedSeconds
         }
         expanded={expanded}
-        hasChildren={Boolean(children)}
+        hasChildren={toolCount > 0}
         isThinkingStreaming={isThinkingStreaming}
         onToggle={toggle}
+        stepCount={stepCount}
       />
       <ThinkingReasoningBody
         expanded={expanded}
+        hasTools={toolCount > 0}
         isWorkActive={isWorkActive}
         sentences={sentences}
       >
