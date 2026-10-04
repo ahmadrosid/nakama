@@ -6,6 +6,7 @@ import {
   BookOpen01Icon,
   ComputerTerminal01Icon,
   Rotate02Icon,
+  TaskEdit01Icon,
   Wrench01Icon,
 } from "hugeicons-react";
 import type { ReactNode } from "react";
@@ -943,7 +944,9 @@ function CollapsibleTrigger({
       ? ComputerTerminal01Icon
       : tool === "read_file"
         ? BookOpen01Icon
-        : Wrench01Icon;
+        : tool === "edit_file"
+          ? TaskEdit01Icon
+          : Wrench01Icon;
 
   return (
     <button
