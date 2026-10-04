@@ -46,6 +46,7 @@ import {
   listKnowledgeBaseDocuments,
   listOrganizationKnowledgeBaseDocuments,
   NakamaApiError,
+  nanoid,
   normalizeKnowledgeBaseMediaType,
   pathExists,
   uploadKnowledgeBaseDocument as persistKnowledgeBaseDocument,
@@ -203,9 +204,6 @@ const SOUL_FILE_KEY_BY_NAME = {
 /** Everything in the soul stack except MEMORY.md, which a clone starts fresh. */
 const CLONED_SOUL_FILE_KEYS = ["instructions", "soul", "style"] as const;
 
-/** How many `-2`, `-3` suffixes to try before giving up on a generated id. */
-const CLONE_ID_ATTEMPTS = 50;
-
 async function copyProfileAvatarTo(
   orgId: string,
   sourceId: string,
@@ -243,17 +241,6 @@ async function copyKnowledgeBaseTo(
     force: true,
     recursive: true,
   });
-}
-
-function slugifyProfileName(name: string): string {
-  return (
-    name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 64) || "profile"
-  );
 }
 
 export class ProfileService {
@@ -305,7 +292,7 @@ export class ProfileService {
 
     validateGeneratedSoulFiles(request.soulFiles);
 
-    const profileId = await this.resolveNewProfileId(request.id, name);
+    const profileId = await this.resolveNewProfileId(request.id);
     const now = new Date().toISOString();
     const profile: StoredProfileRecord = {
       automationsEnabled: true,
@@ -350,7 +337,7 @@ export class ProfileService {
     }
 
     const name = request.name?.trim() || `${source.name} (copy)`;
-    const profileId = await this.resolveCloneProfileId(request.id, name);
+    const profileId = await this.resolveNewProfileId(request.id);
     const now = new Date().toISOString();
 
     await this.db.upsertProfile({
@@ -451,34 +438,6 @@ export class ProfileService {
         toolkits.map((toolkit) => ({ ...toolkit, profileId }))
       );
     }
-  }
-
-  /**
-   * An explicit id must be free, same as create. A generated one is suffixed
-   * until it is, because cloning twice is a normal thing to do.
-   */
-  private async resolveCloneProfileId(
-    requestedId: string | undefined,
-    name: string
-  ): Promise<string> {
-    if (requestedId?.trim()) {
-      return this.resolveNewProfileId(requestedId, name);
-    }
-
-    const base = slugifyProfileName(name);
-
-    for (let suffix = 1; suffix <= CLONE_ID_ATTEMPTS; suffix++) {
-      const candidate = suffix === 1 ? base : `${base}-${suffix}`;
-
-      if (!(await this.isProfileIdTaken(candidate))) {
-        return this.resolveNewProfileId(candidate, name);
-      }
-    }
-
-    throw new NakamaApiError(
-      `Could not find a free profile id for "${name}".`,
-      409
-    );
   }
 
   async updateProfile(
@@ -1290,11 +1249,18 @@ export class ProfileService {
     }
   }
 
+  /**
+   * Generated ids are random (names may repeat across orgs), so an id only
+   * collides when the caller asked for a specific one.
+   */
   private async resolveNewProfileId(
-    requestedId: string | undefined,
-    name: string
+    requestedId: string | undefined
   ): Promise<string> {
-    const trimmed = requestedId?.trim() || slugifyProfileName(name);
+    const trimmed = requestedId?.trim();
+
+    if (!trimmed) {
+      return nanoid();
+    }
 
     if (!PROFILE_ID_PATTERN.test(trimmed)) {
       throw new NakamaApiError(
@@ -1304,7 +1270,10 @@ export class ProfileService {
     }
 
     if (await this.isProfileIdTaken(trimmed)) {
-      throw new NakamaApiError("Profile id already exists.", 409);
+      throw new NakamaApiError(
+        `Profile id "${trimmed}" is already taken.`,
+        409
+      );
     }
 
     return trimmed;
