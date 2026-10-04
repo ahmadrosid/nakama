@@ -358,6 +358,26 @@ function ProviderSetupExtraFields({
   density: "default" | "compact";
   form: ReturnType<typeof useProviderSetupForm>;
 }) {
+  if (form.selectedProvider === "netra") {
+    return (
+      <CustomProviderFields
+        apiKey={form.apiKey}
+        baseUrl="https://api.netraruntime.com/v1"
+        customModels={form.customModels}
+        density={density}
+        disabled={form.busy}
+        displayName="Netra Runtime"
+        hideIdentity
+        modelsError={form.modelsError}
+        onBaseUrlChange={form.setBaseUrl}
+        onCustomModelsChange={form.setCustomModels}
+        onDisplayNameChange={form.setDisplayName}
+        remoteProvider="netra"
+        showModelsEditor={canConnect}
+      />
+    );
+  }
+
   if (form.selectedProvider === "cloudflare") {
     return <CloudflareAccountIdField density={density} form={form} />;
   }

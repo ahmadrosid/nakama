@@ -190,6 +190,7 @@ function ProviderManageModelsFields({
           disabled={card.busy}
           displayName={instance.label}
           displayNameError={null}
+          hideIdentity={card.providerType === "netra"}
           hostMode={instance.hostMode ?? undefined}
           identityReadOnly
           modelsError={null}
@@ -197,7 +198,13 @@ function ProviderManageModelsFields({
           onCustomModelsChange={card.handleManageModelsChange}
           onDisplayNameChange={() => {}}
           providerInstanceId={instance.id}
-          remoteProvider={card.isOllama ? "ollama" : "openai_compatible"}
+          remoteProvider={
+            card.isOllama
+              ? "ollama"
+              : card.providerType === "netra"
+                ? "netra"
+                : "openai_compatible"
+          }
         />
       ) : null}
       {card.isOpenRouter ? (
@@ -284,6 +291,7 @@ function ProviderInstanceCardDialogs({
           dialogError={card.dialogError}
           editBaseUrl={card.editBaseUrl}
           editLabel={card.editLabel}
+          hideIdentity={card.providerType === "netra"}
           hostMode={instance.hostMode ?? undefined}
           manageModels={card.editManageModels}
           onBaseUrlChange={card.setEditBaseUrl}
@@ -291,10 +299,20 @@ function ProviderInstanceCardDialogs({
           onDisplayNameChange={card.setEditLabel}
           onOpenChange={card.setEditOpen}
           onSave={() => void card.saveCompatible()}
-          onWireApiChange={card.isOllama ? undefined : card.setEditWireApi}
+          onWireApiChange={
+            card.isOllama || card.providerType === "netra"
+              ? undefined
+              : card.setEditWireApi
+          }
           open={card.editOpen}
           providerInstanceId={instance.id}
-          remoteProvider={card.isOllama ? "ollama" : "openai_compatible"}
+          remoteProvider={
+            card.isOllama
+              ? "ollama"
+              : card.providerType === "netra"
+                ? "netra"
+                : "openai_compatible"
+          }
           wireApi={card.editWireApi}
         />
       ) : null}

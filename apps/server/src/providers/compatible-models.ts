@@ -4,6 +4,7 @@ import {
   findCustomModel,
   normalizeBaseUrl,
 } from "@nakama/core";
+import { NETRA_AGENT_MODEL_ID } from "@nakama/core/discovery-providers";
 import OpenAI from "openai";
 import type { ProviderModelOption } from "./models";
 import { AVAILABLE_MODELS } from "./models";
@@ -227,13 +228,24 @@ export function getModelsForProviderInstance(
       providerLabel: instance.label,
     }));
 
+  if (instance.type === "netra") {
+    return annotate(
+      customModelsToCatalog(
+        (instance.customModels ?? []).filter(
+          (entry) => entry.id === NETRA_AGENT_MODEL_ID
+        ),
+        "netra"
+      )
+    );
+  }
+
   if (instance.type === "openai_compatible") {
     const entries = instance.customModels ?? [];
     return annotate(
       ensureCurrentModelInCatalog(
-        customModelsToCatalog(entries),
+        customModelsToCatalog(entries, instance.type),
         currentModel,
-        "openai_compatible"
+        instance.type
       )
     );
   }
@@ -510,6 +522,23 @@ export async function fetchRemoteOpenAIModels(
   }
 
   return fetchRemoteOpenAIModelsRaw(normalized, apiKey);
+}
+
+export async function fetchNetraModels(
+  apiKey: string
+): Promise<CustomModelEntry[]> {
+  const entries = await fetchRemoteOpenAIModels(
+    "https://api.netraruntime.com/v1",
+    apiKey
+  );
+  return entries
+    .filter((entry) => entry.id === NETRA_AGENT_MODEL_ID)
+    .map((entry) => ({
+      ...entry,
+      name: "DeepSeek V4 Flash 0731",
+      supportsThinking: true,
+      supportsVision: false,
+    }));
 }
 
 async function fetchRemoteOpenAIModelsRaw(

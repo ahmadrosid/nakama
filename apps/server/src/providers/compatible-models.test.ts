@@ -1,18 +1,64 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { serve } from "bun";
 import {
   compatibleModelSupportsThinking,
   customModelEntryFromRemoteRecord,
+  fetchNetraModels,
   fetchRemoteOpenAIModels,
   getModelsForProviderInstance,
   inferRemoteModelVision,
 } from "./compatible-models";
 
 let mockServer: ReturnType<typeof serve> | undefined;
+const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   mockServer?.stop(true);
   mockServer = undefined;
+  globalThis.fetch = originalFetch;
+});
+
+test("Netra discovery keeps only the documented tool-capable model", async () => {
+  globalThis.fetch = mock(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe("https://api.netraruntime.com/v1/models");
+      expect(new Headers(init?.headers).get("Authorization")).toBe(
+        "Bearer test-key"
+      );
+      return Response.json({
+        data: [
+          { id: "deepseek/deepseek-v4.1-flash" },
+          { id: "deepseek/deepseek-v4-flash-0731" },
+        ],
+      });
+    }
+  ) as unknown as typeof fetch;
+
+  expect(await fetchNetraModels("test-key")).toEqual([
+    {
+      id: "deepseek/deepseek-v4-flash-0731",
+      name: "DeepSeek V4 Flash 0731",
+      supportsThinking: true,
+      supportsVision: false,
+    },
+  ]);
+});
+
+test("Netra agent catalog excludes models without a tool-turn check", () => {
+  const models = getModelsForProviderInstance({
+    apiKey: "test-key",
+    createdAt: "2026-10-05T00:00:00.000Z",
+    customModels: [
+      { id: "deepseek/deepseek-v4.1-flash" },
+      { id: "deepseek/deepseek-v4-flash-0731" },
+    ],
+    id: "netra-1",
+    label: "Netra Runtime",
+    type: "netra",
+  });
+  expect(models.map((model) => model.id)).toEqual([
+    "deepseek/deepseek-v4-flash-0731",
+  ]);
 });
 
 describe("getModelsForProviderInstance openai", () => {

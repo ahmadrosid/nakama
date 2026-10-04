@@ -7,6 +7,7 @@ import {
   validateDisplayName,
 } from "./compatible-provider-config";
 import type { ProviderModelOption } from "./contract";
+import { NETRA_AGENT_MODEL_ID } from "./discovery-providers";
 import {
   defaultOllamaBaseUrl,
   defaultOllamaLabel,
@@ -22,6 +23,10 @@ import {
 } from "./user-config";
 
 export interface ProviderSetupPromptOptions {
+  discoverModels?: (
+    provider: "netra",
+    apiKey: string
+  ) => Promise<ProviderModelOption[]>;
   getDefaultModel: (provider: UserProviderName) => string;
   getModelById: (modelId: string) => ProviderModelOption | undefined;
   getModelsForProvider: (provider: UserProviderName) => ProviderModelOption[];
@@ -35,6 +40,7 @@ const PROVIDER_CHOICES: Array<{ id: UserProviderName; label: string }> = [
   { id: "openrouter", label: "OpenRouter" },
   { id: "gemini", label: "Gemini" },
   { id: "deepseek", label: "DeepSeek" },
+  { id: "netra", label: "Netra Runtime" },
   { id: "doubao", label: "Doubao (Volcengine)" },
   { id: "together", label: "Together AI" },
   { id: "xiaomi", label: "Xiaomi MiMo" },
@@ -104,6 +110,51 @@ export async function promptForProviderConfig(
     if (!apiKey) {
       writeLine("API key is required.\n");
       continue;
+    }
+
+    if (provider === "netra") {
+      let models: ProviderModelOption[] = [];
+      try {
+        models = (await options.discoverModels?.("netra", apiKey)) ?? [];
+      } catch {
+        writeLine("Model discovery failed. Enter an exact Netra model ID.\n");
+      }
+      for (const [index, model] of models.entries()) {
+        writeLine(`  ${index + 1}) ${model.name} (${model.id})`);
+      }
+      const input = (await question("Netra model ID or number: ")).trim();
+      const numeric = Number(input);
+      const chosen = Number.isInteger(numeric)
+        ? models[numeric - 1]
+        : models.find((model) => model.id === input);
+      const modelId = chosen?.id ?? input;
+      if (
+        !modelId ||
+        modelId !== NETRA_AGENT_MODEL_ID ||
+        (models.length > 0 && !chosen)
+      ) {
+        writeLine("Enter an available Netra model ID.\n");
+        continue;
+      }
+      return buildUserConfigFromInstance({
+        apiKey,
+        createdAt: new Date().toISOString(),
+        customModels: [
+          {
+            default: true,
+            id: modelId,
+            ...(chosen?.supportsThinking === undefined
+              ? {}
+              : { supportsThinking: chosen.supportsThinking }),
+            ...(chosen?.supportsVision === undefined
+              ? {}
+              : { supportsVision: chosen.supportsVision }),
+          },
+        ],
+        id: createProviderInstanceId(),
+        label: "Netra Runtime",
+        type: "netra",
+      });
     }
 
     let cloudflareBaseUrl: string | undefined;
@@ -190,6 +241,7 @@ function resolveProviderChoice(input: string): UserProviderName | null {
     normalized === "openrouter" ||
     normalized === "gemini" ||
     normalized === "deepseek" ||
+    normalized === "netra" ||
     normalized === "doubao" ||
     normalized === "mistral" ||
     normalized === "perplexity" ||
