@@ -17,6 +17,7 @@ import { Spinner } from "@nakama/ui/spinner";
 import { useEffect, useRef, useState } from "react";
 import {
   KnowledgeTabPanel,
+  KnowledgeZipImportResult,
   SharedKnowledgeDocuments,
 } from "@/components/soul-tools/knowledge-tab-panel";
 import { useAuth } from "@/context/use-auth";
@@ -77,14 +78,18 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
     (document) => document.status === "ready"
   ).length;
   const loading = knowledgeLoading && !knowledgeBase;
-  const busy =
-    uploading ||
-    uploadMutation.isPending ||
-    importZipMutation.isPending ||
-    attachSharedMutation.isPending ||
-    deleteMutation.isPending ||
-    detachSharedMutation.isPending ||
-    duplicatePrompt !== null;
+  const uploadPending = [
+    uploading,
+    uploadMutation.isPending,
+    importZipMutation.isPending,
+  ].some(Boolean);
+  const busy = [
+    uploadPending,
+    attachSharedMutation.isPending,
+    deleteMutation.isPending,
+    detachSharedMutation.isPending,
+    duplicatePrompt !== null,
+  ].some(Boolean);
 
   useEffect(() => {
     const queryError = profilesError ?? knowledgeError;
@@ -97,6 +102,73 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
     return new Promise((resolve) => {
       setDuplicatePrompt({ filename, resolve });
     });
+  }
+
+  function resolveDuplicateDecision(decision: DuplicateDecision) {
+    duplicatePrompt?.resolve(decision);
+    setDuplicatePrompt(null);
+  }
+
+  async function handleZipUpload(file: File, currentProfileId: string) {
+    if (file.size > MAX_KNOWLEDGE_ZIP_BYTES) {
+      setError(`${file.name} exceeds the 20 MB ZIP limit.`);
+      return false;
+    }
+
+    try {
+      const zipBase64 = await fileToZipBase64(file);
+      const result = await importZipMutation.mutateAsync({
+        profileId: currentProfileId,
+        zipBase64,
+      });
+      setImportResult(result);
+      return true;
+    } catch (err) {
+      setError(formatError(err));
+      return false;
+    }
+  }
+
+  async function handleDocumentUpload(file: File, currentProfileId: string) {
+    if (!isKnowledgeBaseFile(file)) {
+      setError(`Unsupported file type: ${file.name}.`);
+      return true;
+    }
+
+    const document = await fileToDocumentAttachment(file);
+    if (!document) {
+      setError(`Failed to read file: ${file.name}`);
+      return true;
+    }
+
+    try {
+      await uploadMutation.mutateAsync({
+        document,
+        profileId: currentProfileId,
+      });
+      return true;
+    } catch (err) {
+      if (!(err instanceof NakamaApiError && err.status === 409)) {
+        setError(formatError(err));
+        return false;
+      }
+    }
+
+    if ((await askDuplicateDecision(file.name)) === "skip") {
+      return true;
+    }
+
+    try {
+      await uploadMutation.mutateAsync({
+        document,
+        onDuplicate: "replace",
+        profileId: currentProfileId,
+      });
+      return true;
+    } catch (err) {
+      setError(formatError(err));
+      return false;
+    }
   }
 
   async function handleUpload(files: FileList | null) {
@@ -114,57 +186,11 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
         return;
       }
       for (const file of Array.from(files)) {
-        if (isKnowledgeBaseZipFile(file)) {
-          if (file.size > MAX_KNOWLEDGE_ZIP_BYTES) {
-            setError(`${file.name} exceeds the 20 MB ZIP limit.`);
-            break;
-          }
-          try {
-            const zipBase64 = await fileToZipBase64(file);
-            const result = await importZipMutation.mutateAsync({
-              profileId,
-              zipBase64,
-            });
-            setImportResult(result);
-          } catch (err) {
-            setError(formatError(err));
-            break;
-          }
-          continue;
-        }
-
-        if (!isKnowledgeBaseFile(file)) {
-          setError(`Unsupported file type: ${file.name}.`);
-          continue;
-        }
-
-        const document = await fileToDocumentAttachment(file);
-        if (!document) {
-          setError(`Failed to read file: ${file.name}`);
-          continue;
-        }
-
-        try {
-          await uploadMutation.mutateAsync({ document, profileId });
-        } catch (err) {
-          if (!(err instanceof NakamaApiError && err.status === 409)) {
-            setError(formatError(err));
-            break;
-          }
-
-          const decision = await askDuplicateDecision(file.name);
-          if (decision === "replace") {
-            try {
-              await uploadMutation.mutateAsync({
-                document,
-                onDuplicate: "replace",
-                profileId,
-              });
-            } catch (replaceErr) {
-              setError(formatError(replaceErr));
-              break;
-            }
-          }
+        const shouldContinue = isKnowledgeBaseZipFile(file)
+          ? await handleZipUpload(file, profileId)
+          : await handleDocumentUpload(file, profileId);
+        if (!shouldContinue) {
+          break;
         }
       }
     } finally {
@@ -240,42 +266,7 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
         ) : null}
 
         {importResult ? (
-          <div
-            className="mb-4 rounded-md border border-border px-4 py-3 text-sm"
-            role="status"
-          >
-            <p className="font-medium">
-              ZIP import: {importResult.totals.created} added,{" "}
-              {importResult.totals.duplicate} duplicates,{" "}
-              {importResult.totals.unsupported} unsupported,{" "}
-              {importResult.totals.error} errors
-              {importResult.totals.failedExtraction > 0
-                ? `, ${importResult.totals.failedExtraction} unreadable`
-                : ""}
-            </p>
-            {importResult.entries.some(
-              (entry) =>
-                entry.outcome !== "created" || entry.status === "failed"
-            ) ? (
-              <ul className="mt-2 list-inside list-disc text-muted-foreground">
-                {importResult.entries
-                  .filter(
-                    (entry) =>
-                      entry.outcome !== "created" || entry.status === "failed"
-                  )
-                  .map((entry) => (
-                    <li key={entry.filename}>
-                      {entry.filename}:{" "}
-                      {entry.outcome === "created"
-                        ? "unreadable"
-                        : entry.outcome}
-                      {entry.match ? ` (${entry.match.replace("_", " ")})` : ""}
-                      {entry.reason ? ` — ${entry.reason}` : ""}
-                    </li>
-                  ))}
-              </ul>
-            ) : null}
-          </div>
+          <KnowledgeZipImportResult result={importResult} />
         ) : null}
 
         <SharedKnowledgeDocuments
@@ -293,9 +284,7 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
           onUpload={(files) => void handleUpload(files)}
           profileId={profileId}
           readyCount={readyCount}
-          uploadPending={
-            uploading || uploadMutation.isPending || importZipMutation.isPending
-          }
+          uploadPending={uploadPending}
         />
       </div>
 
@@ -307,46 +296,51 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
         target={deleteTarget}
       />
 
-      <Dialog
-        onOpenChange={(open) => {
-          if (!open && duplicatePrompt) {
-            duplicatePrompt.resolve("skip");
-            setDuplicatePrompt(null);
-          }
-        }}
-        open={duplicatePrompt !== null}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Duplicate document</DialogTitle>
-            <DialogDescription>
-              {duplicatePrompt?.filename} is already in this knowledge base.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              onClick={() => {
-                duplicatePrompt?.resolve("skip");
-                setDuplicatePrompt(null);
-              }}
-              type="button"
-              variant="outline"
-            >
-              Skip
-            </Button>
-            <Button
-              onClick={() => {
-                duplicatePrompt?.resolve("replace");
-                setDuplicatePrompt(null);
-              }}
-              type="button"
-            >
-              Replace
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DuplicateKnowledgeDocumentDialog
+        onDecision={resolveDuplicateDecision}
+        prompt={duplicatePrompt}
+      />
     </>
+  );
+}
+
+function DuplicateKnowledgeDocumentDialog({
+  onDecision,
+  prompt,
+}: {
+  onDecision: (decision: DuplicateDecision) => void;
+  prompt: DuplicatePrompt | null;
+}) {
+  return (
+    <Dialog
+      onOpenChange={(open) => {
+        if (!open && prompt) {
+          onDecision("skip");
+        }
+      }}
+      open={prompt !== null}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Duplicate document</DialogTitle>
+          <DialogDescription>
+            {prompt?.filename} is already in this knowledge base.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            onClick={() => onDecision("skip")}
+            type="button"
+            variant="outline"
+          >
+            Skip
+          </Button>
+          <Button onClick={() => onDecision("replace")} type="button">
+            Replace
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
