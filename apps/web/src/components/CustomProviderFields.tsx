@@ -162,7 +162,16 @@ export function CustomProviderFields({
           fieldId="provider-models"
           footerHint="Rates are USD per million tokens. Leave them blank if unknown."
           modelsError={modelsError}
-          onCustomModelsChange={onCustomModelsChange}
+          onCustomModelsChange={(models) =>
+            onCustomModelsChange(
+              remoteProvider === "netra"
+                ? models.map((model) => ({
+                    ...model,
+                    supportsThinking: model.supportsThinking ?? true,
+                  }))
+                : models
+            )
+          }
           renderBrowse={({ multiSelect, onAddMany, onSelect }) =>
             browseSource === "remote" ? (
               <RemoteModelsBrowseList

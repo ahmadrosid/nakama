@@ -80,7 +80,7 @@ export function ProviderSetupForm({
 
   return (
     <form
-      className={formSpacing}
+      className={`min-w-0 ${formSpacing}`}
       onSubmit={(event) => void form.handleSubmit(event)}
     >
       {showHeading ? (

@@ -54,9 +54,9 @@ export function ModelListEditor({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="min-w-0 space-y-2">
       {models.length > 0 ? (
-        <div className="overflow-x-auto rounded-lg border border-border">
+        <div className="max-w-full overflow-x-auto rounded-lg border border-border">
           <table
             className={`w-full text-left text-xs ${showThinking || showVision ? "min-w-[58rem]" : "min-w-[46rem]"}`}
           >
