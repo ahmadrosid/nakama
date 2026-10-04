@@ -425,9 +425,9 @@ describe("profile service createProfile", () => {
     expect(updated.profile.model).toBe("anthropic:claude-sonnet-4");
   });
 
-  test("uses a slug from the profile name when id is omitted", async () => {
+  test("generates a random id when id is omitted", async () => {
     tempConfigDir = await mkdtemp(
-      path.join(os.tmpdir(), "nakama-profile-slug-id-")
+      path.join(os.tmpdir(), "nakama-profile-random-id-")
     );
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
@@ -436,7 +436,28 @@ describe("profile service createProfile", () => {
       name: "Research Assistant",
     });
 
-    expect(created.profile.id).toBe("research-assistant");
+    expect(created.profile.id).toMatch(/^[0-9A-Za-z]{21}$/);
+  });
+
+  test("lets two orgs create profiles with the same name", async () => {
+    tempConfigDir = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-profile-cross-org-")
+    );
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+
+    const service = new ProfileService(createInMemoryDatabaseAdapter());
+    const first = await service.createProfile("org_first", {
+      name: "Penulis",
+    });
+    const second = await service.createProfile("org_second", {
+      name: "Penulis",
+    });
+
+    expect(first.profile.id).toMatch(/^[0-9A-Za-z]{21}$/);
+    expect(second.profile.id).toMatch(/^[0-9A-Za-z]{21}$/);
+    expect(second.profile.id).not.toBe(first.profile.id);
+    expect(first.profile.name).toBe("Penulis");
+    expect(second.profile.name).toBe("Penulis");
   });
 
   test("uses a custom profile id when provided", async () => {
@@ -466,7 +487,47 @@ describe("profile service createProfile", () => {
 
     await expect(
       service.createProfile(ORG_ID, { id: "support", name: "Support 2" })
-    ).rejects.toThrow(/already exists/i);
+    ).rejects.toThrow(/already taken/i);
+  });
+
+  test("rejects custom profile ids taken by another org", async () => {
+    tempConfigDir = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-profile-cross-org-id-")
+    );
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+
+    const service = new ProfileService(createInMemoryDatabaseAdapter());
+
+    await service.createProfile("org_first", {
+      id: "support",
+      name: "Support",
+    });
+
+    await expect(
+      service.createProfile("org_second", { id: "support", name: "Support 2" })
+    ).rejects.toThrow(/already taken/i);
+  });
+
+  test("resolves legacy slug ids via getProfile and getProfileForOrg", async () => {
+    tempConfigDir = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-profile-legacy-slug-")
+    );
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+
+    const db = createInMemoryDatabaseAdapter();
+    const service = new ProfileService(db);
+    await service.createProfile(ORG_ID, {
+      id: "legacy-writer",
+      name: "Legacy Writer",
+    });
+
+    expect((await db.getProfile("legacy-writer"))?.name).toBe("Legacy Writer");
+    expect((await db.getProfileForOrg("legacy-writer", ORG_ID))?.name).toBe(
+      "Legacy Writer"
+    );
+    await expect(
+      service.getProfile(ORG_ID, "legacy-writer")
+    ).resolves.toMatchObject({ profile: { id: "legacy-writer" } });
   });
 
   test.skipIf(process.platform !== "win32")(
@@ -484,7 +545,7 @@ describe("profile service createProfile", () => {
       await expect(
         service.createProfile(ORG_ID, { id: "sales", name: "Sales 2" })
       ).rejects.toMatchObject({
-        message: "Profile id already exists.",
+        message: `Profile id "sales" is already taken.`,
         status: 409,
       });
     }
@@ -927,20 +988,25 @@ describe("profile service cloneProfile", () => {
     const second = await service.cloneProfile(ORG_ID, sourceId, {});
 
     expect(second.profile.id).not.toBe(first.profile.id);
+    expect(first.profile.name).toBe("Research Bot (copy)");
+    expect(second.profile.name).toBe("Research Bot (copy)");
   });
 
   test.skipIf(process.platform !== "win32")(
-    "skips a generated clone id taken in another case on Windows",
+    "clones get a random id even when a case-similar id is taken on Windows",
     async () => {
       const { service, sourceId } = await setup();
-      await service.createProfile(ORG_ID, {
+      const taken = await service.createProfile(ORG_ID, {
         id: "Research-Bot-Copy",
         name: "Taken",
       });
 
       const clone = await service.cloneProfile(ORG_ID, sourceId, {});
 
-      expect(clone.profile.id).toBe("research-bot-copy-2");
+      expect(clone.profile.id).not.toBe(taken.profile.id);
+      expect(clone.profile.id).not.toBe(taken.profile.id.toLowerCase());
+      expect(clone.profile.id).toMatch(/^[0-9A-Za-z]{21}$/);
+      expect(clone.profile.name).toBe("Research Bot (copy)");
     }
   );
 
