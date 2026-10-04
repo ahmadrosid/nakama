@@ -67,6 +67,19 @@ export interface StoredWorkflowRunRecord {
   workflowId: string;
 }
 
+export interface StoredAutomationRunStepRecord {
+  args: string;
+  completedAt: string | null;
+  position: number;
+  result: string | null;
+  runId: string;
+  startedAt: string;
+  status: "running" | "completed";
+  toolCallId: string;
+  toolGroupId: string | null;
+  toolName: string;
+}
+
 export interface StoredWorkflowRunStepRecord {
   completedAt: string | null;
   error: string | null;
@@ -717,6 +730,14 @@ export interface DatabaseAdapter {
   /** Verify the live connection can read the migrated schema. */
   checkHealth(): Promise<void>;
   /**
+   * Automation runs left `running` by a dead process: those already resumed
+   * `maxResumes` times are failed, the rest have their resume count raised and
+   * are returned for the caller to continue.
+   */
+  claimInterruptedAutomationRuns(
+    maxResumes: number
+  ): Promise<Array<{ automationId: string; id: string }>>;
+  /**
    * Atomically claims an idempotency key for a notification webhook delivery.
    * Prunes rows older than the replay window, then returns true on first claim
    * and false on replay within that window.
@@ -729,6 +750,12 @@ export interface DatabaseAdapter {
   compareAndSetOrgPluginState(
     input: CompareAndSetOrgPluginStateInput
   ): Promise<PluginPublishResult>;
+  completeAutomationRunStep(
+    runId: string,
+    toolCallId: string,
+    result: string,
+    completedAt: string
+  ): Promise<void>;
   consumeMfaBackupCode(
     userId: string,
     codeHash: string,
@@ -827,6 +854,7 @@ export interface DatabaseAdapter {
    *
    * Returns the number of automation and workflow runs settled.
    */
+  /** Settles workflow runs a dead process left `running`. Automation runs are handled by `claimInterruptedAutomationRuns`. */
   failInterruptedRuns(): Promise<number>;
   getActiveArtifactShareByPath(
     orgId: string,
@@ -1005,6 +1033,7 @@ export interface DatabaseAdapter {
 
   insertAttachment(record: StoredAttachmentRecord): Promise<void>;
   insertAutomationRun(record: StoredAutomationRunRecord): Promise<void>;
+  insertAutomationRunStep(step: StoredAutomationRunStepRecord): Promise<void>;
   insertWorkflowRun(record: StoredWorkflowRunRecord): Promise<void>;
   insertWorkflowRunStep(record: StoredWorkflowRunStepRecord): Promise<void>;
 
@@ -1023,6 +1052,9 @@ export interface DatabaseAdapter {
     offset?: number;
     orgId?: string;
   }): Promise<StoredAuditEvent[]>;
+  listAutomationRunSteps(
+    runId: string
+  ): Promise<StoredAutomationRunStepRecord[]>;
 
   listAutomationRuns(
     automationId: string,
