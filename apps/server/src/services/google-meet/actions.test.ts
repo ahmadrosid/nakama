@@ -1,7 +1,8 @@
-import { expect, mock, test } from "bun:test";
+import { expect, mock, spyOn, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as recordingImport from "../meet-recording-import";
 import type { MeetExecutionContext } from "./actions";
 import { run } from "./actions";
 import { MeetingStore } from "./store";
@@ -183,6 +184,85 @@ test("uploads preserve Markdown and use Nakama's host for audio without plugin c
     expect(afterFailure.list()).toHaveLength(2);
     afterFailure.close();
   } finally {
+    rmSync(dir, { force: true, recursive: true });
+  }
+});
+
+test("recording import saves only a complete Whisper result in the member's history", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "meet-recording-import-"));
+  const importer = spyOn(
+    recordingImport,
+    "importMeetRecording"
+  ).mockResolvedValue({
+    filename: "Sprint.mp4",
+    text: "Decision one.\n\nDecision two.",
+  });
+  const composio = {
+    downloadMeetRecording: mock(async () => {
+      throw new Error("Unexpected download");
+    }),
+    listMeetRecordings: mock(async () => ({
+      driveConnected: true,
+      gmailConnected: true,
+      recordings: [
+        {
+          date: "",
+          fileId: "drive_file_123",
+          messageId: "msg_1",
+          name: "Sprint.mp4",
+          size: 100,
+        },
+      ],
+    })),
+  };
+  const context: MeetExecutionContext = {
+    actionKey: "recordings",
+    actor: { id: "member", role: "member" },
+    composio,
+    dataDir: dir,
+    orgId: "org",
+    profileId: "profile",
+  };
+  try {
+    const listed = (await run({}, context)) as { recordings: unknown[] };
+    expect(listed.recordings).toHaveLength(1);
+    expect(composio.listMeetRecordings).toHaveBeenCalledWith("org", "member");
+    const meeting = (await run(
+      { fileId: "drive_file_123", messageId: "msg_1" },
+      {
+        ...context,
+        actionKey: "import-recording",
+      }
+    )) as { id: string; state: string };
+    expect(meeting.state).toBe("finished");
+    const store = new MeetingStore(dir, "org");
+    expect(
+      store
+        .transcript(meeting.id)
+        .map((segment) => segment.text)
+        .join("")
+    ).toBe("Decision one.\n\nDecision two.");
+    expect(store.list("member", "profile")).toHaveLength(1);
+    expect(store.list("other", "profile")).toEqual([]);
+    store.close();
+    importer.mockRejectedValueOnce(new Error("Whisper unavailable"));
+    await expect(
+      run(
+        { fileId: "drive_file_123", messageId: "msg_1" },
+        {
+          ...context,
+          actionKey: "import-recording",
+        }
+      )
+    ).rejects.toThrow();
+    const after = new MeetingStore(dir, "org");
+    expect(after.list("member", "profile")).toHaveLength(1);
+    after.close();
+    await expect(
+      run({}, { ...context, actor: { id: "viewer", role: "viewer" } })
+    ).rejects.toThrow();
+  } finally {
+    importer.mockRestore();
     rmSync(dir, { force: true, recursive: true });
   }
 });

@@ -44,6 +44,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile --ignore-scripts
 
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Set up Electron
         run: |
           bun apps/desktop/node_modules/electron/install.js

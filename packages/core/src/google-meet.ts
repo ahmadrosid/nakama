@@ -34,6 +34,8 @@ export interface TranscriptSegment {
 }
 
 export type MeetAction =
+  | "recordings"
+  | "import-recording"
   | "upload"
   | "start-capture"
   | "meetings"
@@ -52,8 +54,20 @@ export interface MeetOverview {
 export interface MeetActionResults {
   configure: { configured: boolean; enabled: boolean };
   delete: { deleted: boolean };
+  "import-recording": Meeting;
   leave: Meeting & { stopRequested: number };
   meetings: MeetOverview;
+  recordings: {
+    driveConnected: boolean;
+    gmailConnected: boolean;
+    recordings: {
+      fileId: string;
+      messageId: string;
+      name: string;
+      size: number;
+      date: string;
+    }[];
+  };
   "start-capture": Meeting & { capture: { token: string; url: string } };
   status: { meeting: Meeting };
   transcript: {

@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import * as recordingImport from "../meet-recording-import";
 import { GoogleMeetService } from "./service";
 import * as transcription from "./transcription";
 
@@ -64,7 +65,7 @@ test("startup is idempotent and restart preserves settings while recovering unfi
     false
   );
   const tools = (await db.listTools()).filter((tool) => tool.orgId === "a");
-  expect(tools).toHaveLength(6);
+  expect(tools).toHaveLength(8);
   expect(
     tools.every(
       (tool) =>
@@ -279,5 +280,73 @@ test("shared capture listener consumes tokens once and preserves protocol 2 fina
     await service.invoke("b", "leave", { meetingId: second.id }, admin);
   } finally {
     connect.mockRestore();
+  }
+});
+
+test("built-in recording imports use the current member and cancel without saving", async () => {
+  await service.close();
+  let importing!: () => void;
+  const started = new Promise<void>((resolve) => {
+    importing = resolve;
+  });
+  const importer = spyOn(
+    recordingImport,
+    "importMeetRecording"
+  ).mockImplementation(async (_composio, input, signal) => {
+    expect(input).toMatchObject({
+      dataDir: service.directory("a"),
+      orgId: "a",
+      userId: "alice",
+    });
+    importing();
+    await new Promise<void>((resolve) =>
+      signal.addEventListener("abort", () => resolve(), { once: true })
+    );
+    return { filename: "meeting.mp4", text: "Late transcript" };
+  });
+  service = new GoogleMeetService(db, root, async () => ({ text: "" }), {
+    async downloadMeetRecording() {
+      throw new Error("Unexpected download");
+    },
+    async listMeetRecordings(orgId, userId) {
+      expect([orgId, userId]).toEqual(["a", "alice"]);
+      return { driveConnected: true, gmailConnected: true, recordings: [] };
+    },
+  });
+  try {
+    expect(
+      (await service.invoke("a", "recordings", {}, admin)).driveConnected
+    ).toBe(true);
+    await expect(
+      service.invoke(
+        "a",
+        "import-recording",
+        { fileId: "../invalid", messageId: "msg" },
+        admin
+      )
+    ).rejects.toThrow();
+    expect(importer).not.toHaveBeenCalled();
+    const pending = service.invoke(
+      "a",
+      "import-recording",
+      { fileId: "drive_file_123", messageId: "msg" },
+      admin
+    );
+    const settled = Promise.allSettled([pending]);
+    await started;
+    await expect(service.withSnapshot(async () => true)).rejects.toThrow();
+    expect(() => service.pauseOrganization("a")).toThrow();
+    await service.close();
+    expect((await settled)[0]?.status).toBe("rejected");
+    await service.reopen();
+    expect((await service.invoke("a", "meetings", {}, admin)).meetings).toEqual(
+      []
+    );
+    await service.invoke("a", "configure", { enabled: false }, admin);
+    await expect(
+      service.invoke("a", "recordings", {}, admin)
+    ).rejects.toThrow();
+  } finally {
+    importer.mockRestore();
   }
 });

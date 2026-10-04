@@ -28,6 +28,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile --ignore-scripts
 
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Run tests
         run: |
           bun apps/desktop/node_modules/electron/install.js
@@ -72,6 +75,9 @@ jobs:
         with:
           path: ~/.bun/install/cache
           key: ${{ steps.dependencies.outputs.cache-primary-key }}
+
+      - name: Install FFmpeg
+        run: choco install ffmpeg --no-progress -y
 
       - name: Run tests
         # Split the slow server suite across runners; run each smaller suite once.
