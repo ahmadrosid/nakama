@@ -25,7 +25,7 @@ Agent platform built to work with your team — not replace them. Multi-tenant m
 
 ## Dev
 
-- Bun 1.3+: `bun install`, `bun run`, `bun test`
+- Bun 1.4+: `bun install`, `bun run`, `bun test`
 - Servers: `bun run dev:server` | `dev:web` | `cli`
 - Format / lint: `bun x ultracite fix` | `check` | `doctor`; unused exports: `bun run knip` (CI fails on findings)
 
