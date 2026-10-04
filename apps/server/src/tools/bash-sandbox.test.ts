@@ -1,15 +1,25 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { PathGuardError } from "@nakama/core";
+import {
+  type ExecEvent,
+  type ExecHandle,
+  ExecTimeoutError,
+  Sandbox,
+  type SandboxHandle,
+} from "microsandbox";
 import { resetBashSandboxManagerForTests, runBash } from "./bash";
 import {
   resolveBashBackend,
   resolveBashSandboxImage,
   resolveBashSandboxNetwork,
 } from "./bash-config";
-import { createBoundedOutput } from "./bash-microsandbox-runtime";
+import {
+  createBoundedOutput,
+  MicrosandboxBashRuntime,
+} from "./bash-microsandbox-runtime";
 import { buildBashSandboxEnv } from "./bash-sandbox-env";
 import {
   type BashSandboxEnsureArgs,
@@ -428,6 +438,221 @@ describe("bash microsandbox path with fake runtime", () => {
       )
     ).rejects.toBeInstanceOf(PathGuardError);
   });
+});
+
+describe("microsandbox adapter cancellation", () => {
+  afterEach(() => mock.restore());
+
+  const execArgs = {
+    command: "echo hi",
+    env: {},
+    guestCwd: "/workspace",
+    name: "test-sandbox",
+    timeoutMs: 1000,
+  };
+
+  function fakeSdk(
+    events: () => AsyncGenerator<ExecEvent> = async function* () {
+      yield { code: 0, kind: "exited" };
+    }
+  ) {
+    const kill = mock(() => Promise.resolve());
+    const handle = {
+      kill,
+      [Symbol.asyncIterator]: events,
+    } as unknown as ExecHandle;
+    const execStreamWith = mock(() => Promise.resolve(handle));
+    const sandbox = { execStreamWith } as unknown as Sandbox;
+    const connect = mock(() => Promise.resolve(sandbox));
+    const get = spyOn(Sandbox, "get").mockResolvedValue({
+      connect,
+      status: "running",
+    } as unknown as SandboxHandle);
+    return { connect, execStreamWith, get, handle, kill, sandbox };
+  }
+
+  test("pre-abort never connects or dispatches", async () => {
+    const sdk = fakeSdk();
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      new MicrosandboxBashRuntime().exec({
+        ...execArgs,
+        signal: controller.signal,
+      })
+    ).rejects.toBeInstanceOf(Error);
+    expect(sdk.get).not.toHaveBeenCalled();
+    expect(sdk.connect).not.toHaveBeenCalled();
+    expect(sdk.execStreamWith).not.toHaveBeenCalled();
+  });
+
+  test("abort during connection prevents command dispatch", async () => {
+    const entered = Promise.withResolvers<void>();
+    const connected = Promise.withResolvers<void>();
+    const sdk = fakeSdk();
+    sdk.connect.mockImplementation(async () => {
+      entered.resolve();
+      await connected.promise;
+      return sdk.sandbox;
+    });
+    const controller = new AbortController();
+    const execution = new MicrosandboxBashRuntime().exec({
+      ...execArgs,
+      signal: controller.signal,
+    });
+    await entered.promise;
+    controller.abort();
+    connected.resolve();
+
+    const outcome = await execution.then(
+      () => "resolved",
+      () => "rejected"
+    );
+    expect(sdk.execStreamWith).not.toHaveBeenCalled();
+    expect(sdk.kill).not.toHaveBeenCalled();
+    expect(outcome).toBe("rejected");
+  });
+
+  test("abort during handle creation kills the returned handle", async () => {
+    const entered = Promise.withResolvers<void>();
+    const created = Promise.withResolvers<void>();
+    const sdk = fakeSdk();
+    sdk.execStreamWith.mockImplementation(async () => {
+      entered.resolve();
+      await created.promise;
+      return sdk.handle;
+    });
+    const controller = new AbortController();
+    const add = spyOn(controller.signal, "addEventListener");
+    const remove = spyOn(controller.signal, "removeEventListener");
+    const execution = new MicrosandboxBashRuntime().exec({
+      ...execArgs,
+      signal: controller.signal,
+    });
+    await entered.promise;
+    controller.abort();
+    created.resolve();
+
+    const outcome = await execution.then(
+      () => "resolved",
+      () => "rejected"
+    );
+    expect(sdk.execStreamWith).toHaveBeenCalledTimes(1);
+    expect(sdk.kill).toHaveBeenCalledTimes(1);
+    expect(outcome).toBe("rejected");
+    expect(remove).toHaveBeenCalledWith("abort", add.mock.calls[0]?.[1]);
+  });
+
+  test.each(["exit", "error", "timeout"])(
+    "active abort kills the handle and rejects on stream %s",
+    async (ending) => {
+      const streaming = Promise.withResolvers<void>();
+      const finished = Promise.withResolvers<void>();
+      const sdk = fakeSdk(async function* () {
+        streaming.resolve();
+        await finished.promise;
+        if (ending === "error") {
+          throw new Error("stream closed");
+        }
+        if (ending === "timeout") {
+          throw new ExecTimeoutError("deadline", 1000);
+        }
+        yield { code: 0, kind: "exited" };
+      });
+      if (ending === "error") {
+        sdk.kill.mockRejectedValue(new Error("already stopped"));
+      }
+      const controller = new AbortController();
+      const add = spyOn(controller.signal, "addEventListener");
+      const remove = spyOn(controller.signal, "removeEventListener");
+      const execution = new MicrosandboxBashRuntime().exec({
+        ...execArgs,
+        signal: controller.signal,
+      });
+      await streaming.promise;
+      controller.abort();
+      expect(sdk.kill).toHaveBeenCalledTimes(1);
+      finished.resolve();
+
+      await expect(execution).rejects.toBeInstanceOf(Error);
+      expect(remove).toHaveBeenCalledWith("abort", add.mock.calls[0]?.[1]);
+      expect(sdk.execStreamWith).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  test.each([false, true])(
+    "preserves bounded output and removes listeners (timeout=%s)",
+    async (timedOut) => {
+      const sdk = fakeSdk(async function* () {
+        yield {
+          data: new TextEncoder().encode("x".repeat(32_001)),
+          kind: "stdout",
+        };
+        yield { data: new TextEncoder().encode("warning"), kind: "stderr" };
+        if (timedOut) {
+          throw new ExecTimeoutError("deadline", 1000);
+        }
+        yield { code: 7, kind: "exited" };
+      });
+      const controller = new AbortController();
+      const add = spyOn(controller.signal, "addEventListener");
+      const remove = spyOn(controller.signal, "removeEventListener");
+
+      expect(
+        await new MicrosandboxBashRuntime().exec({
+          ...execArgs,
+          signal: controller.signal,
+        })
+      ).toEqual({
+        exitCode: timedOut ? null : 7,
+        stderr: "warning",
+        stdout: `${"x".repeat(32_000)}\n...[truncated]`,
+        timedOut,
+      });
+      expect(remove).toHaveBeenCalledWith("abort", add.mock.calls[0]?.[1]);
+      controller.abort();
+      expect(sdk.kill).not.toHaveBeenCalled();
+      expect(sdk.execStreamWith).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  test.each(["connect", "create", "stream"])(
+    "SDK %s failure rejects without retry or leaked listeners",
+    async (stage) => {
+      const error = new Error("SDK unavailable");
+      const sdk = fakeSdk(async function* () {
+        yield { data: new TextEncoder().encode("partial"), kind: "stdout" };
+        throw error;
+      });
+      if (stage === "connect") {
+        sdk.connect.mockRejectedValue(error);
+      } else if (stage === "create") {
+        sdk.execStreamWith.mockRejectedValue(error);
+      }
+      const controller = new AbortController();
+      const add = spyOn(controller.signal, "addEventListener");
+      const remove = spyOn(controller.signal, "removeEventListener");
+
+      await expect(
+        new MicrosandboxBashRuntime().exec({
+          ...execArgs,
+          signal: controller.signal,
+        })
+      ).rejects.toBeInstanceOf(Error);
+      if (stage === "stream") {
+        expect(remove).toHaveBeenCalledWith("abort", add.mock.calls[0]?.[1]);
+      } else {
+        expect(add).not.toHaveBeenCalled();
+      }
+      controller.abort();
+      expect(sdk.kill).not.toHaveBeenCalled();
+      expect(sdk.get).toHaveBeenCalledTimes(1);
+      expect(sdk.execStreamWith).toHaveBeenCalledTimes(
+        stage === "connect" ? 0 : 1
+      );
+    }
+  );
 });
 
 describe("profile sandbox concurrency and output bounds", () => {
