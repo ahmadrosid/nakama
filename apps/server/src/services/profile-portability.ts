@@ -94,6 +94,13 @@ const AVATAR_EXTENSION_MEDIA_TYPES: Record<string, string> = {
 };
 const NOT_ALLOWLISTED_REASON =
   "Not part of the profile pack allowlist (secrets and generated data are excluded).";
+// A skill's `tool.py` and the `.py` scripts it declares under `scripts:` are
+// executed as subprocesses by the chat runtime, so a pack must not be able to
+// install host-level Python through the ordinary org-admin import. They are
+// written only when a platform admin approves the import, the same gate
+// custom tool source already passes through.
+const PYTHON_SKILL_SCRIPT_REASON =
+  "Python skill script skipped: it runs as a subprocess on the server and requires a platform admin to approve the import.";
 const PROFILE_ID_ATTEMPTS = 50;
 
 interface ProfilePackFile {
@@ -128,6 +135,7 @@ export interface CreateProfilePackOptions {
 }
 
 export interface PreviewProfilePackImportOptions {
+  allowPythonSkillTools?: boolean;
   restoreCustomTools?: boolean;
 }
 
@@ -139,6 +147,7 @@ export interface CreateProfilePackResult {
 
 export interface ImportProfilePackOptions {
   actorUserId?: string | null;
+  allowPythonSkillTools?: boolean;
   confirm: boolean;
   name?: string;
   now?: Date;
@@ -242,6 +251,11 @@ export async function previewProfilePackImport(
     options.restoreCustomTools === true,
     skippedAssignments
   );
+  previewBlockedPythonSkillScripts(
+    entries,
+    options.allowPythonSkillTools === true,
+    skippedAssignments
+  );
   await eachNamedOrSkip(
     manifest.meta.mcpServerNames,
     (name) => db.getMcpServerByName(name),
@@ -343,6 +357,7 @@ export async function importProfilePack(
       orgId,
       profileId,
       entries,
+      options.allowPythonSkillTools === true,
       skippedAssignments
     );
     createdSkillIds = await recreatePackedSkills(
@@ -986,6 +1001,7 @@ async function writePackedWorkspaceFiles(
   orgId: string,
   profileId: string,
   entries: ProfilePackZipEntry[],
+  allowPythonSkillTools: boolean,
   skipped: ProfilePackSkippedItem[]
 ): Promise<void> {
   const soulDir = getProfileSoulDir(orgId, profileId);
@@ -1009,8 +1025,40 @@ async function writePackedWorkspaceFiles(
       continue;
     }
 
+    if (!allowPythonSkillTools && isPackedPythonSkillScript(entry.name)) {
+      skipped.push({ path: entry.name, reason: PYTHON_SKILL_SCRIPT_REASON });
+      continue;
+    }
+
     const targetPath = join(soulDir, entry.name);
     await writePrivateBytesFile(targetPath, entry.data);
+  }
+}
+
+/** Every `.py` a skill could run: the skill root tool and declared scripts. */
+function isPackedPythonSkillScript(relativePath: string): boolean {
+  const [first, second] = relativePath.split("/");
+
+  if (first !== "skills" || !second) {
+    return false;
+  }
+
+  return relativePath.toLowerCase().endsWith(".py");
+}
+
+function previewBlockedPythonSkillScripts(
+  entries: ProfilePackZipEntry[],
+  allowPythonSkillTools: boolean,
+  skipped: ProfilePackSkippedItem[]
+): void {
+  if (allowPythonSkillTools) {
+    return;
+  }
+
+  for (const entry of entries) {
+    if (isPackedPythonSkillScript(entry.name)) {
+      skipped.push({ path: entry.name, reason: PYTHON_SKILL_SCRIPT_REASON });
+    }
   }
 }
 
