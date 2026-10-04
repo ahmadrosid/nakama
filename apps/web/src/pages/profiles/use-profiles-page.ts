@@ -4,6 +4,7 @@ import type {
   InstallSkillRequest,
   ProfileDetail,
 } from "@nakama/core/contract";
+import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
@@ -156,7 +157,11 @@ export function useProfilesPage() {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
   const { data: profileComposioData } = useProfileComposioToolkits(selectedId);
-  const { data: allSkills = [] } = useSkillsQuery();
+  const {
+    data: allSkills = [],
+    isLoading: skillsLoading,
+    error: skillsError,
+  } = useSkillsQuery();
   const { data: modelsResponse } = useModelsQuery();
   const {
     data: detail = null,
@@ -867,7 +872,7 @@ export function useProfilesPage() {
 
   async function handleAssignSkill(skillId: string) {
     if (!selectedId) {
-      return;
+      throw new Error("Select a profile first.");
     }
 
     setError(null);
@@ -876,7 +881,18 @@ export function useProfilesPage() {
       await assignSkillMutation.mutateAsync({ profileId: selectedId, skillId });
     } catch (err) {
       setError(formatError(err));
+      throw err;
     }
+  }
+
+  async function handleAssignBash() {
+    if (!selectedId) {
+      throw new Error("Select a profile first.");
+    }
+    await assignMutation.mutateAsync({
+      profileId: selectedId,
+      toolId: [BASH_TOOL_ID],
+    });
   }
 
   async function handleDeleteSkill(skillId: string) {
@@ -1096,6 +1112,7 @@ export function useProfilesPage() {
     editPrompt,
     error,
     flushSave,
+    handleAssignBash,
     handleAssignComposioToolkit,
     handleAssignMcpServer,
     handleAssignSkill,
@@ -1146,6 +1163,8 @@ export function useProfilesPage() {
     setSkillInstallOpen,
     skillCreateOpen,
     skillInstallOpen,
+    skillsError,
+    skillsLoading,
     unassignMcpMutation,
     unassignMutation,
     unassignSkillMutation,
