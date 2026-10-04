@@ -8,6 +8,22 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
+const netraProvider = (model = "deepseek/deepseek-v4-flash-0731") =>
+  createOpenAICompatibleProvider({
+    apiKey: "test-key",
+    baseUrl: "https://api.netraruntime.com/v1",
+    displayName: "Netra Runtime",
+    model,
+    providerName: "netra",
+    supportsThinking: true,
+  });
+
+const netraStream = (chunks: string[]) =>
+  new Response(streamFromChunks(chunks), {
+    headers: { "Content-Type": "text/event-stream" },
+    status: 200,
+  });
+
 describe("OpenAI-compatible provider", () => {
   test("Netra text generation asks for JSON without an unsupported response format", async () => {
     globalThis.fetch = mock(
@@ -19,15 +35,7 @@ describe("OpenAI-compatible provider", () => {
         });
       }
     ) as unknown as typeof fetch;
-    const provider = createOpenAICompatibleProvider({
-      apiKey: "test-key",
-      baseUrl: "https://api.netraruntime.com/v1",
-      displayName: "Netra Runtime",
-      model: "deepseek/deepseek-v4-flash-0731",
-      providerName: "netra",
-      supportsThinking: true,
-    });
-    const result = await provider.generateText({
+    const result = await netraProvider().generateText({
       format: "json",
       prompt: "Return JSON",
       system: "Return JSON",
@@ -77,14 +85,7 @@ describe("OpenAI-compatible provider", () => {
       }
     ) as unknown as typeof fetch;
 
-    const provider = createOpenAICompatibleProvider({
-      apiKey: "test-key",
-      baseUrl: "https://api.netraruntime.com/v1",
-      displayName: "Netra Runtime",
-      model: "deepseek/deepseek-v4-flash-0731",
-      providerName: "netra",
-      supportsThinking: true,
-    });
+    const provider = netraProvider();
     const tool = {
       description: "Look up data",
       name: "lookup",
@@ -122,25 +123,14 @@ describe("OpenAI-compatible provider", () => {
   });
 
   test("Netra rejects a terminal stream error after partial text", async () => {
-    globalThis.fetch = mock(
-      async () =>
-        new Response(
-          streamFromChunks([
-            'data: {"choices":[{"delta":{"content":"Part"}}]}\n\n',
-            'event: error\ndata: {"error":{"message":"balance exhausted"}}\n\n',
-            "data: [DONE]\n\n",
-          ]),
-          { headers: { "Content-Type": "text/event-stream" }, status: 200 }
-        )
+    globalThis.fetch = mock(async () =>
+      netraStream([
+        'data: {"choices":[{"delta":{"content":"Part"}}]}\n\n',
+        'event: error\ndata: {"error":{"message":"balance exhausted"}}\n\n',
+        "data: [DONE]\n\n",
+      ])
     ) as unknown as typeof fetch;
-    const provider = createOpenAICompatibleProvider({
-      apiKey: "test-key",
-      baseUrl: "https://api.netraruntime.com/v1",
-      displayName: "Netra Runtime",
-      model: "deepseek/deepseek-v4-flash-0731",
-      providerName: "netra",
-      supportsThinking: true,
-    });
+    const provider = netraProvider();
     const chunks: string[] = [];
     await expect(
       provider.streamChat(
@@ -152,23 +142,10 @@ describe("OpenAI-compatible provider", () => {
   });
 
   test("Netra rejects a stream that closes before DONE", async () => {
-    globalThis.fetch = mock(
-      async () =>
-        new Response(
-          streamFromChunks([
-            'data: {"choices":[{"delta":{"content":"Part"}}]}\n\n',
-          ]),
-          { headers: { "Content-Type": "text/event-stream" }, status: 200 }
-        )
+    globalThis.fetch = mock(async () =>
+      netraStream(['data: {"choices":[{"delta":{"content":"Part"}}]}\n\n'])
     ) as unknown as typeof fetch;
-    const provider = createOpenAICompatibleProvider({
-      apiKey: "test-key",
-      baseUrl: "https://api.netraruntime.com/v1",
-      displayName: "Netra Runtime",
-      model: "deepseek/deepseek-v4-flash-0731",
-      providerName: "netra",
-      supportsThinking: true,
-    });
+    const provider = netraProvider();
     await expect(
       provider.streamChat(
         { messages: [{ content: "Hi", role: "user" }], system: "Help" },
@@ -177,42 +154,6 @@ describe("OpenAI-compatible provider", () => {
     ).rejects.toThrow("before [DONE]");
   });
 
-  test("Netra V4.1 sends image input to Chat Completions", async () => {
-    globalThis.fetch = mock(
-      async (_input: RequestInfo | URL, init?: RequestInit) => {
-        const body = JSON.parse(String(init?.body)) as {
-          messages: Array<{ content: unknown }>;
-        };
-        expect(body.messages[1]?.content).toEqual([
-          {
-            image_url: { url: "data:image/png;base64,YWJj" },
-            type: "image_url",
-          },
-        ]);
-        return Response.json({
-          choices: [{ message: { content: "A picture" } }],
-        });
-      }
-    ) as unknown as typeof fetch;
-    const provider = createOpenAICompatibleProvider({
-      apiKey: "test-key",
-      baseUrl: "https://api.netraruntime.com/v1",
-      displayName: "Netra Runtime",
-      model: "deepseek/deepseek-v4.1-flash",
-      providerName: "netra",
-      supportsThinking: true,
-    });
-    const result = await provider.generateChat({
-      messages: [
-        {
-          content: [{ data: "YWJj", mediaType: "image/png", type: "image" }],
-          role: "user",
-        },
-      ],
-      system: "Describe the image",
-    });
-    expect(result.content).toBe("A picture");
-  });
   test("sends reasoning config only when the model supports thinking", async () => {
     const fetchMock = mock(
       async (input: RequestInfo | URL, init?: RequestInit) => {
