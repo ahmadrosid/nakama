@@ -174,7 +174,16 @@ export async function retireAppUserData(
   ) {
     // Staged restores may predate these columns. Upgrade before inventorying.
     const migrated = await createSqliteDatabase(`file:${databasePath}`);
-    migrated.release();
+    // At startup the main connection already holds this file and its schema is
+    // current, so the migration above commits nothing. Closing this second
+    // connection can still raise "database is locked" (bun on macOS) while the
+    // main connection is busy — that must not kill boot. In the restore flow
+    // the live database is already released, so the close there keeps working.
+    try {
+      migrated.release();
+    } catch {
+      // Best effort: the handle is dropped when the adapter is collected.
+    }
     const db = new Database(databasePath, { readonly: true });
     try {
       sessions.push(
