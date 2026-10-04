@@ -61,7 +61,7 @@ export async function saveErrorTrackingDsn(
   const next: ErrorTrackingConfig = { dsn: dsn?.trim() || null };
   const lines = [
     "# Nakama error tracking",
-    "# dsn = a Sentry-compatible DSN (Sentry, GlitchTip, Bugsink, self-hosted).",
+    "# dsn = a Sentry-compatible DSN (Sentry, GlitchTip, Bugsink, Rustrak, self-hosted).",
     "# Empty or missing sends nothing. DO_NOT_TRACK=1 overrides this file.",
     ...(next.dsn ? [`dsn=${next.dsn}`] : []),
     "",
