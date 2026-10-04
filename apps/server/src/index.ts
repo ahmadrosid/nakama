@@ -125,6 +125,8 @@ const database = await createDatabase(config.databaseUrl, {
   baseDir: getUserConfigDir(),
 });
 
+const MAX_AUTOMATION_RUN_RESUMES = 2;
+
 await seedDatabase(database.adapter);
 
 await retireAppUserData(
@@ -140,6 +142,12 @@ const interruptedRuns = await database.adapter.failInterruptedRuns();
 if (interruptedRuns > 0) {
   console.log(`Settled ${interruptedRuns} run(s) interrupted by a restart`);
 }
+// Automation runs continue from their last saved tool step instead; one that
+// was already resumed twice is failed here.
+const resumableAutomationRuns =
+  await database.adapter.claimInterruptedAutomationRuns(
+    MAX_AUTOMATION_RUN_RESUMES
+  );
 
 // Channel credentials used to be install-wide. On a single-org install that
 // config can only belong to that org, so claim it once before any scope-exact
@@ -222,6 +230,12 @@ agent.setAutomationRunHistoryTools(
   createAutomationRunHistoryTools(automationService)
 );
 agent.setAutomationRunner(automationRunner);
+if (resumableAutomationRuns.length > 0) {
+  console.log(
+    `Resuming ${resumableAutomationRuns.length} automation run(s) interrupted by a restart`
+  );
+  void automationRunner.resumeInterrupted(resumableAutomationRuns);
+}
 
 const workerManager = new WorkerManagerService(
   projectRoot,

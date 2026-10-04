@@ -115,11 +115,27 @@ CREATE TABLE IF NOT EXISTS automation_runs (
   error TEXT,
   delivery_status TEXT,
   delivery_error TEXT,
+  resume_count INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (automation_id) REFERENCES automations (id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS automation_runs_automation_started
   ON automation_runs (automation_id, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS automation_run_steps (
+  run_id TEXT NOT NULL,
+  tool_call_id TEXT NOT NULL,
+  tool_group_id TEXT,
+  tool_name TEXT NOT NULL,
+  args TEXT NOT NULL,
+  result TEXT,
+  status TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  position INTEGER NOT NULL,
+  PRIMARY KEY (run_id, tool_call_id),
+  FOREIGN KEY (run_id) REFERENCES automation_runs (id) ON DELETE CASCADE
+);
 
 CREATE TABLE IF NOT EXISTS automation_run_read_state (
   user_id TEXT NOT NULL,
