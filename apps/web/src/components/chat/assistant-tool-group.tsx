@@ -3,6 +3,7 @@ import { cn } from "@nakama/ui/utils";
 import {
   ArrowDown01Icon,
   ArrowRight01Icon,
+  Audit02Icon,
   BookOpen01Icon,
   ComputerTerminal01Icon,
   Rotate02Icon,
@@ -946,7 +947,9 @@ function CollapsibleTrigger({
         ? BookOpen01Icon
         : tool === "edit_file"
           ? TaskEdit01Icon
-          : Wrench01Icon;
+          : tool === "search_files"
+            ? Audit02Icon
+            : Wrench01Icon;
 
   return (
     <button
