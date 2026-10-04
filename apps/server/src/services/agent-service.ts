@@ -45,6 +45,7 @@ import type {
   ImageAttachment,
   ImageGenerationSettings,
   ImageGenerationSettingsResponse,
+  ImportKnowledgeBaseZipResponse,
   InitSoulResponse,
   InitUserContextResponse,
   InstallSkillRequest,
@@ -3522,6 +3523,18 @@ export class AgentService {
       profileId,
       document,
       onDuplicate
+    );
+  }
+
+  async importKnowledgeBaseZip(
+    orgId: string,
+    profileId: string,
+    zipBase64: string
+  ): Promise<ImportKnowledgeBaseZipResponse> {
+    return this.profileService.importKnowledgeBaseZip(
+      orgId,
+      profileId,
+      zipBase64
     );
   }
 

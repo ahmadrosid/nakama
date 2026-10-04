@@ -59,7 +59,7 @@ export function KnowledgeTabPanel({
           <p className="text-muted-foreground text-xs tabular-nums">
             {formatDocumentCount(documents.length)}
             {readyCount === documents.length ? "" : ` · ${readyCount} ready`}
-            {" · "}txt, md, csv, pdf ·{" "}
+            {" · "}txt, md, csv, pdf, docx, zip ·{" "}
             {MAX_KNOWLEDGE_DOCUMENT_BYTES / (1024 * 1024)} MB max
           </p>
 
@@ -83,7 +83,7 @@ export function KnowledgeTabPanel({
               ) : (
                 <Upload04Icon aria-hidden className="size-3.5" />
               )}
-              Add document
+              Add document or ZIP
             </Button>
           </div>
         </div>

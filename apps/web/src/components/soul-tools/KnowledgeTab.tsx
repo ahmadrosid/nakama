@@ -1,5 +1,9 @@
 import { NakamaApiError } from "@nakama/core/api-error";
-import type { KnowledgeBaseDocument } from "@nakama/core/contract";
+import type {
+  ImportKnowledgeBaseZipResponse,
+  KnowledgeBaseDocument,
+} from "@nakama/core/contract";
+import { MAX_KNOWLEDGE_ZIP_BYTES } from "@nakama/core/message-content";
 import { Button } from "@nakama/ui/button";
 import {
   Dialog,
@@ -21,6 +25,7 @@ import {
   useAttachSharedKnowledgeBaseDocumentMutation,
   useDeleteKnowledgeBaseDocumentMutation,
   useDetachSharedKnowledgeBaseDocumentMutation,
+  useImportKnowledgeBaseZipMutation,
   useKnowledgeBaseQuery,
   useOrganizationKnowledgeBaseQuery,
   useUploadKnowledgeBaseDocumentMutation,
@@ -28,7 +33,9 @@ import {
 import { formatError } from "@/lib/client";
 import {
   fileToDocumentAttachment,
+  fileToZipBase64,
   isKnowledgeBaseFile,
+  isKnowledgeBaseZipFile,
 } from "@/lib/knowledge-base-files";
 
 type DuplicateDecision = "skip" | "replace";
@@ -50,10 +57,14 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
   const { data: organizationKnowledgeBase = null } =
     useOrganizationKnowledgeBaseQuery(activeOrg?.id ?? null);
   const uploadMutation = useUploadKnowledgeBaseDocumentMutation();
+  const importZipMutation = useImportKnowledgeBaseZipMutation();
   const attachSharedMutation = useAttachSharedKnowledgeBaseDocumentMutation();
   const deleteMutation = useDeleteKnowledgeBaseDocumentMutation();
   const detachSharedMutation = useDetachSharedKnowledgeBaseDocumentMutation();
   const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [importResult, setImportResult] =
+    useState<ImportKnowledgeBaseZipResponse | null>(null);
   const [deleteTarget, setDeleteTarget] =
     useState<KnowledgeBaseDocument | null>(null);
   const [duplicatePrompt, setDuplicatePrompt] =
@@ -67,7 +78,9 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
   ).length;
   const loading = knowledgeLoading && !knowledgeBase;
   const busy =
+    uploading ||
     uploadMutation.isPending ||
+    importZipMutation.isPending ||
     attachSharedMutation.isPending ||
     deleteMutation.isPending ||
     detachSharedMutation.isPending ||
@@ -92,69 +105,73 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
     }
 
     setError(null);
+    setImportResult(null);
+    setUploading(true);
 
-    const candidates = Array.from(files).filter((file) => {
-      if (isKnowledgeBaseFile(file)) {
-        return true;
-      }
-      setError(
-        `Unsupported file type: ${file.name}. Allowed: txt, md, csv, pdf.`
-      );
-      return false;
-    });
-
-    const prepared = await Promise.all(
-      candidates.map(async (file) => ({
-        document: await fileToDocumentAttachment(file),
-        file,
-      }))
-    );
-
-    // Sequential: one duplicate dialog at a time; hard errors stop the batch.
-    const uploadNext = async (index: number): Promise<void> => {
-      const item = prepared[index];
-      if (!item) {
+    try {
+      if (Array.from(files).filter(isKnowledgeBaseZipFile).length > 1) {
+        setError("Select one ZIP at a time.");
         return;
       }
-
-      const { document, file } = item;
-      if (!document) {
-        setError(`Failed to read file: ${file.name}`);
-        return uploadNext(index + 1);
-      }
-
-      try {
-        await uploadMutation.mutateAsync({ document, profileId });
-      } catch (err) {
-        if (!(err instanceof NakamaApiError && err.status === 409)) {
-          setError(formatError(err));
-          return;
+      for (const file of Array.from(files)) {
+        if (isKnowledgeBaseZipFile(file)) {
+          if (file.size > MAX_KNOWLEDGE_ZIP_BYTES) {
+            setError(`${file.name} exceeds the 20 MB ZIP limit.`);
+            break;
+          }
+          try {
+            const zipBase64 = await fileToZipBase64(file);
+            const result = await importZipMutation.mutateAsync({
+              profileId,
+              zipBase64,
+            });
+            setImportResult(result);
+          } catch (err) {
+            setError(formatError(err));
+            break;
+          }
+          continue;
         }
 
-        const decision = await askDuplicateDecision(file.name);
-        if (decision === "skip") {
-          return uploadNext(index + 1);
+        if (!isKnowledgeBaseFile(file)) {
+          setError(`Unsupported file type: ${file.name}.`);
+          continue;
+        }
+
+        const document = await fileToDocumentAttachment(file);
+        if (!document) {
+          setError(`Failed to read file: ${file.name}`);
+          continue;
         }
 
         try {
-          await uploadMutation.mutateAsync({
-            document,
-            onDuplicate: "replace",
-            profileId,
-          });
-        } catch (replaceErr) {
-          setError(formatError(replaceErr));
-          return;
+          await uploadMutation.mutateAsync({ document, profileId });
+        } catch (err) {
+          if (!(err instanceof NakamaApiError && err.status === 409)) {
+            setError(formatError(err));
+            break;
+          }
+
+          const decision = await askDuplicateDecision(file.name);
+          if (decision === "replace") {
+            try {
+              await uploadMutation.mutateAsync({
+                document,
+                onDuplicate: "replace",
+                profileId,
+              });
+            } catch (replaceErr) {
+              setError(formatError(replaceErr));
+              break;
+            }
+          }
         }
       }
-
-      return uploadNext(index + 1);
-    };
-
-    await uploadNext(0);
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   }
 
@@ -222,6 +239,45 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
           </p>
         ) : null}
 
+        {importResult ? (
+          <div
+            className="mb-4 rounded-md border border-border px-4 py-3 text-sm"
+            role="status"
+          >
+            <p className="font-medium">
+              ZIP import: {importResult.totals.created} added,{" "}
+              {importResult.totals.duplicate} duplicates,{" "}
+              {importResult.totals.unsupported} unsupported,{" "}
+              {importResult.totals.error} errors
+              {importResult.totals.failedExtraction > 0
+                ? `, ${importResult.totals.failedExtraction} unreadable`
+                : ""}
+            </p>
+            {importResult.entries.some(
+              (entry) =>
+                entry.outcome !== "created" || entry.status === "failed"
+            ) ? (
+              <ul className="mt-2 list-inside list-disc text-muted-foreground">
+                {importResult.entries
+                  .filter(
+                    (entry) =>
+                      entry.outcome !== "created" || entry.status === "failed"
+                  )
+                  .map((entry) => (
+                    <li key={entry.filename}>
+                      {entry.filename}:{" "}
+                      {entry.outcome === "created"
+                        ? "unreadable"
+                        : entry.outcome}
+                      {entry.match ? ` (${entry.match.replace("_", " ")})` : ""}
+                      {entry.reason ? ` — ${entry.reason}` : ""}
+                    </li>
+                  ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+
         <SharedKnowledgeDocuments
           availableDocuments={organizationKnowledgeBase?.documents}
           busy={busy}
@@ -237,7 +293,9 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
           onUpload={(files) => void handleUpload(files)}
           profileId={profileId}
           readyCount={readyCount}
-          uploadPending={uploadMutation.isPending}
+          uploadPending={
+            uploading || uploadMutation.isPending || importZipMutation.isPending
+          }
         />
       </div>
 
