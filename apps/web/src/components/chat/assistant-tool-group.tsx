@@ -7,6 +7,7 @@ import {
   BookOpen01Icon,
   ComputerTerminal01Icon,
   McpServerIcon,
+  PropertySearchIcon,
   Rotate02Icon,
   TaskEdit01Icon,
   Wrench01Icon,
@@ -927,6 +928,7 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
 const TOOL_ICONS: Record<string, typeof Wrench01Icon> = {
   bash: ComputerTerminal01Icon,
   edit_file: TaskEdit01Icon,
+  knowledge_base_search: PropertySearchIcon,
   read_file: BookOpen01Icon,
   search_files: Audit02Icon,
 };
