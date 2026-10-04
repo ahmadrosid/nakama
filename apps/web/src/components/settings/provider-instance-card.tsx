@@ -83,6 +83,18 @@ function providerModelCountLabel(modelCount: number): string {
   return modelCount === 1 ? "1 model" : `${modelCount} models`;
 }
 
+function compatibleRemoteProvider(
+  card: ReturnType<typeof useProviderInstanceCard>
+): "ollama" | "netra" | "openai_compatible" {
+  if (card.isOllama) {
+    return "ollama";
+  }
+  if (card.providerType === "netra") {
+    return "netra";
+  }
+  return "openai_compatible";
+}
+
 function providerKeyActionLabel(
   card: ReturnType<typeof useProviderInstanceCard>,
   hasApiKey: boolean
@@ -198,13 +210,7 @@ function ProviderManageModelsFields({
           onCustomModelsChange={card.handleManageModelsChange}
           onDisplayNameChange={() => {}}
           providerInstanceId={instance.id}
-          remoteProvider={
-            card.isOllama
-              ? "ollama"
-              : card.providerType === "netra"
-                ? "netra"
-                : "openai_compatible"
-          }
+          remoteProvider={compatibleRemoteProvider(card)}
         />
       ) : null}
       {card.isOpenRouter ? (
@@ -306,13 +312,7 @@ function ProviderInstanceCardDialogs({
           }
           open={card.editOpen}
           providerInstanceId={instance.id}
-          remoteProvider={
-            card.isOllama
-              ? "ollama"
-              : card.providerType === "netra"
-                ? "netra"
-                : "openai_compatible"
-          }
+          remoteProvider={compatibleRemoteProvider(card)}
           wireApi={card.editWireApi}
         />
       ) : null}
