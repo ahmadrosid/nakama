@@ -2906,7 +2906,10 @@ export class AgentService {
         null;
       try {
         discovered = await fetchNetraModels(instance.apiKey);
-      } catch {
+      } catch (error) {
+        if (error instanceof NakamaApiError && error.status === 400) {
+          throw error;
+        }
         // The exact ID can still work when model discovery is unavailable.
         const provider = createProviderForInstance(instance, model);
         if (!provider) {

@@ -2,6 +2,7 @@ import type { ProviderInstance, ProviderName } from "@nakama/core";
 import {
   type CustomModelEntry,
   findCustomModel,
+  NakamaApiError,
   normalizeBaseUrl,
 } from "@nakama/core";
 import { NETRA_AGENT_MODEL_ID } from "@nakama/core/discovery-providers";
@@ -545,12 +546,17 @@ async function fetchRemoteOpenAIModelsRaw(
   baseUrl: string,
   apiKey: string
 ): Promise<CustomModelEntry[]> {
-  const response = await fetch(`${baseUrl}/models`, {
-    headers: {
-      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      Accept: "application/json",
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/models`, {
+      headers: {
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        Accept: "application/json",
+      },
+    });
+  } catch {
+    throw new NakamaApiError("Could not reach the model endpoint.", 502);
+  }
 
   if (!response.ok) {
     const body = await response.text();
@@ -560,12 +566,16 @@ async function fetchRemoteOpenAIModelsRaw(
     );
 
     if (response.status === 401 || response.status === 403) {
-      throw new Error(
-        "Add an API key before discovering models from this endpoint."
+      throw new NakamaApiError(
+        "The model endpoint rejected this API key. Check the key and try again.",
+        400
       );
     }
 
-    throw new Error(`Could not fetch models (${response.status}): ${body}`);
+    throw new NakamaApiError(
+      `Could not load models from this endpoint (${response.status}). Try again.`,
+      502
+    );
   }
 
   const payload = (await response.json()) as {
