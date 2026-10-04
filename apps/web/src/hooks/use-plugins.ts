@@ -450,10 +450,31 @@ export function isPluginLifecycleBusy(plugin: OrgPluginDetail): boolean {
   );
 }
 
+// SemVer order: numeric core first, and a prerelease sorts below its release.
+function compareVersions(a: string, b: string): number {
+  const [coreA, ...preA] = a.split("-");
+  const [coreB, ...preB] = b.split("-");
+  const core = coreA.localeCompare(coreB, undefined, { numeric: true });
+  if (core !== 0) {
+    return core;
+  }
+  if (preA.length === 0 || preB.length === 0) {
+    return preB.length - preA.length;
+  }
+  return preA.join("-").localeCompare(preB.join("-"), undefined, {
+    numeric: true,
+  });
+}
+
+/** Approved releases newer than the selected one, newest first. */
 export function nextPluginVersions(plugin: OrgPluginDetail): string[] {
-  return plugin.availableVersions.filter(
-    (version) => version !== plugin.selectedVersion
-  );
+  const selected = plugin.selectedVersion;
+  if (!selected) {
+    return [];
+  }
+  return plugin.availableVersions
+    .filter((version) => compareVersions(version, selected) > 0)
+    .sort((a, b) => compareVersions(b, a));
 }
 
 export function formatPluginTrustLines(
@@ -549,7 +570,7 @@ export function pluginRowActions(plugin: OrgPluginDetail): {
       ["enabled", "disabled"].includes(plugin.lifecycleState),
     update:
       plugin.installed &&
-      plugin.lifecycleState === "disabled" &&
+      ["enabled", "disabled"].includes(plugin.lifecycleState) &&
       nextPluginVersions(plugin).length > 0,
   };
 }
