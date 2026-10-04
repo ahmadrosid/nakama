@@ -163,13 +163,8 @@ function useThinkingCollapse(
   hasTools: boolean
 ) {
   const [done, setDone] = useState(!isWorkActive && hasBody);
-  const [open, setOpen] = useState(hasTools);
-
-  useEffect(() => {
-    if (hasTools) {
-      setOpen(true);
-    }
-  }, [hasTools]);
+  const [thinkingOpen, setThinkingOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(true);
 
   useEffect(() => {
     if (isWorkActive) {
@@ -193,10 +188,14 @@ function useThinkingCollapse(
   }, [hasBody, isWorkActive]);
 
   const toggle = () => {
-    setOpen((current) => !current);
+    if (hasTools) {
+      setToolsOpen((current) => !current);
+      return;
+    }
+    setThinkingOpen((current) => !current);
   };
 
-  return { done, expanded: open, toggle };
+  return { done, expanded: hasTools ? toolsOpen : thinkingOpen, toggle };
 }
 
 function thinkingLiveLabel(
@@ -229,6 +228,17 @@ function ThinkingReasoningHeader({
   stepCount: number;
   onToggle: () => void;
 }) {
+  const stepLabel = `${stepCount} ${stepCount === 1 ? "step" : "steps"}`;
+  const doneLabel = stepCount > 0 ? stepLabel : "Activity";
+  const durationLabel =
+    elapsedSeconds === null
+      ? ""
+      : ` for ${formatElapsedSeconds(elapsedSeconds)}`;
+  const liveLabel =
+    activityLabel ??
+    thinkingLiveLabel(elapsedSeconds ?? 1, hasChildren, isThinkingStreaming);
+  const liveStepLabel = stepCount > 0 ? ` · ${stepLabel}` : "";
+
   return (
     <button
       aria-expanded={expanded}
@@ -241,30 +251,16 @@ function ThinkingReasoningHeader({
       onClick={onToggle}
       type="button"
     >
-      {done ? (
-        <span className={styles.label}>
-          <span className={styles.verb}>
-            {stepCount > 0
-              ? `${stepCount} ${stepCount === 1 ? "step" : "steps"}`
-              : "Activity"}
-          </span>
-          {elapsedSeconds === null
-            ? null
-            : ` for ${formatElapsedSeconds(elapsedSeconds)}`}
-        </span>
-      ) : (
-        <span className={cn(styles.label, styles.shimmer)}>
-          {activityLabel ??
-            thinkingLiveLabel(
-              elapsedSeconds ?? 1,
-              hasChildren,
-              isThinkingStreaming
-            )}
-          {stepCount > 0
-            ? ` · ${stepCount} ${stepCount === 1 ? "step" : "steps"}`
-            : null}
-        </span>
-      )}
+      <span className={cn(styles.label, !done && styles.shimmer)}>
+        {done ? (
+          <>
+            <span className={styles.verb}>{doneLabel}</span>
+            {durationLabel}
+          </>
+        ) : (
+          `${liveLabel}${liveStepLabel}`
+        )}
+      </span>
       <svg
         aria-hidden="true"
         className={styles.chevron}
