@@ -399,21 +399,12 @@ export function ChatAddCapabilitiesDialogs({
   skillOpen: boolean;
   toolOpen: boolean;
 }) {
-  const { activeOrg } = useAuth();
   const { data: tools = [] } = useToolsQuery();
   const { data: servers = [] } = useMcpServersQuery();
   const { data: profile } = useProfileQuery(profileId);
-  const {
-    data: skills = [],
-    isLoading: skillsLoading,
-    error: skillsError,
-  } = useSkillsQuery();
   const assignToolMutation = useAssignToolMutation();
   const assignMcpMutation = useAssignMcpServerMutation();
   const createMcpMutation = useCreateMcpServerMutation();
-  const installSkillMutation = useInstallSkillMutation();
-  const assignSkillMutation = useAssignSkillMutation();
-  const deleteSkillMutation = useDeleteSkillMutation();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -428,16 +419,7 @@ export function ChatAddCapabilitiesDialogs({
   const busy =
     assignToolMutation.isPending ||
     assignMcpMutation.isPending ||
-    createMcpMutation.isPending ||
-    installSkillMutation.isPending;
-
-  async function handleAssignSkill(skillId: string) {
-    await assignSkillMutation.mutateAsync({ profileId, skillId });
-  }
-
-  async function handleAssignBash() {
-    await assignToolMutation.mutateAsync({ profileId, toolId: [BASH_TOOL_ID] });
-  }
+    createMcpMutation.isPending;
 
   async function handleAssignTool(toolId: string) {
     setError(null);
@@ -477,20 +459,6 @@ export function ChatAddCapabilitiesDialogs({
         serverId: response.server.id,
       });
       onMcpOpenChange(false);
-    } catch (err) {
-      const message = formatError(err);
-      setError(message);
-      throw new Error(message);
-    }
-  }
-
-  async function handleInstallSkill(
-    request: Parameters<typeof installSkillMutation.mutateAsync>[0]
-  ) {
-    setError(null);
-    try {
-      await installSkillMutation.mutateAsync(request);
-      onSkillOpenChange(false);
     } catch (err) {
       const message = formatError(err);
       setError(message);
@@ -557,32 +525,70 @@ export function ChatAddCapabilitiesDialogs({
         onTestConnection={(server) => void handleTestMcp(server)}
         open={mcpOpen}
       />
-      <AddSkillDialog
-        assignedSkillIds={
-          new Set(profile?.skills.map((skill) => skill.id) ?? [])
-        }
-        bashAssigned={
-          profile?.tools.some((tool) => tool.id === BASH_TOOL_ID) ?? false
-        }
-        busy={
-          installSkillMutation.isPending ||
-          assignSkillMutation.isPending ||
-          assignToolMutation.isPending ||
-          deleteSkillMutation.isPending
-        }
-        onAssign={handleAssignSkill}
-        onAssignBash={handleAssignBash}
-        onDelete={(skillId) => deleteSkillMutation.mutateAsync(skillId)}
-        onInstall={handleInstallSkill}
+      <ChatSkillDialog
         onOpenChange={onSkillOpenChange}
         open={skillOpen}
-        orgId={activeOrg?.id ?? null}
         profileId={profileId}
-        skills={skills.filter((skill) => !skill.pluginId)}
-        skillsError={skillsError}
-        skillsLoading={skillsLoading}
       />
     </>
+  );
+}
+
+function ChatSkillDialog({
+  onOpenChange,
+  open,
+  profileId,
+}: {
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  profileId: string;
+}) {
+  const { activeOrg } = useAuth();
+  const { data: profile } = useProfileQuery(profileId);
+  const {
+    data: skills = [],
+    isLoading: skillsLoading,
+    error: skillsError,
+  } = useSkillsQuery();
+  const assignToolMutation = useAssignToolMutation();
+  const assignSkillMutation = useAssignSkillMutation();
+  const deleteSkillMutation = useDeleteSkillMutation();
+  const installSkillMutation = useInstallSkillMutation();
+
+  return (
+    <AddSkillDialog
+      assignedSkillIds={new Set(profile?.skills.map((skill) => skill.id) ?? [])}
+      bashAssigned={
+        profile?.tools.some((tool) => tool.id === BASH_TOOL_ID) ?? false
+      }
+      busy={
+        installSkillMutation.isPending ||
+        assignSkillMutation.isPending ||
+        assignToolMutation.isPending ||
+        deleteSkillMutation.isPending
+      }
+      onAssign={async (skillId) => {
+        await assignSkillMutation.mutateAsync({ profileId, skillId });
+      }}
+      onAssignBash={async () => {
+        await assignToolMutation.mutateAsync({
+          profileId,
+          toolId: [BASH_TOOL_ID],
+        });
+      }}
+      onDelete={(skillId) => deleteSkillMutation.mutateAsync(skillId)}
+      onInstall={async (request) => {
+        await installSkillMutation.mutateAsync(request);
+        onOpenChange(false);
+      }}
+      onOpenChange={onOpenChange}
+      open={open}
+      orgId={activeOrg?.id ?? null}
+      profileId={profileId}
+      skills={skills.filter((skill) => !skill.pluginId)}
+      skillsError={skillsError}
+      skillsLoading={skillsLoading}
+    />
   );
 }
 

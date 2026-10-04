@@ -178,6 +178,7 @@ function OrganizationSkills({
           setSelected((current) => current.filter((id) => id !== skillId));
           continue;
         }
+        // oxlint-disable-next-line react-doctor/async-await-in-loop -- Stop on failure and keep later skills selected.
         await onAssign(skillId);
         setAdded((current) => new Set([...current, skillId]));
         setSelected((current) => current.filter((id) => id !== skillId));
@@ -286,118 +287,23 @@ function OrganizationSkills({
             placeholder="Search skills..."
             value={search}
           />
-          <div className="max-h-72 overflow-y-auto rounded-md border border-border">
-            {skillsLoading ? (
-              <p className="p-4 text-muted-foreground text-sm">
-                Loading skills...
-              </p>
-            ) : null}
-            {!skillsLoading && skillsError ? (
-              <p className="p-4 text-destructive text-sm" role="alert">
-                Could not load skills. Try again.
-              </p>
-            ) : null}
-            {!(skillsLoading || skillsError) && visibleSkills.length === 0 ? (
-              <p className="p-4 text-muted-foreground text-sm">
-                No organization skills yet. Use Install new.
-              </p>
-            ) : null}
-            {!(skillsLoading || skillsError) &&
-            visibleSkills.length > 0 &&
-            results.length === 0 ? (
-              <p className="p-4 text-muted-foreground text-sm">
-                No skills found.
-              </p>
-            ) : null}
-            {skillsLoading || skillsError
-              ? null
-              : results.map((skill) => {
-                  const onProfile = isAdded(skill.id);
-                  const isBrowser = skill.name === "agent-browser";
-                  const needsBash = isBrowser && !bashAssigned;
-                  const needsInstall = isBrowser && browserNeedsInstall;
-                  const unavailable = onProfile || needsBash || needsInstall;
-                  const canDelete = Boolean(
-                    onDelete &&
-                      user?.isPlatformAdmin &&
-                      !bundledNames.has(skill.name) &&
-                      !isPluginOwned(skill)
-                  );
-                  return (
-                    <div
-                      className="flex items-center gap-3 border-border border-b px-3 py-3 last:border-b-0"
-                      key={skill.id}
-                    >
-                      <label className="flex min-w-0 flex-1 items-start gap-3">
-                        <input
-                          aria-label={`Add ${skill.name}`}
-                          checked={selected.includes(skill.id) || onProfile}
-                          className="mt-1"
-                          disabled={busy || unavailable}
-                          onChange={() => toggle(skill.id)}
-                          type="checkbox"
-                        />
-                        <span className="min-w-0">
-                          <span className="block font-medium text-sm">
-                            {skill.name}
-                          </span>
-                          {skill.description.trim() &&
-                          skill.description.trim().toLowerCase() !==
-                            skill.name.toLowerCase() ? (
-                            <span className="block text-muted-foreground text-xs">
-                              {skill.description}
-                            </span>
-                          ) : null}
-                        </span>
-                      </label>
-                      {onProfile ? (
-                        <span className="text-muted-foreground text-xs">
-                          Added
-                        </span>
-                      ) : null}
-                      {needsBash ? (
-                        <Button
-                          disabled={busy}
-                          onClick={() => void addBash()}
-                          size="xs"
-                          type="button"
-                          variant="outline"
-                        >
-                          Add bash
-                        </Button>
-                      ) : null}
-                      {!needsBash && needsInstall && user?.isPlatformAdmin ? (
-                        <Button
-                          disabled={busy}
-                          onClick={() => void installBrowser()}
-                          size="xs"
-                          type="button"
-                          variant="outline"
-                        >
-                          Install
-                        </Button>
-                      ) : null}
-                      {onDelete ? (
-                        <Button
-                          aria-label={`Delete ${skill.name} from library`}
-                          disabled={busy || !canDelete || onProfile}
-                          onClick={() => setPendingDelete(skill)}
-                          size="icon-sm"
-                          title={
-                            onProfile
-                              ? "Remove this skill from the profile before deleting it"
-                              : undefined
-                          }
-                          type="button"
-                          variant="ghost"
-                        >
-                          <Delete02Icon aria-hidden className="size-4" />
-                        </Button>
-                      ) : null}
-                    </div>
-                  );
-                })}
-          </div>
+          <OrganizationSkillList
+            bashAssigned={bashAssigned}
+            browserNeedsInstall={browserNeedsInstall}
+            busy={busy}
+            canInstallBrowser={user?.isPlatformAdmin === true}
+            isAdded={isAdded}
+            onAddBash={addBash}
+            onDelete={onDelete}
+            onInstallBrowser={installBrowser}
+            onRequestDelete={setPendingDelete}
+            onToggle={toggle}
+            results={results}
+            selectedSkillIds={new Set(selected)}
+            skillsError={skillsError}
+            skillsLoading={skillsLoading}
+            visibleSkillCount={visibleSkills.length}
+          />
           {installProgress ? (
             <p className="break-all text-muted-foreground text-xs">
               {installProgress}
@@ -432,6 +338,229 @@ function OrganizationSkills({
         </>
       )}
     </div>
+  );
+}
+
+function OrganizationSkillList({
+  bashAssigned,
+  browserNeedsInstall,
+  busy,
+  canInstallBrowser,
+  isAdded,
+  onAddBash,
+  onDelete,
+  onInstallBrowser,
+  onRequestDelete,
+  onToggle,
+  results,
+  selectedSkillIds,
+  skillsError,
+  skillsLoading,
+  visibleSkillCount,
+}: {
+  bashAssigned: boolean;
+  browserNeedsInstall: boolean;
+  busy: boolean;
+  canInstallBrowser: boolean;
+  isAdded: (skillId: string) => boolean;
+  onAddBash: () => Promise<void>;
+  onDelete?: (skillId: string) => Promise<void>;
+  onInstallBrowser: () => Promise<void>;
+  onRequestDelete: (skill: SkillSummary) => void;
+  onToggle: (skillId: string) => void;
+  results: SkillSummary[];
+  selectedSkillIds: ReadonlySet<string>;
+  skillsError: unknown;
+  skillsLoading: boolean;
+  visibleSkillCount: number;
+}) {
+  return (
+    <div className="max-h-72 overflow-y-auto rounded-md border border-border">
+      {skillsLoading ? (
+        <p className="p-4 text-muted-foreground text-sm">Loading skills...</p>
+      ) : null}
+      {!skillsLoading && skillsError ? (
+        <p className="p-4 text-destructive text-sm" role="alert">
+          Could not load skills. Try again.
+        </p>
+      ) : null}
+      {!(skillsLoading || skillsError) && visibleSkillCount === 0 ? (
+        <p className="p-4 text-muted-foreground text-sm">
+          No organization skills yet. Use Install new.
+        </p>
+      ) : null}
+      {!(skillsLoading || skillsError) &&
+      visibleSkillCount > 0 &&
+      results.length === 0 ? (
+        <p className="p-4 text-muted-foreground text-sm">No skills found.</p>
+      ) : null}
+      {skillsLoading || skillsError
+        ? null
+        : results.map((skill) => (
+            <OrganizationSkillRow
+              bashAssigned={bashAssigned}
+              browserNeedsInstall={browserNeedsInstall}
+              busy={busy}
+              canInstallBrowser={canInstallBrowser}
+              isAdded={isAdded(skill.id)}
+              key={skill.id}
+              onAddBash={onAddBash}
+              onDelete={onDelete}
+              onInstallBrowser={onInstallBrowser}
+              onRequestDelete={onRequestDelete}
+              onToggle={onToggle}
+              selected={selectedSkillIds.has(skill.id)}
+              skill={skill}
+            />
+          ))}
+    </div>
+  );
+}
+
+function OrganizationSkillRow({
+  bashAssigned,
+  browserNeedsInstall,
+  busy,
+  canInstallBrowser,
+  isAdded,
+  onAddBash,
+  onDelete,
+  onInstallBrowser,
+  onRequestDelete,
+  onToggle,
+  selected,
+  skill,
+}: {
+  bashAssigned: boolean;
+  browserNeedsInstall: boolean;
+  busy: boolean;
+  canInstallBrowser: boolean;
+  isAdded: boolean;
+  onAddBash: () => Promise<void>;
+  onDelete?: (skillId: string) => Promise<void>;
+  onInstallBrowser: () => Promise<void>;
+  onRequestDelete: (skill: SkillSummary) => void;
+  onToggle: (skillId: string) => void;
+  selected: boolean;
+  skill: SkillSummary;
+}) {
+  const isBrowser = skill.name === "agent-browser";
+  const needsBash = isBrowser && !bashAssigned;
+  const needsInstall = isBrowser && browserNeedsInstall;
+  const description = skill.description.trim();
+
+  return (
+    <div className="flex items-center gap-3 border-border border-b px-3 py-3 last:border-b-0">
+      <label className="flex min-w-0 flex-1 items-start gap-3">
+        <input
+          aria-label={`Add ${skill.name}`}
+          checked={selected || isAdded}
+          className="mt-1"
+          disabled={busy || isAdded || needsBash || needsInstall}
+          onChange={() => onToggle(skill.id)}
+          type="checkbox"
+        />
+        <span className="min-w-0">
+          <span className="block font-medium text-sm">{skill.name}</span>
+          {description &&
+          description.toLowerCase() !== skill.name.toLowerCase() ? (
+            <span className="block text-muted-foreground text-xs">
+              {description}
+            </span>
+          ) : null}
+        </span>
+      </label>
+      {isAdded ? (
+        <span className="text-muted-foreground text-xs">Added</span>
+      ) : null}
+      <OrganizationSkillActions
+        busy={busy}
+        canInstallBrowser={canInstallBrowser}
+        isAdded={isAdded}
+        needsBash={needsBash}
+        needsInstall={needsInstall}
+        onAddBash={onAddBash}
+        onDelete={onDelete}
+        onInstallBrowser={onInstallBrowser}
+        onRequestDelete={onRequestDelete}
+        skill={skill}
+      />
+    </div>
+  );
+}
+
+function OrganizationSkillActions({
+  busy,
+  canInstallBrowser,
+  isAdded,
+  needsBash,
+  needsInstall,
+  onAddBash,
+  onDelete,
+  onInstallBrowser,
+  onRequestDelete,
+  skill,
+}: {
+  busy: boolean;
+  canInstallBrowser: boolean;
+  isAdded: boolean;
+  needsBash: boolean;
+  needsInstall: boolean;
+  onAddBash: () => Promise<void>;
+  onDelete?: (skillId: string) => Promise<void>;
+  onInstallBrowser: () => Promise<void>;
+  onRequestDelete: (skill: SkillSummary) => void;
+  skill: SkillSummary;
+}) {
+  const canDelete = Boolean(
+    onDelete &&
+      canInstallBrowser &&
+      !bundledNames.has(skill.name) &&
+      !isPluginOwned(skill)
+  );
+
+  return (
+    <>
+      {needsBash ? (
+        <Button
+          disabled={busy}
+          onClick={() => void onAddBash()}
+          size="xs"
+          type="button"
+          variant="outline"
+        >
+          Add bash
+        </Button>
+      ) : null}
+      {!needsBash && needsInstall && canInstallBrowser ? (
+        <Button
+          disabled={busy}
+          onClick={() => void onInstallBrowser()}
+          size="xs"
+          type="button"
+          variant="outline"
+        >
+          Install
+        </Button>
+      ) : null}
+      {onDelete ? (
+        <Button
+          aria-label={`Delete ${skill.name} from library`}
+          disabled={busy || !canDelete || isAdded}
+          onClick={() => onRequestDelete(skill)}
+          size="icon-sm"
+          title={
+            isAdded
+              ? "Remove this skill from the profile before deleting it"
+              : undefined
+          }
+          type="button"
+          variant="ghost"
+        >
+          <Delete02Icon aria-hidden className="size-4" />
+        </Button>
+      ) : null}
+    </>
   );
 }
 
