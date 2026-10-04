@@ -545,7 +545,7 @@ describe("profile service createProfile", () => {
       await expect(
         service.createProfile(ORG_ID, { id: "sales", name: "Sales 2" })
       ).rejects.toMatchObject({
-        message: "Profile id already exists.",
+        message: `Profile id "sales" is already taken.`,
         status: 409,
       });
     }
@@ -993,17 +993,20 @@ describe("profile service cloneProfile", () => {
   });
 
   test.skipIf(process.platform !== "win32")(
-    "skips a generated clone id taken in another case on Windows",
+    "clones get a random id even when a case-similar id is taken on Windows",
     async () => {
       const { service, sourceId } = await setup();
-      await service.createProfile(ORG_ID, {
+      const taken = await service.createProfile(ORG_ID, {
         id: "Research-Bot-Copy",
         name: "Taken",
       });
 
       const clone = await service.cloneProfile(ORG_ID, sourceId, {});
 
-      expect(clone.profile.id).toBe("research-bot-copy-2");
+      expect(clone.profile.id).not.toBe(taken.profile.id);
+      expect(clone.profile.id).not.toBe(taken.profile.id.toLowerCase());
+      expect(clone.profile.id).toMatch(/^[0-9A-Za-z]{21}$/);
+      expect(clone.profile.name).toBe("Research Bot (copy)");
     }
   );
 
