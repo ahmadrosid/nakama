@@ -264,7 +264,9 @@ export function createHonoApp(options: ServerOptions) {
   app.use("*", (c, next) => {
     if (
       c.req.method === "POST" &&
-      /^\/v1\/profiles\/[^/]+\/knowledge-base$/.test(c.req.path)
+      /^\/v1\/profiles\/[^/]+\/knowledge-base(?:\/import-zip)?$/.test(
+        c.req.path
+      )
     ) {
       return knowledgeBodyLimit(c, next);
     }

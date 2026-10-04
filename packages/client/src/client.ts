@@ -76,6 +76,8 @@ import type {
   ImageAttachment,
   ImageGenerationSettings,
   ImageGenerationSettingsResponse,
+  ImportKnowledgeBaseZipRequest,
+  ImportKnowledgeBaseZipResponse,
   InitSoulResponse,
   InitUserContextResponse,
   InstallOrgPluginRequest,
@@ -1655,6 +1657,21 @@ export class NakamaClient {
           document,
           ...(onDuplicate ? { onDuplicate } : {}),
         } satisfies UploadKnowledgeBaseRequest),
+        method: "POST",
+      }
+    );
+  }
+
+  async importKnowledgeBaseZip(
+    profileId: string,
+    zipBase64: string
+  ): Promise<ImportKnowledgeBaseZipResponse> {
+    return this.request<ImportKnowledgeBaseZipResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base/import-zip`,
+      {
+        body: JSON.stringify({
+          zipBase64,
+        } satisfies ImportKnowledgeBaseZipRequest),
         method: "POST",
       }
     );

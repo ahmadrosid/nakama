@@ -157,6 +157,10 @@ Memory writes and archives use bundled skills (`update-profile-memory`, `archive
 | Knowledge base | Via `knowledge_base_search` when assigned | Upload via **Profiles → Knowledge**; search at runtime |
 | Profile skills | Via skill matcher when relevant | `manage-skills` skill or dashboard |
 
+Platform administrators can open **Profiles → Knowledge** and add a ZIP file to a profile. Nakama imports `.txt`, `.md`, `.csv`, `.pdf`, and `.docx` files as separate documents. The ZIP can be at most 20 MB. Each document can be at most 20 MB.
+
+The result shows documents that were added, already present, unreadable, or unsupported. Nakama keeps existing documents when a ZIP has duplicates. An invalid or oversized ZIP adds no documents. The agent can search documents marked **ready**.
+
 Active `MEMORY.md` has a **4096-byte** soft limit. When it is full, the agent should archive old bullets before adding new ones.
 
 Org memory has separate limits: **8192 bytes** for the live file and **2048 bytes** for the injected summary. See [Org memory](/org-memory).

@@ -2540,6 +2540,31 @@ export interface UploadKnowledgeBaseResponse {
   profileId: string;
 }
 
+export interface ImportKnowledgeBaseZipRequest {
+  zipBase64: string;
+}
+
+export interface ImportKnowledgeBaseZipEntry {
+  documentId?: string;
+  filename: string;
+  match?: "content_hash" | "name_size";
+  outcome: "created" | "duplicate" | "unsupported" | "error";
+  reason?: string;
+  status?: KnowledgeBaseDocumentStatus;
+}
+
+export interface ImportKnowledgeBaseZipResponse {
+  entries: ImportKnowledgeBaseZipEntry[];
+  profileId: string;
+  totals: {
+    created: number;
+    duplicate: number;
+    unsupported: number;
+    error: number;
+    failedExtraction: number;
+  };
+}
+
 export interface DeleteKnowledgeBaseResponse {
   deleted: boolean;
   documentId: string;

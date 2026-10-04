@@ -12,6 +12,8 @@ import type {
   DeleteOrganizationKnowledgeBaseResponse,
   DocumentAttachment,
   ImageAttachment,
+  ImportKnowledgeBaseZipEntry,
+  ImportKnowledgeBaseZipResponse,
   JsonSchema,
   KnowledgeBaseDocument,
   KnowledgeBaseDuplicateAction,
@@ -44,6 +46,7 @@ import {
   listKnowledgeBaseDocuments,
   listOrganizationKnowledgeBaseDocuments,
   NakamaApiError,
+  normalizeKnowledgeBaseMediaType,
   pathExists,
   uploadKnowledgeBaseDocument as persistKnowledgeBaseDocument,
   uploadOrganizationKnowledgeBaseDocument as persistOrganizationKnowledgeBaseDocument,
@@ -59,6 +62,10 @@ import {
 import { listChannelOwners } from "@nakama/core/channel-config-shared";
 import { readTextIfExists } from "@nakama/core/fs";
 import {
+  MAX_KNOWLEDGE_DOCUMENT_BYTES,
+  MAX_KNOWLEDGE_ZIP_BYTES,
+} from "@nakama/core/message-content";
+import {
   BUILTIN_TOOL_IDS,
   isProtectedToolId,
 } from "@nakama/core/tools/protected";
@@ -71,6 +78,7 @@ import {
   ensureBuiltinToolDefinitions,
   ensureProfileDefaultBundledSkills,
 } from "@nakama/db";
+import { unzipSync } from "fflate";
 import {
   CUSTOM_TOOL_HANDLERS,
   type CustomToolType,
@@ -96,6 +104,87 @@ import { toSkillSummaries } from "./skills-service";
 import { readToolSource } from "./tool-source";
 
 const PROFILE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
+const MAX_KNOWLEDGE_ZIP_ENTRIES = 100;
+const MAX_KNOWLEDGE_ZIP_UNCOMPRESSED_BYTES = 100 * 1024 * 1024;
+const KNOWLEDGE_ZIP_EXTENSIONS = new Set([
+  ".txt",
+  ".md",
+  ".csv",
+  ".pdf",
+  ".docx",
+]);
+
+function readKnowledgeZip(zipBase64: string): Record<string, Uint8Array> {
+  if (typeof zipBase64 !== "string" || zipBase64.length === 0) {
+    throw new NakamaApiError("ZIP data is required.", 400);
+  }
+  if (zipBase64.length > Math.ceil(MAX_KNOWLEDGE_ZIP_BYTES / 3) * 4) {
+    throw new NakamaApiError("ZIP file exceeds the 20 MiB limit.", 413);
+  }
+  if (
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+      zipBase64
+    )
+  ) {
+    throw new NakamaApiError("Invalid base64 ZIP data.", 400);
+  }
+
+  const archive = Buffer.from(zipBase64, "base64");
+  if (archive.length > MAX_KNOWLEDGE_ZIP_BYTES) {
+    throw new NakamaApiError("ZIP file exceeds the 20 MiB limit.", 413);
+  }
+  if (archive.toString("base64") !== zipBase64) {
+    throw new NakamaApiError("Invalid base64 ZIP data.", 400);
+  }
+
+  let count = 0;
+  let totalBytes = 0;
+  const names = new Set<string>();
+  try {
+    return unzipSync(archive, {
+      filter: ({ name, originalSize }) => {
+        count += 1;
+        totalBytes += originalSize;
+        if (
+          count > MAX_KNOWLEDGE_ZIP_ENTRIES ||
+          !Number.isSafeInteger(originalSize) ||
+          originalSize < 0 ||
+          originalSize > MAX_KNOWLEDGE_DOCUMENT_BYTES ||
+          totalBytes > MAX_KNOWLEDGE_ZIP_UNCOMPRESSED_BYTES
+        ) {
+          throw new NakamaApiError("ZIP file exceeds the entry limits.", 413);
+        }
+
+        const path = name.endsWith("/") ? name.slice(0, -1) : name;
+        if (
+          !path ||
+          path.startsWith("/") ||
+          path.includes("\\") ||
+          /^[A-Za-z]:/.test(path) ||
+          /[\u0000-\u001f\u007f]/.test(path) ||
+          path
+            .split("/")
+            .some((segment) => !segment || segment === "." || segment === "..")
+        ) {
+          throw new NakamaApiError("ZIP file contains an invalid path.", 400);
+        }
+        if (!name.endsWith("/")) {
+          const normalized = path.normalize("NFC");
+          if (names.has(normalized)) {
+            throw new NakamaApiError("ZIP file contains duplicate paths.", 400);
+          }
+          names.add(normalized);
+        }
+        return true;
+      },
+    });
+  } catch (error) {
+    if (error instanceof NakamaApiError) {
+      throw error;
+    }
+    throw new NakamaApiError("Invalid ZIP file.", 400);
+  }
+}
 const BASIC_PROFILE_TOOL_IDS = [
   BUILTIN_TOOL_IDS.write_file,
   BUILTIN_TOOL_IDS.edit_file,
@@ -964,6 +1053,98 @@ export class ProfileService {
           : "Failed to upload knowledge base document.";
       throw new NakamaApiError(message, 400);
     }
+  }
+
+  async importKnowledgeBaseZip(
+    orgId: string,
+    profileId: string,
+    zipBase64: string
+  ): Promise<ImportKnowledgeBaseZipResponse> {
+    await this.requireProfile(orgId, profileId);
+    const archive = readKnowledgeZip(zipBase64);
+    const files = Object.entries(archive).filter(
+      ([name]) =>
+        !(name.endsWith("/") || name.startsWith("__MACOSX/")) &&
+        name.split("/").at(-1) !== ".DS_Store"
+    );
+    if (
+      !files.some(([name]) =>
+        KNOWLEDGE_ZIP_EXTENSIONS.has(
+          name.slice(name.lastIndexOf(".")).toLowerCase()
+        )
+      )
+    ) {
+      throw new NakamaApiError("ZIP file has no supported documents.", 400);
+    }
+
+    const entries: ImportKnowledgeBaseZipEntry[] = [];
+    for (const [filename, bytes] of files) {
+      const extension = filename.slice(filename.lastIndexOf(".")).toLowerCase();
+      if (!KNOWLEDGE_ZIP_EXTENSIONS.has(extension)) {
+        entries.push({
+          filename,
+          outcome: "unsupported",
+          reason: "Unsupported document type.",
+        });
+        continue;
+      }
+
+      try {
+        const { document } = await persistKnowledgeBaseDocument(
+          orgId,
+          profileId,
+          {
+            data: Buffer.from(bytes).toString("base64"),
+            filename,
+            mediaType: normalizeKnowledgeBaseMediaType("", filename),
+          },
+          "error"
+        );
+        entries.push({
+          documentId: document.id,
+          filename,
+          outcome: "created",
+          status: document.status,
+          ...(document.error ? { reason: document.error } : {}),
+        });
+      } catch (error) {
+        if (error instanceof KnowledgeBaseDuplicateError) {
+          entries.push({
+            documentId: error.existing.id,
+            filename,
+            match: error.match,
+            outcome: "duplicate",
+            status: error.existing.status,
+          });
+          continue;
+        }
+        entries.push({
+          filename,
+          outcome: "error",
+          reason:
+            error instanceof Error
+              ? error.message
+              : "Could not import document.",
+        });
+      }
+    }
+
+    await this.memoryBackend.syncKnowledge(orgId, profileId);
+    return {
+      entries,
+      profileId,
+      totals: {
+        created: entries.filter((entry) => entry.outcome === "created").length,
+        duplicate: entries.filter((entry) => entry.outcome === "duplicate")
+          .length,
+        error: entries.filter((entry) => entry.outcome === "error").length,
+        failedExtraction: entries.filter(
+          (entry) => entry.outcome === "created" && entry.status === "failed"
+        ).length,
+        unsupported: entries.filter((entry) => entry.outcome === "unsupported")
+          .length,
+      },
+    };
   }
 
   async deleteKnowledgeBaseDocument(
