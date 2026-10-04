@@ -3,6 +3,7 @@ import { cn } from "@nakama/ui/utils";
 import {
   ArrowDown01Icon,
   ArrowRight01Icon,
+  BookOpen01Icon,
   ComputerTerminal01Icon,
   Rotate02Icon,
   Wrench01Icon,
@@ -897,7 +898,6 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
       <CollapsibleTrigger
         className="pl-0"
         disabled={!hasDetails}
-        isBash={message.tool === "bash"}
         label={formatToolActionLabel(message.tool, message.toolInput)}
         labelClassName={isError ? "text-red-600 dark:text-red-400" : undefined}
         onToggle={() => {
@@ -906,6 +906,7 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
           }
         }}
         open={detailsOpen}
+        tool={message.tool}
       />
       {detailsOpen && hasDetails ? (
         <ToolTimelineDetails
@@ -926,17 +927,24 @@ function CollapsibleTrigger({
   label,
   labelClassName,
   disabled = false,
-  isBash,
   className,
+  tool,
 }: {
   open: boolean;
   onToggle: () => void;
   label: string;
   labelClassName?: string;
   disabled?: boolean;
-  isBash: boolean;
   className?: string;
+  tool?: string;
 }) {
+  const ToolIcon =
+    tool === "bash"
+      ? ComputerTerminal01Icon
+      : tool === "read_file"
+        ? BookOpen01Icon
+        : Wrench01Icon;
+
   return (
     <button
       aria-expanded={disabled ? undefined : open}
@@ -952,11 +960,7 @@ function CollapsibleTrigger({
         aria-hidden="true"
         className="relative z-10 flex h-5 w-3.5 shrink-0 items-center justify-center bg-background"
       >
-        {isBash ? (
-          <ComputerTerminal01Icon className="size-3.5 text-muted-foreground opacity-50" />
-        ) : (
-          <Wrench01Icon className="size-3.5 text-muted-foreground opacity-50" />
-        )}
+        <ToolIcon className="size-3.5 text-muted-foreground opacity-50" />
       </span>
       <span className={cn("min-w-0 flex-1 truncate", labelClassName)}>
         {label}
