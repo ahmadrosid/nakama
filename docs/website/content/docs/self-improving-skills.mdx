@@ -42,18 +42,18 @@ Skills hold **procedures** (how to do something). Profile memory holds **facts**
 |---------|--------------------------|-------------------|
 | **Web chat** | Yes | Yes (when enabled) |
 | **CLI chat** | Yes | Yes (review may run; Apply is web-first) |
-| **Telegram, WhatsApp, Discord** | No | No |
+| **Discord, Telegram, WhatsApp, Slack** | No | Yes (when enabled) |
 | **Automations / scheduled runs** | No | No |
 
 Org **viewers** can read chat but cannot run agents, so they cannot trigger skill updates or Apply suggestions.
 
-Default and Super Bot profiles include the skill-authoring capability after sync. Other profiles need the **manage-skills** skill assigned — see [Skills](/skills).
+Every profile receives the default bundled skills after sync, including `manage-skills`, so skill-authoring capability is available without assigning that skill manually. Super Bot also receives its Super Bot-specific skills.
 
 ## Learn from sources
 
 Crystallization captures a workflow **after** a hard turn. **`/learn`** is the explicit “turn *this* into a skill now” path when you already have the material.
 
-In **web** or **CLI** chat (not Telegram, WhatsApp, Discord, or automations), type:
+In **web** or **CLI** chat (not Telegram, WhatsApp, Discord, Slack, or automations), type:
 
 ```text
 /learn filing an expense: open the portal, New > Expense, attach the receipt, submit
@@ -118,7 +118,7 @@ Org admins: **System → Organization**, on the **Learn after a turn** card (nex
 
 ![Learn after a turn org switch and per-profile overrides](/screenshots/learn-after-a-turn-org.png)
 
-When enabled, after a **successful** turn in an interactive chat (web, CLI, Discord, Telegram or WhatsApp) that looks complex (many tool calls, or a tool error recovery) — and only if the agent did **not** already save a skill that turn — Nakama runs a lightweight background review. Chat is not blocked while that runs. It uses an extra model call on eligible turns, so leave it off unless you want the safety net.
+When enabled, after a **successful** turn in an interactive chat (web, CLI, Discord, Telegram, WhatsApp, or Slack) that looks complex (many tool calls, or a tool error recovery) — and only if the agent did **not** already save a skill that turn — Nakama runs a lightweight background review. Chat is not blocked while that runs. It uses an extra model call on eligible turns, so leave it off unless you want the safety net.
 
 ### What you see (review × write approval)
 
@@ -166,7 +166,7 @@ Click a skill to open its detail dialog for the full breakdown:
 - **Matches** — how often the skill was actually used on a user message
 - **Updates** — how often the skill content was patched (including after an approved proposal)
 
-These numbers update during **web** and **CLI** chat. They do not change from Telegram, WhatsApp, Discord, or automations — those channels do not run the skill-authoring flow today.
+These numbers update during **web** and **CLI** chat. They do not change from Telegram, WhatsApp, Discord, Slack, or automations — those channels do not run the skill-authoring flow today.
 
 ## Skill curator (optional)
 

@@ -16,22 +16,24 @@ Nakama does **not** share one global `default` bot across every org.
 When an organization is created — including the first org at install — Nakama automatically:
 
 1. Creates one **default profile** for that org (`isDefault: true`)
-2. Assigns the standard builtin tool set (web search, file tools, email, and the rest)
-3. Initializes its soul directory on disk
+2. Creates a **Super Bot** profile for that org (`isSuper: true`)
+3. Assigns the standard builtin tool set and default bundled skills to both profiles
+4. Initializes each profile's soul directory on disk
 
-That profile is named **Default Bot** and gets a unique id (not a fixed string like `default`).
+The default profile is named **Default Bot** and gets a unique id (not a fixed
+string like `default`). Super Bot is also created with a unique id.
 
 | What | Behavior |
 |------|----------|
 | Default profile | Exactly one per org, marked with `isDefault`. You can delete it when the org has at least 3 profiles; another non-Super profile becomes the default. |
-| Super bot | Not auto-created; platform admin may add a profile with `isSuper: true` if needed |
+| Super bot | Automatically created once per org with `isSuper: true`; it has the default tools and bundled skills plus Super Bot-specific capabilities |
 | Additional orgs | Each gets its own default profile and isolated on-disk data |
 
 If a session or channel config omits a profile id — or names one that does not exist in the active org — Nakama falls back to that org's default profile.
 
 ### New custom profiles
 
-Platform admins create extra profiles inside the **active org**. Each new profile gets its own soul directory and starts with `read_file`, `write_file`, `edit_file`, `search_files`, and `knowledge_base_search` when those builtins are available. Default and super-bot profiles also receive bundled skills (memory, automations, skill authoring) when installed on the server. Assign more tools, MCP servers, and skills from the dashboard.
+Platform admins create extra profiles inside the **active org**. Each new profile gets its own soul directory and starts with the standard builtin tools and default bundled skills when those capabilities are installed on the server. On startup, Nakama backfills the default bundled skills onto every profile, including profiles created before the current bundled set. Assign more tools, MCP servers, and skills from the dashboard.
 
 Super Bot can also create profiles from chat using a confirm-first factory. For profile-creation requests, it drafts soul files and a tool plan in chat, waits for your explicit OK, then calls `create_profile`. New profiles keep `MEMORY.md` empty and receive basic file/knowledge tools automatically; extra tools still need an explicit ask. On the Profiles page, use **Ask Super Bot** (empty state or create dialog) when a Super Bot profile exists.
 
@@ -126,6 +128,18 @@ New organizations receive a **pre-filled** soul stack for Default Bot — identi
 
 Existing profiles keep customized soul files. On server startup, `ensureSoulScaffolded()` fills **missing or empty** soul files and upgrades **legacy placeholder** `SOUL.md` content (the old `# Your Name` scaffold) to the current Default Bot template. Customized souls are not overwritten.
 
+### User context and app-user sessions
+
+Setup answers are personal context for the authenticated user who completed the
+wizard. `USER.md` is stored per user within the organization, so two members can
+have different roles, preferences, and working context. It is not shared
+organization-wide.
+
+An API-key session with an `appUserId` is a separate app-user session. It does
+not load the authenticated organization user's `USER.md`; its private workspace
+and artifacts are scoped to that stable app-user id. Keep each app user's
+sessions and private files separate from every other app user.
+
 ## Model selection
 
 Each profile can optionally select its own model.
@@ -146,7 +160,7 @@ Profiles keep their own context on disk under the org-scoped profile directory:
 
 At the **organization** level (not inside a profile directory), [org memory](/org-memory) stores shared facts every profile in the org sees — admin-curated, distinct from per-profile `MEMORY.md`.
 
-Memory writes and archives use bundled skills (`update-profile-memory`, `archive-profile-memory`) with the profile's file tools — not separate memory builtins. Artifact saves use `save-artifact` with `write_file`. Default and super-bot profiles receive these skills automatically when they are installed on the server.
+Memory writes and archives use bundled skills (`update-profile-memory`, `archive-profile-memory`) with the profile's file tools — not separate memory builtins. Artifact saves use `save-artifact` with `write_file`. Every profile receives the default bundled skills, including these skills, when they are installed on the server; Super Bot also receives its Super Bot-specific skills.
 
 | Store | Loaded into chat | How agents write |
 |-------|------------------|------------------|
