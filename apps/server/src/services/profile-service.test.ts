@@ -609,6 +609,48 @@ describe("profile service assignSkill", () => {
       )
     ).toBe(true);
   });
+
+  test("rejects another organization's skill and allows a shared skill", async () => {
+    tempConfigDir = await mkdtemp(
+      path.join(os.tmpdir(), "nakama-profile-skill-scope-")
+    );
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+
+    const db = createInMemoryDatabaseAdapter();
+    const service = new ProfileService(db);
+    const created = await service.createProfile(ORG_ID, { name: "Worker Bot" });
+    const now = new Date().toISOString();
+    for (const [id, orgId] of [
+      ["other-skill", "other-org"],
+      ["shared-skill", null],
+    ] as const) {
+      await db.upsertSkill({
+        createdAt: now,
+        createdBy: "human",
+        description: id,
+        disableModelInvocation: false,
+        enabled: true,
+        hasTool: false,
+        id,
+        name: id,
+        orgId,
+        sourcePath: `/tmp/${id}`,
+        updatedAt: now,
+      });
+    }
+
+    await expect(
+      service.assignSkill(ORG_ID, created.profile.id, {
+        skillId: "other-skill",
+      })
+    ).rejects.toThrow("Skill not found.");
+    const updated = await service.assignSkill(ORG_ID, created.profile.id, {
+      skillId: "shared-skill",
+    });
+    expect(updated.profile.skills.map((skill) => skill.id)).toEqual([
+      "shared-skill",
+    ]);
+  });
 });
 
 describe("profile service knowledge base", () => {

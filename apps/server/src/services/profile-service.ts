@@ -891,7 +891,7 @@ export class ProfileService {
 
     const skill = await this.db.getSkill(request.skillId);
 
-    if (!skill) {
+    if (!skill || (skill.orgId != null && skill.orgId !== orgId)) {
       throw new Error("Skill not found.");
     }
 
