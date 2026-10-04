@@ -549,6 +549,23 @@ test("rejects a Netra provider when the model endpoint rejects its API key", asy
   expect(fetchMock).toHaveBeenCalled();
 });
 
+test("discovers the supported Netra model without a custom base URL", async () => {
+  using fetchMock = spyOn(globalThis, "fetch").mockImplementation(async () =>
+    Response.json({ data: [{ id: NETRA_AGENT_MODEL_ID }] })
+  );
+  const service = new AgentService(null, null, createInMemoryDatabaseAdapter());
+
+  const result = await service.discoverModels({
+    apiKey: "test-key",
+    provider: "netra",
+  });
+  expect(result.provider).toBe("netra");
+  expect(result.models.map((model) => model.id)).toEqual([
+    NETRA_AGENT_MODEL_ID,
+  ]);
+  expect(fetchMock).toHaveBeenCalled();
+});
+
 describe("AgentService usage pricing context", () => {
   setupTestConfigDir("nakama-usage-context-");
 

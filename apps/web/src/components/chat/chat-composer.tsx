@@ -915,6 +915,10 @@ function ChatModelPicker({
     setModelSearch("");
     setShowModelSearch(false);
   };
+  const selectModel = (value: string) => {
+    void props.onModelChange(value);
+    closeModelPicker();
+  };
 
   useEffect(() => {
     if (!(modelPickerOpen && modelList)) {
@@ -1001,12 +1005,11 @@ function ChatModelPicker({
                     props.currentModelSelection ===
                     encodeModelSelection("__unknown__", props.profileModelId)
                   }
-                  onSelect={() => {
-                    void props.onModelChange(
+                  onSelect={() =>
+                    selectModel(
                       encodeModelSelection("__unknown__", props.profileModelId!)
-                    );
-                    closeModelPicker();
-                  }}
+                    )
+                  }
                   value={props.profileModelId}
                 >
                   {props.profileModelId}
@@ -1025,10 +1028,7 @@ function ChatModelPicker({
                       <CommandItem
                         data-checked={props.currentModelSelection === value}
                         key={`${providerId}:${model.id}`}
-                        onSelect={() => {
-                          void props.onModelChange(value);
-                          closeModelPicker();
-                        }}
+                        onSelect={() => selectModel(value)}
                         value={`${group.providerLabel} ${model.name} ${model.id}`}
                       >
                         {model.name}

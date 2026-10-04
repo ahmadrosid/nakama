@@ -140,68 +140,40 @@ export function ModelListEditor({
                       />
                     </td>
                   ) : null}
-                  {showPricing ? (
-                    <>
-                      <td className="px-2 py-1.5">
-                        <InputGroup>
-                          <InputGroupInput
-                            disabled={disabled}
-                            min={0}
-                            onChange={(event) => {
-                              const value = event.target.value;
-                              updateRow(index, {
-                                inputPerMillionUsd:
-                                  value === "" ? undefined : Number(value),
-                              });
-                            }}
-                            placeholder="—"
-                            step="any"
-                            type="number"
-                            value={row.inputPerMillionUsd ?? ""}
-                          />
-                        </InputGroup>
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <InputGroup>
-                          <InputGroupInput
-                            aria-label={`Cached input rate for ${row.id.trim() || "model"}`}
-                            disabled={disabled}
-                            min={0}
-                            onChange={(event) => {
-                              const value = event.target.value;
-                              updateRow(index, {
-                                cachedInputPerMillionUsd:
-                                  value === "" ? undefined : Number(value),
-                              });
-                            }}
-                            placeholder="—"
-                            step="any"
-                            type="number"
-                            value={row.cachedInputPerMillionUsd ?? ""}
-                          />
-                        </InputGroup>
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <InputGroup>
-                          <InputGroupInput
-                            disabled={disabled}
-                            min={0}
-                            onChange={(event) => {
-                              const value = event.target.value;
-                              updateRow(index, {
-                                outputPerMillionUsd:
-                                  value === "" ? undefined : Number(value),
-                              });
-                            }}
-                            placeholder="—"
-                            step="any"
-                            type="number"
-                            value={row.outputPerMillionUsd ?? ""}
-                          />
-                        </InputGroup>
-                      </td>
-                    </>
-                  ) : null}
+                  {showPricing
+                    ? (
+                        [
+                          "inputPerMillionUsd",
+                          "cachedInputPerMillionUsd",
+                          "outputPerMillionUsd",
+                        ] as const
+                      ).map((field) => (
+                        <td className="px-2 py-1.5" key={field}>
+                          <InputGroup>
+                            <InputGroupInput
+                              aria-label={
+                                field === "cachedInputPerMillionUsd"
+                                  ? `Cached input rate for ${row.id.trim() || "model"}`
+                                  : undefined
+                              }
+                              disabled={disabled}
+                              min={0}
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                updateRow(index, {
+                                  [field]:
+                                    value === "" ? undefined : Number(value),
+                                });
+                              }}
+                              placeholder="—"
+                              step="any"
+                              type="number"
+                              value={row[field] ?? ""}
+                            />
+                          </InputGroup>
+                        </td>
+                      ))
+                    : null}
                   <td className="px-2 py-1.5">
                     <InputGroup>
                       <InputGroupInput

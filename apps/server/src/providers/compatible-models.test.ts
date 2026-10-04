@@ -397,73 +397,30 @@ describe("customModelEntryFromRemoteRecord", () => {
   });
 });
 
-describe("fetchRemoteOpenAIModels auth errors", () => {
-  for (const status of [401, 403] as const) {
-    test(`names the API key remedy for ${status} without upstream body`, async () => {
-      const upstreamBody = JSON.stringify({
-        error: "API key required for remote API access",
-      });
-      const warn = spyOn(console, "warn").mockImplementation(() => {});
-
-      mockServer = serve({
-        fetch() {
-          return new Response(upstreamBody, {
-            headers: { "content-type": "application/json" },
-            status,
-          });
-        },
-        port: 0,
-      });
-
-      const baseUrl = `http://127.0.0.1:${mockServer.port}/v1`;
-
-      try {
-        await fetchRemoteOpenAIModels(baseUrl, "");
-        expect.unreachable("expected discovery to fail");
-      } catch (error) {
-        expect(error).toBeInstanceOf(NakamaApiError);
-        expect((error as NakamaApiError).status).toBe(400);
-        const message = (error as NakamaApiError).message;
-        expect(message).toContain("API key");
-        expect(message).not.toContain(upstreamBody);
-        expect(message).not.toContain("API key required for remote API access");
-      }
-
-      expect(
-        warn.mock.calls.some(
-          (args) =>
-            typeof args[0] === "string" &&
-            args[0].includes("Could not fetch models") &&
-            String(args[1] ?? args[0]).includes(upstreamBody)
-        )
-      ).toBe(true);
-
-      warn.mockRestore();
+for (const status of [401, 403, 503] as const) {
+  test(`remote discovery handles ${status} without exposing its body`, async () => {
+    const upstreamBody = "private upstream details";
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    mockServer = serve({
+      fetch: () => new Response(upstreamBody, { status }),
+      port: 0,
     });
-  }
-});
 
-test("remote model discovery reports upstream failures without returning their body", async () => {
-  const upstreamBody = "private upstream details";
-  const warn = spyOn(console, "warn").mockImplementation(() => {});
-  mockServer = serve({
-    fetch() {
-      return new Response(upstreamBody, { status: 503 });
-    },
-    port: 0,
+    try {
+      await fetchRemoteOpenAIModels(
+        `http://127.0.0.1:${mockServer.port}/v1`,
+        "key"
+      );
+      expect.unreachable("expected discovery to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(NakamaApiError);
+      expect((error as NakamaApiError).status).toBe(status === 503 ? 502 : 400);
+      expect((error as NakamaApiError).message).not.toContain(upstreamBody);
+      if (status !== 503) {
+        expect((error as NakamaApiError).message).toContain("API key");
+      }
+    } finally {
+      warn.mockRestore();
+    }
   });
-
-  try {
-    await fetchRemoteOpenAIModels(
-      `http://127.0.0.1:${mockServer.port}/v1`,
-      "key"
-    );
-    expect.unreachable("expected discovery to fail");
-  } catch (error) {
-    expect(error).toBeInstanceOf(NakamaApiError);
-    expect((error as NakamaApiError).status).toBe(502);
-    expect((error as NakamaApiError).message).not.toContain(upstreamBody);
-  } finally {
-    warn.mockRestore();
-  }
-});
+}

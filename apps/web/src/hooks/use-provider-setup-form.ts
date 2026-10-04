@@ -9,6 +9,7 @@ import type {
   WireApi,
   XaiOAuthCredentials,
 } from "@nakama/core/contract";
+import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ModelListRow } from "@/components/ModelListEditor";
 import { normalizeModelListRows } from "@/components/model-list-editor.shared";
@@ -242,7 +243,7 @@ export function useProviderSetupForm(
       }
 
       if (provider === "netra") {
-        setBaseUrl("https://api.netraruntime.com/v1");
+        setBaseUrl(defaultDiscoveryBaseUrl("netra") ?? "");
         setDisplayName("Netra Runtime");
         setCustomModels([]);
       }

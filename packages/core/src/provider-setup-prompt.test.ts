@@ -17,7 +17,7 @@ function scriptedPrompt(answers: string[]) {
 describe("promptForProviderConfig", () => {
   test("saves a discovered Netra model with its exact ID", async () => {
     const config = await promptForProviderConfig({
-      ...scriptedPrompt(["netra", "test-key", "1"]),
+      ...scriptedPrompt(["netra", "test-key"]),
       discoverModels: async () => [
         {
           id: "deepseek/deepseek-v4-flash-0731",
@@ -37,6 +37,21 @@ describe("promptForProviderConfig", () => {
         supportsVision: false,
       },
     ]);
+  });
+  test("accepts an exact Netra model ID when discovery fails", async () => {
+    const config = await promptForProviderConfig({
+      ...scriptedPrompt([
+        "netra",
+        "test-key",
+        "deepseek/deepseek-v4-flash-0731",
+      ]),
+      discoverModels: async () => {
+        throw new Error("offline");
+      },
+    });
+    expect(config.providers[0]?.customModels?.[0]?.id).toBe(
+      "deepseek/deepseek-v4-flash-0731"
+    );
   });
   test("accepts Perplexity as a first-party provider", async () => {
     const config = await promptForProviderConfig(

@@ -119,20 +119,13 @@ export async function promptForProviderConfig(
       } catch {
         writeLine("Model discovery failed. Enter an exact Netra model ID.\n");
       }
-      for (const [index, model] of models.entries()) {
-        writeLine(`  ${index + 1}) ${model.name} (${model.id})`);
-      }
-      const input = (await question("Netra model ID or number: ")).trim();
-      const numeric = Number(input);
-      const chosen = Number.isInteger(numeric)
-        ? models[numeric - 1]
-        : models.find((model) => model.id === input);
-      const modelId = chosen?.id ?? input;
-      if (
-        !modelId ||
-        modelId !== NETRA_AGENT_MODEL_ID ||
-        (models.length > 0 && !chosen)
-      ) {
+      const chosen = models.find((model) => model.id === NETRA_AGENT_MODEL_ID);
+      const modelId =
+        chosen?.id ??
+        (models.length === 0
+          ? (await question("Netra model ID: ")).trim()
+          : "");
+      if (modelId !== NETRA_AGENT_MODEL_ID) {
         writeLine("Enter an available Netra model ID.\n");
         continue;
       }

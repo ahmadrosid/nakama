@@ -5,7 +5,10 @@ import {
   NakamaApiError,
   normalizeBaseUrl,
 } from "@nakama/core";
-import { NETRA_AGENT_MODEL_ID } from "@nakama/core/discovery-providers";
+import {
+  defaultDiscoveryBaseUrl,
+  NETRA_AGENT_MODEL_ID,
+} from "@nakama/core/discovery-providers";
 import OpenAI from "openai";
 import type { ProviderModelOption } from "./models";
 import { AVAILABLE_MODELS } from "./models";
@@ -529,7 +532,7 @@ export async function fetchNetraModels(
   apiKey: string
 ): Promise<CustomModelEntry[]> {
   const entries = await fetchRemoteOpenAIModels(
-    "https://api.netraruntime.com/v1",
+    defaultDiscoveryBaseUrl("netra")!,
     apiKey
   );
   return entries

@@ -1,4 +1,5 @@
 import type { CreateProviderResponse } from "@nakama/core/contract";
+import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
 import { ollamaRequiresApiKey } from "@nakama/core/ollama-provider-config";
 import { Button } from "@nakama/ui/button";
 import { FormField } from "@nakama/ui/form-field";
@@ -362,7 +363,7 @@ function ProviderSetupExtraFields({
     return (
       <CustomProviderFields
         apiKey={form.apiKey}
-        baseUrl="https://api.netraruntime.com/v1"
+        baseUrl={defaultDiscoveryBaseUrl("netra") ?? ""}
         customModels={form.customModels}
         density={density}
         disabled={form.busy}
