@@ -6,6 +6,7 @@ import {
   Audit02Icon,
   BookOpen01Icon,
   ComputerTerminal01Icon,
+  McpServerIcon,
   Rotate02Icon,
   TaskEdit01Icon,
   Wrench01Icon,
@@ -949,7 +950,11 @@ function CollapsibleTrigger({
           ? TaskEdit01Icon
           : tool === "search_files"
             ? Audit02Icon
-            : Wrench01Icon;
+            : tool?.includes("__") &&
+                !tool.startsWith("plugin_") &&
+                !tool.startsWith("composio__")
+              ? McpServerIcon
+              : Wrench01Icon;
 
   return (
     <button
