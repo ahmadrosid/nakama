@@ -784,6 +784,13 @@ export interface DatabaseAdapter {
   /** Append-only insert. Adapters must not expose update/delete for this table. */
   createProfileChangeEvent(record: StoredProfileChangeEvent): Promise<void>;
 
+  /**
+   * Inserts a profile only when its id is still free. Resolves to `false`,
+   * leaving the existing row untouched, when the id is already taken, so
+   * allocation and insertion stay atomic for concurrent callers.
+   */
+  createProfileIfAbsent(record: StoredProfileRecord): Promise<boolean>;
+
   createSkillProposal(record: StoredSkillProposal): Promise<void>;
 
   createSkillSuggestion(record: StoredSkillSuggestion): Promise<void>;
@@ -807,6 +814,8 @@ export interface DatabaseAdapter {
   deletePasskeys(userId: string): Promise<void>;
   deletePluginRelease(pluginId: string, version: string): Promise<boolean>;
   deleteProfile(id: string): Promise<boolean>;
+  /** Org-scoped delete: resolves to `false` when the profile belongs elsewhere. */
+  deleteProfileForOrg(id: string, orgId: string): Promise<boolean>;
   deleteSession(id: string): Promise<boolean>;
   deleteSkill(id: string): Promise<boolean>;
   deleteTool(id: string): Promise<boolean>;
