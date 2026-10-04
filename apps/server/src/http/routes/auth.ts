@@ -598,7 +598,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     );
     if (webPublicUrl) {
       try {
-        await persistWebPublicUrl(webPublicUrl);
+        await persistWebPublicUrl(webPublicUrl, c.req.raw);
       } catch (error) {
         return errorResponse(
           error instanceof Error ? error.message : String(error),
