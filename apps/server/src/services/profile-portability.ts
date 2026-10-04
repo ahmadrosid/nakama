@@ -237,6 +237,7 @@ export async function previewProfilePackImport(
   const skippedAssignments: ProfilePackSkippedItem[] = [];
   await previewToolAssignments(
     db,
+    orgId,
     manifest,
     entries,
     options.restoreCustomTools === true,
@@ -354,6 +355,7 @@ export async function importProfilePack(
     await restoreToolAssignments(
       db,
       profileId,
+      orgId,
       manifest,
       entries,
       options.restoreCustomTools === true,
@@ -680,6 +682,7 @@ async function collectPackedCustomTools(
 
 async function previewToolAssignments(
   db: DatabaseAdapter,
+  orgId: string,
   manifest: ProfilePackManifest,
   entries: ProfilePackZipEntry[],
   restoreCustomTools: boolean,
@@ -688,6 +691,7 @@ async function previewToolAssignments(
   for (const name of manifest.meta.toolNames) {
     await resolveToolAssignment(
       db,
+      orgId,
       manifest,
       entries,
       name,
@@ -700,6 +704,7 @@ async function previewToolAssignments(
 async function restoreToolAssignments(
   db: DatabaseAdapter,
   profileId: string,
+  orgId: string,
   manifest: ProfilePackManifest,
   entries: ProfilePackZipEntry[],
   restoreCustomTools: boolean,
@@ -709,6 +714,7 @@ async function restoreToolAssignments(
   for (const name of manifest.meta.toolNames) {
     const resolution = await resolveToolAssignment(
       db,
+      orgId,
       manifest,
       entries,
       name,
@@ -777,13 +783,16 @@ async function restoreToolAssignments(
 
 async function resolveToolAssignment(
   db: DatabaseAdapter,
+  orgId: string,
   manifest: ProfilePackManifest,
   entries: ProfilePackZipEntry[],
   name: string,
   restoreCustomTools: boolean,
   skipped: ProfilePackSkippedItem[]
 ): Promise<ToolAssignmentResolution | null> {
-  const existing = await db.getToolByName(name);
+  // Never resolve tools another organization owns: an unscoped name lookup
+  // would let a pack attach a foreign tenant's tool to this profile.
+  const existing = await db.getToolByNameForOrg(orgId, name);
   const packed = findPackedCustomTool(manifest, name);
 
   if (!packed) {
