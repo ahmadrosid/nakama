@@ -113,7 +113,7 @@ describe("seedOrgSuperBotProfile", () => {
     expect(orgAList[0]?.id).toBe(orgASuperBot.id);
   });
 
-  test("assigns builtins and bash", async () => {
+  test("assigns builtins but no bash by default", async () => {
     const db = createInMemoryDatabaseAdapter();
     await ensureBuiltinToolDefinitions(db);
     const profile = await seedOrgSuperBotProfile(db, "org_a");
@@ -127,9 +127,40 @@ describe("seedOrgSuperBotProfile", () => {
       }
     }
 
-    expect(toolIds).toContain(BASH_TOOL_ID);
+    expect(toolIds).not.toContain(BASH_TOOL_ID);
     expect(toolIds).not.toContain(BUILTIN_TOOL_IDS.delete_file);
     expect(toolIds).not.toContain(GENERATE_IMAGE_TOOL_ID);
+  });
+
+  test("assigns bash only when the deployment opts in", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await ensureBuiltinToolDefinitions(db);
+    const profile = await seedOrgSuperBotProfile(db, "org_a", {
+      grantBash: true,
+    });
+    const toolIds = (await db.listToolsForProfile(profile.id)).map(
+      (tool) => tool.id
+    );
+
+    expect(toolIds).toContain(BASH_TOOL_ID);
+  });
+
+  test("revokes bash seeded before the policy existed", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await ensureBuiltinToolDefinitions(db);
+    const profile = await seedOrgSuperBotProfile(db, "org_a", {
+      grantBash: true,
+    });
+
+    expect(
+      (await db.listToolsForProfile(profile.id)).map((tool) => tool.id)
+    ).toContain(BASH_TOOL_ID);
+
+    await seedOrgSuperBotProfile(db, "org_a");
+
+    expect(
+      (await db.listToolsForProfile(profile.id)).map((tool) => tool.id)
+    ).not.toContain(BASH_TOOL_ID);
   });
 
   test("unassigns delete_file from an existing super bot", async () => {

@@ -5,6 +5,7 @@ import path from "node:path";
 import { PathGuardError } from "@nakama/core";
 import { resetBashSandboxManagerForTests, runBash } from "./bash";
 import {
+  isTenantBashEnabled,
   resolveBashBackend,
   resolveBashSandboxImage,
   resolveBashSandboxNetwork,
@@ -53,6 +54,28 @@ describe("bash backend config", () => {
     expect(
       resolveBashSandboxImage({ NAKAMA_BASH_SANDBOX_IMAGE: "python" })
     ).toBe("python");
+  });
+});
+
+describe("tenant bash policy", () => {
+  test("is off unless the deployment explicitly enables it", () => {
+    expect(isTenantBashEnabled({})).toBe(false);
+    expect(isTenantBashEnabled({ NAKAMA_TENANT_BASH: "  " })).toBe(false);
+    expect(isTenantBashEnabled({ NAKAMA_TENANT_BASH: "0" })).toBe(false);
+    expect(isTenantBashEnabled({ NAKAMA_TENANT_BASH: "false" })).toBe(false);
+    expect(isTenantBashEnabled({ NAKAMA_TENANT_BASH: "off" })).toBe(false);
+  });
+
+  test("is on only for an explicit opt-in", () => {
+    expect(isTenantBashEnabled({ NAKAMA_TENANT_BASH: "1" })).toBe(true);
+    expect(isTenantBashEnabled({ NAKAMA_TENANT_BASH: "true" })).toBe(true);
+    expect(isTenantBashEnabled({ NAKAMA_TENANT_BASH: "on" })).toBe(true);
+  });
+
+  test("rejects a value it cannot interpret instead of enabling bash", () => {
+    expect(() =>
+      isTenantBashEnabled({ NAKAMA_TENANT_BASH: "yes-please" })
+    ).toThrow(/Invalid NAKAMA_TENANT_BASH/);
   });
 });
 
