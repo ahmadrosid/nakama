@@ -204,6 +204,7 @@ function AssistantTextContent({
     );
   }
 
+  // oxlint-disable react-doctor/click-events-have-key-events react-doctor/no-static-element-interactions -- Citation anchors receive native keyboard clicks; this wrapper only delegates them.
   if (!streaming) {
     const { markdown, citations } = formatLocalCitations(
       content,
@@ -234,6 +235,7 @@ function AssistantTextContent({
     </div>
   );
 }
+// oxlint-enable react-doctor/click-events-have-key-events react-doctor/no-static-element-interactions
 
 export function LocalCitationPreview({
   path,
