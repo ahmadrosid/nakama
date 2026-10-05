@@ -2525,15 +2525,25 @@ export class NakamaClient {
     );
   }
 
+  async testAgentBrowserCdp(
+    port: number
+  ): Promise<{ ok: boolean; message: string }> {
+    return this.request("/v1/settings/agent-browser/test", {
+      body: JSON.stringify({ port }),
+      method: "POST",
+    });
+  }
+
   async installAgentBrowser(
     handlers: {
       onProgress?: (message: string) => void;
       onDone?: (status: AgentBrowserStatusResponse) => void;
+      cliOnly?: boolean;
     } = {},
     options?: { signal?: AbortSignal }
   ): Promise<AgentBrowserStatusResponse> {
     const response = await this.fetchImpl(
-      `${this.baseUrl}/v1/settings/agent-browser/install`,
+      `${this.baseUrl}/v1/settings/agent-browser/install${handlers.cliOnly ? "?cliOnly=true" : ""}`,
       withDisabledFetchIdle({
         credentials: this.credentials,
         headers: this.buildHeaders("POST", {

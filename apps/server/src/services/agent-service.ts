@@ -3256,7 +3256,11 @@ export class AgentService {
       meta
     );
 
-    if (request.model !== undefined) {
+    if (
+      request.model !== undefined ||
+      request.agentBrowserMode !== undefined ||
+      request.agentBrowserCdpPort !== undefined
+    ) {
       for (const [sessionId, record] of this.sessions.entries()) {
         if (record.profileId === profileId) {
           this.sessions.delete(sessionId);
@@ -4652,7 +4656,11 @@ export class AgentService {
       const agentBrowserCapability =
         await this.skillsService.composeAgentBrowserCapabilityForProfile(
           orgId,
-          profileId
+          profileId,
+          {
+            ...(await this.requireProfile(orgId, profileId)),
+            sessionName: `nakama-${nanoid()}`,
+          }
         );
 
       if (agentBrowserCapability.trim()) {

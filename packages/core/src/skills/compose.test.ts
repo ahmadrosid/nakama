@@ -54,6 +54,41 @@ describe("composeAgentBrowserCapabilityPrompt", () => {
     expect(composeAgentBrowserCapabilityPrompt([{ name: "weather" }])).toBe("");
     expect(composeAgentBrowserCapabilityPrompt([])).toBe("");
   });
+
+  test("pins a separate local CDP tab and does not fall back to Chrome", () => {
+    const prompt = composeAgentBrowserCapabilityPrompt(
+      [{ name: "agent-browser" }],
+      {
+        agentBrowserCdpPort: 9110,
+        agentBrowserMode: "local_cdp",
+        sessionName: "nakama-test",
+      }
+    );
+    expect(prompt).toContain(
+      "agent-browser --session nakama-test --cdp 9110 --pin-tab open"
+    );
+    expect(prompt).toContain("Do not launch managed Chrome");
+    expect(prompt).toContain(
+      "agent-browser --session nakama-test --cdp 9110 close"
+    );
+  });
+
+  test("keeps managed Chrome as the default", () => {
+    const prompt = composeAgentBrowserCapabilityPrompt([
+      { name: "agent-browser" },
+    ]);
+    expect(prompt).toContain("agent-browser open <url>");
+    expect(prompt).not.toContain("--cdp");
+  });
+
+  test("does not fall back when a local CDP setting is incomplete", () => {
+    const prompt = composeAgentBrowserCapabilityPrompt(
+      [{ name: "agent-browser" }],
+      { agentBrowserMode: "local_cdp" }
+    );
+    expect(prompt).toContain("Do not launch managed Chrome");
+    expect(prompt).not.toContain("agent-browser open <url>");
+  });
 });
 
 describe("skill instruction discovery", () => {

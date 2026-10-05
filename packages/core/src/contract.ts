@@ -2006,6 +2006,8 @@ export interface ConfigureProviderResponse {
 }
 
 export interface ProfileSummary {
+  agentBrowserCdpPort?: number | null;
+  agentBrowserMode?: "managed" | "local_cdp";
   /** Whether this profile may create and execute automations. */
   automationsEnabled?: boolean;
   createdAt: string;
@@ -2272,6 +2274,8 @@ export interface CreateProfileRequest {
 }
 
 export interface UpdateProfileRequest {
+  agentBrowserCdpPort?: number | null;
+  agentBrowserMode?: "managed" | "local_cdp";
   automationsEnabled?: boolean;
   model?: string | null;
   name?: string;

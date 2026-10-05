@@ -906,6 +906,52 @@ describe("profile service cloneProfile", () => {
     );
   });
 
+  test("saves and clones a local CDP connection", async () => {
+    const { service, sourceId } = await setup();
+    expect(
+      (await service.getProfile(ORG_ID, sourceId)).profile.agentBrowserMode
+    ).toBe("managed");
+    await expect(
+      service.updateProfile(ORG_ID, sourceId, {
+        agentBrowserCdpPort: 0,
+        agentBrowserMode: "local_cdp",
+      })
+    ).rejects.toThrow();
+    const priorBackend = process.env.NAKAMA_BASH_BACKEND;
+    process.env.NAKAMA_BASH_BACKEND = "microsandbox";
+    try {
+      await expect(
+        service.updateProfile(ORG_ID, sourceId, {
+          agentBrowserCdpPort: 9110,
+          agentBrowserMode: "local_cdp",
+        })
+      ).rejects.toThrow("Local CDP needs host bash.");
+    } finally {
+      if (priorBackend === undefined) {
+        delete process.env.NAKAMA_BASH_BACKEND;
+      } else {
+        process.env.NAKAMA_BASH_BACKEND = priorBackend;
+      }
+    }
+    await service.updateProfile(ORG_ID, sourceId, {
+      agentBrowserCdpPort: 9110,
+      agentBrowserMode: "local_cdp",
+    });
+    const clone = await service.cloneProfile(ORG_ID, sourceId);
+    expect(clone.profile.agentBrowserMode).toBe("local_cdp");
+    expect(clone.profile.agentBrowserCdpPort).toBe(9110);
+    await service.updateProfile(ORG_ID, sourceId, {
+      agentBrowserMode: "managed",
+    });
+    expect(
+      (await service.getProfile(ORG_ID, sourceId)).profile.agentBrowserCdpPort
+    ).toBeNull();
+    expect(
+      (await service.getProfile(ORG_ID, clone.profile.id)).profile
+        .agentBrowserCdpPort
+    ).toBe(9110);
+  });
+
   test("copies the soul files but leaves MEMORY.md at the template", async () => {
     const { service, sourceId } = await setup();
     const sourceDir = soulDirOf(sourceId);

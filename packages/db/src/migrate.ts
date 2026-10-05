@@ -38,6 +38,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateOrganizationAllowedInviteDomains);
   atomic(migrateSkillsPostTurnReviewColumns);
   atomic(migrateAutomationsEnabledColumn);
+  atomic(migrateAgentBrowserColumns);
   atomic(migrateSkillsCuratorColumns);
   atomic(migrateLlmUsageQuotaColumns);
   atomic(migrateOrgLlmMonthlyQuotaTable);
@@ -843,6 +844,22 @@ function migrateAutomationsEnabledColumn(db: Database): void {
     db.exec(
       "ALTER TABLE profiles ADD COLUMN automations_enabled INTEGER NOT NULL DEFAULT 1;"
     );
+  }
+}
+
+function migrateAgentBrowserColumns(db: Database): void {
+  const columns = new Set(
+    (
+      db.prepare("PRAGMA table_info(profiles)").all() as Array<{ name: string }>
+    ).map((column) => column.name)
+  );
+  if (!columns.has("agent_browser_mode")) {
+    db.exec(
+      "ALTER TABLE profiles ADD COLUMN agent_browser_mode TEXT NOT NULL DEFAULT 'managed';"
+    );
+  }
+  if (!columns.has("agent_browser_cdp_port")) {
+    db.exec("ALTER TABLE profiles ADD COLUMN agent_browser_cdp_port INTEGER;");
   }
 }
 

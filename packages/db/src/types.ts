@@ -82,6 +82,8 @@ export interface StoredWorkflowRunStepRecord {
 }
 
 export interface StoredProfileRecord {
+  agentBrowserCdpPort?: number | null;
+  agentBrowserMode?: "managed" | "local_cdp";
   /** Defaults to enabled when absent for legacy in-memory records. */
   automationsEnabled?: boolean;
   createdAt: string;

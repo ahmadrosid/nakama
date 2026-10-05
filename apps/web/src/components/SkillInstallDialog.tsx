@@ -1,4 +1,8 @@
-import type { InstallSkillRequest, SkillSummary } from "@nakama/core/contract";
+import type {
+  AgentBrowserStatusResponse,
+  InstallSkillRequest,
+  SkillSummary,
+} from "@nakama/core/contract";
 import {
   BUNDLED_SKILL_NAMES,
   RUNTIME_ONLY_BUNDLED_SKILL_NAMES,
@@ -14,6 +18,7 @@ import {
 } from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Delete02Icon } from "hugeicons-react";
 import { type ChangeEvent, type SubmitEvent, useState } from "react";
 import { useAuth } from "@/context/use-auth";
@@ -22,10 +27,22 @@ import {
   useInstallAgentBrowser,
 } from "@/hooks/use-agent-browser-settings";
 import { isPluginOwned } from "@/hooks/use-plugins";
-import { formatError } from "@/lib/client";
+import { client, formatError } from "@/lib/client";
+import { queryKeys } from "@/lib/query-keys";
 
 const bundledNames = new Set<string>(BUNDLED_SKILL_NAMES);
 const runtimeOnlyNames = new Set<string>(RUNTIME_ONLY_BUNDLED_SKILL_NAMES);
+
+function needsBrowserInstall(
+  mode: "managed" | "local_cdp",
+  status?: AgentBrowserStatusResponse
+): boolean {
+  if (mode === "managed") {
+    return status?.ready !== true;
+  }
+  const version = status?.version?.match(/(?:^|\s)(\d+)\.(\d+)\.(\d+)(?:\s|$)/);
+  return !(version && (Number(version[1]) > 0 || Number(version[2]) >= 34));
+}
 
 interface AddSkillDialogProps {
   assignedSkillIds: ReadonlySet<string>;
@@ -95,6 +112,210 @@ export function AddSkillDialog({
   );
 }
 
+function BrowserConnectionSettings({
+  busy,
+  mode,
+  onModeChange,
+  port,
+  profileId,
+  setRunning,
+}: {
+  busy: boolean;
+  mode: "managed" | "local_cdp";
+  onModeChange: (mode: "managed" | "local_cdp" | null) => void;
+  port: number | null;
+  profileId: string;
+  setRunning: (running: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [portOverride, setPortOverride] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const portValue = portOverride ?? String(port ?? "");
+  const cdpPort = Number(portValue);
+  const validPort =
+    Number.isInteger(cdpPort) && cdpPort >= 1 && cdpPort <= 65_535;
+
+  async function run(action: "save" | "test") {
+    if (mode === "local_cdp" && !validPort) {
+      return;
+    }
+    setRunning(true);
+    setMessage(null);
+    try {
+      if (action === "test") {
+        const result = await client.testAgentBrowserCdp(cdpPort);
+        setMessage(result.message);
+      } else {
+        await client.updateProfile(profileId, {
+          agentBrowserCdpPort: mode === "local_cdp" ? cdpPort : null,
+          agentBrowserMode: mode,
+        });
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.profiles.detail(profileId),
+        });
+        onModeChange(null);
+        setPortOverride(null);
+        setMessage("Connection saved.");
+      }
+    } catch (cause) {
+      setMessage(formatError(cause));
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border p-3">
+      <label className="block text-sm" htmlFor="agent-browser-mode">
+        Browser connection
+      </label>
+      <select
+        className="w-full rounded-md border bg-background p-2 text-sm"
+        disabled={busy}
+        id="agent-browser-mode"
+        onChange={(event) => {
+          onModeChange(event.target.value as "managed" | "local_cdp");
+          setMessage(null);
+        }}
+        value={mode}
+      >
+        <option value="managed">Managed Chrome</option>
+        <option value="local_cdp">Local CDP</option>
+      </select>
+      {mode === "local_cdp" ? (
+        <>
+          <label className="block text-sm" htmlFor="agent-browser-port">
+            CDP port
+          </label>
+          <Input
+            disabled={busy}
+            id="agent-browser-port"
+            max={65_535}
+            min={1}
+            onChange={(event) => {
+              setPortOverride(event.target.value);
+              setMessage(null);
+            }}
+            type="number"
+            value={portValue}
+          />
+          <p className="text-muted-foreground text-xs">
+            Local CDP controls the browser directly. Remove BrowserOS Neo MCP
+            from this profile to remove its tool definitions.
+          </p>
+          <Button
+            disabled={busy || !validPort}
+            onClick={() => void run("test")}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Test connection
+          </Button>
+        </>
+      ) : null}
+      <Button
+        disabled={busy || (mode === "local_cdp" && !validPort)}
+        onClick={() => void run("save")}
+        size="sm"
+        type="button"
+      >
+        Save connection
+      </Button>
+      {message ? (
+        <p className="text-sm" role="status">
+          {message}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function BrowserConnectionControl({
+  isPlatformAdmin,
+  profileId,
+  skillAvailable,
+  ...settings
+}: {
+  busy: boolean;
+  isPlatformAdmin: boolean;
+  mode: "managed" | "local_cdp";
+  onModeChange: (mode: "managed" | "local_cdp" | null) => void;
+  port: number | null;
+  profileId: string | null;
+  setRunning: (running: boolean) => void;
+  skillAvailable: boolean;
+}) {
+  if (!(isPlatformAdmin && profileId && skillAvailable)) {
+    return null;
+  }
+  return <BrowserConnectionSettings {...settings} profileId={profileId} />;
+}
+
+function SkillPickerMessages({
+  error,
+  progress,
+}: {
+  error: string | null;
+  progress: string | null;
+}) {
+  return (
+    <>
+      {progress ? (
+        <p className="break-all text-muted-foreground text-xs">{progress}</p>
+      ) : null}
+      {error ? (
+        <p className="text-destructive text-sm" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+function useBrowserInstaller({
+  bashAssigned,
+  canInstall,
+  mode,
+  setError,
+  setInstallProgress,
+  setRunning,
+}: {
+  bashAssigned: boolean;
+  canInstall: boolean;
+  mode: "managed" | "local_cdp";
+  setError: (message: string | null) => void;
+  setInstallProgress: (message: string | null) => void;
+  setRunning: (running: boolean) => void;
+}) {
+  const browserInstall = useInstallAgentBrowser();
+
+  async function installBrowser() {
+    if (!(bashAssigned && canInstall) || browserInstall.isPending) {
+      return;
+    }
+    setRunning(true);
+    setError(null);
+    setInstallProgress(null);
+    try {
+      const status = await browserInstall.mutateAsync({
+        cliOnly: mode === "local_cdp",
+        onProgress: setInstallProgress,
+      });
+      if (!status.ready) {
+        setError(status.statusMessage ?? "agent-browser is not ready.");
+      }
+    } catch (cause) {
+      setError(formatError(cause));
+    } finally {
+      setRunning(false);
+      setInstallProgress(null);
+    }
+  }
+
+  return { installBrowser, installing: browserInstall.isPending };
+}
+
 function OrganizationSkills({
   assignedSkillIds,
   bashAssigned,
@@ -127,17 +348,37 @@ function OrganizationSkills({
   setRunning: (running: boolean) => void;
 }) {
   const { user } = useAuth();
+  const { data: profileResponse } = useQuery({
+    enabled: Boolean(profileId && user?.isPlatformAdmin),
+    queryFn: () => client.getProfile(profileId!),
+    queryKey: profileId
+      ? queryKeys.profiles.detail(profileId)
+      : ["profile", "none"],
+  });
+  const [modeOverride, setModeOverride] = useState<
+    "managed" | "local_cdp" | null
+  >(null);
+  const browserMode =
+    modeOverride ?? profileResponse?.profile.agentBrowserMode ?? "managed";
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [added, setAdded] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<SkillSummary | null>(null);
   const [installProgress, setInstallProgress] = useState<string | null>(null);
-  const { data: browserStatus } = useAgentBrowserSettings(
-    skills.some((skill) => skill.name === "agent-browser")
+  const hasBrowserSkill = skills.some(
+    (skill) => skill.name === "agent-browser"
   );
-  const browserInstall = useInstallAgentBrowser();
-  const busy = disabled || browserInstall.isPending;
+  const { data: browserStatus } = useAgentBrowserSettings(hasBrowserSkill);
+  const { installBrowser, installing } = useBrowserInstaller({
+    bashAssigned,
+    canInstall: user?.isPlatformAdmin === true,
+    mode: browserMode,
+    setError,
+    setInstallProgress,
+    setRunning,
+  });
+  const busy = disabled || installing;
   const visibleSkills = skills.filter(
     (skill) =>
       !runtimeOnlyNames.has(skill.name) &&
@@ -148,7 +389,7 @@ function OrganizationSkills({
       .toLowerCase()
       .includes(search.toLowerCase().trim())
   );
-  const browserNeedsInstall = browserStatus?.ready !== true;
+  const browserNeedsInstall = needsBrowserInstall(browserMode, browserStatus);
 
   function isAdded(skillId: string) {
     return assignedSkillIds.has(skillId) || added.has(skillId);
@@ -223,120 +464,99 @@ function OrganizationSkills({
     }
   }
 
-  async function installBrowser() {
-    if (busy || !bashAssigned || user?.isPlatformAdmin !== true) {
-      return;
-    }
-    setRunning(true);
-    setError(null);
-    setInstallProgress(null);
-    try {
-      const status = await browserInstall.mutateAsync({
-        onProgress: setInstallProgress,
-      });
-      if (!status.ready) {
-        setError(status.statusMessage ?? "agent-browser is not ready.");
-      }
-    } catch (cause) {
-      setError(formatError(cause));
-    } finally {
-      setRunning(false);
-      setInstallProgress(null);
-    }
+  if (pendingDelete) {
+    return (
+      <div className="space-y-4">
+        <DialogHeader>
+          <DialogTitle>Delete skill?</DialogTitle>
+          <DialogDescription>
+            Delete "{pendingDelete.name}" from the library? This removes it from
+            every profile.
+          </DialogDescription>
+        </DialogHeader>
+        {error ? (
+          <p className="text-destructive text-sm" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <Button
+            disabled={busy}
+            onClick={() => setPendingDelete(null)}
+            variant="outline"
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={busy}
+            onClick={() => void confirmDelete()}
+            variant="destructive"
+          >
+            Delete
+          </Button>
+        </DialogFooter>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-4">
-      {pendingDelete ? (
-        <div className="space-y-4">
-          <DialogHeader>
-            <DialogTitle>Delete skill?</DialogTitle>
-            <DialogDescription>
-              Delete "{pendingDelete.name}" from the library? This removes it
-              from every profile.
-            </DialogDescription>
-          </DialogHeader>
-          {error ? (
-            <p className="text-destructive text-sm" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <DialogFooter>
-            <Button
-              disabled={busy}
-              onClick={() => setPendingDelete(null)}
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={busy}
-              onClick={() => void confirmDelete()}
-              variant="destructive"
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </div>
-      ) : (
-        <>
-          <Input
-            aria-label="Search skills"
-            disabled={busy}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search skills..."
-            value={search}
-          />
-          <OrganizationSkillList
-            bashAssigned={bashAssigned}
-            browserNeedsInstall={browserNeedsInstall}
-            busy={busy}
-            canInstallBrowser={user?.isPlatformAdmin === true}
-            isAdded={isAdded}
-            onAddBash={addBash}
-            onDelete={onDelete}
-            onInstallBrowser={installBrowser}
-            onRequestDelete={setPendingDelete}
-            onToggle={toggle}
-            results={results}
-            selectedSkillIds={new Set(selected)}
-            skillsError={skillsError}
-            skillsLoading={skillsLoading}
-            visibleSkillCount={visibleSkills.length}
-          />
-          {installProgress ? (
-            <p className="break-all text-muted-foreground text-xs">
-              {installProgress}
-            </p>
-          ) : null}
-          {error ? (
-            <p className="text-destructive text-sm" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <DialogFooter className="gap-3 border-t-0 bg-transparent pt-0">
-            <Button
-              disabled={busy}
-              onClick={() => onOpenChange(false)}
-              type="button"
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={busy || !profileId || selected.length === 0}
-              onClick={() => void addSelected()}
-              type="button"
-            >
-              {busy && selected.length > 0 ? (
-                <Spinner className="size-4" />
-              ) : (
-                `Add ${selected.length} skill${selected.length === 1 ? "" : "s"}`
-              )}
-            </Button>
-          </DialogFooter>
-        </>
-      )}
+      <BrowserConnectionControl
+        busy={busy}
+        isPlatformAdmin={user?.isPlatformAdmin === true}
+        mode={browserMode}
+        onModeChange={setModeOverride}
+        port={profileResponse?.profile.agentBrowserCdpPort ?? null}
+        profileId={profileId}
+        setRunning={setRunning}
+        skillAvailable={hasBrowserSkill}
+      />
+      <Input
+        aria-label="Search skills"
+        disabled={busy}
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder="Search skills..."
+        value={search}
+      />
+      <OrganizationSkillList
+        bashAssigned={bashAssigned}
+        browserNeedsInstall={browserNeedsInstall}
+        busy={busy}
+        canInstallBrowser={user?.isPlatformAdmin === true}
+        isAdded={isAdded}
+        onAddBash={addBash}
+        onDelete={onDelete}
+        onInstallBrowser={installBrowser}
+        onRequestDelete={setPendingDelete}
+        onToggle={toggle}
+        results={results}
+        selectedSkillIds={new Set(selected)}
+        skillsError={skillsError}
+        skillsLoading={skillsLoading}
+        visibleSkillCount={visibleSkills.length}
+      />
+      <SkillPickerMessages error={error} progress={installProgress} />
+      <DialogFooter className="gap-3 border-t-0 bg-transparent pt-0">
+        <Button
+          disabled={busy}
+          onClick={() => onOpenChange(false)}
+          type="button"
+          variant="outline"
+        >
+          Cancel
+        </Button>
+        <Button
+          disabled={busy || !profileId || selected.length === 0}
+          onClick={() => void addSelected()}
+          type="button"
+        >
+          {busy && selected.length > 0 ? (
+            <Spinner className="size-4" />
+          ) : (
+            `Add ${selected.length} skill${selected.length === 1 ? "" : "s"}`
+          )}
+        </Button>
+      </DialogFooter>
     </div>
   );
 }
@@ -540,7 +760,7 @@ function OrganizationSkillActions({
           type="button"
           variant="outline"
         >
-          Install
+          Install or upgrade
         </Button>
       ) : null}
       {onDelete ? (

@@ -35,6 +35,40 @@ describe("upsertProfile default atomicity", () => {
     }
   });
 
+  test("sqlite keeps each profile's browser connection", async () => {
+    rootDir = await mkdtemp(join(tmpdir(), "nakama-browser-profile-"));
+    const database = await createSqliteDatabase(
+      `file:${join(rootDir, "nakama.sqlite")}`
+    );
+    const now = "2020-01-01T00:00:00.000Z";
+    try {
+      await database.adapter.upsertOrganization({
+        createdAt: now,
+        id: "org_test",
+        name: "Test",
+        slug: "test",
+        updatedAt: now,
+      });
+      await database.adapter.upsertProfile(
+        profile("managed", "org_test", false, now)
+      );
+      await database.adapter.upsertProfile({
+        ...profile("cdp", "org_test", false, now),
+        agentBrowserCdpPort: 9110,
+        agentBrowserMode: "local_cdp",
+      });
+      const profiles = await database.adapter.listProfilesForOrg("org_test");
+      expect(
+        profiles.find((entry) => entry.id === "managed")?.agentBrowserMode
+      ).toBe("managed");
+      expect(
+        profiles.find((entry) => entry.id === "cdp")?.agentBrowserCdpPort
+      ).toBe(9110);
+    } finally {
+      database.close();
+    }
+  });
+
   test("sqlite keeps the prior default when clear-then-upsert rolls back", async () => {
     rootDir = await mkdtemp(join(tmpdir(), "nakama-upsert-default-"));
     const databasePath = join(rootDir, "nakama.sqlite");

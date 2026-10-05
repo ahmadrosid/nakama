@@ -1,6 +1,6 @@
 ---
 name: agent-browser
-description: Use for login-walled portals and headless browser automation with agent-browser. Skip public HTTP reading and explain-only questions.
+description: Use for login-walled portals and interactive browser automation with agent-browser. Skip public HTTP reading and explain-only questions.
 include-body-on-match: true
 ---
 
@@ -15,12 +15,14 @@ Keep ordinary web work local:
 ## Prerequisites
 
 - This profile must have the **`bash`** tool assigned.
-- The host must have the [agent-browser](https://github.com/vercel-labs/agent-browser) CLI and Chrome installed:
+- The host must have the [agent-browser](https://github.com/vercel-labs/agent-browser) CLI. Managed mode also needs Chrome:
 
 ```bash
 npm install -g agent-browser
 agent-browser install
 ```
+
+Local CDP mode needs agent-browser 0.34.0 or newer and a reachable CDP port. The browser capability prompt gives this profile's port and session name. Use those exact values with every command. Start with `agent-browser --session <name> --cdp <port> --pin-tab open <url>`. Use `--pin-tab open` again if the tab is gone. Do not switch to another tab or managed Chrome. Close the named CLI session after the task; this leaves the browser open.
 
 If `bash` returns `command not found`, `ENOENT`, or similar for `agent-browser`, tell the operator to run the install commands above (and `agent-browser install --with-deps` on Linux if Chrome libraries are missing). Do not invent a different browser tool.
 
@@ -42,7 +44,7 @@ If those variables are unset, keep using stock Chrome. Do not pass Cloak paths i
 
 ## Browser workflow
 
-Drive the browser with the `bash` tool. Multiple `agent-browser` commands in the **same agent run** share one daemon session — that is how login → navigate → act stays coherent.
+Drive the browser with the `bash` tool. In local CDP mode, prefix every command with the session and CDP flags from the capability prompt. In managed mode, use the commands below. Multiple commands in the same run share one daemon session.
 
 1. Open the target (or launch without a URL if you must set cookies first):
 

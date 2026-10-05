@@ -74,7 +74,10 @@ import {
   fetchXaiOAuthModels,
   startXaiOAuthDeviceSession,
 } from "../../providers/xai-oauth/oauth";
-import { installAgentBrowser } from "../../services/agent-browser-service";
+import {
+  installAgentBrowser,
+  testAgentBrowserCdp,
+} from "../../services/agent-browser-service";
 import {
   getExternalModelCatalog,
   isExternalModelCatalogId,
@@ -352,6 +355,9 @@ export function registerModelRoutes(
     .object({})
     .passthrough()
     .openapi("AgentBrowserStatusResponse");
+  const agentBrowserTestSchema = z.object({
+    port: z.number().int().min(1).max(65_535),
+  });
   const agentBrowserInstallEventSchema = z
     .object({})
     .passthrough()
@@ -1462,6 +1468,9 @@ export function registerModelRoutes(
       method: "post",
       operationId: "installAgentBrowser",
       path: "/v1/settings/agent-browser/install",
+      request: {
+        query: z.object({ cliOnly: z.enum(["true", "false"]).optional() }),
+      },
       responses: {
         200: {
           content: {
@@ -1479,6 +1488,39 @@ export function registerModelRoutes(
         },
       },
       summary: "Install agent-browser CLI and Chrome",
+      tags: ["Models"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "testAgentBrowserCdp",
+      path: "/v1/settings/agent-browser/test",
+      request: {
+        body: {
+          required: true,
+          content: { "application/json": { schema: agentBrowserTestSchema } },
+        },
+      },
+      responses: {
+        200: {
+          description: "CDP connection result",
+          content: {
+            "application/json": {
+              schema: z.object({ ok: z.boolean(), message: z.string() }),
+            },
+          },
+        },
+        400: {
+          description: "Invalid port",
+          content: { "application/json": { schema: errorSchema } },
+        },
+        403: {
+          description: "Forbidden",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+      summary: "Test a local agent-browser CDP connection",
       tags: ["Models"],
     })
   );
@@ -1965,8 +2007,18 @@ export function registerModelRoutes(
     );
   });
 
+  app.post("/v1/settings/agent-browser/test", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const body = agentBrowserTestSchema.safeParse(await readJson(c.req.raw));
+    if (!body.success) {
+      throw new NakamaApiError("Local CDP needs a port from 1 to 65535.", 400);
+    }
+    return json(await testAgentBrowserCdp(body.data.port));
+  });
+
   app.post("/v1/settings/agent-browser/install", async (c) => {
     requirePlatformAdminFromContext(c);
+    const cliOnly = c.req.query("cliOnly") === "true";
 
     return streamAgentBrowserInstall(
       async (send, signal) => {
@@ -1977,7 +2029,7 @@ export function registerModelRoutes(
               type: "progress",
             });
           },
-          { signal }
+          { signal, cliOnly }
         );
 
         send({

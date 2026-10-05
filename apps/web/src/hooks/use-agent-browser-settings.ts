@@ -25,8 +25,11 @@ export function useInstallAgentBrowser() {
 
   return useMutation({
     mutationFn: async (
-      options: { onProgress?: (message: string) => void } = {}
-    ) => client.installAgentBrowser({ onProgress: options.onProgress }),
+      options: {
+        onProgress?: (message: string) => void;
+        cliOnly?: boolean;
+      } = {}
+    ) => client.installAgentBrowser(options),
     onSuccess: (saved: AgentBrowserStatusResponse) => {
       queryClient.setQueryData(queryKeys.agentBrowser.settings, saved);
     },

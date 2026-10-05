@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
@@ -8,6 +8,9 @@ import { setupFreshInstallSession } from "../http/test-session-helpers";
 import {
   getAgentBrowserInstallCommand,
   getAgentBrowserStatus,
+  installAgentBrowser,
+  supportsAgentBrowserCdp,
+  testAgentBrowserCdp,
 } from "../services/agent-browser-service";
 import { AgentService } from "../services/agent-service";
 import { AuthService } from "../services/auth-service";
@@ -63,6 +66,37 @@ describe("agent-browser service", () => {
     expect(status.version).toBe("agent-browser 1.0.0");
     expect(status.ready).toBe(true);
     expect(status.nextStep).toBeNull();
+  });
+
+  test("requires a CLI with pinned tab support", () => {
+    expect(supportsAgentBrowserCdp("agent-browser 0.33.9")).toBe(false);
+    expect(supportsAgentBrowserCdp("agent-browser 0.34.0")).toBe(true);
+    expect(supportsAgentBrowserCdp("agent-browser 1.0.0")).toBe(true);
+  });
+
+  testPosix("CLI-only install skips the Chrome download", async () => {
+    await installFakeBinary(tempBinDir, "npm", "noop");
+    await installFakeBinary(tempBinDir, "agent-browser", "installable");
+    const status = await installAgentBrowser(undefined, { cliOnly: true });
+    expect(status.ready).toBe(true);
+    await expect(
+      readFile(join(tempBinDir, "chrome-installed"))
+    ).rejects.toThrow();
+  });
+
+  test("reports an unavailable CDP port without exposing tab data", async () => {
+    await installFakeBinary(tempBinDir, "agent-browser", "ready");
+    const result = await testAgentBrowserCdp(9110);
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("9110");
+    expect(result.message).not.toContain("unexpected args");
+  });
+
+  testPosix("checks CDP without returning tab titles", async () => {
+    await installFakeBinary(tempBinDir, "agent-browser", "cdp-list");
+    const result = await testAgentBrowserCdp(9110);
+    expect(result).toEqual({ message: "Browser connection works.", ok: true });
+    expect(JSON.stringify(result)).not.toContain("Private tab title");
   });
 
   // Windows terminates processes directly; it cannot exercise a SIGTERM trap.
@@ -244,6 +278,7 @@ async function installFakeBinary(
     | "login-required"
     | "noop"
     | "installable"
+    | "cdp-list"
     | "hangs"
     | "stubborn"
 ): Promise<void> {
@@ -269,6 +304,18 @@ fi
 echo "unexpected args: $@" >&2
 exit 1
 `;
+  } else if (mode === "cdp-list") {
+    script = `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "agent-browser 0.34.0"
+  exit 0
+fi
+if [ "$1" = "--cdp" ] && [ "$2" = "9110" ] && [ "$3" = "tab" ] && [ "$4" = "list" ]; then
+  echo "Private tab title https://secret.example"
+  exit 0
+fi
+exit 1
+`;
   } else if (mode === "login-required") {
     script = `#!/bin/sh
 if [ "$1" = "--version" ]; then
@@ -288,6 +335,7 @@ if [ "$1" = "--version" ]; then
   exit 0
 fi
 if [ "$1" = "install" ]; then
+  echo installed > ${JSON.stringify(join(binDir, "chrome-installed"))}
   echo "installed chrome"
   exit 0
 fi

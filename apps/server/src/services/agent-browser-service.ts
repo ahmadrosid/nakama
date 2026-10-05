@@ -1,8 +1,12 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { type AgentBrowserStatusResponse, NakamaApiError } from "@nakama/core";
 import {
   ensureBunGlobalInstallDirs,
   ensureProcessPath,
+  getToolExecutionEnv,
 } from "../lib/ensure-process-path";
+import { resolveBashBackend } from "../tools/bash-config";
 import {
   buildGlobalPackageInstallPlan,
   probeCliVersion,
@@ -12,6 +16,52 @@ import {
 
 const AGENT_BROWSER_PACKAGE = "agent-browser";
 const AGENT_BROWSER_COMMAND = "agent-browser";
+const execFileAsync = promisify(execFile);
+
+export function supportsAgentBrowserCdp(version: string | null): boolean {
+  const match = version?.match(/(?:^|\s)(\d+)\.(\d+)\.(\d+)(?:\s|$)/);
+  if (!match) {
+    return false;
+  }
+  const [, major, minor] = match;
+  return Number(major) > 0 || Number(minor) >= 34;
+}
+
+export async function testAgentBrowserCdp(
+  port: number
+): Promise<{ ok: boolean; message: string }> {
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new NakamaApiError("Local CDP needs a port from 1 to 65535.", 400);
+  }
+  if (resolveBashBackend() !== "host") {
+    throw new NakamaApiError("Local CDP needs host bash.", 400);
+  }
+  const status = await getAgentBrowserStatus();
+  if (!supportsAgentBrowserCdp(status.version)) {
+    return {
+      message: "Local CDP needs agent-browser 0.34.0 or newer.",
+      ok: false,
+    };
+  }
+  try {
+    await execFileAsync(
+      AGENT_BROWSER_COMMAND,
+      ["--cdp", String(port), "tab", "list"],
+      {
+        env: getToolExecutionEnv(),
+        maxBuffer: 64 * 1024,
+        timeout: 5000,
+        windowsHide: true,
+      }
+    );
+    return { message: "Browser connection works.", ok: true };
+  } catch {
+    return {
+      message: `Cannot reach the browser on CDP port ${port}.`,
+      ok: false,
+    };
+  }
+}
 
 function buildAgentBrowserCliInstallPlan() {
   return buildGlobalPackageInstallPlan(AGENT_BROWSER_PACKAGE);
@@ -71,7 +121,7 @@ export interface AgentBrowserInstallProgress {
 
 export async function installAgentBrowser(
   onProgress?: (progress: AgentBrowserInstallProgress) => void,
-  options: { signal?: AbortSignal } = {}
+  options: { signal?: AbortSignal; cliOnly?: boolean } = {}
 ): Promise<AgentBrowserStatusResponse> {
   const emitProgress = (message: string) => {
     onProgress?.({ message });
@@ -120,6 +170,10 @@ export async function installAgentBrowser(
   }
 
   ensureProcessPath();
+  if (options.cliOnly) {
+    emitProgress("agent-browser CLI install finished.");
+    return getAgentBrowserStatus();
+  }
   emitProgress(`${AGENT_BROWSER_COMMAND} install`);
 
   const browserResult = await runTimedInstallCommand(

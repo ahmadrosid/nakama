@@ -16,6 +16,9 @@ function createApp() {
   return {
     ...createMinimalHonoApp({
       agent: {
+        getAgentBrowserStatus: async () => ({
+          version: "agent-browser 0.34.0",
+        }),
         updateProfile: (orgId: string, profileId: string, body: unknown) =>
           profileService.updateProfile(
             orgId,
@@ -108,5 +111,35 @@ describe("profile skillsWriteApproval auth", () => {
       })
     );
     expect(forbiddenResp.status).toBe(403);
+
+    const browserBody = JSON.stringify({
+      agentBrowserMode: "local_cdp",
+      agentBrowserCdpPort: 9110,
+    });
+    const forbiddenBrowser = await app.fetch(
+      new Request(`${BASE}/v1/profiles/${profileId}`, {
+        body: browserBody,
+        headers: orgAdminSession.headers(
+          { "X-CSRF-Token": orgAdminSession.csrfToken },
+          orgId
+        ),
+        method: "PUT",
+      })
+    );
+    expect(forbiddenBrowser.status).toBe(403);
+    const allowedBrowser = await app.fetch(
+      new Request(`${BASE}/v1/profiles/${profileId}`, {
+        body: browserBody,
+        headers: platformSession.headers(
+          { "X-CSRF-Token": platformSession.csrfToken },
+          orgId
+        ),
+        method: "PUT",
+      })
+    );
+    expect(allowedBrowser.status).toBe(200);
+    expect(
+      (await databaseAdapter.getProfile(profileId))?.agentBrowserCdpPort
+    ).toBe(9110);
   });
 });

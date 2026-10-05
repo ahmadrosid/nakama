@@ -36,6 +36,7 @@ import {
   renameWorkspaceEntry,
 } from "@nakama/core";
 import { filterProfilesForChatAccess } from "@nakama/core/profiles";
+import { supportsAgentBrowserCdp } from "../../services/agent-browser-service";
 import { ArtifactShareService } from "../../services/artifact-share-service";
 import type { ServerOptions } from "../context";
 import {
@@ -1759,6 +1760,19 @@ export function registerProfileRoutes(
       requireOrgAdmin(auth);
       if (!isOrgAdminAllowedProfileSettingsUpdate(body)) {
         throw new NakamaApiError("Forbidden", 403);
+      }
+    }
+
+    if (
+      body.agentBrowserMode === "local_cdp" ||
+      body.agentBrowserCdpPort != null
+    ) {
+      const status = await agent.getAgentBrowserStatus();
+      if (!supportsAgentBrowserCdp(status.version)) {
+        throw new NakamaApiError(
+          "Local CDP needs agent-browser 0.34.0 or newer.",
+          400
+        );
       }
     }
 

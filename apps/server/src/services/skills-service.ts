@@ -1010,11 +1010,17 @@ export class SkillsService {
 
   async composeAgentBrowserCapabilityForProfile(
     orgId: string,
-    profileId: string
+    profileId: string,
+    connection?: {
+      agentBrowserMode?: "managed" | "local_cdp";
+      agentBrowserCdpPort?: number | null;
+      sessionName?: string;
+    }
   ): Promise<string> {
     const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
     return composeAgentBrowserCapabilityPrompt(
-      assigned.map((item) => item.discovered)
+      assigned.map((item) => item.discovered),
+      connection
     );
   }
 

@@ -215,6 +215,11 @@ const INSTALL_WRITES: { body?: unknown; method: string; path: string }[] = [
   { method: "POST", path: "/v1/settings/email/test" },
   { method: "POST", path: "/v1/settings/agent-browser/install" },
   {
+    body: { port: 9110 },
+    method: "POST",
+    path: "/v1/settings/agent-browser/test",
+  },
+  {
     body: { providerPassthroughEnabled: false },
     method: "PUT",
     path: "/v1/settings/coding-harnesses",

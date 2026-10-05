@@ -80,6 +80,7 @@ import {
   ensureProfileDefaultBundledSkills,
 } from "@nakama/db";
 import { unzipSync } from "fflate";
+import { resolveBashBackend } from "../tools/bash-config";
 import {
   CUSTOM_TOOL_HANDLERS,
   type CustomToolType,
@@ -341,6 +342,8 @@ export class ProfileService {
     const now = new Date().toISOString();
 
     await this.db.upsertProfile({
+      agentBrowserCdpPort: source.agentBrowserCdpPort,
+      agentBrowserMode: source.agentBrowserMode,
       automationsEnabled: source.automationsEnabled !== false,
       createdAt: now,
       id: profileId,
@@ -451,6 +454,39 @@ export class ProfileService {
 
     validateGeneratedSoulFiles(request.soulFiles);
 
+    if (
+      request.agentBrowserMode !== undefined &&
+      request.agentBrowserMode !== "managed" &&
+      request.agentBrowserMode !== "local_cdp"
+    ) {
+      throw new NakamaApiError("Invalid agent-browser mode.", 400);
+    }
+    const agentBrowserMode =
+      request.agentBrowserMode ?? profile.agentBrowserMode ?? "managed";
+    const agentBrowserCdpPort =
+      request.agentBrowserCdpPort === undefined
+        ? (profile.agentBrowserCdpPort ?? null)
+        : request.agentBrowserCdpPort;
+    if (
+      agentBrowserCdpPort !== null &&
+      (!Number.isInteger(agentBrowserCdpPort) ||
+        agentBrowserCdpPort < 1 ||
+        agentBrowserCdpPort > 65_535)
+    ) {
+      throw new NakamaApiError("Local CDP needs a port from 1 to 65535.", 400);
+    }
+    if (agentBrowserMode === "local_cdp" && agentBrowserCdpPort === null) {
+      throw new NakamaApiError("Local CDP needs a port from 1 to 65535.", 400);
+    }
+    if (
+      (request.agentBrowserMode !== undefined ||
+        request.agentBrowserCdpPort !== undefined) &&
+      agentBrowserMode === "local_cdp" &&
+      resolveBashBackend() !== "host"
+    ) {
+      throw new NakamaApiError("Local CDP needs host bash.", 400);
+    }
+
     const nextSystemPrompt =
       request.systemPrompt === undefined
         ? profile.systemPrompt
@@ -458,6 +494,9 @@ export class ProfileService {
 
     await this.db.upsertProfile({
       ...profile,
+      agentBrowserCdpPort:
+        agentBrowserMode === "local_cdp" ? agentBrowserCdpPort : null,
+      agentBrowserMode,
       automationsEnabled:
         request.automationsEnabled === undefined
           ? profile.automationsEnabled !== false
@@ -1345,6 +1384,8 @@ export class ProfileService {
     const soulStack = await resolveSoulStackForProfile(orgId, profile.id);
 
     return {
+      agentBrowserCdpPort: profile.agentBrowserCdpPort ?? null,
+      agentBrowserMode: profile.agentBrowserMode ?? "managed",
       automationsEnabled: profile.automationsEnabled !== false,
       createdAt: profile.createdAt,
       hasAvatar: await hasProfileAvatar(orgId, profile.id),

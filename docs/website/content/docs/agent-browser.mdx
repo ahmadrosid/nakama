@@ -16,7 +16,7 @@ How the system works:
 - This tree uses fewer tokens than raw HTML
 - The agent clicks and fills fields by those refs. Then the agent closes the browser when the task ends
 
-The product has no dedicated `browser` builtin. The workflow is **`bash` + the `agent-browser` skill + the host CLI** and Chrome.
+The product has no dedicated `browser` builtin. The workflow is **`bash` + the `agent-browser` skill + the host CLI**. Managed mode uses Chrome installed by the CLI. Local CDP mode connects to an existing browser, including BrowserOS Neo.
 
 ## Why use agent-browser
 
@@ -62,6 +62,16 @@ Platform admins:
 4. Assign the **`agent-browser`** skill after install and bash are ready.
 
 The skill is opt-in. Nakama does not auto-assign it to Super Bot or default profiles. The profile needs **bash** and the skill. The skill alone cannot open a browser.
+
+### Local CDP connection
+
+A platform admin can select **Local CDP** in the skill picker. Enter the browser's current CDP port, test the connection, and save it for this profile. Use agent-browser 0.34.0 or newer. The install button installs the CLI without downloading Chrome in this mode.
+
+For example, if your browser exposes port `9110`, enter `9110`. The port can change. Nakama tests the connection by listing tabs. The test does not open or change a tab. The agent opens its own pinned tab when it starts work.
+
+Local CDP controls the browser directly. It does not use BrowserOS Neo MCP. Remove BrowserOS Neo MCP from this profile if you want to remove its tool definitions from model requests. The UI setting alone does not lower MCP token use. A local CDP session has its own tab selection, but it shares browser cookies and storage.
+
+Nakama needs host `bash` and network access to the CDP port. Microsandbox `bash` cannot use this mode. In Docker, the container must reach the browser's CDP port. A port on the host may not be reachable from the container.
 
 ### 2. Manual CLI install (optional)
 

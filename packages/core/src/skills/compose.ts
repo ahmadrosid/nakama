@@ -3,11 +3,26 @@ import type { DiscoveredSkill } from "./types";
 export const AGENT_BROWSER_SKILL_NAME = "agent-browser";
 
 export function composeAgentBrowserCapabilityPrompt(
-  skills: Pick<DiscoveredSkill, "name">[]
+  skills: Pick<DiscoveredSkill, "name">[],
+  connection?: {
+    agentBrowserMode?: "managed" | "local_cdp";
+    agentBrowserCdpPort?: number | null;
+    sessionName?: string;
+  }
 ): string {
   const skill = skills.find((entry) => entry.name === AGENT_BROWSER_SKILL_NAME);
   if (!skill) {
     return "";
+  }
+
+  if (connection?.agentBrowserMode === "local_cdp") {
+    if (!(connection.agentBrowserCdpPort && connection.sessionName)) {
+      return "Local CDP is incomplete. Report the missing connection setting. Do not launch managed Chrome.";
+    }
+    const command = `agent-browser --session ${connection.sessionName} --cdp ${connection.agentBrowserCdpPort}`;
+    return `# Browser automation (agent-browser skill)
+
+The agent-browser skill is assigned. Run it through bash. This profile uses local CDP. Start with \`${command} --pin-tab open <url>\`. Use \`${command}\` for every later browser command. Take compact snapshots with \`snapshot -i\`. If a tab is gone, open a fresh tab with \`--pin-tab open\`; do not adopt another tab. If CDP fails, report the failure. Do not launch managed Chrome. End with \`${command} close\`. The browser remains open. Read the assigned skill for the full workflow.`;
   }
 
   return `# Browser automation (agent-browser skill)
