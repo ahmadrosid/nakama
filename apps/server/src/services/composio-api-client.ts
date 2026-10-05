@@ -127,10 +127,9 @@ export function unwrapComposioError(error: unknown): Error {
 
 type ComposioAuthConfigClient = {
   authConfigs: {
-    list(query?: {
-      toolkit?: string;
-      isComposioManaged?: boolean;
-    }): Promise<{ items: Array<{ id?: string }> }>;
+    list(query?: { toolkit?: string }): Promise<{
+      items: Array<{ id?: string; isComposioManaged?: boolean }>;
+    }>;
     create(
       toolkitSlug: string,
       options?: { type?: string }
@@ -144,11 +143,12 @@ export async function resolveAuthConfigId(
 ): Promise<string> {
   const slug = toolkitSlug.toLowerCase();
   const listed = await composio.authConfigs.list({
-    isComposioManaged: true,
     toolkit: slug,
   });
 
-  const existingId = listed.items.find((item) => item.id)?.id;
+  const existingId =
+    listed.items.find((item) => item.id && item.isComposioManaged === false)
+      ?.id ?? listed.items.find((item) => item.id)?.id;
   if (existingId) {
     return existingId;
   }

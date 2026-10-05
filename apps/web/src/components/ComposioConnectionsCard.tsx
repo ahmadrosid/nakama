@@ -8,7 +8,14 @@ import type {
   UpdateProfileComposioToolkitsRequest,
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
-import { ConfirmDialog } from "@nakama/ui/dialog";
+import {
+  ConfirmDialog,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@nakama/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -981,6 +988,13 @@ function ComposioConnectionsReady({
   state: ReturnType<typeof useComposioConnectionsState>;
 }) {
   const [disconnectTarget, setDisconnectTarget] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState<{
+    slug: string;
+    message: string;
+  } | null>(null);
+  const needsMetaAdsAuthConfig =
+    connectError?.slug === "metaads" &&
+    connectError.message.includes("Auth_Config_DefaultAuthConfigNotFound");
   const data = state.toolkitsQuery.data;
   const configured =
     state.settings?.configured === true || data?.configured === true;
@@ -1017,7 +1031,12 @@ function ComposioConnectionsReady({
         busy={state.busy}
         data={data}
         isOrgAdmin={state.isOrgAdmin}
-        onConnect={(slug) => state.connectMutation.mutate(slug)}
+        onConnect={(slug) =>
+          state.connectMutation.mutate(slug, {
+            onError: (error) =>
+              setConnectError({ message: formatError(error), slug }),
+          })
+        }
         onDisable={(slug) => state.disableMutation.mutate(slug)}
         onDisconnect={setDisconnectTarget}
         onEnable={(slug) => state.enableMutation.mutate(slug)}
@@ -1036,6 +1055,58 @@ function ComposioConnectionsReady({
           title="Disconnect toolkit?"
         />
       ) : null}
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) {
+            setConnectError(null);
+          }
+        }}
+        open={connectError !== null}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {needsMetaAdsAuthConfig
+                ? "Meta Ads needs your own OAuth app"
+                : "Could not connect toolkit"}
+            </DialogTitle>
+          </DialogHeader>
+          {needsMetaAdsAuthConfig ? (
+            <>
+              <DialogDescription>
+                Composio has no managed Meta Ads credentials. Set up your own
+                OAuth app to connect.
+              </DialogDescription>
+              <ol className="list-decimal space-y-2 pl-5 text-sm">
+                <li>Create a Meta developer app.</li>
+                <li>
+                  Add this redirect URI to its OAuth settings:{" "}
+                  <code className="break-all">
+                    https://backend.composio.dev/api/v3.1/toolkits/auth/callback
+                  </code>
+                </li>
+                <li>
+                  Create a custom Meta Ads auth config in the Composio project
+                  for this API key. Enter the Meta App ID and App Secret.
+                </li>
+              </ol>
+              <a
+                className="text-sm underline underline-offset-3"
+                href="https://next.docs.composio.dev/docs/auth-configuration/custom-auth-configs"
+                rel="noreferrer"
+                target="_blank"
+              >
+                View setup guide
+              </a>
+              <p className="text-muted-foreground text-sm">
+                Then try Connect again.
+              </p>
+            </>
+          ) : (
+            <DialogDescription>{connectError?.message}</DialogDescription>
+          )}
+        </DialogContent>
+      </Dialog>
     </IntegrationCardShell>
   );
 }
