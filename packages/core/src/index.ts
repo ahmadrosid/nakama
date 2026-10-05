@@ -8,6 +8,7 @@ export * from "./attachments/content";
 export * from "./attachments/store";
 export * from "./audio-transcription";
 export * from "./automation-delivery";
+export * from "./automation-delivery-destination";
 export * from "./automation-run-read";
 export * from "./automation-scheduler";
 export * from "./automation-validate";
