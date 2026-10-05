@@ -31,6 +31,30 @@ export function MarkdownA({
     return <YoutubeEmbed videoId={videoId} />;
   }
 
+  if (href?.startsWith("#file-citation?")) {
+    const query = new URLSearchParams(href.slice(href.indexOf("?") + 1));
+    const citation = query.get("citation");
+    if (citation && /^\d+$/.test(citation)) {
+      const path = query.get("file") ?? "file";
+      return (
+        <sup className="relative -top-0.5 ml-0.5 inline-flex align-baseline">
+          <a
+            {...rest}
+            aria-label={`Open citation ${citation}: ${path} in file preview`}
+            className={cn(
+              "inline-flex min-w-4 items-center justify-center rounded border border-primary/20 bg-primary/10 px-1 font-semibold text-[10px] text-primary leading-4 no-underline hover:bg-primary/20 focus-visible:outline-2 focus-visible:outline-primary",
+              className
+            )}
+            href={href}
+            title={path}
+          >
+            {children}
+          </a>
+        </sup>
+      );
+    }
+  }
+
   return (
     <SafeMarkdownLink className={className} href={href} {...rest}>
       {children}
