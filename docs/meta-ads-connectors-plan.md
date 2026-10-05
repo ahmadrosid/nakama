@@ -16,7 +16,7 @@ Let a Nakama member connect Meta Ads, review performance, and make approved ad c
 
 ## Product shape
 
-Add **Control center → Connectors** at `/customize/connectors`. Put a Meta Ads card there. Show connection state, the Meta identity and ad accounts returned by Meta, and the agents with access. Let an org admin enable Meta and assign agents. Let each member connect, reconnect, or disconnect only their own Meta account. Preserve the existing Composio and MCP pages; link to both from Connectors. Keep notifications and other settings where they are.
+Add **Control center → Connectors** at `/customize/connections/connectors`. Put a Meta Ads card there. Show connection state, the Meta identity and ad accounts returned by Meta, and the agents with access. Let an org admin enable Meta and assign agents. Let each member connect, reconnect, or disconnect only their own Meta account. Preserve the existing Composio and MCP pages; link to both from Connectors. Keep notifications and other settings where they are.
 
 Use the existing org and profile model. A member proposes ad accounts from their Meta connection. An org admin approves the proposed account IDs for that member and org. The server checks that approval on every call. An admin sees only proposed accounts, not the member's full Meta account list. A member cannot make another member's connection available to an agent.
 
