@@ -1331,6 +1331,80 @@ describe("ephemeral attachment marking", () => {
   });
 });
 
+test("pre-org profile retention: legacy profiles and their history survive until an organization adopts them", () => {
+  const db = new Database(":memory:");
+  const snapshot = () =>
+    [
+      "profiles",
+      "profile_tools",
+      "sessions",
+      "session_messages",
+      "automations",
+    ].map((table) => db.query(`SELECT * FROM ${table} ORDER BY rowid`).all());
+
+  try {
+    migrateDatabase(db);
+    db.exec(`
+      INSERT INTO profiles (id, name, system_prompt, is_super, created_at, updated_at)
+      VALUES ('profile_legacy', 'Legacy', 'legacy prompt', 0, '2026-01-01', '2026-01-01');
+
+      INSERT INTO tools (id, name, description, handler_type, created_at, updated_at)
+      VALUES ('tool_legacy', 'legacy_tool', 'Legacy tool', 'builtin', '2026-01-01', '2026-01-01');
+
+      INSERT INTO profile_tools (profile_id, tool_id)
+      VALUES ('profile_legacy', 'tool_legacy');
+
+      INSERT INTO sessions (id, profile_id, channel, title, created_at, updated_at)
+      VALUES ('session_legacy', 'profile_legacy', 'web', 'Old chat', '2026-01-01', '2026-01-01');
+
+      INSERT INTO session_messages (id, session_id, seq, payload, created_at)
+      VALUES ('message_legacy', 'session_legacy', 0, '{"role":"user","content":"keep me"}', '2026-01-01');
+
+      INSERT INTO automations (id, name, version, definition, profile_id, created_at, updated_at)
+      VALUES ('automation_legacy', 'Legacy', 1, '{}', 'profile_legacy', '2026-01-01', '2026-01-01');
+    `);
+    const beforeOrg = snapshot();
+
+    // Every boot until setup creates the first organization.
+    migrateDatabase(db);
+    migrateDatabase(db);
+    expect(snapshot()).toEqual(beforeOrg);
+
+    db.exec(`
+      INSERT INTO organizations (id, name, slug, created_at, updated_at)
+      VALUES ('org_acme', 'Acme', 'acme', '2026-01-02', '2026-01-02');
+    `);
+    migrateDatabase(db);
+
+    expect(
+      db
+        .query(
+          "SELECT org_id, is_default FROM profiles WHERE id = 'profile_legacy'"
+        )
+        .get()
+    ).toEqual({ is_default: 1, org_id: "org_acme" });
+    expect(
+      db
+        .query("SELECT org_id FROM automations WHERE id = 'automation_legacy'")
+        .get()
+    ).toEqual({ org_id: "org_acme" });
+    expect(
+      db
+        .query(
+          "SELECT session_id FROM session_messages WHERE id = 'message_legacy'"
+        )
+        .get()
+    ).toEqual({ session_id: "session_legacy" });
+    expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
+
+    const adopted = snapshot();
+    migrateDatabase(db);
+    expect(snapshot()).toEqual(adopted);
+  } finally {
+    db.close();
+  }
+});
+
 test("file pins migrate existing databases, survive reopen and cascade with profiles", () => {
   const directory = mkdtempSync(join(tmpdir(), "nakama-file-pins-"));
   const filename = join(directory, "pins.sqlite");
