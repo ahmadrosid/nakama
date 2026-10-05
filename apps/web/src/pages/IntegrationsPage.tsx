@@ -1,5 +1,4 @@
 import { Spinner } from "@nakama/ui/spinner";
-import { cn } from "@nakama/ui/utils";
 import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { CodingAgentsSettingsCard } from "@/components/CodingAgentsSettingsCard";
 import { ComposioConnectionsCard } from "@/components/ComposioConnectionsCard";
@@ -46,12 +45,18 @@ function IntegrationSectionPanel({
 
   if (section === "connectors") {
     return (
-      <div className={cn(isPlatformAdmin && "space-y-4")}>
+      <section aria-labelledby="connectors-composio" className="space-y-4">
+        <h2
+          className="font-semibold text-base text-foreground leading-tight"
+          id="connectors-composio"
+        >
+          Composio
+        </h2>
         {isPlatformAdmin ? <ComposioSettingsCard embedded /> : null}
         {canUseOrgIntegrations ? (
           <ComposioConnectionsCard bordered embedded />
         ) : null}
-      </div>
+      </section>
     );
   }
 
