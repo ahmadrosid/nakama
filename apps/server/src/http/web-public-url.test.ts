@@ -178,6 +178,7 @@ describe("web public url settings", () => {
           app.fetch(
             new Request("http://nakama-internal:4310/v1/auth/setup", {
               body: JSON.stringify({ ...buildSetupAuthBody(), webPublicUrl }),
+              headers: { "Content-Type": "application/json" },
               method: "POST",
             })
           );
