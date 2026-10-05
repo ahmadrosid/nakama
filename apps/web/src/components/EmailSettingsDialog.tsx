@@ -130,12 +130,11 @@ export function EmailSettingsDialog({
     initialEmailSettingsState
   );
 
-  const passwordPlaceholder =
-    settings?.source === "environment"
-      ? "Managed by environment"
-      : settings?.source === "settings"
-        ? "Saved"
-        : "App password";
+  const passwordPlaceholder = {
+    environment: "Managed by environment",
+    missing: "App password",
+    settings: "Saved",
+  }[settings?.source ?? "missing"];
 
   useEffect(() => {
     if (!open) {
@@ -205,6 +204,18 @@ export function EmailSettingsDialog({
         },
       }
     );
+  };
+
+  const handleManageSecret = async (action: "clear" | "use-stored") => {
+    try {
+      await client.manageSettingSecret("email", action);
+      await refetch();
+    } catch (error) {
+      dispatch({
+        type: "patch",
+        values: { formError: formatError(error) },
+      });
+    }
   };
 
   return (
@@ -299,36 +310,39 @@ export function EmailSettingsDialog({
               testPending={testMutation.isPending}
               testRecipient={state.testRecipient}
             />
-            {settings?.source === "settings" ||
-            (settings?.source === "missing" && settings.savedAvailable) ? (
-              <div className="px-4 pb-4">
-                <Button
-                  onClick={async () => {
-                    try {
-                      await client.manageSettingSecret(
-                        "email",
-                        settings.source === "settings" ? "clear" : "use-stored"
-                      );
-                      await refetch();
-                    } catch (error) {
-                      dispatch({
-                        type: "patch",
-                        values: { formError: formatError(error) },
-                      });
-                    }
-                  }}
-                  type="button"
-                  variant="outline"
-                >
-                  {settings.source === "settings"
-                    ? "Clear saved password"
-                    : "Use saved password"}
-                </Button>
-              </div>
-            ) : null}
+            <EmailSettingsSecretAction
+              onManage={handleManageSecret}
+              savedAvailable={settings?.savedAvailable === true}
+              source={settings?.source}
+            />
           </>
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function EmailSettingsSecretAction({
+  onManage,
+  savedAvailable,
+  source,
+}: {
+  onManage: (action: "clear" | "use-stored") => void;
+  savedAvailable: boolean;
+  source?: EmailSettingsResponse["source"];
+}) {
+  if (source !== "settings" && !(source === "missing" && savedAvailable)) {
+    return null;
+  }
+  return (
+    <div className="px-4 pb-4">
+      <Button
+        onClick={() => onManage(source === "settings" ? "clear" : "use-stored")}
+        type="button"
+        variant="outline"
+      >
+        {source === "settings" ? "Clear saved password" : "Use saved password"}
+      </Button>
+    </div>
   );
 }

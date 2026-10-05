@@ -67,50 +67,15 @@ export function ProviderReplaceKeyDialog({
 }) {
   let title = `${instance.hasApiKey ? "Update API key" : "Add API key"} for ${instance.label}`;
   let hasCredentials = Boolean(apiKey.trim());
-  let credentialField = (
-    <InputGroup>
-      <InputGroupInput
-        autoComplete="off"
-        disabled={busy || instance.secretSource === "environment"}
-        onChange={(event) => onApiKeyChange(event.target.value)}
-        placeholder={apiKeyPlaceholder(providerType)}
-        type={showApiKey ? "text" : "password"}
-        value={apiKey}
-      />
-      <InputGroupAddon align="inline-end">
-        <InputGroupButton
-          aria-label={showApiKey ? "Hide API key" : "Show API key"}
-          onClick={onToggleShowApiKey}
-          size="icon-sm"
-        >
-          {showApiKey ? <ViewOffIcon /> : <ViewIcon />}
-        </InputGroupButton>
-      </InputGroupAddon>
-    </InputGroup>
-  );
 
   switch (providerType) {
     case "xai_oauth":
       title = `Reconnect ${instance.label}`;
       hasCredentials = Boolean(xaiOAuth);
-      credentialField = (
-        <XaiSignInPanel
-          disabled={busy}
-          oauth={xaiOAuth}
-          onOAuthChange={onXaiOAuthChange}
-        />
-      );
       break;
     case "chatgpt":
       title = `Reconnect ${instance.label}`;
       hasCredentials = Boolean(chatgptOAuth);
-      credentialField = (
-        <ChatgptSignInPanel
-          disabled={busy}
-          oauth={chatgptOAuth}
-          onOAuthChange={onChatgptOAuthChange}
-        />
-      );
       break;
     default:
       break;
@@ -122,7 +87,19 @@ export function ProviderReplaceKeyDialog({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        {credentialField}
+        <ProviderCredentialField
+          apiKey={apiKey}
+          busy={busy}
+          chatgptOAuth={chatgptOAuth}
+          instance={instance}
+          onApiKeyChange={onApiKeyChange}
+          onChatgptOAuthChange={onChatgptOAuthChange}
+          onToggleShowApiKey={onToggleShowApiKey}
+          onXaiOAuthChange={onXaiOAuthChange}
+          providerType={providerType}
+          showApiKey={showApiKey}
+          xaiOAuth={xaiOAuth}
+        />
         {instance.secretSource === "environment" ? (
           <p className="text-sm">
             Managed by {instance.secretEnvName}. Restart Nakama after you change
@@ -177,6 +154,72 @@ export function ProviderReplaceKeyDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ProviderCredentialField({
+  apiKey,
+  busy,
+  chatgptOAuth,
+  instance,
+  onApiKeyChange,
+  onChatgptOAuthChange,
+  onToggleShowApiKey,
+  onXaiOAuthChange,
+  providerType,
+  showApiKey,
+  xaiOAuth,
+}: {
+  apiKey: string;
+  busy: boolean;
+  chatgptOAuth: ChatgptOAuthCredentials | null;
+  instance: ProviderInstanceSummary;
+  onApiKeyChange: (value: string) => void;
+  onChatgptOAuthChange: (oauth: ChatgptOAuthCredentials | null) => void;
+  onToggleShowApiKey: () => void;
+  onXaiOAuthChange: (oauth: XaiOAuthCredentials | null) => void;
+  providerType: SelectedProvider;
+  showApiKey: boolean;
+  xaiOAuth: XaiOAuthCredentials | null;
+}) {
+  if (providerType === "xai_oauth") {
+    return (
+      <XaiSignInPanel
+        disabled={busy}
+        oauth={xaiOAuth}
+        onOAuthChange={onXaiOAuthChange}
+      />
+    );
+  }
+  if (providerType === "chatgpt") {
+    return (
+      <ChatgptSignInPanel
+        disabled={busy}
+        oauth={chatgptOAuth}
+        onOAuthChange={onChatgptOAuthChange}
+      />
+    );
+  }
+  return (
+    <InputGroup>
+      <InputGroupInput
+        autoComplete="off"
+        disabled={busy || instance.secretSource === "environment"}
+        onChange={(event) => onApiKeyChange(event.target.value)}
+        placeholder={apiKeyPlaceholder(providerType)}
+        type={showApiKey ? "text" : "password"}
+        value={apiKey}
+      />
+      <InputGroupAddon align="inline-end">
+        <InputGroupButton
+          aria-label={showApiKey ? "Hide API key" : "Show API key"}
+          onClick={onToggleShowApiKey}
+          size="icon-sm"
+        >
+          {showApiKey ? <ViewOffIcon /> : <ViewIcon />}
+        </InputGroupButton>
+      </InputGroupAddon>
+    </InputGroup>
   );
 }
 

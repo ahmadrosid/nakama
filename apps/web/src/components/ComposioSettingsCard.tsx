@@ -235,8 +235,6 @@ function ComposioApiKeySection({
   showApiKey: boolean;
 }) {
   const sectionPadding = embedded ? "pb-1.5" : "p-5";
-  const canSave = source !== "environment" && apiKey.trim().length > 0;
-
   return (
     <div className={cn("space-y-2", sectionPadding, embedded && "pt-0")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -254,50 +252,16 @@ function ComposioApiKeySection({
         ) : null}
       </div>
 
-      <div className="flex items-center gap-2">
-        <InputGroup className="h-9 min-w-0 flex-1">
-          <InputGroupInput
-            autoComplete="off"
-            disabled={savePending || source === "environment"}
-            onChange={(event) => onApiKeyChange(event.target.value)}
-            placeholder={
-              source === "environment"
-                ? "Managed by environment"
-                : configured
-                  ? "Saved"
-                  : "Paste API key"
-            }
-            type={showApiKey ? "text" : "password"}
-            value={apiKey}
-          />
-          {source === "environment" ? null : (
-            <InputGroupAddon align="inline-end">
-              <InputGroupButton
-                aria-label={showApiKey ? "Hide API key" : "Show API key"}
-                className="relative before:absolute before:-inset-2 before:content-['']"
-                onClick={onToggleShowApiKey}
-                size="icon-xs"
-                type="button"
-              >
-                {showApiKey ? (
-                  <ViewOffIcon className="size-4" />
-                ) : (
-                  <ViewIcon className="size-4" />
-                )}
-              </InputGroupButton>
-            </InputGroupAddon>
-          )}
-        </InputGroup>
-        <Button
-          className="min-w-[4.5rem] shrink-0"
-          disabled={!canSave || savePending}
-          onClick={onSave}
-          size="lg"
-          type="button"
-        >
-          {savePending ? <Spinner className="size-4" /> : "Save"}
-        </Button>
-      </div>
+      <ComposioApiKeyInput
+        apiKey={apiKey}
+        configured={configured}
+        onApiKeyChange={onApiKeyChange}
+        onSave={onSave}
+        onToggleShowApiKey={onToggleShowApiKey}
+        savePending={savePending}
+        showApiKey={showApiKey}
+        source={source}
+      />
 
       {configured && !composioReachable ? (
         <p className="text-amber-800 text-sm dark:text-amber-200" role="status">
@@ -311,6 +275,74 @@ function ComposioApiKeySection({
           {errorMessage}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+function ComposioApiKeyInput({
+  apiKey,
+  configured,
+  onApiKeyChange,
+  onSave,
+  onToggleShowApiKey,
+  savePending,
+  showApiKey,
+  source,
+}: {
+  apiKey: string;
+  configured: boolean;
+  onApiKeyChange: (value: string) => void;
+  onSave: () => void;
+  onToggleShowApiKey: () => void;
+  savePending: boolean;
+  showApiKey: boolean;
+  source?: "environment" | "settings" | "missing";
+}) {
+  const canSave = source !== "environment" && apiKey.trim().length > 0;
+  return (
+    <div className="flex items-center gap-2">
+      <InputGroup className="h-9 min-w-0 flex-1">
+        <InputGroupInput
+          autoComplete="off"
+          disabled={savePending || source === "environment"}
+          onChange={(event) => onApiKeyChange(event.target.value)}
+          placeholder={
+            source === "environment"
+              ? "Managed by environment"
+              : configured
+                ? "Saved"
+                : "Paste API key"
+          }
+          type={showApiKey ? "text" : "password"}
+          value={apiKey}
+        />
+        {source === "environment" ? null : (
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              aria-label={showApiKey ? "Hide API key" : "Show API key"}
+              className="relative before:absolute before:-inset-2 before:content-['']"
+              onClick={onToggleShowApiKey}
+              size="icon-xs"
+              type="button"
+            >
+              {showApiKey ? (
+                <ViewOffIcon className="size-4" />
+              ) : (
+                <ViewIcon className="size-4" />
+              )}
+            </InputGroupButton>
+          </InputGroupAddon>
+        )}
+      </InputGroup>
+      <Button
+        className="min-w-[4.5rem] shrink-0"
+        disabled={!canSave || savePending}
+        onClick={onSave}
+        size="lg"
+        type="button"
+      >
+        {savePending ? <Spinner className="size-4" /> : "Save"}
+      </Button>
     </div>
   );
 }

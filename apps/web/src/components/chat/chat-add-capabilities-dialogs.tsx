@@ -14,7 +14,7 @@ import {
 } from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useId, useState } from "react";
+import { type FormEvent, useId, useState } from "react";
 import { AddSkillDialog } from "@/components/SkillInstallDialog";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
 import { ToolAssignDialog } from "@/components/ToolAssignDialog";
@@ -124,45 +124,21 @@ function ToolSetupCard({
   const [error, setError] = useState<string | null>(null);
   const locked = saving || disabled;
   const plan = setup.data;
-  if (!canManage) {
+  if (
+    !(canManage && plan) ||
+    plan.sessionId !== sessionId ||
+    plan.status === "ready" ||
+    plan.status === "rejected" ||
+    !profiles.data
+  ) {
     return (
-      <p className="text-muted-foreground text-sm">
-        Ask an admin to create and connect this tool.
-      </p>
-    );
-  }
-  if (!plan) {
-    return (
-      <p className="text-muted-foreground text-sm" role="status">
-        {setup.isError ? "Could not load tool setup." : "Loading tool setup…"}
-      </p>
-    );
-  }
-  if (plan.sessionId !== sessionId) {
-    return (
-      <p className="text-muted-foreground text-sm">
-        Open the original chat to complete this tool setup.
-      </p>
-    );
-  }
-  if (plan.status === "ready") {
-    return (
-      <div className="w-full max-w-sm rounded-xl border bg-card p-4">
-        <p className="font-medium text-sm">{plan.name}</p>
-        <p className="text-sm" role="status">
-          Ready
-        </p>
-      </div>
-    );
-  }
-  if (plan.status === "rejected") {
-    return <p className="text-muted-foreground text-sm">Tool setup closed.</p>;
-  }
-  if (!profiles.data) {
-    return (
-      <p className="text-muted-foreground text-sm" role="status">
-        {profiles.isError ? "Could not load agents." : "Loading agents…"}
-      </p>
+      <ToolSetupStatus
+        canManage={canManage}
+        plan={plan}
+        profilesError={profiles.isError}
+        sessionId={sessionId}
+        setupError={setup.isError}
+      />
     );
   }
   const approved = plan.status === "approved";
@@ -234,6 +210,60 @@ function ToolSetupCard({
         Cancel setup
       </Button>
     </form>
+  );
+}
+
+function ToolSetupStatus({
+  canManage,
+  plan,
+  profilesError,
+  sessionId,
+  setupError,
+}: {
+  canManage: boolean;
+  plan: ToolSetupPlan | undefined;
+  profilesError: boolean;
+  sessionId?: string;
+  setupError: boolean;
+}) {
+  if (!canManage) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        Ask an admin to create and connect this tool.
+      </p>
+    );
+  }
+  if (!plan) {
+    return (
+      <p className="text-muted-foreground text-sm" role="status">
+        {setupError ? "Could not load tool setup." : "Loading tool setup…"}
+      </p>
+    );
+  }
+  if (plan.sessionId !== sessionId) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        Open the original chat to complete this tool setup.
+      </p>
+    );
+  }
+  if (plan.status === "ready") {
+    return (
+      <div className="w-full max-w-sm rounded-xl border bg-card p-4">
+        <p className="font-medium text-sm">{plan.name}</p>
+        <p className="text-sm" role="status">
+          Ready
+        </p>
+      </div>
+    );
+  }
+  if (plan.status === "rejected") {
+    return <p className="text-muted-foreground text-sm">Tool setup closed.</p>;
+  }
+  return (
+    <p className="text-muted-foreground text-sm" role="status">
+      {profilesError ? "Could not load agents." : "Loading agents…"}
+    </p>
   );
 }
 
@@ -329,6 +359,29 @@ function ToolCredentialForm({
     }
   }
 
+  async function saveKey(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving) {
+      return;
+    }
+    const form = event.currentTarget;
+    const apiKey = String(new FormData(form).get("apiKey") ?? "");
+    form.reset();
+    setSaving(true);
+    setError(null);
+    try {
+      const saved = await client
+        .forOrg(orgId)
+        .saveToolCredential(toolId, apiKey);
+      queryClient.setQueryData(queryKey, saved);
+      setOpen(false);
+    } catch {
+      setError("Could not save the API key. Enter it again to retry.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="flex w-full max-w-sm items-center justify-between gap-3 rounded-xl border bg-card p-4">
       <div className="min-w-0">
@@ -361,95 +414,99 @@ function ToolCredentialForm({
                 : "Configure"}
           </DialogTrigger>
           {open ? (
-            <DialogContent aria-describedby={undefined} className="sm:max-w-sm">
-              <DialogHeader>
-                <DialogTitle>Connect {toolName}</DialogTitle>
-              </DialogHeader>
-              {status.data?.source === "environment" ? (
-                <p className="text-sm">
-                  Managed by {status.data.envName}. Restart Nakama after you
-                  change it.
-                </p>
-              ) : null}
-              <form
-                className="space-y-4"
-                onSubmit={async (event) => {
-                  event.preventDefault();
-                  if (saving) {
-                    return;
-                  }
-                  const form = event.currentTarget;
-                  const apiKey = String(new FormData(form).get("apiKey") ?? "");
-                  form.reset();
-                  setSaving(true);
-                  setError(null);
-                  try {
-                    const saved = await client
-                      .forOrg(orgId)
-                      .saveToolCredential(toolId, apiKey);
-                    queryClient.setQueryData(queryKey, saved);
-                    setOpen(false);
-                  } catch {
-                    setError(
-                      "Could not save the API key. Enter it again to retry."
-                    );
-                  } finally {
-                    setSaving(false);
-                  }
-                }}
-              >
-                <div className="space-y-2">
-                  <label className="font-medium text-sm" htmlFor={inputId}>
-                    API key
-                  </label>
-                  <Input
-                    autoComplete="off"
-                    disabled={saving || status.data?.source === "environment"}
-                    id={inputId}
-                    maxLength={8192}
-                    name="apiKey"
-                    required
-                    type="password"
-                  />
-                </div>
-                {error ? (
-                  <p className="text-destructive text-sm" role="alert">
-                    {error}
-                  </p>
-                ) : null}
-                <Button
-                  disabled={saving || status.data?.source === "environment"}
-                  type="submit"
-                >
-                  {saving ? "Saving…" : "Save"}
-                </Button>
-              </form>
-              {status.data?.savedAvailable &&
-              status.data.source === "missing" ? (
-                <Button
-                  disabled={saving}
-                  onClick={() => void manageKey("use-stored")}
-                  type="button"
-                  variant="outline"
-                >
-                  Use saved key
-                </Button>
-              ) : null}
-              {status.data?.source === "settings" ? (
-                <Button
-                  disabled={saving}
-                  onClick={() => void manageKey("clear")}
-                  type="button"
-                  variant="outline"
-                >
-                  Clear saved key
-                </Button>
-              ) : null}
-            </DialogContent>
+            <ToolCredentialDialogContent
+              error={error}
+              inputId={inputId}
+              onManage={manageKey}
+              onSave={saveKey}
+              saving={saving}
+              status={status.data}
+              toolName={toolName}
+            />
           ) : null}
         </Dialog>
       ) : null}
     </div>
+  );
+}
+
+function ToolCredentialDialogContent({
+  error,
+  inputId,
+  onManage,
+  onSave,
+  saving,
+  status,
+  toolName,
+}: {
+  error: string | null;
+  inputId: string;
+  onManage: (action: "clear" | "use-stored") => Promise<void>;
+  onSave: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  saving: boolean;
+  status:
+    | Awaited<ReturnType<typeof client.getToolCredentialStatus>>
+    | undefined;
+  toolName: string;
+}) {
+  return (
+    <DialogContent aria-describedby={undefined} className="sm:max-w-sm">
+      <DialogHeader>
+        <DialogTitle>Connect {toolName}</DialogTitle>
+      </DialogHeader>
+      {status?.source === "environment" ? (
+        <p className="text-sm">
+          Managed by {status.envName}. Restart Nakama after you change it.
+        </p>
+      ) : null}
+      <form className="space-y-4" onSubmit={onSave}>
+        <div className="space-y-2">
+          <label className="font-medium text-sm" htmlFor={inputId}>
+            API key
+          </label>
+          <Input
+            autoComplete="off"
+            disabled={saving || status?.source === "environment"}
+            id={inputId}
+            maxLength={8192}
+            name="apiKey"
+            required
+            type="password"
+          />
+        </div>
+        {error ? (
+          <p className="text-destructive text-sm" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <Button
+          disabled={saving || status?.source === "environment"}
+          type="submit"
+        >
+          {saving ? "Saving…" : "Save"}
+        </Button>
+      </form>
+      {status?.savedAvailable && status.source === "missing" ? (
+        <Button
+          disabled={saving}
+          onClick={() => void onManage("use-stored")}
+          type="button"
+          variant="outline"
+        >
+          Use saved key
+        </Button>
+      ) : null}
+      {status?.source === "settings" ? (
+        <Button
+          disabled={saving}
+          onClick={() => void onManage("clear")}
+          type="button"
+          variant="outline"
+        >
+          Clear saved key
+        </Button>
+      ) : null}
+    </DialogContent>
   );
 }
 
