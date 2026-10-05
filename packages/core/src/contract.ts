@@ -1818,6 +1818,7 @@ export type AgentBrowserInstallEvent =
 
 export interface WhatsAppSettingsResponse {
   allowedPhones: string[];
+  allowUnpairedGroupMembers: boolean;
   configured: boolean;
   pairedJid: string | null;
   pairingCode: string | null;
@@ -1828,6 +1829,7 @@ export interface WhatsAppSettingsResponse {
 
 export interface UpdateWhatsAppSettingsRequest {
   allowedPhones?: string;
+  allowUnpairedGroupMembers?: boolean;
   phoneNumber?: string;
   profileId?: string;
   requireGroupMention?: boolean;
