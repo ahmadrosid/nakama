@@ -24,7 +24,7 @@ export function ConnectorsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto w-full max-w-3xl space-y-6">
       <Link
         className="block w-fit text-muted-foreground text-sm hover:text-foreground"
         to="/customize"
