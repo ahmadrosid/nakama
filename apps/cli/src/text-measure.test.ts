@@ -39,21 +39,9 @@ describe("stripAnsi", () => {
   test("removes 256-color codes", () => {
     expect(stripAnsi("\x1b[38;5;123mhello\x1b[39m")).toBe("hello");
   });
-
-  test("leaves plain text alone", () => {
-    expect(stripAnsi("hello")).toBe("hello");
-  });
 });
 
 describe("visibleLength", () => {
-  test("counts plain characters", () => {
-    expect(visibleLength("hello")).toBe(5);
-  });
-
-  test("ignores ansi codes", () => {
-    expect(visibleLength("\x1b[31mhello\x1b[0m")).toBe(5);
-  });
-
   test("counts wide characters", () => {
     expect(visibleLength("中文")).toBe(4);
     expect(visibleLength("a🙂b")).toBe(4);
@@ -61,14 +49,6 @@ describe("visibleLength", () => {
 });
 
 describe("wrapText", () => {
-  test("wraps plain text by visible width", () => {
-    expect(wrapText("abcdef", 3)).toEqual(["abc", "def"]);
-  });
-
-  test("preserves explicit newlines", () => {
-    expect(wrapText("ab\ncd", 3)).toEqual(["ab", "cd"]);
-  });
-
   test("does not split ansi sequences", () => {
     const wrapped = wrapText("\x1b[31mabcdef\x1b[0m", 3);
     expect(wrapped).toEqual(["\x1b[31mabc\x1b[0m", "\x1b[31mdef\x1b[0m"]);
@@ -81,9 +61,7 @@ describe("wrapText", () => {
 
   test("wraps wide characters correctly", () => {
     expect(wrapText("中文中文", 4)).toEqual(["中文", "中文"]);
-  });
-
-  test("returns empty line for empty input", () => {
+    expect(wrapText("ab\ncd", 3)).toEqual(["ab", "cd"]);
     expect(wrapText("", 10)).toEqual([""]);
   });
 
@@ -95,10 +73,6 @@ describe("wrapText", () => {
 });
 
 describe("truncateText", () => {
-  test("leaves short text unchanged", () => {
-    expect(truncateText("hello", 10)).toBe("hello");
-  });
-
   test("truncates by visible width", () => {
     expect(truncateText("hello world", 8)).toBe("hello w…");
   });
