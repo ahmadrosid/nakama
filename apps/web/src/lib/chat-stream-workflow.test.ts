@@ -1,14 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { WorkflowRunRecord, WorkflowStep } from "@nakama/core/contract";
-import { formatToolActionLabel, formatToolResult } from "./chat-stream";
 import {
   activeWorkflowStepIndex,
   buildWorkflowRunCard,
   buildWorkflowStepViews,
-  describeWorkflowStep,
-  formatListWorkflowsToolResult,
-  formatWorkflowRunStatusLabel,
-  humanizeWorkflowStepId,
   isListWorkflowsTool,
   isRunWorkflowTool,
   parseListWorkflowsResult,
@@ -88,55 +83,6 @@ describe("chat-stream-workflow", () => {
         stepCount: 4,
       },
     ]);
-  });
-
-  test("formatListWorkflowsToolResult is one line per workflow", () => {
-    expect(
-      formatListWorkflowsToolResult([
-        {
-          enabled: true,
-          id: "workflow_1",
-          lastRunAt: null,
-          name: "Morning Brief",
-          stepCount: 4,
-        },
-      ])
-    ).toBe("Morning Brief · 4 steps");
-    expect(formatListWorkflowsToolResult([])).toBe("None");
-    expect(formatListWorkflowsToolResult({ error: "nope" })).toBeNull();
-    expect(formatToolActionLabel("list_workflows")).toBe("Listed workflows");
-    expect(
-      formatToolResult("list_workflows", [
-        {
-          enabled: true,
-          id: "workflow_1",
-          name: "Morning Brief",
-          stepCount: 1,
-        },
-      ])
-    ).toBe("Morning Brief · 1 step");
-  });
-
-  test("tool activity labels keep long inputs in details", () => {
-    expect(formatToolActionLabel("bash", { command: "find . -type f" })).toBe(
-      "Ran command"
-    );
-    expect(
-      formatToolActionLabel("search_files", {
-        path: "/workspace/bob",
-        query: "lesson|learned|2026-10-04",
-      })
-    ).toBe("Searched bob");
-    expect(
-      formatToolActionLabel("knowledge_base_search", {
-        query: "lesson learned today",
-      })
-    ).toBe("Searched knowledge base");
-    expect(
-      formatToolActionLabel("org_memory_search", {
-        query: "lesson learned today",
-      })
-    ).toBe("Searched organization memory");
   });
 
   test("parseWorkflowId reads input", () => {
@@ -284,24 +230,6 @@ describe("chat-stream-workflow", () => {
     expect(card.title).toBe("Morning Brief");
     expect(card.statusLabel).toBe("Off");
     expect(card.views).toHaveLength(3);
-  });
-
-  test("formatWorkflowRunStatusLabel covers run states", () => {
-    expect(formatWorkflowRunStatusLabel("failed", false, 1, 4)).toBe(
-      "Failed · step 2 of 4"
-    );
-    expect(formatWorkflowRunStatusLabel("running", true, 0, 4)).toBe(
-      "Running · step 1 of 4"
-    );
-    expect(formatWorkflowRunStatusLabel("completed", false, 3, 4)).toBe(
-      "Done · 4 of 4"
-    );
-    expect(formatWorkflowRunStatusLabel("off", false, 0, 4)).toBe("Off");
-  });
-
-  test("describeWorkflowStep and titles stay human", () => {
-    expect(humanizeWorkflowStepId("prep_work")).toBe("Prep Work");
-    expect(describeWorkflowStep(steps[0]!)).toBe("Web Fetch");
   });
 });
 

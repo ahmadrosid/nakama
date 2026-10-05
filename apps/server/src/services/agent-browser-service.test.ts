@@ -84,13 +84,16 @@ describe("agent-browser service", () => {
     ).rejects.toThrow();
   });
 
-  test("reports an unavailable CDP port without exposing tab data", async () => {
-    await installFakeBinary(tempBinDir, "agent-browser", "ready");
-    const result = await testAgentBrowserCdp(9110);
-    expect(result.ok).toBe(false);
-    expect(result.message).toContain("9110");
-    expect(result.message).not.toContain("unexpected args");
-  });
+  testPosix(
+    "reports an unavailable CDP port without exposing tab data",
+    async () => {
+      await installFakeBinary(tempBinDir, "agent-browser", "ready");
+      const result = await testAgentBrowserCdp(9110);
+      expect(result.ok).toBe(false);
+      expect(result.message).toContain("9110");
+      expect(result.message).not.toContain("unexpected args");
+    }
+  );
 
   testPosix("checks CDP without returning tab titles", async () => {
     await installFakeBinary(tempBinDir, "agent-browser", "cdp-list");

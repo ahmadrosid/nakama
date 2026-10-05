@@ -69,7 +69,7 @@ A platform admin can select **Local CDP** in the skill picker. Enter the browser
 
 For example, if your browser exposes port `9110`, enter `9110`. The port can change. Nakama tests the connection by listing tabs. The test does not open or change a tab. The agent opens its own pinned tab when it starts work.
 
-Local CDP controls the browser directly. It does not use BrowserOS Neo MCP. Remove BrowserOS Neo MCP from this profile if you want to remove its tool definitions from model requests. The UI setting alone does not lower MCP token use. A local CDP session has its own tab selection, but it shares browser cookies and storage.
+Local CDP controls the browser directly. It does not use BrowserOS Neo MCP. Remove BrowserOS Neo MCP from this profile if you want to remove its tool definitions from model requests. The UI setting alone does not lower MCP token use. A local CDP session has its own tab selection, but it shares browser cookies and storage. Anyone who can chat with this profile can use that browser. Automations and sub-agents that use this profile can also use it.
 
 Nakama needs host `bash` and network access to the CDP port. Microsandbox `bash` cannot use this mode. In Docker, the container must reach the browser's CDP port. A port on the host may not be reachable from the container.
 
@@ -141,7 +141,7 @@ In **one** chat turn or automation run:
 4. **Screenshot** (optional) under the profile workspace `artifacts/` directory.
 5. **Close** the browser when the task ends.
 
-Across runs, sessions are **fresh** by default. The product does not keep sticky cookies or a restored login state. The agent logs in again in the run when the task needs it.
+In managed mode, sessions are **fresh** by default. The product does not keep sticky cookies or a restored login state. The agent logs in again in the run when the task needs it. Local CDP mode uses the connected browser's existing cookies and storage.
 
 ## Credentials and safety
 

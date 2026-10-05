@@ -8,8 +8,6 @@
     },
     "apps/desktop": {
       "entry": ["preload.cjs", "tests/smoke.mjs"],
-      // The packaged runtime copies workspace sources and generated declarations.
-      "ignore": ["dist/**"],
       // PowerShell 7 is supplied by the Windows build host.
       "ignoreBinaries": ["pwsh"],
       "project": ["*.mjs", "*.cjs", "tests/*.mjs", "scripts/*.mjs"]
@@ -43,10 +41,7 @@
       ]
     },
     // Not in package.json#workspaces; Knip would skip it otherwise.
-    "docs/website": {
-      "ignoreDependencies": ["react-dom", "@types/react-dom"],
-      "ignoreBinaries": ["next"]
-    }
+    "docs/website": {}
   },
   // Ships with Windows; desktop quit uses it to confirm a leftover pid is bun.
   "ignoreBinaries": ["tasklist"],
