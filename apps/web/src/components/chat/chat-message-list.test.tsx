@@ -24,7 +24,7 @@ mock.module("react-virtuoso", () => ({
 
 const { ChatMessageList } = await import("./chat-message-list");
 
-test("history loading does not expand completed tools", async () => {
+test("history loading keeps tool activity collapsed", async () => {
   const messages: ChatListItem[] = [
     { content: "Run a tool", id: "user", role: "user" },
     {
@@ -61,17 +61,17 @@ test("history loading does not expand completed tools", async () => {
       );
     });
     return container
-      .querySelector('[aria-label="Toggle tools"]')
+      .querySelector('[aria-label="Toggle activity"]')
       ?.getAttribute("aria-expanded");
   };
 
   try {
-    expect(await expanded({})).toBe("true");
+    expect(await expanded({})).toBe("false");
     expect(await expanded({ key: "history", workStreamActive: false })).toBe(
       "false"
     );
     expect(await expanded({ key: "history", workStreamActive: true })).toBe(
-      "true"
+      "false"
     );
     expect(
       await expanded({
