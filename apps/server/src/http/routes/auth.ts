@@ -18,6 +18,7 @@ import {
   rotateLocalAuthToken,
   type SetActiveOrgRequest,
   type SetupAuthRequest,
+  saveUserWebPublicUrl,
   type UpdateAuthProfileRequest,
 } from "@nakama/core";
 import { DEMO_LOGIN_EMAIL, DEMO_LOGIN_HOST } from "@nakama/core/demo-login";
@@ -33,10 +34,7 @@ import {
   verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from "@simplewebauthn/server";
-import {
-  persistWebPublicUrl,
-  resolveRequestClientOrigin,
-} from "../../services/composio-callback-url";
+import { resolveRequestClientOrigin } from "../../services/composio-callback-url";
 import {
   ensureMfaEncryptionKey,
   getMfaEncryptionKey,
@@ -598,7 +596,11 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     );
     if (webPublicUrl) {
       try {
-        await persistWebPublicUrl(webPublicUrl);
+        // resolveRequestClientOrigin already vouched for this origin, and no
+        // user exists yet who could have planted the saved value it may have
+        // matched. The stricter check on a later edit would refuse a base
+        // provisioned in the config file when a proxy hides the public host.
+        await saveUserWebPublicUrl(webPublicUrl);
       } catch (error) {
         return errorResponse(
           error instanceof Error ? error.message : String(error),
