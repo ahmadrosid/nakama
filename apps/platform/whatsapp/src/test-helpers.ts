@@ -284,6 +284,7 @@ export async function writeWhatsAppConfigIni(
     pairingCode?: string | null;
     pairedJid?: string | null;
     allowedPhones?: string[];
+    allowUnpairedGroupMembers?: boolean;
     requireGroupMention?: boolean;
   }
 ): Promise<void> {
@@ -310,6 +311,12 @@ export async function writeWhatsAppConfigIni(
 
   if (config.requireGroupMention === false) {
     lines.push("require_group_mention=false");
+  }
+
+  if (config.allowUnpairedGroupMembers !== undefined) {
+    lines.push(
+      `allow_unpaired_group_members=${config.allowUnpairedGroupMembers}`
+    );
   }
 
   lines.push("");

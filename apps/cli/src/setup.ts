@@ -353,6 +353,13 @@ export async function ensureProviderConfiguredViaCli(
 
   try {
     const config = await promptForProviderConfig({
+      discoverModels: async (_provider, apiKey) => {
+        const response = await client.discoverModels({
+          apiKey,
+          provider: "netra",
+        });
+        return response.models;
+      },
       question: (prompt) => rl.question(prompt),
       writeLine: (line) => printLine(line),
       ...modelHelpers,

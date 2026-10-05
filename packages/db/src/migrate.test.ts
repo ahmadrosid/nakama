@@ -1162,6 +1162,107 @@ describe("migration SQL hardening", () => {
   });
 });
 
+describe("llm usage org scope", () => {
+  // The ledger as it was before it had an owner: one install-wide row, plus
+  // one row per model, neither keyed by org.
+  function legacyUsageDatabase(orgIds: string[]): Database {
+    const db = new Database(":memory:");
+    migrateDatabase(db);
+    for (const orgId of orgIds) {
+      db.query(
+        "INSERT INTO organizations (id, name, slug, created_at, updated_at) VALUES (?, ?, ?, 'now', 'now')"
+      ).run(orgId, orgId, orgId);
+    }
+    db.exec(`
+      DROP TABLE llm_usage_stats;
+      DROP TABLE llm_usage_model_stats;
+      CREATE TABLE llm_usage_stats (
+        id TEXT PRIMARY KEY NOT NULL,
+        request_count INTEGER NOT NULL DEFAULT 0,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        estimated_cost_usd REAL NOT NULL DEFAULT 0,
+        tracked_since TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        org_id TEXT
+      );
+      CREATE TABLE llm_usage_model_stats (
+        model_id TEXT PRIMARY KEY NOT NULL,
+        request_count INTEGER NOT NULL DEFAULT 0,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        estimated_cost_usd REAL NOT NULL DEFAULT 0,
+        tracked_since TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO llm_usage_stats VALUES ('global', 7, 900, 300, 1.25, '2026-01-01', '2026-02-01', NULL);
+      INSERT INTO llm_usage_model_stats VALUES ('gpt-4o', 5, 700, 200, 1, '2026-01-01', '2026-02-01');
+      INSERT INTO llm_usage_model_stats VALUES ('gpt-4o-mini', 2, 200, 100, 0.25, '2026-01-02', '2026-02-01');
+    `);
+    return db;
+  }
+
+  function usageRows(db: Database) {
+    return {
+      byModel: db
+        .query("SELECT * FROM llm_usage_model_stats ORDER BY model_id")
+        .all(),
+      totals: db.query("SELECT * FROM llm_usage_stats").all(),
+    };
+  }
+
+  test("keeps the history under the only org", () => {
+    const db = legacyUsageDatabase(["org-solo"]);
+    try {
+      migrateDatabase(db);
+
+      const migrated = usageRows(db);
+      expect(migrated.totals).toEqual([
+        {
+          estimated_cost_usd: 1.25,
+          id: "global",
+          input_tokens: 900,
+          org_id: "org-solo",
+          output_tokens: 300,
+          request_count: 7,
+          tracked_since: "2026-01-01",
+          updated_at: "2026-02-01",
+        },
+      ]);
+      expect(migrated.byModel).toMatchObject([
+        { input_tokens: 700, model_id: "gpt-4o", org_id: "org-solo" },
+        { input_tokens: 200, model_id: "gpt-4o-mini", org_id: "org-solo" },
+      ]);
+
+      migrateDatabase(db);
+      expect(usageRows(db)).toEqual(migrated);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("resets the history when more than one org could own it", () => {
+    const db = legacyUsageDatabase(["org-a", "org-b"]);
+    try {
+      migrateDatabase(db);
+      expect(usageRows(db)).toEqual({ byModel: [], totals: [] });
+
+      db.exec(`
+        INSERT INTO llm_usage_stats (org_id, id, tracked_since, updated_at)
+          VALUES ('org-a', 'global', 'now', 'now'), ('org-b', 'global', 'now', 'now');
+        INSERT INTO llm_usage_model_stats (org_id, model_id, tracked_since, updated_at)
+          VALUES ('org-a', 'gpt-4o', 'now', 'now'), ('org-b', 'gpt-4o', 'now', 'now');
+      `);
+      const recorded = usageRows(db);
+
+      migrateDatabase(db);
+      expect(usageRows(db)).toEqual(recorded);
+    } finally {
+      db.close();
+    }
+  });
+});
+
 test("upgrading skill proposals preserves pending content and adds supporting files once", () => {
   const db = new Database(":memory:");
   try {

@@ -1,18 +1,65 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { NakamaApiError } from "@nakama/core";
 import { serve } from "bun";
 import {
   compatibleModelSupportsThinking,
   customModelEntryFromRemoteRecord,
+  fetchNetraModels,
   fetchRemoteOpenAIModels,
   getModelsForProviderInstance,
   inferRemoteModelVision,
 } from "./compatible-models";
 
 let mockServer: ReturnType<typeof serve> | undefined;
+const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   mockServer?.stop(true);
   mockServer = undefined;
+  globalThis.fetch = originalFetch;
+});
+
+test("Netra discovery keeps only the documented tool-capable model", async () => {
+  globalThis.fetch = mock(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe("https://api.netraruntime.com/v1/models");
+      expect(new Headers(init?.headers).get("Authorization")).toBe(
+        "Bearer test-key"
+      );
+      return Response.json({
+        data: [
+          { id: "deepseek/deepseek-v4.1-flash" },
+          { id: "deepseek/deepseek-v4-flash-0731" },
+        ],
+      });
+    }
+  ) as unknown as typeof fetch;
+
+  expect(await fetchNetraModels("test-key")).toEqual([
+    {
+      id: "deepseek/deepseek-v4-flash-0731",
+      name: "DeepSeek V4 Flash 0731",
+      supportsThinking: true,
+      supportsVision: false,
+    },
+  ]);
+});
+
+test("Netra agent catalog excludes models without a tool-turn check", () => {
+  const models = getModelsForProviderInstance({
+    apiKey: "test-key",
+    createdAt: "2026-10-05T00:00:00.000Z",
+    customModels: [
+      { id: "deepseek/deepseek-v4.1-flash" },
+      { id: "deepseek/deepseek-v4-flash-0731" },
+    ],
+    id: "netra-1",
+    label: "Netra Runtime",
+    type: "netra",
+  });
+  expect(models.map((model) => model.id)).toEqual([
+    "deepseek/deepseek-v4-flash-0731",
+  ]);
 });
 
 describe("getModelsForProviderInstance openai", () => {
@@ -350,47 +397,30 @@ describe("customModelEntryFromRemoteRecord", () => {
   });
 });
 
-describe("fetchRemoteOpenAIModels auth errors", () => {
-  for (const status of [401, 403] as const) {
-    test(`names the API key remedy for ${status} without upstream body`, async () => {
-      const upstreamBody = JSON.stringify({
-        error: "API key required for remote API access",
-      });
-      const warn = spyOn(console, "warn").mockImplementation(() => {});
-
-      mockServer = serve({
-        fetch() {
-          return new Response(upstreamBody, {
-            headers: { "content-type": "application/json" },
-            status,
-          });
-        },
-        port: 0,
-      });
-
-      const baseUrl = `http://127.0.0.1:${mockServer.port}/v1`;
-
-      try {
-        await fetchRemoteOpenAIModels(baseUrl, "");
-        expect.unreachable("expected discovery to fail");
-      } catch (error) {
-        expect(error).toBeInstanceOf(Error);
-        const message = (error as Error).message;
-        expect(message).toContain("API key");
-        expect(message).not.toContain(upstreamBody);
-        expect(message).not.toContain("API key required for remote API access");
-      }
-
-      expect(
-        warn.mock.calls.some(
-          (args) =>
-            typeof args[0] === "string" &&
-            args[0].includes("Could not fetch models") &&
-            String(args[1] ?? args[0]).includes(upstreamBody)
-        )
-      ).toBe(true);
-
-      warn.mockRestore();
+for (const status of [401, 403, 503] as const) {
+  test(`remote discovery handles ${status} without exposing its body`, async () => {
+    const upstreamBody = "private upstream details";
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    mockServer = serve({
+      fetch: () => new Response(upstreamBody, { status }),
+      port: 0,
     });
-  }
-});
+
+    try {
+      await fetchRemoteOpenAIModels(
+        `http://127.0.0.1:${mockServer.port}/v1`,
+        "key"
+      );
+      expect.unreachable("expected discovery to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(NakamaApiError);
+      expect((error as NakamaApiError).status).toBe(status === 503 ? 502 : 400);
+      expect((error as NakamaApiError).message).not.toContain(upstreamBody);
+      if (status !== 503) {
+        expect((error as NakamaApiError).message).toContain("API key");
+      }
+    } finally {
+      warn.mockRestore();
+    }
+  });
+}

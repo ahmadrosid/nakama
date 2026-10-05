@@ -607,6 +607,7 @@ describe("firstAvailableProviderOption", () => {
           "openrouter",
           "gemini",
           "deepseek",
+          "netra",
           "doubao",
           "together",
           "xiaomi",

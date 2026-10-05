@@ -50,6 +50,7 @@ Nakama supports these built-in provider types:
 | OpenRouter | Route to many models through one API key |
 | Gemini | Google Gemini models |
 | DeepSeek | DeepSeek models |
+| Netra Runtime | Discover models with your Netra API key; choose an available model |
 | Doubao (Volcengine) | Seed models via Volcengine Ark China (`https://ark.cn-beijing.volces.com/api/v3`); set `DOUBAO_API_KEY` |
 | Together AI | Open-source and hosted models via Together |
 | Xiaomi MiMo | MiMo models via `api.xiaomimimo.com` (pay-as-you-go; override base URL for Token Plan clusters) |
@@ -66,6 +67,18 @@ Nakama supports these built-in provider types:
 | Custom (OpenAI-compatible) | Any OpenAI-compatible API; multiple instances allowed |
 
 Most built-in types allow one configured instance each. **Ollama** and **Custom (OpenAI-compatible)** can be added multiple times (for example local Ollama plus a remote compatible endpoint).
+
+## Netra Runtime
+
+1. In **Settings → LLM providers → Add provider**, choose **Netra Runtime**.
+2. Enter your Netra API key and browse the models available to your organization.
+3. Choose a model, then assign it to a profile.
+
+Nakama currently offers DeepSeek V4 Flash 0731. Netra documents its tool-call flow. V4.1 Flash needs a tool-turn check before Nakama can offer it for agents.
+
+Netra charges the rates shown for your organization. Enter its input, cached input, and output rates in the model settings to show cost in Nakama. Leave rates blank when you do not know them.
+
+The CLI can also use `NETRA_API_KEY` with an exact `NETRA_MODEL` ID. See [Netra's model guide](https://app.netraruntime.com/docs/models.md) for model IDs and features.
 
 ## Provider-specific features
 

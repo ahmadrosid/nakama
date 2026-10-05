@@ -1188,6 +1188,65 @@ describe("createChatHandler group chats", () => {
     });
   });
 
+  test("group access off ignores an unpaired member and still answers a paired one", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        allowUnpairedGroupMembers: false,
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+        requireGroupMention: false,
+      });
+
+      const {
+        calls,
+        handler: handleMessage,
+        sent,
+      } = await createTestHandler(homeDir);
+
+      await handleMessage(
+        groupInbound({
+          senderJid: "6281227900622@s.whatsapp.net",
+          text: "hi",
+        })
+      );
+
+      expect(sent).toEqual([]);
+      expect(calls.sendStream).toBe(0);
+
+      await handleMessage(groupInbound({ text: "hi" }));
+
+      expect(calls.sendStream).toBe(1);
+    });
+  });
+
+  test("group access on answers an unpaired member only when mentioned", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeWhatsAppConfigIni(homeDir, {
+        allowUnpairedGroupMembers: true,
+        pairedJid: PAIRED_JID,
+        phoneNumber: "1234567890",
+      });
+
+      const { calls, handler: handleMessage } =
+        await createTestHandler(homeDir);
+      const senderJid = "6281227900622@s.whatsapp.net";
+
+      await handleMessage(groupInbound({ senderJid, text: "hi" }));
+
+      expect(calls.sendStream).toBe(0);
+
+      await handleMessage(
+        groupInbound({
+          mentionedJids: [BOT_ME.id],
+          senderJid,
+          text: "@Nakama hi",
+        })
+      );
+
+      expect(calls.sendStream).toBe(1);
+    });
+  });
+
   test("resolves a group LID to an allowlisted phone via group metadata", async () => {
     await withTempHome(async (homeDir) => {
       await writeWhatsAppConfigIni(homeDir, {

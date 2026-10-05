@@ -95,7 +95,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
         </div>
       ) : null}
       <ProfileConfigIdentitySection state={state} />
-      {canPack ? (
+      {canPack && !detail.isSuper ? (
         <ChannelProfileContext.Provider
           key={`${activeOrg?.id}:${detail.id}`}
           value={detail.id}
