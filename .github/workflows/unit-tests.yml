@@ -28,10 +28,17 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile --ignore-scripts
 
-      # bun test does not type-check. Docker Publish does, through this build,
-      # but only after the merge.
-      - name: Build web
-        run: bun run --filter @nakama/web build
+      # bun test does not type-check or bundle. Docker Publish does both, but
+      # only after the merge. Keep this list the same as the one in Dockerfile.
+      - name: Build what the image builds
+        run: |
+          bun run --filter @nakama/web build
+          bun run --filter @nakama/server build
+          bun run --filter @nakama/automation build
+          bun run --filter @nakama/telegram build
+          bun run --filter @nakama/whatsapp build
+          bun run --filter @nakama/discord build
+          bun run --filter @nakama/slack build
 
       - name: Run tests
         run: |
