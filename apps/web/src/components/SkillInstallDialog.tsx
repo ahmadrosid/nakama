@@ -348,9 +348,9 @@ function OrganizationSkills({
   setRunning: (running: boolean) => void;
 }) {
   const { user } = useAuth();
-  const { data: profileResponse } = useQuery({
+  const { data: profile } = useQuery({
     enabled: Boolean(profileId && user?.isPlatformAdmin),
-    queryFn: () => client.getProfile(profileId!),
+    queryFn: async () => (await client.getProfile(profileId!)).profile,
     queryKey: profileId
       ? queryKeys.profiles.detail(profileId)
       : ["profile", "none"],
@@ -358,8 +358,7 @@ function OrganizationSkills({
   const [modeOverride, setModeOverride] = useState<
     "managed" | "local_cdp" | null
   >(null);
-  const browserMode =
-    modeOverride ?? profileResponse?.profile.agentBrowserMode ?? "managed";
+  const browserMode = modeOverride ?? profile?.agentBrowserMode ?? "managed";
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [added, setAdded] = useState<ReadonlySet<string>>(new Set());
@@ -506,7 +505,7 @@ function OrganizationSkills({
         isPlatformAdmin={user?.isPlatformAdmin === true}
         mode={browserMode}
         onModeChange={setModeOverride}
-        port={profileResponse?.profile.agentBrowserCdpPort ?? null}
+        port={profile?.agentBrowserCdpPort ?? null}
         profileId={profileId}
         setRunning={setRunning}
         skillAvailable={hasBrowserSkill}
