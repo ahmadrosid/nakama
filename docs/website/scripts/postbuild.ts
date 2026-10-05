@@ -1,7 +1,8 @@
+import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { readContentPages, type ContentPage } from "./content-inventory";
 import { buildLlmsTxt, type PageMetadata } from "../lib/site-meta";
+import { type ContentPage, readContentPages } from "./content-inventory";
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const CONTENT_DIR = path.join(ROOT, "..", "content", "docs");
@@ -11,6 +12,43 @@ const MIRRORS_DIR = path.join(WEBSITE_DIR, "generated", "mirrors");
 const MIRROR_ROUTES_DIR = path.join(WEBSITE_DIR, "app", "(mirrors)");
 
 const EXTRA_MIRRORS = ["getting-started.md"];
+
+// next build resolves pages, not the links inside them, so a renamed page
+// leaves dead internal links that only a reader finds.
+function checkInternalLinks(contentPages: ContentPage[]): void {
+  const routes = new Set([
+    ...contentPages.map((page) =>
+      page.relativePath.replace(/\.md$/, "").replace(/(^|\/)index$/, "")
+    ),
+    ...EXTRA_MIRRORS.map((extra) => extra.replace(/\.md$/, "")),
+  ]);
+  const missing: string[] = [];
+
+  for (const page of contentPages) {
+    for (const match of page.markdown.matchAll(/\[[^\]]*\]\(([^)\s]+)/g)) {
+      const href = match[1];
+      if (!href.startsWith("/") || href.startsWith("//")) {
+        continue;
+      }
+      const route = href.replace(/[?#].*$/, "").replace(/^\/+|\/+$/g, "");
+      if (
+        route === "" ||
+        route === "llms.txt" ||
+        routes.has(route.replace(/\.md$/, "")) ||
+        existsSync(path.join(PUBLIC_DIR, route))
+      ) {
+        continue;
+      }
+      missing.push(`${page.mdxPath}: ${href}`);
+    }
+  }
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing internal documentation paths:\n${missing.join("\n")}`
+    );
+  }
+}
 
 function mirrorContentType(relativePath: string): string {
   return relativePath.endsWith(".md")
@@ -78,6 +116,7 @@ async function main() {
   await cleanGeneratedMirrors();
 
   const contentPages: ContentPage[] = await readContentPages(CONTENT_DIR);
+  checkInternalLinks(contentPages);
   const pages: PageMetadata[] = contentPages.map((page) => ({
     description: page.description,
     relativePath: page.relativePath,
