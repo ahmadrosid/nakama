@@ -28,6 +28,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile --ignore-scripts
 
+      # bun test does not type-check. Docker Publish does, through this build,
+      # but only after the merge.
+      - name: Build web
+        run: bun run --filter @nakama/web build
+
       - name: Run tests
         run: |
           bun apps/desktop/node_modules/electron/install.js
