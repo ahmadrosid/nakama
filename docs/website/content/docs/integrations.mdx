@@ -15,6 +15,17 @@ Open **Control center → Integrations** to manage settings that span agents or 
 
 Channel credentials and bridge workers belong to one agent. Open **Agent → your agent → Channels**, then choose [Telegram](/telegram), [WhatsApp](/whatsapp), [Discord](/discord), or [Slack](/slack). MCP servers live under **Control center → Agent tools → MCP**. See [MCP servers](/mcp).
 
+## Direct channel worker runs
+
+The dashboard sets the organization and profile when it starts a channel worker. For a direct local run, set both values:
+
+```bash
+export NAKAMA_CHANNEL_ORG_ID="org_your_org"
+export NAKAMA_CHANNEL_PROFILE_ID="your-profile"
+```
+
+Then run `bun run dev:telegram`, `bun run dev:whatsapp`, `bun run dev:discord`, or `bun run dev:slack`. Save the connection for that profile first. Set `NAKAMA_CONFIG_DIR` and `NAKAMA_SERVER_URL` if you use a separate config root or server.
+
 ## Related docs
 
 - [Quickstart](/quickstart)

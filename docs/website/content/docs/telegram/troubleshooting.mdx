@@ -8,7 +8,7 @@ description: "Debug the Nakama Telegram bridge worker and fix common configurati
 When the bot is silent or behaving wrong, the fastest clue is the bridge worker's own log output.
 
 1. Open **Agent → your agent → Channels → Telegram**
-2. In the **Bridge worker** row, click **View logs**
+2. After an account links, select **More → View logs**
 3. Switch to the **Stderr** tab
 
 The stderr stream shows what the bridge worker could not do. For example, a bad or expired bot token shows up as a repeated `401: Unauthorized` from Telegram:
@@ -28,7 +28,7 @@ Use **Refresh** to pull the latest lines, **Copy** to grab the output for a bug 
 Check these first:
 
 1. The bot token is saved correctly
-2. The owning agent’s Telegram worker is running
+2. The owning profile's Telegram worker is running
 3. The Nakama server is running
 4. The Telegram user is paired or allowlisted
 

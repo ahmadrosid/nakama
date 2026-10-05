@@ -86,7 +86,7 @@ $AB --session "$SESSION" cookies set nakama_csrf "$CSRF_VAL" \
   --url "${BASE_URL}/" --sameSite Lax
 
 # ---------------------------------------------------------------------------
-# Step 2: Agent -> Connections -> Telegram, bot token entry (not yet saved).
+# Step 2: Agent -> Channels -> Telegram, bot token entry (not yet saved).
 # ---------------------------------------------------------------------------
 $AB --session "$SESSION" open "${BASE_URL}/profiles/${PROFILE_ID}/channels/telegram"
 $AB --session "$SESSION" wait 2500
@@ -126,11 +126,24 @@ $AB --session "$SESSION" wait 400
 $AB --session "$SESSION" screenshot "$SCREENSHOT_DIR/telegram-pairing.png"
 
 # ---------------------------------------------------------------------------
-# Debugging: Bridge worker -> View logs (stderr shows token / config errors).
+# Debugging: More -> View logs (stderr shows token / config errors).
 # Give the worker time to poll Telegram with the fake token and record 401s.
 # ---------------------------------------------------------------------------
+# The setup page shows worker controls after one user links. Seed only this
+# isolated demo config so the log menu is visible without a real Telegram user.
+(cd "$ROOT" && NAKAMA_CONFIG_DIR="$TEMP_CONFIG" DOCS_ORG_ID="$ORG_ID" DOCS_PROFILE_ID="$PROFILE_ID" bun -e '
+  const { saveTelegramConfig } = await import("./packages/core/src/telegram-config.ts");
+  await saveTelegramConfig({
+    orgId: process.env.DOCS_ORG_ID,
+    profileId: process.env.DOCS_PROFILE_ID,
+  }, { pairedUserIds: "123456789" });
+')
+$AB --session "$SESSION" open "${BASE_URL}/profiles/${PROFILE_ID}/channels/telegram"
+$AB --session "$SESSION" wait 2500
 $AB --session "$SESSION" wait 8000
-$AB --session "$SESSION" eval "(() => { const button = [...document.querySelectorAll('button')].find(el => el.textContent.trim() === 'View logs'); if (!button) throw new Error('Missing View logs button'); button.click(); })()"
+$AB --session "$SESSION" eval "(() => { const button = [...document.querySelectorAll('button')].find(el => el.textContent.trim() === 'More'); if (!button) throw new Error('Missing More button'); button.click(); })()"
+$AB --session "$SESSION" wait 400
+$AB --session "$SESSION" eval "(() => { const item = [...document.querySelectorAll('[role=menuitem]')].find(el => el.textContent.trim() === 'View logs'); if (!item) throw new Error('Missing View logs menu item'); item.click(); })()"
 $AB --session "$SESSION" wait 1500
 $AB --session "$SESSION" set viewport "$VIEWPORT_WIDTH" 760
 # The dialog only fetches once on open, so click Refresh to pull the latest
@@ -142,7 +155,7 @@ $AB --session "$SESSION" wait 1000
 $AB --session "$SESSION" screenshot "$SCREENSHOT_DIR/telegram-worker-logs.png"
 
 # ---------------------------------------------------------------------------
-# Step 3: Customize -> LLM providers -> Audio transcription model picker.
+# Step 3: Control center -> AI Providers -> Audio transcription model picker.
 # ---------------------------------------------------------------------------
 $AB --session "$SESSION" open "${BASE_URL}/customize/providers"
 $AB --session "$SESSION" wait 2500
@@ -154,7 +167,7 @@ $AB --session "$SESSION" wait 400
 $AB --session "$SESSION" screenshot "$SCREENSHOT_DIR/telegram-audio-transcription.png"
 
 # ---------------------------------------------------------------------------
-# Outbound notifications: Integrations -> Notifications destination form.
+# Outbound notifications: Control center -> Notifications destination form.
 # ---------------------------------------------------------------------------
 $AB --session "$SESSION" open "${BASE_URL}/customize/connections/notifications"
 $AB --session "$SESSION" wait 2500
