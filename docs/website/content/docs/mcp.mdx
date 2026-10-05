@@ -22,7 +22,7 @@ Use MCP when you need product-specific or internal capabilities — databases, S
 
 ```json
 {
-  "url": "https://mcp.example.com/sse",
+  "url": "https://mcp.example.com/mcp",
   "headers": { "Authorization": "Bearer my-token" }
 }
 ```
@@ -51,8 +51,8 @@ Nakama **caches** the tool list at connect time — it is not re-fetched on ever
 | `error` | Last connect/sync failed — see `lastError` |
 
 - **Connect** — opens the client, fetches and caches tools
-- **Sync** — refreshes the cache from an existing connection (after the server adds/removes tools)
-- **Startup** — Nakama auto-reconnects every **enabled** server; failures log a warning and set status to `error`
+- **Sync** — reconnects and refreshes the cache (after the server adds/removes tools)
+- **Startup** — Nakama auto-reconnects enabled HTTP servers; failures log a warning and set status to `error`. Command servers connect when a profile calls a tool
 
 ## Setup
 
@@ -70,7 +70,7 @@ Platform admins manage servers in **Control center → Agent tools → MCP** and
 
 1. Open **Agent** and select a profile
 2. In the **MCP** tab, click **Add MCP server**, then pick an existing server or create a new one
-3. Unassigning removes tools from the next chat; deleting a server removes it from all profiles
+3. Unassigning removes tools from the next chat. You must unassign a server from every profile before deleting it. Preinstalled servers cannot be deleted
 
 ### Example: Exa web search
 
@@ -140,7 +140,7 @@ browser before it can connect.
 Close the dialog with **Finish later** and nothing is lost: the row stays as **Sign-in
 required** with a **Sign in** button that starts the same flow again.
 
-The refresh token is stored with the server, so Nakama keeps the connection alive across
+The provider's tokens are stored with the server, so Nakama can reconnect across
 restarts without asking again. **Connect** starts a fresh sign-in whenever the grant is
 revoked or expires.
 
@@ -199,7 +199,7 @@ MCP management is platform-admin only (same as profiles, builtins, and skills).
 ## Troubleshooting
 
 - **`error` status** — check `lastError`: wrong URL, missing `command`, unreachable host, or expired credentials
-- **`needs_auth` status / "Sign-in required"** - the OAuth sign-in never finished. Click **Sign in** on the row for a fresh link, and check the public URL matches the origin you open the dashboard on
+- **`needs_auth` status / "Sign-in required"** — sign-in is incomplete or needs renewal. Click **Sign in** on the row for a fresh link, and check the public URL matches the origin you open the dashboard on
 - **No tools discovered** — server connected but returned zero tools; fix server-side config, then **Sync tools**
 - **"not connected" on tool call** — connection dropped; reconnect. For stdio, confirm the command is on PATH
 - **Exa rate limit** — add an `x-api-key` header with your [Exa API key](https://dashboard.exa.ai/api-keys), then reconnect
