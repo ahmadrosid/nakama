@@ -147,7 +147,7 @@ if (interruptedRuns > 0) {
 const organizations = await database.adapter.listOrganizations();
 const authService = new AuthService();
 
-const llmUsageTracker = await LlmUsageTracker.create(database.adapter);
+const llmUsageTracker = new LlmUsageTracker(database.adapter);
 const agent = new AgentService(
   userConfig,
   provider,
@@ -164,9 +164,16 @@ agent.setServerTools({
     db: database.adapter,
     ensureSettingsLoaded: () => agent.ensureImageGenerationSettingsLoaded(),
     getUserConfig: () => agent.getUserConfig(),
-    recordUsage: (modelId, inputTokens, outputTokens, providerInstance) => {
-      llmUsageTracker.record(modelId, inputTokens, outputTokens, 0, {
-        providerInstance,
+    recordUsage: (
+      modelId,
+      inputTokens,
+      outputTokens,
+      providerInstance,
+      orgId
+    ) => {
+      llmUsageTracker.record(modelId, inputTokens, outputTokens, {
+        orgId,
+        pricingContext: { providerInstance },
       });
     },
   }),

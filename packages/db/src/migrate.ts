@@ -52,7 +52,7 @@ export function migrateDatabase(db: Database): void {
   migrateLegacyProfileIds(db);
   atomic(migrateCodingDelegationSkillName);
   atomic(migrateWorkspaceSettingsTable);
-  atomic(migrateLlmUsageModelStatsTable);
+  atomic(migrateLlmUsageOrgScope);
   atomic(migrateToolOutputSavingsTable);
   atomic(migrateLlmTurnUsageTable);
   atomic(migrateAttachmentsTable);
@@ -458,18 +458,87 @@ function migratePasskeyTables(db: Database): void {
   }
 }
 
-function migrateLlmUsageModelStatsTable(db: Database): void {
+/**
+ * LLM usage is a tenant ledger: the system status page reports it per org, so
+ * one install-wide row answered every organization's request with the whole
+ * install's tokens and cost (#1306).
+ *
+ * Both tables are rebuilt rather than ALTERed because the org has to join the
+ * primary key: one row per org, one row per org and model. The old rows carry
+ * no org. With exactly one organization they can only be that org's, so they
+ * move to it. With several there is no telling whose spend they were, so both
+ * tables start empty and each org accumulates from its next request.
+ *
+ * This runs on every open, so a table that already has org_id in its key is
+ * left alone.
+ */
+function migrateLlmUsageOrgScope(db: Database): void {
+  const unscoped = (
+    [
+      ["llm_usage_stats", "id"],
+      ["llm_usage_model_stats", "model_id"],
+    ] as const
+  ).filter(([table]) => {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+      name: string;
+      pk: number;
+    }>;
+    return (
+      columns.length > 0 &&
+      !columns.some((column) => column.name === "org_id" && column.pk > 0)
+    );
+  });
+
+  for (const [table] of unscoped) {
+    db.exec(`ALTER TABLE ${table} RENAME TO ${table}_unscoped;`);
+  }
+
   db.exec(`
-    CREATE TABLE IF NOT EXISTS llm_usage_model_stats (
-      model_id TEXT PRIMARY KEY NOT NULL,
+    CREATE TABLE IF NOT EXISTS llm_usage_stats (
+      org_id TEXT NOT NULL,
+      id TEXT NOT NULL,
       request_count INTEGER NOT NULL DEFAULT 0,
       input_tokens INTEGER NOT NULL DEFAULT 0,
       output_tokens INTEGER NOT NULL DEFAULT 0,
       estimated_cost_usd REAL NOT NULL DEFAULT 0,
       tracked_since TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (org_id, id)
+    );
+    CREATE TABLE IF NOT EXISTS llm_usage_model_stats (
+      org_id TEXT NOT NULL,
+      model_id TEXT NOT NULL,
+      request_count INTEGER NOT NULL DEFAULT 0,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      estimated_cost_usd REAL NOT NULL DEFAULT 0,
+      tracked_since TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (org_id, model_id)
     );
   `);
+
+  // Archived organizations count: one of them may be who ran up the old total.
+  const orgs = db
+    .prepare("SELECT id FROM organizations LIMIT 2")
+    .all() as Array<{
+    id: string;
+  }>;
+
+  for (const [table, key] of unscoped) {
+    if (orgs.length === 1) {
+      db.prepare(`
+        INSERT INTO ${table} (
+          org_id, ${key}, request_count, input_tokens, output_tokens,
+          estimated_cost_usd, tracked_since, updated_at
+        )
+        SELECT ?, ${key}, request_count, input_tokens, output_tokens,
+          estimated_cost_usd, tracked_since, updated_at
+        FROM ${table}_unscoped
+      `).run(orgs[0].id);
+    }
+    db.exec(`DROP TABLE ${table}_unscoped;`);
+  }
 }
 
 /**
@@ -953,7 +1022,6 @@ const TENANT_ORG_ID_TABLES = [
   "tools",
   "mcp_servers",
   "skills",
-  "llm_usage_stats",
   "workspace_settings",
 ] as const;
 
