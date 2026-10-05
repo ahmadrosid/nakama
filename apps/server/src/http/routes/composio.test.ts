@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { saveComposioConfig } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentService } from "../../services/agent-service";
 import { AuthService } from "../../services/auth-service";
@@ -45,7 +44,7 @@ function createMockClient(): ComposioApiClient {
 async function createApp() {
   const configDir = await mkdtemp(join(tmpdir(), "nakama-composio-route-"));
   process.env.NAKAMA_CONFIG_DIR = configDir;
-  await saveComposioConfig({ apiKey: TEST_API_KEY });
+  process.env.COMPOSIO_API_KEY = TEST_API_KEY;
 
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const authService = new AuthService();

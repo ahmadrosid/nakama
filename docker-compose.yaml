@@ -3,6 +3,8 @@ services:
     image: ghcr.io/ahmadrosid/nakama:latest
     ports:
       - "4310:4310"
+    env_file:
+      - nakama-secrets.env
     environment:
       - NAKAMA_CONFIG_DIR=/nakama/data
       # Optional: skip the browser setup wizard on first boot.

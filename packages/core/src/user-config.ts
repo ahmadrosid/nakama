@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { NakamaApiError } from "./api-error";
 import {
   isValidBaseUrl,
@@ -564,11 +564,12 @@ export async function saveUserConfig(config: UserConfig): Promise<void> {
 export async function writeParsedConfigIni(
   global: Record<string, string | undefined>,
   sections: Record<string, Record<string, string>>,
-  patch: Record<string, string | undefined> = {}
+  patch: Record<string, string | undefined> = {},
+  targetPath = getUserConfigPath()
 ): Promise<void> {
   const lines = buildConfigIniLines(global, sections, patch);
-  await writeTextFile(getUserConfigPath(), lines.join("\n"), {
-    ensureDir: getUserConfigDir(),
+  await writeTextFile(targetPath, lines.join("\n"), {
+    ensureDir: dirname(targetPath),
   });
 }
 
@@ -665,7 +666,7 @@ function loadProvidersFromSections(
     }
 
     const label = normalizeProviderInstanceLabel(type, values.label, providers);
-    const apiKey = values.api_key ?? "";
+    const apiKey = "";
     const baseUrl = values.base_url?.trim()
       ? normalizeBaseUrl(values.base_url)
       : undefined;
@@ -730,7 +731,6 @@ function buildProviderSectionValues(
   provider: ProviderInstance
 ): Record<string, string> {
   const values: Record<string, string> = {
-    api_key: provider.apiKey,
     created_at: provider.createdAt,
     label: normalizeProviderInstanceLabel(provider.type, provider.label, []),
     type: provider.type,
@@ -834,6 +834,12 @@ function buildConfigIniLines(
     lines.push(`[${sectionName}]`);
 
     for (const [key, value] of Object.entries(values)) {
+      if (
+        key === "api_key" ||
+        (sectionName === "email" && key === "password")
+      ) {
+        continue;
+      }
       lines.push(`${key}=${value}`);
     }
 

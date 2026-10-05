@@ -39,7 +39,6 @@ export async function writeCodexConfigToml(
     routing.model ?? "gpt-4.1"
   );
   const baseUrl = routing.baseUrl ?? "";
-  const apiKey = routing.apiKey ?? "";
 
   const contents = [
     'model_provider = "nakama"',
@@ -49,8 +48,7 @@ export async function writeCodexConfigToml(
     `base_url = "${baseUrl}"`,
     `wire_api = "responses"`,
     "",
-    "[model_providers.nakama.env]",
-    `OPENAI_API_KEY = "${apiKey.replace(/"/g, '\\"')}"`,
+    'env_key = "NAKAMA_HARNESS_API_KEY"',
     "",
     "[profiles.nakama]",
     'model_provider = "nakama"',
@@ -82,7 +80,7 @@ export async function writeOpenCodeConfig(
     provider: {
       [providerKey]: {
         options: {
-          apiKey: routing.apiKey,
+          apiKey: "{env:NAKAMA_HARNESS_API_KEY}",
           baseURL: routing.baseUrl,
         },
         ...(model ? { models: { [model]: { name: model } } } : {}),
@@ -196,7 +194,6 @@ export async function writePiModelsJson(
 ): Promise<string> {
   const configPath = path.join(configDir, "models.json");
   const baseUrl = routing.baseUrl ?? "";
-  const apiKey = routing.apiKey ?? "";
 
   const providers: Record<string, Record<string, unknown>> = {};
 
@@ -206,7 +203,7 @@ export async function writePiModelsJson(
     // openai-responses, openai-completions, etc).
     const providerId = resolvePiProviderId(providerType);
     providers[providerId] = {
-      apiKey,
+      apiKey: "NAKAMA_HARNESS_API_KEY",
       baseUrl,
     };
   } else {
@@ -219,7 +216,7 @@ export async function writePiModelsJson(
     );
     providers["nakama"] = {
       api: "openai-completions",
-      apiKey,
+      apiKey: "NAKAMA_HARNESS_API_KEY",
       baseUrl,
       models: [
         {

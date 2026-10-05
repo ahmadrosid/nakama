@@ -101,8 +101,18 @@ function createSettingsHooks<TData, TRequest>(config: {
 }
 
 const webSearchSettings = createSettingsHooks({
-  mutationFn: (request: UpdateWebSearchSettingsRequest) =>
-    client.setWebSearchSettings(request),
+  mutationFn: async (request: UpdateWebSearchSettingsRequest) => {
+    const { apiKey, ...settings } = request;
+    if (apiKey?.trim()) {
+      const provider =
+        settings.provider ?? (await client.getWebSearchSettings()).provider;
+      if (!provider) {
+        throw new Error("Select a web search provider.");
+      }
+      await client.setWebSearchSecret(provider, apiKey);
+    }
+    return client.setWebSearchSettings(settings);
+  },
   queryFn: () => client.getWebSearchSettings(),
   queryKey: queryKeys.webSearchSettings,
 });
@@ -280,8 +290,13 @@ export function useRegenerateSlackHandshake() {
 }
 
 const emailSettings = createSettingsHooks({
-  mutationFn: (request: UpdateEmailSettingsRequest) =>
-    client.setEmailSettings(request),
+  mutationFn: async (request: UpdateEmailSettingsRequest) => {
+    const { password, ...settings } = request;
+    await client.setEmailSettings(settings);
+    return password?.trim()
+      ? client.setEmailSecret(password)
+      : client.getEmailSettings();
+  },
   queryFn: () => client.getEmailSettings(),
   queryKey: queryKeys.email.settings,
 });
@@ -592,8 +607,20 @@ export function useCreateProviderMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (request: Parameters<typeof client.createProvider>[0]) =>
-      client.createProvider(request),
+    mutationFn: async (
+      request: Parameters<typeof client.createProvider>[0]
+    ) => {
+      const { apiKey, ...settings } = request;
+      const created = await client.createProvider(settings);
+      if (!apiKey?.trim()) {
+        return created;
+      }
+      const updated = await client.setProviderSecret(
+        created.provider.id,
+        apiKey
+      );
+      return { ...created, provider: updated.provider };
+    },
     onSuccess: async () => {
       await invalidateProviderQueries(queryClient);
     },
@@ -610,7 +637,21 @@ export function useUpdateProviderMutation() {
     }: {
       providerId: string;
       request: Parameters<typeof client.updateProvider>[1];
-    }) => client.updateProvider(providerId, request),
+    }) => {
+      const { apiKey, ...settings } = request;
+      const hasSettings = Object.keys(settings).length > 0;
+      return hasSettings
+        ? client
+            .updateProvider(providerId, settings)
+            .then(async (updated) =>
+              apiKey?.trim()
+                ? client.setProviderSecret(providerId, apiKey)
+                : updated
+            )
+        : apiKey?.trim()
+          ? client.setProviderSecret(providerId, apiKey)
+          : client.updateProvider(providerId, settings);
+    },
     onSuccess: async () => {
       await invalidateProviderQueries(queryClient);
     },

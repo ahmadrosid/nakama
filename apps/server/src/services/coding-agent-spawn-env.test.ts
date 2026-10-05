@@ -86,9 +86,31 @@ describe("coding-agent spawn env", () => {
     expect(modelsJson.providers.nakama.baseUrl).toBe(
       "https://custom.example.com/v1"
     );
-    expect(modelsJson.providers.nakama.apiKey).toBe("sk-custom-test");
+    expect(modelsJson.providers.nakama.apiKey).toBe("NAKAMA_HARNESS_API_KEY");
+    expect(JSON.stringify(modelsJson)).not.toContain("sk-custom-test");
+    expect(env.env.NAKAMA_HARNESS_API_KEY).toBe("sk-custom-test");
     expect(modelsJson.providers.nakama.api).toBe("openai-completions");
     await env.cleanup?.();
+  });
+
+  test("keeps an OpenCode key out of its temporary config", async () => {
+    const spawn = await buildSpawnEnvForHarness(
+      "opencode",
+      activeAnthropicRouting({
+        apiKey: "private-opencode-key",
+        baseUrl: "https://custom.example.com/v1",
+      }),
+      "openai_compatible"
+    );
+    const { readFile } = await import("node:fs/promises");
+    const config = await readFile(
+      `${spawn.env.XDG_CONFIG_HOME}/opencode/opencode.json`,
+      "utf8"
+    );
+    expect(config).toContain("{env:NAKAMA_HARNESS_API_KEY}");
+    expect(config).not.toContain("private-opencode-key");
+    expect(spawn.env.NAKAMA_HARNESS_API_KEY).toBe("private-opencode-key");
+    await spawn.cleanup?.();
   });
 
   test("uses nakama provider in models.json for anthropic with custom base URL", async () => {
@@ -134,7 +156,10 @@ describe("coding-agent spawn env", () => {
     // Default base URL → override built-in anthropic provider
     expect(modelsJson.providers.anthropic).toBeDefined();
     expect(modelsJson.providers.nakama).toBeUndefined();
-    expect(modelsJson.providers.anthropic.apiKey).toBe("sk-ant-test");
+    expect(modelsJson.providers.anthropic.apiKey).toBe(
+      "NAKAMA_HARNESS_API_KEY"
+    );
+    expect(JSON.stringify(modelsJson)).not.toContain("sk-ant-test");
     await env.cleanup?.();
   });
 
@@ -181,6 +206,28 @@ describe("coding-agent spawn env", () => {
 
     expect(env.ANTHROPIC_API_KEY).toBe("sk-from-nakama");
     expect(env.CUSTOM_FLAG).toBe("1");
+  });
+
+  test("does not pass managed secrets from the server or caller", () => {
+    const env = mergeCodingAgentSpawnEnv(
+      {
+        EXA_API_KEY_FILE: "/secret",
+        NAKAMA_SECRETS_KEY: "master",
+        PATH: "/bin",
+      },
+      { NAKAMA_HARNESS_API_KEY: "selected" },
+      {
+        callerEnv: {
+          COMPOSIO_API_KEY: "other",
+          NAKAMA_EMAIL_PASSWORD: "password",
+        },
+      }
+    );
+    expect(env.NAKAMA_HARNESS_API_KEY).toBe("selected");
+    expect(env.NAKAMA_SECRETS_KEY).toBeUndefined();
+    expect(env.EXA_API_KEY_FILE).toBeUndefined();
+    expect(env.COMPOSIO_API_KEY).toBeUndefined();
+    expect(env.NAKAMA_EMAIL_PASSWORD).toBeUndefined();
   });
 
   test("redacts secrets for prompt context", () => {

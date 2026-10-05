@@ -20,7 +20,7 @@ import {
   useSaveWebSearchSettings,
   useWebSearchSettings,
 } from "@/hooks/use-app-queries";
-import { formatError } from "@/lib/client";
+import { client, formatError } from "@/lib/client";
 
 const BUILT_IN_VALUE = "__web_search_builtin__";
 
@@ -48,7 +48,7 @@ function useSavedHint() {
 }
 
 function useWebSearchSettingsForm() {
-  const { data: settings } = useWebSearchSettings();
+  const { data: settings, refetch } = useWebSearchSettings();
   const saveMutation = useSaveWebSearchSettings();
   // undefined follows the server; null is an explicit built-in selection.
   const [providerDraft, setProvider] = useState<
@@ -61,7 +61,9 @@ function useWebSearchSettingsForm() {
   const [savedHint, setSavedHint] = useSavedHint();
 
   const keyAlreadySaved =
-    settings?.provider === provider && Boolean(settings?.apiKeyMasked);
+    settings?.provider === provider && settings?.configured === true;
+  const managedByEnvironment =
+    settings?.provider === provider && settings?.source === "environment";
 
   function resetMessages() {
     setFormError(null);
@@ -118,13 +120,26 @@ function useWebSearchSettingsForm() {
     );
   }
 
+  async function manageKey(action: "clear" | "use-stored") {
+    resetMessages();
+    try {
+      await client.manageSettingSecret("web-search", action);
+      await refetch();
+      setSavedHint(action === "clear" ? "Key cleared" : "Saved key selected");
+    } catch (error) {
+      setFormError(formatError(error));
+    }
+  }
+
   return {
     apiKey,
     formError,
     keyAlreadySaved,
-    maskedKey: settings?.apiKeyMasked,
+    managedByEnvironment,
+    manageKey,
     pending: saveMutation.isPending,
     provider,
+    savedAvailable: settings?.provider === provider && settings.savedAvailable,
     savedHint,
     saveKey,
     selectProvider,
@@ -135,20 +150,21 @@ function useWebSearchSettingsForm() {
     },
     setFormError,
     setSavedHint,
+    source: settings?.provider === provider ? settings.source : "missing",
   };
 }
 
 function WebSearchApiKeyFields({
   apiKey,
   keyAlreadySaved,
-  maskedKey,
+  managedByEnvironment,
   pending,
   onApiKeyChange,
   onSave,
 }: {
   apiKey: string;
   keyAlreadySaved: boolean;
-  maskedKey: string | null | undefined;
+  managedByEnvironment: boolean;
   pending: boolean;
   onApiKeyChange: (value: string) => void;
   onSave: () => void;
@@ -167,33 +183,43 @@ function WebSearchApiKeyFields({
         <InputGroup className="h-9 min-w-0 flex-1">
           <InputGroupInput
             autoComplete="off"
-            disabled={pending}
+            disabled={pending || managedByEnvironment}
             id="web-search-api-key"
             onChange={(event) => onApiKeyChange(event.target.value)}
             placeholder={
-              keyAlreadySaved ? `Saved (${maskedKey})` : "Paste API key"
+              managedByEnvironment
+                ? "Managed by environment"
+                : keyAlreadySaved
+                  ? "Saved"
+                  : "Paste API key"
             }
             type={showApiKey ? "text" : "password"}
             value={apiKey}
           />
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton
-              aria-label={showApiKey ? "Hide API key" : "Show API key"}
-              onClick={() => setShowApiKey((current) => !current)}
-              size="icon-xs"
-              type="button"
-            >
-              {showApiKey ? (
-                <ViewOffIcon className="size-4" />
-              ) : (
-                <ViewIcon className="size-4" />
-              )}
-            </InputGroupButton>
-          </InputGroupAddon>
+          {managedByEnvironment ? null : (
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                aria-label={showApiKey ? "Hide API key" : "Show API key"}
+                onClick={() => setShowApiKey((current) => !current)}
+                size="icon-xs"
+                type="button"
+              >
+                {showApiKey ? (
+                  <ViewOffIcon className="size-4" />
+                ) : (
+                  <ViewIcon className="size-4" />
+                )}
+              </InputGroupButton>
+            </InputGroupAddon>
+          )}
         </InputGroup>
         <Button
           className="min-w-[4.5rem] shrink-0"
-          disabled={pending || !(apiKey.trim() || keyAlreadySaved)}
+          disabled={
+            pending ||
+            managedByEnvironment ||
+            !(apiKey.trim() || keyAlreadySaved)
+          }
           id="btn-web-search-save"
           onClick={onSave}
           size="sm"
@@ -249,18 +275,35 @@ export function WebSearchSettingsCard() {
       </div>
 
       {form.provider ? (
-        <WebSearchApiKeyFields
-          apiKey={form.apiKey}
-          keyAlreadySaved={form.keyAlreadySaved}
-          maskedKey={form.maskedKey}
-          onApiKeyChange={(value) => {
-            form.setApiKey(value);
-            form.setFormError(null);
-            form.setSavedHint(null);
-          }}
-          onSave={form.saveKey}
-          pending={form.pending}
-        />
+        <>
+          <WebSearchApiKeyFields
+            apiKey={form.apiKey}
+            keyAlreadySaved={form.keyAlreadySaved}
+            managedByEnvironment={form.managedByEnvironment}
+            onApiKeyChange={(value) => {
+              form.setApiKey(value);
+              form.setFormError(null);
+              form.setSavedHint(null);
+            }}
+            onSave={form.saveKey}
+            pending={form.pending}
+          />
+          {form.source === "settings" ||
+          (form.source === "missing" && form.savedAvailable) ? (
+            <Button
+              onClick={() =>
+                void form.manageKey(
+                  form.source === "settings" ? "clear" : "use-stored"
+                )
+              }
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {form.source === "settings" ? "Clear saved key" : "Use saved key"}
+            </Button>
+          ) : null}
+        </>
       ) : null}
 
       {form.formError ? (

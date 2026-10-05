@@ -4,11 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 mock.module("electron", () => ({
-  app: {},
+  app: { getPath: () => join(root, "userData") },
   BrowserWindow: {},
   dialog: {},
   Menu: {},
   nativeTheme: {},
+  safeStorage: {
+    decryptString: (value) => value.toString(),
+    encryptString: (value) => Buffer.from(value),
+    getSelectedStorageBackend: () => "mock",
+    isEncryptionAvailable: () => true,
+  },
   shell: {},
 }));
 process.argv.push("--smoke-test");

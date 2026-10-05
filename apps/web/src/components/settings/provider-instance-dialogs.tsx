@@ -46,6 +46,7 @@ export function ProviderReplaceKeyDialog({
   onChatgptOAuthChange,
   onToggleShowApiKey,
   onSave,
+  onManage,
 }: {
   open: boolean;
   instance: ProviderInstanceSummary;
@@ -62,6 +63,7 @@ export function ProviderReplaceKeyDialog({
   onChatgptOAuthChange: (oauth: ChatgptOAuthCredentials | null) => void;
   onToggleShowApiKey: () => void;
   onSave: () => void;
+  onManage?: (action: "clear" | "use-stored") => void;
 }) {
   let title = `${instance.hasApiKey ? "Update API key" : "Add API key"} for ${instance.label}`;
   let hasCredentials = Boolean(apiKey.trim());
@@ -69,7 +71,7 @@ export function ProviderReplaceKeyDialog({
     <InputGroup>
       <InputGroupInput
         autoComplete="off"
-        disabled={busy}
+        disabled={busy || instance.secretSource === "environment"}
         onChange={(event) => onApiKeyChange(event.target.value)}
         placeholder={apiKeyPlaceholder(providerType)}
         type={showApiKey ? "text" : "password"}
@@ -121,12 +123,39 @@ export function ProviderReplaceKeyDialog({
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         {credentialField}
+        {instance.secretSource === "environment" ? (
+          <p className="text-sm">
+            Managed by {instance.secretEnvName}. Restart Nakama after you change
+            it.
+          </p>
+        ) : null}
         {dialogError ? (
           <p className="text-destructive text-sm" role="alert">
             {dialogError}
           </p>
         ) : null}
         <DialogFooter>
+          {instance.secretSource === "settings" ? (
+            <Button
+              disabled={busy}
+              onClick={() => onManage?.("clear")}
+              type="button"
+              variant="outline"
+            >
+              Clear saved key
+            </Button>
+          ) : null}
+          {instance.secretSource === "missing" &&
+          instance.savedSecretAvailable ? (
+            <Button
+              disabled={busy}
+              onClick={() => onManage?.("use-stored")}
+              type="button"
+              variant="outline"
+            >
+              Use saved key
+            </Button>
+          ) : null}
           <Button
             disabled={busy}
             onClick={() => onOpenChange(false)}
@@ -136,7 +165,9 @@ export function ProviderReplaceKeyDialog({
             Cancel
           </Button>
           <Button
-            disabled={busy || !hasCredentials}
+            disabled={
+              busy || instance.secretSource === "environment" || !hasCredentials
+            }
             onClick={onSave}
             type="button"
           >

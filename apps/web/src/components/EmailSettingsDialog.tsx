@@ -2,6 +2,7 @@ import type {
   EmailSettingsResponse,
   UpdateEmailSettingsRequest,
 } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +21,7 @@ import {
   useSaveEmailSettings,
   useSendEmailTest,
 } from "@/hooks/use-app-queries";
-import { formatError } from "@/lib/client";
+import { client, formatError } from "@/lib/client";
 
 type EmailSettingsState = {
   imapHost: string;
@@ -117,6 +118,7 @@ export function EmailSettingsDialog({
     data: settings,
     isLoading,
     error: loadError,
+    refetch,
   } = useQuery({
     ...emailSettingsQueryOptions,
     enabled: open,
@@ -128,9 +130,12 @@ export function EmailSettingsDialog({
     initialEmailSettingsState
   );
 
-  const passwordPlaceholder = settings?.passwordMasked
-    ? `Saved (${settings.passwordMasked})`
-    : "App password";
+  const passwordPlaceholder =
+    settings?.source === "environment"
+      ? "Managed by environment"
+      : settings?.source === "settings"
+        ? "Saved"
+        : "App password";
 
   useEffect(() => {
     if (!open) {
@@ -272,6 +277,7 @@ export function EmailSettingsDialog({
                 dispatch({ type: "patch", values: { username: value } })
               }
               password={state.password}
+              passwordManaged={settings?.source === "environment"}
               passwordPlaceholder={passwordPlaceholder}
               showPassword={state.showPassword}
               smtpHost={state.smtpHost}
@@ -293,6 +299,33 @@ export function EmailSettingsDialog({
               testPending={testMutation.isPending}
               testRecipient={state.testRecipient}
             />
+            {settings?.source === "settings" ||
+            (settings?.source === "missing" && settings.savedAvailable) ? (
+              <div className="px-4 pb-4">
+                <Button
+                  onClick={async () => {
+                    try {
+                      await client.manageSettingSecret(
+                        "email",
+                        settings.source === "settings" ? "clear" : "use-stored"
+                      );
+                      await refetch();
+                    } catch (error) {
+                      dispatch({
+                        type: "patch",
+                        values: { formError: formatError(error) },
+                      });
+                    }
+                  }}
+                  type="button"
+                  variant="outline"
+                >
+                  {settings.source === "settings"
+                    ? "Clear saved password"
+                    : "Use saved password"}
+                </Button>
+              </div>
+            ) : null}
           </>
         )}
       </DialogContent>

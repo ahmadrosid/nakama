@@ -236,6 +236,7 @@ async function buildOpenCodeSpawnEnv(
   return {
     cleanup: configDir.cleanup,
     env: {
+      NAKAMA_HARNESS_API_KEY: routing.apiKey,
       XDG_CONFIG_HOME: configDir.dir,
     },
   };
@@ -252,14 +253,14 @@ export async function buildPiSpawnEnv(
   // pi does not read OPENAI_BASE_URL / ANTHROPIC_BASE_URL env vars.
   // The base URL is hardcoded per built-in provider and can only be overridden
   // via models.json in the pi config directory (PI_CODING_AGENT_DIR).
-  // We create a temp config dir with a models.json that overrides the
-  // provider's baseUrl + apiKey, then point pi to it.
+  // The temp models.json names an environment variable; it never stores the key.
   const configDir = await createHarnessConfigDir("nakama-pi-config-");
   await writePiModelsJson(configDir.dir, routing, providerType);
 
   return {
     cleanup: configDir.cleanup,
     env: {
+      NAKAMA_HARNESS_API_KEY: routing.apiKey,
       PI_CODING_AGENT_DIR: configDir.dir,
     },
   };
@@ -301,6 +302,7 @@ export async function buildSpawnEnvForHarness(
       cleanup: configDir.cleanup,
       env: {
         CODEX_HOME: configDir.dir,
+        NAKAMA_HARNESS_API_KEY: routing.apiKey,
         ...env,
       },
     };
@@ -322,6 +324,18 @@ export async function buildSpawnEnvForHarness(
 const HIJACKING_ENV_KEY =
   /^(BASH_ENV|IFS|PS4|SHELLOPTS|BASHOPTS|NODE_OPTIONS|BASH_FUNC_.*|LD_.*|DYLD_.*|PYTHON.*)$/;
 
+function isManagedSecretEnvKey(key: string): boolean {
+  return (
+    key === "NAKAMA_SECRETS_KEY" ||
+    key === "NAKAMA_SECRETS_KEY_NEXT" ||
+    key === "NAKAMA_EMAIL_PASSWORD" ||
+    key === "NAKAMA_EMAIL_PASSWORD_FILE" ||
+    key.startsWith("NAKAMA_PROVIDER_API_KEY_") ||
+    key.startsWith("NAKAMA_TOOL_API_KEY_") ||
+    /(?:^|_)API_KEY(?:_FILE)?$/.test(key)
+  );
+}
+
 export function mergeCodingAgentSpawnEnv(
   baseEnv: NodeJS.ProcessEnv,
   spawnEnv: Record<string, string>,
@@ -334,13 +348,22 @@ export function mergeCodingAgentSpawnEnv(
   const merged: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(spawnEnv)) {
-    if (!HIJACKING_ENV_KEY.test(key)) {
+    if (
+      !(
+        HIJACKING_ENV_KEY.test(key) ||
+        key.startsWith("NAKAMA_PROVIDER_API_KEY_") ||
+        key.startsWith("NAKAMA_TOOL_API_KEY_")
+      ) &&
+      key !== "NAKAMA_SECRETS_KEY" &&
+      key !== "NAKAMA_SECRETS_KEY_NEXT" &&
+      key !== "NAKAMA_EMAIL_PASSWORD"
+    ) {
       merged[key] = value;
     }
   }
 
   for (const [key, value] of Object.entries(callerEnv)) {
-    if (HIJACKING_ENV_KEY.test(key)) {
+    if (HIJACKING_ENV_KEY.test(key) || isManagedSecretEnvKey(key)) {
       continue;
     }
 
@@ -356,7 +379,10 @@ export function mergeCodingAgentSpawnEnv(
     merged[key] = value;
   }
 
-  return { ...baseEnv, ...merged };
+  const safeBaseEnv = Object.fromEntries(
+    Object.entries(baseEnv).filter(([key]) => !isManagedSecretEnvKey(key))
+  );
+  return { ...safeBaseEnv, ...merged };
 }
 
 export function redactSpawnEnvForPrompt(

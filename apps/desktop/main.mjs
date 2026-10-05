@@ -1,12 +1,193 @@
 import { spawn } from "node:child_process";
-import { access, mkdir, open, rename } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import {
+  access,
+  mkdir,
+  open,
+  readFile,
+  rename,
+  writeFile,
+} from "node:fs/promises";
 import { delimiter, join } from "node:path";
-import { app, BrowserWindow, dialog, Menu, nativeTheme, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  Menu,
+  nativeTheme,
+  safeStorage,
+  shell,
+} from "electron";
+
+async function loadDesktopSecretsKey() {
+  if (
+    !safeStorage.isEncryptionAvailable() ||
+    safeStorage.getSelectedStorageBackend?.() === "basic_text"
+  ) {
+    throw new Error(
+      "Unlock the operating-system credential store before starting Nakama."
+    );
+  }
+  const keyDir = app.getPath("userData");
+  const keyPath = join(keyDir, "secrets-key.enc");
+  await mkdir(keyDir, { mode: 0o700, recursive: true });
+  try {
+    return safeStorage.decryptString(await readFile(keyPath));
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw new Error("Cannot unlock the saved Nakama secrets key.");
+    }
+  }
+  const key = randomBytes(32).toString("base64");
+  await writeFile(keyPath, safeStorage.encryptString(key), {
+    flag: "wx",
+    mode: 0o600,
+  });
+  return key;
+}
+
+async function exportRecoveryKey() {
+  const key = await loadDesktopSecretsKey();
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    defaultPath: "nakama-recovery-key.txt",
+    title: "Save Nakama recovery key",
+  });
+  if (canceled || !filePath) {
+    return;
+  }
+  await writeFile(filePath, `${key}\n`, { flag: "wx", mode: 0o600 });
+  await dialog.showMessageBox({
+    detail: "Keep this file separate from your Nakama backup.",
+    message: "Recovery key saved",
+    type: "info",
+  });
+}
+
+async function importRecoveryKey(runtime, dataDir) {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    properties: ["openFile"],
+    title: "Open Nakama recovery key",
+  });
+  if (canceled || !filePaths[0]) {
+    return;
+  }
+  const key = (await readFile(filePaths[0], "utf8")).trim();
+  if (
+    Buffer.from(key, "base64").length !== 32 ||
+    Buffer.from(key, "base64").toString("base64") !== key
+  ) {
+    throw new Error("The recovery key file is invalid.");
+  }
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !name.startsWith("NAKAMA_"))
+  );
+  const child = spawn(
+    join(runtime, "bin", process.platform === "win32" ? "bun.exe" : "bun"),
+    ["run", "apps/server/src/index.ts"],
+    {
+      cwd: runtime,
+      env: {
+        ...env,
+        DATABASE_URL: `file:${join(dataDir, "sqlite/nakama.sqlite")}`,
+        NAKAMA_CHECK_SECRETS_KEY: "1",
+        NAKAMA_CONFIG_DIR: dataDir,
+        NAKAMA_HOST: "127.0.0.1",
+        NAKAMA_PORT: "0",
+        NAKAMA_SECRETS_KEY: key,
+        PATH: `${join(runtime, "bin")}${delimiter}${process.env.PATH ?? ""}`,
+      },
+      stdio: "ignore",
+      windowsHide: true,
+    }
+  );
+  const code = await new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", resolve);
+  });
+  if (code !== 0) {
+    throw new Error("This recovery key cannot unlock the saved Nakama data.");
+  }
+  const keyPath = join(app.getPath("userData"), "secrets-key.enc");
+  const nextPath = `${keyPath}.next`;
+  await writeFile(nextPath, safeStorage.encryptString(key), {
+    flag: "wx",
+    mode: 0o600,
+  });
+  await rename(nextPath, keyPath);
+  app.relaunch();
+  app.quit();
+}
+
+function installDesktopMenu(updateItem = null, recovery = null) {
+  const recoveryItems = recovery
+    ? [
+        {
+          click: () =>
+            void exportRecoveryKey().catch((error) =>
+              dialog.showErrorBox(
+                "Could not export recovery key",
+                error.message
+              )
+            ),
+          label: "Export recovery key…",
+        },
+        {
+          click: () =>
+            void importRecoveryKey(recovery.runtime, recovery.dataDir).catch(
+              (error) =>
+                dialog.showErrorBox(
+                  "Could not import recovery key",
+                  error.message
+                )
+            ),
+          label: "Import recovery key…",
+        },
+      ]
+    : [];
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      ...(process.platform === "darwin"
+        ? [
+            {
+              label: app.name,
+              submenu: [
+                { role: "about" },
+                ...(updateItem ? [updateItem] : []),
+                { type: "separator" },
+                { role: "services" },
+                { type: "separator" },
+                { role: "hide" },
+                { role: "hideOthers" },
+                { role: "unhide" },
+                { type: "separator" },
+                { role: "quit" },
+              ],
+            },
+          ]
+        : []),
+      {
+        label: "File",
+        submenu: [
+          ...recoveryItems,
+          ...(recoveryItems.length ? [{ type: "separator" }] : []),
+          { role: "close" },
+        ],
+      },
+      { role: "editMenu" },
+      { role: "viewMenu" },
+      { role: "windowMenu" },
+      ...(process.platform === "darwin" || !updateItem
+        ? []
+        : [{ role: "help", submenu: [updateItem] }]),
+    ])
+  );
+}
 
 export function configureUpdates(
   updater,
   stopServer,
-  prompt = dialog.showMessageBox
+  prompt = dialog.showMessageBox,
+  recovery = null
 ) {
   updater.autoDownload = true;
   updater.autoInstallOnAppQuit = false;
@@ -66,36 +247,7 @@ export function configureUpdates(
     id: "check-for-updates",
     label: "Check for Updates…",
   };
-  Menu.setApplicationMenu(
-    Menu.buildFromTemplate([
-      ...(process.platform === "darwin"
-        ? [
-            {
-              label: app.name,
-              submenu: [
-                { role: "about" },
-                updateItem,
-                { type: "separator" },
-                { role: "services" },
-                { type: "separator" },
-                { role: "hide" },
-                { role: "hideOthers" },
-                { role: "unhide" },
-                { type: "separator" },
-                { role: "quit" },
-              ],
-            },
-          ]
-        : []),
-      { role: "fileMenu" },
-      { role: "editMenu" },
-      { role: "viewMenu" },
-      { role: "windowMenu" },
-      ...(process.platform === "darwin"
-        ? []
-        : [{ role: "help", submenu: [updateItem] }]),
-    ])
-  );
+  installDesktopMenu(updateItem, recovery);
   updater.on("error", updateFailed);
   updater.on("update-downloaded", async ({ version }) => {
     try {
@@ -124,6 +276,7 @@ export function configureUpdates(
 
 export async function startLocalServer(runtime, dataDir) {
   await mkdir(dataDir, { mode: 0o700, recursive: true });
+  const secretsKey = await loadDesktopSecretsKey();
   const log = await open(join(dataDir, "server.log"), "w", 0o600);
   // NAKAMA_PYTHON_BIN survives on Windows so users whose Python is not on PATH
   // can point the server at it; the server still checks it against its allowlist.
@@ -149,6 +302,7 @@ export async function startLocalServer(runtime, dataDir) {
         NAKAMA_DISABLE_FIX_PATH: "1",
         NAKAMA_HOST: "127.0.0.1",
         NAKAMA_PORT: "0",
+        NAKAMA_SECRETS_KEY: secretsKey,
         // A data restore must not move the log this process writes to.
         NAKAMA_SERVER_LOG: join(dataDir, "server.log"),
         NODE_ENV: "production",
@@ -335,6 +489,7 @@ export async function createWindow(url, { show = true } = {}) {
 if (!process.argv.includes("--smoke-test")) {
   let localServer;
   let quitting = false;
+  let recovery = null;
   app.setName("Nakama");
   app.setPath(
     "userData",
@@ -368,12 +523,13 @@ if (!process.argv.includes("--smoke-test")) {
             }
           }
         }
-        localServer = await startLocalServer(
-          app.isPackaged
+        recovery = {
+          dataDir,
+          runtime: app.isPackaged
             ? join(process.resourcesPath, "runtime")
             : join(app.getAppPath(), "dist/runtime"),
-          dataDir
-        );
+        };
+        localServer = await startLocalServer(recovery.runtime, dataDir);
         if (quitting) {
           await localServer.stop();
           app.exit();
@@ -391,17 +547,23 @@ if (!process.argv.includes("--smoke-test")) {
         return createWindow(`${localServer.url}/chat`);
       })
       .then(async () => {
+        installDesktopMenu(null, recovery);
         if (app.isPackaged && !process.windowsStore && !quitting) {
           const { autoUpdater } = (await import("electron-updater")).default;
-          configureUpdates(autoUpdater, async () => {
-            if (quitting) {
-              return false;
-            }
-            quitting = true;
-            await localServer?.stop();
-            localServer = undefined;
-            return true;
-          });
+          configureUpdates(
+            autoUpdater,
+            async () => {
+              if (quitting) {
+                return false;
+              }
+              quitting = true;
+              await localServer?.stop();
+              localServer = undefined;
+              return true;
+            },
+            dialog.showMessageBox,
+            recovery
+          );
         }
       })
       .catch((error) => {

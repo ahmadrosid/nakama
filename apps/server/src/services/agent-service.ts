@@ -185,7 +185,6 @@ import {
   replaceImagePartsWithDescriptions,
   resolveDiscordApplicationId,
   resolveOllamaHostMode,
-  saveComposioConfig,
   saveDiscordConfig,
   saveEmailConfig,
   saveErrorTrackingDsn,
@@ -317,6 +316,7 @@ import {
   VISION_MODEL_REQUIRED_MESSAGE,
 } from "./image-vision-fallback";
 import type { LlmUsageTracker } from "./llm-usage-tracker";
+import { type ManagedSecrets, providerSecretEnvNames } from "./managed-secrets";
 import type { McpClientManager } from "./mcp-client-manager";
 import type { McpService } from "./mcp-service";
 import { buildMcpToolDefinitions } from "./mcp-tool-bridge";
@@ -437,12 +437,14 @@ export class AgentService {
   private visionSettingsPromise: Promise<void> | null = null;
   private transcriptionSettingsPromise: Promise<void> | null = null;
   private imageGenerationSettingsPromise: Promise<void> | null = null;
+  private secretFingerprint: string | null = null;
 
   constructor(
     userConfig: UserConfig | null,
     provider: ProviderClient | null,
     db: DatabaseAdapter,
-    private readonly llmUsageTracker?: LlmUsageTracker
+    private readonly llmUsageTracker?: LlmUsageTracker,
+    private readonly managedSecrets?: ManagedSecrets
   ) {
     this.userConfig = userConfig;
     this.db = db;
@@ -853,6 +855,7 @@ export class AgentService {
     input: TranscribeAudioRequest,
     signal?: AbortSignal
   ): Promise<TranscribeAudioResponse> {
+    await this.refreshManagedProviderKeys();
     await this.ensureTranscriptionSettingsLoaded();
 
     const data = input.data?.trim();
@@ -991,6 +994,7 @@ export class AgentService {
     input: GenerateImageRequest,
     orgId: string | null
   ): Promise<GenerateImageResponse> {
+    await this.refreshManagedProviderKeys();
     await this.ensureImageGenerationSettingsLoaded();
 
     const prompt = input.prompt?.trim();
@@ -1362,33 +1366,48 @@ export class AgentService {
 
   async getComposioSettings(): Promise<ComposioSettingsResponse> {
     const settings = await loadComposioSettingsPublic();
+    const status = await this.managedSecrets?.status("global", "composio", [
+      "COMPOSIO_API_KEY",
+    ]);
     return {
       ...settings,
+      apiKeyMasked: null,
       composioReachable: settings.configured
         ? await (this.composioService?.isReachable() ?? false)
         : false,
+      savedAvailable: status?.savedAvailable ?? false,
+      source: status?.source ?? "missing",
     };
   }
 
   async setComposioSettings(
     input: UpdateComposioSettingsRequest
   ): Promise<ComposioSettingsResponse> {
-    const existing = await loadComposioSettingsPublic();
-    const apiKey =
-      input.apiKey !== undefined && input.apiKey.trim()
-        ? input.apiKey.trim()
-        : undefined;
-
-    if (!(apiKey || existing.configured)) {
-      throw new Error("Composio API key is required.");
+    if (input.apiKey?.trim()) {
+      throw new NakamaApiError(
+        "Save the Composio key through the secret settings API.",
+        400
+      );
     }
+    return this.getComposioSettings();
+  }
 
-    if (apiKey) {
-      await this.composioService?.validateConfiguration(apiKey);
-      await saveComposioConfig({ apiKey });
-      this.composioService?.reloadConfiguration();
+  async setComposioSecret(apiKey: string): Promise<ComposioSettingsResponse> {
+    if (!this.managedSecrets) {
+      throw new Error("Secret store is not ready.");
     }
-
+    if (
+      (
+        await this.managedSecrets.resolve("global", "composio", [
+          "COMPOSIO_API_KEY",
+        ])
+      ).source === "environment"
+    ) {
+      throw new NakamaApiError("This key is managed by the environment.", 409);
+    }
+    await this.composioService?.validateConfiguration(apiKey);
+    await this.managedSecrets.save("global", "composio", apiKey);
+    this.composioService?.reloadConfiguration();
     return this.getComposioSettings();
   }
 
@@ -1437,29 +1456,149 @@ export class AgentService {
   }
 
   async getEmailSettings(): Promise<EmailSettingsResponse> {
-    return loadEmailSettingsPublic();
+    const settings = await loadEmailSettingsPublic();
+    const status = await this.managedSecrets?.status("global", "email", [
+      "NAKAMA_EMAIL_PASSWORD",
+    ]);
+    return {
+      ...settings,
+      passwordMasked: null,
+      savedAvailable: status?.savedAvailable ?? false,
+      source: status?.source ?? "missing",
+    };
   }
 
   async setEmailSettings(
     input: UpdateEmailSettingsRequest
   ): Promise<EmailSettingsResponse> {
-    return saveEmailConfig(input);
+    await saveEmailConfig(input);
+    return this.getEmailSettings();
+  }
+
+  async setEmailSecret(password: string): Promise<EmailSettingsResponse> {
+    if (!this.managedSecrets) {
+      throw new Error("Secret store is not ready.");
+    }
+    if (
+      (
+        await this.managedSecrets.resolve("global", "email", [
+          "NAKAMA_EMAIL_PASSWORD",
+        ])
+      ).source === "environment"
+    ) {
+      throw new NakamaApiError(
+        "This password is managed by the environment.",
+        409
+      );
+    }
+    await this.managedSecrets.save("global", "email", password);
+    return this.getEmailSettings();
   }
 
   async getWebSearchSettings(): Promise<WebSearchSettingsResponse> {
-    return loadWebSearchSettingsPublic();
+    const settings = await loadWebSearchSettingsPublic();
+    const envName =
+      settings.provider === "firecrawl" ? "FIRECRAWL_API_KEY" : "EXA_API_KEY";
+    const status = settings.provider
+      ? await this.managedSecrets?.status(
+          "global",
+          `web-search:${settings.provider}`,
+          [envName]
+        )
+      : null;
+    return {
+      ...settings,
+      apiKeyMasked: null,
+      savedAvailable: status?.savedAvailable ?? false,
+      source: status?.source ?? "missing",
+    };
   }
 
   async setWebSearchSettings(
     input: UpdateWebSearchSettingsRequest
   ): Promise<WebSearchSettingsResponse> {
-    const settings = await saveWebSearchConfig(input);
+    const previous = await loadWebSearchSettingsPublic();
+    await saveWebSearchConfig(input);
+    if (
+      previous.provider &&
+      input.provider !== undefined &&
+      input.provider !== previous.provider
+    ) {
+      await this.managedSecrets?.delete(
+        "global",
+        `web-search:${previous.provider}`
+      );
+    }
 
     // Sessions cache their resolved tool list, so the swap between hosted and
     // custom search only takes effect once they are rebuilt.
     this.sessions.clear();
 
-    return settings;
+    return this.getWebSearchSettings();
+  }
+
+  async setWebSearchSecret(
+    provider: "exa" | "firecrawl",
+    apiKey: string
+  ): Promise<WebSearchSettingsResponse> {
+    if (
+      !this.managedSecrets ||
+      (provider !== "exa" && provider !== "firecrawl")
+    ) {
+      throw new NakamaApiError("Invalid web search provider.", 400);
+    }
+    const envName = provider === "exa" ? "EXA_API_KEY" : "FIRECRAWL_API_KEY";
+    if (
+      (
+        await this.managedSecrets.resolve("global", `web-search:${provider}`, [
+          envName,
+        ])
+      ).source === "environment"
+    ) {
+      throw new NakamaApiError("This key is managed by the environment.", 409);
+    }
+    await this.managedSecrets.save("global", `web-search:${provider}`, apiKey);
+    this.sessions.clear();
+    return this.getWebSearchSettings();
+  }
+
+  async manageSettingSecret(
+    kind: "email" | "web-search" | "composio",
+    action: "clear" | "use-stored"
+  ): Promise<
+    EmailSettingsResponse | WebSearchSettingsResponse | ComposioSettingsResponse
+  > {
+    if (!this.managedSecrets) {
+      throw new Error("Secret store is not ready.");
+    }
+    const provider =
+      kind === "web-search"
+        ? (await loadWebSearchSettingsPublic()).provider
+        : null;
+    if (kind === "web-search" && !provider) {
+      throw new NakamaApiError("Select a web search provider.", 400);
+    }
+    const name = kind === "web-search" ? `web-search:${provider}` : kind;
+    const envNames =
+      kind === "email"
+        ? ["NAKAMA_EMAIL_PASSWORD"]
+        : kind === "composio"
+          ? ["COMPOSIO_API_KEY"]
+          : [provider === "firecrawl" ? "FIRECRAWL_API_KEY" : "EXA_API_KEY"];
+    if (action === "clear") {
+      await this.managedSecrets.delete("global", name);
+    } else {
+      await this.managedSecrets.useStored("global", name, envNames);
+    }
+    if (kind === "composio") {
+      this.composioService?.reloadConfiguration();
+      return this.getComposioSettings();
+    }
+    if (kind === "web-search") {
+      this.sessions.clear();
+      return this.getWebSearchSettings();
+    }
+    return this.getEmailSettings();
   }
 
   async sendEmailTest(recipient: string): Promise<SendEmailTestResponse> {
@@ -2553,6 +2692,7 @@ export class AgentService {
   async discoverModels(
     request: DiscoverModelsRequest
   ): Promise<ModelsResponse> {
+    await this.refreshManagedProviderKeys();
     const providerId = request.providerId?.trim();
     if (providerId) {
       return this.discoverModelsForProvider(providerId, {
@@ -2865,12 +3005,29 @@ export class AgentService {
   }
 
   async listProviders(): Promise<ListProvidersResponse> {
+    await this.refreshManagedProviderKeys();
     const providers = this.userConfig?.providers ?? [];
 
     return {
       defaultProviderId: this.userConfig?.defaultProviderId ?? null,
-      providers: providers.map((instance) =>
-        toProviderInstanceSummary(instance, countModelsForInstance(instance))
+      providers: await Promise.all(
+        providers.map(async (instance) => {
+          const envNames = providerSecretEnvNames(instance.id, instance.type);
+          const status = await this.managedSecrets?.status(
+            "global",
+            `provider:${instance.id}`,
+            envNames
+          );
+          return {
+            ...toProviderInstanceSummary(
+              instance,
+              countModelsForInstance(instance)
+            ),
+            savedSecretAvailable: status?.savedAvailable ?? false,
+            secretEnvName: status?.envName ?? envNames[0],
+            secretSource: status?.source ?? ("missing" as const),
+          };
+        })
       ),
     };
   }
@@ -2878,55 +3035,15 @@ export class AgentService {
   async createProvider(
     request: CreateProviderRequest
   ): Promise<CreateProviderResponse> {
+    if (request.apiKey?.trim()) {
+      throw new NakamaApiError(
+        "Save the API key through the secret settings API.",
+        400
+      );
+    }
     const existing = this.userConfig?.providers ?? [];
     const instance = buildProviderInstanceFromCreateRequest(request, existing);
     const model = resolveInitialModel(instance, request.model);
-    if (instance.type === "netra") {
-      if (model !== NETRA_AGENT_MODEL_ID) {
-        throw new NakamaApiError(
-          "This Netra model needs a verified tool-turn test.",
-          400
-        );
-      }
-      let discovered: Awaited<ReturnType<typeof fetchNetraModels>> | null =
-        null;
-      try {
-        discovered = await fetchNetraModels(instance.apiKey);
-      } catch (error) {
-        if (error instanceof NakamaApiError && error.status === 400) {
-          throw error;
-        }
-        // The exact ID can still work when model discovery is unavailable.
-        const provider = createProviderForInstance(instance, model);
-        if (!provider) {
-          throw new NakamaApiError(
-            "Netra provider could not be initialized.",
-            400
-          );
-        }
-        await provider.generateChat({
-          messages: [{ content: "Reply OK.", role: "user" }],
-          system: "Reply OK.",
-        });
-      }
-      if (discovered && !discovered.some((entry) => entry.id === model)) {
-        throw new NakamaApiError(
-          "The selected Netra model is not available to this API key.",
-          400
-        );
-      }
-    }
-    if (instance.type === "gemini") {
-      const provider = createProviderForInstance(instance, model);
-      if (!provider) {
-        throw new Error("Gemini provider could not be initialized.");
-      }
-      await provider.generateText({
-        format: "text",
-        prompt: "Reply with OK.",
-        system: "Reply with OK.",
-      });
-    }
     const providers = [...existing, instance];
     const isFirst = providers.length === 1;
     const thinking = await this.resolveThinkingSettings();
@@ -2967,6 +3084,12 @@ export class AgentService {
     providerId: string,
     request: UpdateProviderRequest
   ): Promise<UpdateProviderResponse> {
+    if (request.apiKey?.trim()) {
+      throw new NakamaApiError(
+        "Save the API key through the secret settings API.",
+        400
+      );
+    }
     if (!this.userConfig) {
       throw new Error("Provider is not configured.");
     }
@@ -3020,6 +3143,7 @@ export class AgentService {
     };
 
     await saveUserConfig(this.userConfig);
+    await this.managedSecrets?.delete("global", `provider:${providerId}`);
     this.refreshProviderConfig();
 
     return { defaultProviderId };
@@ -3077,6 +3201,7 @@ export class AgentService {
   async getModels(
     options: { source?: "catalog" | "remote" } = {}
   ): Promise<ModelsResponse> {
+    await this.refreshManagedProviderKeys();
     const active = getActiveProviderInstance(this.userConfig);
     const currentProviderId = this.userConfig?.defaultProviderId ?? null;
     const configuredProviders = this.userConfig?.providers ?? [];
@@ -3216,9 +3341,167 @@ export class AgentService {
     this.sessions.clear();
   }
 
+  private async refreshManagedProviderKeys(): Promise<void> {
+    if (!this.managedSecrets) {
+      return;
+    }
+    const fingerprint = await this.managedSecrets.fingerprint();
+    if (
+      this.secretFingerprint !== null &&
+      fingerprint !== this.secretFingerprint
+    ) {
+      this.sessions.clear();
+      this.composioService?.reloadConfiguration();
+    }
+    this.secretFingerprint = fingerprint;
+    if (!this.userConfig) {
+      return;
+    }
+    const providers = await Promise.all(
+      this.userConfig.providers.map(async (instance) => ({
+        ...instance,
+        apiKey:
+          (
+            await this.managedSecrets!.resolve(
+              "global",
+              `provider:${instance.id}`,
+              providerSecretEnvNames(instance.id, instance.type)
+            )
+          ).value ?? "",
+      }))
+    );
+    if (
+      providers.some(
+        (instance, index) =>
+          instance.apiKey !== this.userConfig!.providers[index]?.apiKey
+      )
+    ) {
+      this.userConfig = { ...this.userConfig, providers };
+      this.refreshProviderConfig();
+    }
+  }
+
+  async setProviderSecret(
+    providerId: string,
+    apiKey: string
+  ): Promise<UpdateProviderResponse> {
+    if (!apiKey?.trim()) {
+      throw new NakamaApiError("Enter an API key.", 400);
+    }
+    const current = findProviderInstance(this.userConfig, providerId);
+    if (!(current && this.managedSecrets)) {
+      throw new NakamaApiError("Provider not found.", 404);
+    }
+    const envNames = providerSecretEnvNames(providerId, current.type);
+    if (
+      (
+        await this.managedSecrets.resolve(
+          "global",
+          `provider:${providerId}`,
+          envNames
+        )
+      ).source === "environment"
+    ) {
+      throw new NakamaApiError("This key is managed by the environment.", 409);
+    }
+    const updated = applyProviderInstanceUpdate(current, { apiKey });
+    const model = resolveInitialModel(updated, undefined);
+    if (updated.type === "netra") {
+      if (model !== NETRA_AGENT_MODEL_ID) {
+        throw new NakamaApiError(
+          "This Netra model needs a verified tool-turn test.",
+          400
+        );
+      }
+      let discovered: Awaited<ReturnType<typeof fetchNetraModels>> | null =
+        null;
+      try {
+        discovered = await fetchNetraModels(updated.apiKey);
+      } catch (error) {
+        if (error instanceof NakamaApiError && error.status === 400) {
+          throw error;
+        }
+        const provider = createProviderForInstance(updated, model);
+        if (!provider) {
+          throw new NakamaApiError(
+            "Netra provider could not be initialized.",
+            400
+          );
+        }
+        await provider.generateChat({
+          messages: [{ content: "Reply OK.", role: "user" }],
+          system: "Reply OK.",
+        });
+      }
+      if (discovered && !discovered.some((entry) => entry.id === model)) {
+        throw new NakamaApiError(
+          "The selected Netra model is not available to this API key.",
+          400
+        );
+      }
+    }
+    if (updated.type === "gemini") {
+      const provider = createProviderForInstance(updated, model);
+      if (!provider) {
+        throw new Error("Gemini provider could not be initialized.");
+      }
+      await provider.generateText({
+        format: "text",
+        prompt: "Reply with OK.",
+        system: "Reply with OK.",
+      });
+    }
+    await this.managedSecrets.save(
+      "global",
+      `provider:${providerId}`,
+      updated.apiKey
+    );
+    this.userConfig = {
+      ...this.userConfig!,
+      providers: this.userConfig!.providers.map((instance) =>
+        instance.id === providerId ? updated : instance
+      ),
+    };
+    this.refreshProviderConfig();
+    return {
+      provider: {
+        ...toProviderInstanceSummary(updated, countModelsForInstance(updated)),
+        secretSource: "settings",
+      },
+    };
+  }
+
+  async manageProviderSecret(
+    providerId: string,
+    action: "clear" | "use-stored"
+  ): Promise<UpdateProviderResponse> {
+    const current = findProviderInstance(this.userConfig, providerId);
+    if (!(current && this.managedSecrets)) {
+      throw new NakamaApiError("Provider not found.", 404);
+    }
+    const envNames = providerSecretEnvNames(providerId, current.type);
+    if (action === "clear") {
+      await this.managedSecrets.delete("global", `provider:${providerId}`);
+    } else {
+      await this.managedSecrets.useStored(
+        "global",
+        `provider:${providerId}`,
+        envNames
+      );
+    }
+    await this.refreshManagedProviderKeys();
+    const providers = await this.listProviders();
+    return {
+      provider: providers.providers.find(
+        (provider) => provider.id === providerId
+      )!,
+    };
+  }
+
   /** After a data-root restore, reload provider config and clear in-memory session state. */
   async reloadAfterDataRestore(): Promise<void> {
     this.userConfig = await loadUserConfig();
+    await this.refreshManagedProviderKeys();
     this.refreshProviderConfig();
     this.ephemeralSessions.clear();
     this.composioService?.reloadConfiguration();
@@ -3313,7 +3596,11 @@ export class AgentService {
   }
 
   async deleteTool(toolId: string): Promise<void> {
-    return this.profileService.deleteTool(toolId);
+    const tool = await this.db.getTool(toolId);
+    await this.profileService.deleteTool(toolId);
+    if (tool) {
+      await this.managedSecrets?.delete(tool.orgId, `tool:${toolId}`);
+    }
   }
 
   async runToolPlayground(
@@ -4199,6 +4486,7 @@ export class AgentService {
     codingWorkspaceRoot?: string,
     cognito?: CognitoSessionOptions
   ): Promise<AgentChatSession> {
+    await this.refreshManagedProviderKeys();
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireProfile(orgId, profileId);
     // skill_manage writes skills and expands /learn, both of which outlive the

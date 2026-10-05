@@ -1,3 +1,4 @@
+import { resolveManagedSecret } from "./config";
 import { readTextOrNull } from "./fs";
 import { maskTrailingSecret, REDACTED_SECRET_VALUE } from "./secret-mask";
 import {
@@ -154,7 +155,7 @@ function parseEmailSection(
   values: Record<string, string>
 ): EmailConfigFile | null {
   const username = values.username?.trim() ?? "";
-  const password = values.password?.trim() ?? "";
+  const password = "";
   const imapHost = values.imap_host?.trim() ?? "";
   const smtpHost = values.smtp_host?.trim() ?? "";
 
@@ -185,7 +186,6 @@ function buildEmailSectionValues(
     imap_host: config.imapHost,
     imap_port: String(config.imapPort),
     imap_secure: config.imapSecure ? "true" : "false",
-    password: config.password,
     smtp_host: config.smtpHost,
     smtp_port: String(config.smtpPort),
     smtp_secure: config.smtpSecure ? "true" : "false",
@@ -207,7 +207,16 @@ export async function loadEmailConfig(): Promise<EmailConfigFile | null> {
     return null;
   }
 
-  return parseEmailSection(section);
+  const parsedConfig = parseEmailSection(section);
+  return parsedConfig
+    ? {
+        ...parsedConfig,
+        password:
+          (await resolveManagedSecret("global", "email", [
+            "NAKAMA_EMAIL_PASSWORD",
+          ])) ?? "",
+      }
+    : null;
 }
 
 export function toEmailSettingsPublic(
@@ -236,7 +245,7 @@ export function toEmailSettingsPublic(
     imapHost: file.imapHost || null,
     imapPort: file.imapPort,
     imapSecure: file.imapSecure,
-    passwordMasked: maskTrailingSecret(file.password),
+    passwordMasked: file.password ? maskTrailingSecret(file.password) : null,
     smtpHost: file.smtpHost || null,
     smtpPort: file.smtpPort,
     smtpSecure: file.smtpSecure,
@@ -312,6 +321,9 @@ function buildSavedEmailConfig(
 export async function saveEmailConfig(
   input: UpdateEmailSettingsInput
 ): Promise<EmailSettingsPublic> {
+  if (input.password?.trim() && input.password !== REDACTED_SECRET_VALUE) {
+    throw new Error("Save the email password through the secret settings API.");
+  }
   const raw = await readTextOrNull(getUserConfigPath());
   const parsed =
     raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
@@ -321,7 +333,7 @@ export async function saveEmailConfig(
   parsed.sections[EMAIL_SECTION] = buildEmailSectionValues(next);
   await writeParsedConfigIni(parsed.global, parsed.sections);
 
-  return toEmailSettingsPublic(next);
+  return loadEmailSettingsPublic();
 }
 
 export function toMailboxConfig(config: EmailConfigFile) {

@@ -155,6 +155,9 @@ function ToolSetupCard({
       </div>
     );
   }
+  if (plan.status === "rejected") {
+    return <p className="text-muted-foreground text-sm">Tool setup closed.</p>;
+  }
   if (!profiles.data) {
     return (
       <p className="text-muted-foreground text-sm" role="status">
@@ -208,6 +211,27 @@ function ToolSetupCard({
       ) : null}
       <Button disabled={locked || !onContinue} type="submit">
         {saving ? "Building…" : buttonLabel}
+      </Button>
+      <Button
+        disabled={locked || saving}
+        onClick={async () => {
+          setSaving(true);
+          setError(null);
+          try {
+            const rejected = await client
+              .forOrg(orgId)
+              .rejectToolSetup(setupId);
+            queryClient.setQueryData(queryKey, rejected);
+          } catch (error) {
+            setError(formatError(error));
+          } finally {
+            setSaving(false);
+          }
+        }}
+        type="button"
+        variant="outline"
+      >
+        Cancel setup
       </Button>
     </form>
   );
@@ -289,6 +313,21 @@ function ToolCredentialForm({
     queryFn: () => client.forOrg(orgId).getToolCredentialStatus(toolId),
     queryKey,
   });
+  async function manageKey(action: "clear" | "use-stored") {
+    setSaving(true);
+    setError(null);
+    try {
+      const next = await client
+        .forOrg(orgId)
+        .manageToolCredential(toolId, action);
+      queryClient.setQueryData(queryKey, next);
+      setOpen(false);
+    } catch {
+      setError("Could not change the API key.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="flex w-full max-w-sm items-center justify-between gap-3 rounded-xl border bg-card p-4">
@@ -296,9 +335,11 @@ function ToolCredentialForm({
         <p className="truncate font-medium text-sm">{toolName}</p>
         <p className="text-muted-foreground text-xs" role="status">
           {canManage
-            ? status.data?.configured
-              ? "API key saved"
-              : "Connect API key"
+            ? status.data?.source === "environment"
+              ? `Managed by ${status.data.envName}`
+              : status.data?.configured
+                ? "API key saved"
+                : "Connect API key"
             : "Ask an admin to connect the API key"}
         </p>
       </div>
@@ -313,13 +354,23 @@ function ToolCredentialForm({
           open={open}
         >
           <DialogTrigger render={<Button size="sm" variant="outline" />}>
-            {status.data?.configured ? "Replace key" : "Configure"}
+            {status.data?.source === "environment"
+              ? "View key source"
+              : status.data?.configured
+                ? "Replace key"
+                : "Configure"}
           </DialogTrigger>
           {open ? (
             <DialogContent aria-describedby={undefined} className="sm:max-w-sm">
               <DialogHeader>
                 <DialogTitle>Connect {toolName}</DialogTitle>
               </DialogHeader>
+              {status.data?.source === "environment" ? (
+                <p className="text-sm">
+                  Managed by {status.data.envName}. Restart Nakama after you
+                  change it.
+                </p>
+              ) : null}
               <form
                 className="space-y-4"
                 onSubmit={async (event) => {
@@ -353,7 +404,7 @@ function ToolCredentialForm({
                   </label>
                   <Input
                     autoComplete="off"
-                    disabled={saving}
+                    disabled={saving || status.data?.source === "environment"}
                     id={inputId}
                     maxLength={8192}
                     name="apiKey"
@@ -366,10 +417,34 @@ function ToolCredentialForm({
                     {error}
                   </p>
                 ) : null}
-                <Button disabled={saving} type="submit">
+                <Button
+                  disabled={saving || status.data?.source === "environment"}
+                  type="submit"
+                >
                   {saving ? "Saving…" : "Save"}
                 </Button>
               </form>
+              {status.data?.savedAvailable &&
+              status.data.source === "missing" ? (
+                <Button
+                  disabled={saving}
+                  onClick={() => void manageKey("use-stored")}
+                  type="button"
+                  variant="outline"
+                >
+                  Use saved key
+                </Button>
+              ) : null}
+              {status.data?.source === "settings" ? (
+                <Button
+                  disabled={saving}
+                  onClick={() => void manageKey("clear")}
+                  type="button"
+                  variant="outline"
+                >
+                  Clear saved key
+                </Button>
+              ) : null}
             </DialogContent>
           ) : null}
         </Dialog>

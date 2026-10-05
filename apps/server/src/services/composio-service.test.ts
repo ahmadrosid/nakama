@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { saveComposioConfig } from "@nakama/core";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AuthService } from "./auth-service";
@@ -115,8 +114,9 @@ async function seedOrgWithAdmin(
 async function createConfiguredService() {
   const configDir = await mkdtemp(join(tmpdir(), "nakama-composio-service-"));
   const previous = process.env.NAKAMA_CONFIG_DIR;
+  const previousKey = process.env.COMPOSIO_API_KEY;
   process.env.NAKAMA_CONFIG_DIR = configDir;
-  await saveComposioConfig({ apiKey: TEST_API_KEY });
+  process.env.COMPOSIO_API_KEY = TEST_API_KEY;
 
   const db = createInMemoryDatabaseAdapter();
   const service = new ComposioService(db, new AuthService());
@@ -129,6 +129,11 @@ async function createConfiguredService() {
         delete process.env.NAKAMA_CONFIG_DIR;
       } else {
         process.env.NAKAMA_CONFIG_DIR = previous;
+      }
+      if (previousKey === undefined) {
+        delete process.env.COMPOSIO_API_KEY;
+      } else {
+        process.env.COMPOSIO_API_KEY = previousKey;
       }
     },
     service,

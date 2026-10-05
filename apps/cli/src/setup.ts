@@ -13,14 +13,12 @@ import { NakamaApiError, NakamaClient } from "@nakama/client";
 import {
   type BrowserSessionCookieNames,
   browserSessionCookieNames,
-  getUserConfigPath,
   HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES,
   PLAIN_BROWSER_SESSION_COOKIE_NAMES,
   type ProviderModelOption,
   promptForProviderConfig,
   type UserProviderName,
 } from "@nakama/core";
-import { formatCliDisplayPath, isCliVerbose } from "./display-path";
 import { printLine } from "./terminal-safe";
 
 export class LoginForm implements Component, Focusable {
@@ -371,23 +369,22 @@ export async function ensureProviderConfiguredViaCli(
       instance.customModels?.[0]?.id ??
       modelHelpers.getDefaultModel(instance.type);
 
-    const result = await client.configureProvider({
-      apiKey: instance.apiKey,
+    const result = await client.createProvider({
       baseUrl: instance.baseUrl,
       customModels: instance.customModels,
-      displayName:
-        instance.type === "openai_compatible" ? instance.label : undefined,
       hostMode: instance.hostMode,
+      label: instance.type === "openai_compatible" ? instance.label : undefined,
       model,
-      provider: instance.type,
+      type: instance.type,
     });
+    if (instance.apiKey) {
+      await client.setProviderSecret(result.provider.id, instance.apiKey);
+    }
 
     printLine(
-      `\nProvider configured (${result.provider}, ${result.currentModel}).`
+      `\nProvider configured (${result.provider.type}, ${result.initialModel}).`
     );
-    console.log(
-      `Saved to ${formatCliDisplayPath(getUserConfigPath(), isCliVerbose())}\n`
-    );
+    console.log("Provider settings saved. The key is stored securely.\n");
 
     return true;
   } finally {

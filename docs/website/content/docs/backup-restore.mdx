@@ -11,13 +11,17 @@ The export is a `.zip` backup of the configured Nakama data root, which defaults
 
 Treat export ZIPs as sensitive. They can include:
 
-- Provider settings and API keys
+- Provider settings and encrypted API keys
 - Auth data
 - Org and profile workspaces (soul files, memory, artifacts)
 - Org-level `MEMORY.md`, `memory-archive/`, and `memory-history/` (see [Org memory](/org-memory))
 - Custom tools and skills
 - Plugin packages and organization plugin data (snapshotted, not copied mid-write)
 - The local SQLite database when it lives under the Nakama root
+
+The ZIP does not contain `NAKAMA_SECRETS_KEY` or plaintext Settings keys.
+Keep the matching master key in a separate backup. Supply it before importing the ZIP.
+Nakama rejects an import when it cannot decrypt the saved keys.
 
 ## Import
 

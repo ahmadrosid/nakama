@@ -1,6 +1,5 @@
 import { join } from "node:path";
-import { readEnvValue } from "./config";
-import { parseIni, readTextOrNull, writeTextFile } from "./fs";
+import { readEnvValue, resolveManagedSecret } from "./config";
 import { maskTrailingSecret } from "./secret-mask";
 import { getUserConfigDir } from "./user-config";
 
@@ -54,20 +53,10 @@ export async function isComposioConfiguredAsync(
 }
 
 export async function loadComposioConfigFile(): Promise<ComposioConfigFile | null> {
-  const raw = await readTextOrNull(getComposioConfigPath());
-
-  if (raw === null) {
-    return null;
-  }
-
-  const values = parseIni(raw);
-  const apiKey = values.api_key?.trim() ?? "";
-
-  if (!apiKey) {
-    return null;
-  }
-
-  return { apiKey };
+  const apiKey = await resolveManagedSecret("global", "composio", [
+    "COMPOSIO_API_KEY",
+  ]);
+  return apiKey ? { apiKey } : null;
 }
 
 export function toComposioSettingsPublic(
@@ -95,31 +84,8 @@ export async function loadComposioSettingsPublic(
   return toComposioSettingsPublic(await loadComposioConfigFile(), env);
 }
 
-async function writeComposioConfigFile(
-  config: ComposioConfigFile
-): Promise<void> {
-  const lines = [
-    "# Nakama Composio integration",
-    `api_key=${config.apiKey}`,
-    "",
-  ];
-
-  await writeTextFile(getComposioConfigPath(), lines.join("\n"), {
-    ensureDir: getComposioConfigDir(),
-  });
-}
-
 export async function saveComposioConfig(
-  input: UpdateComposioSettingsInput
+  _input: UpdateComposioSettingsInput
 ): Promise<ComposioSettingsPublic> {
-  const existing = await loadComposioConfigFile();
-  const apiKey =
-    input.apiKey === undefined ? (existing?.apiKey ?? "") : input.apiKey.trim();
-
-  if (!apiKey) {
-    throw new Error("Composio API key is required.");
-  }
-
-  await writeComposioConfigFile({ apiKey });
-  return toComposioSettingsPublic({ apiKey });
+  throw new Error("Save the Composio key through the secret settings API.");
 }

@@ -48,6 +48,7 @@ describe("parseProviderName", () => {
 describe("apiKeyEnvVarForProvider", () => {
   test("Netra uses its documented API key variable", () => {
     expect(apiKeyEnvVarForProvider("netra")).toBe("NETRA_API_KEY");
+    expect(apiKeyEnvVarForProvider("deepseek")).toBe("DEEPSEEK_API_KEY");
   });
   test("chatgpt uses OAuth, not an API key env var", () => {
     expect(apiKeyEnvVarForProvider("chatgpt")).toBeNull();
@@ -138,14 +139,14 @@ describe("resolveProvider", () => {
 });
 
 describe("resolveProvider deepseek", () => {
-  test("does not auto-resolve DeepSeek from env API key", () => {
+  test("auto-resolves DeepSeek from env API key", () => {
     const provider = resolveProvider({
       env: {
         DEEPSEEK_API_KEY: "sk-test",
       },
     });
 
-    expect(provider).toBeNull();
+    expect(provider).toBe("deepseek");
   });
 });
 
