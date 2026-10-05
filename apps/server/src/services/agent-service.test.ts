@@ -1545,6 +1545,23 @@ describe("AgentService WhatsApp allowed phones", () => {
       false
     );
   });
+
+  test("writes allowUnpairedGroupMembers to WhatsApp config", async () => {
+    const service = await createWhatsAppService();
+
+    const saved = await service.setWhatsAppSettings(ORG_ID, {
+      allowUnpairedGroupMembers: true,
+      profileId: "default",
+    });
+
+    expect(saved.allowUnpairedGroupMembers).toBe(true);
+    expect(
+      (await service.getWhatsAppSettings(ORG_ID)).allowUnpairedGroupMembers
+    ).toBe(true);
+    expect(
+      (await loadWhatsAppConfigFile(ORG_ID))?.allowUnpairedGroupMembers
+    ).toBe(true);
+  });
 });
 
 describe("AgentService organization knowledge base", () => {

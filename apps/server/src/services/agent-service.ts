@@ -1535,6 +1535,9 @@ export class AgentService {
           ...(input.allowedPhones === undefined
             ? {}
             : { allowedPhones: input.allowedPhones }),
+          ...(input.allowUnpairedGroupMembers === undefined
+            ? {}
+            : { allowUnpairedGroupMembers: input.allowUnpairedGroupMembers }),
           ...(input.phoneNumber === undefined
             ? {}
             : { phoneNumber: input.phoneNumber.trim() }),
