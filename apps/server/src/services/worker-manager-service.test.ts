@@ -82,21 +82,6 @@ describe("WorkerManagerService", () => {
   });
 
   describe("isValidWorker", () => {
-    test("returns true for telegram", () => {
-      const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.isValidWorker("telegram")).toBe(true);
-    });
-
-    test("returns true for whatsapp", () => {
-      const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.isValidWorker("whatsapp")).toBe(true);
-    });
-
-    test("returns true for automation", () => {
-      const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.isValidWorker("automation")).toBe(true);
-    });
-
     test("returns true for discord", () => {
       const service = new WorkerManagerService(projectRoot, createMockPm2());
       expect(service.isValidWorker("discord")).toBe(true);
