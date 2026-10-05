@@ -35,6 +35,10 @@ const IntegrationsPage = lazyPage(
   () => import("@/pages/IntegrationsPage"),
   "IntegrationsPage"
 );
+const ConnectorsPage = lazyPage(
+  () => import("@/pages/IntegrationsPage"),
+  "ConnectorsPage"
+);
 const LoginPage = lazyPage(() => import("@/pages/LoginPage"), "LoginPage");
 const PasswordResetPage = lazyPage(
   () => import("@/pages/PasswordResetPage"),
@@ -237,6 +241,10 @@ function AppShell() {
                     path="/tasks"
                   />
                   <Route element={<IntegrationsPage />} path="/integrations" />
+                  <Route
+                    element={<ConnectorsPage />}
+                    path="/customize/connectors"
+                  />
                   <Route
                     element={<IntegrationsPage />}
                     path="/customize/connections/:section"

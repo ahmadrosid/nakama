@@ -4,7 +4,7 @@ import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
 import { Input } from "@nakama/ui/input";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight01Icon } from "hugeicons-react";
+import { ArrowRight01Icon, Plug01Icon } from "hugeicons-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
@@ -12,6 +12,7 @@ import { useAuth } from "@/context/use-auth";
 import { useOrgPlugins } from "@/hooks/use-plugins";
 import { client, formatError } from "@/lib/client";
 import {
+  canAccessIntegrationsPage,
   enabledPluginNavEntries,
   navHrefForPage,
   pluginIcon,
@@ -74,14 +75,25 @@ export function CustomizePage() {
     title,
   }));
   sections.push({
-    items: visibleIntegrationSections(
-      user?.isPlatformAdmin === true,
-      activeOrg?.role
-    ).map((item) => ({
-      href: `/customize/connections/${item.id}`,
-      icon: item.icon,
-      label: item.label,
-    })),
+    items: [
+      ...(canAccessIntegrationsPage(activeOrg?.role)
+        ? [
+            {
+              href: "/customize/connectors",
+              icon: Plug01Icon,
+              label: "Connectors",
+            },
+          ]
+        : []),
+      ...visibleIntegrationSections(
+        user?.isPlatformAdmin === true,
+        activeOrg?.role
+      ).map((item) => ({
+        href: `/customize/connections/${item.id}`,
+        icon: item.icon,
+        label: item.label,
+      })),
+    ],
     title: "Integrations",
   });
   sections.push({

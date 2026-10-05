@@ -13,6 +13,51 @@ import {
   visibleIntegrationSections,
 } from "@/lib/navigation";
 
+export function ConnectorsPage() {
+  const { activeOrg, isLoading, user } = useAuth();
+
+  if (isLoading) {
+    return <Spinner className="size-5" />;
+  }
+  if (!activeOrg || activeOrg.role === "viewer") {
+    return <Navigate replace to="/customize" />;
+  }
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-6">
+      <Link
+        className="block w-fit text-muted-foreground text-sm hover:text-foreground"
+        to="/customize"
+      >
+        ← Back to Control center
+      </Link>
+      <h1 className="font-medium text-xl">Connectors</h1>
+      <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+        <div className="flex items-center justify-between gap-4 px-4 py-4">
+          <span className="font-medium text-sm">Meta Ads</span>
+          <span className="text-muted-foreground text-sm">Unavailable</span>
+        </div>
+        <Link
+          className="flex items-center justify-between gap-4 px-4 py-4 hover:bg-accent/50"
+          to="/customize/connections/composio"
+        >
+          <span className="font-medium text-sm">Composio</span>
+          <span className="text-muted-foreground text-sm">Manage</span>
+        </Link>
+        {user?.isPlatformAdmin ? (
+          <Link
+            className="flex items-center justify-between gap-4 px-4 py-4 hover:bg-accent/50"
+            to="/customize/mcp"
+          >
+            <span className="font-medium text-sm">MCP servers</span>
+            <span className="text-muted-foreground text-sm">Manage</span>
+          </Link>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function resolveSection(value: string | null): IntegrationSectionId {
   if (
     value === "notifications" ||
