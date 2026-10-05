@@ -11,6 +11,7 @@ import {
   saveUserConfig,
   type UserConfig,
 } from "@nakama/core";
+import { NETRA_AGENT_MODEL_ID } from "@nakama/core/discovery-providers";
 import { createProviderFromActiveConfig } from "./providers";
 
 export interface ProviderBootstrap {
@@ -34,12 +35,21 @@ async function bootstrapProviderFromEnv(
     return null;
   }
 
+  const netraModel =
+    providerType === "netra" ? readEnvValue(env, "NETRA_MODEL") : null;
+  if (providerType === "netra" && netraModel !== NETRA_AGENT_MODEL_ID) {
+    return null;
+  }
+
   const instance = {
     apiKey: "",
     createdAt: new Date().toISOString(),
     id: createProviderInstanceId(),
     label: defaultProviderLabel(providerType, []),
     type: providerType,
+    ...(netraModel
+      ? { customModels: [{ default: true, id: netraModel }] }
+      : {}),
   };
 
   const config: UserConfig = {

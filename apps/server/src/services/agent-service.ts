@@ -206,6 +206,10 @@ import {
   type ChannelConfigScope,
   isChannelOwner,
 } from "@nakama/core/channel-config-shared";
+import {
+  defaultDiscoveryBaseUrl,
+  NETRA_AGENT_MODEL_ID,
+} from "@nakama/core/discovery-providers";
 import { readTextIfExists } from "@nakama/core/fs";
 import { canAccessSuperBotProfile } from "@nakama/core/profiles";
 import {
@@ -222,6 +226,7 @@ import {
   createProviderForInstance,
   createProviderFromActiveConfig,
   fetchFireworksGatewayModels,
+  fetchNetraModels,
   fetchOllamaModels,
   fetchRemoteOpenAIModels,
   getModelsForProviderInstance,
@@ -2598,25 +2603,42 @@ export class AgentService {
       };
     }
 
-    const baseUrl = request.baseUrl?.trim();
+    const isNetra = request.provider === "netra";
+    const baseUrl = isNetra
+      ? defaultDiscoveryBaseUrl("netra")
+      : request.baseUrl?.trim();
+    const apiKey = request.apiKey?.trim() ?? "";
+    if (isNetra && !apiKey) {
+      throw new NakamaApiError(
+        "API key is required to discover Netra models.",
+        400
+      );
+    }
     if (!baseUrl) {
       throw new NakamaApiError("baseUrl or providerId is required.", 400);
     }
 
-    const entries =
-      request.provider === "ollama"
+    const entries = isNetra
+      ? await fetchNetraModels(apiKey)
+      : request.provider === "ollama"
         ? await fetchOllamaModels(baseUrl, request.apiKey ?? "")
         : await fetchRemoteOpenAIModels(baseUrl, request.apiKey ?? "");
 
-    const probeType =
-      request.provider === "ollama"
+    const probeType = isNetra
+      ? ("netra" as const)
+      : request.provider === "ollama"
         ? ("ollama" as const)
         : ("openai_compatible" as const);
     const probeInstance = {
       apiKey: request.apiKey ?? "",
       baseUrl,
       id: "discover",
-      label: probeType === "ollama" ? "Ollama" : "Discover",
+      label:
+        probeType === "netra"
+          ? "Netra Runtime"
+          : probeType === "ollama"
+            ? "Ollama"
+            : "Discover",
       type: probeType,
       ...(request.hostMode ? { hostMode: request.hostMode } : {}),
       createdAt: new Date(0).toISOString(),
@@ -2652,7 +2674,11 @@ export class AgentService {
       throw new NakamaApiError("Provider not found.", 404);
     }
 
-    if (instance.type === "ollama" || instance.type === "openai_compatible") {
+    if (
+      instance.type === "ollama" ||
+      instance.type === "openai_compatible" ||
+      instance.type === "netra"
+    ) {
       const hostMode =
         instance.type === "ollama"
           ? (overrides?.hostMode ?? resolveOllamaHostMode(instance))
@@ -2660,10 +2686,10 @@ export class AgentService {
       const apiKey =
         overrides?.apiKey?.trim() ||
         instance.apiKey.trim() ||
-        (instance.type === "ollama"
+        (instance.type === "ollama" || instance.type === "netra"
           ? readEnvValue(
               process.env,
-              apiKeyEnvVarForProvider("ollama") ?? ""
+              apiKeyEnvVarForProvider(instance.type) ?? ""
             ) || ""
           : "");
 
@@ -2682,7 +2708,11 @@ export class AgentService {
       const baseUrl =
         overrides?.baseUrl ||
         instance.baseUrl?.trim() ||
-        (instance.type === "ollama" ? defaultOllamaBaseUrl(hostMode!) : "");
+        (instance.type === "ollama"
+          ? defaultOllamaBaseUrl(hostMode!)
+          : instance.type === "netra"
+            ? defaultDiscoveryBaseUrl("netra")
+            : "");
 
       if (!baseUrl) {
         throw new NakamaApiError(
@@ -2694,7 +2724,15 @@ export class AgentService {
       const entries =
         instance.type === "ollama"
           ? await fetchOllamaModels(baseUrl, apiKey)
-          : await fetchRemoteOpenAIModels(baseUrl, apiKey);
+          : instance.type === "netra"
+            ? (await fetchNetraModels(apiKey)).map((entry) => ({
+                ...entry,
+                ...instance.customModels?.find(
+                  (saved) => saved.id === entry.id
+                ),
+                name: entry.name,
+              }))
+            : await fetchRemoteOpenAIModels(baseUrl, apiKey);
       const remoteInstance = { ...instance, baseUrl, customModels: entries };
       const models = getModelsForProviderInstance(remoteInstance);
 
@@ -2843,6 +2881,41 @@ export class AgentService {
     const existing = this.userConfig?.providers ?? [];
     const instance = buildProviderInstanceFromCreateRequest(request, existing);
     const model = resolveInitialModel(instance, request.model);
+    if (instance.type === "netra") {
+      if (model !== NETRA_AGENT_MODEL_ID) {
+        throw new NakamaApiError(
+          "This Netra model needs a verified tool-turn test.",
+          400
+        );
+      }
+      let discovered: Awaited<ReturnType<typeof fetchNetraModels>> | null =
+        null;
+      try {
+        discovered = await fetchNetraModels(instance.apiKey);
+      } catch (error) {
+        if (error instanceof NakamaApiError && error.status === 400) {
+          throw error;
+        }
+        // The exact ID can still work when model discovery is unavailable.
+        const provider = createProviderForInstance(instance, model);
+        if (!provider) {
+          throw new NakamaApiError(
+            "Netra provider could not be initialized.",
+            400
+          );
+        }
+        await provider.generateChat({
+          messages: [{ content: "Reply OK.", role: "user" }],
+          system: "Reply OK.",
+        });
+      }
+      if (discovered && !discovered.some((entry) => entry.id === model)) {
+        throw new NakamaApiError(
+          "The selected Netra model is not available to this API key.",
+          400
+        );
+      }
+    }
     if (instance.type === "gemini") {
       const provider = createProviderForInstance(instance, model);
       if (!provider) {

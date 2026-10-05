@@ -241,6 +241,7 @@ type OpenAIMessage =
       role: "assistant";
       content: string | null;
       reasoning_content?: string;
+      reasoning_details?: unknown[];
       tool_calls?: Array<{
         id: string;
         type: "function";
@@ -277,7 +278,7 @@ async function toOpenAIMessage(
   }
 
   if (message.role === "assistant") {
-    return toOpenAIAssistantMessage(message);
+    return toOpenAIAssistantMessage(message, provider);
   }
 
   return {
@@ -288,14 +289,20 @@ async function toOpenAIMessage(
 }
 
 function toOpenAIAssistantMessage(
-  message: Extract<ChatMessage, { role: "assistant" }>
+  message: Extract<ChatMessage, { role: "assistant" }>,
+  provider: ProviderName
 ): Extract<OpenAIMessage, { role: "assistant" }> {
   const thinking = message.thinking?.trim();
 
   return {
     content: message.content || null,
     role: "assistant",
-    ...(thinking ? { reasoning_content: thinking } : {}),
+    ...(thinking && !(provider === "netra" && message.providerContent?.length)
+      ? { reasoning_content: thinking }
+      : {}),
+    ...(provider === "netra" && message.providerContent?.length
+      ? { reasoning_details: message.providerContent }
+      : {}),
     ...(message.toolCalls?.length
       ? { tool_calls: toOpenAIAssistantToolCalls(message.toolCalls) }
       : {}),

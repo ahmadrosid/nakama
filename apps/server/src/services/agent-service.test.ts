@@ -15,6 +15,7 @@ import {
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
+import { NETRA_AGENT_MODEL_ID } from "@nakama/core/discovery-providers";
 import type { StoredProfileRecord } from "@nakama/db";
 import {
   createInMemoryDatabaseAdapter,
@@ -530,6 +531,39 @@ describe("AgentService thinking provider options", () => {
 
     expect(options?.thinking).toEqual({ effort: "high", enabled: true });
   });
+});
+
+test("rejects a Netra provider when the model endpoint rejects its API key", async () => {
+  using fetchMock = spyOn(globalThis, "fetch").mockImplementation(
+    async () => new Response("invalid key", { status: 401 })
+  );
+  const service = new AgentService(null, null, createInMemoryDatabaseAdapter());
+
+  await expect(
+    service.createProvider({
+      apiKey: "invalid-key",
+      model: NETRA_AGENT_MODEL_ID,
+      type: "netra",
+    })
+  ).rejects.toMatchObject({ status: 400 });
+  expect(fetchMock).toHaveBeenCalled();
+});
+
+test("discovers the supported Netra model without a custom base URL", async () => {
+  using fetchMock = spyOn(globalThis, "fetch").mockImplementation(async () =>
+    Response.json({ data: [{ id: NETRA_AGENT_MODEL_ID }] })
+  );
+  const service = new AgentService(null, null, createInMemoryDatabaseAdapter());
+
+  const result = await service.discoverModels({
+    apiKey: "test-key",
+    provider: "netra",
+  });
+  expect(result.provider).toBe("netra");
+  expect(result.models.map((model) => model.id)).toEqual([
+    NETRA_AGENT_MODEL_ID,
+  ]);
+  expect(fetchMock).toHaveBeenCalled();
 });
 
 describe("AgentService usage pricing context", () => {

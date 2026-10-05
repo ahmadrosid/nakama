@@ -96,6 +96,7 @@ const PROVIDER_TYPE_LABELS: Record<UserProviderName, string> = {
   mistral: "Mistral",
   moonshot: "Moonshot Kimi",
   moonshot_cn: "Moonshot Kimi (CN)",
+  netra: "Netra Runtime",
   ollama: "Ollama",
   openai: "OpenAI",
   openai_compatible: "Custom",

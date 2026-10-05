@@ -50,6 +50,7 @@ export function formatProviderLabel(
     provider === "openrouter" ||
     provider === "gemini" ||
     provider === "deepseek" ||
+    provider === "netra" ||
     provider === "doubao" ||
     provider === "mistral" ||
     provider === "perplexity" ||
@@ -89,6 +90,7 @@ export const PROVIDER_OPTIONS: Array<{ id: SelectedProvider; label: string }> =
     { id: "openrouter", label: "OpenRouter" },
     { id: "gemini", label: "Gemini" },
     { id: "deepseek", label: "DeepSeek" },
+    { id: "netra", label: "Netra Runtime" },
     { id: "doubao", label: "Doubao (Volcengine)" },
     { id: "together", label: "Together AI" },
     { id: "xiaomi", label: "Xiaomi MiMo" },
@@ -547,6 +549,7 @@ export function buildCreateProviderRequest(options: {
 }): CreateProviderRequest {
   const customModels =
     options.provider === "openai_compatible" ||
+    options.provider === "netra" ||
     ([
       "openrouter",
       "xai_oauth",

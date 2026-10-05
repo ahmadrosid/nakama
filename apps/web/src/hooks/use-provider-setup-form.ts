@@ -9,6 +9,7 @@ import type {
   WireApi,
   XaiOAuthCredentials,
 } from "@nakama/core/contract";
+import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ModelListRow } from "@/components/ModelListEditor";
 import { normalizeModelListRows } from "@/components/model-list-editor.shared";
@@ -128,12 +129,15 @@ export function useProviderSetupForm(
   const filteredModels = useMemo(() => {
     if (
       selectedProvider === "openai_compatible" ||
+      selectedProvider === "netra" ||
       selectedProvider === "ollama"
     ) {
       return modelsFromCustomRows(customModels).map((model) =>
         selectedProvider === "ollama"
           ? { ...model, provider: "ollama" as const }
-          : model
+          : selectedProvider === "netra"
+            ? { ...model, provider: "netra" as const }
+            : model
       );
     }
 
@@ -238,6 +242,12 @@ export function useProviderSetupForm(
         setCustomModels([]);
       }
 
+      if (provider === "netra") {
+        setBaseUrl(defaultDiscoveryBaseUrl("netra") ?? "");
+        setDisplayName("Netra Runtime");
+        setCustomModels([]);
+      }
+
       if (provider !== "openrouter") {
         setOpenRouterModels([]);
         setOpenRouterModelsError(null);
@@ -248,7 +258,11 @@ export function useProviderSetupForm(
         setShortlistModelsError(null);
       }
 
-      if (provider !== "openai_compatible" && provider !== "ollama") {
+      if (
+        provider !== "openai_compatible" &&
+        provider !== "ollama" &&
+        provider !== "netra"
+      ) {
         setBaseUrl("");
         setDisplayNameError(null);
         setBaseUrlError(null);
@@ -431,6 +445,7 @@ export function useProviderSetupForm(
             : null;
       const nextModelsError =
         selectedProvider === "openai_compatible" ||
+        selectedProvider === "netra" ||
         selectedProvider === "ollama"
           ? validateCustomModelsInput(customModels)
           : null;
@@ -525,8 +540,12 @@ export function useProviderSetupForm(
                     supportsVision: entry.supportsVision !== false,
                   }))
                 : selectedProvider === "openai_compatible" ||
+                    selectedProvider === "netra" ||
                     selectedProvider === "ollama"
-                  ? normalizeModelListRows(customModels)
+                  ? normalizeModelListRows(customModels).map((entry) => ({
+                      ...entry,
+                      default: entry.id === modelToSave,
+                    }))
                   : selectedProvider === "openrouter"
                     ? normalizeModelListRows(openRouterModels)
                     : isShortlistCapabilityProvider(selectedProvider)
