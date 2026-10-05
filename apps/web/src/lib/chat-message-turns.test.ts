@@ -1,20 +1,41 @@
 import { describe, expect, test } from "bun:test";
 import {
+  formatLocalCitations,
   segmentAssistantTurn,
-  showLocalFilePaths,
   toolGroupElapsedSeconds,
 } from "@/components/chat/assistant-tool-group.shared";
 import type { ChatListItem } from "./chat-history";
 import { groupMessagesIntoTurns, turnKey } from "./chat-message-turns";
 
-test("shows local file paths without changing web links or images", () => {
+test("numbers local file citations without changing web links or images", () => {
   expect(
-    showLocalFilePaths(
+    formatLocalCitations(
       "See [Paid Ads](wiki/paid-ads.md), [site](https://example.com), and ![logo](wiki/logo.png)."
-    )
+    ).markdown
   ).toBe(
     "See Paid Ads (`wiki/paid-ads.md`), [site](https://example.com), and ![logo](wiki/logo.png)."
   );
+  expect(
+    formatLocalCitations(
+      "[Paid Ads](wiki/paid-ads.md) and [Paid Ads](wiki/paid-ads.md)",
+      "bob"
+    )
+  ).toEqual({
+    citations: [
+      {
+        href: "/files?citation=1&file=wiki%2Fpaid-ads.md&folder=wiki&profile=bob&view=workspace",
+        label: "Paid Ads",
+        number: 1,
+        path: "wiki/paid-ads.md",
+      },
+    ],
+    markdown:
+      "[1](/files?citation=1&file=wiki%2Fpaid-ads.md&folder=wiki&profile=bob&view=workspace) and [1](/files?citation=1&file=wiki%2Fpaid-ads.md&folder=wiki&profile=bob&view=workspace)",
+  });
+  expect(formatLocalCitations("[site](https://example.com)", "bob")).toEqual({
+    citations: [],
+    markdown: "[site](https://example.com)",
+  });
 });
 
 function item(

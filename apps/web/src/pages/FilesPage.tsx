@@ -2,7 +2,7 @@ import type { ArtifactFile, WorkspaceEntry } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { Download04Icon } from "hugeicons-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ArtifactAttachmentPanelActions } from "@/components/chat/artifact-attachment-panel-actions";
 import { ArtifactAttachmentPanelBody } from "@/components/chat/artifact-attachment-panel-body";
@@ -45,6 +45,7 @@ import {
   canPreviewWorkspaceEntry,
   type FilesViewMode,
   getStoredFilesViewMode,
+  legacyArtifactProfileId,
   resolveFilesProfileId,
   setStoredFilesViewMode,
 } from "@/lib/files-page.shared";
@@ -72,18 +73,21 @@ import { FilesToolbar } from "@/pages/files/files-toolbar";
 const EMPTY_ARTIFACTS: ArtifactFile[] = [];
 
 export function FilesPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { profileId: activeProfileId } = useActiveChatProfile();
   const { data: profiles = [] } = useProfilesQuery();
-  const profileId = resolveFilesProfileId({ activeProfileId, profiles });
+  const profileId =
+    legacyArtifactProfileId(searchParams.toString(), profiles) ??
+    resolveFilesProfileId({ activeProfileId, profiles });
   const { user, activeOrg } = useAuth();
   const canViewFiles = user?.isPlatformAdmin === true;
   const pins = useFilePins(profileId, canViewFiles);
-  const [searchParams, setSearchParams] = useSearchParams();
   const view = searchParams.get("view") ?? "workspace";
   function navigate(view: string, folder = "") {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       next.set("view", view);
+      next.delete("file");
       next.delete("folder");
       if (folder) {
         next.set("folder", folder);
@@ -154,6 +158,7 @@ export function FilesPage() {
                   <FilesArtifactsPage key={profileId} profileId={profileId} />
                 ) : (
                   <WorkspaceFilesPage
+                    file={searchParams.get("file")}
                     folder={searchParams.get("folder") ?? ""}
                     key={`${profileId}:${searchParams.get("folder") ?? ""}`}
                     onNavigate={(folder) => navigate("workspace", folder)}
@@ -407,10 +412,12 @@ function FilesArtifactsPage({ profileId }: { profileId: string | null }) {
 
 function WorkspaceFilesPage({
   profileId,
+  file,
   folder,
   onNavigate,
 }: {
   profileId: string | null;
+  file: string | null;
   folder: string;
   onNavigate: (folder: string) => void;
 }) {
@@ -418,6 +425,7 @@ function WorkspaceFilesPage({
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<ArtifactTypeFilter>("all");
   const [selected, setSelected] = useState<WorkspaceEntry | null>(null);
+  const openedFile = useRef<string | null>(null);
   const closePreview = useCallback(() => setSelected(null), []);
   const [viewMode, setViewMode] = useState<FilesViewMode>(
     getStoredFilesViewMode
@@ -427,6 +435,18 @@ function WorkspaceFilesPage({
     queryFn: () => client.listProfileWorkspaceFiles(profileId!, folder),
     queryKey: ["workspace-files", activeOrg?.id, profileId, folder],
   });
+  useEffect(() => {
+    if (!file || openedFile.current === file) {
+      return;
+    }
+    const entry = data?.entries.find(
+      (candidate) => candidate.kind === "file" && candidate.path === file
+    );
+    if (entry) {
+      openedFile.current = file;
+      setSelected(entry);
+    }
+  }, [data?.entries, file]);
   const typeOptions = availableArtifactTypeFilters(
     (data?.entries ?? []).filter((entry) => entry.kind !== "directory")
   );

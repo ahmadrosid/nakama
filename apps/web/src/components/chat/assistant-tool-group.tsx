@@ -22,7 +22,8 @@ import {
 } from "@/components/ai-elements/message";
 import {
   type AssistantTurnSegment,
-  showLocalFilePaths,
+  formatLocalCitations,
+  type LocalFileCitation,
   toolGroupElapsedSeconds,
 } from "@/components/chat/assistant-tool-group.shared";
 import { ImageGenerationToolRow } from "@/components/chat/ImageGenerationToolRow";
@@ -109,6 +110,7 @@ export function AssistantTurnSegmentView({
               ? () => onRetryMessage(segment.message)
               : undefined
           }
+          profileId={profileId}
           retryDisabled={retryDisabled}
         />
       </MessageContent>
@@ -131,15 +133,19 @@ function StreamingPlainTail({ text }: { text: string }) {
 
 function AssistantTextContent({
   message,
+  profileId,
   onRetry,
   retryDisabled = false,
 }: {
   message: ChatListItem;
+  profileId?: string | null;
   onRetry?: () => void;
   retryDisabled?: boolean;
 }) {
+  const { user } = useAuth();
   const streaming = Boolean(message.streaming && !message.thinkingStreaming);
   const content = useRafCoalescedValue(message.content, streaming);
+  const citedProfileId = user?.isPlatformAdmin ? profileId : null;
 
   if (message.failed) {
     return (
@@ -171,21 +177,59 @@ function AssistantTextContent({
   }
 
   if (!streaming) {
+    const { markdown, citations } = formatLocalCitations(
+      content,
+      citedProfileId
+    );
     return (
-      <MessageResponse>{showLocalFilePaths(content) || "…"}</MessageResponse>
+      <>
+        <MessageResponse>{markdown || "…"}</MessageResponse>
+        <LocalCitationFooter citations={citations} />
+      </>
     );
   }
 
   const { sealed, tail } = splitStreamingMarkdown(content);
+  const { markdown } = formatLocalCitations(sealed, citedProfileId);
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-0">
       {sealed ? (
         <MessageResponse isAnimating={false} mode="streaming">
-          {showLocalFilePaths(sealed)}
+          {markdown}
         </MessageResponse>
       ) : null}
       {tail || !sealed ? <StreamingPlainTail text={tail} /> : null}
+    </div>
+  );
+}
+
+function LocalCitationFooter({
+  citations,
+}: {
+  citations: LocalFileCitation[];
+}) {
+  if (citations.length === 0) {
+    return null;
+  }
+  return (
+    <div
+      aria-label="Sources"
+      className="mt-3 flex flex-wrap gap-1.5 border-border/60 border-t pt-2 text-xs"
+    >
+      {citations.map(({ href, label, number, path }) => (
+        <a
+          aria-label={`Open ${label} in file preview`}
+          className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary"
+          href={href}
+          key={path}
+          title={path}
+        >
+          <span className="font-semibold text-primary">{number}</span>
+          <span className="truncate">{label}</span>
+          <span className="truncate text-muted-foreground">· {path}</span>
+        </a>
+      ))}
     </div>
   );
 }
