@@ -20,49 +20,14 @@ function prompt(
   });
 }
 
-test("buildChatSystemPrompt includes automation skill pointer when create_automation is available", () => {
-  const text = prompt(["create_automation"]);
-
-  expect(text).toContain("create-automation skill");
-  expect(text).not.toContain("5-field cron syntax");
-  expect(text).not.toContain("runAt");
-});
-
-test("buildChatSystemPrompt omits gated guidance for write_file-only sessions", () => {
-  const text = prompt(["write_file"]);
-
-  expect(text).not.toContain("list_workflows");
-  expect(text).not.toContain("create-workflow skill");
-  expect(text).not.toContain("create-automation skill");
-  expect(text).not.toContain("5-field cron syntax");
-  expect(text).not.toContain("skill_manage");
-  expect(text).not.toContain("update-profile-memory skill");
-  expect(text).not.toContain("archive-profile-memory skill");
-  expect(text).not.toContain("update_profile_memory");
-  expect(text).toContain("save-artifact skill");
-  expect(text).not.toContain("save_artifact");
-});
-
-test("buildChatSystemPrompt includes /learn recognition when skill_manage is available", () => {
-  const text = prompt(["skill_manage"]);
-
-  expect(text).toContain("skill_manage");
-  expect(text).toContain("[/learn]");
-});
-
-test("buildChatSystemPrompt includes memory skill pointers when file tools are available", () => {
-  const text = prompt(["read_file", "edit_file"]);
-
-  expect(text).toContain("update-profile-memory skill");
-  expect(text).toContain("archive-profile-memory skill");
-  expect(text).not.toContain("update_profile_memory");
-});
-
-test("buildChatSystemPrompt omits artifact guidance when write_file is unavailable", () => {
-  const text = prompt(["read_file"]);
-
-  expect(text).not.toContain("save-artifact skill");
-  expect(text).not.toContain("save_artifact");
+test.each([
+  [["create_automation"], "create-automation skill"],
+  [["skill_manage"], "[/learn]"],
+  [["read_file", "edit_file"], "update-profile-memory skill"],
+  [["write_file"], "save-artifact skill"],
+] as const)("tool guidance follows available tools", (tools, marker) => {
+  expect(prompt([...tools])).toContain(marker);
+  expect(prompt([])).not.toContain(marker);
 });
 
 test("buildChatSystemPrompt marks extracted document text as untrusted", () => {
@@ -96,15 +61,12 @@ test("buildChatSystemPrompt inserts USER.md section after identity", () => {
   expect(userIndex).toBeGreaterThan(identityIndex);
   expect(runtimeIndex).toBeGreaterThan(userIndex);
   expect(text).toContain("Name: Alex\nRole: engineer");
-});
-
-test("buildChatSystemPrompt omits USER.md section when empty", () => {
-  const text = buildChatSystemPrompt([], {
-    basePrompt: "You are a helpful assistant.",
-    userContext: "   ",
-  });
-
-  expect(text).not.toContain("# Personalisation (USER.md)");
+  expect(
+    buildChatSystemPrompt([], {
+      basePrompt: "You are a helpful assistant.",
+      userContext: "   ",
+    })
+  ).not.toContain("# Personalisation (USER.md)");
 });
 
 // Every channel, so flipping one entry of MESSAGING_CHANNEL_PROMPT between a

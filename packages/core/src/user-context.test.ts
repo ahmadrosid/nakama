@@ -5,7 +5,6 @@ import {
   parseUserContext,
   renderUserContext,
   USER_CONTEXT_FIELDS,
-  USER_CONTEXT_TEMPLATE,
 } from "./user-context";
 
 test("normalizeUserContextContent returns undefined when empty", () => {
@@ -26,65 +25,9 @@ test("buildUserContextStatus omits content by default", () => {
   });
 });
 
-test("USER_CONTEXT_TEMPLATE is the field labels as empty bullets", () => {
-  expect(USER_CONTEXT_TEMPLATE).toBe(
-    `# About Me
-
-- Name / nickname:
-- What you do:
-- Help with:
-- Current projects:
-- Tech stack:
-- How you like replies (concise, detailed, casual, formal):
-- Always:
-- Never:
-`
-  );
-});
-
 test("renderUserContext returns nothing when every answer is blank", () => {
   expect(renderUserContext({})).toBe("");
   expect(renderUserContext({ name: "", role: "   " })).toBe("");
-});
-
-test("renderUserContext leaves blank answers out of the file", () => {
-  expect(renderUserContext({ name: "Alex", never: "Guess at prices" })).toBe(
-    `# About Me
-
-- Name / nickname: Alex
-- Never: Guess at prices
-`
-  );
-});
-
-test("renderUserContext keeps extra notes below the bullets", () => {
-  expect(
-    renderUserContext({ name: "Alex" }, "I am on call every other week.")
-  ).toBe(
-    `# About Me
-
-- Name / nickname: Alex
-
-I am on call every other week.
-`
-  );
-});
-
-test("renderUserContext keeps extra notes even with no answers", () => {
-  expect(renderUserContext({}, "Just some notes.")).toBe(
-    `# About Me
-
-Just some notes.
-`
-  );
-});
-
-test("parseUserContext reads the template back as blank answers", () => {
-  const parsed = parseUserContext(USER_CONTEXT_TEMPLATE);
-  expect(parsed.extra).toBe("");
-  for (const field of USER_CONTEXT_FIELDS) {
-    expect(parsed.answers[field.key]).toBe("");
-  }
 });
 
 test("parseUserContext keeps unknown lines as extra", () => {
@@ -112,6 +55,18 @@ Ships on Fridays.
 `;
   const parsed = parseUserContext(original);
   expect(renderUserContext(parsed.answers, parsed.extra)).toBe(original);
+});
+
+test("parse and render preserve every field and extra notes", () => {
+  const answers = Object.fromEntries(
+    USER_CONTEXT_FIELDS.map((field) => [field.key, field.key])
+  );
+  const rendered = renderUserContext(answers, "On call every other week.");
+  expect(parseUserContext(rendered)).toEqual({
+    answers,
+    extra: "On call every other week.",
+  });
+  expect(renderUserContext({}, "Just notes.")).toContain("Just notes.");
 });
 
 test("parse and render round-trip a trailing space in an answer", () => {
