@@ -1,5 +1,6 @@
 import { Button } from "@nakama/ui/button";
 import { cn } from "@nakama/ui/utils";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowDown01Icon,
   ArrowRight01Icon,
@@ -12,8 +13,8 @@ import {
   TaskEdit01Icon,
   Wrench01Icon,
 } from "hugeicons-react";
-import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import type { MouseEvent, ReactNode } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Message,
@@ -32,6 +33,7 @@ import thinkingStyles from "@/components/chat/ThinkingReasoning.module.css";
 import { WebFetchToolRow } from "@/components/chat/WebFetchToolRow";
 import { WebSearchToolRow } from "@/components/chat/WebSearchToolRow";
 import { WorkflowRunToolRow } from "@/components/chat/WorkflowRunToolRow";
+import { WorkspaceFilePreview } from "@/components/chat/workspace-file-preview";
 import { PluginSurface } from "@/components/PluginSurface";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useAuth } from "@/context/use-auth";
@@ -64,6 +66,7 @@ import {
   shouldRenderWebSearchToolRow,
 } from "@/lib/chat-stream-web-search";
 import { isRunWorkflowTool } from "@/lib/chat-stream-workflow";
+import { client, formatError } from "@/lib/client";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
 import { findPluginTool } from "@/lib/plugin-runtime";
 import { splitStreamingMarkdown } from "@/lib/streaming-markdown-seal";
@@ -146,6 +149,27 @@ function AssistantTextContent({
   const streaming = Boolean(message.streaming && !message.thinkingStreaming);
   const content = useRafCoalescedValue(message.content, streaming);
   const citedProfileId = user?.isPlatformAdmin ? profileId : null;
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const closePreview = useCallback(() => setPreviewPath(null), []);
+
+  function openCitation(event: MouseEvent<HTMLElement>) {
+    const link =
+      event.target instanceof Element
+        ? event.target.closest('a[href^="#file-citation?"]')
+        : null;
+    if (!(link && event.currentTarget.contains(link))) {
+      return;
+    }
+    const query = new URLSearchParams(
+      link.getAttribute("href")?.split("?")[1] ?? ""
+    );
+    const path = query.get("file");
+    if (!path || query.get("profile") !== citedProfileId) {
+      return;
+    }
+    event.preventDefault();
+    setPreviewPath(path);
+  }
 
   if (message.failed) {
     return (
@@ -182,10 +206,21 @@ function AssistantTextContent({
       citedProfileId
     );
     return (
-      <>
+      <div
+        className="flex w-full min-w-0 flex-col gap-0"
+        onClick={openCitation}
+      >
         <MessageResponse>{markdown || "…"}</MessageResponse>
         <LocalCitationFooter citations={citations} />
-      </>
+        {previewPath && citedProfileId ? (
+          <LocalCitationPreview
+            key={previewPath}
+            onClose={closePreview}
+            path={previewPath}
+            profileId={citedProfileId}
+          />
+        ) : null}
+      </div>
     );
   }
 
@@ -193,15 +228,61 @@ function AssistantTextContent({
   const { markdown } = formatLocalCitations(sealed, citedProfileId);
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-0">
+    <div className="flex w-full min-w-0 flex-col gap-0" onClick={openCitation}>
       {sealed ? (
         <MessageResponse isAnimating={false} mode="streaming">
           {markdown}
         </MessageResponse>
       ) : null}
       {tail || !sealed ? <StreamingPlainTail text={tail} /> : null}
+      {previewPath && citedProfileId ? (
+        <LocalCitationPreview
+          key={previewPath}
+          onClose={closePreview}
+          path={previewPath}
+          profileId={citedProfileId}
+        />
+      ) : null}
     </div>
   );
+}
+
+function LocalCitationPreview({
+  path,
+  profileId,
+  onClose,
+}: {
+  path: string;
+  profileId: string;
+  onClose: () => void;
+}) {
+  const { activeOrg } = useAuth();
+  const folder = path.slice(0, path.lastIndexOf("/"));
+  const { data, error } = useQuery({
+    queryFn: () => client.listProfileWorkspaceFiles(profileId, folder),
+    queryKey: ["citation-file", activeOrg?.id, profileId, folder],
+  });
+  const entry = data?.entries.find(
+    (candidate) => candidate.kind === "file" && candidate.path === path
+  );
+  if (entry) {
+    return (
+      <WorkspaceFilePreview
+        entry={entry}
+        id={`citation:${profileId}:${path}`}
+        onClose={onClose}
+        profileId={profileId}
+      />
+    );
+  }
+  if (error || data) {
+    return (
+      <p className="text-destructive text-sm" role="alert">
+        {error ? formatError(error) : "File not found."}
+      </p>
+    );
+  }
+  return null;
 }
 
 function LocalCitationFooter({

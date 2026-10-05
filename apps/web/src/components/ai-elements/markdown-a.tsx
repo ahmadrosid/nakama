@@ -31,7 +31,7 @@ export function MarkdownA({
     return <YoutubeEmbed videoId={videoId} />;
   }
 
-  if (href?.startsWith("/files?")) {
+  if (href?.startsWith("#file-citation?")) {
     const query = new URLSearchParams(href.slice(href.indexOf("?") + 1));
     const citation = query.get("citation");
     if (citation && /^\d+$/.test(citation)) {
@@ -46,7 +46,6 @@ export function MarkdownA({
               className
             )}
             href={href}
-            target="_self"
             title={path}
           >
             {children}
@@ -54,19 +53,6 @@ export function MarkdownA({
         </sup>
       );
     }
-    return (
-      <a
-        {...rest}
-        className={cn(
-          "wrap-anywhere font-medium text-primary underline",
-          className
-        )}
-        href={href}
-        target="_self"
-      >
-        {children}
-      </a>
-    );
   }
 
   return (

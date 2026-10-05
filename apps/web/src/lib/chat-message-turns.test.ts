@@ -23,14 +23,14 @@ test("numbers local file citations without changing web links or images", () => 
   ).toEqual({
     citations: [
       {
-        href: "/files?citation=1&file=wiki%2Fpaid-ads.md&folder=wiki&profile=bob&view=workspace",
+        href: "#file-citation?citation=1&file=wiki%2Fpaid-ads.md&profile=bob",
         label: "Paid Ads",
         number: 1,
         path: "wiki/paid-ads.md",
       },
     ],
     markdown:
-      "[1](/files?citation=1&file=wiki%2Fpaid-ads.md&folder=wiki&profile=bob&view=workspace) and [1](/files?citation=1&file=wiki%2Fpaid-ads.md&folder=wiki&profile=bob&view=workspace)",
+      "[1](#file-citation?citation=1&file=wiki%2Fpaid-ads.md&profile=bob) and [1](#file-citation?citation=1&file=wiki%2Fpaid-ads.md&profile=bob)",
   });
   expect(formatLocalCitations("[site](https://example.com)", "bob")).toEqual({
     citations: [],

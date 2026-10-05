@@ -26,15 +26,12 @@ export function formatLocalCitations(
         return `[${existing.number}](${existing.href})`;
       }
       const number = citations.length + 1;
-      const folder = path.slice(0, path.lastIndexOf("/"));
       const query = new URLSearchParams({
         citation: String(number),
         file: path,
-        folder,
         profile: profileId,
-        view: "workspace",
       });
-      const href = `/files?${query}`;
+      const href = `#file-citation?${query}`;
       citations.push({ href, label, number, path });
       return `[${number}](${href})`;
     }
