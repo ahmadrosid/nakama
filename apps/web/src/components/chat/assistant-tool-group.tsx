@@ -14,7 +14,7 @@ import {
   Wrench01Icon,
 } from "hugeicons-react";
 import type { MouseEvent, ReactNode } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Message,
@@ -75,6 +75,7 @@ export function AssistantTurnSegmentView({
   showThinking = true,
   modelLabel,
   profileId,
+  onOpenFileCitation,
   onRetryMessage,
   retryDisabled = false,
 }: {
@@ -82,6 +83,7 @@ export function AssistantTurnSegmentView({
   showThinking?: boolean;
   modelLabel?: string | null;
   profileId?: string | null;
+  onOpenFileCitation?: (path: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
   retryDisabled?: boolean;
 }) {
@@ -108,6 +110,7 @@ export function AssistantTurnSegmentView({
         ) : null}
         <AssistantTextContent
           message={segment.message}
+          onOpenFileCitation={onOpenFileCitation}
           onRetry={
             segment.message.failed && onRetryMessage
               ? () => onRetryMessage(segment.message)
@@ -137,20 +140,21 @@ function StreamingPlainTail({ text }: { text: string }) {
 function AssistantTextContent({
   message,
   profileId,
+  onOpenFileCitation,
   onRetry,
   retryDisabled = false,
 }: {
   message: ChatListItem;
   profileId?: string | null;
+  onOpenFileCitation?: (path: string) => void;
   onRetry?: () => void;
   retryDisabled?: boolean;
 }) {
   const { user } = useAuth();
   const streaming = Boolean(message.streaming && !message.thinkingStreaming);
   const content = useRafCoalescedValue(message.content, streaming);
-  const citedProfileId = user?.isPlatformAdmin ? profileId : null;
-  const [previewPath, setPreviewPath] = useState<string | null>(null);
-  const closePreview = useCallback(() => setPreviewPath(null), []);
+  const citedProfileId =
+    user?.isPlatformAdmin && onOpenFileCitation ? profileId : null;
 
   function openCitation(event: MouseEvent<HTMLElement>) {
     const link =
@@ -168,7 +172,7 @@ function AssistantTextContent({
       return;
     }
     event.preventDefault();
-    setPreviewPath(path);
+    onOpenFileCitation?.(path);
   }
 
   if (message.failed) {
@@ -212,14 +216,6 @@ function AssistantTextContent({
       >
         <MessageResponse>{markdown || "…"}</MessageResponse>
         <LocalCitationFooter citations={citations} />
-        {previewPath && citedProfileId ? (
-          <LocalCitationPreview
-            key={previewPath}
-            onClose={closePreview}
-            path={previewPath}
-            profileId={citedProfileId}
-          />
-        ) : null}
       </div>
     );
   }
@@ -235,19 +231,11 @@ function AssistantTextContent({
         </MessageResponse>
       ) : null}
       {tail || !sealed ? <StreamingPlainTail text={tail} /> : null}
-      {previewPath && citedProfileId ? (
-        <LocalCitationPreview
-          key={previewPath}
-          onClose={closePreview}
-          path={previewPath}
-          profileId={citedProfileId}
-        />
-      ) : null}
     </div>
   );
 }
 
-function LocalCitationPreview({
+export function LocalCitationPreview({
   path,
   profileId,
   onClose,
