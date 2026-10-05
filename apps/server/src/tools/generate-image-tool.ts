@@ -71,7 +71,8 @@ export interface GenerateImageToolDeps {
     modelId: string,
     inputTokens: number,
     outputTokens: number,
-    providerInstance: ProviderInstance
+    providerInstance: ProviderInstance,
+    orgId: string
   ) => void;
 }
 
@@ -239,7 +240,8 @@ export async function runGenerateImageTool(
       result.model,
       result.usage.inputTokens,
       result.usage.outputTokens,
-      selection.instance
+      selection.instance,
+      orgId
     );
   }
 
