@@ -4,8 +4,9 @@ import {
   assertChannelPath,
   type ChannelConfigScope,
   claimChannelIdentity,
-  generateHandshakeCode,
+  createPairingCodeSecret,
   getChannelConfigDir,
+  hasActiveHandshakeCode,
   isBotChannelUserAuthorized,
   isChannelOwner,
   listChannelOwners,
@@ -13,7 +14,8 @@ import {
   maskBotToken,
   releaseChannelClaims,
   resetChannelConversationState,
-  resolveHandshakeCodeOnSave,
+  resetPairingAttemptBudget,
+  resolveHandshakeOnSave,
   verifyAndPairBotChannelUser,
   writeBotChannelIniConfig,
 } from "./channel-config-shared";
@@ -22,10 +24,12 @@ import { ensureDir, pathExists, readDirectoryOrEmpty } from "./fs";
 import { getUserConfigDir } from "./user-config";
 
 export {
-  generateHandshakeCode,
+  hasActiveHandshakeCode,
+  isPairingCodeActive,
+  looksLikePairingCode,
   maskBotToken,
-  normalizeHandshakeInput,
 } from "./channel-config-shared";
+export { generatePairingCode } from "./pairing-code";
 
 export const DEFAULT_TELEGRAM_PROFILE_ID = "default";
 
@@ -33,6 +37,7 @@ export interface TelegramConfigFile {
   allowedUserIds: number[];
   botToken: string;
   handshakeCode: string | null;
+  handshakeExpiresAt: string | null;
   pairedUserIds: number[];
   profileId: string;
 }
@@ -187,7 +192,9 @@ export function toTelegramSettingsPublic(
     allowedUserIds: file.allowedUserIds,
     botTokenMasked: maskBotToken(file.botToken),
     configured: Boolean(file.botToken.trim()),
-    handshakeCode: file.handshakeCode,
+    // An expired code is worse than none: the dashboard would offer a secret
+    // that no longer works.
+    handshakeCode: hasActiveHandshakeCode(file) ? file.handshakeCode : null,
     pairedUserIds: file.pairedUserIds,
     profileId: file.profileId,
   };
@@ -262,7 +269,7 @@ function buildSavedTelegramConfig(
   return {
     allowedUserIds,
     botToken,
-    handshakeCode: resolveHandshakeCodeOnSave(existing, allowedUserIds),
+    ...resolveHandshakeOnSave(existing, allowedUserIds),
     pairedUserIds,
     profileId: resolveTelegramProfileId(input, existing),
   };
@@ -342,12 +349,15 @@ export async function regenerateTelegramHandshake(
     throw new Error("Save a bot token before generating a pairing code.");
   }
 
+  const { code, expiresAt } = createPairingCodeSecret();
   const next: TelegramConfigFile = {
     ...existing,
-    handshakeCode: generateHandshakeCode(),
+    handshakeCode: code,
+    handshakeExpiresAt: expiresAt,
   };
 
   await writeTelegramConfigFile(orgId, next);
+  resetPairingAttemptBudget(getTelegramConfigDir(orgId));
   return toTelegramSettingsPublic(next);
 }
 
@@ -357,10 +367,12 @@ export async function verifyAndPairTelegramUser(
   userId: number
 ): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
   return verifyAndPairBotChannelUser({
+    configDir: getTelegramConfigDir(orgId),
     handshakeInput,
     isAuthorized: isTelegramUserAuthorized,
     label: "Telegram",
     load: () => loadTelegramConfigFile(orgId),
+    sourceKey: "telegram",
     userId,
     write: (config) => writeTelegramConfigFile(orgId, config),
   });
@@ -387,6 +399,7 @@ export function resolveTelegramConfigFromSources(options: {
       : (file?.allowedUserIds ?? []),
     botToken,
     handshakeCode: file?.handshakeCode ?? null,
+    handshakeExpiresAt: file?.handshakeExpiresAt ?? null,
     pairedUserIds: file?.pairedUserIds ?? [],
     profileId:
       env.NAKAMA_TELEGRAM_PROFILE_ID?.trim() ||

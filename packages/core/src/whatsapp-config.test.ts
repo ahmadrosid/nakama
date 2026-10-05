@@ -153,17 +153,17 @@ describe("parseAllowedWhatsAppPhones", () => {
 });
 
 describe("generatePairingCode", () => {
-  test("returns 8 uppercase hex chars", () => {
-    expect(generatePairingCode()).toMatch(/^[0-9A-F]{8}$/);
+  test("returns 32 uppercase hex chars", () => {
+    expect(generatePairingCode()).toMatch(/^[0-9A-F]{32}$/);
   });
 });
 
 describe("saveWhatsAppConfig", () => {
-  test("creates config without auto-generating a pairing code", async () => {
+  test("creates config with a fresh expiring pairing code", async () => {
     await withTempHomedir("nakama-core-wa-home-", async () => {
       const result = await saveWhatsAppConfig({ profileId: "profile_custom" });
 
-      expect(result.pairingCode).toBeNull();
+      expect(result.pairingCode).toMatch(/^[0-9A-F]{32}$/);
       expect(result.configured).toBe(true);
       expect(result.phoneNumberMasked).toBeNull();
       expect(result.pairedJid).toBeNull();
@@ -171,7 +171,18 @@ describe("saveWhatsAppConfig", () => {
       const saved = await loadWhatsAppConfigFile();
       expect(saved?.phoneNumber).toBe("");
       expect(saved?.profileId).toBe("profile_custom");
-      expect(saved?.pairingCode).toBeNull();
+      expect(Date.parse(saved?.pairingCodeExpiresAt ?? "")).toBeGreaterThan(
+        Date.now()
+      );
+    });
+  });
+
+  test("keeps a live pairing code across an unrelated save", async () => {
+    await withTempHomedir("nakama-core-wa-home-", async () => {
+      const first = await saveWhatsAppConfig({ profileId: "profile_custom" });
+      const result = await saveWhatsAppConfig({ profileId: "profile_custom" });
+
+      expect(result.pairingCode).toBe(first.pairingCode);
     });
   });
 
@@ -332,6 +343,7 @@ describe("resolveWhatsAppConfigFromSources", () => {
         pairedJid: null,
         pairedLid: null,
         pairingCode: null,
+        pairingCodeExpiresAt: null,
         phoneNumber: "+9876543210",
         profileId: "profile_from_file",
         requireGroupMention: true,
@@ -343,6 +355,7 @@ describe("resolveWhatsAppConfigFromSources", () => {
       pairedJid: null,
       pairedLid: null,
       pairingCode: null,
+      pairingCodeExpiresAt: null,
       phoneNumber: "+1234567890",
       profileId: "profile_from_file",
       requireGroupMention: true,

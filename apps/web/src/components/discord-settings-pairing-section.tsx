@@ -16,10 +16,10 @@ function pairingCodeDescription(
 ): string {
   if (pairingCode) {
     if (isPaired) {
-      return "Send this code to your bot in Discord to link another account.";
+      return "Send this code to your bot in Discord to link another account. It expires in 10 minutes.";
     }
 
-    return "Send this code to your bot in Discord to finish linking.";
+    return "Send this code to your bot in Discord to finish linking. It expires in 10 minutes.";
   }
 
   if (isPaired) {
