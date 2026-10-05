@@ -5,7 +5,7 @@ import { useOrgMemoryProposals } from "@/hooks/use-org-memory-proposals";
 import { useSkillProposals } from "@/hooks/use-skill-proposals";
 import { orgSkillProposalsPath, PAGE_PATHS } from "@/lib/navigation";
 
-export type NotificationKind =
+type NotificationKind =
   | "automation-run"
   | "org-memory-proposal"
   | "skill-proposal";

@@ -1,6 +1,8 @@
+import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { buildLlmsTxt } from "../lib/site-meta";
+import { buildLlmsTxt, type PageMetadata } from "../lib/site-meta";
+import { type ContentPage, readContentPages } from "./content-inventory";
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
 const CONTENT_DIR = path.join(ROOT, "..", "content", "docs");
@@ -11,44 +13,41 @@ const MIRROR_ROUTES_DIR = path.join(WEBSITE_DIR, "app", "(mirrors)");
 
 const EXTRA_MIRRORS = ["getting-started.md"];
 
-function mdxPathToRelativePath(relativeMdxPath: string): string {
-  if (relativeMdxPath === "docs.mdx") {
-    return "docs/index.md";
-  }
-  const withoutExt = relativeMdxPath.replace(/\.mdx$/, "");
-  if (withoutExt.endsWith("/index")) {
-    const dir = withoutExt.slice(0, -"/index".length);
-    return dir ? `${dir}/index.md` : "index.md";
-  }
-  return `${withoutExt}.md`;
-}
+// next build resolves pages, not the links inside them, so a renamed page
+// leaves dead internal links that only a reader finds.
+function checkInternalLinks(contentPages: ContentPage[]): void {
+  const routes = new Set([
+    ...contentPages.map((page) =>
+      page.relativePath.replace(/\.md$/, "").replace(/(^|\/)index$/, "")
+    ),
+    ...EXTRA_MIRRORS.map((extra) => extra.replace(/\.md$/, "")),
+  ]);
+  const missing: string[] = [];
 
-function stripFrontmatter(content: string): string {
-  if (!content.startsWith("---\n")) {
-    return content;
-  }
-  const end = content.indexOf("\n---\n", 4);
-  if (end === -1) {
-    return content;
-  }
-  return content.slice(end + 5);
-}
-
-async function walkMdxFiles(dir: string, base = ""): Promise<string[]> {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const files: string[] = [];
-
-  for (const entry of entries) {
-    const relative = base ? `${base}/${entry.name}` : entry.name;
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...(await walkMdxFiles(full, relative)));
-    } else if (entry.name.endsWith(".mdx")) {
-      files.push(relative);
+  for (const page of contentPages) {
+    for (const match of page.markdown.matchAll(/\[[^\]]*\]\(([^)\s]+)/g)) {
+      const href = match[1];
+      if (!href.startsWith("/") || href.startsWith("//")) {
+        continue;
+      }
+      const route = href.replace(/[?#].*$/, "").replace(/^\/+|\/+$/g, "");
+      if (
+        route === "" ||
+        route === "llms.txt" ||
+        routes.has(route.replace(/\.md$/, "")) ||
+        existsSync(path.join(PUBLIC_DIR, route))
+      ) {
+        continue;
+      }
+      missing.push(`${page.mdxPath}: ${href}`);
     }
   }
 
-  return files.sort();
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing internal documentation paths:\n${missing.join("\n")}`
+    );
+  }
 }
 
 function mirrorContentType(relativePath: string): string {
@@ -116,37 +115,44 @@ async function cleanGeneratedMirrors() {
 async function main() {
   await cleanGeneratedMirrors();
 
-  const mdxFiles = await walkMdxFiles(CONTENT_DIR);
-  const pages = mdxFiles.map(mdxPathToRelativePath);
+  const contentPages: ContentPage[] = await readContentPages(CONTENT_DIR);
+  checkInternalLinks(contentPages);
+  const pages: PageMetadata[] = contentPages.map((page) => ({
+    description: page.description,
+    relativePath: page.relativePath,
+    title: page.title,
+  }));
 
-  for (const mdxFile of mdxFiles) {
-    const sourcePath = path.join(CONTENT_DIR, mdxFile);
-    const relativePath = mdxPathToRelativePath(mdxFile);
-    const outputPath = path.join(MIRRORS_DIR, relativePath);
-    const raw = await readFile(sourcePath, "utf8");
-    const markdown = stripFrontmatter(raw);
-
+  for (const page of contentPages) {
+    const outputPath = path.join(MIRRORS_DIR, page.relativePath);
     await mkdir(path.dirname(outputPath), { recursive: true });
-    await writeFile(outputPath, markdown);
+    await writeFile(outputPath, page.markdown);
   }
 
   for (const extra of EXTRA_MIRRORS) {
     const sourcePath = path.join(WEBSITE_DIR, extra);
     const outputPath = path.join(MIRRORS_DIR, extra);
     const raw = await readFile(sourcePath, "utf8");
-    const markdown = stripFrontmatter(raw.replace(/^---[\s\S]*?---\n/, ""));
-    await writeFile(outputPath, markdown);
-    if (!pages.includes(extra)) {
-      pages.push(extra);
+    await writeFile(outputPath, raw);
+    if (!pages.some((page) => page.relativePath === extra)) {
+      const title = raw.match(/^# (.+)$/m)?.[1] ?? "Getting Started";
+      const description =
+        raw
+          .split("\n")
+          .map((line) => line.trim())
+          .find((line) => line && !line.startsWith("#")) ?? "";
+      pages.push({ description, relativePath: extra, title });
     }
   }
 
   await writeFile(path.join(MIRRORS_DIR, "llms.txt"), buildLlmsTxt(pages));
 
+  const pagePaths = pages.map((page) => page.relativePath);
+
   const sitemapUrls = [
     "",
-    ...pages.map((page) => {
-      const clean = page.replace(/index\.md$/, "").replace(/\.md$/, "");
+    ...pagePaths.map((pagePath) => {
+      const clean = pagePath.replace(/index\.md$/, "").replace(/\.md$/, "");
       return clean ? `/${clean}` : "/";
     }),
   ];
@@ -166,7 +172,7 @@ ${sitemapUrls
 `;
   await writeFile(path.join(PUBLIC_DIR, "sitemap.xml"), sitemap);
 
-  await writeMirrorRoutes([...pages, "llms.txt"]);
+  await writeMirrorRoutes([...pagePaths, "llms.txt"]);
 
   console.log(
     `Generated ${pages.length} markdown mirrors, llms.txt, sitemap.xml, and mirror routes`

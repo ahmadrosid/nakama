@@ -338,6 +338,7 @@ describe("web_fetch happy path", () => {
     expect(out.content).toContain("# Title");
     expect(out.content).toContain("**world**");
     expect(out.imageUrl).toBeUndefined();
+    expect(out.images).toBeUndefined();
     expect(requests).toBe(1); // The default path never fetches robots or images.
   });
 
@@ -367,6 +368,7 @@ describe("web_fetch happy path", () => {
     expect(out.imageUrl).toBe(
       "https://chatswood-h.schools.nsw.gov.au/media_school.jpg?width=1200&format=pjpg"
     );
+    expect(out.images).toEqual([{ data: "/9j/AA==", mediaType: "image/jpeg" }]);
     expect(requests.map((request) => new URL(request).pathname)).toEqual([
       "/robots.txt",
       "/",
@@ -397,6 +399,7 @@ describe("web_fetch happy path", () => {
         CTX
       );
       expect(out.imageUrl).toBeNull();
+      expect(out.images).toBeUndefined();
     }
   });
 
@@ -520,6 +523,7 @@ describe("web_fetch happy path", () => {
         CTX
       );
       expect(out.imageUrl).toBeNull();
+      expect(out.images).toBeUndefined();
       expect(requests).toEqual(
         imageResponse ? ["/robots.txt", "/", "/pic.jpg"] : ["/robots.txt", "/"]
       );

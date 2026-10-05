@@ -1,5 +1,4 @@
 import { Tabs } from "@base-ui/react/tabs";
-import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
 import { Switch } from "@nakama/ui/switch";
 import { useState } from "react";
 import { SkillProposalsPanel } from "@/components/profiles/SkillProposalsPanel";
@@ -38,11 +37,8 @@ export function ProfileConfigAssignmentsSection({
     availableComposioToolkits,
     handleAssignComposioToolkit,
     allSkills,
-    assignedSkillIds,
     setSkillCreateOpen,
     setSkillInstallOpen,
-    handleAssignSkill,
-    handleDeleteSkill,
     selectedId,
   } = state;
   const { navigateToSkillDetail } = useAppNavigation();
@@ -145,17 +141,13 @@ export function ProfileConfigAssignmentsSection({
       <Tabs.Panel value="skills">
         <ProfileSkillsSection
           allSkills={allSkills.filter((skill) => !skill.pluginId)}
-          assignedSkillIds={assignedSkillIds}
           busy={readOnly}
           detail={{
             ...detail,
             skills: detail.skills.filter((skill) => !skill.pluginId),
           }}
-          onAssign={handleAssignSkill}
-          onAssignBash={() => handleAssignTool(BASH_TOOL_ID)}
+          onAddOpen={() => setSkillInstallOpen(true)}
           onCreateOpen={() => setSkillCreateOpen(true)}
-          onDelete={handleDeleteSkill}
-          onInstallOpen={() => setSkillInstallOpen(true)}
           onRemove={setRemoveConfirm}
           onViewDetail={(skillId) => {
             navigateToSkillDetail(skillId, {

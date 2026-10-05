@@ -29,7 +29,7 @@ In the [Discord Developer Portal](https://discord.com/developers/applications), 
 
 | Value | Portal location | For Nakama? |
 | --- | --- | --- |
-| **Bot token** | **Bot** | Yes — paste in **Agent → profile → Channels → Discord** |
+| **Bot token** | **Bot** | Yes, paste in **Agent → your agent → Channels → Discord** |
 | **Message Content Intent** | **Bot → Privileged Gateway Intents** | Yes — turn the toggle **on** |
 | OAuth2 permissions | **OAuth2 → URL Generator** | Yes — invite the bot to your server |
 | Application ID, Public Key | General Information | No |
@@ -54,29 +54,31 @@ This toggle is required. Without it, the bridge worker logs `Used disallowed int
    - **Manage Threads** (recommended so `/close` can archive bot conversation threads)
 4. Copy the generated URL, open it, pick a server, and approve
 
-You can also use the **Invite bot to server** link on **Agent → profile → Channels → Discord** after saving your token — Nakama generates an invite with the right permissions.
+You can also use the **Invite bot to server** link on **Agent → your agent → Channels → Discord** after saving your token. Nakama generates an invite with the right permissions.
 
 Keep the token secret. If you enable Message Content Intent after the bot is already in a server, generate a fresh invite and add the bot again.
 
 ## Step 2: Save in Nakama
 
-An organization admin can open **Agent → profile → Channels → Discord** and select the profile that should answer. The route is scoped to that profile, so the connection is fixed to it; there is no separate default-profile selector. Then:
+Sign in as an organization admin or platform admin and open **Agent → your agent → Channels → Discord**, then:
 
 1. Paste the bot token
 2. Save — Nakama validates it with Discord and generates a pairing code on the same page
+
+The channel settings route is `/profiles/:profileId/channels/discord`.
 
 ## Step 3: Pair your Discord account
 
 Pairing links your Discord user to Nakama so unlinked users cannot use the bot.
 
-1. Copy the pairing code from **Agent → profile → Channels → Discord** (click **Regenerate** if needed)
+1. Copy the pairing code from **Agent → your agent → Channels → Discord** (click **Regenerate** if needed)
 2. Open a private DM with your bot and send the code as a plain text message
 
 After a successful match, that user is linked and the code is cleared. Server channels require the user to pair in a private DM or be on the profile's allowed-user list.
 
 ## Step 4: Start the Discord bridge
 
-On **Agent → profile → Channels → Discord**, use the **Bridge worker** controls to start the worker. The worker is scoped to the organization and profile in the route.
+On **Agent → your agent → Channels → Discord**, use the **Bridge worker** controls to start the worker.
 
 The bridge connects to Discord and forwards messages to your Nakama server.
 
@@ -86,7 +88,7 @@ Nakama also supports allowlisting Discord user IDs directly. This is useful when
 
 To add users from the dashboard:
 
-1. Open **Agent → profile → Channels → Discord**
+1. Open **Agent → your agent → Channels → Discord**
 2. In **Allowed users**, click **Manage**
 3. Paste a Discord user snowflake ID and click **Add**
 
@@ -178,15 +180,11 @@ Each profile owns its bot, pairings, conversations, worker controls, and logs. T
 
 **Stop** keeps the configuration. **Disconnect** removes credentials, pairings, and the channel directory's session/thread data. Disconnect before moving a profile to another organization. Clones and exports do not include connections.
 
-If an older connection cannot be assigned automatically, it stays stopped. Claim it from **Agent → profile → Channels → Discord**. Installation-wide connections require a platform admin.
-
-## Rotating the bot token
-
-After you replace the Discord bot token, restart this profile's Discord worker. The long-lived gateway process keeps the token it loaded at startup, so saving alone does not rotate the running connection.
+If an older connection cannot be assigned automatically, it stays stopped until it is claimed for an agent through the API (`POST /v1/settings/channel-legacy/claim`). The dashboard has no claim control. Installation-wide connections require a platform admin.
 
 ## Running the worker directly
 
-The dashboard supplies the scope automatically. A direct run must set both values so the worker reads the correct profile-scoped config:
+A direct local run needs the organization and profile that own the connection:
 
 ```bash
 NAKAMA_CHANNEL_ORG_ID="org_your_org" \
@@ -194,7 +192,7 @@ NAKAMA_CHANNEL_PROFILE_ID="your-profile" \
 bun run dev:discord
 ```
 
-Save the Discord connection in the same Nakama config directory first. Set `NAKAMA_SERVER_URL` and `NAKAMA_CONFIG_DIR` as needed for a separate server or non-default config root.
+Save the connection in the same Nakama config directory first. Set `NAKAMA_SERVER_URL` and `NAKAMA_CONFIG_DIR` if you use a separate server or config root.
 
 ## Troubleshooting
 
@@ -206,7 +204,7 @@ The Discord bridge cannot start because **Message Content Intent** is off for th
 
 1. [Discord Developer Portal](https://discord.com/developers/applications) → your app → **Bot**
 2. Under **Privileged Gateway Intents**, turn **Message Content Intent** **on**
-3. Save, then restart the Discord bridge worker in **Agent → profile → Channels → Discord**
+3. Save, then restart the Discord bridge worker in **Agent → your agent → Channels → Discord**
 
 If the bot was already in your server before you enabled the intent, generate a fresh invite (Step 1b) and add the bot again.
 
@@ -217,7 +215,7 @@ This is not something Nakama can enable for you — Discord only exposes this as
 Check these first:
 
 1. The bot token is saved correctly
-2. The Discord bridge worker is running (start it from **Agent → profile → Channels → Discord**)
+2. The Discord bridge worker is running (start it from **Agent → your agent → Channels → Discord**)
 3. The Nakama server is running
 4. The Discord user is paired or allowlisted
 

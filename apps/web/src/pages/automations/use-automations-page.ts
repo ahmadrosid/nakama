@@ -1,9 +1,11 @@
+import uFuzzy from "@leeoniya/ufuzzy";
 import type {
   AutomationRunRecord,
   StoredAutomation,
 } from "@nakama/core/contract";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
@@ -25,9 +27,14 @@ import { formatTrigger } from "@/pages/automations/automations-page.shared";
 
 const EMPTY_AUTOMATIONS: StoredAutomation[] = [];
 const EMPTY_UNREAD_BY_AUTOMATION_ID: Record<string, number> = {};
+const automationSearch = new uFuzzy({
+  compare: () => 0,
+  intraIns: Number.POSITIVE_INFINITY,
+});
 
 export function useAutomationsPage() {
   const { navigateToNewChat } = useAppNavigation();
+  const { profileId } = useActiveChatProfile();
   const {
     data: automationsData,
     isLoading: initialLoading,
@@ -35,12 +42,17 @@ export function useAutomationsPage() {
     error: automationsError,
     refetch: refetchAutomations,
   } = useAutomationsQuery(5000);
-  const automations = automationsData?.automations ?? EMPTY_AUTOMATIONS;
   const unreadByAutomationId =
     automationsData?.unread?.byAutomationId ?? EMPTY_UNREAD_BY_AUTOMATION_ID;
   const { data: profiles = [], isLoading: profilesLoading } =
     useProfilesQuery();
   const superBotProfile = findSuperBotProfile(profiles);
+  const automations = useMemo(() => {
+    const all = automationsData?.automations ?? EMPTY_AUTOMATIONS;
+    return profileId && profileId === superBotProfile?.id
+      ? all
+      : all.filter((automation) => automation.profileId === profileId);
+  }, [automationsData?.automations, profileId, superBotProfile?.id]);
   const [searchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const {
@@ -78,14 +90,21 @@ export function useAutomationsPage() {
     automations.find((automation) => automation.id === selectedId) ?? null;
 
   const filteredAutomations = useMemo(() => {
-    const query = trimmedSearch.toLowerCase();
-    return automations.filter(
-      (automation) =>
-        !query ||
-        automation.name.toLowerCase().includes(query) ||
-        automation.description.toLowerCase().includes(query) ||
-        automation.id.toLowerCase().includes(query)
+    const query = trimmedSearch.trim().toLowerCase();
+    if (!query) {
+      return automations;
+    }
+
+    const [indices, info, order] = automationSearch.search(
+      automations.map((automation) =>
+        [automation.name, automation.description, automation.id].join(" ")
+      ),
+      query
     );
+
+    const matches =
+      info && order ? order.map((index) => info.idx[index]) : indices;
+    return (matches ?? []).map((index) => automations[index]!);
   }, [automations, trimmedSearch]);
 
   const selectedRunSummary = useMemo(() => {

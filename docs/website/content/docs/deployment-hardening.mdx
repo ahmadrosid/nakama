@@ -1,0 +1,262 @@
+---
+title: "Deployment hardening"
+description: "Reduce exposure, protect Nakama data, and verify a self-hosted deployment before people use it."
+---
+
+Nakama holds provider keys, account sessions, message history, files, and tools
+that can act on other systems. Treat the dashboard as an administrative console,
+not as a public website.
+
+The safest starting point is a private network such as Tailscale. If people must
+reach Nakama from the public internet, put it behind an HTTPS reverse proxy and
+keep port `4310` private.
+
+## Before people sign in
+
+| Area | Minimum control |
+| --- | --- |
+| Inbound network | Expose HTTPS on `443`; do not expose `4310` directly |
+| TLS | Terminate TLS at Caddy, Nginx, Traefik, or an equivalent managed proxy |
+| Public origin | Set `NAKAMA_WEB_PUBLIC_URL` to the exact HTTPS origin |
+| Data root | Persist it, restrict it to the Nakama service account, and include it in encrypted backups |
+| Secrets | Keep provider keys and channel tokens out of images, Compose files, shell history, and source control |
+| Egress | Permit only the destinations required by the features you enabled |
+| Recovery | Test a restore before relying on a backup schedule |
+| Updates | Pin a tested image tag or digest; stage upgrades and keep a rollback copy |
+
+## Keep the application port private
+
+Nakama has no built-in TLS. A source install binds to loopback by default, while
+the Docker image listens on `0.0.0.0:4310` inside the container. Publishing
+`4310` on every host interface bypasses the protection your reverse proxy would
+otherwise provide.
+
+When the proxy runs on the same Docker host, bind the published port to loopback:
+
+Replace `VERSION` with a release tag you have tested:
+
+```bash
+docker run -d \
+  -p 127.0.0.1:4310:4310 \
+  -v nakama-data:/nakama/data \
+  -e NAKAMA_WEB_PUBLIC_URL=https://nakama.example.com \
+  --name nakama \
+  ghcr.io/ahmadrosid/nakama:VERSION
+```
+
+When the proxy and Nakama are services in the same Compose project, place them
+on a private Docker network and omit `ports` from the Nakama service. Use
+`expose: ["4310"]` only as documentation; Compose services on the same network
+can already reach that port.
+
+Allow inbound traffic to the proxy on `443`. Redirect `80` to HTTPS if you need
+certificate issuance or an HTTP redirect. Deny direct public access to `4310`.
+
+For a deployment that does not need public callbacks or public artifact links,
+[Tailscale](/tailscale) avoids a public listener entirely.
+
+## Terminate TLS at a reverse proxy
+
+### Caddy
+
+Caddy obtains and renews certificates automatically when DNS points at the host
+and ports `80` and `443` reach it:
+
+```text
+nakama.example.com {
+  @metrics path /metrics
+  respond @metrics 404
+
+  reverse_proxy 127.0.0.1:4310 {
+    flush_interval -1
+  }
+}
+```
+
+### Nginx
+
+The certificate paths below are examples. Keep response buffering off so chat
+streaming through Server-Sent Events is not delayed:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name nakama.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/nakama.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/nakama.example.com/privkey.pem;
+
+    location = /metrics { return 404; }
+
+    location / {
+        proxy_pass http://127.0.0.1:4310;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+    }
+}
+```
+
+If Prometheus needs `/metrics`, replace the public `404` with an IP allowlist or
+a private listener. The metrics endpoint has no application login when
+`NAKAMA_METRICS=true`.
+
+Behind a reverse proxy, Nakama's rate limiter sees the proxy address by default.
+Set `NAKAMA_TRUST_PROXY=true` only when the backend port is private and the
+proxy replaces untrusted `X-Forwarded-For` values. A client that can reach the
+backend or supply the first forwarded address can otherwise choose its own
+rate-limit identity.
+
+After the proxy is live, set the exact external origin:
+
+```bash
+NAKAMA_WEB_PUBLIC_URL=https://nakama.example.com
+```
+
+Nakama uses this value for OAuth callbacks and public artifact links. Do not
+point it at an internal HTTP address when users enter through HTTPS.
+
+## Limit outbound traffic
+
+A fresh server does not send telemetry. Network calls start when an operator
+configures a provider or integration, or when a user or agent invokes a network
+tool. The packaged desktop app is the exception: it checks its GitHub update
+feed at startup and every six hours.
+
+Use the [outbound connections inventory](/outbound-connections) to build an
+egress policy. Keep these two cases in mind:
+
+- Fixed services such as a selected LLM provider or Telegram can be allowlisted
+  by destination.
+- `web_fetch`, browser automation, HTTP MCP servers, custom tools, plugins, and
+  coding agents can target operator- or user-selected hosts. Either isolate
+  those capabilities in a controlled network or leave them unassigned.
+
+DNS-only allowlists do not control a tool after it starts another process.
+Enforce egress at the host, container network, or firewall boundary.
+
+## Protect the data root
+
+The data root contains more than the SQLite database. It can contain provider
+keys, channel credentials, OAuth state, profile workspaces, memory, attachments,
+plugin data, and public-share snapshots. An exported backup can contain the
+same material.
+
+Nakama does not currently provide full encryption at rest for this data root.
+Use an encrypted host filesystem or volume in addition to restrictive file
+permissions. Native secret-manager and encrypted-config support is tracked in
+[#364](https://github.com/ahmadrosid/nakama/issues/364).
+
+The container runs as non-root UID `1000`. For a bind mount, create a dedicated
+directory and make that account its owner before starting Nakama:
+
+```bash
+sudo install -d -m 700 -o 1000 -g 1000 /srv/nakama-data
+```
+
+Then mount `/srv/nakama-data:/nakama/data`. Do not mount a home directory, the
+Docker socket, or unrelated application data into the container. Host-backed
+`bash`, custom tools, browser automation, coding agents, and plugins can reach
+whatever the Nakama process can reach.
+
+The stock image already runs as UID `1000`; do not replace that with root or add
+`--privileged`. Add `/dev/kvm` only when you deliberately operate the
+MicroSandbox backend and understand the host dependency.
+
+## Handle secrets deliberately
+
+- For settings that Nakama accepts from environment variables, inject them at
+  runtime from your deployment platform or a protected environment file. Keep
+  that file readable only by the service account. Settings saved through the
+  dashboard still require protection of the data root described above.
+- Do not bake keys into an image or commit them in Compose files.
+- Give each deployment its own provider, channel, mailbox, Composio, MCP, and
+  error-tracking credentials so one leak can be rotated without affecting every
+  environment.
+- Remove stale integrations and revoke their credentials at the provider. A
+  disabled worker stops using a token; it does not revoke the token upstream.
+- Keep debug logs local and short-lived. HTTP request logs omit bodies and
+  credentials, but local process and tool logs are not a general-purpose secret
+  scrubber.
+
+In **Control center → Workspace → Settings → Multi-factor authentication**, register a passkey or
+authenticator app for privileged accounts and store backup codes offline. A
+platform admin can enable and enforce MFA for selected roles. Test a recovery
+login before making enforcement mandatory.
+
+## Back up for recovery, not just retention
+
+Use **Control center → Workspace → Settings → Export ZIP** or snapshot the persistent volume. Prefer the
+application export while Nakama is running. If you copy the SQLite files or the
+whole volume directly, stop the container first so the snapshot is not taken
+mid-write.
+
+For each environment:
+
+1. Choose a recovery point objective and schedule backups more frequently than
+   that interval.
+2. Encrypt backups before they leave the host and restrict who can download
+   them.
+3. Keep at least one copy outside the Nakama host and apply a retention limit.
+4. Restore into an isolated instance and verify login, org membership, profile
+   files, attachments, and one non-production provider connection.
+5. Record the Nakama image version used by the restore test.
+
+See [Backup and restore](/backup-restore) for the supported export and import
+flows.
+
+## Reduce runtime impact
+
+- Assign `bash`, browser automation, coding agents, skill scripts, custom tools,
+  MCP servers, plugins, and external providers only to profiles that need them.
+- Prefer MicroSandbox for untrusted shell work when the host supports it. The
+  default host backend runs inside the Nakama process environment and is not a
+  tenant sandbox.
+- Set CPU and memory limits with enough headroom for enabled channel workers.
+  WhatsApp and browser workloads use more memory than an offline server.
+- Leave `/metrics` off unless a private collector needs it. Use `/healthz` for
+  liveness and `/readyz` for database readiness; neither verifies external
+  providers or worker connectivity.
+- Use `NAKAMA_LOG_FORMAT=json` and request IDs when shipping logs. Treat the log
+  destination as sensitive because tool and worker logs can include operational
+  data even though HTTP request logging omits bodies.
+- Configure [error tracking](/error-tracking) only when the destination and its
+  retention policy are acceptable for the deployment.
+
+## Verify the boundary
+
+Run these checks from a machine outside the host network:
+
+```bash
+# Must succeed through TLS.
+curl --fail --show-error https://nakama.example.com/healthz
+
+# Must fail or time out; 4310 must not be public.
+curl --connect-timeout 5 http://nakama.example.com:4310/healthz
+
+# Must be 404 or blocked unless this client is an approved metrics collector.
+curl --fail-with-body https://nakama.example.com/metrics
+```
+
+Then verify operational controls rather than assuming them:
+
+- Sign in as a viewer and confirm mutation and agent actions are unavailable.
+- Confirm an org member cannot select another organization by changing the URL,
+  cookie, or `X-Org-Id` header.
+- Restore the latest backup into an isolated instance.
+- Trigger one configured integration at a time and compare observed egress with
+  the [inventory](/outbound-connections).
+- Re-run these checks after proxy, firewall, provider, plugin, MCP, or channel
+  changes.
+
+## Related material
+
+- [Docker](/docker)
+- [Coolify](/coolify)
+- [Tailscale](/tailscale)
+- [Backup and restore](/backup-restore)
+- [Outbound connections](/outbound-connections)
+- [Threat model](https://github.com/ahmadrosid/nakama/blob/main/THREAT_MODEL.md)

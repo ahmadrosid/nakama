@@ -86,4 +86,54 @@ describe("guardFilePath", () => {
     expect(guarded.resolved).toBe(path.join(realWorkspace, "SOUL.md"));
     expect(guarded.resolved).not.toBe(path.join(process.cwd(), "SOUL.md"));
   });
+  test.skipIf(process.platform !== "win32")(
+    "refuses NTFS alternate data stream names on Windows",
+    async () => {
+      const workspace = await mkdtemp(path.join(tmpdir(), "nakama-guard-ads-"));
+      try {
+        for (const attempt of [
+          "skills/x/tool.js::$DATA",
+          "notes 10:30.md",
+          "docs:hidden/notes.md",
+          path.join(workspace, "MEMORY.md:stream"),
+        ]) {
+          const refused = guardFilePath(attempt, null, 10, { cwd: workspace });
+          await expect(refused).rejects.toBeInstanceOf(PathGuardError);
+          await expect(refused).rejects.toMatchObject({ code: "SPECIAL_FILE" });
+        }
+
+        // The drive letter's own colon is not a stream.
+        const guarded = await guardFilePath(
+          path.join(workspace, "notes.md"),
+          null,
+          10,
+          { cwd: workspace }
+        );
+        expect(guarded.resolved).toBe(
+          path.join(await realpath(workspace), "notes.md")
+        );
+      } finally {
+        await rm(workspace, { force: true, recursive: true });
+      }
+    }
+  );
+
+  test.skipIf(process.platform === "win32")(
+    "keeps ':' as an ordinary file name character on POSIX",
+    async () => {
+      const workspace = await mkdtemp(
+        path.join(tmpdir(), "nakama-guard-colon-")
+      );
+      try {
+        const guarded = await guardFilePath("notes 10:30.md", null, 10, {
+          cwd: workspace,
+        });
+        expect(guarded.resolved).toBe(
+          path.join(await realpath(workspace), "notes 10:30.md")
+        );
+      } finally {
+        await rm(workspace, { force: true, recursive: true });
+      }
+    }
+  );
 });

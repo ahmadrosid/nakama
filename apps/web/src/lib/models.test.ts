@@ -18,6 +18,38 @@ import {
 } from "./models";
 
 describe("buildCreateProviderRequest", () => {
+  test("includes routing only for OpenRouter", () => {
+    const openRouterRouting = {
+      dataCollection: "deny",
+      requireParameters: true,
+      zdr: false,
+    } as const;
+    expect(
+      buildCreateProviderRequest({
+        apiKey: "key",
+        openRouterRouting,
+        provider: "openrouter",
+      }).openRouterRouting
+    ).toEqual(openRouterRouting);
+    expect(
+      buildCreateProviderRequest({
+        apiKey: "key",
+        openRouterRouting,
+        provider: "openai",
+      })
+    ).not.toHaveProperty("openRouterRouting");
+    expect(
+      buildCreateProviderRequest({ apiKey: "key", provider: "openrouter" })
+    ).not.toHaveProperty("openRouterRouting");
+    expect(
+      buildCreateProviderRequest({
+        apiKey: "key",
+        openRouterRouting: {},
+        provider: "openrouter",
+      })
+    ).not.toHaveProperty("openRouterRouting");
+  });
+
   test.each([
     ["openai_compatible", true, true],
     ["openrouter", true, false],
@@ -575,6 +607,7 @@ describe("firstAvailableProviderOption", () => {
           "openrouter",
           "gemini",
           "deepseek",
+          "netra",
           "doubao",
           "together",
           "xiaomi",

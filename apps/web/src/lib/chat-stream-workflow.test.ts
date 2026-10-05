@@ -117,6 +117,28 @@ describe("chat-stream-workflow", () => {
     ).toBe("Morning Brief · 1 step");
   });
 
+  test("tool activity labels keep long inputs in details", () => {
+    expect(formatToolActionLabel("bash", { command: "find . -type f" })).toBe(
+      "Ran command"
+    );
+    expect(
+      formatToolActionLabel("search_files", {
+        path: "/workspace/bob",
+        query: "lesson|learned|2026-10-04",
+      })
+    ).toBe("Searched bob");
+    expect(
+      formatToolActionLabel("knowledge_base_search", {
+        query: "lesson learned today",
+      })
+    ).toBe("Searched knowledge base");
+    expect(
+      formatToolActionLabel("org_memory_search", {
+        query: "lesson learned today",
+      })
+    ).toBe("Searched organization memory");
+  });
+
   test("parseWorkflowId reads input", () => {
     expect(parseWorkflowId({ workflowId: " workflow_1 " })).toBe("workflow_1");
     expect(parseWorkflowId({})).toBeNull();

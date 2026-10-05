@@ -27,13 +27,15 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateMcpTables);
   atomic(migrateSkillsTables);
   atomic(migrateUsersTable);
+  atomic(migratePasskeyTables);
   atomic(migrateOrgTables);
-  atomic(migrateApiKeysTable);
+  atomic((database) => database.exec("DROP TABLE IF EXISTS api_keys"));
   atomic(migrateLegacyUserContextToOrgMembers);
   atomic(migrateOrgMemoryProposalsTable);
   atomic(migrateSkillProposalsTable);
   atomic(migrateSkillSuggestionsTable);
   atomic(migrateSkillsWriteApprovalColumns);
+  atomic(migrateOrganizationAllowedInviteDomains);
   atomic(migrateSkillsPostTurnReviewColumns);
   atomic(migrateAutomationsEnabledColumn);
   atomic(migrateSkillsCuratorColumns);
@@ -50,7 +52,7 @@ export function migrateDatabase(db: Database): void {
   migrateLegacyProfileIds(db);
   atomic(migrateCodingDelegationSkillName);
   atomic(migrateWorkspaceSettingsTable);
-  atomic(migrateLlmUsageModelStatsTable);
+  atomic(migrateLlmUsageOrgScope);
   atomic(migrateToolOutputSavingsTable);
   atomic(migrateLlmTurnUsageTable);
   atomic(migrateAttachmentsTable);
@@ -62,7 +64,9 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateAuditEventsTable);
   atomic(migrateProfileChangeEventsTable);
   atomic(migratePluginTables);
+  atomic(migrateRemoveGoogleMeetPlugin);
   atomic(migrateFilePinsTable);
+  atomic(migrateNotificationWebhookDeliveriesTable);
 }
 
 function migrateSessionAppUserId(db: Database): void {
@@ -402,18 +406,139 @@ function migrateUsersTable(db: Database): void {
   `);
 }
 
-function migrateLlmUsageModelStatsTable(db: Database): void {
+function migratePasskeyTables(db: Database): void {
   db.exec(`
-    CREATE TABLE IF NOT EXISTS llm_usage_model_stats (
-      model_id TEXT PRIMARY KEY NOT NULL,
+    CREATE TABLE IF NOT EXISTS user_passkeys (
+      id TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT NOT NULL,
+      credential_id TEXT NOT NULL,
+      public_key TEXT NOT NULL,
+      counter INTEGER NOT NULL DEFAULT 0,
+      transports TEXT NOT NULL DEFAULT '[]',
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS user_passkeys_credential_unique
+      ON user_passkeys (credential_id);
+    CREATE INDEX IF NOT EXISTS user_passkeys_user_idx
+      ON user_passkeys (user_id);
+    CREATE TABLE IF NOT EXISTS user_passkey_challenges (
+      challenge TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT,
+      type TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    );
+  `);
+
+  const columns = db
+    .prepare("PRAGMA table_info(user_passkey_challenges)")
+    .all() as Array<{ name: string; notnull: number }>;
+  if (columns.find((column) => column.name === "user_id")?.notnull) {
+    db.exec(`
+      ALTER TABLE user_passkey_challenges
+        RENAME TO user_passkey_challenges_legacy;
+      CREATE TABLE user_passkey_challenges (
+        challenge TEXT PRIMARY KEY NOT NULL,
+        user_id TEXT,
+        type TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+      );
+      INSERT INTO user_passkey_challenges (
+        challenge, user_id, type, expires_at, created_at
+      )
+      SELECT challenge, user_id, type, expires_at, created_at
+      FROM user_passkey_challenges_legacy;
+      DROP TABLE user_passkey_challenges_legacy;
+    `);
+  }
+}
+
+/**
+ * LLM usage is a tenant ledger: the system status page reports it per org, so
+ * one install-wide row answered every organization's request with the whole
+ * install's tokens and cost (#1306).
+ *
+ * Both tables are rebuilt rather than ALTERed because the org has to join the
+ * primary key: one row per org, one row per org and model. The old rows carry
+ * no org. With exactly one organization they can only be that org's, so they
+ * move to it. With several there is no telling whose spend they were, so both
+ * tables start empty and each org accumulates from its next request.
+ *
+ * This runs on every open, so a table that already has org_id in its key is
+ * left alone.
+ */
+function migrateLlmUsageOrgScope(db: Database): void {
+  const unscoped = (
+    [
+      ["llm_usage_stats", "id"],
+      ["llm_usage_model_stats", "model_id"],
+    ] as const
+  ).filter(([table]) => {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+      name: string;
+      pk: number;
+    }>;
+    return (
+      columns.length > 0 &&
+      !columns.some((column) => column.name === "org_id" && column.pk > 0)
+    );
+  });
+
+  for (const [table] of unscoped) {
+    db.exec(`ALTER TABLE ${table} RENAME TO ${table}_unscoped;`);
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS llm_usage_stats (
+      org_id TEXT NOT NULL,
+      id TEXT NOT NULL,
       request_count INTEGER NOT NULL DEFAULT 0,
       input_tokens INTEGER NOT NULL DEFAULT 0,
       output_tokens INTEGER NOT NULL DEFAULT 0,
       estimated_cost_usd REAL NOT NULL DEFAULT 0,
       tracked_since TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (org_id, id)
+    );
+    CREATE TABLE IF NOT EXISTS llm_usage_model_stats (
+      org_id TEXT NOT NULL,
+      model_id TEXT NOT NULL,
+      request_count INTEGER NOT NULL DEFAULT 0,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      estimated_cost_usd REAL NOT NULL DEFAULT 0,
+      tracked_since TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (org_id, model_id)
     );
   `);
+
+  // Archived organizations count: one of them may be who ran up the old total.
+  const orgs = db
+    .prepare("SELECT id FROM organizations LIMIT 2")
+    .all() as Array<{
+    id: string;
+  }>;
+
+  for (const [table, key] of unscoped) {
+    if (orgs.length === 1) {
+      db.prepare(`
+        INSERT INTO ${table} (
+          org_id, ${key}, request_count, input_tokens, output_tokens,
+          estimated_cost_usd, tracked_since, updated_at
+        )
+        SELECT ?, ${key}, request_count, input_tokens, output_tokens,
+          estimated_cost_usd, tracked_since, updated_at
+        FROM ${table}_unscoped
+      `).run(orgs[0].id);
+    }
+    db.exec(`DROP TABLE ${table}_unscoped;`);
+  }
 }
 
 /**
@@ -539,28 +664,6 @@ function migrateOrgTables(db: Database): void {
   if (!columnNames.has("user_context")) {
     db.exec("ALTER TABLE org_members ADD COLUMN user_context TEXT;");
   }
-}
-
-function migrateApiKeysTable(db: Database): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS api_keys (
-      id TEXT PRIMARY KEY NOT NULL,
-      org_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      environment TEXT NOT NULL,
-      key_prefix TEXT NOT NULL,
-      secret_hash TEXT NOT NULL,
-      created_by_user_id TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      expires_at TEXT,
-      last_used_at TEXT,
-      revoked_at TEXT,
-      FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
-      FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE CASCADE
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS api_keys_prefix_unique ON api_keys (key_prefix);
-    CREATE INDEX IF NOT EXISTS api_keys_org_id ON api_keys (org_id, created_at DESC);
-  `);
 }
 
 /**
@@ -716,6 +819,17 @@ function migrateSkillsWriteApprovalColumns(db: Database): void {
     )
   ) {
     db.exec("ALTER TABLE profiles ADD COLUMN skills_write_approval INTEGER;");
+  }
+}
+
+function migrateOrganizationAllowedInviteDomains(db: Database): void {
+  const columns = db
+    .prepare("PRAGMA table_info(organizations)")
+    .all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === "allowed_invite_domains")) {
+    db.exec(
+      "ALTER TABLE organizations ADD COLUMN allowed_invite_domains TEXT NOT NULL DEFAULT '[]';"
+    );
   }
 }
 
@@ -908,7 +1022,6 @@ const TENANT_ORG_ID_TABLES = [
   "tools",
   "mcp_servers",
   "skills",
-  "llm_usage_stats",
   "workspace_settings",
 ] as const;
 
@@ -1087,9 +1200,11 @@ function migrateProfileOrgColumns(db: Database): void {
         `).run(anyProfile.id);
         }
       }
-    } else {
-      db.prepare("DELETE FROM profiles WHERE org_id IS NULL").run();
     }
+    // With no organization yet, org-less profiles stay as they are. This step
+    // runs on every open, and deleting them cascaded into sessions, messages,
+    // attachments and automations. The branch above adopts them once an
+    // organization exists.
 
     db.prepare(`
     UPDATE automations
@@ -1488,6 +1603,10 @@ function migrateAutomationRunsTable(db: Database): void {
     .all() as Array<{ name: string }>;
   const columnNames = new Set(columns.map((column) => column.name));
 
+  if (!columnNames.has("progress")) {
+    db.exec("ALTER TABLE automation_runs ADD COLUMN progress TEXT;");
+  }
+
   if (!columnNames.has("delivery_status")) {
     db.exec(`
       ALTER TABLE automation_runs ADD COLUMN delivery_status TEXT;
@@ -1762,6 +1881,17 @@ function migrateProfileChangeEventsTable(db: Database): void {
   `);
 }
 
+function migrateRemoveGoogleMeetPlugin(db: Database): void {
+  // Meet is built in. Remove obsolete plugin contributions and their cascading
+  // profile assignments; meeting databases and transcripts live outside this DB.
+  db.prepare("DELETE FROM tools WHERE plugin_id = ?").run("google-meet");
+  db.prepare("DELETE FROM skills WHERE plugin_id = ?").run("google-meet");
+  db.prepare("DELETE FROM org_plugins WHERE plugin_id = ?").run("google-meet");
+  db.prepare("DELETE FROM plugin_releases WHERE plugin_id = ?").run(
+    "google-meet"
+  );
+}
+
 function migratePluginTables(db: Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS plugin_releases (
@@ -1870,5 +2000,20 @@ CREATE TABLE IF NOT EXISTS file_pins (
   path TEXT NOT NULL,
   PRIMARY KEY (org_id, user_id, profile_id, path)
 );
+  `);
+}
+
+function migrateNotificationWebhookDeliveriesTable(db: Database): void {
+  db.exec(`
+CREATE TABLE IF NOT EXISTS notification_webhook_deliveries (
+  destination_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (destination_id, event_id),
+  FOREIGN KEY (destination_id) REFERENCES notification_destinations (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS notification_webhook_deliveries_created_at
+  ON notification_webhook_deliveries (created_at);
   `);
 }

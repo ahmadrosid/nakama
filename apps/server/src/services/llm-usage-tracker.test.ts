@@ -2,12 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { LlmUsageTracker } from "./llm-usage-tracker";
 
+const ORG_A = "org_a";
+const ORG_B = "org_b";
+
 describe("LlmUsageTracker", () => {
-  test("loads persisted stats and increments them on record", async () => {
+  test("reads back what record persisted for that org", async () => {
     const db = createInMemoryDatabaseAdapter();
     const trackedSince = "2026-06-05T00:00:00.000Z";
 
     await db.incrementLlmUsageStats(
+      ORG_A,
       {
         estimatedCostUsd: 0.12,
         inputTokens: 900,
@@ -17,10 +21,10 @@ describe("LlmUsageTracker", () => {
       trackedSince
     );
 
-    const tracker = await LlmUsageTracker.create(db);
-    tracker.record("gpt-4o", 100, 50);
+    const tracker = new LlmUsageTracker(db);
+    tracker.record("gpt-4o", 100, 50, { orgId: ORG_A });
 
-    expect(tracker.getStats()).toEqual({
+    expect(await tracker.getStats(ORG_A)).toEqual({
       estimatedCostUsd: expect.any(Number),
       inputTokens: 1000,
       outputTokens: 350,
@@ -29,13 +33,7 @@ describe("LlmUsageTracker", () => {
       trackedSince,
     });
 
-    const persisted = await db.getLlmUsageStats();
-    const persistedByModel = await db.listLlmUsageStatsByModel();
-    expect(persisted?.requestCount).toBe(4);
-    expect(persisted?.inputTokens).toBe(1000);
-    expect(persisted?.outputTokens).toBe(350);
-    expect(persisted?.trackedSince).toBe(trackedSince);
-    expect(tracker.getStatsByModel()).toEqual([
+    expect(await tracker.getStatsByModel(ORG_A)).toEqual([
       {
         estimatedCostUsd: expect.any(Number),
         inputTokens: 100,
@@ -46,93 +44,74 @@ describe("LlmUsageTracker", () => {
         trackedSince: expect.any(String),
       },
     ]);
-    expect(persistedByModel).toEqual([
-      {
-        estimatedCostUsd: expect.any(Number),
-        inputTokens: 100,
-        modelId: "gpt-4o",
-        outputTokens: 50,
-        requestCount: 1,
-        trackedSince: expect.any(String),
-        updatedAt: expect.any(String),
-      },
-    ]);
   });
 
-  test("waits for an in-flight record before reloading", async () => {
+  test("keeps one org's ledger out of another org's totals", async () => {
     const db = createInMemoryDatabaseAdapter();
-    const incrementStats = db.incrementLlmUsageStats.bind(db);
-    const persistGate = Promise.withResolvers<void>();
-    const persistStarted = Promise.withResolvers<void>();
+    const tracker = new LlmUsageTracker(db);
 
-    db.incrementLlmUsageStats = async (delta, trackedSince) => {
-      persistStarted.resolve();
-      await persistGate.promise;
-      await incrementStats(delta, trackedSince);
-    };
+    tracker.record("gpt-4o", 100, 50, { orgId: ORG_A });
+    tracker.record("gpt-4o", 9000, 4000, { orgId: ORG_B });
 
-    const tracker = await LlmUsageTracker.create(db);
-    tracker.record("gpt-4o", 100, 50);
-    await persistStarted.promise;
-
-    const reload = tracker.reloadFromDatabase();
-    persistGate.resolve();
-    await reload;
-
-    expect(tracker.getStats().requestCount).toBe(1);
-    expect(tracker.getStatsByModel()).toHaveLength(1);
-  });
-
-  test("retries a reload when a record arrives during the database read", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    await db.incrementLlmUsageStats(
-      {
-        estimatedCostUsd: 0.02,
-        inputTokens: 200,
-        outputTokens: 100,
-        requestCount: 2,
-      },
-      "2026-06-05T00:00:00.000Z"
-    );
-    const tracker = await LlmUsageTracker.create(db);
-    const getStats = db.getLlmUsageStats.bind(db);
-    const readGate = Promise.withResolvers<void>();
-    const readStarted = Promise.withResolvers<void>();
-    let readCount = 0;
-    let pauseNextRead = true;
-
-    db.getLlmUsageStats = async () => {
-      readCount += 1;
-      const snapshot = await getStats();
-      if (pauseNextRead) {
-        pauseNextRead = false;
-        readStarted.resolve();
-        await readGate.promise;
-      }
-      return snapshot;
-    };
-
-    const reload = tracker.reloadFromDatabase();
-    await readStarted.promise;
-    tracker.record("gpt-4o", 100, 50);
-    readGate.resolve();
-    await reload;
-
-    expect(tracker.getStats()).toMatchObject({
-      inputTokens: 300,
-      outputTokens: 150,
-      requestCount: 3,
-      totalTokens: 450,
+    expect(await tracker.getStats(ORG_A)).toMatchObject({
+      inputTokens: 100,
+      outputTokens: 50,
+      requestCount: 1,
+      totalTokens: 150,
     });
-    expect(readCount).toBe(2);
-    expect(tracker.getStatsByModel()).toMatchObject([
-      {
-        inputTokens: 100,
-        modelId: "gpt-4o",
-        outputTokens: 50,
-        requestCount: 1,
-        totalTokens: 150,
-      },
+    expect(await tracker.getStatsByModel(ORG_A)).toMatchObject([
+      { inputTokens: 100, modelId: "gpt-4o", requestCount: 1 },
     ]);
+    expect(await tracker.getStats(ORG_B)).toMatchObject({
+      inputTokens: 9000,
+      outputTokens: 4000,
+      requestCount: 1,
+      totalTokens: 13_000,
+    });
+    expect(await tracker.getStatsByModel(ORG_B)).toMatchObject([
+      { inputTokens: 9000, modelId: "gpt-4o", requestCount: 1 },
+    ]);
+  });
+
+  test("reports zero for an org that never recorded usage", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const tracker = new LlmUsageTracker(db);
+
+    tracker.record("gpt-4o", 100, 50, { orgId: ORG_A });
+
+    expect(await tracker.getStats(ORG_B)).toMatchObject({
+      estimatedCostUsd: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      requestCount: 0,
+      totalTokens: 0,
+    });
+    expect(await tracker.getStatsByModel(ORG_B)).toEqual([]);
+  });
+
+  test("accumulates concurrent records for the same org", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const tracker = new LlmUsageTracker(db);
+
+    for (let index = 0; index < 5; index += 1) {
+      tracker.record("gpt-4o", 10, 5, { orgId: ORG_A });
+    }
+
+    expect(await tracker.getStats(ORG_A)).toMatchObject({
+      inputTokens: 50,
+      outputTokens: 25,
+      requestCount: 5,
+      totalTokens: 75,
+    });
+  });
+
+  test("returns zero totals without a database", async () => {
+    const tracker = new LlmUsageTracker();
+
+    expect(await tracker.getStats(ORG_A)).toMatchObject({
+      inputTokens: 0,
+      requestCount: 0,
+    });
+    expect(await tracker.getStatsByModel(ORG_A)).toEqual([]);
   });
 });

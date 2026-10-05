@@ -32,7 +32,7 @@ import {
 } from "./composio-api-client";
 import { encryptComposioSecret } from "./composio-secret";
 
-export interface ComposioOAuthStatePayload {
+interface ComposioOAuthStatePayload {
   connectionId: string;
   nonce: string;
   orgId: string;

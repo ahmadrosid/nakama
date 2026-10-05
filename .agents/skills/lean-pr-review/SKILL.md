@@ -2,7 +2,8 @@
 name: lean-pr-review
 description: >-
   Review a GitHub PR for major issues first, then unnecessary complexity.
-  Comment on someone else's PR; fix and push findings on your own PR.
+  Approve the reviewed PR and open a separate fix PR for verified findings.
+  Do not post review comments or wait for the author to fix issues.
   Use for a lean PR review, /lean-pr-review, /lean-review, or over-engineering
   feedback on a PR.
 ---
@@ -16,34 +17,24 @@ scoring tags, or this skill by name in comments or commit messages.
 
 PR URL or number (e.g. `https://github.com/OWNER/REPO/pull/N`).
 
-## Mode: comment vs apply
+## Default: approve and open a fix PR
 
-After fetching PR metadata, compare the PR author to the authenticated user:
-
-```bash
-gh api user --jq .login
-# vs PR .user.login
-```
-
-| Who authored the PR | What to do |
-|---|---|
-| **Me** (author login == `gh api user`) | **Apply** cuts on the PR head, commit, push. Do **not** post review comments. |
-| **Someone else** | **Comment** only — post short inline review comments. Do not apply fixes unless the user explicitly asks. |
-
-If the user explicitly says “comment only” or “apply”, that overrides the table.
+“Accept” means approve, not merge. For any author, fix verified findings in a
+separate PR instead of posting comments or waiting for the author.
+Explicit user instructions override this default.
 
 ## Steps
 
 1. Fetch the PR with `gh` (REST preferred):
    - Metadata: title, body, base/head, author login, additions/deletions, changed files
    - Full diff for every changed file
-   - Head SHA (needed to attach inline comments, or to verify before/after apply)
-   - Decide mode (comment vs apply) from **Mode** above
+   - Head SHA (needed to approve the reviewed version and prepare fixes)
+   - Authenticated login: `gh api user --jq .login`
 
 2. First trace the changed behavior and its callers. Find concrete major issues:
    broken behavior, security or data exposure, data loss, or serious performance
    regressions. Report only issues supported by a clear failure scenario. Do not
-   invent risks or flag style nits and minor test gaps. Fix or comment on these
+   invent risks or flag style nits and minor test gaps. Fix these
    findings before any complexity findings.
 
 3. Then review for unnecessary complexity. A single smoke / assert-based
@@ -59,103 +50,65 @@ If the user explicitly says “comment only” or “apply”, that overrides th
    - Tests that re-prove the same property twice (e.g. two phases inside one
      try/finally when one hang + one failure already covers the lock)
 
-   If neither pass finds anything:
-   - **Comment mode:** post “LGTM” as a review comment and return “LGTM” with the review URL in chat.
-   - **Apply mode:** reply “LGTM — no major issues or lean cuts.” in chat only. Do not post on the PR.
-   - Stop. Do not invent nits.
+   If neither pass finds anything, proceed to approval without inventing nits.
 
 4. Draft findings privately as `file:Lline: problem, impact, and concrete fix`
    for major issues, or `file:Lline: what to cut. what replaces it.` for lean cuts.
 
-5. **Branch on mode:**
+5. If findings exist, prepare and open the separate fix PR below. Then
+   re-fetch the original PR head SHA. If it changed, review the new changes
+   and update the fixes before approving.
 
-### Comment mode (not my PR)
+6. Approve the reviewed SHA for an open PR by someone else using REST:
 
-Rewrite each finding as a normal human review comment:
-- Direct, concrete, kind
-- Point at the specific code
-- For major issues, describe the failure and the fix. For lean cuts, say what
-  to drop / inline and why the remaining coverage is enough.
-- No jargon labels (`yagni:`, `delete:`, `shrink:`), no scoring, no
-  “net: -N lines”
-- No corporate filler, no “have you considered…”, no praise sandwiches
+   ```bash
+   gh api repos/OWNER/REPO/pulls/N/reviews --method POST --input review.json
+   ```
 
-Post via GitHub REST (not GraphQL when it times out):
+   Write `review.json` with `commit_id` set to the reviewed head SHA and
+   `event` set to `APPROVE`. Omit `body` and `comments`.
+   GitHub does not allow approving your own PR; skip approval in that case.
+   Skip approval for closed or merged PRs. Report API or permission failures
+   in chat; do not substitute a comment or claim approval succeeded.
 
-```bash
-gh api repos/OWNER/REPO/pulls/N/reviews --method POST --input review.json
-```
+7. Return the approval URL and fix PR URL with a short summary of the fixes.
+   With no findings, return “LGTM” and the approval URL. Briefly state if
+   approval was skipped or failed.
 
-`review.json` shape:
+## Separate fix PR
 
-```json
-{
-  "commit_id": "<head_sha>",
-  "event": "COMMENT",
-  "body": "<1–2 sentence overall summary of the findings>",
-  "comments": [
-    {
-      "path": "path/to/file.ts",
-      "line": 42,
-      "side": "RIGHT",
-      "body": "<human comment>"
-    }
-  ]
-}
-```
-
-- Use `side: "RIGHT"` for lines in the new version of the file.
-- Prefer 1–3 inline comments. Prioritize major issues, then lean cuts. Merge
-  related points onto one anchor line.
-- Overall body stays short. Put the actionable detail on the lines.
-- Use `event: "COMMENT"` unless the user asked for approve / request changes.
-- After posting findings, return only the review URL. If neither pass finds
-  anything, return “LGTM” with the review URL.
-
-### Apply mode (my PR)
-
-Do **not** post a GitHub review or inline comments.
-
-1. Check out the PR head in an isolated worktree when practical: fetch
-   `origin pull/N/head:pr-N` (or use the PR head branch) and work there so the
-   user’s other checkout stays untouched.
-2. Fix verified major issues first, then apply lean cuts as minimal code edits.
+1. Check out the reviewed head SHA in an isolated worktree when practical.
+   Create a new branch, such as `fix/pr-N-review`, so the user's checkout
+   stays untouched. Do not push fixes to the original PR branch.
+2. Fix verified major issues first, then apply lean cuts as minimal edits.
    No drive-by refactors beyond the findings.
-3. Run the smallest relevant tests for the touched files.
-4. Commit on the PR branch with a clear message focused on the fixes. Follow
-   the user’s git commit rules.
-5. Push to the PR head branch (`git push origin HEAD:<head_ref>` or
-   equivalent).
-6. Return a short chat summary: what changed + PR URL. No review comments on
-   GitHub.
-
-## Comment voice (comment mode only)
-
-Good:
-
-> Reload hang + reload reject already prove admission before the first await
-> and release in `finally` across the whole cycle. The curator-phase overlap /
-> failure path doesn’t add much on top of that — you could drop
-> `curatorStarted`, `failingCurator`, and `curatorCalls` and keep the same
-> confidence with a shorter test.
-
-Good:
-
-> Only used once — fine to inline `1000` at `beginPolling`.
-
-Bad:
-
-> yagni: curator-phase overlap. Drop it.
-> net: -30 lines possible.
-> As per our complexity guidelines…
+3. Run the smallest relevant tests and required checks for the touched files.
+4. Commit with a clear message focused on the fixes. Follow the user's git
+   commit rules. Push the new branch to a repository you can write to; use
+   a fork if necessary.
+5. Open one ready-for-review PR containing the fixes:
+   - Original PR open: target its head branch in its head repository so the
+     diff contains only the fixes, without waiting for the original to merge.
+   - Original PR merged: start from the updated base branch, apply only fixes
+     still needed, test, and target that base branch.
+   - Original PR closed without merging: report this in chat; do not reopen
+     its changes through a fix PR.
+6. Link the original PR in the fix PR body. Explain the concrete failure,
+   resulting behavior, and validation. Follow the repository's PR template
+   and PR description skill. Do not rewrite the original PR description.
+7. If permissions or GitHub branch rules prevent opening the fix PR, preserve
+   the prepared changes and report the blocker in chat. Do not post findings
+   on the original PR or wait for its author to implement them.
 
 ## Boundaries
 
-- **Comment mode:** do not apply code fixes unless the user asks.
-- **Apply mode:** apply only verified major fixes and lean cuts; do not post
-  review comments.
-- Do not rewrite the PR description.
-- Do not mention internal review frameworks, skills, or scoring in comments
+- Apply only verified major fixes and lean cuts.
+- Do not post issue comments, inline review comments, or request changes
+  under the default workflow.
+- Approval does not authorize merging either PR.
+- Do not rewrite the original PR description.
+- Do not mention internal review frameworks, skills, or scoring in reviews
   or commit messages.
 - Do not flag production code that is already the minimal pattern (e.g. a
   boolean in-flight guard with try/finally).
+- Verify approval, push, and PR creation before claiming success.

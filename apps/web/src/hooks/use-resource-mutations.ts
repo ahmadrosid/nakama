@@ -15,6 +15,7 @@ import {
   type InfiniteData,
   useInfiniteQuery,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -695,6 +696,33 @@ export function useArtifactsQuery(profileId: string | null, folder = "") {
   });
 }
 
+/**
+ * Chat chips come from the transcript, which never learns that a file was
+ * deleted later. Returns false per artifact once the server confirms it is gone.
+ */
+export function useArtifactsExist(
+  artifacts: readonly { ownerProfileId?: string; path: string }[],
+  profileId: string | null | undefined,
+  enabled: boolean
+): boolean[] {
+  return useQueries({
+    // Unknown (loading or failed) keeps the chip: only a 404 hides it.
+    combine: (results) => results.map((result) => result.data !== false),
+    queries: artifacts.map((artifact) => {
+      const ownerId = artifact.ownerProfileId ?? profileId ?? "";
+      return {
+        enabled: enabled && Boolean(ownerId),
+        queryFn: () => client.hasProfileArtifact(ownerId, artifact.path),
+        queryKey: [
+          ...queryKeys.artifacts.profile(ownerId),
+          "exists",
+          artifact.path,
+        ],
+      };
+    }),
+  });
+}
+
 export function useWriteArtifactMutation() {
   const queryClient = useQueryClient();
 
@@ -908,6 +936,25 @@ export function useUploadKnowledgeBaseDocumentMutation() {
       onDuplicate?: KnowledgeBaseDuplicateAction;
     }) => client.uploadKnowledgeBaseDocument(profileId, document, onDuplicate),
     onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.knowledgeBase.profile(variables.profileId),
+      });
+    },
+  });
+}
+
+export function useImportKnowledgeBaseZipMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      profileId,
+      zipBase64,
+    }: {
+      profileId: string;
+      zipBase64: string;
+    }) => client.importKnowledgeBaseZip(profileId, zipBase64),
+    onSettled: async (_data, _error, variables) => {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.knowledgeBase.profile(variables.profileId),
       });

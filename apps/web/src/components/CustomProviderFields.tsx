@@ -28,6 +28,7 @@ interface CustomProviderFieldsProps {
   disabled?: boolean;
   displayName: string;
   displayNameError?: string | null;
+  hideIdentity?: boolean;
   hostMode?: "local" | "cloud";
   identityReadOnly?: boolean;
   modelsError?: string | null;
@@ -37,7 +38,7 @@ interface CustomProviderFieldsProps {
   /** Omitted for endpoints that are known to speak chat/completions, like Ollama. */
   onWireApiChange?: (value: WireApi) => void;
   providerInstanceId?: string;
-  remoteProvider?: "ollama" | "openai_compatible";
+  remoteProvider?: "ollama" | "openai_compatible" | "netra";
   showModelsEditor?: boolean;
   wireApi?: WireApi;
 }
@@ -49,6 +50,7 @@ export function CustomProviderFields({
   customModels,
   disabled,
   identityReadOnly = false,
+  hideIdentity = false,
   density = "default",
   showModelsEditor = true,
   displayNameError,
@@ -71,55 +73,59 @@ export function CustomProviderFields({
 
   return (
     <div className="space-y-4">
-      <FormField
-        density={density}
-        footer={
-          displayNameError ? (
-            <p className="text-destructive text-sm" role="alert">
-              {displayNameError}
-            </p>
-          ) : null
-        }
-        id="provider-display-name"
-        label="Provider name"
-      >
-        <InputGroup>
-          <InputGroupInput
-            aria-invalid={displayNameError != null}
-            disabled={identityDisabled}
-            id="provider-display-name"
-            onChange={(event) => onDisplayNameChange(event.target.value)}
-            placeholder="Ollama"
-            readOnly={identityReadOnly}
-            value={displayName}
-          />
-        </InputGroup>
-      </FormField>
+      {hideIdentity ? null : (
+        <FormField
+          density={density}
+          footer={
+            displayNameError ? (
+              <p className="text-destructive text-sm" role="alert">
+                {displayNameError}
+              </p>
+            ) : null
+          }
+          id="provider-display-name"
+          label="Provider name"
+        >
+          <InputGroup>
+            <InputGroupInput
+              aria-invalid={displayNameError != null}
+              disabled={identityDisabled}
+              id="provider-display-name"
+              onChange={(event) => onDisplayNameChange(event.target.value)}
+              placeholder="Ollama"
+              readOnly={identityReadOnly}
+              value={displayName}
+            />
+          </InputGroup>
+        </FormField>
+      )}
 
-      <FormField
-        density={density}
-        footer={
-          baseUrlError ? (
-            <p className="text-destructive text-sm" role="alert">
-              {baseUrlError}
-            </p>
-          ) : null
-        }
-        id="provider-base-url"
-        label="Base URL"
-      >
-        <InputGroup>
-          <InputGroupInput
-            aria-invalid={baseUrlError != null}
-            disabled={identityDisabled}
-            id="provider-base-url"
-            onChange={(event) => onBaseUrlChange(event.target.value)}
-            placeholder="http://localhost:11434/v1"
-            readOnly={identityReadOnly}
-            value={baseUrl}
-          />
-        </InputGroup>
-      </FormField>
+      {hideIdentity ? null : (
+        <FormField
+          density={density}
+          footer={
+            baseUrlError ? (
+              <p className="text-destructive text-sm" role="alert">
+                {baseUrlError}
+              </p>
+            ) : null
+          }
+          id="provider-base-url"
+          label="Base URL"
+        >
+          <InputGroup>
+            <InputGroupInput
+              aria-invalid={baseUrlError != null}
+              disabled={identityDisabled}
+              id="provider-base-url"
+              onChange={(event) => onBaseUrlChange(event.target.value)}
+              placeholder="http://localhost:11434/v1"
+              readOnly={identityReadOnly}
+              value={baseUrl}
+            />
+          </InputGroup>
+        </FormField>
+      )}
 
       {onWireApiChange ? (
         <FormField density={density} id="provider-wire-api" label="API">
@@ -154,9 +160,18 @@ export function CustomProviderFields({
           density={density}
           disabled={disabled}
           fieldId="provider-models"
-          footerHint="$/1M rates are USD per million tokens and drive the cost shown in chat. Leave both blank if unknown."
+          footerHint="Rates are USD per million tokens. Leave them blank if unknown."
           modelsError={modelsError}
-          onCustomModelsChange={onCustomModelsChange}
+          onCustomModelsChange={(models) =>
+            onCustomModelsChange(
+              remoteProvider === "netra"
+                ? models.map((model) => ({
+                    ...model,
+                    supportsThinking: model.supportsThinking ?? true,
+                  }))
+                : models
+            )
+          }
           renderBrowse={({ multiSelect, onAddMany, onSelect }) =>
             browseSource === "remote" ? (
               <RemoteModelsBrowseList

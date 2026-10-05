@@ -29,6 +29,7 @@ import {
   mergeCodingAgentSpawnEnv,
   resolveCodingAgentSpawnBundle,
 } from "./coding-agent-spawn-env";
+import { killProcessTree } from "./custom-tool-subprocess";
 
 /** How long a timed-out child gets to honour SIGTERM before it is killed. */
 const SIGTERM_GRACE_MS = CLI_SIGTERM_GRACE_MS;
@@ -596,7 +597,7 @@ async function getHarnessRuntimeStatus(
   };
 }
 
-export function getCodingHarnessLoginCommand(
+function getCodingHarnessLoginCommand(
   kind: StoredCodingAgentHarnessKind
 ): string | null {
   if (kind === "codex") {
@@ -851,8 +852,10 @@ async function runProbeCommand(
   return new Promise((resolve) => {
     const child = spawn(harness.command, args, {
       cwd,
+      detached: process.platform !== "win32",
       env: mergeCodingAgentSpawnEnv(getToolExecutionEnv(), spawnEnv),
       stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
     });
     let stdout = "";
     let stderr = "";
@@ -861,8 +864,14 @@ async function runProbeCommand(
 
     const timeoutId = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
-      killTimeoutId = setTimeout(() => child.kill("SIGKILL"), SIGTERM_GRACE_MS);
+      if (process.platform === "win32") {
+        void killProcessTree(child, "SIGKILL");
+      } else {
+        void killProcessTree(child, "SIGTERM");
+        killTimeoutId = setTimeout(() => {
+          void killProcessTree(child, "SIGKILL");
+        }, SIGTERM_GRACE_MS);
+      }
       // Resolve here rather than waiting for `close`: a child that ignores
       // SIGTERM never emits one, so the caller would wait past the timeout it
       // just set.
@@ -881,7 +890,11 @@ async function runProbeCommand(
       timedOut: boolean;
     }) => {
       clearTimeout(timeoutId);
-      clearTimeout(killTimeoutId);
+      // The parent can exit while a descendant ignores SIGTERM. Keep the
+      // escalation armed until the group has received SIGKILL.
+      if (!timedOut) {
+        clearTimeout(killTimeoutId);
+      }
       resolve(result);
     };
 

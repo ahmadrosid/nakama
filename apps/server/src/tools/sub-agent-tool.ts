@@ -9,12 +9,6 @@ import {
 
 export const SUB_AGENT_TOOL_NAME = "sub_agent";
 
-export interface SubAgentToolInput {
-  context?: string;
-  task: string;
-  timeoutMs?: number;
-}
-
 export type SubAgentToolOutput = SubAgentRunResult;
 
 export function createSubAgentTool(agentService: AgentService): ToolDefinition {

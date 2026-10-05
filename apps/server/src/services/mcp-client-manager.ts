@@ -26,6 +26,7 @@ interface ConnectOptions {
 
 export class McpClientManager {
   private readonly connections = new Map<string, ConnectedMcpClient>();
+  private readonly inflight = new Map<string, Promise<CachedMcpTool[]>>();
 
   isConnected(
     serverId: string,
@@ -47,8 +48,19 @@ export class McpClientManager {
     orgId: string,
     profileId: string
   ): Promise<void> {
-    if (this.isConnected(server.id, server.transport, profileId, orgId)) {
+    const key = connectionKey(server.id, server.transport, profileId, orgId);
+
+    if (this.connections.has(key)) {
       return;
+    }
+
+    const pending = this.inflight.get(key);
+    if (pending) {
+      await pending;
+      // Disconnect may have run after the shared connect settled.
+      if (this.connections.has(key)) {
+        return;
+      }
     }
 
     await this.connect(server, { orgId, profileId });
@@ -64,6 +76,27 @@ export class McpClientManager {
       options?.profileId,
       options?.orgId
     );
+
+    const pending = this.inflight.get(key);
+    if (pending) {
+      return pending;
+    }
+
+    const run = this.establishConnection(server, options, key);
+    const tracked = run.finally(() => {
+      if (this.inflight.get(key) === tracked) {
+        this.inflight.delete(key);
+      }
+    });
+    this.inflight.set(key, tracked);
+    return tracked;
+  }
+
+  private async establishConnection(
+    server: StoredMcpServerRecord,
+    options: ConnectOptions | undefined,
+    key: string
+  ): Promise<CachedMcpTool[]> {
     await this.disconnectKey(key);
 
     const transport = createTransport(server.transport, server.config, options);
@@ -72,13 +105,26 @@ export class McpClientManager {
       version: "1.0.0",
     });
 
-    await client.connect(transport);
-    const result = await client.listTools();
-    const tools = normalizeListedTools(result.tools);
+    let connectionStored = false;
 
-    this.connections.set(key, { client, transport });
+    try {
+      await client.connect(transport);
+      const result = await client.listTools();
+      const tools = normalizeListedTools(result.tools);
 
-    return tools;
+      this.connections.set(key, { client, transport });
+      connectionStored = true;
+
+      return tools;
+    } finally {
+      if (!connectionStored) {
+        try {
+          await transport.close();
+        } catch {
+          // Ignore transport shutdown errors.
+        }
+      }
+    }
   }
 
   async disconnect(serverId: string): Promise<void> {
@@ -183,11 +229,24 @@ export class McpClientManager {
       version: "1.0.0",
     });
 
-    await client.connect(transport);
-    const result = await client.listTools();
-    const tools = normalizeListedTools(result.tools);
-    this.connections.set(connectionKey, { client, transport });
-    return tools;
+    let connectionStored = false;
+
+    try {
+      await client.connect(transport);
+      const result = await client.listTools();
+      const tools = normalizeListedTools(result.tools);
+      this.connections.set(connectionKey, { client, transport });
+      connectionStored = true;
+      return tools;
+    } finally {
+      if (!connectionStored) {
+        try {
+          await transport.close();
+        } catch {
+          // Ignore transport shutdown errors.
+        }
+      }
+    }
   }
 
   isHttpEndpointConnected(connectionKey: string): boolean {

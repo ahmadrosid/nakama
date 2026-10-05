@@ -46,8 +46,7 @@ async function loadExamples(directory: string): Promise<string | undefined> {
 
 export async function loadSoulStack(
   directory: string,
-  readMemory?: (content: string) => Promise<string>,
-  fallbackDirectory?: string
+  readMemory?: (content: string) => Promise<string>
 ): Promise<LoadedSoulStack> {
   const files: LoadedSoulStack["files"] = {};
   const loaded: string[] = [];
@@ -66,9 +65,6 @@ export async function loadSoulStack(
       content = (await readMemory(raw)).trim() || undefined;
     } else {
       content = await readTextIfExists(join(directory, filename));
-      if (key !== "memory" && !content && fallbackDirectory) {
-        content = await readTextIfExists(join(fallbackDirectory, filename));
-      }
     }
 
     if (content) {

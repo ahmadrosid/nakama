@@ -143,14 +143,22 @@ export const MAX_URL_CHAT_DRAFT_LENGTH = 1500;
 
 export function chatProfileIdFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/chat\/([^/]+)\//);
-  return match?.[1] ? decodeURIComponent(match[1]) : null;
+  if (!match?.[1]) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
 }
 
 export function isChatSessionPath(pathname: string): boolean {
   return chatProfileIdFromPath(pathname) !== null;
 }
 
-export const ACTIVE_CHAT_PROFILE_STORAGE_KEY = "nakama:active-chat-profile";
+const ACTIVE_CHAT_PROFILE_STORAGE_KEY = "nakama:active-chat-profile";
 
 export function activeChatProfileStorageKey(orgId?: string | null): string {
   return orgId
@@ -200,10 +208,24 @@ export function pickKnownProfileId(
 
 /** Initial profile for draft `/chat` before profiles list loads. */
 export function readInitialDraftChatProfileId(input: {
+  currentOrgId?: string | null;
+  currentProfileId?: string | null;
   search: string;
   orgId?: string | null;
   routeProfileId?: string | null;
 }): string {
+  if (
+    input.orgId &&
+    input.currentOrgId !== undefined &&
+    input.currentOrgId !== input.orgId
+  ) {
+    return "";
+  }
+
+  if (input.currentProfileId !== undefined && input.currentProfileId !== null) {
+    return input.currentProfileId;
+  }
+
   if (input.routeProfileId) {
     return input.routeProfileId;
   }

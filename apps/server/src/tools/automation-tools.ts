@@ -1,6 +1,7 @@
 import {
   emptyObjectSchema,
   normalizeAutomationDelivery,
+  requireToolNotViewer,
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
@@ -54,6 +55,7 @@ export function createAutomationTools(
         type: "object",
       },
       async run(input, context) {
+        requireToolNotViewer(context);
         const orgId = requireOrgId(context);
         const name = readString(input, "name");
         const description = readString(input, "description");
@@ -141,6 +143,7 @@ export function createAutomationTools(
         type: "object",
       },
       async run(input, context) {
+        requireToolNotViewer(context);
         const orgId = requireOrgId(context);
         const automationId = readString(input, "automationId");
 
@@ -174,6 +177,7 @@ export function createAutomationTools(
         type: "object",
       },
       async run(input, context) {
+        requireToolNotViewer(context);
         const orgId = requireOrgId(context);
         const automationId = readString(input, "automationId");
 

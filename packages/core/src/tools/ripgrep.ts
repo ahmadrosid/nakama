@@ -73,6 +73,7 @@ export async function runRipgrep(
     const child = spawn(command, args, {
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
     });
 
     let stderr = "";

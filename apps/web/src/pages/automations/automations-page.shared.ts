@@ -3,9 +3,60 @@ import type {
   AutomationTrigger,
   StoredAutomation,
 } from "@nakama/core/contract";
+import { type ChatListItem, chatMessagesToListItems } from "@/lib/chat-history";
 
-export const agentWorkPanelClassName =
-  "flex min-h-0 flex-1 flex-col overflow-hidden";
+export function automationRunMessages(
+  run: AutomationRunRecord
+): ChatListItem[] {
+  const running = run.status === "running";
+  const transcript = run.progress?.length
+    ? run.progress
+    : run.output
+      ? [{ content: run.output, role: "assistant" as const }]
+      : [];
+  const messages: ChatListItem[] = chatMessagesToListItems(transcript).map(
+    (message) => ({
+      ...message,
+      createdAt: run.startedAt,
+      streaming:
+        running &&
+        message.role === "assistant" &&
+        message.historyIndex === transcript.length - 1,
+      thinkingStreaming:
+        running &&
+        Boolean(message.thinking) &&
+        !message.content &&
+        message.historyIndex === transcript.length - 1,
+      toolStatus:
+        running && message.role === "tool" && !message.toolCompletedAt
+          ? ("running" as const)
+          : message.toolStatus,
+    })
+  );
+  if (running && (!messages.length || messages.at(-1)?.role === "user")) {
+    messages.push({
+      content: "",
+      createdAt: run.startedAt,
+      id: `${run.id}-waiting`,
+      role: "assistant",
+      streaming: true,
+      thinkingStreaming: false,
+      toolStatus: undefined,
+    });
+  }
+  if (run.error) {
+    return [
+      ...messages,
+      {
+        content: run.error,
+        failed: true,
+        id: `${run.id}-error`,
+        role: "assistant",
+      },
+    ];
+  }
+  return messages;
+}
 
 export function formatTrigger(trigger: AutomationTrigger): string {
   if (trigger.type === "manual") {
@@ -54,7 +105,7 @@ export function groupRunsByDay(
   }));
 }
 
-export function formatRunDayLabel(value: string): string {
+function formatRunDayLabel(value: string): string {
   const date = new Date(value);
   const now = new Date();
 
@@ -90,10 +141,6 @@ export function formatRunDayLabel(value: string): string {
 }
 
 export function runPreviewText(run: AutomationRunRecord): string | null {
-  if (run.status === "running" && !run.output?.trim() && !run.error?.trim()) {
-    return "Run in progress…";
-  }
-
   if (run.status === "failed" && run.error?.trim()) {
     return run.error.trim();
   }

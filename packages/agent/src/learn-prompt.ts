@@ -121,7 +121,7 @@ function replaceLearnContentText<T extends string | MessageContentPart[]>(
   return next as T;
 }
 
-export function buildLearnPrompt(userRequest: string): string {
+function buildLearnPrompt(userRequest: string): string {
   const req = userRequest.trim() || DEFAULT_LEARN_SOURCE;
 
   return [

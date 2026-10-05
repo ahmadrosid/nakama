@@ -13,14 +13,14 @@
 
 # Nakama
 
-[Documentation](https://ahmadrosid.github.io/nakama/) · [Demo](https://demo.getnakama.cloud) · [Managed hosting](https://getnakama.cloud/)
+[Documentation](https://ahmadrosid.github.io/nakama/) · [Managed hosting](https://getnakama.cloud/)
 
 > Your next hire will still be human.
 > Nakama runs the agents. Your team keeps the important work.
 
 Nakama is an AI agent platform for your team. You chat in a dashboard that feels like ChatGPT. Behind that, each agent can use tools, skills, memory, and channels (Telegram, WhatsApp, Discord) — with its own identity and permissions.
 
-It was built for teams from day one: one server, many orgs, invites and roles, agents isolated from each other. Set it up in the browser — demo, managed cloud, or one Docker container.
+It was built for teams from day one: one server, many orgs, invites and roles, agents isolated from each other. Set it up with managed cloud or one Docker container.
 
 Coming from [OpenClaw](https://github.com/openclaw/openclaw) or [Hermes Agent](https://github.com/nousresearch/hermes-agent)? Same class of capability, without the setup maze, and not limited to one operator on one machine.
 
@@ -31,14 +31,11 @@ A quick tour of the redesigned dashboard: pick an agent, explore its instruction
 Open [ARCHITECTURE.md](./ARCHITECTURE.md) for the system design.
 Open the [docs site](https://ahmadrosid.github.io/nakama/) for the full guide.
 
+## Desktop downloads
+
+macOS downloads are available in [desktop releases](https://github.com/ahmadrosid/nakama/releases?q=desktop-v). Windows has no published installation link here yet; unsigned MSIX files in older releases are Partner Center uploads, not installable downloads. See [Windows installation](apps/desktop/README.md#windows-installation) for availability and alternatives.
+
 ## Quick start
-
-### Try the demo
-
-Open the live demo at [https://demo.getnakama.cloud](https://demo.getnakama.cloud).
-
-- Username: `demo@getnakama.cloud`
-- Password: `demo1234`
 
 ### Managed hosting
 
@@ -91,12 +88,18 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahm
 ./scripts/docker-build-run.sh
 ```
 
-**Fresh start:**
+**Fresh start (destroys data):**
 
 ```bash
 ./scripts/docker-destroy.sh
 ./scripts/docker-build-run.sh
 ```
+
+The reset script also removes every container publishing port 4310, including
+unrelated containers. It does not remove the cached
+`ghcr.io/ahmadrosid/nakama:latest` image. See the
+[Docker reset documentation](https://ahmadrosid.github.io/nakama/docker#reset-a-local-docker-install)
+for the complete cleanup scope.
 
 Open the dashboard at http://localhost:4310.
 

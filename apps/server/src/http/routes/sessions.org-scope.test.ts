@@ -36,7 +36,7 @@ async function createScenario() {
     null,
     databaseAdapter
   );
-  const { app } = createMinimalHonoApp({
+  const { app, authService } = createMinimalHonoApp({
     agent,
     databaseAdapter,
   });
@@ -72,7 +72,7 @@ async function createScenario() {
     },
   ]);
 
-  return { agent, app, databaseAdapter, victimSessionId };
+  return { agent, app, authService, databaseAdapter, victimSessionId };
 }
 
 const CROSS_ORG_ROUTES: Array<{

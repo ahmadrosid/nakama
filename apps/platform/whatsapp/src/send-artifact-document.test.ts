@@ -94,3 +94,64 @@ describe("sendWhatsAppArtifactDocument", () => {
     expect(result.error).toBe("upload failed");
   });
 });
+
+test("upload deadline reports unknown, settles late rejection, and never retries", async () => {
+  let attempts = 0;
+  let rejectUpload: (error: Error) => void = () => {};
+  const socket = {
+    sendMessage: () => {
+      attempts += 1;
+      return new Promise((_resolve, reject) => {
+        rejectUpload = reject;
+      });
+    },
+  } as unknown as WASocket;
+  const result = await sendWhatsAppArtifactDocument(
+    socket,
+    "1@s.whatsapp.net",
+    {
+      bytes: new Uint8Array([1]),
+      filename: "a.csv",
+      mimeType: "text/csv",
+    },
+    { timeoutMs: 5 }
+  );
+  expect(result.status).toBe("unknown");
+  expect(result.ok).toBe(false);
+  rejectUpload(new Error("late rejection"));
+  await new Promise((resolve) => setTimeout(resolve, 1));
+  expect(attempts).toBe(1);
+});
+
+test("cancellation before upload sends nothing; cancellation in flight has unknown outcome", async () => {
+  const controller = new AbortController();
+  let attempts = 0;
+  const socket = {
+    sendMessage: () => {
+      attempts += 1;
+      controller.abort();
+      return new Promise(() => {});
+    },
+  } as unknown as WASocket;
+  const input = {
+    bytes: new Uint8Array([1]),
+    filename: "a.csv",
+    mimeType: "text/csv",
+  };
+  expect(
+    (
+      await sendWhatsAppArtifactDocument(socket, "1@s.whatsapp.net", input, {
+        signal: controller.signal,
+      })
+    ).status
+  ).toBe("unknown");
+  expect(attempts).toBe(1);
+  expect(
+    (
+      await sendWhatsAppArtifactDocument(socket, "1@s.whatsapp.net", input, {
+        signal: controller.signal,
+      })
+    ).status
+  ).toBe("failed");
+  expect(attempts).toBe(1);
+});

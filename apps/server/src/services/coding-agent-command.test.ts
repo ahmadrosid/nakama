@@ -43,7 +43,9 @@ describe("buildCodingAgentCommandTemplate", () => {
       "/tmp/workspace"
     );
 
-    expect(template.command).toContain("codex --ask-for-approval never exec");
+    expect(template.command).toContain(
+      "codex exec --dangerously-bypass-approvals-and-sandbox"
+    );
     expect(template.command).toContain("--skip-git-repo-check");
     expect(template.command).toContain("'Refactor auth module'");
     expect(
@@ -51,7 +53,11 @@ describe("buildCodingAgentCommandTemplate", () => {
         cwd: "/tmp/workspace",
         prompt: "Refactor auth module",
       }).slice(0, 3)
-    ).toEqual(["--ask-for-approval", "never", "exec"]);
+    ).toEqual([
+      "exec",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "--skip-git-repo-check",
+    ]);
   });
 
   test("builds pi.dev command and spawn env", async () => {

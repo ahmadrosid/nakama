@@ -81,6 +81,7 @@ export async function setupFreshInstallSession(
   const response = await app.fetch(
     new Request("http://localhost:4310/v1/auth/setup", {
       body: JSON.stringify(buildSetupAuthBody(email)),
+      headers: { "Content-Type": "application/json" },
       method: "POST",
     })
   );

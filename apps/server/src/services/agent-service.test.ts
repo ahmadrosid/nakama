@@ -15,6 +15,7 @@ import {
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
+import { NETRA_AGENT_MODEL_ID } from "@nakama/core/discovery-providers";
 import type { StoredProfileRecord } from "@nakama/db";
 import {
   createInMemoryDatabaseAdapter,
@@ -25,6 +26,7 @@ import { createMinimalHonoApp } from "../http/test-app-helpers";
 import { setupFreshInstallSession } from "../http/test-session-helpers";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
+import { createDefaultProfile } from "./agent-service-test-fixtures";
 import { LlmUsageTracker } from "./llm-usage-tracker";
 import { resolveDefaultModelForInstance } from "./provider-instance-helpers";
 import { sessionTurnRegistry } from "./session-turn-registry";
@@ -34,21 +36,6 @@ const TEST_ORG_ID = "org_test";
 import { SkillsService } from "./skills-service";
 
 const ORG_ID = "org_test";
-
-function createDefaultProfile(): StoredProfileRecord {
-  const now = new Date().toISOString();
-  return {
-    createdAt: now,
-    id: "profile_default",
-    isDefault: true,
-    isSuper: false,
-    model: null,
-    name: "Default",
-    orgId: ORG_ID,
-    systemPrompt: "You are helpful.",
-    updatedAt: now,
-  };
-}
 
 describe("Super Bot provider inheritance", () => {
   setupTestConfigDir("nakama-inherited-provider-");
@@ -420,7 +407,7 @@ describe("AgentService branching", () => {
     ).rejects.toThrow("messageIndex is out of bounds.");
   });
 
-  test("falls back to org default when the requested profile is missing", async () => {
+  test("falls back to org default only when no profile is requested", async () => {
     const database = await createSqliteDatabase(":memory:");
     const db = database.adapter;
     const now = new Date().toISOString();
@@ -447,11 +434,12 @@ describe("AgentService branching", () => {
       });
 
       const service = new AgentService(null, null, db);
-      const sessionId = await service.createSession(
-        ORG_ID,
-        "web",
-        "missing_profile"
-      );
+      await expect(
+        service.createSession(ORG_ID, "web", "missing_profile")
+      ).rejects.toMatchObject({ status: 404 });
+      expect(await db.listSessions()).toEqual([]);
+
+      const sessionId = await service.createSession(ORG_ID, "web");
       const session = await db.getSession(sessionId);
 
       expect(session?.profileId).toBe("profile_custom");
@@ -545,14 +533,48 @@ describe("AgentService thinking provider options", () => {
   });
 });
 
+test("rejects a Netra provider when the model endpoint rejects its API key", async () => {
+  using fetchMock = spyOn(globalThis, "fetch").mockImplementation(
+    async () => new Response("invalid key", { status: 401 })
+  );
+  const service = new AgentService(null, null, createInMemoryDatabaseAdapter());
+
+  await expect(
+    service.createProvider({
+      apiKey: "invalid-key",
+      model: NETRA_AGENT_MODEL_ID,
+      type: "netra",
+    })
+  ).rejects.toMatchObject({ status: 400 });
+  expect(fetchMock).toHaveBeenCalled();
+});
+
+test("discovers the supported Netra model without a custom base URL", async () => {
+  using fetchMock = spyOn(globalThis, "fetch").mockImplementation(async () =>
+    Response.json({ data: [{ id: NETRA_AGENT_MODEL_ID }] })
+  );
+  const service = new AgentService(null, null, createInMemoryDatabaseAdapter());
+
+  const result = await service.discoverModels({
+    apiKey: "test-key",
+    provider: "netra",
+  });
+  expect(result.provider).toBe("netra");
+  expect(result.models.map((model) => model.id)).toEqual([
+    NETRA_AGENT_MODEL_ID,
+  ]);
+  expect(fetchMock).toHaveBeenCalled();
+});
+
 describe("AgentService usage pricing context", () => {
   setupTestConfigDir("nakama-usage-context-");
 
   test("retains each harness's rates when another provider completes during a stream", async () => {
     const db = createInMemoryDatabaseAdapter();
-    const tracker = await LlmUsageTracker.create(db);
+    const tracker = new LlmUsageTracker(db);
     const service = new AgentService(null, null, db, tracker) as unknown as {
       createHarness(options: {
+        orgId: string;
         provider: ProviderClient;
         providerInstance: ProviderInstance;
         modelId: string;
@@ -578,6 +600,7 @@ describe("AgentService usage pricing context", () => {
     };
     const options = {
       modelId: "gpt-5.5",
+      orgId: ORG_ID,
       provider,
       providerInstance: {
         apiKey: "test",
@@ -607,9 +630,8 @@ describe("AgentService usage pricing context", () => {
     expect((await pending).usage?.costUsd).toBeCloseTo(1.1);
     // Cached harnesses keep their own rates after another harness is built.
     expect((await api.generateChat(input)).usage?.costUsd).toBeCloseTo(1.1);
-    await tracker.reloadFromDatabase();
-    expect(tracker.getStats().estimatedCostUsd).toBeCloseTo(2.2);
-    expect(tracker.getStats().requestCount).toBe(3);
+    expect((await tracker.getStats(ORG_ID)).estimatedCostUsd).toBeCloseTo(2.2);
+    expect((await tracker.getStats(ORG_ID)).requestCount).toBe(3);
   });
 
   test("prices OpenAI image parsing independently of a DeepSeek primary", async () => {
@@ -619,7 +641,7 @@ describe("AgentService usage pricing context", () => {
       model: "primary::deepseek-v4-flash",
     };
     await db.upsertProfile(profile);
-    const tracker = await LlmUsageTracker.create(db);
+    const tracker = new LlmUsageTracker(db);
     const service = new AgentService(
       {
         defaultProviderId: "primary",
@@ -666,8 +688,7 @@ describe("AgentService usage pricing context", () => {
     await session!.send({
       message: [{ data: "aGVsbG8=", mediaType: "image/png", type: "image" }],
     });
-    await tracker.reloadFromDatabase();
-    const byModel = tracker.getStatsByModel();
+    const byModel = await tracker.getStatsByModel(ORG_ID);
     expect(
       byModel.find((row) => row.modelId === "gpt-4o-mini")?.estimatedCostUsd
     ).toBeCloseTo(0.027, 6);
@@ -675,7 +696,10 @@ describe("AgentService usage pricing context", () => {
       byModel.find((row) => row.modelId === "deepseek-v4-flash")
         ?.estimatedCostUsd
     ).toBeCloseTo(0.054, 6);
-    expect(tracker.getStats().estimatedCostUsd).toBeCloseTo(0.081, 6);
+    expect((await tracker.getStats(ORG_ID)).estimatedCostUsd).toBeCloseTo(
+      0.081,
+      6
+    );
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
@@ -902,10 +926,21 @@ describe("AgentService coding delegation context", () => {
     const db = createInMemoryDatabaseAdapter();
     await installFakeOpenCode(tempBinDir);
     await Bun.write(
-      path.join(tempBinDir, "claude"),
-      "#!/bin/sh\necho claude\n"
+      path.join(
+        tempBinDir,
+        process.platform === "win32" ? "claude.cmd" : "claude"
+      ),
+      process.platform === "win32"
+        ? "@echo off\r\necho claude\r\n"
+        : "#!/bin/sh\necho claude\n"
     );
-    await chmod(path.join(tempBinDir, "claude"), 0o755);
+    await chmod(
+      path.join(
+        tempBinDir,
+        process.platform === "win32" ? "claude.cmd" : "claude"
+      ),
+      0o755
+    );
 
     await db.upsertWorkspaceSettings({
       codingAgentHarnesses: [
@@ -1547,6 +1582,23 @@ describe("AgentService WhatsApp allowed phones", () => {
       false
     );
   });
+
+  test("writes allowUnpairedGroupMembers to WhatsApp config", async () => {
+    const service = await createWhatsAppService();
+
+    const saved = await service.setWhatsAppSettings(ORG_ID, {
+      allowUnpairedGroupMembers: true,
+      profileId: "default",
+    });
+
+    expect(saved.allowUnpairedGroupMembers).toBe(true);
+    expect(
+      (await service.getWhatsAppSettings(ORG_ID)).allowUnpairedGroupMembers
+    ).toBe(true);
+    expect(
+      (await loadWhatsAppConfigFile(ORG_ID))?.allowUnpairedGroupMembers
+    ).toBe(true);
+  });
 });
 
 describe("AgentService organization knowledge base", () => {
@@ -1601,6 +1653,13 @@ async function captureError(
 }
 
 async function installFakeOpenCode(binDir: string): Promise<void> {
+  if (process.platform === "win32") {
+    await writeFile(
+      path.join(binDir, "opencode.cmd"),
+      "@echo off\r\necho fake opencode\r\n"
+    );
+    return;
+  }
   const scriptPath = path.join(binDir, "opencode");
   await writeFile(
     scriptPath,

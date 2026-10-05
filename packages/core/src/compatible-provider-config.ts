@@ -1,4 +1,4 @@
-import type { CustomModelEntry, ProviderName, WireApi } from "./contract";
+import type { CustomModelEntry, WireApi } from "./contract";
 
 export const DISPLAY_NAME_MAX_LENGTH = 64;
 
@@ -217,8 +217,4 @@ export function findCustomModel(
   modelId: string
 ): CustomModelEntry | undefined {
   return models?.find((model) => model.id === modelId.trim());
-}
-
-export function isCompatibleProvider(provider: ProviderName): boolean {
-  return provider === "openai_compatible";
 }

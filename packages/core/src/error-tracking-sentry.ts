@@ -18,8 +18,8 @@ export interface SentryDsn {
 }
 
 /**
- * The slice of the Sentry store payload nakama actually sends. Hand-rolled because no
- * SDK is in use, and named so the envelope is a checked shape rather than a bag: a
+ * The slice of the Sentry event payload nakama actually sends. Hand-rolled because no
+ * SDK is in use, and named so the payload is a checked shape rather than a bag: a
  * typo in a key here is silently ignored by the ingest and impossible to spot later.
  */
 export interface SentryEvent {
@@ -46,9 +46,13 @@ export interface SentryEvent {
 }
 
 /**
- * One protocol covers Sentry, GlitchTip, Bugsink and self-hosted Sentry: they all accept
- * the same store endpoint and X-Sentry-Auth header, so the operator picks the platform
- * and nakama does not have to know which one it is talking to.
+ * One protocol covers Sentry, GlitchTip, Bugsink, Rustrak and self-hosted Sentry: they
+ * all accept the same envelope endpoint and X-Sentry-Auth header, so the operator picks
+ * the platform and nakama does not have to know which one it is talking to.
+ *
+ * The envelope endpoint, not the older store one. Store is deprecated in Sentry and
+ * removed outright in Rustrak, which answers 400 to it, so an envelope is the one shape
+ * every ingest still takes.
  */
 export function parseSentryDsn(dsn: string): SentryDsn | null {
   const trimmed = dsn.trim();
@@ -76,7 +80,7 @@ export function parseSentryDsn(dsn: string): SentryDsn | null {
   const prefix = segments.length > 0 ? `/${segments.join("/")}` : "";
 
   return {
-    endpoint: `${url.protocol}//${url.host}${prefix}/api/${projectId}/store/`,
+    endpoint: `${url.protocol}//${url.host}${prefix}/api/${projectId}/envelope/`,
     publicKey,
   };
 }
@@ -113,16 +117,38 @@ export function toSentryEvent(report: ErrorReport): SentryEvent {
   };
 }
 
+/**
+ * The wire form of one event: an envelope, which is the only ingestion shape every
+ * Sentry-compatible backend still accepts. Sentry and GlitchTip keep store alive for
+ * legacy clients, but it is deprecated and Rustrak rejects it, so the envelope is what
+ * makes "Sentry-compatible" true for all of them rather than for three of them.
+ *
+ * Layout is fixed by the protocol: the envelope header line, then for each item its
+ * header line and its payload line, each newline-terminated. The length is in bytes
+ * rather than characters, because the event carries stack traces and error messages
+ * that are not ASCII in general.
+ */
 export async function sendSentryEvent(
   dsn: SentryDsn,
   event: SentryEvent,
   timeoutMs = SEND_TIMEOUT_MS
 ): Promise<boolean> {
+  const payload = JSON.stringify(event);
+  const envelopeHeader = JSON.stringify({
+    event_id: event.event_id,
+    sent_at: new Date().toISOString(),
+  });
+  const itemHeader = JSON.stringify({
+    content_type: "application/json",
+    length: Buffer.byteLength(payload),
+    type: "event",
+  });
+
   try {
     const response = await fetch(dsn.endpoint, {
-      body: JSON.stringify(event),
+      body: `${envelopeHeader}\n${itemHeader}\n${payload}\n`,
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": "application/x-sentry-envelope",
         "X-Sentry-Auth": `Sentry sentry_version=7, sentry_client=${SENTRY_CLIENT}, sentry_key=${dsn.publicKey}`,
       },
       method: "POST",

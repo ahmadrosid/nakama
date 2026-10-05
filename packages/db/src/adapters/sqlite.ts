@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { chmodSync } from "node:fs";
+import { sep } from "node:path";
 import type { AgentQuestionnaire, ChatMessage } from "@nakama/core";
 import {
   derivePluginToolName,
@@ -17,7 +18,6 @@ import type {
   OrgMemoryProposalStatus,
   PluginPublishResult,
   PublishOrgPluginReleaseInput,
-  StoredApiKeyRecord,
   StoredArtifactShareRecord,
   StoredAttachmentRecord,
   StoredAuditEvent,
@@ -35,6 +35,7 @@ import type {
   StoredOrgMemberRecord,
   StoredOrgMemoryProposal,
   StoredOrgPluginRecord,
+  StoredPasskeyRecord,
   StoredPluginReleaseRecord,
   StoredProfileChangeEvent,
   StoredProfileComposioToolkitRecord,
@@ -59,6 +60,12 @@ import type {
 export interface SqliteDatabase {
   adapter: DatabaseAdapter;
   close(): void;
+  /**
+   * Finalizes every prepared statement and releases the file now. `close()`
+   * keeps the file open until those statements are garbage collected, and
+   * Windows cannot rename or delete an open SQLite file.
+   */
+  release(): void;
   reopen(): Promise<void>;
 }
 
@@ -97,6 +104,7 @@ interface AutomationRunRow {
   error: string | null;
   id: string;
   output: string | null;
+  progress: string | null;
   started_at: string;
   status: string;
 }
@@ -172,7 +180,6 @@ interface ToolRow {
 interface SessionRow {
   agent_questionnaire: string | null;
   agent_todos: string;
-  app_user_id?: string | null;
   channel: string;
   created_at: string;
   id: string;
@@ -208,7 +215,6 @@ interface AttachmentRow {
 }
 
 interface SessionSummaryRow {
-  app_user_id?: string | null;
   channel: string;
   created_at: string;
   first_user_payload: string | null;
@@ -225,6 +231,7 @@ interface LlmUsageStatsRow {
   estimated_cost_usd: number;
   id: string;
   input_tokens: number;
+  org_id: string;
   output_tokens: number;
   request_count: number;
   tracked_since: string;
@@ -235,6 +242,7 @@ interface LlmUsageModelStatsRow {
   estimated_cost_usd: number;
   input_tokens: number;
   model_id: string;
+  org_id: string;
   output_tokens: number;
   request_count: number;
   tracked_since: string;
@@ -255,7 +263,7 @@ interface WorkspaceSettingsRow {
 }
 
 interface NotificationDestinationRow {
-  channel: "telegram";
+  channel: StoredNotificationDestinationRecord["channel"];
   config: string;
   created_at: string;
   id: string;
@@ -359,11 +367,14 @@ interface UserRow {
   user_context?: string | null;
 }
 
-interface MfaBackupCodeRow {
-  code_hash: string;
+interface PasskeyRow {
+  counter: number;
   created_at: string;
+  credential_id: string;
   id: string;
-  used_at: string | null;
+  name: string;
+  public_key: string;
+  transports: string;
   user_id: string;
 }
 
@@ -379,21 +390,8 @@ interface BrowserSessionRow {
   user_id: string;
 }
 
-interface ApiKeyRow {
-  created_at: string;
-  created_by_user_id: string;
-  environment: string;
-  expires_at: string | null;
-  id: string;
-  key_prefix: string;
-  last_used_at: string | null;
-  name: string;
-  org_id: string;
-  revoked_at: string | null;
-  secret_hash: string;
-}
-
 interface OrganizationRow {
+  allowed_invite_domains: string;
   archived_at: string | null;
   created_at: string;
   id: string;
@@ -555,7 +553,10 @@ export async function createSqliteDatabase(
   return {
     adapter: adapterProxy,
     close() {
-      db.close();
+      db.close(true);
+    },
+    release() {
+      db.close(true);
     },
     async reopen() {
       const nextDb = openPrivateDatabase(databasePath);
@@ -564,10 +565,13 @@ export async function createSqliteDatabase(
       const previousDb = db;
       db = nextDb;
       adapter = nextAdapter;
-      previousDb.close();
+      previousDb.close(true);
     },
   };
 }
+
+/** How long claim rows block replays before prune (also caps table growth). */
+const NOTIFICATION_WEBHOOK_DELIVERY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listAutomationsStmt = db.prepare("SELECT * FROM automations");
@@ -605,13 +609,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     ORDER BY started_at DESC
     LIMIT 1
   `);
+  const getAutomationRunStmt = db.prepare(`
+    SELECT * FROM automation_runs
+    WHERE automation_id = ? AND id = ?
+    LIMIT 1
+  `);
   const insertAutomationRunStmt = db.prepare(`
-    INSERT INTO automation_runs (id, automation_id, status, started_at, completed_at, output, error, delivery_status, delivery_error)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO automation_runs (id, automation_id, status, started_at, completed_at, output, error, delivery_status, delivery_error, progress)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const updateAutomationRunStmt = db.prepare(`
     UPDATE automation_runs
-    SET status = ?, completed_at = ?, output = ?, error = ?, delivery_status = ?, delivery_error = ?
+    SET status = ?, completed_at = ?, output = ?, error = ?, delivery_status = ?, delivery_error = ?, progress = ?
     WHERE id = ?
   `);
   const deleteAutomationRunStmt = db.prepare(`
@@ -866,7 +875,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           successor.id
         );
       }
-      const workspacePrefix = `${workspaceFrom}/`;
+      const workspacePrefix = `${workspaceFrom}${sep}`;
       if (
         db
           .query(
@@ -987,63 +996,78 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     return deleteToolStmt.run(toolId);
   });
 
-  const listSessionsStmt = db.prepare("SELECT * FROM sessions");
-  const listSessionsForUserStmt = db.prepare(
-    "SELECT * FROM sessions WHERE user_id = ? ORDER BY created_at ASC"
+  const listSessionsStmt = db.prepare(
+    "SELECT * FROM sessions WHERE app_user_id IS NULL"
   );
-  const getSessionStmt = db.prepare("SELECT * FROM sessions WHERE id = ?");
+  const listSessionsForUserStmt = db.prepare(
+    "SELECT * FROM sessions WHERE user_id = ? AND app_user_id IS NULL ORDER BY created_at ASC"
+  );
+  const getSessionStmt = db.prepare(
+    "SELECT * FROM sessions WHERE id = ? AND app_user_id IS NULL"
+  );
   const upsertSessionStmt = db.prepare(`
     INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, app_user_id, user_id, model, pinned)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       profile_id = excluded.profile_id,
       channel = excluded.channel,
-      app_user_id = COALESCE(excluded.app_user_id, sessions.app_user_id),
       user_id = COALESCE(excluded.user_id, sessions.user_id),
       model = excluded.model
+    WHERE sessions.app_user_id IS NULL
   `);
   const updateSessionUpdatedAtStmt = db.prepare(
-    "UPDATE sessions SET updated_at = ? WHERE id = ?"
+    "UPDATE sessions SET updated_at = ? WHERE id = ? AND app_user_id IS NULL"
   );
-  const deleteSessionStmt = db.prepare("DELETE FROM sessions WHERE id = ?");
+  const deleteSessionStmt = db.prepare(
+    "DELETE FROM sessions WHERE id = ? AND app_user_id IS NULL"
+  );
   const updateSessionModelStmt = db.prepare(
-    "UPDATE sessions SET model = ? WHERE id = ?"
+    "UPDATE sessions SET model = ? WHERE id = ? AND app_user_id IS NULL"
   );
   const updateSessionPinnedStmt = db.prepare(
-    "UPDATE sessions SET pinned = ? WHERE id = ?"
+    "UPDATE sessions SET pinned = ? WHERE id = ? AND app_user_id IS NULL"
   );
   const updateSessionTitleStmt = db.prepare(`
-    UPDATE sessions SET title = ? WHERE id = ? AND title IS NULL
+    UPDATE sessions SET title = ? WHERE id = ? AND app_user_id IS NULL AND title IS NULL
   `);
   const getSessionTodosStmt = db.prepare(
-    "SELECT agent_todos FROM sessions WHERE id = ?"
+    "SELECT agent_todos FROM sessions WHERE id = ? AND app_user_id IS NULL"
   );
   const renameSessionTitleStmt = db.prepare(
-    "UPDATE sessions SET title = ? WHERE id = ?"
+    "UPDATE sessions SET title = ? WHERE id = ? AND app_user_id IS NULL"
   );
   const updateSessionTodosStmt = db.prepare(
-    "UPDATE sessions SET agent_todos = ? WHERE id = ?"
+    "UPDATE sessions SET agent_todos = ? WHERE id = ? AND app_user_id IS NULL"
   );
   const getSessionQuestionnaireStmt = db.prepare(
-    "SELECT agent_questionnaire FROM sessions WHERE id = ?"
+    "SELECT agent_questionnaire FROM sessions WHERE id = ? AND app_user_id IS NULL"
   );
   const updateSessionQuestionnaireStmt = db.prepare(
-    "UPDATE sessions SET agent_questionnaire = ? WHERE id = ?"
+    "UPDATE sessions SET agent_questionnaire = ? WHERE id = ? AND app_user_id IS NULL"
   );
 
   const listMessagesForSessionStmt = db.prepare(`
     SELECT * FROM session_messages
-    WHERE session_id = ?
+    WHERE session_id = ? AND EXISTS (SELECT 1 FROM sessions WHERE id = session_id AND app_user_id IS NULL)
     ORDER BY seq ASC
   `);
   const appendMessageStmt = db.prepare(`
     INSERT INTO session_messages (id, session_id, seq, payload, created_at)
     VALUES (?, ?, ?, ?, ?)
   `);
+  const requireWritableSession = (sessionId: string): void => {
+    const retired = db
+      .query("SELECT 1 FROM sessions WHERE id = ? AND app_user_id IS NOT NULL")
+      .get(sessionId);
+    if (retired) {
+      throw new Error("Session not found.");
+    }
+  };
   const insertMessages = (
     sessionId: string,
     messages: StoredSessionMessageRecord[]
   ): void => {
+    requireWritableSession(sessionId);
     for (const message of messages) {
       appendMessageStmt.run(
         message.id,
@@ -1056,10 +1080,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   };
   const appendMessagesTransaction = db.transaction(insertMessages);
   const deleteMessagesForSessionStmt = db.prepare(
-    "DELETE FROM session_messages WHERE session_id = ?"
+    "DELETE FROM session_messages WHERE session_id = ? AND EXISTS (SELECT 1 FROM sessions WHERE id = session_id AND app_user_id IS NULL)"
   );
   const replaceMessagesForSessionTransaction = db.transaction(
     (sessionId: string, messages: StoredSessionMessageRecord[]) => {
+      requireWritableSession(sessionId);
       deleteMessagesForSessionStmt.run(sessionId);
       insertMessages(sessionId, messages);
 
@@ -1079,16 +1104,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const getAttachmentStmt = db.prepare(
-    "SELECT * FROM attachments WHERE id = ?"
+    "SELECT * FROM attachments WHERE id = ? AND NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = attachments.session_id AND app_user_id IS NOT NULL)"
   );
   const listAttachmentsForSessionStmt = db.prepare(
-    "SELECT * FROM attachments WHERE session_id = ?"
+    "SELECT * FROM attachments WHERE session_id = ? AND NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = attachments.session_id AND app_user_id IS NOT NULL)"
   );
   const listEphemeralAttachmentsStmt = db.prepare(
-    "SELECT * FROM attachments WHERE ephemeral = 1"
+    "SELECT * FROM attachments WHERE ephemeral = 1 AND NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = attachments.session_id AND app_user_id IS NOT NULL)"
   );
   const deleteAttachmentStmt = db.prepare(
-    "DELETE FROM attachments WHERE id = ?"
+    "DELETE FROM attachments WHERE id = ? AND NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = attachments.session_id AND app_user_id IS NOT NULL)"
   );
   // Keyset paging on the sort columns. `position` is each row's place in the
   // whole list, so the caller can tell when chats crossed a cursor between two
@@ -1098,7 +1123,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WITH summaries AS (
       SELECT
         s.id,
-        s.app_user_id,
         s.profile_id,
         s.channel,
         s.created_at,
@@ -1114,15 +1138,15 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       WHERE s.profile_id = ?1
         AND s.channel IN (SELECT value FROM json_each(?2))
         AND (?8 IS NULL OR s.id = ?8)
-        AND (?9 IS NULL OR s.app_user_id = ?9)
+        AND s.app_user_id IS NULL
         -- Only message text is searched: content is a string or an array of
         -- parts, and matching the raw JSON would let "role" hit every chat.
         -- LIKE ignores case for ASCII letters only, so "école" does not find
         -- "École": SQLite has no Unicode case folding and bun:sqlite cannot
         -- register one. That needs a folded copy of the text or an FTS5 index.
         AND (
-          ?10 IS NULL
-          OR s.title LIKE ?10 ESCAPE '\\'
+          ?9 IS NULL
+          OR s.title LIKE ?9 ESCAPE '\\'
           OR EXISTS (
             SELECT 1
             FROM session_messages sm
@@ -1131,7 +1155,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
               AND (
                 (
                   json_type(sm.payload, '$.content') = 'text'
-                  AND json_extract(sm.payload, '$.content') LIKE ?10 ESCAPE '\\'
+                  AND json_extract(sm.payload, '$.content') LIKE ?9 ESCAPE '\\'
                 )
                 OR (
                   json_type(sm.payload, '$.content') = 'array'
@@ -1139,7 +1163,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
                     SELECT 1
                     FROM json_each(sm.payload, '$.content') AS part
                     WHERE json_extract(part.value, '$.type') = 'text'
-                      AND json_extract(part.value, '$.text') LIKE ?10 ESCAPE '\\'
+                      AND json_extract(part.value, '$.text') LIKE ?9 ESCAPE '\\'
                   )
                 )
               )
@@ -1178,10 +1202,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   `);
 
   const getLlmUsageStatsStmt = db.prepare(
-    "SELECT * FROM llm_usage_stats WHERE id = ?"
+    "SELECT * FROM llm_usage_stats WHERE org_id = ? AND id = ?"
   );
   const listLlmUsageStatsByModelStmt = db.prepare(`
     SELECT * FROM llm_usage_model_stats
+    WHERE org_id = ?
     ORDER BY request_count DESC, input_tokens + output_tokens DESC, model_id ASC
   `);
   const listMcpServersStmt = db.prepare("SELECT * FROM mcp_servers");
@@ -1212,6 +1237,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     FROM mcp_servers
     INNER JOIN profile_mcp_servers ON profile_mcp_servers.server_id = mcp_servers.id
     WHERE profile_mcp_servers.profile_id = ?
+    AND mcp_servers.enabled = 1
     ORDER BY mcp_servers.name ASC
   `);
   const assignMcpServerStmt = db.prepare(`
@@ -1394,6 +1420,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
   const incrementLlmUsageStatsStmt = db.prepare(`
     INSERT INTO llm_usage_stats (
+      org_id,
       id,
       request_count,
       input_tokens,
@@ -1402,8 +1429,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       tracked_since,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(org_id, id) DO UPDATE SET
       request_count = llm_usage_stats.request_count + excluded.request_count,
       input_tokens = llm_usage_stats.input_tokens + excluded.input_tokens,
       output_tokens = llm_usage_stats.output_tokens + excluded.output_tokens,
@@ -1412,6 +1439,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   `);
   const incrementLlmUsageStatsByModelStmt = db.prepare(`
     INSERT INTO llm_usage_model_stats (
+      org_id,
       model_id,
       request_count,
       input_tokens,
@@ -1420,8 +1448,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       tracked_since,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(model_id) DO UPDATE SET
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(org_id, model_id) DO UPDATE SET
       request_count = llm_usage_model_stats.request_count + excluded.request_count,
       input_tokens = llm_usage_model_stats.input_tokens + excluded.input_tokens,
       output_tokens = llm_usage_model_stats.output_tokens + excluded.output_tokens,
@@ -1519,6 +1547,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   `);
   const deleteNotificationDestinationStmt = db.prepare(`
     DELETE FROM notification_destinations WHERE id = ?
+  `);
+  const claimNotificationWebhookDeliveryStmt = db.prepare(`
+    INSERT OR IGNORE INTO notification_webhook_deliveries (
+      destination_id,
+      event_id,
+      created_at
+    )
+    VALUES (?, ?, ?)
+  `);
+  const pruneNotificationWebhookDeliveriesStmt = db.prepare(`
+    DELETE FROM notification_webhook_deliveries
+    WHERE created_at < ?
   `);
   const listComposioToolkitsForOrgStmt = db.prepare(`
     SELECT
@@ -1749,9 +1789,57 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET used_at = ?
     WHERE user_id = ? AND code_hash = ? AND used_at IS NULL
   `);
+  const countUnusedMfaBackupCodesStmt = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM user_mfa_backup_codes
+    WHERE user_id = ? AND used_at IS NULL
+  `);
   const deleteMfaBackupCodesStmt = db.prepare(`
     DELETE FROM user_mfa_backup_codes
     WHERE user_id = ?
+  `);
+  const createPasskeyStmt = db.prepare(`
+    INSERT INTO user_passkeys (
+      id, user_id, credential_id, public_key, counter, transports, name, created_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const createPasskeyChallengeStmt = db.prepare(`
+    INSERT INTO user_passkey_challenges (
+      challenge, user_id, type, expires_at, created_at
+    )
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  const deleteExpiredPasskeyChallengesStmt = db.prepare(`
+    DELETE FROM user_passkey_challenges
+    WHERE expires_at <= ?
+  `);
+  const consumePasskeyChallengeStmt = db.prepare(`
+    DELETE FROM user_passkey_challenges
+    WHERE challenge = ? AND type = ? AND expires_at > ?
+      AND (user_id = ? OR user_id IS NULL)
+  `);
+  const deletePasskeysStmt = db.prepare(
+    "DELETE FROM user_passkeys WHERE user_id = ?"
+  );
+  const getPasskeyStmt = db.prepare(`
+    SELECT id, user_id, credential_id, public_key, counter, transports, name, created_at
+    FROM user_passkeys
+    WHERE user_id = ? AND credential_id = ?
+  `);
+  const getPasskeyByCredentialIdStmt = db.prepare(`
+    SELECT id, user_id, credential_id, public_key, counter, transports, name, created_at
+    FROM user_passkeys
+    WHERE credential_id = ?
+  `);
+  const listPasskeysStmt = db.prepare(`
+    SELECT id, user_id, credential_id, public_key, counter, transports, name, created_at
+    FROM user_passkeys
+    WHERE user_id = ?
+    ORDER BY created_at ASC
+  `);
+  const updatePasskeyCounterStmt = db.prepare(`
+    UPDATE user_passkeys SET counter = ? WHERE user_id = ? AND credential_id = ?
   `);
 
   const getUserByEmailStmt = db.prepare("SELECT * FROM users WHERE email = ?");
@@ -1954,25 +2042,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     SET active_org_id = ?
     WHERE id = ?
   `);
-  const createApiKeyStmt = db.prepare(`
-    INSERT INTO api_keys (
-      id, org_id, name, environment, key_prefix, secret_hash,
-      created_by_user_id, created_at, expires_at, last_used_at, revoked_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const getApiKeyByPrefixStmt = db.prepare(`
-    SELECT * FROM api_keys WHERE key_prefix = ? LIMIT 1
-  `);
-  const listApiKeysForOrgStmt = db.prepare(`
-    SELECT * FROM api_keys WHERE org_id = ? ORDER BY created_at DESC, id DESC
-  `);
-  const revokeApiKeyStmt = db.prepare(`
-    UPDATE api_keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL
-  `);
-  const deleteApiKeyStmt = db.prepare("DELETE FROM api_keys WHERE id = ?");
-  const updateApiKeyLastUsedAtStmt = db.prepare(`
-    UPDATE api_keys SET last_used_at = ? WHERE id = ?
-  `);
   const createPasswordResetTokenStmt = db.prepare(`
     INSERT INTO password_reset_tokens (
       id, user_id, token_hash, expires_at, consumed_at, created_at
@@ -2032,6 +2101,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     for (const table of [
       "llm_turn_usage",
       "llm_usage_stats",
+      "llm_usage_model_stats",
       "mcp_servers",
       "skills",
       "tool_output_savings",
@@ -2044,11 +2114,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     return deleteOrganizationStmt.run(orgId).changes > 0;
   });
   const upsertOrganizationStmt = db.prepare(`
-    INSERT INTO organizations (id, name, slug, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO organizations (id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       slug = excluded.slug,
+      allowed_invite_domains = excluded.allowed_invite_domains,
       monthly_llm_token_limit = excluded.monthly_llm_token_limit,
       monthly_llm_turn_limit = excluded.monthly_llm_turn_limit,
       monthly_llm_warning_percent = excluded.monthly_llm_warning_percent,
@@ -2083,18 +2154,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         OR org_llm_monthly_quota.reserved_tokens + excluded.reserved_tokens <= (SELECT monthly_llm_token_limit FROM organizations WHERE id = org_llm_monthly_quota.org_id));
   `);
   const listOrganizationsStmt = db.prepare(`
-    SELECT id, name, slug, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
+    SELECT id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     ORDER BY name ASC
   `);
   const getOrganizationBySlugStmt = db.prepare(`
-    SELECT id, name, slug, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
+    SELECT id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     WHERE slug = ?
     LIMIT 1
   `);
   const getOrganizationByIdStmt = db.prepare(`
-    SELECT id, name, slug, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
+    SELECT id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     WHERE id = ?
     LIMIT 1
@@ -2404,6 +2475,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       record.id,
       record.name,
       record.slug,
+      JSON.stringify(record.allowedInviteDomains ?? []),
       record.monthlyLlmTokenLimit ?? null,
       record.monthlyLlmTurnLimit ?? 0,
       record.monthlyLlmWarningPercent ?? 80,
@@ -2458,6 +2530,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       o.id,
       o.name,
       o.slug,
+      o.allowed_invite_domains,
       o.skills_write_approval,
       o.skills_post_turn_review,
       o.skills_curator_enabled,
@@ -2783,6 +2856,25 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       statement.get();
     },
 
+    async claimNotificationWebhookDelivery(destinationId, eventId, createdAt) {
+      // Bound ledger growth: drop rows outside the replay window before claim.
+      const createdAtMs = Date.parse(createdAt);
+      if (Number.isFinite(createdAtMs)) {
+        pruneNotificationWebhookDeliveriesStmt.run(
+          new Date(
+            createdAtMs - NOTIFICATION_WEBHOOK_DELIVERY_RETENTION_MS
+          ).toISOString()
+        );
+      }
+      return (
+        claimNotificationWebhookDeliveryStmt.run(
+          destinationId,
+          eventId,
+          createdAt
+        ).changes > 0
+      );
+    },
+
     async compareAndSetOrgPluginState(input) {
       return compareAndSetOrgPluginStateTx(input);
     },
@@ -2791,6 +2883,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
     async consumeMfaTotpStep(userId, step) {
       return consumeMfaTotpStepStmt.run(step, userId, step).changes > 0;
+    },
+    async consumePasskeyChallenge(challenge, userId, type, consumedAt) {
+      return (
+        consumePasskeyChallengeStmt.run(challenge, type, consumedAt, userId)
+          .changes > 0
+      );
     },
 
     async consumePasswordResetToken(tokenHash, passwordHash, consumedAt) {
@@ -2837,27 +2935,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           unreadCount: Number((row as { unread_count: number }).unread_count),
         }));
     },
+    async countUnusedMfaBackupCodes(userId) {
+      const row = countUnusedMfaBackupCodesStmt.get(userId) as {
+        count: number;
+      };
+      return Number(row.count);
+    },
 
     async countUsers() {
       const row = countUsersStmt.get() as { count: number };
       return row.count;
     },
-    async createApiKey(record) {
-      createApiKeyStmt.run(
-        record.id,
-        record.orgId,
-        record.name,
-        record.environment,
-        record.keyPrefix,
-        record.secretHash,
-        record.createdByUserId,
-        record.createdAt,
-        record.expiresAt,
-        record.lastUsedAt,
-        record.revokedAt
-      );
-    },
-
     async createArtifactShare(record) {
       createArtifactShareStmt.run(
         record.id,
@@ -2944,6 +3032,28 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.createdAt
       );
     },
+    async createPasskey(record) {
+      createPasskeyStmt.run(
+        record.id,
+        record.userId,
+        record.credentialId,
+        record.publicKey,
+        record.counter,
+        JSON.stringify(record.transports),
+        record.name,
+        record.createdAt
+      );
+    },
+    async createPasskeyChallenge(record) {
+      deleteExpiredPasskeyChallengesStmt.run(record.createdAt);
+      createPasskeyChallengeStmt.run(
+        record.challenge,
+        record.userId,
+        record.type,
+        record.expiresAt,
+        record.createdAt
+      );
+    },
 
     async createPasswordResetToken(record) {
       createPasswordResetTokenStmt.run(
@@ -3018,11 +3128,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       runCreateUserStmt(record);
     },
 
-    async deleteApiKey(id) {
-      const result = deleteApiKeyStmt.run(id);
-      return result.changes > 0;
-    },
-
     async deleteAttachment(id) {
       const result = deleteAttachmentStmt.run(id);
       return result.changes > 0;
@@ -3042,7 +3147,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const result = deleteComposioToolkitStmt.run(id);
       return result.changes > 0;
     },
-
     async deleteComposioUserConnection(id) {
       const result = deleteComposioUserConnectionStmt.run(id);
       return result.changes > 0;
@@ -3090,6 +3194,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async deleteOrgPlugin(orgId, pluginId, expectedRevision) {
       return deleteOrgPluginTx(orgId, pluginId, expectedRevision);
+    },
+
+    async deletePasskeys(userId) {
+      deletePasskeysStmt.run(userId);
     },
 
     async deletePluginRelease(pluginId, version) {
@@ -3176,11 +3284,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return row ? toAutomationRunRecord(row) : null;
     },
 
-    async getApiKeyByPrefix(keyPrefix) {
-      const row = getApiKeyByPrefixStmt.get(keyPrefix) as ApiKeyRow | null;
-      return row ? toApiKeyRecord(row) : null;
-    },
-
     async getArtifactShareById(orgId, profileId, shareId) {
       const row = getArtifactShareByIdStmt.get(
         orgId,
@@ -3205,6 +3308,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async getAutomation(id) {
       const row = getAutomationStmt.get(id) as AutomationRow | null;
       return row ? toAutomationRecord(row) : null;
+    },
+
+    async getAutomationRun(automationId, runId) {
+      const row = getAutomationRunStmt.get(
+        automationId,
+        runId
+      ) as AutomationRunRow | null;
+      return row ? toAutomationRunRecord(row) : null;
     },
 
     async getAutomationRunReadThrough(userId, orgId, automationId) {
@@ -3256,8 +3367,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return row ? toProfileRecord(row) : null;
     },
 
-    async getLlmUsageStats() {
+    async getLlmUsageStats(orgId) {
       const row = getLlmUsageStatsStmt.get(
+        orgId,
         LLM_USAGE_STATS_ID
       ) as LlmUsageStatsRow | null;
       return row ? toLlmUsageStatsRecord(row) : null;
@@ -3330,6 +3442,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async getOrgPlugin(orgId, pluginId) {
       const row = getOrgPluginStmt.get(orgId, pluginId) as OrgPluginRow | null;
       return row ? toOrgPluginRecord(row) : null;
+    },
+    async getPasskey(userId, credentialId) {
+      const row = getPasskeyStmt.get(userId, credentialId) as PasskeyRow | null;
+      return row ? toPasskeyRecord(row) : null;
+    },
+    async getPasskeyByCredentialId(credentialId) {
+      const row = getPasskeyByCredentialIdStmt.get(
+        credentialId
+      ) as PasskeyRow | null;
+      return row ? toPasskeyRecord(row) : null;
     },
 
     async getPendingOrgInvite(orgId, email) {
@@ -3521,9 +3643,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
-    async incrementLlmUsageStats(delta, trackedSince) {
+    async incrementLlmUsageStats(orgId, delta, trackedSince) {
       const updatedAt = new Date().toISOString();
       incrementLlmUsageStatsStmt.run(
+        orgId,
         LLM_USAGE_STATS_ID,
         delta.requestCount,
         delta.inputTokens,
@@ -3534,9 +3657,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
-    async incrementLlmUsageStatsByModel(modelId, delta, trackedSince) {
+    async incrementLlmUsageStatsByModel(orgId, modelId, delta, trackedSince) {
       const updatedAt = new Date().toISOString();
       incrementLlmUsageStatsByModelStmt.run(
+        orgId,
         modelId,
         delta.requestCount,
         delta.inputTokens,
@@ -3579,6 +3703,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async insertAttachment(record) {
+      if (record.sessionId) {
+        requireWritableSession(record.sessionId);
+      }
       insertAttachmentStmt.run(
         record.id,
         record.orgId,
@@ -3605,7 +3732,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.output,
         record.error,
         record.deliveryStatus ?? null,
-        record.deliveryError ?? null
+        record.deliveryError ?? null,
+        record.progress ? JSON.stringify(record.progress) : null
       );
     },
 
@@ -3636,12 +3764,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.completedAt,
         record.position
       );
-    },
-
-    async listApiKeysForOrg(orgId) {
-      return listApiKeysForOrgStmt
-        .all(orgId)
-        .map((row) => toApiKeyRecord(row as ApiKeyRow));
     },
 
     async listArtifactSharesForProfile(orgId, profileId) {
@@ -3748,9 +3870,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       }));
     },
 
-    async listLlmUsageStatsByModel() {
+    async listLlmUsageStatsByModel(orgId) {
       return listLlmUsageStatsByModelStmt
-        .all()
+        .all(orgId)
         .map((row) => toLlmUsageModelStatsRecord(row as LlmUsageModelStatsRow));
     },
 
@@ -3835,6 +3957,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           : listOrgPluginsForOrgStmt.all(orgId);
       return rows.map((row) => toOrgPluginRecord(row as OrgPluginRow));
     },
+    async listPasskeys(userId) {
+      return listPasskeysStmt
+        .all(userId)
+        .map((row) => toPasskeyRecord(row as PasskeyRow));
+    },
 
     async listPlatformAdminUsers() {
       const rows = listPlatformAdminUsersStmt.all() as UserRow[];
@@ -3887,7 +4014,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async listSessionSummaries(profileId, channels, options = {}) {
-      const { after, appUserId, limit, query, sessionId } = options;
+      const { after, limit, query, sessionId } = options;
       return listSessionSummariesStmt
         .all(
           profileId,
@@ -3899,7 +4026,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           // SQLite reads a negative LIMIT as no limit.
           limit ?? -1,
           sessionId ?? null,
-          appUserId ?? null,
           query ? likeContains(query) : null
         )
         .map((row) => toSessionSummaryRecord(row as SessionSummaryRow));
@@ -4117,11 +4243,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       replaceProfileComposioToolkitsTransaction(profileId, assignments);
     },
 
-    async revokeApiKey(id, revokedAt) {
-      const result = revokeApiKeyStmt.run(revokedAt, id);
-      return result.changes > 0;
-    },
-
     async revokeArtifactShare(id, revokedAt) {
       const result = revokeArtifactShareStmt.run(revokedAt, id);
       return result.changes > 0;
@@ -4203,10 +4324,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return result.changes > 0;
     },
 
-    async updateApiKeyLastUsedAt(id, lastUsedAt) {
-      updateApiKeyLastUsedAtStmt.run(lastUsedAt, id);
-    },
-
     async updateArtifactShareSnapshot(id, snapshot) {
       updateArtifactShareSnapshotStmt.run(
         snapshot.filename,
@@ -4225,6 +4342,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.error,
         record.deliveryStatus ?? null,
         record.deliveryError ?? null,
+        record.progress ? JSON.stringify(record.progress) : null,
         record.id
       );
     },
@@ -4258,6 +4376,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         id
       );
       return result.changes > 0;
+    },
+    async updatePasskeyCounter(userId, credentialId, counter) {
+      updatePasskeyCounterStmt.run(counter, userId, credentialId);
     },
 
     async updateSessionModel(sessionId, model) {
@@ -4454,13 +4575,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       runUpsertProfileStmt(record);
     },
     async upsertSession(record) {
+      requireWritableSession(record.id);
       upsertSessionStmt.run(
         record.id,
         record.profileId,
         record.channel,
         record.createdAt,
         record.createdAt,
-        record.appUserId ?? null,
         record.userId ?? null,
         record.model,
         record.pinned ? 1 : 0
@@ -4560,6 +4681,9 @@ function toAutomationRunRecord(
     error: row.error,
     id: row.id,
     output: row.output,
+    progress: row.progress
+      ? (parseJson(row.progress) as StoredAutomationRunRecord["progress"])
+      : undefined,
     startedAt: row.started_at,
     status: row.status as StoredAutomationRunRecord["status"],
   };
@@ -4856,7 +4980,6 @@ function toSessionRecord(row: SessionRow): StoredSessionRecord {
   return {
     agentQuestionnaire: parseAgentQuestionnaire(row.agent_questionnaire),
     agentTodos: parseAgentTodos(row.agent_todos),
-    appUserId: row.app_user_id ?? null,
     channel: row.channel,
     createdAt: row.created_at,
     id: row.id,
@@ -4927,7 +5050,6 @@ function toSessionSummaryRecord(
   row: SessionSummaryRow
 ): StoredSessionSummaryRecord {
   return {
-    appUserId: row.app_user_id ?? null,
     channel: row.channel,
     createdAt: row.created_at,
     id: row.id,
@@ -4948,6 +5070,7 @@ function toLlmUsageStatsRecord(
     estimatedCostUsd: row.estimated_cost_usd,
     id: row.id,
     inputTokens: row.input_tokens,
+    orgId: row.org_id,
     outputTokens: row.output_tokens,
     requestCount: row.request_count,
     trackedSince: row.tracked_since,
@@ -4962,6 +5085,7 @@ function toLlmUsageModelStatsRecord(
     estimatedCostUsd: row.estimated_cost_usd,
     inputTokens: row.input_tokens,
     modelId: row.model_id,
+    orgId: row.org_id,
     outputTokens: row.output_tokens,
     requestCount: row.request_count,
     trackedSince: row.tracked_since,
@@ -5100,15 +5224,29 @@ function parseCodingAgentHarnesses(
     return [];
   }
 }
+function toPasskeyRecord(row: PasskeyRow): StoredPasskeyRecord {
+  let transports: string[] = [];
+  try {
+    transports = JSON.parse(row.transports) as string[];
+  } catch {
+    transports = [];
+  }
+  return {
+    counter: row.counter,
+    createdAt: row.created_at,
+    credentialId: row.credential_id,
+    id: row.id,
+    name: row.name,
+    publicKey: row.public_key,
+    transports,
+    userId: row.user_id,
+  };
+}
 
 function toNotificationDestinationRecord(
   row: NotificationDestinationRow
 ): StoredNotificationDestinationRecord {
-  return {
-    channel: row.channel,
-    config: JSON.parse(
-      row.config
-    ) as StoredNotificationDestinationRecord["config"],
+  const common = {
     createdAt: row.created_at,
     id: row.id,
     name: row.name,
@@ -5116,6 +5254,37 @@ function toNotificationDestinationRecord(
     secretHash: row.secret_hash,
     updatedAt: row.updated_at,
   };
+  switch (row.channel) {
+    case "telegram":
+      return {
+        ...common,
+        channel: row.channel,
+        config: JSON.parse(row.config) as Extract<
+          StoredNotificationDestinationRecord,
+          { channel: "telegram" }
+        >["config"],
+      };
+    case "discord":
+      return {
+        ...common,
+        channel: row.channel,
+        config: JSON.parse(row.config) as Extract<
+          StoredNotificationDestinationRecord,
+          { channel: "discord" }
+        >["config"],
+      };
+    case "whatsapp":
+      return {
+        ...common,
+        channel: row.channel,
+        config: JSON.parse(row.config) as Extract<
+          StoredNotificationDestinationRecord,
+          { channel: "whatsapp" }
+        >["config"],
+      };
+    default:
+      throw new Error("Unsupported notification destination channel.");
+  }
 }
 
 function normalizeOrgComposioToolkitStatus(
@@ -5194,6 +5363,7 @@ function toUserRecord(row: UserRow): StoredUserRecord {
 
 function toOrganizationRecord(row: OrganizationRow): StoredOrganizationRecord {
   return {
+    allowedInviteDomains: JSON.parse(row.allowed_invite_domains) as string[],
     archivedAt: row.archived_at,
     createdAt: row.created_at,
     id: row.id,
@@ -5396,22 +5566,6 @@ function toBrowserSessionRecord(
     revokedAt: row.revoked_at,
     sessionTokenHash: row.session_token_hash,
     userId: row.user_id,
-  };
-}
-
-function toApiKeyRecord(row: ApiKeyRow): StoredApiKeyRecord {
-  return {
-    createdAt: row.created_at,
-    createdByUserId: row.created_by_user_id,
-    environment: row.environment,
-    expiresAt: row.expires_at,
-    id: row.id,
-    keyPrefix: row.key_prefix,
-    lastUsedAt: row.last_used_at,
-    name: row.name,
-    orgId: row.org_id,
-    revokedAt: row.revoked_at,
-    secretHash: row.secret_hash,
   };
 }
 

@@ -4,6 +4,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+source "$(dirname "$0")/capture-common.sh"
 MAIN_ROOT="${NAKAMA_MAIN_ROOT:-/tmp/nakama-main-pr-shots}"
 SCREENSHOT_DIR="$ROOT/.github/pr-image"
 TEMP_AFTER="/tmp/nakama-pr-auto-profile-after-$$"
@@ -24,11 +25,11 @@ BEFORE_SERVER_PID=""
 AFTER_WEB_PID=""
 BEFORE_WEB_PID=""
 
-if command -v agent-browser >/dev/null 2>&1; then
-  AB="$(command -v agent-browser)"
-else
-  AB="npx --yes agent-browser"
+if ! command -v agent-browser >/dev/null 2>&1; then
+  echo "agent-browser is required on PATH (npm i -g agent-browser && agent-browser install)" >&2
+  exit 1
 fi
+AB="$(command -v agent-browser)"
 
 cleanup() {
   $AB --session "$SESSION_AFTER" close --all 2>/dev/null || true
@@ -201,6 +202,7 @@ capture_edit_dialog() {
 }
 
 mkdir -p "$SCREENSHOT_DIR"
+ensure_current_web_build "$ROOT"
 
 if [[ ! -d "$MAIN_ROOT/apps/web" ]]; then
   echo "Missing main worktree at $MAIN_ROOT (git worktree add … main)" >&2

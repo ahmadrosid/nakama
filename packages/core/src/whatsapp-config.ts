@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { rename, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
 import {
   assertChannelPath,
   type ChannelConfigScope,
@@ -13,7 +13,6 @@ import {
   resetChannelConversationState,
 } from "./channel-config-shared";
 import {
-  ensureDir,
   parseIni,
   pathExists,
   readDirectoryOrEmpty,
@@ -35,6 +34,7 @@ export const DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION = true;
 
 export interface WhatsAppConfigFile {
   allowedPhones: string[];
+  allowUnpairedGroupMembers: boolean;
   outboundPort?: string | null;
   outboundToken?: string | null;
   pairedJid: string | null;
@@ -47,6 +47,7 @@ export interface WhatsAppConfigFile {
 
 export interface WhatsAppSettingsPublic {
   allowedPhones: string[];
+  allowUnpairedGroupMembers: boolean;
   configured: boolean;
   pairedJid: string | null;
   pairingCode: string | null;
@@ -57,6 +58,7 @@ export interface WhatsAppSettingsPublic {
 
 export interface UpdateWhatsAppSettingsInput {
   allowedPhones?: string;
+  allowUnpairedGroupMembers?: boolean;
   phoneNumber?: string;
   profileId?: string;
   requireGroupMention?: boolean;
@@ -246,9 +248,19 @@ export async function loadWhatsAppConfigFile(
   const pairedLid = values.paired_lid?.trim() || null;
   const outboundPort = values.outbound_port?.trim() || null;
   const outboundToken = values.outbound_token?.trim() || null;
+  const requireGroupMention = parseIniBoolean(
+    values.require_group_mention,
+    DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION
+  );
 
   return {
     allowedPhones: parseAllowedWhatsAppPhones(values.allowed_phones ?? ""),
+    // Files written before this setting existed opened the group to everyone
+    // exactly when the mention requirement was off, so a missing value keeps that.
+    allowUnpairedGroupMembers: parseIniBoolean(
+      values.allow_unpaired_group_members,
+      !requireGroupMention
+    ),
     outboundPort,
     outboundToken,
     pairedJid,
@@ -256,10 +268,7 @@ export async function loadWhatsAppConfigFile(
     pairingCode,
     phoneNumber,
     profileId,
-    requireGroupMention: parseIniBoolean(
-      values.require_group_mention,
-      DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION
-    ),
+    requireGroupMention,
   };
 }
 
@@ -293,6 +302,7 @@ export function toWhatsAppSettingsPublic(
   if (!file) {
     return {
       allowedPhones: [],
+      allowUnpairedGroupMembers: false,
       configured: false,
       pairedJid: null,
       pairingCode: null,
@@ -304,6 +314,7 @@ export function toWhatsAppSettingsPublic(
 
   return {
     allowedPhones: file.allowedPhones,
+    allowUnpairedGroupMembers: file.allowUnpairedGroupMembers,
     configured: true,
     pairedJid: file.pairedJid,
     pairingCode: file.pairingCode,
@@ -340,6 +351,7 @@ async function writeWhatsAppConfigFile(
     ...(config.outboundPort ? [`outbound_port=${config.outboundPort}`] : []),
     ...(config.outboundToken ? [`outbound_token=${config.outboundToken}`] : []),
     `require_group_mention=${config.requireGroupMention ? "true" : "false"}`,
+    `allow_unpaired_group_members=${config.allowUnpairedGroupMembers ? "true" : "false"}`,
     "",
   ];
 
@@ -388,6 +400,10 @@ function buildSavedWhatsAppConfig(
 
   return {
     allowedPhones: resolveAllowedPhones(input, existing),
+    allowUnpairedGroupMembers:
+      input.allowUnpairedGroupMembers ??
+      existing?.allowUnpairedGroupMembers ??
+      false,
     outboundPort: existing?.outboundPort ?? null,
     outboundToken: existing?.outboundToken ?? null,
     pairedJid,
@@ -617,6 +633,7 @@ export function resolveWhatsAppConfigFromSources(options: {
 
   return {
     allowedPhones: file?.allowedPhones ?? [],
+    allowUnpairedGroupMembers: file?.allowUnpairedGroupMembers ?? false,
     pairedJid: file?.pairedJid ?? null,
     pairedLid: file?.pairedLid ?? null,
     pairingCode: file?.pairingCode ?? null,
@@ -673,23 +690,6 @@ export async function listWhatsAppConfigOrgIds(): Promise<string[]> {
     }
   }
   return configured;
-}
-
-/** Called with the oldest organization, after stopping the legacy worker. */
-export async function claimLegacyWhatsAppConfig(
-  orgId: string
-): Promise<boolean> {
-  const legacyDir = getWhatsAppConfigDir();
-  const targetDir = getWhatsAppConfigDir(orgId);
-  if (
-    !(await pathExists(getWhatsAppConfigPath())) ||
-    (await pathExists(targetDir))
-  ) {
-    return false;
-  }
-  await ensureDir(dirname(targetDir));
-  await rename(legacyDir, targetDir);
-  return true;
 }
 
 /** Persist the ephemeral loopback port allocated to this account's worker. */

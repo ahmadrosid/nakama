@@ -11,7 +11,7 @@ export function getBrowserTimezone(): string {
   }
 }
 
-export function getTimezoneEntries(
+function getTimezoneEntries(
   response: ListTimezonesResponse | undefined
 ): TimezoneCatalogEntry[] {
   if (!response) {

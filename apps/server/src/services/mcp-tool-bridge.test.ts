@@ -8,6 +8,13 @@ import {
   sanitizeLlmToolNamePart,
 } from "./mcp-tool-bridge";
 
+function serverLookup(servers: StoredMcpServerRecord[]) {
+  return {
+    async getMcpServer(serverId: string) {
+      return servers.find((server) => server.id === serverId) ?? null;
+    },
+  };
+}
 describe("mcp tool bridge", () => {
   test("namespaces tool names by server", () => {
     expect(namespacedMcpToolName("filesystem", "read_file")).toBe(
@@ -49,6 +56,7 @@ describe("mcp tool bridge", () => {
     const tools = buildMcpToolDefinitions(
       servers,
       manager,
+      serverLookup(servers),
       "org_test",
       "profile_test"
     );
@@ -89,6 +97,7 @@ describe("mcp tool bridge", () => {
     const tools = buildMcpToolDefinitions(
       servers,
       manager,
+      serverLookup(servers),
       "org_test",
       "profile_test"
     );
@@ -117,6 +126,7 @@ describe("mcp tool bridge", () => {
     const tools = buildMcpToolDefinitions(
       servers,
       manager,
+      serverLookup(servers),
       "org_test",
       "profile_test"
     );
@@ -125,5 +135,76 @@ describe("mcp tool bridge", () => {
     expect(result).toEqual({
       error: 'MCP server "filesystem" is not connected.',
     });
+  });
+
+  test("excludes disabled servers from new tool definitions", () => {
+    const manager = new McpClientManager();
+    const servers: StoredMcpServerRecord[] = [
+      {
+        cachedTools: [{ description: "Read a file", name: "read_file" }],
+        config: { url: "https://example.com/mcp" },
+        createdAt: "2026-01-01T00:00:00.000Z",
+        enabled: false,
+        id: "mcp_1",
+        lastError: null,
+        name: "filesystem",
+        status: "disconnected",
+        transport: "http",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+
+    const tools = buildMcpToolDefinitions(
+      servers,
+      manager,
+      serverLookup(servers),
+      "org_test",
+      "profile_test"
+    );
+
+    expect(tools).toEqual([]);
+  });
+
+  test("blocks an existing tool definition after its server is disabled", async () => {
+    let enabled = true;
+    const calls: string[] = [];
+    const manager = {
+      async callTool() {
+        calls.push("callTool");
+        return { ok: true };
+      },
+      async ensureConnected() {
+        calls.push("ensureConnected");
+      },
+    } as unknown as McpClientManager;
+    const server: StoredMcpServerRecord = {
+      cachedTools: [{ description: "Read a file", name: "read_file" }],
+      config: { command: "mcp-filesystem" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      enabled: true,
+      id: "mcp_1",
+      lastError: null,
+      name: "filesystem",
+      status: "connected",
+      transport: "stdio",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const tools = buildMcpToolDefinitions(
+      [server],
+      manager,
+      {
+        async getMcpServer() {
+          return { ...server, enabled };
+        },
+      },
+      "org_test",
+      "profile_test"
+    );
+
+    enabled = false;
+    const result = await tools[0]!.run({}, {});
+
+    expect(result).toEqual({ error: expect.any(String) });
+    expect(calls).toEqual([]);
   });
 });

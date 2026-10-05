@@ -107,7 +107,7 @@ function isHtmlParseMode(options: unknown): options is { parse_mode: "HTML" } {
   );
 }
 
-export interface MockStreamControl {
+interface MockStreamControl {
   complete(reply?: string): void;
   fail(error?: Error): void;
   readonly signal: AbortSignal | undefined;
@@ -416,7 +416,7 @@ export async function writeTelegramConfigIni(
   await writeFile(path.join(dir, "config.ini"), lines.join("\n"), "utf8");
 }
 
-export { createDefaultTestOrgs, createMultiTestOrgs };
+export { createMultiTestOrgs };
 
 export function createTestOrgStore(homeDir: string): ChannelOrgStore {
   return createSharedTestOrgStore(homeDir, "telegram");

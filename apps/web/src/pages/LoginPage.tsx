@@ -9,8 +9,10 @@ import { MfaCodeInput } from "@/components/MfaCodeInput";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
+import { client } from "@/lib/client";
 import { isDemoLoginHost } from "@/lib/demo-login";
 import { SETUP_PATH } from "@/lib/navigation";
+import { getPasskey } from "@/lib/passkey";
 import { ditherLogoSrc } from "@/lib/theme";
 
 /**
@@ -31,6 +33,7 @@ function LoginMfaFields({
   onBackupCodeChange,
   onMfaCodeChange,
   onToggleMethod,
+  totpEnabled,
   useBackupCode,
 }: {
   backupCode: string;
@@ -40,6 +43,7 @@ function LoginMfaFields({
   onBackupCodeChange: (value: string) => void;
   onMfaCodeChange: (value: string) => void;
   onToggleMethod: () => void;
+  totpEnabled: boolean;
   useBackupCode: boolean;
 }) {
   return (
@@ -55,9 +59,11 @@ function LoginMfaFields({
         >
           <ArrowLeft02Icon aria-hidden className="size-4" />
         </Button>
-        <span className="font-medium text-sm">Email</span>
+        <span className="font-medium text-sm">
+          {email ? "Email" : "Sign in"}
+        </span>
       </div>
-      <p className="text-muted-foreground text-sm">{email}</p>
+      {email ? <p className="text-muted-foreground text-sm">{email}</p> : null}
       {useBackupCode ? (
         <div>
           <label
@@ -88,11 +94,13 @@ function LoginMfaFields({
           />
         </div>
       )}
-      <Button onClick={onToggleMethod} type="button" variant="link">
-        {useBackupCode
-          ? "Use authenticator code instead"
-          : "Use a backup code instead"}
-      </Button>
+      {totpEnabled ? (
+        <Button onClick={onToggleMethod} type="button" variant="link">
+          {useBackupCode
+            ? "Use authenticator instead"
+            : "Use a backup code instead"}
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -100,10 +108,12 @@ function LoginMfaFields({
 function LoginHeader({
   demoLogin,
   mfaRequired,
+  passkeyRequired,
   resolvedTheme,
 }: {
   demoLogin: boolean;
   mfaRequired: boolean;
+  passkeyRequired: boolean;
   resolvedTheme: Parameters<typeof ditherLogoSrc>[0];
 }) {
   return (
@@ -114,14 +124,16 @@ function LoginHeader({
         src={ditherLogoSrc(resolvedTheme)}
       />
       <h1 className="font-semibold text-xl tracking-tight">
-        {mfaRequired ? "Verify your identity" : "Sign in to Nakama"}
+        {mfaRequired || passkeyRequired
+          ? "Verify your identity"
+          : "Sign in to Nakama"}
       </h1>
-      {mfaRequired || demoLogin ? null : (
+      {mfaRequired || passkeyRequired || demoLogin ? null : (
         <p className="text-muted-foreground text-sm">
           Enter your credentials to access your account.
         </p>
       )}
-      {demoLogin && !mfaRequired ? (
+      {demoLogin && !mfaRequired && !passkeyRequired ? (
         <div className="space-y-2 rounded-md border bg-muted/40 px-3 py-3 text-sm">
           <div className="flex items-baseline justify-between gap-3">
             <span className="text-muted-foreground">Email</span>
@@ -137,6 +149,181 @@ function LoginHeader({
   );
 }
 
+function LoginFormFields({
+  backupCode,
+  email,
+  mfaCode,
+  mfaRequired,
+  onBackFromMfa,
+  onBackFromPasskey,
+  onBackupCodeChange,
+  onEmailChange,
+  onMfaCodeChange,
+  onPasswordChange,
+  onToggleMfaMethod,
+  onUseMfaFallback,
+  passkeyFallbackAvailable,
+  passkeyRequired,
+  passkeyTotpEnabled,
+  password,
+  totpEnabled,
+  useBackupCode,
+}: {
+  backupCode: string;
+  email: string;
+  mfaCode: string;
+  mfaRequired: boolean;
+  onBackFromMfa: () => void;
+  onBackFromPasskey: () => void;
+  onBackupCodeChange: (value: string) => void;
+  onEmailChange: (value: string) => void;
+  onMfaCodeChange: (value: string) => void;
+  onPasswordChange: (value: string) => void;
+  onToggleMfaMethod: () => void;
+  onUseMfaFallback: () => void;
+  passkeyFallbackAvailable: boolean;
+  passkeyRequired: boolean;
+  passkeyTotpEnabled: boolean;
+  password: string;
+  totpEnabled: boolean;
+  useBackupCode: boolean;
+}) {
+  return (
+    <>
+      {mfaRequired || passkeyRequired ? null : (
+        <>
+          <div>
+            <label className="mb-1 block font-medium text-sm" htmlFor="email">
+              Email
+            </label>
+            <Input
+              id="email"
+              onChange={(event) => onEmailChange(event.target.value)}
+              placeholder="admin@example.com"
+              required
+              type="email"
+              value={email}
+            />
+          </div>
+          <div>
+            <label
+              className="mb-1 block font-medium text-sm"
+              htmlFor="password"
+            >
+              Password
+            </label>
+            <Input
+              id="password"
+              onChange={(event) => onPasswordChange(event.target.value)}
+              placeholder="••••••••"
+              required
+              type="password"
+              value={password}
+            />
+          </div>
+        </>
+      )}
+      {mfaRequired ? (
+        <LoginMfaFields
+          backupCode={backupCode}
+          email={email}
+          mfaCode={mfaCode}
+          onBack={onBackFromMfa}
+          onBackupCodeChange={onBackupCodeChange}
+          onMfaCodeChange={onMfaCodeChange}
+          onToggleMethod={onToggleMfaMethod}
+          totpEnabled={totpEnabled}
+          useBackupCode={useBackupCode}
+        />
+      ) : passkeyRequired ? (
+        <div className="space-y-3 p-0">
+          <div className="relative flex items-center">
+            <Button
+              aria-label="Back to sign in"
+              className="absolute -left-8"
+              onClick={onBackFromPasskey}
+              size="icon"
+              type="button"
+              variant="ghost"
+            >
+              <ArrowLeft02Icon aria-hidden className="size-4" />
+            </Button>
+            <span className="font-medium text-sm">Passkey</span>
+          </div>
+          <div className="space-y-3">
+            <p className="text-muted-foreground text-sm">
+              Approve the passkey prompt to continue.
+            </p>
+            {passkeyFallbackAvailable ? (
+              <Button onClick={onUseMfaFallback} type="button" variant="link">
+                {passkeyTotpEnabled
+                  ? "Use authenticator instead"
+                  : "Use a recovery code"}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function LoginFormActions({
+  demoLogin,
+  error,
+  isSubmitting,
+  mfaRequired,
+  onPasskeyLogin,
+  passkeyRequired,
+}: {
+  demoLogin: boolean;
+  error: string | null;
+  isSubmitting: boolean;
+  mfaRequired: boolean;
+  onPasskeyLogin: () => void;
+  passkeyRequired: boolean;
+}) {
+  return (
+    <>
+      {error ? (
+        <div className="rounded-md bg-red-50 px-3 py-2 text-red-800 text-sm dark:bg-red-950/30 dark:text-red-200">
+          {error}
+        </div>
+      ) : null}
+      {passkeyRequired ? null : (
+        <Button className="w-full" disabled={isSubmitting} type="submit">
+          {isSubmitting ? "Verifying..." : mfaRequired ? "Verify" : "Sign in"}
+        </Button>
+      )}
+      {mfaRequired || passkeyRequired || demoLogin ? null : (
+        <>
+          <div className="flex items-center gap-3 text-muted-foreground text-xs uppercase">
+            <span className="h-px flex-1 bg-border" />
+            <span>or</span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          <Button
+            className="w-full"
+            onClick={onPasskeyLogin}
+            type="button"
+            variant="outline"
+          >
+            Sign in with a passkey
+          </Button>
+        </>
+      )}
+      {mfaRequired || passkeyRequired || demoLogin ? null : (
+        <Link
+          className="block text-center font-medium text-primary text-sm hover:underline"
+          to="/reset-password"
+        >
+          Forgot password?
+        </Link>
+      )}
+    </>
+  );
+}
+
 export function LoginPage() {
   const demoLogin = isDemoLoginHost();
   const [email, setEmail] = useState(demoLogin ? DEMO_LOGIN_EMAIL : "");
@@ -146,6 +333,10 @@ export function LoginPage() {
   const [mfaCode, setMfaCode] = useState("");
   const [backupCode, setBackupCode] = useState("");
   const [useBackupCode, setUseBackupCode] = useState(false);
+  const [passkeyRequired, setPasskeyRequired] = useState(false);
+  const [passkeyTotpEnabled, setPasskeyTotpEnabled] = useState(false);
+  const [passkeyFallbackAvailable, setPasskeyFallbackAvailable] =
+    useState(false);
   const [mfaRequired, setMfaRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -155,7 +346,38 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: string } | null)?.from;
+  async function beginPasskeyLogin(passwordFlow = false) {
+    setError(null);
+    try {
+      const result = await client.getPasskeyLoginOptions();
+      setPasskeyFallbackAvailable(passwordFlow);
+      const credential = await getPasskey(result.options);
+      const response = await login("", "", {
+        passkey: credential,
+        passkeyChallenge: result.challenge,
+      });
+      if (response.mfaRequired && !response.mfaEnrolled) {
+        navigate("/settings?mfa=required", { replace: true });
+      } else {
+        navigate(resolvePostAuthPath(from), { replace: true });
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Passkey verification failed."
+      );
+    }
+  }
 
+  async function handlePasskeyLogin() {
+    setPasskeyRequired(true);
+    setPasskeyFallbackAvailable(false);
+    setIsSubmitting(true);
+    try {
+      await beginPasskeyLogin();
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
   if (isAuthenticated && !isSubmitting) {
     return <Navigate replace to={resolvePostAuthPath(from)} />;
   }
@@ -180,13 +402,22 @@ export function LoginPage() {
         navigate(resolvePostAuthPath(from), { replace: true });
       }
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Login failed";
+      if (
+        err instanceof NakamaApiError &&
+        err.message === "Passkey verification required."
+      ) {
+        setPasskeyTotpEnabled(err.totpEnabled === true);
+        setPasskeyRequired(true);
+        await beginPasskeyLogin(true);
+        return;
+      }
       if (
         err instanceof NakamaApiError &&
         err.message === "MFA verification required."
       ) {
         setMfaRequired(true);
       }
-      const message = err instanceof Error ? err.message : "Login failed";
       setError(
         message === "MFA verification required."
           ? "Authentication code required."
@@ -203,83 +434,60 @@ export function LoginPage() {
         <LoginHeader
           demoLogin={demoLogin}
           mfaRequired={mfaRequired}
+          passkeyRequired={passkeyRequired}
           resolvedTheme={resolvedTheme}
         />
         <form className="space-y-4" onSubmit={handleSubmit}>
-          {mfaRequired ? null : (
-            <>
-              <div>
-                <label
-                  className="mb-1 block font-medium text-sm"
-                  htmlFor="email"
-                >
-                  Email
-                </label>
-                <Input
-                  id="email"
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@example.com"
-                  required
-                  type="email"
-                  value={email}
-                />
-              </div>
-              <div>
-                <label
-                  className="mb-1 block font-medium text-sm"
-                  htmlFor="password"
-                >
-                  Password
-                </label>
-                <Input
-                  id="password"
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  type="password"
-                  value={password}
-                />
-              </div>
-            </>
-          )}
-          {mfaRequired ? (
-            <LoginMfaFields
-              backupCode={backupCode}
-              email={email}
-              mfaCode={mfaCode}
-              onBack={() => {
-                setMfaRequired(false);
-                setUseBackupCode(false);
-                setMfaCode("");
-                setBackupCode("");
-                setError(null);
-              }}
-              onBackupCodeChange={setBackupCode}
-              onMfaCodeChange={setMfaCode}
-              onToggleMethod={() => {
-                setUseBackupCode((current) => !current);
-                setMfaCode("");
-                setBackupCode("");
-              }}
-              useBackupCode={useBackupCode}
-            />
-          ) : null}
-          {error && (
-            <div className="rounded-md bg-red-50 px-3 py-2 text-red-800 text-sm dark:bg-red-950/30 dark:text-red-200">
-              {error}
-            </div>
-          )}
-          <Button className="w-full" disabled={isSubmitting} type="submit">
-            {isSubmitting ? "Verifying..." : mfaRequired ? "Verify" : "Sign in"}
-          </Button>
-          {mfaRequired || demoLogin ? null : (
-            <Link
-              className="block text-center font-medium text-primary text-sm hover:underline"
-              to="/reset-password"
-            >
-              Forgot password?
-            </Link>
-          )}
+          <LoginFormFields
+            backupCode={backupCode}
+            email={email}
+            mfaCode={mfaCode}
+            mfaRequired={mfaRequired}
+            onBackFromMfa={() => {
+              setMfaRequired(false);
+              setUseBackupCode(false);
+              setMfaCode("");
+              setBackupCode("");
+              setError(null);
+            }}
+            onBackFromPasskey={() => {
+              setPasskeyRequired(false);
+              setPasskeyFallbackAvailable(false);
+              setUseBackupCode(false);
+              setMfaCode("");
+              setBackupCode("");
+              setError(null);
+            }}
+            onBackupCodeChange={setBackupCode}
+            onEmailChange={setEmail}
+            onMfaCodeChange={setMfaCode}
+            onPasswordChange={setPassword}
+            onToggleMfaMethod={() => {
+              setUseBackupCode((current) => !current);
+              setMfaCode("");
+              setBackupCode("");
+            }}
+            onUseMfaFallback={() => {
+              setPasskeyRequired(false);
+              setMfaRequired(true);
+              setUseBackupCode(!passkeyTotpEnabled);
+              setError(null);
+            }}
+            passkeyFallbackAvailable={passkeyFallbackAvailable}
+            passkeyRequired={passkeyRequired}
+            passkeyTotpEnabled={passkeyTotpEnabled}
+            password={password}
+            totpEnabled={passkeyFallbackAvailable ? passkeyTotpEnabled : true}
+            useBackupCode={useBackupCode}
+          />
+          <LoginFormActions
+            demoLogin={demoLogin}
+            error={error}
+            isSubmitting={isSubmitting}
+            mfaRequired={mfaRequired}
+            onPasskeyLogin={() => void handlePasskeyLogin()}
+            passkeyRequired={passkeyRequired}
+          />
         </form>
       </div>
     </div>

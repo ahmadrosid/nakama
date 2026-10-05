@@ -1,3 +1,4 @@
+import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
 import { Button } from "@nakama/ui/button";
 import {
   Dialog,
@@ -11,8 +12,9 @@ import { Spinner } from "@nakama/ui/spinner";
 import { ProfileCreateDialog } from "@/components/ProfileCreateDialog";
 import { ProfileImportDialog } from "@/components/profiles/ProfileImportDialog";
 import { SkillCreateDialog } from "@/components/SkillCreateDialog";
-import { SkillInstallDialog } from "@/components/SkillInstallDialog";
+import { AddSkillDialog } from "@/components/SkillInstallDialog";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
+import { useAuth } from "@/context/use-auth";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { resolveSuperBotChatProfileId } from "@/lib/profiles";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
@@ -223,7 +225,15 @@ function RemoveAssignmentDialog({
 }
 
 export function ProfilesDialogs(state: ProfilesPageState) {
+  const { activeOrg } = useAuth();
   const {
+    allSkills,
+    skillsLoading,
+    skillsError,
+    detail,
+    handleAssignSkill,
+    handleAssignBash,
+    handleDeleteSkill,
     allTools,
     createOpen,
     handleCreateOpenChange,
@@ -298,12 +308,25 @@ export function ProfilesDialogs(state: ProfilesPageState) {
         profileId={selectedId}
       />
 
-      <SkillInstallDialog
-        busy={installSkillMutation.isPending}
+      <AddSkillDialog
+        assignedSkillIds={
+          new Set(detail?.skills.map((skill) => skill.id) ?? [])
+        }
+        bashAssigned={
+          detail?.tools.some((tool) => tool.id === BASH_TOOL_ID) ?? false
+        }
+        busy={installSkillMutation.isPending || assignSkillMutation.isPending}
+        onAssign={handleAssignSkill}
+        onAssignBash={handleAssignBash}
+        onDelete={handleDeleteSkill}
+        onInstall={handleInstallSkill}
         onOpenChange={setSkillInstallOpen}
-        onSubmit={handleInstallSkill}
         open={skillInstallOpen}
+        orgId={activeOrg?.id ?? null}
         profileId={selectedId}
+        skills={allSkills.filter((skill) => !skill.pluginId)}
+        skillsError={skillsError}
+        skillsLoading={skillsLoading}
       />
 
       <McpServerDialog

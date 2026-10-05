@@ -107,7 +107,7 @@ export function usePluginAgentAccess() {
   });
 }
 
-export async function savePluginAgentAccess(
+async function savePluginAgentAccess(
   orgId: string,
   pluginId: string,
   changes: Record<string, boolean>
@@ -181,14 +181,14 @@ export function useSavePluginAgentAccess() {
   });
 }
 
-export function orgPluginsQueryOptions(orgId: string) {
+function orgPluginsQueryOptions(orgId: string) {
   return queryOptions({
     queryFn: () => client.listOrgPlugins(orgId),
     queryKey: queryKeys.plugins.all(orgId),
   });
 }
 
-export function orgPluginQueryOptions(orgId: string, pluginId: string) {
+function orgPluginQueryOptions(orgId: string, pluginId: string) {
   return queryOptions({
     queryFn: () => client.getOrgPlugin(pluginId, orgId),
     queryKey: queryKeys.plugins.detail(orgId, pluginId),
@@ -231,41 +231,6 @@ export function useInstallOfficialPlugin() {
       });
     }
   );
-}
-
-export function useInstallGoogleMeet(orgId: string, expectedRevision?: number) {
-  const queryClient = useQueryClient();
-  const install = useMutation({
-    mutationFn: async () =>
-      expectedRevision === undefined
-        ? client.installOfficialPlugin("google-meet", orgId)
-        : client.reinstallOfficialPlugin(
-            "google-meet",
-            expectedRevision,
-            orgId
-          ),
-    onSettled: async () => {
-      await invalidateOrgPlugins(queryClient, orgId);
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.plugins.releases,
-      });
-    },
-  });
-  const dependencies: {
-    data: {
-      state: "ready";
-      steps: Array<{
-        id: string;
-        label: string;
-        state: "failed" | "installing" | "pending" | "ready";
-      }>;
-    };
-    isLoading: boolean;
-  } = {
-    data: { state: "ready" as const, steps: [] },
-    isLoading: false,
-  };
-  return { dependencies, install };
 }
 
 export function useReinstallOfficialPlugin() {
@@ -485,10 +450,31 @@ export function isPluginLifecycleBusy(plugin: OrgPluginDetail): boolean {
   );
 }
 
+// SemVer order: numeric core first, and a prerelease sorts below its release.
+function compareVersions(a: string, b: string): number {
+  const [coreA, ...preA] = a.split("-");
+  const [coreB, ...preB] = b.split("-");
+  const core = coreA.localeCompare(coreB, undefined, { numeric: true });
+  if (core !== 0) {
+    return core;
+  }
+  if (preA.length === 0 || preB.length === 0) {
+    return preB.length - preA.length;
+  }
+  return preA.join("-").localeCompare(preB.join("-"), undefined, {
+    numeric: true,
+  });
+}
+
+/** Approved releases newer than the selected one, newest first. */
 export function nextPluginVersions(plugin: OrgPluginDetail): string[] {
-  return plugin.availableVersions.filter(
-    (version) => version !== plugin.selectedVersion
-  );
+  const selected = plugin.selectedVersion;
+  if (!selected) {
+    return [];
+  }
+  return plugin.availableVersions
+    .filter((version) => compareVersions(version, selected) > 0)
+    .sort((a, b) => compareVersions(b, a));
 }
 
 export function formatPluginTrustLines(
@@ -584,7 +570,7 @@ export function pluginRowActions(plugin: OrgPluginDetail): {
       ["enabled", "disabled"].includes(plugin.lifecycleState),
     update:
       plugin.installed &&
-      plugin.lifecycleState === "disabled" &&
+      ["enabled", "disabled"].includes(plugin.lifecycleState) &&
       nextPluginVersions(plugin).length > 0,
   };
 }

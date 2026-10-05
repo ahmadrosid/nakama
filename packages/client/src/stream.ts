@@ -78,6 +78,7 @@ export async function readStreamEvents(
 ): Promise<string> {
   let reply = "";
   let sawDataEvent = false;
+  let sawDoneEvent = false;
 
   const doneReply = await consumeSseEvents<StreamEvent, string>(
     body,
@@ -139,6 +140,9 @@ export async function readStreamEvents(
       }
 
       if (payload.type === "done") {
+        sawDoneEvent = true;
+        handlers.onDone?.();
+        throwIfAborted(signal);
         if (payload.contextUsage) {
           handlers.onContextUsage?.(payload.contextUsage);
         }
@@ -156,11 +160,11 @@ export async function readStreamEvents(
     }
   );
 
-  if (doneReply) {
-    return doneReply;
-  }
-
   throwIfAborted(signal);
+
+  if (sawDoneEvent) {
+    return doneReply ?? "";
+  }
 
   if (!reply) {
     throw new Error(
@@ -208,11 +212,11 @@ export async function readAgentBrowserInstallStream(
     signal
   );
 
+  throwIfAborted(signal);
+
   if (doneStatus) {
     return doneStatus;
   }
-
-  throwIfAborted(signal);
 
   if (status) {
     return status;
@@ -254,7 +258,29 @@ async function consumeSseEvents<TEvent extends { type: string }, TResult>(
         );
       }
 
-      const { done, value } = await reader.read();
+      const readResult = await new Promise<
+        Awaited<ReturnType<typeof reader.read>>
+      >((resolve, reject) => {
+        const remainingIdleMs = Math.max(0, idleMs - (Date.now() - lastDataAt));
+        const idleTimeout = setTimeout(() => {
+          void reader.cancel();
+          reject(
+            new Error(
+              `Chat stream timed out after ${Math.round(idleMs / 1000)}s waiting for the model. The provider may be rate-limited, misconfigured, or unavailable — try another model or check Settings.`
+            )
+          );
+        }, remainingIdleMs);
+
+        void reader
+          .read()
+          .then(resolve, reject)
+          .finally(() => {
+            clearTimeout(idleTimeout);
+          });
+      });
+
+      throwIfAborted(signal);
+      const { done, value } = readResult;
 
       if (done) {
         break;
@@ -273,6 +299,7 @@ async function consumeSseEvents<TEvent extends { type: string }, TResult>(
         buffer = buffer.slice(boundary + 2);
 
         for (const line of eventBlock.split("\n")) {
+          throwIfAborted(signal);
           if (line.startsWith(":") || !line.startsWith("data: ")) {
             continue;
           }
@@ -282,6 +309,7 @@ async function consumeSseEvents<TEvent extends { type: string }, TResult>(
 
           const payload = JSON.parse(line.slice(6)) as TEvent;
           const result = await onEvent(payload);
+          throwIfAborted(signal);
 
           if (result !== undefined) {
             return result;

@@ -1,43 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { NakamaApiError } from "@nakama/core";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import type { createInMemoryDatabaseAdapter } from "@nakama/db";
+import type { AgentService } from "./agent-service";
 import { AutomationDeliveryService } from "./automation-delivery-service";
 import { AutomationRunner } from "./automation-runner";
 import { AutomationService } from "./automation-service";
 import {
+  createAutomationTestDb as createTestDb,
+  ORG_ID,
+  PROFILE_ID,
+} from "./automation-test-fixtures";
+import {
   createMcpAwareEmailOutboundAdapter,
   hasAutomationEmailDeliveryPath,
 } from "./mcp-email-delivery";
-
-const ORG_ID = "org_test";
-const PROFILE_ID = "profile_default";
-
-async function createTestDb() {
-  const db = createInMemoryDatabaseAdapter();
-  const now = new Date().toISOString();
-
-  await db.upsertOrganization({
-    createdAt: now,
-    id: ORG_ID,
-    name: "Test Org",
-    slug: "test-org",
-    updatedAt: now,
-  });
-
-  await db.upsertProfile({
-    createdAt: now,
-    id: PROFILE_ID,
-    isDefault: true,
-    isSuper: false,
-    model: null,
-    name: "Default Bot",
-    orgId: ORG_ID,
-    systemPrompt: "",
-    updatedAt: now,
-  });
-
-  return db;
-}
 
 async function assignComposeioGmailSender(
   db: ReturnType<typeof createInMemoryDatabaseAdapter>,
@@ -507,6 +483,34 @@ describe("AutomationService", () => {
     const runs = await service.listRuns(automation.id, ORG_ID);
     expect(runs.map((run) => run.id)).toEqual(["run_keep_me"]);
   });
+
+  test("completes the exact claimed automation run", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+    const automation = await service.create(
+      ORG_ID,
+      {
+        description: "Concurrent task",
+        name: "Concurrent task",
+        prompt: "Say hello",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID
+    );
+    const firstRun = await service.createRun(automation.id);
+    const secondRun = await service.createRun(automation.id);
+
+    await service.completeRun(firstRun.id, automation.id, { output: "First" });
+
+    const runs = await service.listRuns(automation.id);
+    expect(runs.find((run) => run.id === firstRun.id)?.status).toBe(
+      "completed"
+    );
+    expect(runs.find((run) => run.id === secondRun.id)?.status).toBe("running");
+    expect((await service.getActiveRun(automation.id))?.id).toBe(secondRun.id);
+  });
 });
 
 test("automation list reflects a run starting and finishing", async () => {
@@ -542,6 +546,136 @@ test("automation list reflects a run starting and finishing", async () => {
 });
 
 describe("AutomationRunner", () => {
+  test.each([false, true])(
+    "exposes progress before completion (fails: %s)",
+    async (fails) => {
+      const db = await createTestDb();
+      const service = new AutomationService(db, {
+        getUserTimezone: async () => "UTC",
+      });
+      const automation = await service.create(
+        ORG_ID,
+        {
+          description: "Live progress",
+          name: "Live task",
+          prompt: "Find news",
+          trigger: { type: "manual" },
+        },
+        PROFILE_ID
+      );
+      const started = Promise.withResolvers<void>();
+      const finish = Promise.withResolvers<void>();
+      const runner = new AutomationRunner(service, {
+        runAutomationPrompt: async (
+          _orgId: string,
+          _profileId: string,
+          _prompt: string,
+          _automationId?: string,
+          _runId?: string,
+          handlers?: Parameters<AgentService["runAutomationPrompt"]>[5]
+        ) => {
+          handlers?.onChunk("Searching ");
+          handlers?.onChunk("news");
+          handlers?.onToolStart?.({
+            input: { command: "pwd" },
+            tool: "bash",
+            toolCallId: "call-1",
+          });
+          handlers?.onToolStart?.({
+            input: { path: "README.md" },
+            tool: "read_file",
+            toolCallId: "call-2",
+          });
+          handlers?.onToolEnd?.({
+            result: { error: "Not found" },
+            tool: "read_file",
+            toolCallId: "call-2",
+          });
+          started.resolve();
+          await finish.promise;
+          if (fails) {
+            throw new Error("Provider disconnected");
+          }
+          return "News summary";
+        },
+      } as never);
+      const pending = runner.run(automation.id);
+      await started.promise;
+      try {
+        const runs = await service.listRuns(automation.id, ORG_ID);
+        expect(runs[0]).toMatchObject({
+          output: "Searching news",
+          status: "running",
+        });
+        expect(runs[0]?.progress).toMatchObject([
+          { content: "Find news", role: "user" },
+          { content: "Searching news", role: "assistant" },
+          {
+            role: "assistant",
+            toolCalls: [
+              { arguments: { command: "pwd" }, id: "call-1", name: "bash" },
+            ],
+          },
+          {
+            content: "",
+            role: "tool",
+            toolCallId: "call-1",
+            toolStartedAt: expect.any(Number),
+          },
+          {
+            role: "assistant",
+            toolCalls: [{ id: "call-2", name: "read_file" }],
+          },
+          {
+            content: JSON.stringify({ error: "Not found" }),
+            role: "tool",
+            toolCallId: "call-2",
+            toolCompletedAt: expect.any(Number),
+          },
+        ]);
+        expect(runs[0]?.progress?.[3]).not.toHaveProperty("toolCompletedAt");
+        await expect(
+          service.listRuns(automation.id, "other-org")
+        ).rejects.toThrow();
+      } finally {
+        finish.resolve();
+        await pending;
+      }
+      const runs = await service.listRuns(automation.id, ORG_ID);
+      expect(runs[0]).toMatchObject({
+        output: fails ? "Searching news" : "News summary",
+        status: fails ? "failed" : "completed",
+      });
+      expect(runner.getActiveRunCount()).toBe(0);
+      const reloadedService = new AutomationService(db, {
+        getUserTimezone: async () => "UTC",
+      });
+      const reloaded = (
+        await reloadedService.listRuns(automation.id, ORG_ID)
+      )[0]!;
+      expect(reloaded.progress).toEqual(runs[0]?.progress);
+      expect(reloaded.progress?.[0]).toMatchObject({
+        content: "Find news",
+        role: "user",
+      });
+      const unfinished = reloaded.progress?.find(
+        (item) => item.role === "tool" && item.toolCallId === "call-1"
+      );
+      expect(unfinished).toMatchObject({ toolCompletedAt: expect.any(Number) });
+      if (unfinished?.role === "tool") {
+        expect(JSON.parse(unfinished.content).error).toBeDefined();
+      }
+      if (!fails) {
+        expect(reloaded.progress?.at(-1)).toMatchObject({
+          content: "News summary",
+          role: "assistant",
+        });
+      }
+      await reloadedService.deleteRun(automation.id, reloaded.id, ORG_ID);
+      expect(await db.getAutomationRun(automation.id, reloaded.id)).toBeNull();
+    }
+  );
+
   test("writes completed run records", async () => {
     const db = await createTestDb();
     const service = new AutomationService(db, {
@@ -572,6 +706,102 @@ describe("AutomationRunner", () => {
     expect(runs).toHaveLength(1);
     expect(runs[0]?.status).toBe("completed");
     expect(runs[0]?.output).toBe("Hello from automation");
+  });
+
+  test("concurrent automation runs execute once", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+    const automation = await service.create(
+      ORG_ID,
+      {
+        description: "Concurrent task",
+        name: "Concurrent task",
+        prompt: "Say hello",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID
+    );
+    const agentStarted = Promise.withResolvers<void>();
+    const releaseAgent = Promise.withResolvers<void>();
+    let agentCalls = 0;
+    let claimedRunId: string | undefined;
+    const runner = new AutomationRunner(service, {
+      runAutomationPrompt: async (
+        _orgId: string,
+        _profileId: string,
+        _prompt: string,
+        _automationId?: string,
+        automationRunId?: string
+      ) => {
+        agentCalls += 1;
+        claimedRunId = automationRunId;
+        agentStarted.resolve();
+        await releaseAgent.promise;
+        return "Hello from automation";
+      },
+    } as never);
+
+    const firstRun = runner.run(automation.id);
+    const secondRun = runner.run(automation.id);
+    await agentStarted.promise;
+    releaseAgent.resolve();
+    const [firstResult, secondResult] = await Promise.all([
+      firstRun,
+      secondRun,
+    ]);
+
+    expect(firstResult.output).toBe("Hello from automation");
+    expect(secondResult.skipped).toBe(true);
+    expect(agentCalls).toBe(1);
+    const runs = await service.listRuns(automation.id);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.id).toBe(claimedRunId);
+    expect(runs[0]?.status).toBe("completed");
+  });
+
+  test("releases the run guard when run creation fails", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+    const automation = await service.create(
+      ORG_ID,
+      {
+        description: "Retryable task",
+        name: "Retryable task",
+        prompt: "Say hello",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID
+    );
+    const createRun = service.createRun.bind(service);
+    let createAttempts = 0;
+    service.createRun = async (automationId) => {
+      createAttempts += 1;
+      if (createAttempts === 1) {
+        throw new Error("Database unavailable");
+      }
+      return createRun(automationId);
+    };
+    const runner = new AutomationRunner(service, {
+      runAutomationPrompt: async () => "Hello from automation",
+    } as never);
+
+    await expect(runner.run(automation.id)).rejects.toThrow(
+      "Database unavailable"
+    );
+    expect(runner.isRunning(automation.id)).toBe(false);
+    expect(runner.getActiveRunCount()).toBe(0);
+
+    const result = await runner.run(automation.id);
+    expect(result.output).toBe("Hello from automation");
+    expect(createAttempts).toBe(2);
+    expect(await service.getActiveRun(automation.id)).toBeNull();
+    expect((await service.listRuns(automation.id))[0]?.status).toBe(
+      "completed"
+    );
   });
 
   test("passes automation scope to the agent prompt", async () => {

@@ -3,6 +3,20 @@ import type { ProviderInstance } from "@nakama/core";
 import { createProviderForInstance } from "./create";
 
 describe("createProviderForInstance routing", () => {
+  test("blocks Netra models without a verified tool turn", () => {
+    const instance: ProviderInstance = {
+      apiKey: "test-key",
+      createdAt: "2026-10-05T00:00:00.000Z",
+      customModels: [{ id: "deepseek/deepseek-v4.1-flash" }],
+      id: "netra-1",
+      label: "Netra Runtime",
+      type: "netra",
+    };
+    expect(() =>
+      createProviderForInstance(instance, "deepseek/deepseek-v4.1-flash")
+    ).toThrow();
+  });
+
   test("routes xiaomi instances to the configured base URL with auth", async () => {
     let seenPath = "";
     let seenAuth = "";

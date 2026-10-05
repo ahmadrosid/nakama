@@ -46,6 +46,7 @@ function WhatsAppSettingsCardForOrg({
     <WhatsAppSettingsCardContent
       actionLabel={card.actionLabel}
       allowedPhoneSummary={card.allowedPhoneSummary}
+      allowUnpairedGroupMembers={card.allowUnpairedGroupMembers}
       awaitingQr={card.awaitingQr}
       bridgeStarting={card.bridgeStarting}
       canSave={card.canSave}
@@ -57,6 +58,7 @@ function WhatsAppSettingsCardForOrg({
       linkedNumber={card.linkedNumber}
       linkingAfterScan={card.linkingAfterScan}
       loadError={card.loadError}
+      onAllowUnpairedGroupMembersChange={card.onAllowUnpairedGroupMembersChange}
       onCopyPairingCode={card.onCopyPairingCode}
       onManageAllowedPhones={card.onManageAllowedPhones}
       onReconnect={card.onReconnect}

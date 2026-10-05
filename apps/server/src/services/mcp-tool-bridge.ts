@@ -1,6 +1,6 @@
 import type { JsonSchema, ToolDefinition } from "@nakama/core";
 import { emptyObjectSchema } from "@nakama/core";
-import type { StoredMcpServerRecord } from "@nakama/db";
+import type { DatabaseAdapter, StoredMcpServerRecord } from "@nakama/db";
 import type { McpClientManager } from "./mcp-client-manager";
 
 const LLM_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -8,6 +8,7 @@ const LLM_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 export function buildMcpToolDefinitions(
   servers: StoredMcpServerRecord[],
   manager: McpClientManager,
+  db: Pick<DatabaseAdapter, "getMcpServer">,
   orgId: string,
   profileId: string
 ): ToolDefinition[] {
@@ -15,6 +16,10 @@ export function buildMcpToolDefinitions(
   const usedNames = new Set<string>();
 
   for (const server of servers) {
+    if (!server.enabled) {
+      continue;
+    }
+
     for (const cachedTool of server.cachedTools) {
       const name = uniqueLlmToolName(
         namespacedMcpToolName(server.name, cachedTool.name),
@@ -28,6 +33,14 @@ export function buildMcpToolDefinitions(
         parameters: toJsonSchema(cachedTool.inputSchema),
         async run(input) {
           try {
+            const currentServer = await db.getMcpServer(server.id);
+
+            if (!currentServer?.enabled) {
+              return {
+                error: `MCP server "${server.name}" is disabled.`,
+              };
+            }
+
             if (server.transport === "stdio") {
               await manager.ensureConnected(server, orgId, profileId);
             } else if (!manager.isConnected(server.id, server.transport)) {
