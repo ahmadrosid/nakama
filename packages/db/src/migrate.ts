@@ -1132,9 +1132,11 @@ function migrateProfileOrgColumns(db: Database): void {
         `).run(anyProfile.id);
         }
       }
-    } else {
-      db.prepare("DELETE FROM profiles WHERE org_id IS NULL").run();
     }
+    // With no organization yet, org-less profiles stay as they are. This step
+    // runs on every open, and deleting them cascaded into sessions, messages,
+    // attachments and automations. The branch above adopts them once an
+    // organization exists.
 
     db.prepare(`
     UPDATE automations
