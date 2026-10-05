@@ -5,7 +5,7 @@ description: "Export and restore your Nakama data root with dashboard ZIP backup
 
 ## Export
 
-Platform admins can export local Nakama data from **Settings → Export ZIP**.
+Platform admins can export local Nakama data from **Control center → Workspace → Settings → Export ZIP**.
 
 The export is a `.zip` backup of the configured Nakama data root, which defaults to `~/.nakama` and follows `NAKAMA_CONFIG_DIR` when set.
 
@@ -30,11 +30,11 @@ Plan for downtime during restore. This replaces the active data root rather than
 
 On a fresh install, you can also restore during [first-time setup](/first-time-setup) before creating a new admin account.
 
-Restored plugins stay **disabled** until an organization admin enables them on **System → Plugins**. If a restored package no longer matches its stored hash, that release stays unavailable and must be installed again.
+Restored plugins stay **disabled** until an organization admin enables them in **Control center → Agent tools → Plugins**. If a restored package no longer matches its stored hash, that release stays unavailable and must be installed again.
 
 ## Profile packs (single agent)
 
-To move **one** profile without a full-root backup, use **System → Profiles → Export profile / Import profile**. See [Profiles → Export and import a profile pack](/profiles#export-and-import-a-profile-pack).
+To move **one** profile without a full-root backup, open **Agent**, select the profile, and choose **Export** or **Import**. See [Export and import an agent pack](/profiles#export-and-import-a-profile-pack).
 
 Those packs deliberately omit secrets and are not interchangeable with Export ZIP above.
 
