@@ -204,6 +204,13 @@ describe("platform org routes", () => {
     );
     expect(second.status).toBe(201);
 
+    await databaseAdapter.putManagedSecret({
+      encryptedValue: "test-value",
+      name: "tool:test-api-key",
+      scope: created.organization.id,
+      source: "settings",
+    });
+
     const archived = await app.fetch(
       new Request(
         `http://localhost:4310/v1/platform/orgs/${created.organization.id}`,
@@ -232,6 +239,12 @@ describe("platform org routes", () => {
     expect(deleted.status).toBe(204);
     expect(
       await databaseAdapter.getOrganizationById(created.organization.id)
+    ).toBeNull();
+    expect(
+      await databaseAdapter.getManagedSecret(
+        created.organization.id,
+        "tool:test-api-key"
+      )
     ).toBeNull();
   });
 

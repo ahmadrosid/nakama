@@ -14,7 +14,7 @@ import {
   permissiveObjectSchema,
   writeParsedConfigIni,
 } from "@nakama/core";
-import type { StoredToolRecord } from "@nakama/db";
+import type { DatabaseAdapter, StoredToolRecord } from "@nakama/db";
 import { type ManagedSecrets, toolSecretEnvName } from "./managed-secrets";
 
 const CREDENTIAL_SECTION_PREFIX = "tool-key.";
@@ -303,11 +303,14 @@ export function completeToolSetup(
  * shadow copy holding the secret; pre-deletion operator backups remain under
  * the operator's own retention policy.
  */
-export function deleteOrgToolCredentials(orgId: string): Promise<void> {
+export function deleteOrgToolCredentials(
+  orgId: string,
+  databaseAdapter: DatabaseAdapter
+): Promise<void> {
   const write = credentialWrite.then(async () => {
-    for (const secret of await requireToolSecrets().list()) {
+    for (const secret of await databaseAdapter.listManagedSecrets()) {
       if (secret.scope === orgId && secret.name.startsWith("tool:")) {
-        await requireToolSecrets().delete(orgId, secret.name);
+        await databaseAdapter.deleteManagedSecret(orgId, secret.name);
       }
     }
     const parsed = await readConfig();
