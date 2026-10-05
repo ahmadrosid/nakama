@@ -992,10 +992,13 @@ function ComposioConnectionsReady({
     slug: string;
     message: string;
   } | null>(null);
-  const needsMetaAdsAuthConfig =
-    connectError?.slug === "metaads" &&
-    connectError.message.includes("Auth_Config_DefaultAuthConfigNotFound");
+  const needsCustomAuthConfig = connectError?.message.includes(
+    "Auth_Config_DefaultAuthConfigNotFound"
+  );
   const data = state.toolkitsQuery.data;
+  const toolkitName =
+    data?.catalog.find((item) => item.slug === connectError?.slug)?.name ??
+    connectError?.slug;
   const configured =
     state.settings?.configured === true || data?.configured === true;
 
@@ -1066,29 +1069,23 @@ function ComposioConnectionsReady({
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {needsMetaAdsAuthConfig
-                ? "Meta Ads needs your own OAuth app"
+              {needsCustomAuthConfig
+                ? `${toolkitName} needs a custom auth config`
                 : "Could not connect toolkit"}
             </DialogTitle>
           </DialogHeader>
-          {needsMetaAdsAuthConfig ? (
+          {needsCustomAuthConfig ? (
             <>
               <DialogDescription>
-                Composio has no managed Meta Ads credentials. Set up your own
-                OAuth app to connect.
+                Composio has no managed credentials for {toolkitName}.
               </DialogDescription>
               <ol className="list-decimal space-y-2 pl-5 text-sm">
-                <li>Create a Meta developer app.</li>
+                <li>Open the Composio project for this API key.</li>
                 <li>
-                  Add this redirect URI to its OAuth settings:{" "}
-                  <code className="break-all">
-                    https://backend.composio.dev/api/v3.1/toolkits/auth/callback
-                  </code>
+                  Create a custom auth config for {toolkitName}. Enter the
+                  credentials that Composio requests.
                 </li>
-                <li>
-                  Create a custom Meta Ads auth config in the Composio project
-                  for this API key. Enter the Meta App ID and App Secret.
-                </li>
+                <li>Return here and try Connect again.</li>
               </ol>
               <a
                 className="text-sm underline underline-offset-3"
@@ -1098,9 +1095,6 @@ function ComposioConnectionsReady({
               >
                 View setup guide
               </a>
-              <p className="text-muted-foreground text-sm">
-                Then try Connect again.
-              </p>
             </>
           ) : (
             <DialogDescription>{connectError?.message}</DialogDescription>
