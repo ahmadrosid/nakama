@@ -1,5 +1,15 @@
 import type { ChatListItem } from "@/lib/chat-history";
 
+export function showLocalFilePaths(markdown: string): string {
+  return markdown.replace(
+    /(?<!!)\[([^\]]+)\]\(([^\s)]+)\)/g,
+    (link, label: string, path: string) =>
+      /^[a-z][a-z\d+.-]*:/i.test(path) || /^[/.#]/.test(path)
+        ? link
+        : `${label} (\`${path}\`)`
+  );
+}
+
 export function toolGroupElapsedSeconds(
   tools: ChatListItem[],
   now: number,

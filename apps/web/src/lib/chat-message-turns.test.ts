@@ -1,10 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import {
   segmentAssistantTurn,
+  showLocalFilePaths,
   toolGroupElapsedSeconds,
 } from "@/components/chat/assistant-tool-group.shared";
 import type { ChatListItem } from "./chat-history";
 import { groupMessagesIntoTurns, turnKey } from "./chat-message-turns";
+
+test("shows local file paths without changing web links or images", () => {
+  expect(
+    showLocalFilePaths(
+      "See [Paid Ads](wiki/paid-ads.md), [site](https://example.com), and ![logo](wiki/logo.png)."
+    )
+  ).toBe(
+    "See Paid Ads (`wiki/paid-ads.md`), [site](https://example.com), and ![logo](wiki/logo.png)."
+  );
+});
 
 function item(
   partial: Pick<ChatListItem, "id" | "role"> & Partial<ChatListItem>

@@ -22,6 +22,7 @@ import {
 } from "@/components/ai-elements/message";
 import {
   type AssistantTurnSegment,
+  showLocalFilePaths,
   toolGroupElapsedSeconds,
 } from "@/components/chat/assistant-tool-group.shared";
 import { ImageGenerationToolRow } from "@/components/chat/ImageGenerationToolRow";
@@ -170,7 +171,9 @@ function AssistantTextContent({
   }
 
   if (!streaming) {
-    return <MessageResponse>{content || "…"}</MessageResponse>;
+    return (
+      <MessageResponse>{showLocalFilePaths(content) || "…"}</MessageResponse>
+    );
   }
 
   const { sealed, tail } = splitStreamingMarkdown(content);
@@ -179,7 +182,7 @@ function AssistantTextContent({
     <div className="flex w-full min-w-0 flex-col gap-0">
       {sealed ? (
         <MessageResponse isAnimating={false} mode="streaming">
-          {sealed}
+          {showLocalFilePaths(sealed)}
         </MessageResponse>
       ) : null}
       {tail || !sealed ? <StreamingPlainTail text={tail} /> : null}
