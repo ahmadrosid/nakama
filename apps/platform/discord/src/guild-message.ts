@@ -241,8 +241,3 @@ export function parseTextCommand(text: string): string {
   const command = first.split("@")[0] ?? first;
   return command.toLowerCase();
 }
-
-export function looksLikeHandshakeAttempt(text: string): boolean {
-  const normalized = text.trim().replace(/\s+/g, "").toUpperCase();
-  return /^[0-9A-F]{8}$/.test(normalized);
-}

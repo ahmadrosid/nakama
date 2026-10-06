@@ -28,7 +28,11 @@ import type {
   SendMessageInput,
   SessionSummary,
 } from "@nakama/core/contract";
-import { addDiscordAllowedUserId } from "@nakama/core/discord-config";
+import {
+  addDiscordAllowedUserId,
+  hasActiveHandshakeCode,
+  looksLikePairingCode,
+} from "@nakama/core/discord-config";
 import {
   filterProfilesForChatAccess,
   formatProfileSwitchConfirmation,
@@ -66,7 +70,6 @@ import {
   explainGuildMessageHandling,
   isDiscordGuildMessage,
   isDiscordThreadMessage,
-  looksLikeHandshakeAttempt,
   parseTextCommand,
   resolveBotInfo,
   resolveChannelOrgKey,
@@ -250,7 +253,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
 
     await inheritThreadOrg(channelOrgKey, parentOrgKey);
 
-    if (isGuild && text && looksLikeHandshakeAttempt(text)) {
+    if (isGuild && text && looksLikePairingCode(text)) {
       await messenger.send(LINK_IN_PRIVATE_REPLY);
       return;
     }
@@ -668,7 +671,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
   ): Promise<void> {
     const command = parseTextCommand(text);
     const fileConfig = authStore.getConfig();
-    const hasHandshake = Boolean(fileConfig?.handshakeCode);
+    const hasHandshake = hasActiveHandshakeCode(fileConfig);
 
     if (command === "/help") {
       await replyChunks(messenger, `${PAIRING_PROMPT}\n\n${HELP_TEXT}`);
@@ -685,7 +688,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       return;
     }
 
-    if (!looksLikeHandshakeAttempt(text)) {
+    if (!looksLikePairingCode(text)) {
       await messenger.send(PAIRING_PROMPT);
       return;
     }
@@ -698,7 +701,7 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
     command: string,
     messenger: DiscordMessenger
   ): Promise<void> {
-    const hasHandshake = Boolean(authStore.getConfig()?.handshakeCode);
+    const hasHandshake = hasActiveHandshakeCode(authStore.getConfig());
 
     if (command === "help") {
       await replyChunks(messenger, `${PAIRING_PROMPT}\n\n${HELP_TEXT}`);

@@ -39,6 +39,10 @@ const TEST_CONFIG = {
   profileId: "default",
 };
 
+const PAIRING_CODE = "A1B2C3D4E5F60718293A4B5C6D7E8F90";
+const LIVE_CODE_EXPIRY = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+const WRONG_PAIRING_CODE = "0".repeat(32);
+
 // These handler tests run in ~0.2s locally but occasionally exceed the 5000ms
 // default under CI's concurrent all-workspace load. Give them more headroom.
 setDefaultTimeout(10_000);
@@ -577,7 +581,8 @@ describe("createChatHandler group chats", () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",
-        handshakeCode: "ABCD1234",
+        handshakeCode: PAIRING_CODE,
+        handshakeExpiresAt: LIVE_CODE_EXPIRY,
       });
 
       const {
@@ -636,7 +641,8 @@ describe("createChatHandler security", () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",
-        handshakeCode: "ABCD1234",
+        handshakeCode: PAIRING_CODE,
+        handshakeExpiresAt: LIVE_CODE_EXPIRY,
       });
 
       const { calls, handler: handleMessage } = await createTestHandler(
@@ -661,7 +667,8 @@ describe("createChatHandler security", () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",
-        handshakeCode: "ABCD1234",
+        handshakeCode: PAIRING_CODE,
+        handshakeExpiresAt: LIVE_CODE_EXPIRY,
       });
 
       const { calls, handler: handleMessage } = await createTestHandler(
@@ -690,7 +697,8 @@ describe("createChatHandler security", () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",
-        handshakeCode: "ABCD1234",
+        handshakeCode: PAIRING_CODE,
+        handshakeExpiresAt: LIVE_CODE_EXPIRY,
       });
 
       const {
@@ -706,14 +714,14 @@ describe("createChatHandler security", () => {
       );
 
       const { ctx, replies } = createMessageContext({
-        text: "DEADBEEF",
+        text: WRONG_PAIRING_CODE,
         userId: 1001,
       });
 
       await handleMessage(ctx);
 
       expect(replies).toEqual([
-        "Invalid pairing code. Copy it from this agent’s Connections → Telegram and try again.",
+        "That pairing code did not work. Generate a new code in this agent’s Connections → Telegram and try again.",
       ]);
       expect(authStore.isAuthorized(1001)).toBe(false);
       expect(calls.sendStream).toBe(0);
@@ -724,7 +732,8 @@ describe("createChatHandler security", () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",
-        handshakeCode: "ABCD1234",
+        handshakeCode: PAIRING_CODE,
+        handshakeExpiresAt: LIVE_CODE_EXPIRY,
       });
 
       const {
@@ -740,7 +749,7 @@ describe("createChatHandler security", () => {
       );
 
       const pairAttempt = createMessageContext({
-        text: "ab cd 12 34",
+        text: PAIRING_CODE,
         userId: 1001,
       });
       await handleMessage(pairAttempt.ctx);
@@ -769,7 +778,8 @@ describe("createChatHandler security", () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",
-        handshakeCode: "ABCD1234",
+        handshakeCode: PAIRING_CODE,
+        handshakeExpiresAt: LIVE_CODE_EXPIRY,
         profileId: "missing_profile",
       });
 
@@ -788,7 +798,7 @@ describe("createChatHandler security", () => {
       );
 
       const pairAttempt = createMessageContext({
-        text: "ABCD1234",
+        text: PAIRING_CODE,
         userId: 1001,
       });
       await handleMessage(pairAttempt.ctx);
@@ -809,7 +819,8 @@ describe("createChatHandler security", () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",
-        handshakeCode: "ABCD1234",
+        handshakeCode: PAIRING_CODE,
+        handshakeExpiresAt: LIVE_CODE_EXPIRY,
       });
 
       const { authStore, handler: handleMessage } = await createTestHandler(
@@ -821,13 +832,13 @@ describe("createChatHandler security", () => {
       );
 
       const firstUser = createMessageContext({
-        text: "ABCD1234",
+        text: PAIRING_CODE,
         userId: 1001,
       });
       await handleMessage(firstUser.ctx);
 
       const secondUser = createMessageContext({
-        text: "ABCD1234",
+        text: PAIRING_CODE,
         userId: 2002,
       });
       await handleMessage(secondUser.ctx);
@@ -1244,7 +1255,8 @@ describe("createChatHandler security", () => {
     await withTempHome(async (homeDir) => {
       await writeTelegramConfigIni(homeDir, {
         botToken: "1234567890:TEST",
-        handshakeCode: "ABCD1234",
+        handshakeCode: PAIRING_CODE,
+        handshakeExpiresAt: LIVE_CODE_EXPIRY,
       });
 
       const { calls, handler: handleMessage } = await createTestHandler(
