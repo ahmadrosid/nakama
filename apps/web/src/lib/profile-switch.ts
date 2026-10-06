@@ -29,7 +29,12 @@ export function resolveProfileSwitch(input: {
     pathname === PAGE_PATHS.automations ||
     pathname === buildChatBasePath();
 
-  if (profileId === activeProfileId) {
+  // Outside chat (Settings, Skills, ...) the rail still highlights the active
+  // agent, so picking it opens its chat instead of doing nothing.
+  if (
+    profileId === activeProfileId &&
+    (onProfilesPage || swapsInPlace || isChatSessionPath(pathname))
+  ) {
     return { kind: "stay" };
   }
 

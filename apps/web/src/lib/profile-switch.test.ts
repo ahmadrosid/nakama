@@ -57,4 +57,12 @@ describe("resolveProfileSwitch", () => {
       kind: "stay",
     });
   });
+
+  test("the active agent picked outside chat still opens its chat", () => {
+    expect(pick("/settings", "", "beta")).toEqual({
+      kind: "navigate",
+      replace: false,
+      to: "/chat",
+    });
+  });
 });
