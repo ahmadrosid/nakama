@@ -144,7 +144,10 @@ if __name__ == "__main__":
       "plain-secret-value"
     );
     const keyFile = await stat(path.join(dir, "tool-credentials.key"));
-    expect((keyFile.mode % 0o1000).toString(8)).toBe("600");
+    // Windows does not expose POSIX owner/group permission bits.
+    if (process.platform !== "win32") {
+      expect(keyFile.mode % 0o1000).toBe(0o600);
+    }
     expect(await loadToolApiKey("org_a", "tool_x")).toBe("plain-secret-value");
 
     const parsed = parseIniWithSections(
