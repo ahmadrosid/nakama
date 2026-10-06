@@ -1,6 +1,10 @@
-import type {
-  WebFetchToolState,
-  WebSearchSource,
+import {
+  dedupeSources,
+  normalizeSourceUrl,
+  readRecord,
+  readString,
+  type WebFetchToolState,
+  type WebSearchSource,
 } from "@/components/chat/web-search.shared";
 import type { ChatListItem } from "@/lib/chat-history";
 
@@ -31,41 +35,6 @@ export function isWebFetchTool(tool: string | undefined): boolean {
   }
 
   return MCP_EXA_WEB_FETCH_TOOL_PATTERN.test(tool);
-}
-
-function readRecord(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
-}
-
-function readString(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function normalizeSourceUrl(url: string): { url: string; href: string } {
-  const trimmed = url.trim();
-  const href = trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;
-  return { href, url: trimmed };
-}
-
-function dedupeSources(sources: WebSearchSource[]): WebSearchSource[] {
-  const seen = new Set<string>();
-  const next: WebSearchSource[] = [];
-
-  for (const source of sources) {
-    const key = source.href ?? source.url;
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    next.push(source);
-  }
-
-  return next;
 }
 
 function sourceFromUrl(url: string, title?: string | null): WebSearchSource {
