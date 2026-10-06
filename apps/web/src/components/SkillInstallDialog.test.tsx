@@ -157,17 +157,15 @@ test("BrowserOS Neo saves its CDP port without a port entry", async () => {
     );
   });
 
-  const connection = document.querySelector<HTMLSelectElement>(
-    "#agent-browser-mode"
-  );
+  const connection = document.querySelector<HTMLElement>("#agent-browser-mode");
   expect(connection).not.toBeNull();
   await act(async () => {
-    if (connection) {
-      connection.value = "browseros_neo";
-      connection.dispatchEvent(
-        new document.defaultView!.Event("change", { bubbles: true })
-      );
-    }
+    connection?.click();
+  });
+  await act(async () => {
+    [...document.querySelectorAll<HTMLElement>("[role=option]")]
+      .find((option) => option.textContent?.includes("BrowserOS Neo"))
+      ?.click();
   });
   expect(document.querySelector("#agent-browser-port")).toBeNull();
 

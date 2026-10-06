@@ -17,6 +17,13 @@ import {
   DialogTitle,
 } from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@nakama/ui/select";
 import { Spinner } from "@nakama/ui/spinner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Delete02Icon } from "hugeicons-react";
@@ -182,12 +189,13 @@ function BrowserConnectionSettings({
       <label className="block text-sm" htmlFor="agent-browser-mode">
         Browser connection
       </label>
-      <select
-        className="w-full rounded-md border bg-background p-2 text-sm"
+      <Select
         disabled={busy}
-        id="agent-browser-mode"
-        onChange={(event) => {
-          const nextChoice = event.target.value as typeof choice;
+        onValueChange={(value) => {
+          if (value == null) {
+            return;
+          }
+          const nextChoice = value as typeof choice;
           setChoiceOverride(nextChoice);
           onModeChange(nextChoice === "managed" ? "managed" : "local_cdp");
           setPortOverride(
@@ -199,10 +207,15 @@ function BrowserConnectionSettings({
         }}
         value={choice}
       >
-        <option value="managed">Managed Chrome</option>
-        <option value="browseros_neo">BrowserOS Neo</option>
-        <option value="local_cdp">Local CDP</option>
-      </select>
+        <SelectTrigger className="w-full" id="agent-browser-mode">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="managed">Managed Chrome</SelectItem>
+          <SelectItem value="browseros_neo">BrowserOS Neo</SelectItem>
+          <SelectItem value="local_cdp">Local CDP</SelectItem>
+        </SelectContent>
+      </Select>
       {choice === "local_cdp" ? (
         <>
           <label className="block text-sm" htmlFor="agent-browser-port">
