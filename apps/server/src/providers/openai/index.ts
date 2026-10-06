@@ -21,9 +21,12 @@ import {
 import {
   buildChatCompletionResult,
   extractOpenAITokenUsage,
+  finalizePendingToolCalls,
   formatHttpErrorBody,
+  mergePendingToolCall,
   normalizeThinkingEffort,
   notifyToolInputDelta,
+  type PendingToolCall,
   parseJsonRecord,
   readSseEvents,
   sanitizeToolCallHistory,
@@ -698,63 +701,6 @@ async function requestCompletion(
     content,
     ...(usage ? { usage } : {}),
   };
-}
-
-interface PendingToolCall {
-  arguments: string;
-  id: string;
-  name: string;
-}
-
-function mergePendingToolCall(
-  pending: Map<number, PendingToolCall>,
-  toolDelta: {
-    index?: number;
-    id?: string;
-    function?: { name?: string; arguments?: string };
-  }
-): void {
-  const index = toolDelta.index ?? 0;
-  const current = pending.get(index) ?? {
-    arguments: "",
-    id: "",
-    name: "",
-  };
-
-  if (toolDelta.id) {
-    current.id = toolDelta.id;
-  }
-
-  if (toolDelta.function?.name) {
-    current.name = toolDelta.function.name;
-  }
-
-  if (toolDelta.function?.arguments) {
-    current.arguments += toolDelta.function.arguments;
-  }
-
-  pending.set(index, current);
-}
-
-function finalizePendingToolCalls(
-  pending: Map<number, PendingToolCall>
-): ToolCall[] {
-  return [...pending.entries()]
-    .sort(([left], [right]) => left - right)
-    .map(([, call]) => call)
-    .flatMap((call) => {
-      if (!(call.id && call.name)) {
-        return [];
-      }
-
-      return [
-        {
-          arguments: parseJsonRecord(call.arguments),
-          id: call.id,
-          name: call.name,
-        },
-      ];
-    });
 }
 
 async function readOpenAIStream(
