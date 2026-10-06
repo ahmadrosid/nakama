@@ -133,6 +133,7 @@ export async function run(input, context) {
   const db = new Database(context.databasePath);
   db.run("INSERT INTO items (id, body) VALUES (?, ?)", [input.id, input.body]);
   db.close();
+  await context.host({ op: "profiles" });
   await Bun.sleep(200);
   return { ok: true };
 }
@@ -355,7 +356,13 @@ describe("plugin portability", () => {
       slug: "source",
       updatedAt: new Date().toISOString(),
     });
-    const service = new PluginService(database.adapter, configDir);
+    const started = Promise.withResolvers<void>();
+    const service = new PluginService(database.adapter, configDir, {
+      onHostRequest: async () => {
+        started.resolve();
+        return [];
+      },
+    });
     await service.installPluginPackage(slowWriteBundle());
     const added = await service.addOrgPlugin(ORG, "slow");
     await service.enableOrgPlugin(ORG, "slow", added.revision);
@@ -368,7 +375,7 @@ describe("plugin portability", () => {
       orgId: ORG,
       pluginId: "slow",
     });
-    await Bun.sleep(40);
+    await Promise.race([started.promise, write]);
     const exported = await createNakamaDataExport({
       drainTimeoutMs: 2000,
       rootDir: configDir,
