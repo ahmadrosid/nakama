@@ -12,7 +12,6 @@ import {
   maskBotToken,
   releaseChannelClaims,
   resetChannelConversationState,
-  resetPairingAttemptBudget,
   resolveHandshakeOnSave,
   verifyAndPairBotChannelUser,
   writeBotChannelIniConfig,
@@ -403,7 +402,6 @@ export async function regenerateDiscordHandshake(
   };
 
   await writeDiscordConfigFile(next, scope);
-  resetPairingAttemptBudget(getDiscordConfigDir(scope));
   return withDiscordInviteUrl(toDiscordSettingsPublic(next), next.botToken);
 }
 
@@ -418,7 +416,6 @@ export async function verifyAndPairDiscordUser(
     isAuthorized: isDiscordUserAuthorized,
     label: "Discord",
     load: () => loadDiscordConfigFile(scope),
-    sourceKey: "discord",
     userId,
     write: (config) => writeDiscordConfigFile(config, scope),
   });

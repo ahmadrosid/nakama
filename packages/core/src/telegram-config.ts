@@ -14,7 +14,6 @@ import {
   maskBotToken,
   releaseChannelClaims,
   resetChannelConversationState,
-  resetPairingAttemptBudget,
   resolveHandshakeOnSave,
   verifyAndPairBotChannelUser,
   writeBotChannelIniConfig,
@@ -357,7 +356,6 @@ export async function regenerateTelegramHandshake(
   };
 
   await writeTelegramConfigFile(orgId, next);
-  resetPairingAttemptBudget(getTelegramConfigDir(orgId));
   return toTelegramSettingsPublic(next);
 }
 
@@ -372,7 +370,6 @@ export async function verifyAndPairTelegramUser(
     isAuthorized: isTelegramUserAuthorized,
     label: "Telegram",
     load: () => loadTelegramConfigFile(orgId),
-    sourceKey: "telegram",
     userId,
     write: (config) => writeTelegramConfigFile(orgId, config),
   });
