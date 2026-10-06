@@ -11,7 +11,6 @@ import {
   isChannelOwner,
   releaseChannelClaims,
   resetChannelConversationState,
-  resetPairingAttemptBudget,
   withPairingConfigLock,
 } from "./channel-config-shared";
 import {
@@ -23,14 +22,15 @@ import {
   writeTextFile,
 } from "./fs";
 import {
-  fingerprintPairingCode,
   generatePairingCode,
   getPairingAttemptBudget,
+  isPairingAttemptBlocked,
   isPairingCodeActive,
   looksLikePairingCode,
   normalizePairingCode,
   pairingCodesMatch,
   pairingFailureMessage,
+  recordPairingFailure,
 } from "./pairing-code";
 import { getUserConfigDir } from "./user-config";
 import { parseAllowedWhatsAppPhones } from "./whatsapp-phones";
@@ -566,7 +566,6 @@ export async function regenerateWhatsAppPairingCode(
   };
 
   await writeWhatsAppConfigFile(next, orgId);
-  resetPairingAttemptBudget(getWhatsAppConfigDir(orgId));
   return toWhatsAppSettingsPublic(next);
 }
 
@@ -599,21 +598,16 @@ export async function verifyAndPairWhatsAppUser(
       }
 
       const expected = config.pairingCode as string;
-      const budget = getPairingAttemptBudget(configDir);
-      const attempt = {
-        codeFingerprint: fingerprintPairingCode(expected),
-        senderKey: jid,
-        sourceKey: "whatsapp",
-      };
+      const budget = getPairingAttemptBudget(configDir, expected);
 
-      if (budget.blocked(attempt) !== null) {
+      if (isPairingAttemptBlocked(budget)) {
         return failure;
       }
 
       if (!pairingCodesMatch(pairingCodeInput, expected)) {
         // Exhausting the per-code budget retires the code, so a guessing run
         // cannot keep at the same secret.
-        if (budget.recordFailure(attempt) === "code") {
+        if (recordPairingFailure(budget)) {
           await writeWhatsAppConfigFile(
             { ...config, ...SPENT_PAIRING_SECRET },
             orgId

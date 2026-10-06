@@ -1,20 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import {
   createPairingCodeSecret,
-  fingerprintPairingCode,
   generatePairingCode,
   getPairingAttemptBudget,
+  isPairingAttemptBlocked,
   isPairingCodeActive,
   looksLikePairingCode,
   normalizePairingCode,
-  PAIRING_ATTEMPT_LIMITS,
-  PAIRING_ATTEMPT_WINDOW_MS,
   PAIRING_CODE_LENGTH,
   PAIRING_CODE_TTL_MS,
-  PairingAttemptBudget,
-  type PairingAttemptInput,
   pairingCodesMatch,
-  resetPairingAttemptBudgetsForTests,
+  recordPairingFailure,
 } from "./pairing-code";
 
 describe("generatePairingCode", () => {
@@ -80,168 +76,28 @@ describe("isPairingCodeActive", () => {
   });
 });
 
-describe("fingerprintPairingCode", () => {
-  test("is stable across formatting and never echoes the code", () => {
-    const code = generatePairingCode();
-
-    expect(fingerprintPairingCode(code.toLowerCase())).toBe(
-      fingerprintPairingCode(code)
-    );
-    expect(fingerprintPairingCode(code)).not.toContain(code);
-  });
-});
-
-function attempt(
-  overrides: Partial<PairingAttemptInput> = {}
-): PairingAttemptInput {
-  return {
-    codeFingerprint: fingerprintPairingCode(generatePairingCode()),
-    senderKey: "U1",
-    sourceKey: "test-network",
-    ...overrides,
-  };
-}
-
-describe("PairingAttemptBudget", () => {
-  test("blocks nothing before the first failure", () => {
-    expect(new PairingAttemptBudget().blocked(attempt())).toBeNull();
-  });
-
-  test("exhausts the per-code budget and retires that code only", () => {
-    const budget = new PairingAttemptBudget();
-    const code = fingerprintPairingCode(generatePairingCode());
-
-    for (let i = 0; i < PAIRING_ATTEMPT_LIMITS.perCode - 1; i += 1) {
-      expect(budget.recordFailure(attempt({ codeFingerprint: code }))).toBe(
-        null
-      );
-    }
-    expect(budget.blocked(attempt({ codeFingerprint: code }))).toBeNull();
-
-    expect(budget.recordFailure(attempt({ codeFingerprint: code }))).toBe(
-      "code"
-    );
-    expect(budget.blocked(attempt({ codeFingerprint: code }))).toBe("code");
-    expect(
-      budget.blocked(attempt({ codeFingerprint: fingerprintPairingCode("x") }))
-    ).toBeNull();
-  });
-
-  test("exhausts the per-sender budget for one identity", () => {
-    const budget = new PairingAttemptBudget();
-    let exhausted: string | null = null;
-
-    for (let i = 0; i < PAIRING_ATTEMPT_LIMITS.perSender; i += 1) {
-      exhausted = budget.recordFailure(attempt({ senderKey: "U1" }));
-    }
-
-    expect(exhausted).toBe("sender");
-    expect(budget.blocked(attempt({ senderKey: "U1" }))).toBe("sender");
-    expect(budget.blocked(attempt({ senderKey: "U2" }))).toBeNull();
-  });
-
-  test("exhausts the per-source budget across senders", () => {
-    const budget = new PairingAttemptBudget();
-    let exhausted: string | null = null;
-
-    for (let i = 0; i < PAIRING_ATTEMPT_LIMITS.perSource; i += 1) {
-      exhausted = budget.recordFailure(
-        attempt({ senderKey: `U${i}`, sourceKey: "203.0.113.7" })
-      );
-    }
-
-    expect(exhausted).toBe("source");
-    expect(
-      budget.blocked(attempt({ senderKey: "U999", sourceKey: "203.0.113.7" }))
-    ).toBe("source");
-    expect(
-      budget.blocked(attempt({ senderKey: "U999", sourceKey: "198.51.100.4" }))
-    ).toBeNull();
-  });
-
-  test("exhausts the global budget across codes, senders, and sources", () => {
-    const budget = new PairingAttemptBudget();
-    let exhausted: string | null = null;
-
-    for (let i = 0; i < PAIRING_ATTEMPT_LIMITS.global; i += 1) {
-      exhausted = budget.recordFailure(
-        attempt({
-          codeFingerprint: fingerprintPairingCode(`code-${i}`),
-          senderKey: `U${i}`,
-          sourceKey: `198.51.100.${i}`,
-        })
-      );
-    }
-
-    expect(exhausted).toBe("global");
-    expect(
-      budget.blocked(
-        attempt({
-          codeFingerprint: fingerprintPairingCode("fresh"),
-          senderKey: "U-fresh",
-          sourceKey: "198.51.100.250",
-        })
-      )
-    ).toBe("global");
-  });
-
-  test("forgets failures once the window has passed", () => {
-    const budget = new PairingAttemptBudget();
-    const now = Date.now();
-    const stale = attempt({ codeFingerprint: null, senderKey: "U1" });
-
-    for (let i = 0; i < PAIRING_ATTEMPT_LIMITS.perSender; i += 1) {
-      budget.recordFailure(stale, now);
-    }
-    expect(budget.blocked(stale, now)).toBe("sender");
-
-    const later = now + PAIRING_ATTEMPT_WINDOW_MS + 1;
-    expect(budget.blocked(stale, later)).toBeNull();
-  });
-
-  test("reset clears every dimension", () => {
-    const budget = new PairingAttemptBudget();
-    const code = fingerprintPairingCode(generatePairingCode());
-
-    for (let i = 0; i < PAIRING_ATTEMPT_LIMITS.perCode; i += 1) {
-      budget.recordFailure(attempt({ codeFingerprint: code }));
-    }
-    expect(budget.blocked(attempt({ codeFingerprint: code }))).toBe("code");
-
-    budget.reset();
-
-    expect(budget.blocked(attempt({ codeFingerprint: code }))).toBeNull();
-  });
-});
-
 describe("getPairingAttemptBudget", () => {
-  test("keeps one budget per scope and forgets it on reset", () => {
-    resetPairingAttemptBudgetsForTests();
-    const code = fingerprintPairingCode(generatePairingCode());
-    const scope = "/tmp/nakama-test-scope";
+  test("retires one code after five wrong guesses", () => {
+    const scope = `scope-${crypto.randomUUID()}`;
+    const budget = getPairingAttemptBudget(scope, "A".repeat(32));
 
-    for (let i = 0; i < PAIRING_ATTEMPT_LIMITS.perCode; i += 1) {
-      getPairingAttemptBudget(scope).recordFailure(
-        attempt({ codeFingerprint: code })
-      );
+    for (let i = 0; i < 4; i += 1) {
+      expect(recordPairingFailure(budget)).toBe(false);
+    }
+    expect(recordPairingFailure(budget)).toBe(true);
+    expect(isPairingAttemptBlocked(budget)).toBe(true);
+  });
+
+  test("starts a new budget when another process issues a new code", () => {
+    const scope = `scope-${crypto.randomUUID()}`;
+    const old = getPairingAttemptBudget(scope, "A".repeat(32));
+    for (let i = 0; i < 5; i += 1) {
+      recordPairingFailure(old);
     }
 
-    expect(getPairingAttemptBudget(scope).blocked(attempt())).toBeNull();
-    expect(
-      getPairingAttemptBudget(scope).blocked(attempt({ codeFingerprint: code }))
-    ).toBe("code");
-    expect(
-      getPairingAttemptBudget("/tmp/other-scope").blocked(
-        attempt({ codeFingerprint: code })
-      )
-    ).toBeNull();
-
-    getPairingAttemptBudget(scope).reset();
-
-    expect(
-      getPairingAttemptBudget(scope).blocked(attempt({ codeFingerprint: code }))
-    ).toBeNull();
-    resetPairingAttemptBudgetsForTests();
+    const fresh = getPairingAttemptBudget(scope, "B".repeat(32));
+    expect(isPairingAttemptBlocked(fresh)).toBe(false);
+    expect(fresh).toBe(getPairingAttemptBudget(scope, "B".repeat(32)));
   });
 });
 

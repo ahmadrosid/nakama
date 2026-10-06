@@ -18,12 +18,13 @@ import {
 } from "./fs";
 import {
   createPairingCodeSecret,
-  fingerprintPairingCode,
   getPairingAttemptBudget,
+  isPairingAttemptBlocked,
   isPairingCodeActive,
   type PairingCodeSecret,
   pairingCodesMatch,
   pairingFailureMessage,
+  recordPairingFailure,
 } from "./pairing-code";
 import { maskTrailingSecret } from "./secret-mask";
 import { getOrgConfigDir, getUserConfigDir } from "./user-config";
@@ -34,7 +35,6 @@ export {
   isPairingCodeActive,
   looksLikePairingCode,
   PAIRING_CODE_TTL_MS,
-  resetPairingAttemptBudget,
 } from "./pairing-code";
 
 export type ChannelPlatform = "telegram" | "discord" | "whatsapp" | "slack";
@@ -413,8 +413,6 @@ export async function verifyAndPairBotChannelUser<
   ) => boolean;
   label: string;
   load: () => Promise<TConfig | null>;
-  /** Network the guess arrived from. */
-  sourceKey: string;
   userId: TId;
   write: (config: TConfig) => Promise<void>;
 }): Promise<ChannelPairResult> {
@@ -440,21 +438,16 @@ export async function verifyAndPairBotChannelUser<
       }
 
       const expected = config.handshakeCode as string;
-      const budget = getPairingAttemptBudget(options.configDir);
-      const attempt = {
-        codeFingerprint: fingerprintPairingCode(expected),
-        senderKey: String(options.userId),
-        sourceKey: options.sourceKey,
-      };
+      const budget = getPairingAttemptBudget(options.configDir, expected);
 
-      if (budget.blocked(attempt) !== null) {
+      if (isPairingAttemptBlocked(budget)) {
         return failure;
       }
 
       if (!pairingCodesMatch(options.handshakeInput, expected)) {
         // Exhausting the per-code budget retires the code, so a guessing run
         // cannot keep at the same secret.
-        if (budget.recordFailure(attempt) === "code") {
+        if (recordPairingFailure(budget)) {
           await options.write({ ...config, ...SPENT_HANDSHAKE });
         }
         return failure;

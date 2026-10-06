@@ -73,174 +73,28 @@ export function isPairingCodeActive(
   return Number.isFinite(deadline) && now < deadline;
 }
 
-/** Identifies a code in the attempt budget without keeping the secret itself. */
-export function fingerprintPairingCode(code: string): string {
-  return createHash("sha256").update(normalizePairingCode(code)).digest("hex");
+const MAX_PAIRING_FAILURES = 5;
+const attempts = new Map<string, { fingerprint: string; failures: number }>();
+
+/** Keep the five-guess limit with the active code in each worker process. */
+export function getPairingAttemptBudget(scope: string, code: string) {
+  const fingerprint = createHash("sha256").update(code).digest("hex");
+  const current = attempts.get(scope);
+  if (current?.fingerprint === fingerprint) {
+    return current;
+  }
+  const fresh = { failures: 0, fingerprint };
+  attempts.set(scope, fresh);
+  return fresh;
 }
 
-export interface PairingAttemptLimits {
-  /** Across every sender reaching this bridge. */
-  global: number;
-  /** Against one issued code; hitting it retires the code. */
-  perCode: number;
-  /** One messaging identity. */
-  perSender: number;
-  /** One network source. */
-  perSource: number;
+export function isPairingAttemptBlocked(budget: { failures: number }): boolean {
+  return budget.failures >= MAX_PAIRING_FAILURES;
 }
 
-export const PAIRING_ATTEMPT_LIMITS: PairingAttemptLimits = {
-  global: 100,
-  perCode: 5,
-  perSender: 10,
-  perSource: 25,
-};
-
-export const PAIRING_ATTEMPT_WINDOW_MS = 30 * 60 * 1000;
-
-export type PairingLimit = "code" | "global" | "sender" | "source";
-
-export interface PairingAttemptInput {
-  /** `fingerprintPairingCode` of the code the sender claims to hold. */
-  codeFingerprint: string | null;
-  senderKey: string;
-  sourceKey: string;
-}
-
-/** Bounds counter memory; a flood of one-off senders must not grow it forever. */
-const MAX_TRACKED_KEYS = 10_000;
-
-/**
- * Rolling-window failure counters for one pairing scope. The scope is the
- * channel config directory, so the budget follows the agent it protects and
- * dies with a restart.
- */
-export class PairingAttemptBudget {
-  private readonly codes = new Map<string, number[]>();
-  private readonly senders = new Map<string, number[]>();
-  private readonly sources = new Map<string, number[]>();
-  private global: number[] = [];
-
-  constructor(
-    private readonly limits: PairingAttemptLimits = PAIRING_ATTEMPT_LIMITS,
-    private readonly windowMs: number = PAIRING_ATTEMPT_WINDOW_MS
-  ) {}
-
-  /** First exhausted dimension, or `null` while guessing is still allowed. */
-  blocked(input: PairingAttemptInput, now = Date.now()): PairingLimit | null {
-    if (
-      input.codeFingerprint !== null &&
-      this.count(this.codes.get(input.codeFingerprint), now) >=
-        this.limits.perCode
-    ) {
-      return "code";
-    }
-    if (
-      this.count(this.senders.get(input.senderKey), now) >=
-      this.limits.perSender
-    ) {
-      return "sender";
-    }
-    if (
-      this.count(this.sources.get(input.sourceKey), now) >=
-      this.limits.perSource
-    ) {
-      return "source";
-    }
-    return this.count(this.global, now) >= this.limits.global ? "global" : null;
-  }
-
-  /** Books one failed guess and reports the dimension it just exhausted. */
-  recordFailure(
-    input: PairingAttemptInput,
-    now = Date.now()
-  ): PairingLimit | null {
-    if (input.codeFingerprint !== null) {
-      this.push(this.codes, input.codeFingerprint, now);
-    }
-    this.push(this.senders, input.senderKey, now);
-    this.push(this.sources, input.sourceKey, now);
-    this.global = [...this.global, now].filter(
-      (at) => at > now - this.windowMs
-    );
-    return this.blocked(input, now);
-  }
-
-  reset(): void {
-    this.codes.clear();
-    this.senders.clear();
-    this.sources.clear();
-    this.global = [];
-  }
-
-  private count(times: number[] | undefined, now: number): number {
-    if (!times) {
-      return 0;
-    }
-    const cutoff = now - this.windowMs;
-    let live = 0;
-    for (const at of times) {
-      if (at > cutoff) {
-        live += 1;
-      }
-    }
-    return live;
-  }
-
-  private push(map: Map<string, number[]>, key: string, now: number): void {
-    const cutoff = now - this.windowMs;
-    const live = map.get(key)?.filter((at) => at > cutoff) ?? [];
-
-    if (live.length === 0 && !map.has(key) && map.size >= MAX_TRACKED_KEYS) {
-      this.evictOldest(map);
-    }
-
-    map.set(key, [...live, now]);
-  }
-
-  /** Drops the least recently seen key; a stale counter is the cheapest to lose. */
-  private evictOldest(map: Map<string, number[]>): void {
-    let oldestKey: string | null = null;
-    let oldestAt = Number.POSITIVE_INFINITY;
-
-    for (const [key, times] of map) {
-      const last = times[times.length - 1] ?? Number.NEGATIVE_INFINITY;
-      if (last < oldestAt) {
-        oldestAt = last;
-        oldestKey = key;
-      }
-    }
-
-    if (oldestKey !== null) {
-      map.delete(oldestKey);
-    }
-  }
-}
-
-const budgets = new Map<string, PairingAttemptBudget>();
-
-export function getPairingAttemptBudget(scope: string): PairingAttemptBudget {
-  const existing = budgets.get(scope);
-  if (existing) {
-    return existing;
-  }
-  const created = new PairingAttemptBudget();
-  budgets.set(scope, created);
-  return created;
-}
-
-/** Called when an owner issues a fresh code, so a lockout cannot outlive it. */
-export function resetPairingAttemptBudget(scope?: string): void {
-  if (scope === undefined) {
-    budgets.clear();
-    return;
-  }
-  budgets.delete(scope);
-}
-
-/** `@internal` Test helper — clears every scope's counters. */
-export function resetPairingAttemptBudgetsForTests(): void {
-  budgets.clear();
+export function recordPairingFailure(budget: { failures: number }): boolean {
+  budget.failures += 1;
+  return isPairingAttemptBlocked(budget);
 }
 
 /**

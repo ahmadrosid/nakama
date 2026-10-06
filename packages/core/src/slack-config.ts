@@ -11,7 +11,6 @@ import {
   maskBotToken,
   releaseChannelClaims,
   resetChannelConversationState,
-  resetPairingAttemptBudget,
   resolveHandshakeOnSave,
   verifyAndPairBotChannelUser,
 } from "./channel-config-shared";
@@ -409,7 +408,6 @@ export async function regenerateSlackHandshake(
     handshakeExpiresAt: expiresAt,
   };
   await writeSlackConfigFile(owner, next);
-  resetPairingAttemptBudget(getSlackConfigDir(owner));
   return toSlackSettingsPublic(next);
 }
 
@@ -424,7 +422,6 @@ export function verifyAndPairSlackUser(
     isAuthorized: isSlackUserAuthorized,
     label: "Slack",
     load: () => loadSlackConfigFile(owner),
-    sourceKey: "slack",
     userId,
     write: (config) => writeSlackConfigFile(owner, config),
   });
