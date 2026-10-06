@@ -216,7 +216,7 @@ export function createHonoApp(options: ServerOptions) {
         "Content-Security-Policy",
         isArtifactFrame
           ? ARTIFACT_FRAME_CSP
-          : `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'${docsScripts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:${docsFonts}; connect-src 'self'${docsConnections};`
+          : `default-src 'self'; script-src 'self' '${THEME_BOOTSTRAP_SCRIPT_HASH}'${docsScripts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; object-src blob:; frame-src 'self' blob:; font-src 'self' data:${docsFonts}; connect-src 'self'${docsConnections};`
       );
       // Also true behind a TLS terminator, which is where HSTS matters most.
       if (isSecureRequest(c.req.raw)) {
