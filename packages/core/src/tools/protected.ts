@@ -3,6 +3,7 @@ export const BUILTIN_TOOL_IDS = {
   edit_file: "tool_edit_file",
   email: "tool_email",
   extract_document_text: "tool_extract_document_text",
+  knowledge_base_index: "tool_knowledge_base_index",
   knowledge_base_search: "tool_knowledge_base_search",
   list_artifacts: "tool_list_artifacts",
   read_file: "tool_read_file",

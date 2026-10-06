@@ -211,6 +211,38 @@ describe("knowledge_base_search tool", () => {
     expect(filteredByUnattachedFilename.matchCount).toBe(0);
   });
 
+  test("uses document IDs only within the attached scope", async () => {
+    await setupTwoScopes();
+    const context = { orgId: ORG_ID, profileId: PROFILE_ID };
+    const shared = await runKnowledgeBaseSearch(
+      { documentId: SHARED_DOCUMENT_ID, query: "alpha", scope: "organization" },
+      context
+    );
+    expect(shared.matches.map((match) => match.scope)).toEqual([
+      "organization",
+    ]);
+    const hidden = await runKnowledgeBaseSearch(
+      {
+        documentId: UNSHARED_DOCUMENT_ID,
+        query: "secret",
+        scope: "organization",
+      },
+      context
+    );
+    expect(hidden.matchCount).toBe(0);
+    await expect(
+      runKnowledgeBaseSearch(
+        {
+          documentId: SHARED_DOCUMENT_ID,
+          filename: "shared.txt",
+          query: "alpha",
+          scope: "organization",
+        },
+        context
+      )
+    ).rejects.toThrow();
+  });
+
   test("merges profile and organization matches in one query", async () => {
     await setupTwoScopes();
 

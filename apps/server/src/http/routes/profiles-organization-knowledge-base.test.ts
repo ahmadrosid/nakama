@@ -4,6 +4,7 @@ import {
   attachSharedKnowledgeBaseDocument,
   getKnowledgeBaseDir,
   getKnowledgeBaseExtractedPath,
+  rebuildKnowledgeIndex,
 } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { zipSync } from "fflate";
@@ -303,6 +304,7 @@ describe("profile knowledge base ZIP import", () => {
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const profileService = new ProfileService(databaseAdapter);
+  let indexEnabled = false;
   return {
     ...createMinimalHonoApp({
       agent: {
@@ -326,6 +328,22 @@ function createApp() {
           ),
         getProfile: (orgId: string, profileId: string) =>
           profileService.getProfile(orgId, profileId),
+        getKnowledgeIndex: async () => ({
+          content: "",
+          enabled: indexEnabled,
+          failed: 0,
+          indexedCount: 0,
+          pending: 0,
+          provider: "gpt-test",
+          readyCount: 0,
+          status: indexEnabled ? "missing" : "off",
+          totalLines: 0,
+        }),
+        setKnowledgeIndex: async (_orgId: string, enabled: boolean) => {
+          indexEnabled = enabled;
+        },
+        backfillKnowledgeIndex: async () => 0,
+        retryKnowledgeIndex: async () => 0,
         importKnowledgeBaseZip: (
           orgId: string,
           profileId: string,
@@ -336,6 +354,7 @@ function createApp() {
         listOrganizationKnowledgeBase: (orgId: string) =>
           profileService.listOrganizationKnowledgeBase(orgId),
         listProfiles: async () => ({ profiles: [] }),
+        rebuildProfileKnowledgeIndex: rebuildKnowledgeIndex,
         readOrganizationKnowledgeBaseDocument: (
           orgId: string,
           documentId: string,
@@ -407,6 +426,60 @@ async function setupSession(email: string) {
 }
 
 describe("organization knowledge base routes", () => {
+  test("enables indexing without starting a backfill", async () => {
+    const { app, orgId, post, profileId, session } = await setupSession(
+      "platform-kb-index@example.com"
+    );
+    const path = `/v1/profiles/${profileId}/knowledge-base/index`;
+    const before = await app.fetch(
+      new Request(`${BASE}${path}`, { headers: session.headers({}, orgId) })
+    );
+    expect((await before.json()).status).toBe("off");
+    const enabled = await post(path, JSON.stringify({ action: "enable" }));
+    expect(enabled.status).toBe(200);
+    expect((await enabled.json()).status).toBe("missing");
+  });
+
+  test("lets an organization admin enable indexing", async () => {
+    const { app, authService, databaseAdapter } = createApp();
+    const { adminSession, orgId } = await createOrgAdminSession(
+      app,
+      authService,
+      databaseAdapter,
+      "index-org-admin",
+      "index-org-admin@example.com"
+    );
+    const now = new Date().toISOString();
+    await databaseAdapter.upsertProfile({
+      createdAt: now,
+      id: "profile_index_admin",
+      isDefault: true,
+      isSuper: false,
+      model: null,
+      name: "Default",
+      orgId,
+      systemPrompt: "",
+      updatedAt: now,
+    });
+    const response = await app.fetch(
+      new Request(
+        `${BASE}/v1/profiles/profile_index_admin/knowledge-base/index`,
+        {
+          body: JSON.stringify({ action: "enable" }),
+          headers: adminSession.headers(
+            {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": adminSession.csrfToken,
+            },
+            orgId
+          ),
+          method: "POST",
+        }
+      )
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).enabled).toBe(true);
+  });
   test("upload validation and duplicate handling match the profile route", async () => {
     const { orgId, post } = await setupSession("platform-kb-1@example.com");
     const path = `/v1/orgs/${orgId}/knowledge-base`;

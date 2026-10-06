@@ -58,6 +58,35 @@ describe("openAIModelRejectsChatToolsWithReasoning", () => {
 });
 
 describe("OpenAI codex vision routing", () => {
+  test("caps indexing output on chat and Responses requests", async () => {
+    const limits: number[] = [];
+    globalThis.fetch = mock(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body));
+        limits.push(body.max_completion_tokens ?? body.max_output_tokens);
+        return Response.json(
+          body.max_output_tokens
+            ? {
+                output: [
+                  {
+                    content: [{ text: "ok", type: "output_text" }],
+                    type: "message",
+                  },
+                ],
+              }
+            : { choices: [{ message: { content: "ok" } }] }
+        );
+      }
+    ) as unknown as typeof fetch;
+    for (const model of ["gpt-4o-mini", "gpt-5.3-codex"]) {
+      await createOpenAIProvider({ apiKey: "sk-test", model }).generateChat({
+        messages: [{ content: "index", role: "user" }],
+        providerOptions: { maxOutputTokens: 300 },
+        system: "index",
+      });
+    }
+    expect(limits).toEqual([300, 300]);
+  });
   test("routes codex image requests through the responses api", async () => {
     const fetchMock = mock(
       async (input: RequestInfo | URL, init?: RequestInit) => {

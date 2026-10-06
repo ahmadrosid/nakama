@@ -2530,6 +2530,27 @@ export interface ListKnowledgeBaseResponse {
   sources: KnowledgeBaseSource[];
 }
 
+export interface KnowledgeIndexResponse {
+  content: string;
+  enabled: boolean;
+  failed: number;
+  indexedCount: number;
+  nextOffset?: number;
+  pending: number;
+  provider: string | null;
+  readyCount: number;
+  status:
+    | "off"
+    | "updating"
+    | "partial"
+    | "ready"
+    | "needs_retry"
+    | "needs_setup"
+    | "missing"
+    | "stale";
+  totalLines: number;
+}
+
 export interface UploadKnowledgeBaseRequest {
   document: DocumentAttachment;
   /** Default `error` — reject duplicates so clients can warn / choose skip or replace. */
@@ -2771,6 +2792,7 @@ export interface GenerateTextResult {
 }
 
 export interface ProviderChatOptions {
+  maxOutputTokens?: number;
   thinking?: {
     enabled: boolean;
     effort?: ThinkingEffort;

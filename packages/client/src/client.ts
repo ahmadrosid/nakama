@@ -88,6 +88,7 @@ import type {
   InvokePluginActionRequest,
   InvokePluginActionResponse,
   KnowledgeBaseDuplicateAction,
+  KnowledgeIndexResponse,
   ListArtifactsResponse,
   ListAutomationRunsResponse,
   ListAutomationsResponse,
@@ -1642,6 +1643,39 @@ export class NakamaClient {
   ): Promise<ListKnowledgeBaseResponse> {
     return this.request<ListKnowledgeBaseResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base`
+    );
+  }
+
+  async getKnowledgeIndex(
+    profileId: string,
+    topic?: string,
+    offset = 0
+  ): Promise<KnowledgeIndexResponse> {
+    const query = new URLSearchParams();
+    if (topic) {
+      query.set("topic", topic);
+    }
+    if (offset) {
+      query.set("offset", String(offset));
+    }
+    return this.request<KnowledgeIndexResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base/index${query.size ? `?${query}` : ""}`
+    );
+  }
+
+  async changeKnowledgeIndex(
+    profileId: string,
+    action:
+      | "enable"
+      | "disable"
+      | "backfill"
+      | "retry"
+      | "rebuild"
+      | "reanalyze"
+  ): Promise<KnowledgeIndexResponse> {
+    return this.request<KnowledgeIndexResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base/index`,
+      { body: JSON.stringify({ action }), method: "POST" }
     );
   }
 

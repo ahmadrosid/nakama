@@ -30,6 +30,24 @@ export function comparablePath(filePath: string): string {
   return process.platform === "win32" ? filePath.toLowerCase() : filePath;
 }
 
+export function refuseKnowledgeIndexPath(filePath: string): void {
+  const directory = path.basename(path.dirname(filePath)).toLowerCase();
+  const name = path.basename(filePath).toLowerCase();
+  if (
+    directory === "knowledge-base" &&
+    (name === "index.md" ||
+      name === "index.meta.json" ||
+      name === "index-settings.json" ||
+      name === "index-work.json" ||
+      name.endsWith(".index.json"))
+  ) {
+    throw new PathGuardError(
+      "Use knowledge_base_index to read the index",
+      "SPECIAL_FILE"
+    );
+  }
+}
+
 /**
  * On NTFS a `:` after the drive root names an alternate data stream:
  * `tool.js::$DATA` writes `tool.js` under a name no refusal matches, and

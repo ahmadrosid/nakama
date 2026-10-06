@@ -8,6 +8,7 @@ import type {
   ImportKnowledgeBaseZipRequest,
   ImportKnowledgeBaseZipResponse,
   InitSoulResponse,
+  KnowledgeIndexResponse,
   ListArtifactsResponse,
   ListKnowledgeBaseResponse,
   ListProfileChangeHistoryResponse,
@@ -760,6 +761,85 @@ export function registerProfileRoutes(
       tags: ["Profiles"],
     })
   );
+  const knowledgeIndexSchema = z
+    .object({
+      content: z.string(),
+      enabled: z.boolean(),
+      failed: z.number(),
+      indexedCount: z.number(),
+      nextOffset: z.number().optional(),
+      pending: z.number(),
+      provider: z.string().nullable(),
+      readyCount: z.number(),
+      status: z.enum([
+        "off",
+        "updating",
+        "partial",
+        "ready",
+        "needs_retry",
+        "needs_setup",
+        "missing",
+        "stale",
+      ]),
+      totalLines: z.number(),
+    })
+    .openapi("KnowledgeIndexResponse");
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getKnowledgeIndex",
+      path: "/v1/profiles/{profileId}/knowledge-base/index",
+      request: {
+        params: profileIdParam,
+        query: z.object({
+          topic: z.string().optional(),
+          offset: z.coerce.number().int().min(0).optional(),
+        }),
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: knowledgeIndexSchema } },
+          description: "Knowledge index status",
+        },
+      },
+      summary: "Read knowledge index status and headings",
+      tags: ["Profiles"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "changeKnowledgeIndex",
+      path: "/v1/profiles/{profileId}/knowledge-base/index",
+      request: {
+        params: profileIdParam,
+        body: {
+          content: {
+            "application/json": {
+              schema: z.object({
+                action: z.enum([
+                  "enable",
+                  "disable",
+                  "backfill",
+                  "retry",
+                  "rebuild",
+                  "reanalyze",
+                ]),
+              }),
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: knowledgeIndexSchema } },
+          description: "Knowledge index status",
+        },
+      },
+      summary: "Manage knowledge indexing",
+      tags: ["Profiles"],
+    })
+  );
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
@@ -1490,6 +1570,63 @@ export function registerProfileRoutes(
     );
   });
 
+  app.get("/v1/profiles/:profileId/knowledge-base/index", async (c) => {
+    requireOrgAdminOrPlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const profileId = decodeURIComponent(c.req.param("profileId"));
+    const topic = c.req.query("topic");
+    const offset = Number(c.req.query("offset") ?? 0);
+    if (!Number.isSafeInteger(offset) || offset < 0) {
+      throw new NakamaApiError("Invalid index offset.", 400);
+    }
+    return json<KnowledgeIndexResponse>(
+      await agent.getKnowledgeIndex(orgId, profileId, topic, offset)
+    );
+  });
+
+  app.post("/v1/profiles/:profileId/knowledge-base/index", async (c) => {
+    requireOrgAdminOrPlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const profileId = decodeURIComponent(c.req.param("profileId"));
+    await agent.getProfile(orgId, profileId);
+    const { action } = await readJson(
+      c.req.raw,
+      z.object({
+        action: z.enum([
+          "enable",
+          "disable",
+          "backfill",
+          "retry",
+          "rebuild",
+          "reanalyze",
+        ]),
+      })
+    );
+    switch (action) {
+      case "enable":
+        await agent.setKnowledgeIndex(orgId, true);
+        break;
+      case "disable":
+        await agent.setKnowledgeIndex(orgId, false);
+        break;
+      case "backfill":
+        await agent.backfillKnowledgeIndex(orgId);
+        break;
+      case "reanalyze":
+        await agent.backfillKnowledgeIndex(orgId, true);
+        break;
+      case "retry":
+        await agent.retryKnowledgeIndex(orgId);
+        break;
+      case "rebuild":
+        await agent.rebuildProfileKnowledgeIndex(orgId, profileId);
+        break;
+    }
+    return json<KnowledgeIndexResponse>(
+      await agent.getKnowledgeIndex(orgId, profileId)
+    );
+  });
+
   app.post("/v1/profiles/:profileId/knowledge-base", async (c) => {
     requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
@@ -1652,6 +1789,7 @@ export function registerProfileRoutes(
       await agent.getProfile(orgId, profileId);
       try {
         await attachSharedKnowledgeBaseDocument(orgId, profileId, documentId);
+        await agent.rebuildProfileKnowledgeIndex(orgId, profileId);
       } catch (error) {
         if (
           error instanceof Error &&
@@ -1678,6 +1816,9 @@ export function registerProfileRoutes(
         profileId,
         documentId
       );
+      if (detached) {
+        await agent.rebuildProfileKnowledgeIndex(orgId, profileId);
+      }
       if (!detached) {
         throw new NakamaApiError(
           "Shared knowledge base document is not attached to this profile.",

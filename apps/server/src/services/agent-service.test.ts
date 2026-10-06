@@ -37,6 +37,127 @@ import { SkillsService } from "./skills-service";
 
 const ORG_ID = "org_test";
 
+describe("knowledge index worker", () => {
+  setupTestConfigDir("nakama-index-worker-");
+
+  test("indexes a new document once within the request limits", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    const provider = {
+      apiKey: "sk-test",
+      createdAt: new Date().toISOString(),
+      id: "openai-index",
+      label: "OpenAI",
+      type: "openai" as const,
+    };
+    const service = new AgentService(
+      { defaultProviderId: provider.id, providers: [provider] },
+      null,
+      db
+    );
+    const previousFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      calls += 1;
+      const body = JSON.parse(String(init?.body));
+      expect(body.max_output_tokens ?? body.max_completion_tokens).toBe(300);
+      const content = JSON.stringify({
+        topics: [
+          { description: "Invoice dates", name: "Billing", terms: ["payment"] },
+        ],
+      });
+      return Response.json(
+        body.max_output_tokens
+          ? {
+              output: [
+                {
+                  content: [{ text: content, type: "output_text" }],
+                  type: "message",
+                },
+              ],
+            }
+          : { choices: [{ message: { content } }] }
+      );
+    }) as typeof fetch;
+    try {
+      await service.setKnowledgeIndex(ORG_ID, true);
+      await service.uploadKnowledgeBaseDocument(ORG_ID, "profile_default", {
+        data: Buffer.from("Invoices are due on day 10.").toString("base64"),
+        filename: "notes.txt",
+        mediaType: "text/plain",
+      });
+      let status = await service.getKnowledgeIndex(ORG_ID, "profile_default");
+      for (
+        let attempt = 0;
+        attempt < 50 && status.status !== "ready";
+        attempt += 1
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        status = await service.getKnowledgeIndex(ORG_ID, "profile_default");
+      }
+      expect(status.status).toBe("ready");
+      expect(status.content).toContain("## billing");
+      expect(calls).toBe(1);
+      await service.rebuildProfileKnowledgeIndex(ORG_ID, "profile_default");
+      await service.backfillKnowledgeIndex(ORG_ID);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(calls).toBe(1);
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
+  });
+
+  test("keeps a failed call pending for explicit retry after restart", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile(createDefaultProfile());
+    const provider = {
+      apiKey: "sk-test",
+      createdAt: new Date().toISOString(),
+      id: "openai-index",
+      label: "OpenAI",
+      type: "openai" as const,
+    };
+    const config = { defaultProviderId: provider.id, providers: [provider] };
+    const previousFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return Response.json({
+        choices: [{ message: { content: "invalid json" } }],
+      });
+    }) as typeof fetch;
+    try {
+      const service = new AgentService(config, null, db);
+      await service.setKnowledgeIndex(ORG_ID, true);
+      await service.uploadKnowledgeBaseDocument(ORG_ID, "profile_default", {
+        data: Buffer.from("Invoices are due on day 10.").toString("base64"),
+        filename: "notes.txt",
+        mediaType: "text/plain",
+      });
+      let status = await service.getKnowledgeIndex(ORG_ID, "profile_default");
+      for (
+        let attempt = 0;
+        attempt < 50 && status.status !== "needs_retry";
+        attempt += 1
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        status = await service.getKnowledgeIndex(ORG_ID, "profile_default");
+      }
+      expect(status.status).toBe("needs_retry");
+      new AgentService(config, null, db);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(calls).toBe(1);
+      await service.retryKnowledgeIndex(ORG_ID);
+      for (let attempt = 0; attempt < 50 && calls < 2; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(calls).toBe(2);
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
+  });
+});
+
 describe("Super Bot provider inheritance", () => {
   setupTestConfigDir("nakama-inherited-provider-");
 

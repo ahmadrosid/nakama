@@ -83,6 +83,7 @@ export function createOpenAIProvider(
       }
 
       return requestChatCompletion(client, {
+        maxOutputTokens: input.providerOptions?.maxOutputTokens,
         messages: input.messages,
         model,
         signal: input.signal,
@@ -367,6 +368,7 @@ export function parseOpenAIToolCalls(
 
 async function buildChatCompletionRequestBody(options: {
   model: string;
+  maxOutputTokens?: number;
   system: string;
   messages: ChatMessage[];
   tools?: LlmToolDefinition[];
@@ -388,6 +390,9 @@ async function buildChatCompletionRequestBody(options: {
 
   return {
     model: options.model,
+    ...(options.maxOutputTokens
+      ? { max_completion_tokens: options.maxOutputTokens }
+      : {}),
     ...(options.stream ? { stream: true } : {}),
     ...(options.streamOptions && provider !== "perplexity"
       ? {
@@ -544,6 +549,7 @@ async function requestChatCompletion(
   client: OpenAIClientConfig,
   options: {
     model: string;
+    maxOutputTokens?: number;
     system: string;
     messages: ChatMessage[];
     signal?: AbortSignal;

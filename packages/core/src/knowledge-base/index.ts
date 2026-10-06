@@ -1,5 +1,6 @@
 export * from "./catalog";
 export * from "./extract";
 export * from "./paths";
+export * from "./semantic-index";
 export * from "./sources";
 export * from "./store";

@@ -46,6 +46,29 @@ describe("search_files tool", () => {
     expect(result.truncated).toBe(false);
   });
 
+  test("does not search generated knowledge index files", async () => {
+    workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-search-"));
+    await mkdir(path.join(workspaceRoot, "knowledge-base"));
+    await writeFile(
+      path.join(workspaceRoot, "knowledge-base", "index.md"),
+      "private-index-token\n"
+    );
+    await writeFile(
+      path.join(workspaceRoot, "knowledge-base", "kb_1.index.json"),
+      "private-index-token\n"
+    );
+    await writeFile(
+      path.join(workspaceRoot, "notes.txt"),
+      "private-index-token\n"
+    );
+    const result = await runSearchFiles(
+      { query: "private-index-token" },
+      { orgId: "org_test", profileId: "profile_test" },
+      { workspaceRoot }
+    );
+    expect(result.matches.map((match) => match.file)).toEqual(["notes.txt"]);
+  });
+
   test("supports fixed-string mode", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-search-"));
     await writeFile(

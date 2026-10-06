@@ -1,26 +1,18 @@
-import { DEFAULT_KNOWLEDGE_SOURCES, NAKAMA_DOCS_LLMS_URL } from "./sources";
 import {
-  getProfileSharedDocumentIds,
-  listKnowledgeBaseDocuments,
-  listOrganizationKnowledgeBaseDocuments,
-} from "./store";
+  getKnowledgeIndexStatus,
+  isKnowledgeIndexEnabled,
+  listAccessibleKnowledgeDocuments,
+} from "./semantic-index";
+import { DEFAULT_KNOWLEDGE_SOURCES, NAKAMA_DOCS_LLMS_URL } from "./sources";
 
 export async function composeKnowledgeBaseCatalog(
   orgId: string,
   profileId: string
 ): Promise<string> {
-  const [profileDocuments, sharedDocumentIds, organizationDocuments] =
-    await Promise.all([
-      listKnowledgeBaseDocuments(orgId, profileId),
-      getProfileSharedDocumentIds(orgId, profileId),
-      listOrganizationKnowledgeBaseDocuments(orgId),
-    ]);
-  const documents = [
-    ...profileDocuments.map((document) => ({ ...document, scope: "profile" })),
-    ...organizationDocuments
-      .filter((document) => sharedDocumentIds.includes(document.id))
-      .map((document) => ({ ...document, scope: "organization" })),
-  ];
+  const [documents, enabled] = await Promise.all([
+    listAccessibleKnowledgeDocuments(orgId, profileId),
+    isKnowledgeIndexEnabled(orgId),
+  ]);
   const sources = DEFAULT_KNOWLEDGE_SOURCES;
   const readyDocuments = documents.filter(
     (document) => document.status === "ready"
@@ -33,13 +25,14 @@ export async function composeKnowledgeBaseCatalog(
   const sections: string[] = [];
 
   if (readyDocuments.length > 0) {
+    const status = enabled
+      ? await getKnowledgeIndexStatus(orgId, profileId)
+      : null;
+    sections.push("# Uploaded documents");
     sections.push(
-      "# Uploaded documents",
-      "Use knowledge_base_search to look up facts from uploaded documents on demand.",
-      ...readyDocuments.map(
-        (document) =>
-          `- [${document.scope}] ${document.filename} (${document.mediaType}) [id: ${document.id}]`
-      )
+      status && (status.status === "ready" || status.status === "partial")
+        ? `${readyDocuments.length} ready; ${status.indexedCount} indexed. Use knowledge_base_index to find topics, then knowledge_base_search to verify facts.`
+        : `${readyDocuments.length} ready. Use knowledge_base_search to find facts.`
     );
   }
 

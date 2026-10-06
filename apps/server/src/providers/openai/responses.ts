@@ -114,6 +114,9 @@ async function buildResponsesRequestBody(
     input: await toResponsesInput(input.messages),
     instructions: input.system,
     model,
+    ...(input.providerOptions?.maxOutputTokens
+      ? { max_output_tokens: input.providerOptions.maxOutputTokens }
+      : {}),
     store: false,
     ...(tools.length > 0 ? { tools } : {}),
     ...buildOpenAIReasoningRequest(

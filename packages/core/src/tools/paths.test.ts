@@ -2,7 +2,28 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { guardFilePath, PathGuardError } from "./paths";
+import {
+  guardFilePath,
+  PathGuardError,
+  refuseKnowledgeIndexPath,
+} from "./paths";
+
+test("protects generated index files from file tools", () => {
+  for (const name of [
+    "index.md",
+    "index.meta.json",
+    "index-settings.json",
+    "index-work.json",
+    "kb_1.index.json",
+  ]) {
+    expect(() =>
+      refuseKnowledgeIndexPath(path.join("/tmp", "knowledge-base", name))
+    ).toThrow(PathGuardError);
+  }
+  expect(() =>
+    refuseKnowledgeIndexPath(path.join("/tmp", "notes", "index.md"))
+  ).not.toThrow();
+});
 
 describe("guardFilePath", () => {
   test("allows a new directory beneath a symlinked parent without allowing siblings", async () => {

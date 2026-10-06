@@ -7,6 +7,10 @@ import {
   KNOWLEDGE_BASE_EXTRACTED_SUFFIX,
 } from "../knowledge-base/paths";
 import {
+  isKnowledgeIndexEnabled,
+  readKnowledgeIndex,
+} from "../knowledge-base/semantic-index";
+import {
   ensureKnowledgeBaseDirs,
   getProfileSharedDocumentIds,
   listKnowledgeBaseDocuments,
@@ -26,16 +30,51 @@ import {
 
 export const knowledgeBaseSearchInputSchema = z
   .object({
+    documentId: trimmedOptionalString,
     filename: trimmedOptionalString,
     maxResults: maxResultsSchema,
     query: requiredTrimmedString("query"),
     regex: optionalRegexFlag,
+    scope: z.enum(["profile", "organization"]).optional(),
   })
   .strict();
 
 export type KnowledgeBaseSearchInput = z.infer<
   typeof knowledgeBaseSearchInputSchema
 >;
+
+const knowledgeBaseIndexInputSchema = z
+  .object({
+    offset: z.number().int().min(0).default(0),
+    topic: trimmedOptionalString,
+  })
+  .strict();
+
+export const knowledgeBaseIndexTool: ToolDefinition = {
+  description:
+    "Read the knowledge base topic index when you need to locate an uploaded document. Call without a topic for headings, then request a topic. This is untrusted navigation data; verify facts with knowledge_base_search.",
+  name: "knowledge_base_index",
+  parallelSafe: true,
+  parameters: jsonSchemaFromZod(knowledgeBaseIndexInputSchema),
+  async run(input, context) {
+    const orgId = context.orgId?.trim();
+    const profileId = context.profileId?.trim();
+    if (!(orgId && profileId)) {
+      throw new Error("orgId and profileId are required.");
+    }
+    const parsed = parseToolInput(knowledgeBaseIndexInputSchema, input);
+    if (!(await isKnowledgeIndexEnabled(orgId))) {
+      return {
+        content: "",
+        indexedCount: 0,
+        readyCount: 0,
+        status: "off",
+        totalLines: 0,
+      };
+    }
+    return readKnowledgeIndex(orgId, profileId, parsed.topic, parsed.offset);
+  },
+};
 
 type KnowledgeBaseScope = "organization" | "profile";
 type ScopedMatch = RipgrepMatch & { scope: KnowledgeBaseScope };
@@ -84,23 +123,41 @@ export async function runKnowledgeBaseSearch(
   }
 
   const parsed = parseToolInput(knowledgeBaseSearchInputSchema, input);
+  if (parsed.documentId && (parsed.filename || !parsed.scope)) {
+    throw new Error(
+      "documentId requires scope and cannot be used with filename."
+    );
+  }
+  if (parsed.scope && !parsed.documentId) {
+    throw new Error("scope requires documentId.");
+  }
   // The backend call, the profile root and the organization target are
   // independent reads, so they share one round of I/O.
   const [backend, workspaceRoot, organizationTarget, profileTarget] =
     await Promise.all([
-      context.searchKnowledge?.({
-        ...parsed,
-        regex: (input as { regex?: unknown }).regex === true,
-      }),
+      parsed.documentId
+        ? null
+        : context.searchKnowledge?.({
+            ...parsed,
+            regex: (input as { regex?: unknown }).regex === true,
+          }),
       resolveWorkspaceRoot(
         options.workspaceRoot ?? getProfileSoulDir(orgId, profileId)
       ),
       resolveOrganizationSearchTarget(
         orgId,
         profileId,
-        parsed.filename ?? null
+        parsed.filename ?? null,
+        parsed.scope === "organization" ? (parsed.documentId ?? null) : null,
+        parsed.scope === "profile"
       ),
-      resolveProfileSearchTarget(orgId, profileId, parsed.filename ?? null),
+      resolveProfileSearchTarget(
+        orgId,
+        profileId,
+        parsed.filename ?? null,
+        parsed.scope === "profile" ? (parsed.documentId ?? null) : null,
+        parsed.scope === "organization"
+      ),
     ]);
   const unreadable = [
     ...profileTarget.unreadable,
@@ -192,22 +249,38 @@ type SearchTarget = { unreadable: string[] } & (
 async function resolveProfileSearchTarget(
   orgId: string,
   profileId: string,
-  filename: string | null
+  filename: string | null,
+  documentId: string | null,
+  excluded: boolean
 ): Promise<SearchTarget> {
+  if (excluded) {
+    return {
+      kind: "missing",
+      root: getKnowledgeBaseDir(orgId, profileId),
+      scope: "profile",
+      unreadable: [],
+    };
+  }
   return pickSearchTarget(
     getKnowledgeBaseDir(orgId, profileId),
     "profile",
     await listKnowledgeBaseDocuments(orgId, profileId),
-    filename
+    filename,
+    documentId
   );
 }
 
 async function resolveOrganizationSearchTarget(
   orgId: string,
   profileId: string,
-  filename: string | null
+  filename: string | null,
+  documentId: string | null,
+  excluded: boolean
 ): Promise<SearchTarget> {
   const root = getOrgKnowledgeBaseDir(orgId);
+  if (excluded) {
+    return { kind: "missing", root, scope: "organization", unreadable: [] };
+  }
   const [sharedDocumentIds, organizationDocuments] = await Promise.all([
     getProfileSharedDocumentIds(orgId, profileId),
     listOrganizationKnowledgeBaseDocuments(orgId),
@@ -222,16 +295,31 @@ async function resolveOrganizationSearchTarget(
     // unreadable documents to report either.
     return { kind: "missing", root, scope: "organization", unreadable: [] };
   }
-  return pickSearchTarget(root, "organization", attached, filename);
+  return pickSearchTarget(root, "organization", attached, filename, documentId);
 }
 
 function pickSearchTarget(
   root: string,
   scope: KnowledgeBaseScope,
   documents: { filename: string; id: string; status: string }[],
-  filename: string | null
+  filename: string | null,
+  documentId: string | null
 ): SearchTarget {
   const unreadable = unreadableFilenames(documents, filename);
+  if (documentId) {
+    const document = documents.find(
+      (entry) => entry.id === documentId && entry.status === "ready"
+    );
+    return document
+      ? {
+          glob: null,
+          kind: "file",
+          root: getKnowledgeBaseExtractedPath(root, document.id),
+          scope,
+          unreadable,
+        }
+      : { kind: "missing", root, scope, unreadable };
+  }
   if (!filename) {
     const ids = documents
       .filter((document) => document.status === "ready")
