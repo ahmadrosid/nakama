@@ -269,17 +269,53 @@ function ToolSetupFields({
   );
 }
 
-function ToolCredentialForm({
+interface ToolCredentialFormProps {
+  canManage: boolean;
+  orgId: string;
+  toolId: string;
+  toolName: string;
+}
+
+function ToolCredentialForm(props: ToolCredentialFormProps) {
+  const { canManage, orgId, toolId, toolName } = props;
+  const status = useQuery({
+    enabled: canManage,
+    queryFn: () => client.forOrg(orgId).getToolCredentialStatus(toolId),
+    queryKey: ["tool-credentials", orgId, toolId],
+  });
+  const envFields = status.data?.env;
+  if (!(canManage && envFields)) {
+    return <ToolApiKeyForm {...props} />;
+  }
+  // Tools with several declared settings are filled in on the playground,
+  // which shows one field per variable.
+  return (
+    <div className="flex w-full max-w-sm items-center justify-between gap-3 rounded-xl border bg-card p-4">
+      <div className="min-w-0">
+        <p className="truncate font-medium text-sm">{toolName}</p>
+        <p className="text-muted-foreground text-xs" role="status">
+          {envFields.every((field) => field.configured)
+            ? "Settings saved"
+            : "Connect settings"}
+        </p>
+      </div>
+      <Button
+        render={<Link to={toolPlaygroundPath(toolId)} />}
+        size="sm"
+        variant="outline"
+      >
+        Configure
+      </Button>
+    </div>
+  );
+}
+
+function ToolApiKeyForm({
   toolId,
   toolName,
   orgId,
   canManage,
-}: {
-  toolId: string;
-  toolName: string;
-  orgId: string;
-  canManage: boolean;
-}) {
+}: ToolCredentialFormProps) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -291,31 +327,6 @@ function ToolCredentialForm({
     queryFn: () => client.forOrg(orgId).getToolCredentialStatus(toolId),
     queryKey,
   });
-
-  const envFields = status.data?.env;
-  // Tools with several declared settings are filled in on the playground,
-  // which shows one field per variable.
-  if (canManage && envFields) {
-    return (
-      <div className="flex w-full max-w-sm items-center justify-between gap-3 rounded-xl border bg-card p-4">
-        <div className="min-w-0">
-          <p className="truncate font-medium text-sm">{toolName}</p>
-          <p className="text-muted-foreground text-xs" role="status">
-            {envFields.every((field) => field.configured)
-              ? "Settings saved"
-              : "Connect settings"}
-          </p>
-        </div>
-        <Button
-          render={<Link to={toolPlaygroundPath(toolId)} />}
-          size="sm"
-          variant="outline"
-        >
-          Configure
-        </Button>
-      </div>
-    );
-  }
 
   return (
     <div className="flex w-full max-w-sm items-center justify-between gap-3 rounded-xl border bg-card p-4">
