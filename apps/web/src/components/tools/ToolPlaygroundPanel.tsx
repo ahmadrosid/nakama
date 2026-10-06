@@ -3,12 +3,15 @@ import { Button } from "@nakama/ui/button";
 import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
 import { Textarea } from "@nakama/ui/textarea";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PlayIcon } from "hugeicons-react";
+import { useState } from "react";
 import { ToolSourceCodeBlock } from "@/components/tools/ToolSourceCodeBlock";
 import {
   formatToolPlaygroundResult,
   type ToolPlaygroundRunControls,
 } from "@/components/tools/use-tool-playground-run";
+import { client, formatError } from "@/lib/client";
 
 export function ToolPlaygroundRunForm({
   tool,
@@ -27,6 +30,8 @@ export function ToolPlaygroundRunForm({
           <code className="type-code">~/.nakama/orgs/…/profiles/…/</code>.
         </p>
       </div>
+
+      <ToolApiKeyForm toolId={tool.id} />
 
       <div className="flex flex-col gap-2.5">
         <label
@@ -99,6 +104,72 @@ export function ToolPlaygroundRunForm({
         </p>
       ) : null}
     </div>
+  );
+}
+
+function ToolApiKeyForm({ toolId }: { toolId: string }) {
+  const queryClient = useQueryClient();
+  const queryKey = ["tool-credentials", toolId];
+  const status = useQuery({
+    queryFn: () => client.getToolCredentialStatus(toolId),
+    queryKey,
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputId = `${toolId}-api-key`;
+
+  return (
+    <form
+      className="flex flex-col gap-2.5"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        if (saving) {
+          return;
+        }
+        const form = event.currentTarget;
+        const apiKey = String(new FormData(form).get("apiKey") ?? "");
+        setSaving(true);
+        setError(null);
+        try {
+          queryClient.setQueryData(
+            queryKey,
+            await client.saveToolCredential(toolId, apiKey)
+          );
+          form.reset();
+        } catch (saveError) {
+          setError(formatError(saveError));
+        } finally {
+          setSaving(false);
+        }
+      }}
+    >
+      <label className="font-medium text-foreground text-xs" htmlFor={inputId}>
+        API key
+      </label>
+      <div className="flex gap-2">
+        <Input
+          autoComplete="off"
+          disabled={saving}
+          id={inputId}
+          maxLength={8192}
+          name="apiKey"
+          placeholder={
+            status.data?.configured ? "Saved" : "NAKAMA_TOOL_API_KEY"
+          }
+          required
+          type="password"
+        />
+        <Button disabled={saving} size="sm" type="submit" variant="outline">
+          {saving ? <Spinner className="size-4" /> : null}
+          {status.data?.configured ? "Replace" : "Save"}
+        </Button>
+      </div>
+      {error ? (
+        <p className="text-destructive text-xs" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </form>
   );
 }
 

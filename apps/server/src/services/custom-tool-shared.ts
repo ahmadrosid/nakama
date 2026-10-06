@@ -300,14 +300,19 @@ export async function loadCustomSubprocessTool(options: {
       if (record.orgId && record.orgId !== context.orgId) {
         throw new Error("Tool not available in this organization.");
       }
-      if (!config.requiresApiKey) {
+      if (!context.orgId) {
+        if (config.requiresApiKey) {
+          throw new Error("Organization context is required.");
+        }
         return run(modulePath, input, context);
       }
-      if (!context.orgId) {
-        throw new Error("Organization context is required.");
-      }
+      // A key saved from the playground reaches the tool even when the tool
+      // was registered without requiresApiKey.
       const apiKey = await loadToolApiKey(context.orgId, record.id);
       if (!apiKey) {
+        if (!config.requiresApiKey) {
+          return run(modulePath, input, context);
+        }
         return {
           orgId: context.orgId,
           toolId: record.id,

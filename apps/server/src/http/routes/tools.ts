@@ -435,12 +435,11 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
     if (!tool) {
       throw new NakamaApiError("Tool not found.", 404);
     }
-    if (
-      !(tool.handlerType === "javascript" || tool.handlerType === "python") ||
-      (tool.handlerConfig as Record<string, unknown> | null)?.requiresApiKey !==
-        true
-    ) {
-      throw new NakamaApiError("This tool does not require an API key.", 400);
+    if (!(tool.handlerType === "javascript" || tool.handlerType === "python")) {
+      throw new NakamaApiError(
+        "Only custom JavaScript or Python tools take an API key.",
+        400
+      );
     }
   }
 

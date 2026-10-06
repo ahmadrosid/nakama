@@ -131,6 +131,26 @@ if __name__ == "__main__":
     });
   });
 
+  test("a saved key reaches a tool registered without requiresApiKey", async () => {
+    const { configDir: dir, toolsDir } = await setupToolsDir();
+    configDir = dir;
+    await writeFile(
+      path.join(toolsDir, "optional-key.js"),
+      `export async function run() {
+      return { present: Boolean(process.env.NAKAMA_TOOL_API_KEY) };
+    }`
+    );
+    const record = makeRecord({
+      handlerConfig: { modulePath: "optional-key.js" },
+    });
+    const tool = (await loadJavascriptTool(record))!;
+    expect(await tool.run({}, { orgId: "org_a" })).toEqual({ present: false });
+    expect(await tool.run({}, {})).toEqual({ present: false });
+    await saveToolApiKey("org_a", record.id, "optional-key");
+    expect(await tool.run({}, { orgId: "org_a" })).toEqual({ present: true });
+    expect(await tool.run({}, { orgId: "org_b" })).toEqual({ present: false });
+  });
+
   test("reads parallelSafe from handlerConfig, not the module", async () => {
     const { configDir: dir, toolsDir } = await setupToolsDir();
     configDir = dir;

@@ -125,7 +125,13 @@ describe("tool playground routes", () => {
                   id: "tool_key",
                   name: "key_tool",
                   handlerType: "javascript",
-                  handlerConfig: { requiresApiKey: true },
+                  handlerConfig: {},
+                },
+                {
+                  id: "tool_builtin",
+                  name: "builtin_tool",
+                  handlerType: "builtin",
+                  handlerConfig: {},
                 },
               ]
             : [],
@@ -172,6 +178,15 @@ describe("tool playground routes", () => {
     );
     expect(invalid.status).toBe(400);
     expect(await loadToolApiKey(orgId, "tool_key")).toBe("private-tool-key");
+    const builtin = await app.fetch(
+      new Request(url.replace("tool_key", "tool_builtin"), {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ apiKey: "builtin-key" }),
+      })
+    );
+    expect(builtin.status).toBe(400);
+    expect(await loadToolApiKey(orgId, "tool_builtin")).toBeUndefined();
     visibleOrg = "other_org";
     expect(
       (
