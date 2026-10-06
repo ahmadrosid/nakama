@@ -21,6 +21,8 @@ import { buildNewChatPath } from "@/lib/chat-history";
 import { client } from "@/lib/client";
 import {
   enabledPluginNavEntries,
+  type NavGroup,
+  type NavItem,
   navHrefForPage,
   STANDALONE_PAGES,
   visibleNavGroups,
@@ -54,6 +56,76 @@ function fuzzyFilter<T>(
   const matches =
     info && order ? order.map((index) => info.idx[index]) : indices;
   return (matches ?? []).map((index) => items[index]);
+}
+
+function NavigationResults({
+  groups,
+  plugins,
+  standalone,
+  onNavigate,
+}: {
+  groups: NavGroup[];
+  plugins: ReturnType<typeof enabledPluginNavEntries>;
+  standalone: NavItem[];
+  onNavigate: (href: string) => void;
+}) {
+  return (
+    <>
+      {groups.map((group) => (
+        <CommandGroup heading={group.label} key={group.id}>
+          {group.items.map((item) => (
+            <CommandItem
+              className="[&>svg:last-child]:hidden"
+              key={item.id}
+              onSelect={() => onNavigate(navHrefForPage(item.id))}
+              value={`${item.label} ${item.description}`}
+            >
+              <item.icon className="size-4" />
+              <span>{item.label}</span>
+              <span className="ml-auto min-w-0 flex-1 truncate text-right text-muted-foreground text-xs">
+                {item.description}
+              </span>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      ))}
+      {plugins.length > 0 ? (
+        <CommandGroup heading="Plugins">
+          {plugins.map((entry) => (
+            <CommandItem
+              className="[&>svg:last-child]:hidden"
+              key={entry.pluginId}
+              onSelect={() => onNavigate(entry.href)}
+              value={`${entry.label} ${entry.pluginId}`}
+            >
+              <span>{entry.label}</span>
+              <span className="ml-auto min-w-0 flex-1 truncate text-right text-muted-foreground text-xs">
+                {entry.pluginId}
+              </span>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      ) : null}
+      {standalone.length > 0 ? (
+        <CommandGroup heading="More">
+          {standalone.map((item) => (
+            <CommandItem
+              className="[&>svg:last-child]:hidden"
+              key={item.id}
+              onSelect={() => onNavigate(navHrefForPage(item.id))}
+              value={`${item.label} ${item.description}`}
+            >
+              <item.icon className="size-4" />
+              <span>{item.label}</span>
+              <span className="ml-auto min-w-0 flex-1 truncate text-right text-muted-foreground text-xs">
+                {item.description}
+              </span>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      ) : null}
+    </>
+  );
 }
 
 /**
@@ -287,59 +359,12 @@ export function CommandPalette() {
               ? "Loading agents..."
               : "No matching page or agent."}
           </CommandEmpty>
-          {filteredGroups.map((group) => (
-            <CommandGroup heading={group.label} key={group.id}>
-              {group.items.map((item) => (
-                <CommandItem
-                  className="[&>svg:last-child]:hidden"
-                  key={item.id}
-                  onSelect={() => go(navHrefForPage(item.id))}
-                  value={`${item.label} ${item.description}`}
-                >
-                  <item.icon className="size-4" />
-                  <span>{item.label}</span>
-                  <span className="ml-auto min-w-0 flex-1 truncate text-right text-muted-foreground text-xs">
-                    {item.description}
-                  </span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          ))}
-          {filteredPlugins.length > 0 ? (
-            <CommandGroup heading="Plugins">
-              {filteredPlugins.map((entry) => (
-                <CommandItem
-                  className="[&>svg:last-child]:hidden"
-                  key={entry.pluginId}
-                  onSelect={() => go(entry.href)}
-                  value={`${entry.label} ${entry.pluginId}`}
-                >
-                  <span>{entry.label}</span>
-                  <span className="ml-auto min-w-0 flex-1 truncate text-right text-muted-foreground text-xs">
-                    {entry.pluginId}
-                  </span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          ) : null}
-          {filteredStandalone.length > 0 ? (
-            <CommandGroup heading="More">
-              {filteredStandalone.map((item) => (
-                <CommandItem
-                  className="[&>svg:last-child]:hidden"
-                  key={item.id}
-                  onSelect={() => go(navHrefForPage(item.id))}
-                  value={`${item.label} ${item.description}`}
-                >
-                  <item.icon className="size-4" />
-                  <span>{item.label}</span>
-                  <span className="ml-auto min-w-0 flex-1 truncate text-right text-muted-foreground text-xs">
-                    {item.description}
-                  </span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          ) : null}
+          <NavigationResults
+            groups={filteredGroups}
+            onNavigate={go}
+            plugins={filteredPlugins}
+            standalone={filteredStandalone}
+          />
           {isPlatformAdmin &&
           (platformOrgsError || search.data?.error || search.isError) ? (
             <CommandGroup heading="Agents">
