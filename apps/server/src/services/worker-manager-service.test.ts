@@ -56,6 +56,21 @@ afterEach(async () => {
 });
 
 describe("WorkerManagerService", () => {
+  test.each([
+    "startWorker",
+    "stopWorker",
+    "restartWorker",
+    "getWorkerLogs",
+    "clearWorkerLogs",
+  ] as const)("%s rejects an unknown worker", async (method) => {
+    const service = new WorkerManagerService(projectRoot, createMockPm2());
+    const result =
+      method === "getWorkerLogs"
+        ? service.getWorkerLogs("foobar", 10)
+        : service[method]("foobar");
+    await expect(result).rejects.toThrow();
+  });
+
   test("isolates agent processes, desired state, and recovery", async () => {
     const first = { orgId: "org_a", profileId: "agent_a" };
     const second = { orgId: "org_a", profileId: "agent_b" };
@@ -281,11 +296,6 @@ describe("WorkerManagerService", () => {
       await rm(tmpProjectRoot, { force: true, recursive: true });
     });
 
-    test("throws for unknown worker", async () => {
-      const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.startWorker("foobar")).rejects.toThrow("Unknown worker");
-    });
-
     test("throws when PM2 start fails", async () => {
       const mockPm2 = createMockPm2();
       mockPm2.start = mock((_opts: unknown, cb: (err: Error | null) => void) =>
@@ -327,11 +337,6 @@ describe("WorkerManagerService", () => {
         whatsapp: false,
       });
     });
-
-    test("throws for unknown worker", async () => {
-      const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.stopWorker("foobar")).rejects.toThrow("Unknown worker");
-    });
   });
 
   describe("restartWorker", () => {
@@ -351,11 +356,6 @@ describe("WorkerManagerService", () => {
       );
       expect(mockPm2.restart).not.toHaveBeenCalled();
       expect(mockPm2.start).toHaveBeenCalledTimes(1);
-    });
-
-    test("throws for unknown worker", async () => {
-      const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.restartWorker("foobar")).rejects.toThrow("Unknown worker");
     });
   });
 
@@ -539,13 +539,6 @@ describe("WorkerManagerService", () => {
       expect(logs.stderr).toBe("");
     });
 
-    test("throws for unknown worker", async () => {
-      const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.getWorkerLogs("foobar", 10)).rejects.toThrow(
-        "Unknown worker"
-      );
-    });
-
     test("throws when PM2 describe fails", async () => {
       const mockPm2 = createMockPm2();
       mockPm2.describe = mock(
@@ -642,13 +635,6 @@ describe("WorkerManagerService", () => {
       expect(mockPm2.flush).toHaveBeenCalledWith(
         "whatsapp",
         expect.any(Function)
-      );
-    });
-
-    test("throws for unknown worker", async () => {
-      const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.clearWorkerLogs("foobar")).rejects.toThrow(
-        "Unknown worker"
       );
     });
 

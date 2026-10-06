@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { saveUserWebPublicUrl } from "@nakama/core";
 import {
   isLoopbackComposioCallbackBaseUrl,
   persistWebPublicUrl,
@@ -154,7 +155,7 @@ describe("composio-callback-url", () => {
   test("the desktop app ignores a public URL restored from another install", async () => {
     // A backup restored into the desktop app carries the web install's URL,
     // but the desktop UI is only ever served on loopback.
-    await persistWebPublicUrl("https://nakama.example.com");
+    await saveUserWebPublicUrl("https://nakama.example.com");
     const previousDesktop = process.env.NAKAMA_DESKTOP;
     process.env.NAKAMA_DESKTOP = "1";
     const request = new Request(
@@ -179,7 +180,7 @@ describe("composio-callback-url", () => {
   });
 
   test("outside the desktop app a saved public URL still refuses loopback", async () => {
-    await persistWebPublicUrl("https://nakama.example.com");
+    await saveUserWebPublicUrl("https://nakama.example.com");
     const request = new Request(
       "http://127.0.0.1:50839/v1/sessions/session-1/messages",
       { headers: { Origin: "http://127.0.0.1:50839" }, method: "POST" }
@@ -245,9 +246,12 @@ describe("composio-callback-url", () => {
     process.env.NAKAMA_CONFIG_DIR = configDir;
 
     try {
-      expect(await persistWebPublicUrl("https://gateway.example.com/v1/")).toBe(
-        "https://gateway.example.com/v1"
-      );
+      expect(
+        await persistWebPublicUrl(
+          "https://gateway.example.com/v1/",
+          new Request("https://gateway.example.com/v1/system/web-public-url")
+        )
+      ).toBe("https://gateway.example.com/v1");
       expect(resolveComposioCallbackBaseUrl()).toBe(
         "https://gateway.example.com/v1"
       );
@@ -256,6 +260,46 @@ describe("composio-callback-url", () => {
         delete process.env.NAKAMA_CONFIG_DIR;
       } else {
         process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+      }
+      rmSync(configDir, { force: true, recursive: true });
+    }
+  });
+
+  test("persistWebPublicUrl refuses a host the deployment does not serve", async () => {
+    const configDir = join(tmpdir(), `nakama-callback-url-host-${Date.now()}`);
+    mkdirSync(configDir, { recursive: true });
+    const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+    const previousPublicUrl = process.env.NAKAMA_WEB_PUBLIC_URL;
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    delete process.env.NAKAMA_WEB_PUBLIC_URL;
+
+    try {
+      await expect(
+        persistWebPublicUrl(
+          "https://attacker.example",
+          new Request("https://api.example.com/v1/system/web-public-url")
+        )
+      ).rejects.toThrow("webPublicUrl must use this deployment's own origin.");
+
+      // The env override is how a deployment that serves the web app from
+      // another host names it.
+      process.env.NAKAMA_WEB_PUBLIC_URL = "https://app.example.com";
+      expect(
+        await persistWebPublicUrl(
+          "https://app.example.com",
+          new Request("https://api.example.com/v1/system/web-public-url")
+        )
+      ).toBe("https://app.example.com");
+    } finally {
+      if (previousConfigDir === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+      }
+      if (previousPublicUrl === undefined) {
+        delete process.env.NAKAMA_WEB_PUBLIC_URL;
+      } else {
+        process.env.NAKAMA_WEB_PUBLIC_URL = previousPublicUrl;
       }
       rmSync(configDir, { force: true, recursive: true });
     }

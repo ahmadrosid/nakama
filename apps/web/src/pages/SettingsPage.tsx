@@ -191,7 +191,8 @@ export function SettingsPage() {
               </div>
             ) : null}
 
-            {isOrgAdmin ? <WebPublicUrlSettingsRow /> : null}
+            {/* Install-wide: the callback/share base for every organization. */}
+            {isPlatformAdmin ? <WebPublicUrlSettingsRow /> : null}
           </CardContent>
         </Card>
 
