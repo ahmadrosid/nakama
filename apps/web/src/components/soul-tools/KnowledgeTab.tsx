@@ -48,7 +48,6 @@ type DuplicatePrompt = {
 };
 
 export function KnowledgeTab({ profileId }: { profileId: string | null }) {
-  const queryClient = useQueryClient();
   const { activeOrg } = useAuth();
   const { data: profiles = [], error: profilesError } = useProfilesQuery();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -72,38 +71,6 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
     useState<KnowledgeBaseDocument | null>(null);
   const [duplicatePrompt, setDuplicatePrompt] =
     useState<DuplicatePrompt | null>(null);
-  const [showIndex, setShowIndex] = useState(false);
-  const [indexTopic, setIndexTopic] = useState<string | undefined>();
-  const [indexOffset, setIndexOffset] = useState(0);
-  const indexQuery = useQuery({
-    enabled: Boolean(profileId),
-    queryFn: () => client.getKnowledgeIndex(profileId!),
-    queryKey: ["knowledge-index", profileId],
-    refetchInterval: 5000,
-  });
-  const indexPreviewQuery = useQuery({
-    enabled: Boolean(profileId && showIndex),
-    queryFn: () =>
-      client.getKnowledgeIndex(profileId!, indexTopic, indexOffset),
-    queryKey: ["knowledge-index", profileId, indexTopic, indexOffset],
-  });
-  const indexMutation = useMutation({
-    mutationFn: (
-      action:
-        | "enable"
-        | "disable"
-        | "backfill"
-        | "retry"
-        | "rebuild"
-        | "reanalyze"
-    ) => client.changeKnowledgeIndex(profileId!, action),
-    onError: (err) => setError(formatError(err)),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["knowledge-index", profileId],
-      });
-    },
-  });
 
   const selectedProfile =
     profiles.find((profile) => profile.id === profileId) ?? null;
@@ -303,133 +270,7 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
           <KnowledgeZipImportResult result={importResult} />
         ) : null}
 
-        {indexQuery.data ? (
-          <div className="mb-4 rounded-md border border-border px-4 py-3 text-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="font-medium">
-                Index: {indexQuery.data.status.replace("_", " ")} ·{" "}
-                {indexQuery.data.indexedCount}/{indexQuery.data.readyCount}{" "}
-                ready
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  disabled={indexMutation.isPending}
-                  onClick={() =>
-                    indexMutation.mutate(
-                      indexQuery.data!.enabled ? "disable" : "enable"
-                    )
-                  }
-                  size="sm"
-                  variant="outline"
-                >
-                  {indexQuery.data.enabled ? "Turn off" : "Enable index"}
-                </Button>
-                {indexQuery.data.enabled ? (
-                  <>
-                    <Button
-                      disabled={indexMutation.isPending}
-                      onClick={() => indexMutation.mutate("backfill")}
-                      size="sm"
-                      variant="outline"
-                    >
-                      Analyze documents
-                    </Button>
-                    <Button
-                      disabled={
-                        indexMutation.isPending ||
-                        indexQuery.data.status === "updating"
-                      }
-                      onClick={() => indexMutation.mutate("reanalyze")}
-                      size="sm"
-                      variant="outline"
-                    >
-                      Reanalyze
-                    </Button>
-                    <Button
-                      disabled={
-                        indexMutation.isPending ||
-                        indexQuery.data.status === "updating" ||
-                        indexQuery.data.failed + indexQuery.data.pending === 0
-                      }
-                      onClick={() => indexMutation.mutate("retry")}
-                      size="sm"
-                      variant="outline"
-                    >
-                      Approve next batch
-                    </Button>
-                    <Button
-                      disabled={indexMutation.isPending}
-                      onClick={() => indexMutation.mutate("rebuild")}
-                      size="sm"
-                      variant="outline"
-                    >
-                      Rebuild index
-                    </Button>
-                    <Button
-                      onClick={() => setShowIndex((value) => !value)}
-                      size="sm"
-                      variant="outline"
-                    >
-                      {showIndex ? "Close index" : "View index"}
-                    </Button>
-                  </>
-                ) : null}
-              </div>
-            </div>
-            <p className="mt-2 text-muted-foreground text-xs">
-              {indexQuery.data.provider ?? "No supported model"} · 4,000 input
-              bytes and 300 output tokens per document · six documents per batch
-              · {indexQuery.data.pending} pending · {indexQuery.data.failed}{" "}
-              need retry
-            </p>
-            {showIndex ? (
-              <div className="mt-3 border-border border-t pt-3">
-                {indexTopic ? (
-                  <Button
-                    onClick={() => {
-                      setIndexTopic(undefined);
-                      setIndexOffset(0);
-                    }}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    All topics
-                  </Button>
-                ) : null}
-                {(indexTopic ? "" : (indexPreviewQuery.data?.content ?? ""))
-                  .split("\n")
-                  .filter((line) => line.startsWith("## "))
-                  .map((line) => (
-                    <Button
-                      key={line}
-                      onClick={() => {
-                        setIndexTopic(line.slice(3));
-                        setIndexOffset(0);
-                      }}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      {line.slice(3)}
-                    </Button>
-                  ))}
-                <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-xs">
-                  {indexPreviewQuery.data?.content}
-                </pre>
-                {indexPreviewQuery.data?.nextOffset === undefined ? null : (
-                  <Button
-                    onClick={() =>
-                      setIndexOffset(indexPreviewQuery.data!.nextOffset!)
-                    }
-                    size="sm"
-                    variant="outline"
-                  >
-                    Next page
-                  </Button>
-                )}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        <KnowledgeIndexPanel profileId={profileId} setError={setError} />
 
         <SharedKnowledgeDocuments
           availableDocuments={organizationKnowledgeBase?.documents}
@@ -464,6 +305,181 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
       />
     </>
   );
+}
+
+function KnowledgeIndexPanel({
+  profileId,
+  setError,
+}: {
+  profileId: string;
+  setError: (error: string | null) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [showIndex, setShowIndex] = useState(false);
+  const indexQuery = useQuery({
+    queryFn: () => client.getKnowledgeIndex(profileId),
+    queryKey: ["knowledge-index", profileId],
+    refetchInterval: 5000,
+  });
+  const indexMutation = useMutation({
+    mutationFn: (
+      action:
+        | "enable"
+        | "disable"
+        | "backfill"
+        | "retry"
+        | "rebuild"
+        | "reanalyze"
+    ) => client.changeKnowledgeIndex(profileId, action),
+    onError: (err) => setError(formatError(err)),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["knowledge-index", profileId],
+      });
+    },
+  });
+
+  return indexQuery.data ? (
+    <div className="mb-4 rounded-md border border-border px-4 py-3 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-medium">
+          Index: {indexQuery.data.status.replace("_", " ")} ·{" "}
+          {indexQuery.data.indexedCount}/{indexQuery.data.readyCount} ready
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            disabled={indexMutation.isPending}
+            onClick={() =>
+              indexMutation.mutate(
+                indexQuery.data!.enabled ? "disable" : "enable"
+              )
+            }
+            size="sm"
+            variant="outline"
+          >
+            {indexQuery.data.enabled ? "Turn off" : "Enable index"}
+          </Button>
+          {indexQuery.data.enabled ? (
+            <>
+              <Button
+                disabled={indexMutation.isPending}
+                onClick={() => indexMutation.mutate("backfill")}
+                size="sm"
+                variant="outline"
+              >
+                Analyze documents
+              </Button>
+              <Button
+                disabled={
+                  indexMutation.isPending ||
+                  indexQuery.data.status === "updating"
+                }
+                onClick={() => indexMutation.mutate("reanalyze")}
+                size="sm"
+                variant="outline"
+              >
+                Reanalyze
+              </Button>
+              <Button
+                disabled={
+                  indexMutation.isPending ||
+                  indexQuery.data.status === "updating" ||
+                  indexQuery.data.failed + indexQuery.data.pending === 0
+                }
+                onClick={() => indexMutation.mutate("retry")}
+                size="sm"
+                variant="outline"
+              >
+                Approve next batch
+              </Button>
+              <Button
+                disabled={indexMutation.isPending}
+                onClick={() => indexMutation.mutate("rebuild")}
+                size="sm"
+                variant="outline"
+              >
+                Rebuild index
+              </Button>
+              <Button
+                onClick={() => setShowIndex((value) => !value)}
+                size="sm"
+                variant="outline"
+              >
+                {showIndex ? "Close index" : "View index"}
+              </Button>
+            </>
+          ) : null}
+        </div>
+      </div>
+      <p className="mt-2 text-muted-foreground text-xs">
+        {indexQuery.data.provider ?? "No supported model"} · 4,000 input bytes
+        and 300 output tokens per document · six documents per batch ·{" "}
+        {indexQuery.data.pending} pending · {indexQuery.data.failed} need retry
+      </p>
+      <KnowledgeIndexPreview profileId={profileId} showIndex={showIndex} />
+    </div>
+  ) : null;
+}
+
+function KnowledgeIndexPreview({
+  profileId,
+  showIndex,
+}: {
+  profileId: string;
+  showIndex: boolean;
+}) {
+  const [indexTopic, setIndexTopic] = useState<string | undefined>();
+  const [indexOffset, setIndexOffset] = useState(0);
+  const indexPreviewQuery = useQuery({
+    enabled: showIndex,
+    queryFn: () => client.getKnowledgeIndex(profileId, indexTopic, indexOffset),
+    queryKey: ["knowledge-index", profileId, indexTopic, indexOffset],
+  });
+
+  return showIndex ? (
+    <div className="mt-3 border-border border-t pt-3">
+      {indexTopic ? (
+        <Button
+          onClick={() => {
+            setIndexTopic(undefined);
+            setIndexOffset(0);
+          }}
+          size="sm"
+          variant="ghost"
+        >
+          All topics
+        </Button>
+      ) : null}
+      {(indexTopic ? "" : (indexPreviewQuery.data?.content ?? ""))
+        .split("\n")
+        .filter((line) => line.startsWith("## "))
+        .map((line) => (
+          <Button
+            key={line}
+            onClick={() => {
+              setIndexTopic(line.slice(3));
+              setIndexOffset(0);
+            }}
+            size="sm"
+            variant="ghost"
+          >
+            {line.slice(3)}
+          </Button>
+        ))}
+      <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-xs">
+        {indexPreviewQuery.data?.content}
+      </pre>
+      {indexPreviewQuery.data?.nextOffset === undefined ? null : (
+        <Button
+          onClick={() => setIndexOffset(indexPreviewQuery.data!.nextOffset!)}
+          size="sm"
+          variant="outline"
+        >
+          Next page
+        </Button>
+      )}
+    </div>
+  ) : null;
 }
 
 function DuplicateKnowledgeDocumentDialog({
