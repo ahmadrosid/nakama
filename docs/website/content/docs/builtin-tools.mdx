@@ -491,6 +491,18 @@ Two handler types are supported, and both run as a subprocess per call rather th
 
 Neither handler inherits the server's full environment. The child process only gets `PATH` (to resolve the interpreter), `NAKAMA_CONFIG_DIR`, and `NAKAMA_WORKSPACE_ROOT` (the active profile workspace) — provider API keys and anything else in the server's environment are not visible to a tool. The child's working directory is the tool's own file, not the server's checkout, so relative file access stays scoped to `~/.nakama/tools/`.
 
+### Giving a tool an API key
+
+Some custom tools call a paid or private API. Nakama keeps that key out of chat, out of the model, and out of the tool's source.
+
+Org admins add the key in one of these places:
+
+- **Super Bot setup card** — when Super Bot proposes a tool that needs a key, the approval card asks for it.
+- **Configure card in chat** — shown when a tool runs without a saved key.
+- **Tool playground** — open the tool, enter the key under **API key**, then **Save**. Use **Replace** to rotate it.
+
+The tool reads the key from `NAKAMA_TOOL_API_KEY`. Each key belongs to one organization and one tool, is encrypted at rest, and is never shown again after saving. If a tool echoes the key in its output or errors, Nakama replaces it with `[REDACTED]`.
+
 ### Authoring a JavaScript tool
 
 A JavaScript tool is a `.js` file that exports a `run(input, context)` function. Nakama loads it through a small runner subprocess — you do not write a stdin/stdout harness yourself:

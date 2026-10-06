@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
-import { rm, writeFile } from "node:fs/promises";
+import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import {
+  getUserConfigPath,
+  parseIniWithSections,
+  writeParsedConfigIni,
+} from "@nakama/core";
 import {
   loadToolApiKey,
   resolveCustomToolModulePath,
@@ -129,6 +134,37 @@ if __name__ == "__main__":
       echo: "[REDACTED]",
       present: true,
     });
+  });
+
+  test("tool API keys are encrypted at rest and bound to their org", async () => {
+    const { configDir: dir } = await setupToolsDir();
+    configDir = dir;
+    await saveToolApiKey("org_a", "tool_x", "plain-secret-value");
+    expect(await readFile(getUserConfigPath(), "utf8")).not.toContain(
+      "plain-secret-value"
+    );
+    const keyFile = await stat(path.join(dir, "tool-credentials.key"));
+    expect((keyFile.mode % 0o1000).toString(8)).toBe("600");
+    expect(await loadToolApiKey("org_a", "tool_x")).toBe("plain-secret-value");
+
+    const parsed = parseIniWithSections(
+      await readFile(getUserConfigPath(), "utf8")
+    );
+    const [sectionA] = Object.keys(parsed.sections);
+    await saveToolApiKey("org_b", "tool_x", "org-b-value");
+    const afterB = parseIniWithSections(
+      await readFile(getUserConfigPath(), "utf8")
+    );
+    const sectionB = Object.keys(afterB.sections).find(
+      (name) => name !== sectionA
+    )!;
+    afterB.sections[sectionB] = parsed.sections[sectionA!]!;
+    await writeParsedConfigIni(afterB.global, afterB.sections);
+    await expect(loadToolApiKey("org_b", "tool_x")).rejects.toThrow();
+
+    afterB.sections[sectionB] = { api_key: "legacy-plain" };
+    await writeParsedConfigIni(afterB.global, afterB.sections);
+    expect(await loadToolApiKey("org_b", "tool_x")).toBe("legacy-plain");
   });
 
   test("a saved key reaches a tool registered without requiresApiKey", async () => {

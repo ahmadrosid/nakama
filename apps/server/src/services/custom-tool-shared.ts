@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
   JsonSchema,
@@ -7,7 +8,9 @@ import type {
   ToolSetupPlan,
 } from "@nakama/core";
 import {
+  ensureUserConfigDir,
   getCustomToolsDir,
+  getUserConfigDir,
   getUserConfigPath,
   NakamaApiError,
   parseIniWithSections,
@@ -65,12 +68,92 @@ async function readConfig() {
   }
 }
 
+/**
+ * Tool API keys are AES-256-GCM encrypted in config.ini. The encryption key
+ * lives in its own owner-only file, so a copy of config.ini alone does not
+ * reveal any tool key.
+ */
+const CREDENTIAL_KEY_FILE = "tool-credentials.key";
+
+async function readCredentialEncryptionKey(): Promise<Buffer> {
+  const keyPath = path.join(getUserConfigDir(), CREDENTIAL_KEY_FILE);
+  try {
+    return Buffer.from((await readFile(keyPath, "utf8")).trim(), "base64url");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+  await ensureUserConfigDir();
+  const key = randomBytes(32);
+  try {
+    await writeFile(keyPath, key.toString("base64url"), {
+      flag: "wx",
+      mode: 0o600,
+    });
+    return key;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      throw error;
+    }
+    return Buffer.from((await readFile(keyPath, "utf8")).trim(), "base64url");
+  }
+}
+
+async function encryptToolApiKey(
+  orgId: string,
+  apiKey: string
+): Promise<Record<string, string>> {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv(
+    "aes-256-gcm",
+    await readCredentialEncryptionKey(),
+    iv
+  );
+  // Binding the org stops a ciphertext copied into another org's section
+  // from decrypting there.
+  cipher.setAAD(Buffer.from(orgId, "utf8"));
+  const ciphertext = Buffer.concat([
+    cipher.update(apiKey, "utf8"),
+    cipher.final(),
+  ]);
+  return {
+    api_key_enc: Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString(
+      "base64url"
+    ),
+  };
+}
+
+async function decryptToolApiKey(
+  orgId: string,
+  credential: Record<string, string> | undefined
+): Promise<string | undefined> {
+  if (!credential?.api_key_enc) {
+    // Keys saved before encryption stay readable until the next save.
+    return credential?.api_key;
+  }
+  const encoded = Buffer.from(credential.api_key_enc, "base64url");
+  const decipher = createDecipheriv(
+    "aes-256-gcm",
+    await readCredentialEncryptionKey(),
+    encoded.subarray(0, 12)
+  );
+  decipher.setAAD(Buffer.from(orgId, "utf8"));
+  decipher.setAuthTag(encoded.subarray(12, 28));
+  return Buffer.concat([
+    decipher.update(encoded.subarray(28)),
+    decipher.final(),
+  ]).toString("utf8");
+}
+
 export async function loadToolApiKey(
   orgId: string,
   toolId: string
 ): Promise<string | undefined> {
-  return (await readConfig()).sections[credentialSection(orgId, toolId)]
-    ?.api_key;
+  return decryptToolApiKey(
+    orgId,
+    (await readConfig()).sections[credentialSection(orgId, toolId)]
+  );
 }
 
 let credentialWrite: Promise<void> = Promise.resolve();
@@ -94,8 +177,9 @@ export function saveToolApiKey(
 ): Promise<void> {
   const apiKey = validateApiKey(value);
   const write = credentialWrite.then(async () => {
+    const encrypted = await encryptToolApiKey(orgId, apiKey);
     const parsed = await readConfig();
-    parsed.sections[credentialSection(orgId, toolId)] = { api_key: apiKey };
+    parsed.sections[credentialSection(orgId, toolId)] = encrypted;
     await writeParsedConfigIni(parsed.global, parsed.sections);
   });
   credentialWrite = write.catch(() => undefined);
@@ -150,9 +234,8 @@ export function approveToolSetup(
       return plan;
     }
     if (plan.requiresApiKey) {
-      parsed.sections[credentialSection(orgId, setupId)] = {
-        api_key: validateApiKey(input.apiKey),
-      };
+      parsed.sections[credentialSection(orgId, setupId)] =
+        await encryptToolApiKey(orgId, validateApiKey(input.apiKey));
     }
     const approved: ToolSetupPlan = {
       ...plan,
@@ -180,7 +263,7 @@ export function completeToolSetup(
     const staged = credentialSection(orgId, plan.id);
     if (plan.requiresApiKey) {
       const credential = parsed.sections[staged];
-      if (!credential?.api_key) {
+      if (!(credential?.api_key_enc || credential?.api_key)) {
         throw new Error(
           "The API key is missing. Configure the tool before using it."
         );
