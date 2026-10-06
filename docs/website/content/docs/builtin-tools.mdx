@@ -501,6 +501,8 @@ Org admins add the key in one of these places:
 - **Configure card in chat** — shown when a tool runs without a saved key.
 - **Tool playground** — open the tool, enter the key under **API key**, then **Save**. Use **Replace** to rotate it.
 
+![The tool playground with a saved API key and a successful run](/screenshots/tool-playground-api-key.png)
+
 The tool reads the key from `NAKAMA_TOOL_API_KEY`. Each key belongs to one organization and one tool, is encrypted at rest, and is never shown again after saving. If a tool echoes the key in its output or errors, Nakama replaces it with `[REDACTED]`.
 
 ### Authoring a JavaScript tool
