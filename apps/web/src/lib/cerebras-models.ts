@@ -3,7 +3,7 @@ export interface CerebrasApiPricing {
   prompt?: string;
 }
 
-export interface CerebrasApiCapabilities {
+interface CerebrasApiCapabilities {
   function_calling?: boolean;
   json_mode?: boolean;
   reasoning?: boolean;
@@ -149,7 +149,7 @@ export function normalizeCerebrasModels(
   return data.map(normalizeCerebrasModel).sort(compareCerebrasModelRows);
 }
 
-export function compareCerebrasModelRows(
+function compareCerebrasModelRows(
   a: CerebrasModelRow,
   b: CerebrasModelRow
 ): number {

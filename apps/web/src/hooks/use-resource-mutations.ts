@@ -943,6 +943,25 @@ export function useUploadKnowledgeBaseDocumentMutation() {
   });
 }
 
+export function useImportKnowledgeBaseZipMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      profileId,
+      zipBase64,
+    }: {
+      profileId: string;
+      zipBase64: string;
+    }) => client.importKnowledgeBaseZip(profileId, zipBase64),
+    onSettled: async (_data, _error, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.knowledgeBase.profile(variables.profileId),
+      });
+    },
+  });
+}
+
 export function useAttachSharedKnowledgeBaseDocumentMutation() {
   const queryClient = useQueryClient();
 

@@ -22,4 +22,15 @@ describe("splitThinkingLines", () => {
       "Third sentence closes the thought.",
     ]);
   });
+
+  test("shows adjacent bold headings as separate plain text steps", () => {
+    expect(
+      splitThinkingLines(
+        "**Synthesizing key lessons summary****Summarizing growth and focus lessons**"
+      )
+    ).toEqual([
+      "Synthesizing key lessons summary",
+      "Summarizing growth and focus lessons",
+    ]);
+  });
 });

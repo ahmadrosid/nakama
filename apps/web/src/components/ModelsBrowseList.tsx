@@ -19,7 +19,7 @@ import {
   type SelectedProvider,
 } from "@/lib/models";
 
-export type BrowseSelectHandler = (
+type BrowseSelectHandler = (
   provider: SelectedProvider,
   modelId: string,
   row: ModelsDevRow

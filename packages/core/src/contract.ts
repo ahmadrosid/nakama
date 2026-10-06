@@ -71,6 +71,8 @@ export interface AutomationRunRecord {
   error: string | null;
   id: string;
   output: string | null;
+  /** Chat transcript, updated live and retained when the run completes. */
+  progress?: ChatMessage[];
   /** Present when the API resolves read state for the current user. */
   read?: boolean;
   startedAt: string;
@@ -313,10 +315,6 @@ export interface CodingHarnessSettingsResponse {
   providerPassthroughEnabled: boolean;
 }
 
-export interface UpdateCodingHarnessSettingsRequest {
-  providerPassthroughEnabled: boolean;
-}
-
 export interface TokenOptimizationTurnArm {
   arm: string;
   /** Turns whose token count came from an estimate, not the provider. */
@@ -489,16 +487,12 @@ export interface AuthUserResponse {
   backupCodesEnabled?: boolean;
   email: string;
   id: string;
-  /**
-   * What this credential may do, not what its owner may do. An API key minted
-   * by a platform admin is de-privileged, so it reports false here.
-   */
   isPlatformAdmin?: boolean;
   mfaEnabled?: boolean;
   mfaEnrolled?: boolean;
   mfaRequired?: boolean;
-  /** Which credential answered, which is what explains the flag above. */
-  mode?: "api-key" | "browser-session" | "local-token";
+  /** Credential used for this request. */
+  mode?: "browser-session" | "local-token";
   name?: string | null;
   orgId?: string | null;
   passkeyEnabled?: boolean;
@@ -763,36 +757,6 @@ export interface RevokeBrowserSessionsResponse {
   revoked: number;
 }
 
-export interface ApiKeySummary {
-  createdAt: string;
-  environment: "live" | "test";
-  expiresAt: string | null;
-  id: string;
-  keyPrefix: string;
-  lastUsedAt: string | null;
-  name: string;
-  revokedAt: string | null;
-}
-
-export interface CreateApiKeyRequest {
-  expiresAt?: string | null;
-  name: string;
-}
-
-export interface CreateApiKeyResponse {
-  key: ApiKeySummary;
-  secret: string;
-}
-
-export interface ListApiKeysResponse {
-  keys: ApiKeySummary[];
-}
-
-export interface RotateApiKeyResponse {
-  key: ApiKeySummary;
-  secret: string;
-}
-
 export interface OrgMemoryResponse {
   content: string;
 }
@@ -1029,27 +993,7 @@ export interface ResetPasswordRequest {
   token: string;
 }
 
-export interface ChannelOrgMappingSummary {
-  channel: ChannelType;
-  channelUserId: string;
-  createdAt: string;
-  orgId: string;
-  userId: string;
-}
-
-export interface CreateChannelOrgMappingRequest {
-  channel: ChannelType;
-  channelUserId: string;
-  userId: string;
-}
-
-export interface ListChannelOrgMappingsResponse {
-  mappings: ChannelOrgMappingSummary[];
-}
-
 export interface CreateSessionRequest {
-  /** Stable end-user identifier supplied by a trusted backend using an API key. */
-  appUserId?: string;
   channel: AgentChannel;
   codingWorkspaceRoot?: string;
   /**
@@ -1462,10 +1406,6 @@ export interface ListWorkflowsResponse {
   workflows: StoredWorkflow[];
 }
 
-export interface WorkflowResponse {
-  workflow: StoredWorkflow;
-}
-
 export interface CreateWorkflowRequest {
   description: string;
   enabled?: boolean;
@@ -1746,7 +1686,10 @@ export interface SendErrorTrackingTestResponse {
   delivered: boolean;
 }
 
-export type NotificationDestinationChannel = "telegram";
+export type NotificationDestinationChannel =
+  | "telegram"
+  | "discord"
+  | "whatsapp";
 
 export type NotificationWebhookLevel = "info" | "success" | "warning" | "error";
 
@@ -1756,15 +1699,26 @@ export interface TelegramNotificationDestinationConfig {
   topicId?: number | null;
 }
 
-export interface NotificationDestinationSummary {
-  channel: NotificationDestinationChannel;
+export interface DiscordNotificationDestinationConfig {
+  channelId: string;
+  profileId: string;
+}
+
+export interface WhatsAppNotificationDestinationConfig {
+  profileId: string;
+}
+
+export type NotificationDestinationSummary = {
   createdAt: string;
   id: string;
   name: string;
-  telegram: TelegramNotificationDestinationConfig;
   updatedAt: string;
   webhookPath: string;
-}
+} & (
+  | { channel: "telegram"; telegram: TelegramNotificationDestinationConfig }
+  | { channel: "discord"; discord: DiscordNotificationDestinationConfig }
+  | { channel: "whatsapp"; whatsapp: WhatsAppNotificationDestinationConfig }
+);
 
 export interface NotificationDestinationWithSecret {
   apiKey: string;
@@ -1775,16 +1729,21 @@ export interface ListNotificationDestinationsResponse {
   destinations: NotificationDestinationSummary[];
 }
 
-export interface CreateNotificationDestinationRequest {
-  channel: NotificationDestinationChannel;
+export type CreateNotificationDestinationRequest = {
   name: string;
-  telegram: TelegramNotificationDestinationConfig;
-}
+} & (
+  | { channel: "telegram"; telegram: TelegramNotificationDestinationConfig }
+  | { channel: "discord"; discord: DiscordNotificationDestinationConfig }
+  | { channel: "whatsapp"; whatsapp: WhatsAppNotificationDestinationConfig }
+);
 
-export interface UpdateNotificationDestinationRequest {
+export type UpdateNotificationDestinationRequest = {
   name: string;
-  telegram: TelegramNotificationDestinationConfig;
-}
+} & (
+  | { channel?: "telegram"; telegram: TelegramNotificationDestinationConfig }
+  | { channel: "discord"; discord: DiscordNotificationDestinationConfig }
+  | { channel: "whatsapp"; whatsapp: WhatsAppNotificationDestinationConfig }
+);
 
 export interface RegenerateNotificationDestinationKeyResponse {
   apiKey: string;
@@ -1834,15 +1793,6 @@ export interface SendEmailTestResponse {
   to: string;
 }
 
-export type CodingAgentProviderPassthroughSummary = {
-  active: boolean;
-  configured: boolean;
-  compatible: boolean;
-  providerLabel: string | null;
-  model: string | null;
-  message?: string | null;
-};
-
 export interface AgentBrowserStatusResponse {
   installCommand: string;
   installed: boolean;
@@ -1868,6 +1818,7 @@ export type AgentBrowserInstallEvent =
 
 export interface WhatsAppSettingsResponse {
   allowedPhones: string[];
+  allowUnpairedGroupMembers: boolean;
   configured: boolean;
   pairedJid: string | null;
   pairingCode: string | null;
@@ -1878,6 +1829,7 @@ export interface WhatsAppSettingsResponse {
 
 export interface UpdateWhatsAppSettingsRequest {
   allowedPhones?: string;
+  allowUnpairedGroupMembers?: boolean;
   phoneNumber?: string;
   profileId?: string;
   requireGroupMention?: boolean;
@@ -2035,7 +1987,7 @@ export interface DiscoverModelsRequest {
   baseUrl?: string;
   hostMode?: OllamaHostMode;
   /** When set, discovery uses the matching remote fetch path (Ollama includes `/api/tags` fallback). */
-  provider?: "ollama" | "openai_compatible" | "fireworks";
+  provider?: "ollama" | "openai_compatible" | "fireworks" | "netra";
   providerId?: string;
 }
 
@@ -2477,8 +2429,6 @@ export interface ListWorkspaceFilesResponse {
 }
 
 export interface ListArtifactsOptions {
-  /** Scopes the listing to one end user's artifacts, when the caller names one. */
-  appUserId?: string | null;
   folder?: string;
   limit?: number;
   offset?: number;
@@ -2594,6 +2544,31 @@ export interface UploadKnowledgeBaseResponse {
   profileId: string;
 }
 
+export interface ImportKnowledgeBaseZipRequest {
+  zipBase64: string;
+}
+
+export interface ImportKnowledgeBaseZipEntry {
+  documentId?: string;
+  filename: string;
+  match?: "content_hash" | "name_size";
+  outcome: "created" | "duplicate" | "unsupported" | "error";
+  reason?: string;
+  status?: KnowledgeBaseDocumentStatus;
+}
+
+export interface ImportKnowledgeBaseZipResponse {
+  entries: ImportKnowledgeBaseZipEntry[];
+  profileId: string;
+  totals: {
+    created: number;
+    duplicate: number;
+    unsupported: number;
+    error: number;
+    failedExtraction: number;
+  };
+}
+
 export interface DeleteKnowledgeBaseResponse {
   deleted: boolean;
   documentId: string;
@@ -2630,6 +2605,7 @@ export type ProviderName =
   | "openrouter"
   | "gemini"
   | "deepseek"
+  | "netra"
   | "doubao"
   | "mistral"
   | "perplexity"

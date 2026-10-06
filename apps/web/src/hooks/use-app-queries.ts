@@ -348,7 +348,7 @@ const thinkingSettings = createSettingsHooks({
   queryFn: () => client.getThinkingSettings(),
   queryKey: queryKeys.thinkingSettings,
 });
-export const thinkingSettingsQueryOptions = thinkingSettings.queryOptions;
+const thinkingSettingsQueryOptions = thinkingSettings.queryOptions;
 export const useThinkingSettings = thinkingSettings.useSettings;
 export const useSaveThinkingSettings = thinkingSettings.useSave;
 export function buildThinkingSettingsPayload(
@@ -389,37 +389,37 @@ export function useSendErrorTrackingTest() {
   return useMutation({ mutationFn: () => client.sendErrorTrackingTest() });
 }
 
-export const healthQueryOptions = queryOptions({
+const healthQueryOptions = queryOptions({
   queryFn: () => client.health(),
   queryKey: queryKeys.health,
   staleTime: defaultStaleTime,
 });
 
-export const modelsQueryOptions = queryOptions({
+const modelsQueryOptions = queryOptions({
   queryFn: () => client.getModels(),
   queryKey: queryKeys.models,
   staleTime: defaultStaleTime,
 });
 
-export const profilesQueryOptions = queryOptions({
+const profilesQueryOptions = queryOptions({
   queryFn: async () => (await client.listProfiles()).profiles,
   queryKey: queryKeys.profiles.all,
   staleTime: defaultStaleTime,
 });
 
-export const toolsQueryOptions = queryOptions({
+const toolsQueryOptions = queryOptions({
   queryFn: async () => (await client.listTools()).tools,
   queryKey: queryKeys.tools.all,
   staleTime: defaultStaleTime,
 });
 
-export const mcpServersQueryOptions = queryOptions({
+const mcpServersQueryOptions = queryOptions({
   queryFn: async () => (await client.listMcpServers()).servers,
   queryKey: queryKeys.mcp.all,
   staleTime: defaultStaleTime,
 });
 
-export const skillsQueryOptions = queryOptions({
+const skillsQueryOptions = queryOptions({
   queryFn: async () => (await client.listSkills()).skills,
   queryKey: queryKeys.skills.all,
   staleTime: defaultStaleTime,
@@ -432,7 +432,7 @@ export const automationsQueryOptions = queryOptions({
   staleTime: defaultStaleTime,
 });
 
-export function profileQueryOptions(profileId: string) {
+function profileQueryOptions(profileId: string) {
   return queryOptions({
     enabled: Boolean(profileId),
     queryFn: async () => (await client.getProfile(profileId)).profile,
@@ -484,8 +484,16 @@ export function useModelsQuery(options?: { enabled?: boolean }) {
   });
 }
 
-export function useProfilesQuery() {
-  return useQuery(profilesQueryOptions);
+export function useProfilesQuery(orgId?: string | null) {
+  return useQuery({
+    enabled: orgId === undefined || Boolean(orgId),
+    queryFn: async () => (await client.listProfiles()).profiles,
+    queryKey:
+      orgId === undefined
+        ? queryKeys.profiles.all
+        : [...queryKeys.profiles.all, orgId],
+    staleTime: defaultStaleTime,
+  });
 }
 
 export function useProfileQuery(profileId: string | null) {
@@ -511,7 +519,7 @@ export function useSkillsQuery() {
   return useQuery(skillsQueryOptions);
 }
 
-export function skillQueryOptions(skillId: string) {
+function skillQueryOptions(skillId: string) {
   return queryOptions({
     enabled: Boolean(skillId),
     queryFn: async () => (await client.getSkill(skillId)).skill,
@@ -543,7 +551,7 @@ export function useMcpServerDetailQuery(serverId: string | null) {
   });
 }
 
-export function toolQueryOptions(toolId: string) {
+function toolQueryOptions(toolId: string) {
   return queryOptions({
     enabled: Boolean(toolId),
     queryFn: async () => (await client.getTool(toolId)).tool,
@@ -559,7 +567,7 @@ export function useToolQuery(toolId: string | null) {
   });
 }
 
-export const providersQueryOptions = queryOptions({
+const providersQueryOptions = queryOptions({
   queryFn: () => client.listProviders(),
   queryKey: queryKeys.providers,
   staleTime: defaultStaleTime,

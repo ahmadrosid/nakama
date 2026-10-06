@@ -12,7 +12,6 @@ import { Spinner } from "@nakama/ui/spinner";
 import {
   type ChangeEvent,
   type FormEvent,
-  useEffect,
   useMemo,
   useReducer,
   useRef,
@@ -97,17 +96,6 @@ function profileCreateFormReducer(
   }
 }
 
-function slugifyProfileName(name: string): string {
-  return (
-    name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 64) || "profile"
-  );
-}
-
 export function ProfileCreateDialog({
   open,
   tools,
@@ -148,7 +136,6 @@ function ProfileCreateDialogContent({
     profileCreateFormReducer,
     initialProfileCreateFormState
   );
-  const profileIdEditedRef = useRef(false);
   const avatarFileRef = useRef<File | null>(null);
 
   const busy =
@@ -157,29 +144,15 @@ function ProfileCreateDialogContent({
     assignToolMutation.isPending;
   const profileIdTrimmed = form.profileId.trim();
   const profileIdValid =
-    Boolean(profileIdTrimmed) && PROFILE_ID_PATTERN.test(profileIdTrimmed);
+    !profileIdTrimmed || PROFILE_ID_PATTERN.test(profileIdTrimmed);
   const profileIdHasValue = form.profileId.length > 0;
-  const profileIdHelpText =
-    !profileIdHasValue || profileIdValid
-      ? "From name. Letters, numbers, `_`, `-` only."
-      : "Agent id must start with a letter or number and only use letters, numbers, `_`, or `-`.";
+  const profileIdHelpText = profileIdValid
+    ? "Optional. Letters, numbers, `_`, `-` only."
+    : "Agent id must start with a letter or number and only use letters, numbers, `_`, or `-`.";
   const toolIdSet = useMemo(() => new Set(form.toolIds), [form.toolIds]);
   const availableTools = tools.filter((tool) => !toolIdSet.has(tool.id));
   const selectableTools = availableTools;
   const selectedTools = tools.filter((tool) => toolIdSet.has(tool.id));
-
-  useEffect(() => {
-    if (profileIdEditedRef.current) {
-      return;
-    }
-
-    dispatch({
-      type: "patch",
-      values: {
-        profileId: form.name.trim() ? slugifyProfileName(form.name) : "",
-      },
-    });
-  }, [form.name]);
 
   function handleAvatarSelected(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -233,7 +206,7 @@ function ProfileCreateDialogContent({
 
     try {
       const response = await createMutation.mutateAsync({
-        id: profileIdTrimmed,
+        id: profileIdTrimmed || undefined,
         name: form.name.trim(),
         systemPrompt: defaultCreatePrompt,
       });
@@ -283,7 +256,7 @@ function ProfileCreateDialogContent({
         <DialogHeader className="gap-2">
           <DialogTitle>Create agent</DialogTitle>
           <DialogDescription>
-            Set name and agent id.
+            Set a name. Agent id is optional.
             {onAskSuperBot ? (
               <>
                 {" "}
@@ -331,7 +304,6 @@ function ProfileCreateDialogContent({
               type: "patch",
               values: { profileId: value, submitError: null },
             });
-            profileIdEditedRef.current = true;
           }}
           onRemoveTool={handleRemoveTool}
           onToolSelect={handleToolSelect}

@@ -10,13 +10,13 @@ import { queryKeys } from "@/lib/query-keys";
 
 const timezoneCatalogStaleTime = 1000 * 60 * 60;
 
-export const timezoneCatalogQueryOptions = queryOptions({
+const timezoneCatalogQueryOptions = queryOptions({
   queryFn: () => client.listTimezones(),
   queryKey: queryKeys.timezones.catalog,
   staleTime: timezoneCatalogStaleTime,
 });
 
-export const userTimezoneQueryOptions = queryOptions({
+const userTimezoneQueryOptions = queryOptions({
   queryFn: () => client.getTimezone(),
   queryKey: queryKeys.timezones.settings,
   staleTime: timezoneCatalogStaleTime,

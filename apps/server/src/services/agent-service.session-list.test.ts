@@ -124,7 +124,6 @@ describe("listSessions pages the merged history", () => {
         "profile_default",
         CHANNELS,
         ACCESS,
-        undefined,
         { cursor, limit: 2 }
       );
       paged.push(...page.sessions.map((session) => session.id));
@@ -140,14 +139,10 @@ describe("listSessions pages the merged history", () => {
   test("a page asked for after a chat moved across its cursor is stale", async () => {
     const { db, service } = await seedHistory();
     const listPage = (cursor?: string) =>
-      service.listSessions(
-        ORG_ID,
-        "profile_default",
-        CHANNELS,
-        ACCESS,
-        undefined,
-        { cursor, limit: 2 }
-      );
+      service.listSessions(ORG_ID, "profile_default", CHANNELS, ACCESS, {
+        cursor,
+        limit: 2,
+      });
     const first = await listPage();
     const all = await service.listSessions(
       ORG_ID,
@@ -180,7 +175,6 @@ describe("listSessions pages the merged history", () => {
       "profile_default",
       CHANNELS,
       ACCESS,
-      undefined,
       { limit: 5 }
     );
     expect(page.sessions).toHaveLength(5);
@@ -190,14 +184,10 @@ describe("listSessions pages the merged history", () => {
   test("a cursor that is not ours is a 400", async () => {
     const { service } = await seedHistory();
     await expect(
-      service.listSessions(
-        ORG_ID,
-        "profile_default",
-        CHANNELS,
-        ACCESS,
-        undefined,
-        { cursor: "not-a-cursor", limit: 2 }
-      )
+      service.listSessions(ORG_ID, "profile_default", CHANNELS, ACCESS, {
+        cursor: "not-a-cursor",
+        limit: 2,
+      })
     ).rejects.toMatchObject({ status: 400 });
   });
 
@@ -280,7 +270,6 @@ describe("listSessions searches titles and message text", () => {
           CHANNELS,
           ACCESS,
           undefined,
-          undefined,
           query
         )
       ).sessions.map((session) => session.id);
@@ -311,7 +300,6 @@ describe("listSessions searches titles and message text", () => {
           "profile_default",
           CHANNELS,
           ACCESS,
-          undefined,
           undefined,
           query
         )
@@ -345,7 +333,6 @@ describe("listSessions searches titles and message text", () => {
         "profile_default",
         CHANNELS,
         ACCESS,
-        undefined,
         { cursor, limit: 1 },
         "i"
       );
@@ -358,7 +345,6 @@ describe("listSessions searches titles and message text", () => {
       "profile_default",
       CHANNELS,
       ACCESS,
-      undefined,
       undefined,
       "i"
     );

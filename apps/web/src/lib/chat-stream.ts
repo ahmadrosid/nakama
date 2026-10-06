@@ -18,7 +18,7 @@ import {
 import { addChatUsage } from "@/lib/chat-usage";
 import { createClientId } from "@/lib/client-id";
 
-export function formatBashToolResult(result: unknown): string | null {
+function formatBashToolResult(result: unknown): string | null {
   if (typeof result !== "object" || result === null) {
     return null;
   }
@@ -51,7 +51,7 @@ export function formatBashToolResult(result: unknown): string | null {
   return parts.length > 0 ? parts.join("\n\n") : null;
 }
 
-export function formatDefaultToolResult(result: unknown): string | null {
+function formatDefaultToolResult(result: unknown): string | null {
   if (result == null) {
     return null;
   }
@@ -78,6 +78,17 @@ export function formatToolResult(
   tool: string | undefined,
   result: unknown
 ): string | null {
+  if (
+    tool === "read_file" &&
+    typeof result === "object" &&
+    result !== null &&
+    !("error" in result) &&
+    "content" in result &&
+    typeof result.content === "string"
+  ) {
+    return result.content.replace(/\r\n/g, "\n").trim() || null;
+  }
+
   if (tool === "bash") {
     return formatBashToolResult(result);
   }
@@ -171,7 +182,7 @@ export function parseProfileCreatedResult(
   return profile as CreatedProfileSummary;
 }
 
-export type SubAgentToolStatus = "success" | "fail" | "timeout";
+type SubAgentToolStatus = "success" | "fail" | "timeout";
 
 export interface ParsedSubAgentResult {
   error?: string;
@@ -298,7 +309,7 @@ export function formatSubAgentToolResult(result: unknown): string | null {
   return null;
 }
 
-export function formatToolSummary(
+function formatToolSummary(
   tool: string | undefined,
   input?: Record<string, unknown>
 ): string | null {
@@ -371,8 +382,8 @@ export function formatToolActionLabel(
     return "Listed workflows";
   }
 
-  if (tool === "bash" && summary) {
-    return `Ran ${truncateDisplay(summary.split("\n")[0] ?? summary, 96)}`;
+  if (tool === "bash") {
+    return "Ran command";
   }
 
   if (
@@ -395,16 +406,16 @@ export function formatToolActionLabel(
   }
 
   if (tool === "search_files") {
-    const query = typeof input?.query === "string" ? input.query.trim() : null;
     const path = typeof input?.path === "string" ? basename(input.path) : null;
+    return path ? `Searched ${path}` : "Searched files";
+  }
 
-    if (query && path) {
-      return `Searched ${path} · ${truncateDisplay(query, 48)}`;
-    }
+  if (tool === "knowledge_base_search") {
+    return "Searched knowledge base";
+  }
 
-    if (query) {
-      return `Searched · ${truncateDisplay(query, 64)}`;
-    }
+  if (tool === "org_memory_search") {
+    return "Searched organization memory";
   }
 
   if (summary) {
@@ -507,9 +518,7 @@ export function deriveChatStatus(
 }
 
 /** Messages after the latest user message (current assistant turn). */
-export function latestAssistantTurnMessages(
-  messages: ChatListItem[]
-): ChatListItem[] {
+function latestAssistantTurnMessages(messages: ChatListItem[]): ChatListItem[] {
   return messages.slice(
     messages.findLastIndex((message) => message?.role === "user") + 1
   );

@@ -17,6 +17,7 @@ import {
 } from "../testing/plugin-package-fixture";
 import { AgentService } from "./agent-service";
 import { PluginService } from "./plugin-service";
+import { sessionTurnRegistry } from "./session-turn-registry";
 import { SkillsService } from "./skills-service";
 import {
   pluginActorFromContext,
@@ -156,7 +157,9 @@ describe("AgentService plugin capabilities", () => {
     expect(await readdir(copyRoot)).toEqual(["keep.txt"]);
     const started = await agent.beginSessionTurn(sessionId, ORG_ID);
     expect(started).toBe(true);
-    const next = await agent.resolveSession(sessionId, ORG_ID);
+    const next = await agent.resolveSession(sessionId, ORG_ID).finally(() => {
+      sessionTurnRegistry.cancelTurn(sessionId);
+    });
     expect(next).not.toBe(first);
 
     const after = await resolveProfileStoredTools(

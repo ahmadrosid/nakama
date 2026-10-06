@@ -269,7 +269,9 @@ function createApp() {
       createProvider: record("createProvider"),
       deleteProvider: record("deleteProvider"),
       discoverModels: record("discoverModels"),
-      getProfile: async () => ({ profile: { id: "default" } }),
+      getProfile: async (_orgId: string, profileId: string) => ({
+        profile: { id: "default", isSuper: profileId === "super_bot" },
+      }),
       listProfiles: async () => ({ profiles: [{ id: "default" }] }),
       sendErrorTrackingTest: record("sendErrorTrackingTest"),
       setComposioSettings: record("setComposioSettings"),
@@ -377,6 +379,20 @@ describe("install-wide settings writes require a platform admin", () => {
     expect(response.status).not.toBe(403);
     expect(calls).toEqual(["updateProvider"]);
   });
+
+  for (const channel of ["telegram", "discord", "whatsapp"]) {
+    test(`an admin cannot connect ${channel} to Super Bot`, async () => {
+      const { app, calls, session } = await login("admin", true);
+      const response = await callRoute(app, session, {
+        body: { botToken: "token" },
+        method: "PUT",
+        path: `/v1/settings/${channel}?profileId=super_bot`,
+      });
+
+      expect(response.status).toBe(400);
+      expect(calls).toEqual([]);
+    });
+  }
 
   test("an org admin can still change org-scoped Telegram settings", async () => {
     const { app, calls, session } = await login("admin");

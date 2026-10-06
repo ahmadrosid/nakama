@@ -11,6 +11,7 @@ import { EventEmitter } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { deflateSync } from "node:zlib";
 import * as baileys from "@whiskeysockets/baileys";
 import processMessage from "@whiskeysockets/baileys/lib/Utils/process-message.js";
 import { usePrivateMultiFileAuthState } from "./auth-state";
@@ -53,9 +54,9 @@ const createSocket = mock((_config: baileys.UserFacingSocketConfig) => {
 
 mock.module("@whiskeysockets/baileys", () => ({
   ...baileys,
-  fetchLatestBaileysVersion: async () => ({
-    version: [2, 3000, 1_023_223_821],
-  }),
+  fetchLatestBaileysVersion: async () => {
+    throw new Error("GitHub version lookup is unavailable");
+  },
   makeWASocket: createSocket,
 }));
 
@@ -212,6 +213,199 @@ describe("WhatsApp socket reconnect", () => {
       process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
     }
     await rm(tempConfigDir, { force: true, recursive: true });
+  });
+
+  test("preserves identity sync through pairing and reconnect without importing history", async () => {
+    // Baileys' LID cache schedules TTL timers; do not run those immediately.
+    timeoutSpy.mockRestore();
+    const onMessage = mock();
+    const onQr = mock();
+    const onConnected = mock();
+    const handle = await createWhatsAppSocket({ onConnected, onMessage, onQr });
+    await handle.start();
+    emit(0, { qr: "private-qr" });
+    expect(onQr).toHaveBeenCalledWith("private-qr");
+    const config = createSocket.mock.calls[0]![0];
+    config.auth!.creds.me = { id: "123@s.whatsapp.net", lid: "456@lid" };
+    await sockets[0]!.ev.listeners("connection.update")[0]!({
+      connection: "open",
+    });
+    expect(onConnected).toHaveBeenCalledWith({
+      id: "123@s.whatsapp.net",
+      lid: "456@lid",
+    });
+
+    const types = baileys.proto.HistorySync.HistorySyncType;
+    const logger = createBaileysLogger();
+    const auth = config.auth!;
+    auth.keys = baileys.addTransactionCapability(
+      auth.keys,
+      logger,
+      baileys.DEFAULT_CONNECTION_CONFIG.transactionOpts
+    );
+    const repository = config.makeSignalRepository!(auth, logger);
+    try {
+      for (const syncType of [
+        types.INITIAL_BOOTSTRAP,
+        types.RECENT,
+        types.PUSH_NAME,
+        types.NON_BLOCKING_DATA,
+        types.INITIAL_STATUS_V3,
+      ]) {
+        expect(config.shouldSyncHistoryMessage!({ syncType })).toBe(true);
+        await processMessage(
+          {
+            key: {
+              fromMe: true,
+              id: `sync-${syncType}`,
+              remoteJid: auth.creds.me!.id,
+            },
+            message: {
+              protocolMessage: {
+                historySyncNotification: {
+                  initialHistBootstrapInlinePayload: deflateSync(
+                    baileys.proto.HistorySync.encode({
+                      conversations: [
+                        {
+                          id: "789@lid",
+                          messages: [{ message: SAMPLE_UPSERT.messages[0] }],
+                        },
+                      ],
+                      phoneNumberToLidMappings: [
+                        {
+                          lidJid: `${800 + syncType}@lid`,
+                          pnJid: `${900 + syncType}@s.whatsapp.net`,
+                        },
+                      ],
+                      syncType,
+                    }).finish()
+                  ),
+                  syncType,
+                },
+                type: baileys.proto.Message.ProtocolMessage.Type
+                  .HISTORY_SYNC_NOTIFICATION,
+              },
+            },
+          },
+          {
+            creds: auth.creds,
+            ev: sockets[0]!.ev as unknown as baileys.BaileysEventEmitter,
+            getMessage: async () => undefined,
+            keyStore: auth.keys as baileys.SignalKeyStoreWithTransaction,
+            options: {},
+            shouldProcessHistoryMsg: config.shouldSyncHistoryMessage!({
+              syncType,
+            }),
+            signalRepository: repository,
+          }
+        );
+        expect(
+          await repository.lidMapping.getLIDForPN(
+            `${900 + syncType}@s.whatsapp.net`
+          )
+        ).toBe(`${800 + syncType}@lid`);
+      }
+    } finally {
+      repository.close?.();
+    }
+    expect(onMessage).not.toHaveBeenCalled();
+    await sockets[0]!.ev.listeners("connection.update")[0]!(TIMEOUT_CLOSE);
+    for (const [socketConfig] of createSocket.mock.calls) {
+      expect(socketConfig.syncFullHistory).toBe(false);
+      for (const syncType of [
+        types.FULL,
+        types.ON_DEMAND,
+        null,
+        undefined,
+        999,
+      ]) {
+        expect(socketConfig.shouldSyncHistoryMessage!({ syncType })).toBe(
+          false
+        );
+      }
+      expect(
+        socketConfig.shouldSyncHistoryMessage!({
+          syncType: types.INITIAL_BOOTSTRAP,
+        })
+      ).toBe(true);
+    }
+    await sockets[1]!.ev.listeners("connection.update")[0]!({
+      connection: "open",
+    });
+    expect(onConnected).toHaveBeenCalledTimes(2);
+    expect(createSocket).toHaveBeenCalledTimes(2);
+  });
+
+  test.each([
+    ["QR refs attempts ended", 408, true],
+    ["Timed Out", 408, true],
+    ["Connection was lost", 408, true],
+    ["Stream Errored (restart required)", 515, true],
+    ["Logged Out", 401, false],
+  ])(
+    "reports safe disconnect diagnostics for %s",
+    async (message, code, reconnect) => {
+      const onDisconnected = mock();
+      const handle = await createWhatsAppSocket({
+        onDisconnected,
+        onMessage: async () => {},
+      });
+      await handle.start();
+      emit(0, {
+        connection: "close",
+        lastDisconnect: { error: { message, output: { statusCode: code } } },
+      });
+      await flush();
+      const line = String(logSpy.mock.calls[0]![0]);
+      const diagnostic = JSON.parse(line.slice(line.indexOf("{")));
+      expect(diagnostic).toEqual({
+        cause: null,
+        code,
+        message,
+        reconnect,
+        timestamp: expect.any(String),
+      });
+      expect(Number.isFinite(Date.parse(diagnostic.timestamp))).toBe(true);
+      expect(onDisconnected).toHaveBeenCalledTimes(1);
+      expect(createSocket).toHaveBeenCalledTimes(reconnect ? 2 : 1);
+    }
+  );
+
+  test("redacts arbitrary error payloads but preserves safe transport causes", async () => {
+    const handle = await createWhatsAppSocket({ onMessage: async () => {} });
+    await handle.start();
+    const secret =
+      "qr-payload auth-token private-message 123@s.whatsapp.net\nforged-log";
+    for (const field of ["cause", "data"]) {
+      emit(sockets.length - 1, {
+        connection: "close",
+        lastDisconnect: {
+          error: {
+            message: `WebSocket Error (${secret})`,
+            output: { payload: secret, statusCode: 408 },
+            [field]: { code: "ECONNRESET", message: secret, stack: secret },
+          },
+        },
+      });
+      await flush();
+    }
+    emit(sockets.length - 1, {
+      connection: "close",
+      lastDisconnect: {
+        error: { cause: { code: secret, message: secret }, message: secret },
+      },
+    });
+    await flush();
+    const lines = logSpy.mock.calls.map(([line]) => String(line));
+    expect(lines).toHaveLength(3);
+    for (const line of lines) {
+      const diagnostic = JSON.parse(line.slice(line.indexOf("{")));
+      expect(diagnostic.message).toBe("[redacted]");
+      expect(line).not.toContain(secret);
+      expect(diagnostic.cause).toBe(
+        diagnostic.code === 408 ? "ECONNRESET" : "[redacted]"
+      );
+    }
   });
 
   test("ends the previous socket and waits before reconnecting on 408", async () => {

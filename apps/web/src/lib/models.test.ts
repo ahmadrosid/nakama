@@ -152,34 +152,29 @@ function group(
 }
 
 describe("resolveModelThinkingSupport", () => {
-  test("treats xiaomi models as opt-in only for thinking", () => {
+  test.each([
+    "xiaomi",
+    "openai_compatible",
+    "openrouter",
+    "deepseek",
+    "together",
+    "vercel_ai_gateway",
+    "mistral",
+    "qwen",
+    "qwen_cn",
+    "doubao",
+    "perplexity",
+    "cerebras",
+    "fireworks",
+  ] as const)("%s requires an explicit thinking flag", (provider) => {
+    const selected = encodeModelSelection(provider, "model-1");
     expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("xm-1", "model-1"),
-        group("xm-1", "xiaomi")
-      )
+      resolveModelThinkingSupport(selected, group(provider, provider))
     ).toBe(false);
-
     expect(
       resolveModelThinkingSupport(
-        encodeModelSelection("xm-1", "model-1"),
-        group("xm-1", "xiaomi", { supportsThinking: true })
-      )
-    ).toBe(true);
-  });
-
-  test("treats openai-compatible models as opt-in only", () => {
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("compat-1", "model-1"),
-        group("compat-1", "openai_compatible")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("compat-1", "model-1"),
-        group("compat-1", "openai_compatible", { supportsThinking: true })
+        selected,
+        group(provider, provider, { supportsThinking: true })
       )
     ).toBe(true);
   });
@@ -199,211 +194,29 @@ describe("resolveModelThinkingSupport", () => {
       )
     ).toBe(false);
   });
-
-  test("treats openrouter models as opt-in only", () => {
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("or-1", "model-1"),
-        group("or-1", "openrouter")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("or-1", "model-1"),
-        group("or-1", "openrouter", { supportsThinking: true })
-      )
-    ).toBe(true);
-  });
-
-  test("treats deepseek models as opt-in only", () => {
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("ds-1", "model-1"),
-        group("ds-1", "deepseek")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("ds-1", "model-1"),
-        group("ds-1", "deepseek", { supportsThinking: true })
-      )
-    ).toBe(true);
-  });
-
-  test("treats together models as opt-in only for thinking", () => {
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("tg-1", "model-1"),
-        group("tg-1", "together")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("tg-1", "model-1"),
-        group("tg-1", "together", { supportsThinking: true })
-      )
-    ).toBe(true);
-  });
-
-  test("treats vercel_ai_gateway models as opt-in only for thinking", () => {
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("vag-1", "model-1"),
-        group("vag-1", "vercel_ai_gateway")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("vag-1", "model-1"),
-        group("vag-1", "vercel_ai_gateway", { supportsThinking: true })
-      )
-    ).toBe(true);
-  });
-
-  test("treats mistral models as opt-in only", () => {
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("mi-1", "model-1"),
-        group("mi-1", "mistral")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("mi-1", "model-1"),
-        group("mi-1", "mistral", { supportsThinking: true })
-      )
-    ).toBe(true);
-  });
-
-  test("treats qwen models as opt-in only for thinking", () => {
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("qw-1", "model-1"),
-        group("qw-1", "qwen")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("qw-1", "model-1"),
-        group("qw-1", "qwen", { supportsThinking: true })
-      )
-    ).toBe(true);
-
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("qw-cn-1", "model-1"),
-        group("qw-cn-1", "qwen_cn", { supportsThinking: true })
-      )
-    ).toBe(true);
-  });
-
-  test("treats doubao models as opt-in only", () => {
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("db-1", "model-1"),
-        group("db-1", "doubao")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("db-1", "model-1"),
-        group("db-1", "doubao", { supportsThinking: true })
-      )
-    ).toBe(true);
-  });
-
-  test("treats perplexity models as opt-in only", () => {
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("pplx-1", "model-1"),
-        group("pplx-1", "perplexity")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("pplx-1", "model-1"),
-        group("pplx-1", "perplexity", { supportsThinking: true })
-      )
-    ).toBe(true);
-  });
-
-  test("treats cerebras models as opt-in only", () => {
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("cb-1", "model-1"),
-        group("cb-1", "cerebras")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("cb-1", "model-1"),
-        group("cb-1", "cerebras", { supportsThinking: true })
-      )
-    ).toBe(true);
-  });
-
-  test("treats fireworks models as opt-in only", () => {
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("fw-1", "model-1"),
-        group("fw-1", "fireworks")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelThinkingSupport(
-        encodeModelSelection("fw-1", "model-1"),
-        group("fw-1", "fireworks", { supportsThinking: true })
-      )
-    ).toBe(true);
-  });
 });
 
 describe("resolveModelVisionSupport", () => {
-  test("treats xiaomi models as opt-in only for vision", () => {
+  test.each([
+    "xiaomi",
+    "openai_compatible",
+    "opencode_go",
+    "doubao",
+    "cerebras",
+    "together",
+    "qwen",
+    "vercel_ai_gateway",
+    "fireworks",
+    "openrouter",
+  ] as const)("%s requires an explicit vision flag", (provider) => {
+    const selected = encodeModelSelection(provider, "model-1");
+    expect(resolveModelVisionSupport(selected, group(provider, provider))).toBe(
+      false
+    );
     expect(
       resolveModelVisionSupport(
-        encodeModelSelection("xm-1", "model-1"),
-        group("xm-1", "xiaomi")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("xm-1", "model-1"),
-        group("xm-1", "xiaomi", { supportsVision: true })
-      )
-    ).toBe(true);
-  });
-
-  test("treats openai-compatible and opencode_go models as opt-in only", () => {
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("compat-1", "model-1"),
-        group("compat-1", "openai_compatible")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("go-1", "model-1"),
-        group("go-1", "opencode_go")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("compat-1", "model-1"),
-        group("compat-1", "openai_compatible", { supportsVision: true })
+        selected,
+        group(provider, provider, { supportsVision: true })
       )
     ).toBe(true);
   });
@@ -422,118 +235,6 @@ describe("resolveModelVisionSupport", () => {
         group("openai-1", "openai", { supportsVision: false })
       )
     ).toBe(false);
-  });
-
-  test("treats doubao models as opt-in only for vision", () => {
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("db-1", "model-1"),
-        group("db-1", "doubao")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("db-1", "model-1"),
-        group("db-1", "doubao", { supportsVision: true })
-      )
-    ).toBe(true);
-  });
-
-  test("treats cerebras models as opt-in only for vision", () => {
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("cb-1", "model-1"),
-        group("cb-1", "cerebras")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("cb-1", "model-1"),
-        group("cb-1", "cerebras", { supportsVision: true })
-      )
-    ).toBe(true);
-  });
-
-  test("treats together models as opt-in only for vision", () => {
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("tg-1", "model-1"),
-        group("tg-1", "together")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("tg-1", "model-1"),
-        group("tg-1", "together", { supportsVision: true })
-      )
-    ).toBe(true);
-  });
-
-  test("treats qwen models as opt-in only for vision", () => {
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("qw-1", "model-1"),
-        group("qw-1", "qwen")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("qw-1", "model-1"),
-        group("qw-1", "qwen", { supportsVision: true })
-      )
-    ).toBe(true);
-  });
-
-  test("treats vercel_ai_gateway models as opt-in only for vision", () => {
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("vag-1", "model-1"),
-        group("vag-1", "vercel_ai_gateway")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("vag-1", "model-1"),
-        group("vag-1", "vercel_ai_gateway", { supportsVision: true })
-      )
-    ).toBe(true);
-  });
-
-  test("treats fireworks models as opt-in only for vision", () => {
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("fw-1", "model-1"),
-        group("fw-1", "fireworks")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("fw-1", "model-1"),
-        group("fw-1", "fireworks", { supportsVision: true })
-      )
-    ).toBe(true);
-  });
-
-  test("treats openrouter models as opt-in only for vision", () => {
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("or-1", "model-1"),
-        group("or-1", "openrouter")
-      )
-    ).toBe(false);
-
-    expect(
-      resolveModelVisionSupport(
-        encodeModelSelection("or-1", "model-1"),
-        group("or-1", "openrouter", { supportsVision: true })
-      )
-    ).toBe(true);
   });
 });
 
@@ -607,6 +308,7 @@ describe("firstAvailableProviderOption", () => {
           "openrouter",
           "gemini",
           "deepseek",
+          "netra",
           "doubao",
           "together",
           "xiaomi",

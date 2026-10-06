@@ -24,7 +24,7 @@ Always tell participants before transcription starts. Follow your organization's
 
 ### 1. Open Google Meet
 
-Open **Google Meet** in the sidebar. It is included in Nakama. An organization admin can enable or disable it in **Google Meet → Settings**.
+Open **Control center → Workspace → Google Meet**. It is included in Nakama. An organization admin can enable or disable it in **Google Meet → Settings**.
 
 ### 2. Add the OpenAI key
 
@@ -78,9 +78,32 @@ If Chrome closes or the connection breaks, Nakama keeps the text collected so fa
 
 ## Remote Nakama servers
 
-If Chrome and Nakama run on different computers, ask your administrator to connect them through a secure web address that supports a live connection. The address should start with `wss://`.
+The capture service binds to `127.0.0.1` by default. If Chrome runs on another
+computer, your administrator must make the capture WebSocket reachable through
+a secure address and set these variables on the Nakama server before starting
+Nakama:
 
-Do not share the connection links. They contain a temporary private passcode for one organization and one meeting.
+- `NAKAMA_MEET_CAPTURE_HOST` sets the capture listener's bind address. Set it to
+  `0.0.0.0` when a container or reverse proxy must connect to the listener.
+- `NAKAMA_MEET_CAPTURE_ORIGIN` sets the complete WebSocket URL that Nakama gives
+  the Chrome extension. Use `wss://` and include the `/capture` path.
+- `NAKAMA_MEET_CAPTURE_PORT` sets the capture listener's port. Without it Nakama
+  picks a free port on each start, so set it when a reverse proxy needs a fixed
+  target.
+
+For example, configure a reverse proxy at `meet-capture.example.com` with these
+server environment variables:
+
+```bash
+export NAKAMA_MEET_CAPTURE_HOST=0.0.0.0
+export NAKAMA_MEET_CAPTURE_PORT=4320
+export NAKAMA_MEET_CAPTURE_ORIGIN=wss://meet-capture.example.com/capture
+```
+
+Restart Nakama after changing any of these variables. The reverse
+proxy must forward WebSocket upgrade requests to the capture listener. Do not
+share the connection links; they contain a temporary private passcode for one
+organization and one meeting.
 
 ## Troubleshooting
 

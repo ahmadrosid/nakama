@@ -49,7 +49,7 @@ const HIDDEN_SLASH_SKILL_NAMES = new Set<string>([
 ]);
 
 /** Composer slash tokens that are not skill names (must not become `/skill …`). */
-export const RESERVED_COMPOSER_SLASH_COMMANDS: ReservedSlashCommand[] = [
+const RESERVED_COMPOSER_SLASH_COMMANDS: ReservedSlashCommand[] = [
   {
     description: "Enable automatic learning after complex turns",
     name: "enable-learning-loop",
@@ -61,7 +61,7 @@ export const RESERVED_COMPOSER_SLASH_COMMANDS: ReservedSlashCommand[] = [
 ];
 
 /** Opens a dialog instead of inserting text. Shown when the user can assign tools. */
-export const COMPOSER_ADD_SLASH_COMMANDS: ReservedSlashCommand[] = [
+const COMPOSER_ADD_SLASH_COMMANDS: ReservedSlashCommand[] = [
   {
     action: "add-plugin",
     description: "Enable a plugin for this agent",

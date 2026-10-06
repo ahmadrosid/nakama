@@ -1,4 +1,5 @@
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
+import path from "node:path";
 import type { ToolContext } from "@nakama/core";
 
 // Shared subprocess machinery for custom tool loaders (javascript, python).
@@ -12,6 +13,57 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 // Keep in sync with TOOL_RETRYABLE_EXIT_CODE in custom-tool-handlers.ts
 // (sysexits EX_TEMPFAIL). Avoid importing that module — loaders import us.
 const RETRYABLE_EXIT_CODE = 75;
+
+/** Signal a dedicated POSIX process group or a Windows process tree.
+ * Callers must spawn with detached: true on POSIX. Windows callers can await
+ * taskkill completion before releasing inherited output handles.
+ */
+export function killProcessTree(
+  child: ChildProcess,
+  signal: NodeJS.Signals
+): Promise<void> {
+  const killChild = () => {
+    try {
+      child.kill(signal);
+    } catch {
+      // already exited
+    }
+  };
+  if (!child.pid) {
+    return Promise.resolve();
+  }
+  if (process.platform === "win32") {
+    return new Promise((resolve) => {
+      const killer = spawn(
+        path.join(
+          process.env.SystemRoot ?? "C:\\Windows",
+          "System32",
+          "taskkill.exe"
+        ),
+        // Windows has no graceful POSIX group signal. Match child.kill's
+        // forceful termination, while also ending its descendants.
+        ["/F", "/T", "/PID", String(child.pid)],
+        { stdio: "ignore", windowsHide: true }
+      );
+      killer.once("error", () => {
+        killChild();
+        resolve();
+      });
+      killer.once("close", (code) => {
+        if (code !== 0) {
+          killChild();
+        }
+        resolve();
+      });
+    });
+  }
+  try {
+    process.kill(-child.pid, signal);
+  } catch {
+    killChild();
+  }
+  return Promise.resolve();
+}
 
 function resolveCustomToolTimeoutMs(): number {
   const configured = Number(process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS);
@@ -88,6 +140,7 @@ export async function spawnJsonTool(
       // does not leave a tool process holding the session open.
       const child = spawn(bin, args, {
         cwd,
+        detached: process.platform !== "win32",
         env,
         stdio: transport?.onHostRequest
           ? ["pipe", "pipe", "pipe", "ipc"]
@@ -147,17 +200,9 @@ export async function spawnJsonTool(
 
       const killChild = () => {
         hostAbort.abort();
-        try {
-          child.kill("SIGTERM");
-        } catch {
-          // already exited
-        }
+        void killProcessTree(child, "SIGTERM");
         setTimeout(() => {
-          try {
-            child.kill("SIGKILL");
-          } catch {
-            // already exited
-          }
+          void killProcessTree(child, "SIGKILL");
         }, SIGKILL_GRACE_MS).unref();
       };
 

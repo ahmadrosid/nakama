@@ -81,6 +81,7 @@ const USER_PRICED_PROVIDERS = new Set<ProviderName>([
   "fireworks",
   "ollama",
   "openrouter",
+  "netra",
 ]);
 
 function isUserPriced(context: PricingContext): boolean {

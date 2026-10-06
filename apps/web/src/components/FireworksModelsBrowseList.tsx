@@ -6,7 +6,7 @@ import {
 } from "@/components/model-browse-utils";
 import { useFireworksDiscoverModels } from "@/hooks/use-fireworks-discover-models";
 
-export type FireworksBrowseSelectHandler = (row: CapabilityBrowseRow) => void;
+type FireworksBrowseSelectHandler = (row: CapabilityBrowseRow) => void;
 
 interface FireworksModelsBrowseListProps {
   apiKey?: string;

@@ -95,5 +95,3 @@ function getChatId(ctx: Context): number {
 
   return ctx.chat.id;
 }
-
-export type { TelegramReplyMessage };

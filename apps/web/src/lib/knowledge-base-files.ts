@@ -7,9 +7,18 @@ import {
 
 import { readFileAsDataUrl } from "./read-file-as-data-url";
 
-export const KNOWLEDGE_BASE_ACCEPT = `.pdf,.docx,.txt,.md,.csv,application/pdf,${DOCX_MEDIA_TYPE},text/plain,text/csv,text/markdown`;
+export const KNOWLEDGE_BASE_ACCEPT = `.pdf,.docx,.txt,.md,.csv,.zip,application/pdf,${DOCX_MEDIA_TYPE},text/plain,text/csv,text/markdown,application/zip`;
 
 const KB_EXTENSIONS = new Set([".pdf", ".docx", ".txt", ".md", ".csv"]);
+
+export function isKnowledgeBaseZipFile(file: File): boolean {
+  return file.name.trim().toLowerCase().endsWith(".zip");
+}
+
+export async function fileToZipBase64(file: File): Promise<string> {
+  const dataUrl = await readFileAsDataUrl(file);
+  return dataUrl.slice(dataUrl.indexOf(",") + 1);
+}
 
 export function isKnowledgeBaseFile(file: File): boolean {
   const filename = file.name.trim();

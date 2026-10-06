@@ -48,6 +48,44 @@ const moonshotInstance = {
   type: "moonshot" as const,
 };
 describe("estimateUsageCostUsd", () => {
+  test("uses saved Netra rates and counts cached input once", () => {
+    const instance = {
+      apiKey: "netra-key",
+      createdAt: "2026-10-05T00:00:00.000Z",
+      customModels: [
+        {
+          cachedInputPerMillionUsd: 0.05,
+          id: "deepseek/deepseek-v4-flash-0731",
+          inputPerMillionUsd: 0.2,
+          outputPerMillionUsd: 0.5,
+        },
+      ],
+      id: "netra-1",
+      label: "Netra Runtime",
+      type: "netra" as const,
+    };
+    expect(
+      getModelPricing("deepseek/deepseek-v4-flash-0731", {
+        providerInstance: instance,
+      })
+    ).toEqual({
+      cachedInputPerMillionUsd: 0.05,
+      inputPerMillionUsd: 0.2,
+      outputPerMillionUsd: 0.5,
+    });
+    expect(
+      estimateUsageCostUsd(
+        "deepseek/deepseek-v4-flash-0731",
+        1200,
+        300,
+        { providerInstance: instance },
+        800
+      )
+    ).toBeCloseTo(0.000_27);
+    expect(
+      getModelPricing("deepseek/deepseek-v4.1-flash", { provider: "netra" })
+    ).toBeNull();
+  });
   test("prices shared model ids by provider, including subscription zero rates", () => {
     expect(
       estimateUsageCostUsd("gpt-5.5", 100_000, 20_000, {

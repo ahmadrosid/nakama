@@ -110,7 +110,3 @@ export function getToolExecutionEnv(): NodeJS.ProcessEnv {
     [pathKey]: prefix ? `${prefix}${path.delimiter}${current}` : current,
   };
 }
-
-export function resetProcessPathState(): void {
-  ensured = false;
-}

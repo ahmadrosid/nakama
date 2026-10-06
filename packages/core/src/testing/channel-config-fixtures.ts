@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
 
-export const HANDSHAKE_CODE_PATTERN = /^[0-9A-F]{8}$/;
+const HANDSHAKE_CODE_PATTERN = /^[0-9A-F]{8}$/;
 
 export async function withTempHomedir(
   prefix: string,

@@ -1,5 +1,9 @@
 import { NakamaApiError } from "@nakama/core/api-error";
-import type { KnowledgeBaseDocument } from "@nakama/core/contract";
+import type {
+  ImportKnowledgeBaseZipResponse,
+  KnowledgeBaseDocument,
+} from "@nakama/core/contract";
+import { MAX_KNOWLEDGE_ZIP_BYTES } from "@nakama/core/message-content";
 import { Button } from "@nakama/ui/button";
 import {
   Dialog,
@@ -13,6 +17,7 @@ import { Spinner } from "@nakama/ui/spinner";
 import { useEffect, useRef, useState } from "react";
 import {
   KnowledgeTabPanel,
+  KnowledgeZipImportResult,
   SharedKnowledgeDocuments,
 } from "@/components/soul-tools/knowledge-tab-panel";
 import { useAuth } from "@/context/use-auth";
@@ -21,6 +26,7 @@ import {
   useAttachSharedKnowledgeBaseDocumentMutation,
   useDeleteKnowledgeBaseDocumentMutation,
   useDetachSharedKnowledgeBaseDocumentMutation,
+  useImportKnowledgeBaseZipMutation,
   useKnowledgeBaseQuery,
   useOrganizationKnowledgeBaseQuery,
   useUploadKnowledgeBaseDocumentMutation,
@@ -28,7 +34,9 @@ import {
 import { formatError } from "@/lib/client";
 import {
   fileToDocumentAttachment,
+  fileToZipBase64,
   isKnowledgeBaseFile,
+  isKnowledgeBaseZipFile,
 } from "@/lib/knowledge-base-files";
 
 type DuplicateDecision = "skip" | "replace";
@@ -50,10 +58,14 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
   const { data: organizationKnowledgeBase = null } =
     useOrganizationKnowledgeBaseQuery(activeOrg?.id ?? null);
   const uploadMutation = useUploadKnowledgeBaseDocumentMutation();
+  const importZipMutation = useImportKnowledgeBaseZipMutation();
   const attachSharedMutation = useAttachSharedKnowledgeBaseDocumentMutation();
   const deleteMutation = useDeleteKnowledgeBaseDocumentMutation();
   const detachSharedMutation = useDetachSharedKnowledgeBaseDocumentMutation();
   const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [importResult, setImportResult] =
+    useState<ImportKnowledgeBaseZipResponse | null>(null);
   const [deleteTarget, setDeleteTarget] =
     useState<KnowledgeBaseDocument | null>(null);
   const [duplicatePrompt, setDuplicatePrompt] =
@@ -66,12 +78,18 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
     (document) => document.status === "ready"
   ).length;
   const loading = knowledgeLoading && !knowledgeBase;
-  const busy =
-    uploadMutation.isPending ||
-    attachSharedMutation.isPending ||
-    deleteMutation.isPending ||
-    detachSharedMutation.isPending ||
-    duplicatePrompt !== null;
+  const uploadPending = [
+    uploading,
+    uploadMutation.isPending,
+    importZipMutation.isPending,
+  ].some(Boolean);
+  const busy = [
+    uploadPending,
+    attachSharedMutation.isPending,
+    deleteMutation.isPending,
+    detachSharedMutation.isPending,
+    duplicatePrompt !== null,
+  ].some(Boolean);
 
   useEffect(() => {
     const queryError = profilesError ?? knowledgeError;
@@ -86,75 +104,100 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
     });
   }
 
+  function resolveDuplicateDecision(decision: DuplicateDecision) {
+    duplicatePrompt?.resolve(decision);
+    setDuplicatePrompt(null);
+  }
+
+  async function handleZipUpload(file: File, currentProfileId: string) {
+    if (file.size > MAX_KNOWLEDGE_ZIP_BYTES) {
+      setError(`${file.name} exceeds the 20 MB ZIP limit.`);
+      return false;
+    }
+
+    try {
+      const zipBase64 = await fileToZipBase64(file);
+      const result = await importZipMutation.mutateAsync({
+        profileId: currentProfileId,
+        zipBase64,
+      });
+      setImportResult(result);
+      return true;
+    } catch (err) {
+      setError(formatError(err));
+      return false;
+    }
+  }
+
+  async function handleDocumentUpload(file: File, currentProfileId: string) {
+    if (!isKnowledgeBaseFile(file)) {
+      setError(`Unsupported file type: ${file.name}.`);
+      return true;
+    }
+
+    const document = await fileToDocumentAttachment(file);
+    if (!document) {
+      setError(`Failed to read file: ${file.name}`);
+      return true;
+    }
+
+    try {
+      await uploadMutation.mutateAsync({
+        document,
+        profileId: currentProfileId,
+      });
+      return true;
+    } catch (err) {
+      if (!(err instanceof NakamaApiError && err.status === 409)) {
+        setError(formatError(err));
+        return false;
+      }
+    }
+
+    if ((await askDuplicateDecision(file.name)) === "skip") {
+      return true;
+    }
+
+    try {
+      await uploadMutation.mutateAsync({
+        document,
+        onDuplicate: "replace",
+        profileId: currentProfileId,
+      });
+      return true;
+    } catch (err) {
+      setError(formatError(err));
+      return false;
+    }
+  }
+
   async function handleUpload(files: FileList | null) {
     if (!(profileId && files?.length)) {
       return;
     }
 
     setError(null);
+    setImportResult(null);
+    setUploading(true);
 
-    const candidates = Array.from(files).filter((file) => {
-      if (isKnowledgeBaseFile(file)) {
-        return true;
-      }
-      setError(
-        `Unsupported file type: ${file.name}. Allowed: txt, md, csv, pdf.`
-      );
-      return false;
-    });
-
-    const prepared = await Promise.all(
-      candidates.map(async (file) => ({
-        document: await fileToDocumentAttachment(file),
-        file,
-      }))
-    );
-
-    // Sequential: one duplicate dialog at a time; hard errors stop the batch.
-    const uploadNext = async (index: number): Promise<void> => {
-      const item = prepared[index];
-      if (!item) {
+    try {
+      if (Array.from(files).filter(isKnowledgeBaseZipFile).length > 1) {
+        setError("Select one ZIP at a time.");
         return;
       }
-
-      const { document, file } = item;
-      if (!document) {
-        setError(`Failed to read file: ${file.name}`);
-        return uploadNext(index + 1);
-      }
-
-      try {
-        await uploadMutation.mutateAsync({ document, profileId });
-      } catch (err) {
-        if (!(err instanceof NakamaApiError && err.status === 409)) {
-          setError(formatError(err));
-          return;
-        }
-
-        const decision = await askDuplicateDecision(file.name);
-        if (decision === "skip") {
-          return uploadNext(index + 1);
-        }
-
-        try {
-          await uploadMutation.mutateAsync({
-            document,
-            onDuplicate: "replace",
-            profileId,
-          });
-        } catch (replaceErr) {
-          setError(formatError(replaceErr));
-          return;
+      for (const file of Array.from(files)) {
+        const shouldContinue = isKnowledgeBaseZipFile(file)
+          ? await handleZipUpload(file, profileId)
+          : await handleDocumentUpload(file, profileId);
+        if (!shouldContinue) {
+          break;
         }
       }
-
-      return uploadNext(index + 1);
-    };
-
-    await uploadNext(0);
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   }
 
@@ -222,6 +265,10 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
           </p>
         ) : null}
 
+        {importResult ? (
+          <KnowledgeZipImportResult result={importResult} />
+        ) : null}
+
         <SharedKnowledgeDocuments
           availableDocuments={organizationKnowledgeBase?.documents}
           busy={busy}
@@ -237,7 +284,7 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
           onUpload={(files) => void handleUpload(files)}
           profileId={profileId}
           readyCount={readyCount}
-          uploadPending={uploadMutation.isPending}
+          uploadPending={uploadPending}
         />
       </div>
 
@@ -249,46 +296,51 @@ export function KnowledgeTab({ profileId }: { profileId: string | null }) {
         target={deleteTarget}
       />
 
-      <Dialog
-        onOpenChange={(open) => {
-          if (!open && duplicatePrompt) {
-            duplicatePrompt.resolve("skip");
-            setDuplicatePrompt(null);
-          }
-        }}
-        open={duplicatePrompt !== null}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Duplicate document</DialogTitle>
-            <DialogDescription>
-              {duplicatePrompt?.filename} is already in this knowledge base.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              onClick={() => {
-                duplicatePrompt?.resolve("skip");
-                setDuplicatePrompt(null);
-              }}
-              type="button"
-              variant="outline"
-            >
-              Skip
-            </Button>
-            <Button
-              onClick={() => {
-                duplicatePrompt?.resolve("replace");
-                setDuplicatePrompt(null);
-              }}
-              type="button"
-            >
-              Replace
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DuplicateKnowledgeDocumentDialog
+        onDecision={resolveDuplicateDecision}
+        prompt={duplicatePrompt}
+      />
     </>
+  );
+}
+
+function DuplicateKnowledgeDocumentDialog({
+  onDecision,
+  prompt,
+}: {
+  onDecision: (decision: DuplicateDecision) => void;
+  prompt: DuplicatePrompt | null;
+}) {
+  return (
+    <Dialog
+      onOpenChange={(open) => {
+        if (!open && prompt) {
+          onDecision("skip");
+        }
+      }}
+      open={prompt !== null}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Duplicate document</DialogTitle>
+          <DialogDescription>
+            {prompt?.filename} is already in this knowledge base.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            onClick={() => onDecision("skip")}
+            type="button"
+            variant="outline"
+          >
+            Skip
+          </Button>
+          <Button onClick={() => onDecision("replace")} type="button">
+            Replace
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readStreamEvents } from "./stream";
+import { readAgentBrowserInstallStream, readStreamEvents } from "./stream";
 
 function streamFromChunks(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
@@ -163,6 +163,62 @@ describe("readStreamEvents", () => {
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });
 
+  test("stops buffered events when a chunk callback aborts", async () => {
+    const controller = new AbortController();
+    const callbacks: string[] = [];
+    const stream = streamFromChunks([
+      [
+        { delta: "first", type: "chunk" },
+        { delta: "late", type: "chunk" },
+        { input: {}, tool: "search", toolCallId: "call_1", type: "tool_start" },
+        { type: "usage", usage: { inputTokens: 1, outputTokens: 1 } },
+        { reply: "firstlate", type: "done" },
+      ]
+        .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+        .join(""),
+    ]);
+
+    await expect(
+      readStreamEvents(
+        stream,
+        {
+          onChunk: (delta) => {
+            callbacks.push(delta);
+            controller.abort();
+          },
+          onDone: () => callbacks.push("done"),
+          onToolStart: () => callbacks.push("tool"),
+          onUsage: () => callbacks.push("usage"),
+        },
+        controller.signal
+      )
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(callbacks).toEqual(["first"]);
+  });
+
+  test("rejects when the done callback aborts before context usage", async () => {
+    const controller = new AbortController();
+    const callbacks: string[] = [];
+
+    await expect(
+      readStreamEvents(
+        streamFromChunks([
+          'data: {"type":"done","reply":"ok","contextUsage":{"usedTokens":1,"usableContextTokens":10,"contextWindow":20,"source":"provider"}}\n\n',
+        ]),
+        {
+          onChunk: () => {},
+          onContextUsage: () => callbacks.push("context usage"),
+          onDone: () => {
+            callbacks.push("done");
+            controller.abort();
+          },
+        },
+        controller.signal
+      )
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(callbacks).toEqual(["done"]);
+  });
+
   test("surfaces server error events", async () => {
     await expect(
       readStreamEvents(
@@ -173,6 +229,28 @@ describe("readStreamEvents", () => {
       )
     ).rejects.toThrow("Rate limit exceeded");
   });
+});
+
+test("agent-browser install stops buffered events after cancellation", async () => {
+  const controller = new AbortController();
+  const callbacks: string[] = [];
+
+  await expect(
+    readAgentBrowserInstallStream(
+      streamFromChunks([
+        'data: {"type":"progress","message":"first"}\n\ndata: {"type":"progress","message":"late"}\n\ndata: {"type":"done","status":{}}\n\n',
+      ]),
+      {
+        onDone: () => callbacks.push("done"),
+        onProgress: (message) => {
+          callbacks.push(message);
+          controller.abort();
+        },
+      },
+      controller.signal
+    )
+  ).rejects.toMatchObject({ name: "AbortError" });
+  expect(callbacks).toEqual(["first"]);
 });
 
 test("terminal done callback does not authorize partial EOF, abort, or error streams", async () => {

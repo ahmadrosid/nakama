@@ -217,6 +217,7 @@ export function ProviderCompatibleEditDialog({
   remoteProvider = "openai_compatible",
   providerInstanceId,
   hostMode,
+  hideIdentity = false,
   browseLabel,
   onOpenChange,
   onDisplayNameChange,
@@ -234,7 +235,8 @@ export function ProviderCompatibleEditDialog({
   manageModels: ModelListRow[];
   apiKey?: string;
   browseSource?: "remote" | "models.dev";
-  remoteProvider?: "ollama" | "openai_compatible";
+  remoteProvider?: "ollama" | "openai_compatible" | "netra";
+  hideIdentity?: boolean;
   providerInstanceId?: string;
   hostMode?: "local" | "cloud";
   browseLabel?: string;
@@ -265,6 +267,7 @@ export function ProviderCompatibleEditDialog({
         disabled={busy}
         displayName={editLabel}
         displayNameError={null}
+        hideIdentity={hideIdentity}
         hostMode={hostMode}
         modelsError={null}
         onBaseUrlChange={onBaseUrlChange}

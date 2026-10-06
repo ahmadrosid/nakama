@@ -2,9 +2,9 @@ import type { ImageGenerationAspect } from "@/components/chat/ImageGeneration";
 import { toArtifactsRelativePath } from "@/lib/chat-artifacts";
 import type { ChatListItem } from "@/lib/chat-history";
 
-export const GENERATE_IMAGE_TOOL_NAME = "generate_image";
+const GENERATE_IMAGE_TOOL_NAME = "generate_image";
 
-export type ImageGenerationToolStatus = "running" | "done" | "error";
+type ImageGenerationToolStatus = "running" | "done" | "error";
 
 export interface ImageGenerationToolState {
   artifactPath: string | null;

@@ -192,8 +192,10 @@ export function useProviderInstanceCard({
   };
 
   const saveCompatible = async () => {
-    const displayNameError = validateDisplayNameInput(editLabel);
-    const baseUrlError = validateBaseUrlInput(editBaseUrl);
+    const displayNameError =
+      providerType === "netra" ? null : validateDisplayNameInput(editLabel);
+    const baseUrlError =
+      providerType === "netra" ? null : validateBaseUrlInput(editBaseUrl);
     const modelsError = validateCustomModelsInput(manageModels);
 
     if (displayNameError || baseUrlError || modelsError) {
@@ -203,8 +205,9 @@ export function useProviderInstanceCard({
 
     await runUpdate(
       {
-        baseUrl: editBaseUrl,
-        label: editLabel,
+        ...(providerType === "netra"
+          ? {}
+          : { baseUrl: editBaseUrl, label: editLabel }),
         ...(isOllama
           ? {
               hostMode: editBaseUrl.toLowerCase().includes("ollama.com")
@@ -213,7 +216,9 @@ export function useProviderInstanceCard({
             }
           : {}),
         customModels: normalizeModelListRows(manageModels),
-        ...(isOllama ? {} : { wireApi: editWireApi }),
+        ...(isOllama || providerType === "netra"
+          ? {}
+          : { wireApi: editWireApi }),
       },
       () => setEditOpen(false)
     );

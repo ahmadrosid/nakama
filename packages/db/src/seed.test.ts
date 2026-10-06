@@ -144,10 +144,14 @@ describe("seed cleanup", () => {
     expect(await db.listToolsForProfile("profile_test")).toHaveLength(0);
   });
 
-  test("removes deprecated builtin tools", async () => {
+  test.each([
+    "archive_profile_memory",
+    "update_profile_memory",
+    "create_skill",
+    "save_artifact",
+  ])("removes deprecated builtin %s and its assignments", async (name) => {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();
-
     await db.upsertProfile({
       createdAt: now,
       id: "profile_test",
@@ -157,118 +161,19 @@ describe("seed cleanup", () => {
       systemPrompt: "test",
       updatedAt: now,
     });
-
+    const id = `tool_${name}`;
     await db.upsertTool({
       createdAt: now,
-      description: "Deprecated archive tool",
-      handlerConfig: { name: "archive_profile_memory" },
+      description: "Deprecated tool",
+      handlerConfig: { name },
       handlerType: "builtin",
-      id: "tool_archive_profile_memory",
-      name: "archive_profile_memory",
+      id,
+      name,
       updatedAt: now,
     });
-
-    await db.assignToolToProfile("profile_test", "tool_archive_profile_memory");
-
+    await db.assignToolToProfile("profile_test", id);
     await removeDeprecatedBuiltinTools(db);
-
-    expect(await db.getTool("tool_archive_profile_memory")).toBeNull();
-    expect(await db.listToolsForProfile("profile_test")).toHaveLength(0);
-  });
-
-  test("removes deprecated update_profile_memory tool", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const now = new Date().toISOString();
-
-    await db.upsertProfile({
-      createdAt: now,
-      id: "profile_test",
-      isSuper: false,
-      model: null,
-      name: "Test",
-      systemPrompt: "test",
-      updatedAt: now,
-    });
-
-    await db.upsertTool({
-      createdAt: now,
-      description: "Deprecated memory tool",
-      handlerConfig: { name: "update_profile_memory" },
-      handlerType: "builtin",
-      id: "tool_update_profile_memory",
-      name: "update_profile_memory",
-      updatedAt: now,
-    });
-
-    await db.assignToolToProfile("profile_test", "tool_update_profile_memory");
-
-    await removeDeprecatedBuiltinTools(db);
-
-    expect(await db.getTool("tool_update_profile_memory")).toBeNull();
-    expect(await db.listToolsForProfile("profile_test")).toHaveLength(0);
-  });
-
-  test("removes deprecated create_skill tool", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const now = new Date().toISOString();
-
-    await db.upsertProfile({
-      createdAt: now,
-      id: "profile_test",
-      isSuper: false,
-      model: null,
-      name: "Test",
-      systemPrompt: "test",
-      updatedAt: now,
-    });
-
-    await db.upsertTool({
-      createdAt: now,
-      description: "Deprecated skill creation tool",
-      handlerConfig: { name: "create_skill" },
-      handlerType: "builtin",
-      id: "tool_create_skill",
-      name: "create_skill",
-      updatedAt: now,
-    });
-
-    await db.assignToolToProfile("profile_test", "tool_create_skill");
-
-    await removeDeprecatedBuiltinTools(db);
-
-    expect(await db.getTool("tool_create_skill")).toBeNull();
-    expect(await db.listToolsForProfile("profile_test")).toHaveLength(0);
-  });
-
-  test("removes deprecated save_artifact tool", async () => {
-    const db = createInMemoryDatabaseAdapter();
-    const now = new Date().toISOString();
-
-    await db.upsertProfile({
-      createdAt: now,
-      id: "profile_test",
-      isSuper: false,
-      model: null,
-      name: "Test",
-      systemPrompt: "test",
-      updatedAt: now,
-    });
-
-    await db.upsertTool({
-      createdAt: now,
-      description: "Deprecated artifact tool",
-      handlerConfig: { name: "save_artifact" },
-      handlerType: "builtin",
-      id: "tool_save_artifact",
-      name: "save_artifact",
-      updatedAt: now,
-    });
-
-    await db.assignToolToProfile("profile_test", "tool_save_artifact");
-
-    await removeDeprecatedBuiltinTools(db);
-
-    expect(await db.getTool("tool_save_artifact")).toBeNull();
+    expect(await db.getTool(id)).toBeNull();
     expect(await db.listToolsForProfile("profile_test")).toHaveLength(0);
   });
 });

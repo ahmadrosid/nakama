@@ -18,6 +18,7 @@ import {
   rotateLocalAuthToken,
   type SetActiveOrgRequest,
   type SetupAuthRequest,
+  saveUserWebPublicUrl,
   type UpdateAuthProfileRequest,
 } from "@nakama/core";
 import { DEMO_LOGIN_EMAIL, DEMO_LOGIN_HOST } from "@nakama/core/demo-login";
@@ -33,10 +34,7 @@ import {
   verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from "@simplewebauthn/server";
-import {
-  persistWebPublicUrl,
-  resolveRequestClientOrigin,
-} from "../../services/composio-callback-url";
+import { resolveRequestClientOrigin } from "../../services/composio-callback-url";
 import {
   ensureMfaEncryptionKey,
   getMfaEncryptionKey,
@@ -158,7 +156,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       mfaEnabled: z.boolean().optional(),
       mfaEnrolled: z.boolean().optional(),
       mfaRequired: z.boolean().optional(),
-      mode: z.enum(["api-key", "browser-session", "local-token"]).optional(),
+      mode: z.enum(["browser-session", "local-token"]).optional(),
       name: z.string().nullable().optional(),
       orgId: z.string().nullable().optional(),
       phone: z.string().nullable().optional(),
@@ -569,6 +567,8 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
       return errorResponse("Authentication not configured", 500);
     }
 
+    assertJsonRequest(c.req.raw);
+
     const humanUserCount = await databaseAdapter.countHumanUsers();
     if (humanUserCount > 0) {
       return errorResponse("Admin user already exists", 409);
@@ -598,7 +598,11 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     );
     if (webPublicUrl) {
       try {
-        await persistWebPublicUrl(webPublicUrl);
+        // resolveRequestClientOrigin already vouched for this origin, and no
+        // user exists yet who could have planted the saved value it may have
+        // matched. The stricter check on a later edit would refuse a base
+        // provisioned in the config file when a proxy hides the public host.
+        await saveUserWebPublicUrl(webPublicUrl);
       } catch (error) {
         return errorResponse(
           error instanceof Error ? error.message : String(error),
@@ -1371,6 +1375,12 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     }
 
     const auth = getRequestAuth(c);
+    if (auth.mode !== "browser-session") {
+      return errorResponse(
+        "Sign in through the dashboard to update your profile.",
+        403
+      );
+    }
     assertBrowserCsrf(c.req.raw, auth, authService);
 
     const body = await readJson<UpdateAuthProfileRequest>(
@@ -1546,10 +1556,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     }
 
     const auth = getRequestAuth(c);
-    const orgs = await orgService.listUserOrgs(
-      auth.user.id,
-      auth.mode === "api-key" ? (auth.activeOrgId ?? null) : undefined
-    );
+    const orgs = await orgService.listUserOrgs(auth.user.id);
     return json<ListUserOrgsResponse>(orgs);
   });
 

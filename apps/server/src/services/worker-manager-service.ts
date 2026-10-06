@@ -878,7 +878,8 @@ export class WorkerManagerService {
 
   async stopWorker(
     name: string,
-    orgId: ChannelConfigScope = null
+    orgId: ChannelConfigScope = null,
+    preserveDesired = false
   ): Promise<void> {
     if (!this.isValidWorker(name)) {
       throw new Error(`Unknown worker: ${name}`);
@@ -907,7 +908,7 @@ export class WorkerManagerService {
           pm2.stop(processName, (error) => cb(error))
         );
       }
-      if (pluginWorker) {
+      if (pluginWorker && !preserveDesired) {
         await this.writePluginWorkerDesired(pluginWorker, false);
       }
       if (!pluginWorker) {
@@ -919,13 +920,35 @@ export class WorkerManagerService {
             throw new Error("Stop the manually started agent worker first");
           }
         }
-        await setWorkerDesiredRunning(
-          name as PlatformWorkerName,
-          false,
-          isChannelOwner(orgId) || name === "whatsapp" ? orgId : null
-        );
+        if (!preserveDesired) {
+          await setWorkerDesiredRunning(
+            name as PlatformWorkerName,
+            false,
+            isChannelOwner(orgId) || name === "whatsapp" ? orgId : null
+          );
+        }
       }
     });
+  }
+
+  async pauseDataWorkers(): Promise<void> {
+    for (const platform of [
+      "telegram",
+      "discord",
+      "whatsapp",
+      "slack",
+    ] as const) {
+      for (const owner of await listChannelOwners(platform)) {
+        if (
+          (await this.getWorkerStatus(platform, owner))?.status === "online"
+        ) {
+          await this.stopWorker(platform, owner, true);
+        }
+      }
+    }
+    if ((await this.getWorkerStatus("automation"))?.status === "online") {
+      await this.stopWorker("automation", null, true);
+    }
   }
 
   async recoverDesiredWorkers(): Promise<void> {

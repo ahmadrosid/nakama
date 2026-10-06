@@ -182,14 +182,14 @@ MicroSandbox backend and understand the host dependency.
   credentials, but local process and tool logs are not a general-purpose secret
   scrubber.
 
-In **Settings → Multi-factor authentication**, register a passkey or
+In **Control center → Workspace → Settings → Multi-factor authentication**, register a passkey or
 authenticator app for privileged accounts and store backup codes offline. A
 platform admin can enable and enforce MFA for selected roles. Test a recovery
 login before making enforcement mandatory.
 
 ## Back up for recovery, not just retention
 
-Use **Settings → Export ZIP** or snapshot the persistent volume. Prefer the
+Use **Control center → Workspace → Settings → Export ZIP** or snapshot the persistent volume. Prefer the
 application export while Nakama is running. If you copy the SQLite files or the
 whole volume directly, stop the container first so the snapshot is not taken
 mid-write.

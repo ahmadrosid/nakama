@@ -27,7 +27,7 @@ async function fetchCerebrasModels(): Promise<{
   }
 }
 
-export const cerebrasModelsQueryOptions = queryOptions({
+const cerebrasModelsQueryOptions = queryOptions({
   queryFn: fetchCerebrasModels,
   queryKey: queryKeys.cerebrasModels,
   staleTime: 1000 * 60 * 30,

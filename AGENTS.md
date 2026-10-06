@@ -15,7 +15,8 @@ Agent platform built to work with your team — not replace them. Multi-tenant m
 
 **Replies**
 - ADHD-shaped: lead with the action; numbered steps; no preamble/recap
-- Human voice — short, concrete, plain words (not tech jargon), no corporate filler
+- Use [ASD-STE100 Simplified Technical English](https://www.asd-ste100.org/) in every reply to the user, including progress updates. Keep code names, commands, and paths exact.
+- Human voice — short, concrete, plain words, no corporate filler
 - If ambiguous, give 3 options numbered — the user will reply with a number
 
 **Process**
@@ -24,7 +25,7 @@ Agent platform built to work with your team — not replace them. Multi-tenant m
 
 ## Dev
 
-- Bun 1.3+: `bun install`, `bun run`, `bun test`
+- Bun 1.4+: `bun install`, `bun run`, `bun test`
 - Servers: `bun run dev:server` | `dev:web` | `cli`
 - Format / lint: `bun x ultracite fix` | `check` | `doctor`; unused exports: `bun run knip` (CI fails on findings)
 
@@ -91,7 +92,7 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahm
 
 Orgs isolate profiles, sessions, automations, tools, MCP, skills, usage (`org_id` — see `packages/db/sql/schema.sql`, `migrateTenantOrgScope`).
 
-**Org context:** every authed call except `/v1/auth/*` and `/v1/platform/*` needs `X-Org-Id` (`@nakama/client`) or `active_org_id` cookie (`POST /v1/auth/active-org`). Middleware: `org-middleware.ts`; guards: `org-guards.ts`.
+**Org context:** every authed call except `/v1/auth/*` and `/v1/platform/*` needs `X-Org-Id` (`@nakama/client`) or the active org stored on the browser session (`active_org_id`, set by `POST /v1/auth/active-org`). Middleware: `org-middleware.ts`; guards: `org-guards.ts`.
 
 | Change | Where |
 |---|---|

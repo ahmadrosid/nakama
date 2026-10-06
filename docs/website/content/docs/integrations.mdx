@@ -1,36 +1,30 @@
 ---
 title: "Integrations"
-description: "See which dashboard integration sections manage channels, Composio, and related deployment settings."
+description: "See which Control center integrations manage notifications, external tools, and deployment settings."
 ---
 
-Use **Integrations** in the Nakama dashboard to connect channels, bridge workers, and external tool providers.
+Open **Control center → Integrations** to manage settings that span agents or the whole installation.
 
 ## Available sections
 
-- [Telegram](/telegram): configure the bot token, pairing flow, allowed users, and bridge worker behavior
-- [WhatsApp](/whatsapp): link a phone number, pair accounts, choose group mention behavior, and manage the WhatsApp bridge
-- [Discord](/discord): save the bot token, invite the bot, pair users, and run the Discord worker
-- [Slack](/slack): create the app from a manifest, save the bot and app tokens, pair members, and run the Slack worker
-- [Composio](/composio): connect SaaS toolkits with per-user OAuth and assign them to profiles
-- [MCP Servers](/mcp): connect external MCP servers and expose their tools to profiles
-- [Error tracking](/error-tracking): send this instance's own crashes to your Sentry, GlitchTip, or Bugsink project
-- **Coding agents**: choose Nakama provider passthrough (default) or harness login on this server — see [Coding agent](/coding-agent#provider-passthrough)
+- [Notifications](/telegram/notifications): send agent events to a Telegram topic, a Discord channel, or a WhatsApp contact
+- [Composio](/composio): connect SaaS toolkits with per-user OAuth and assign them to agents
+- **Coding agents**: choose Nakama provider passthrough (default) or harness login on this server. See [Coding agent](/coding-agent#provider-passthrough)
+- **Context savings**: configure token optimization and review its savings. See [Token optimiser](/token-optimiser)
+- [Error tracking](/error-tracking): send this instance's own crashes to your Sentry, GlitchTip, Bugsink, or Rustrak project
 
-## Backend API keys
+Channel credentials and bridge workers belong to one agent. Open **Agent → your agent → Channels**, then choose [Telegram](/telegram), [WhatsApp](/whatsapp), [Discord](/discord), or [Slack](/slack). MCP servers live under **Control center → Agent tools → MCP**. See [MCP servers](/mcp).
 
-Use organization backend API keys when a server-side app needs to call Nakama's AI API. Create them from the organization admin API, store the returned secret in that app's server-side environment, and send it as `Authorization: Bearer <key>`.
+## Direct channel worker runs
 
-The secret is shown only when the key is created or rotated. Nakama stores a hash, so list keys to see metadata and revoke or rotate compromised keys. Do not put these keys in browser code, mobile apps, or public repositories. The existing `~/.nakama/local-auth-token` remains for local CLI and worker access.
+The dashboard sets the organization and profile when it starts a channel worker. For a direct local run, set both values:
 
-## What lives in Integrations
+```bash
+export NAKAMA_CHANNEL_ORG_ID="org_your_org"
+export NAKAMA_CHANNEL_PROFILE_ID="your-profile"
+```
 
-The dashboard groups together deployment-level and organization-level configuration that is not tied to a single profile page.
-
-Common examples:
-
-- channel credentials such as Telegram, WhatsApp, and Discord tokens
-- bridge worker controls and pairing codes
-- Composio toolkit enablement and OAuth connection management
+Then run `bun run dev:telegram`, `bun run dev:whatsapp`, `bun run dev:discord`, or `bun run dev:slack`. Save the connection for that profile first. Set `NAKAMA_CONFIG_DIR` and `NAKAMA_SERVER_URL` if you use a separate config root or server.
 
 ## Related docs
 

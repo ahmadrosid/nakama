@@ -5,6 +5,8 @@ import type {
   DeleteArtifactResponse,
   DeleteKnowledgeBaseResponse,
   ImageAttachment,
+  ImportKnowledgeBaseZipRequest,
+  ImportKnowledgeBaseZipResponse,
   InitSoulResponse,
   ListArtifactsResponse,
   ListKnowledgeBaseResponse,
@@ -43,13 +45,7 @@ import {
   requireOrgAdminOrPlatformAdminFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
-import {
-  getRequestAppUserScope,
-  getRequestAuth,
-  json,
-  readJson,
-  readOptionalJson,
-} from "../shared";
+import { getRequestAuth, json, readJson, readOptionalJson } from "../shared";
 import type { HonoApp } from "../types";
 
 const ORG_ADMIN_PROFILE_SETTING_KEYS = new Set([
@@ -209,6 +205,32 @@ export function registerProfileRoutes(
     .object({})
     .passthrough()
     .openapi("UploadKnowledgeBaseResponse");
+  const importKnowledgeBaseZipRequestSchema = z
+    .object({ zipBase64: z.string().min(1) })
+    .strict()
+    .openapi("ImportKnowledgeBaseZipRequest");
+  const importKnowledgeBaseZipResponseSchema = z
+    .object({
+      profileId: z.string(),
+      entries: z.array(
+        z.object({
+          filename: z.string(),
+          outcome: z.enum(["created", "duplicate", "unsupported", "error"]),
+          documentId: z.string().optional(),
+          status: z.enum(["ready", "failed"]).optional(),
+          match: z.enum(["content_hash", "name_size"]).optional(),
+          reason: z.string().optional(),
+        })
+      ),
+      totals: z.object({
+        created: z.number(),
+        duplicate: z.number(),
+        unsupported: z.number(),
+        error: z.number(),
+        failedExtraction: z.number(),
+      }),
+    })
+    .openapi("ImportKnowledgeBaseZipResponse");
   const deleteKnowledgeBaseSchema = z
     .object({})
     .passthrough()
@@ -778,6 +800,50 @@ export function registerProfileRoutes(
   );
   app.openAPIRegistry.registerPath(
     createRoute({
+      method: "post",
+      operationId: "importKnowledgeBaseZip",
+      path: "/v1/profiles/{profileId}/knowledge-base/import-zip",
+      request: {
+        body: {
+          content: {
+            "application/json": { schema: importKnowledgeBaseZipRequestSchema },
+          },
+          required: true,
+        },
+        params: profileIdParam,
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              schema: importKnowledgeBaseZipResponseSchema,
+            },
+          },
+          description: "Knowledge base ZIP import results",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Invalid ZIP file",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Platform administrator required",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Profile not found",
+        },
+        413: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "ZIP file exceeds an import limit",
+        },
+      },
+      summary: "Import a ZIP of profile knowledge base documents",
+      tags: ["Profiles"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
       method: "delete",
       operationId: "deleteKnowledgeBaseDocument",
       path: "/v1/profiles/{profileId}/knowledge-base/{documentId}",
@@ -1305,7 +1371,6 @@ export function registerProfileRoutes(
   app.get("/v1/profiles/:profileId/artifacts", async (c) => {
     requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
-    const { appUserId } = getRequestAppUserScope(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const limitRaw = c.req.query("limit");
     const offsetRaw = c.req.query("offset");
@@ -1332,7 +1397,6 @@ export function registerProfileRoutes(
 
     return json<ListArtifactsResponse>(
       await agent.listProfileArtifacts(orgId, profileId, {
-        appUserId,
         folder: c.req.query("folder"),
         limit,
         offset,
@@ -1342,7 +1406,6 @@ export function registerProfileRoutes(
 
   app.get("/v1/profiles/:profileId/artifacts/content", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
-    const { appUserId } = getRequestAppUserScope(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const artifactPath = c.req.query("path");
 
@@ -1357,7 +1420,6 @@ export function registerProfileRoutes(
       profileId,
       artifactPath,
       {
-        appUserId,
         ...(c.req.method === "HEAD" ? { headOnly: true } : {}),
         render,
       }
@@ -1445,6 +1507,19 @@ export function registerProfileRoutes(
     );
   });
 
+  app.post("/v1/profiles/:profileId/knowledge-base/import-zip", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const profileId = decodeURIComponent(c.req.param("profileId"));
+    const body = await readJson<ImportKnowledgeBaseZipRequest>(
+      c.req.raw,
+      importKnowledgeBaseZipRequestSchema
+    );
+    return json<ImportKnowledgeBaseZipResponse>(
+      await agent.importKnowledgeBaseZip(orgId, profileId, body.zipBase64)
+    );
+  });
+
   app.delete(
     "/v1/profiles/:profileId/knowledge-base/:documentId",
     async (c) => {
@@ -1486,12 +1561,12 @@ export function registerProfileRoutes(
         : await agent.readKnowledgeBaseDocument(orgId, profileId, documentId, {
             render,
           });
-      const downloadName = document.filename.replace(/["\\]/g, "_");
+      const downloadName = document.filename.split("/").at(-1) ?? "document";
       const disposition =
         c.req.query("inline") === "1" ? "inline" : "attachment";
       return new Response(document.bytes, {
         headers: {
-          "Content-Disposition": `${disposition}; filename="${downloadName}"`,
+          "Content-Disposition": `${disposition}; filename*=UTF-8''${encodeURIComponent(downloadName)}`,
           "Content-Type": document.contentType,
         },
       });

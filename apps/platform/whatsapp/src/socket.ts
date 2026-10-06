@@ -8,12 +8,11 @@ import {
   DEFAULT_CONNECTION_CONFIG,
   DisconnectReason,
   extractMessageContent,
-  fetchLatestBaileysVersion,
   getContentType,
   jidDecode,
   jidEncode,
   makeWASocket,
-  type proto,
+  proto,
   type WASocket,
 } from "@whiskeysockets/baileys";
 import { usePrivateMultiFileAuthState } from "./auth-state";
@@ -48,7 +47,6 @@ export async function createWhatsAppSocket(
 ): Promise<WhatsAppSocketHandle> {
   const authDir = getWhatsAppConfigDir(deps.orgId) + "/auth";
   const { state, saveCreds } = await usePrivateMultiFileAuthState(authDir);
-  const { version } = await fetchLatestBaileysVersion();
 
   let socket: WASocket | null = null;
   let stopped = false;
@@ -130,10 +128,15 @@ export async function createWhatsAppSocket(
         markOnlineOnConnect: false,
         printQRInTerminal: false,
         retryRequestDelayMs: 2000,
-        // Keep history sync disabled, but allow Baileys init queries so the
-        // socket fully subscribes after reconnect/restart.
-        shouldSyncHistoryMessage: () => false,
-        version,
+        // Bootstrap carries identity mappings; RECENT gates app-state init.
+        // History stays in messaging-history.set, never imported into chats.
+        shouldSyncHistoryMessage: ({ syncType }) =>
+          syncType === proto.HistorySync.HistorySyncType.INITIAL_BOOTSTRAP ||
+          syncType === proto.HistorySync.HistorySyncType.RECENT ||
+          syncType === proto.HistorySync.HistorySyncType.PUSH_NAME ||
+          syncType === proto.HistorySync.HistorySyncType.NON_BLOCKING_DATA ||
+          syncType === proto.HistorySync.HistorySyncType.INITIAL_STATUS_V3,
+        syncFullHistory: false,
       });
 
       if (myGen !== generation || stopped) {
@@ -186,16 +189,25 @@ export async function createWhatsAppSocket(
           // socket cannot dispatch after the next generation is bound.
           next.ev.destroy();
           deps.onDisconnected?.();
-          const statusCode = (
-            lastDisconnect?.error as
-              | { output?: { statusCode?: number } }
-              | undefined
-          )?.output?.statusCode;
+          const error = lastDisconnect?.error as
+            | {
+                output?: { statusCode?: number };
+                cause?: unknown;
+                data?: unknown;
+              }
+            | undefined;
+          const statusCode = error?.output?.statusCode;
           const shouldReconnect =
             statusCode !== DisconnectReason.loggedOut && !stopped;
 
           console.log(
-            `WhatsApp disconnected (code: ${statusCode}).${shouldReconnect ? " Reconnecting..." : ""}`
+            `WhatsApp disconnected ${JSON.stringify({
+              cause: safeDisconnectReason(error?.cause ?? error?.data),
+              code: typeof statusCode === "number" ? statusCode : null,
+              message: safeDisconnectReason(error),
+              reconnect: shouldReconnect,
+              timestamp: new Date().toISOString(),
+            })}`
           );
 
           if (!shouldReconnect) {
@@ -313,6 +325,35 @@ export async function createWhatsAppSocket(
   };
 
   return handle;
+}
+
+function safeDisconnectReason(error: unknown): string | null {
+  if (error == null) {
+    return null;
+  }
+  const { message, code } =
+    typeof error === "object"
+      ? (error as { message?: unknown; code?: unknown })
+      : { code: undefined, message: error };
+  // Only known diagnostics can leave the worker: arbitrary error text/data
+  // can contain QR payloads, credentials, message content, or remote addresses.
+  if (
+    typeof message === "string" &&
+    /^(QR refs attempts ended|Timed Out|Connection was lost|Connection Closed|Connection Terminated|Connection Terminated by Server|Connection Failure|Logged Out|Intentional Logout|Restart Required|Pre-key upload timeout|Multi-device beta not joined|Stream Errored \((conflict|restart required|connection failure)\))$/.test(
+      message
+    )
+  ) {
+    return message;
+  }
+  if (
+    typeof code === "string" &&
+    /^(ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|EPIPE|ENETUNREACH|EHOSTUNREACH)$/.test(
+      code
+    )
+  ) {
+    return code;
+  }
+  return "[redacted]";
 }
 
 function wrapSocketSendMessage(target: WASocket): void {

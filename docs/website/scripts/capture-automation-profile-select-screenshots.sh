@@ -4,6 +4,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+source "$(dirname "$0")/capture-common.sh"
 MAIN_ROOT="${NAKAMA_MAIN_ROOT:-/tmp/nakama-main-pr-shots}"
 SCREENSHOT_DIR="$ROOT/.github/pr-image"
 TEMP_AFTER="/tmp/nakama-pr-auto-profile-after-$$"
@@ -201,6 +202,7 @@ capture_edit_dialog() {
 }
 
 mkdir -p "$SCREENSHOT_DIR"
+ensure_current_web_build "$ROOT"
 
 if [[ ! -d "$MAIN_ROOT/apps/web" ]]; then
   echo "Missing main worktree at $MAIN_ROOT (git worktree add … main)" >&2

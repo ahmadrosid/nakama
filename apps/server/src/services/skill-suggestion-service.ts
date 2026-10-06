@@ -13,11 +13,7 @@ import {
   assertNotBundledSkillName,
   assertValidSkillName,
 } from "@nakama/core/skills/write";
-import type {
-  DatabaseAdapter,
-  SkillSuggestionAction,
-  StoredSkillSuggestion,
-} from "@nakama/db";
+import type { DatabaseAdapter, StoredSkillSuggestion } from "@nakama/db";
 import type { SkillProposalService } from "./skill-proposal-service";
 import { isSkillWriteApprovalRequired } from "./skill-write-approval";
 import type { SkillsService } from "./skills-service";
@@ -271,5 +267,3 @@ export class SkillSuggestionService {
     return this.skillProposalService;
   }
 }
-
-export type { SkillSuggestionAction };

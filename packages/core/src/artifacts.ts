@@ -35,34 +35,10 @@ import type {
 import { convertDocxToMarkdown } from "./docx-text";
 import { pathExists } from "./fs";
 import { SOUL_FILES } from "./soul/load";
-import {
-  getAppUserSoulDir,
-  getProfileArtifactsDir,
-  getProfileSoulDir,
-} from "./soul/resolve";
+import { getProfileArtifactsDir, getProfileSoulDir } from "./soul/resolve";
 import { buildToolExecutionContext } from "./tools/context";
-import { jsonSchemaFromZod, parseToolInput } from "./tools/schema";
-
-/**
- * Where an artifact written by this org and profile is stored.
- *
- * An app user's own folder, or the shared profile folder when no app user is
- * named. Reads go through `artifactReadDirs` instead, which falls back to the
- * shared folder; this is the single destination a write picks.
- */
-function artifactsDirFor(
-  orgId: string,
-  profileId: string,
-  appUserId?: string | null
-): string {
-  const trimmed = appUserId?.trim();
-
-  return trimmed
-    ? path.join(getAppUserSoulDir(orgId, profileId, trimmed), "artifacts")
-    : getProfileArtifactsDir(orgId, profileId);
-}
-
 import { guardFilePath, PathGuardError } from "./tools/paths";
+import { jsonSchemaFromZod, parseToolInput } from "./tools/schema";
 
 const ARTIFACT_META_SUFFIX = ".nakama-meta.json";
 // ponytail: per-process locking; coordinate replicas before sharing writable workspaces.
@@ -98,7 +74,7 @@ export async function listArtifacts(
 ): Promise<ListArtifactsResponse> {
   const directory = workspaceRoot
     ? path.join(workspaceRoot, "artifacts")
-    : artifactsDirFor(orgId, profileId, options.appUserId);
+    : getProfileArtifactsDir(orgId, profileId);
 
   if (workspaceRoot && (await pathExists(directory))) {
     if ((await lstat(directory)).isSymbolicLink()) {
@@ -239,92 +215,34 @@ function artifactNotFoundOr(error: unknown, filename: string): unknown {
 }
 
 /**
- * Where to look for an artifact when the caller names an app user: that user's
- * own folder first, then the shared profile folder.
- *
- * The fallback is there because every document written before the write side
- * learned about app users is sitting in the shared folder, and dropping it
- * would strand files that exist today. It grants nothing new: the same caller
- * reaches the shared folder already by leaving the header off.
- */
-function artifactReadDirs(
-  orgId: string,
-  profileId: string,
-  appUserId?: string | null
-): { directory: string; fallback: boolean }[] {
-  const trimmed = appUserId?.trim();
-  const shared = {
-    directory: getProfileArtifactsDir(orgId, profileId),
-    fallback: false,
-  };
-
-  if (!trimmed) {
-    return [shared];
-  }
-
-  return [
-    {
-      directory: path.join(
-        getAppUserSoulDir(orgId, profileId, trimmed),
-        "artifacts"
-      ),
-      fallback: false,
-    },
-    { ...shared, fallback: true },
-  ];
-}
-
-/**
- * A name the fallback is allowed to carry into the shared folder. An app user
- * naming an absolute path or a `..` segment is reaching outside their own
- * folder, and that stays a 404 whatever is on the other side.
- */
-function isPlainArtifactName(filename: string): boolean {
-  if (path.isAbsolute(filename) || filename.startsWith("~")) {
-    return false;
-  }
-
-  return !filename
-    .split(/[\\/]/)
-    .some((segment) => segment === ".." || segment.trim() === "~");
-}
-
-/**
  * First directory holding the file, or null. Every way of failing answers the
  * same: a path the caller may not reach and a path that is not there are not
  * distinguished, so a traversal attempt learns nothing from the reply.
  */
 async function locateArtifact(
-  candidates: { directory: string; fallback: boolean }[],
+  directory: string,
   filename: string
 ): Promise<{ filePath: string; fileStat: Stats } | null> {
-  for (const candidate of candidates) {
-    if (candidate.fallback && !isPlainArtifactName(filename)) {
-      continue;
-    }
-    const resolvedDir = await realpath(candidate.directory).catch(() => null);
-    if (!resolvedDir) {
-      continue;
-    }
-    const guarded = await guardFilePath(filename, null, undefined, {
-      allowedDirs: [resolvedDir],
-      cwd: resolvedDir,
-    }).catch(() => null);
-    if (!guarded) {
-      continue;
-    }
-    const fileStat = await stat(guarded.resolved).catch(() => null);
-    if (fileStat?.isFile()) {
-      return { filePath: guarded.resolved, fileStat };
-    }
+  const resolvedDir = await realpath(directory).catch(() => null);
+  if (!resolvedDir) {
+    return null;
+  }
+  const guarded = await guardFilePath(filename, null, undefined, {
+    allowedDirs: [resolvedDir],
+    cwd: resolvedDir,
+  }).catch(() => null);
+  if (!guarded) {
+    return null;
+  }
+  const fileStat = await stat(guarded.resolved).catch(() => null);
+  if (fileStat?.isFile()) {
+    return { filePath: guarded.resolved, fileStat };
   }
 
   return null;
 }
 
 export async function readArtifactFile(input: {
-  /** Resolves the end user's own artifacts folder when the caller names one. */
-  appUserId?: string | null;
   orgId: string;
   profileId: string;
   filename: string;
@@ -336,7 +254,7 @@ export async function readArtifactFile(input: {
   render?: "markdown";
 }): Promise<{ bytes: Buffer; contentType: string; filePath: string }> {
   const located = await locateArtifact(
-    artifactReadDirs(input.orgId, input.profileId, input.appUserId),
+    getProfileArtifactsDir(input.orgId, input.profileId),
     input.filename
   );
 

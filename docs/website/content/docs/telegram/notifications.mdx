@@ -1,11 +1,11 @@
 ---
 title: "Outbound notifications"
-description: "Send simple webhook-driven notifications from external apps into a Telegram group or topic."
+description: "Send webhook-driven alerts through Telegram, Discord, or WhatsApp."
 ---
 
-Nakama can also send simple text notifications into Telegram.
+Send payment updates, failed job alerts, and deployment notifications from external apps through Telegram, Discord, or WhatsApp.
 
-This is separate from the normal chat bridge. Instead of waiting for a Telegram user to message the bot first, another app can call a Nakama webhook and Nakama will post the message into a configured Telegram chat.
+Another app calls a Nakama webhook, and Nakama posts the notification through the selected agent's connection. Users do not need to start a chat with the agent to receive each alert.
 
 This is useful for things like:
 
@@ -16,16 +16,21 @@ This is useful for things like:
 
 ## How it works
 
-1. Open **Integrations**
-2. In **Notification destinations**, create a new destination
-3. Choose the agent whose Telegram connection should send the notification, then enter a name
-4. Paste the Telegram topic link, such as `https://t.me/c/3734526664/147`
+1. Open **Control center → Notifications**
+2. Choose the agent whose connection should send the notification
+3. Choose **Telegram**, **Discord**, or **WhatsApp**, then enter a name
+4. For Telegram, paste a topic link such as `https://t.me/c/3734526664/147`. For Discord, enter the target channel or thread ID. For WhatsApp, check the displayed paired contact.
 5. Save and copy the generated webhook URL and API key
 
-![Create a Telegram notification destination from Integrations → Notifications](/screenshots/telegram-notifications.png)
+![Create a Telegram notification destination from Control center → Notifications](/screenshots/telegram-notifications.png)
 
-Each destination belongs to one organization and uses one agent’s Telegram connection. If that connection is unavailable, delivery fails instead of using another bot. Older destinations with unclear ownership require you to select an agent before delivery resumes.
-Nakama extracts the Telegram Chat ID and Topic ID from the link and sends the message directly into that topic thread.
+Each destination belongs to one organization and uses one agent's connection. If that connection is unavailable, delivery fails instead of using another agent. Older Telegram destinations without an agent require you to select one before delivery resumes.
+
+Telegram notifications go directly to the linked topic. Discord notifications go to the specified channel or thread, where the bot needs permission to send messages. To copy a Discord channel ID, enable Developer Mode in Discord and use **Copy Channel ID** on the channel.
+
+WhatsApp notifications go to the agent's current paired contact. Changing the pairing changes the recipient for all of that agent's WhatsApp destinations. Pair the contact before creating a destination, and keep the WhatsApp worker connected. Arbitrary phone numbers and WhatsApp groups are not supported here.
+
+Use **Edit** on a destination to change its name, agent, or target. To switch channels, create a new destination. Key rotation and deletion work the same way for every channel.
 
 ## Webhook payload
 
@@ -44,27 +49,27 @@ Send a `POST` request with JSON like this:
 Required headers:
 
 - `X-API-Key` — the destination API key
-- `Idempotency-Key` — a unique id per event (max 128 characters). Replays of the same key are rejected and do not send again. Claims are kept for 7 days (including after a failed Telegram send) so a lost success response cannot unlock a second delivery.
+- `Idempotency-Key` — a unique id per event (max 128 characters). Replays of the same key are rejected and do not send again. Claims are kept for 7 days, including after a failed delivery, so a lost success response cannot unlock a second delivery.
 
 `body` is required.
 `title` is optional.
 `level` is optional and can be `info`, `success`, `warning`, or `error`.
 
-Nakama formats that into a short Telegram text message and sends it to the configured chat or topic.
+Nakama sends the title, body, and level indicator through the chosen channel. WhatsApp uses plain text; Telegram and Discord retain title emphasis.
 
 ## Design note
 
-In v1, Nakama does not accept arbitrary templating or custom Telegram payloads from external apps.
+Nakama accepts simple notification text rather than arbitrary templates or custom channel payloads.
 
 That is intentional:
 
 - the webhook stays stable and easy to validate
 - external apps only need to send simple notification text
-- the destination model can later support Slack or Discord with the same webhook shape
+- all three channels use the same webhook shape
 
 ## Notification destinations for groups and topics
 
-From **Integrations → Notifications**, Nakama can create Telegram webhook destinations for a group or a forum topic.
+From **Control center → Notifications**, Nakama can create Telegram webhook destinations for a group or a forum topic.
 
 If you already have a topic share link such as:
 
@@ -95,3 +100,5 @@ Then copy `message.chat.id` and `message.message_thread_id` from the matching up
 - [Chat behavior & commands](/telegram/chat)
 - [Troubleshooting](/telegram/troubleshooting)
 - [Telegram setup](/telegram)
+- [Discord setup](/discord)
+- [WhatsApp setup](/whatsapp)

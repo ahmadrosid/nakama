@@ -184,10 +184,11 @@ export interface SseEvent {
 export async function readSseEvents(
   body: ReadableStream<Uint8Array>,
   onEvent: (event: SseEvent) => void | Promise<void>
-): Promise<void> {
+): Promise<boolean> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let sawDone = false;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -209,7 +210,7 @@ export async function readSseEvents(
 
       const eventBlock = buffer.slice(0, boundary.index);
       buffer = buffer.slice(boundary.index + boundary.length);
-      await emitSseEvent(eventBlock, onEvent);
+      sawDone = (await emitSseEvent(eventBlock, onEvent)) || sawDone;
     }
 
     if (done) {
@@ -218,14 +219,15 @@ export async function readSseEvents(
   }
 
   if (buffer.trim()) {
-    await emitSseEvent(buffer, onEvent);
+    sawDone = (await emitSseEvent(buffer, onEvent)) || sawDone;
   }
+  return sawDone;
 }
 
 async function emitSseEvent(
   eventBlock: string,
   onEvent: (event: SseEvent) => void | Promise<void>
-): Promise<void> {
+): Promise<boolean> {
   let event = "message";
   const dataLines: string[] = [];
 
@@ -247,11 +249,15 @@ async function emitSseEvent(
   const data = dataLines.join("\n");
   const normalized = data.trim();
 
-  if (!normalized || normalized === "[DONE]") {
-    return;
+  if (normalized === "[DONE]") {
+    return true;
+  }
+  if (!normalized) {
+    return false;
   }
 
   await onEvent({ data, event });
+  return false;
 }
 
 function findSseBoundary(

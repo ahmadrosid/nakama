@@ -13,9 +13,7 @@ const SUGGEST_PARAMS_SYSTEM = [
   "Do not use markdown fences, labels, or surrounding prose.",
 ].join("\n");
 
-export function buildSuggestParamsUserPrompt(
-  input: SuggestToolParamsInput
-): string {
+function buildSuggestParamsUserPrompt(input: SuggestToolParamsInput): string {
   const lines = [
     `Tool: ${input.toolName}`,
     `Description: ${input.description}`,

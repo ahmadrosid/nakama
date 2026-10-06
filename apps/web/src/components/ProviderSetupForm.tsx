@@ -1,4 +1,5 @@
 import type { CreateProviderResponse } from "@nakama/core/contract";
+import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
 import { ollamaRequiresApiKey } from "@nakama/core/ollama-provider-config";
 import { Button } from "@nakama/ui/button";
 import { FormField } from "@nakama/ui/form-field";
@@ -80,7 +81,7 @@ export function ProviderSetupForm({
 
   return (
     <form
-      className={formSpacing}
+      className={`min-w-0 ${formSpacing}`}
       onSubmit={(event) => void form.handleSubmit(event)}
     >
       {showHeading ? (
@@ -358,6 +359,26 @@ function ProviderSetupExtraFields({
   density: "default" | "compact";
   form: ReturnType<typeof useProviderSetupForm>;
 }) {
+  if (form.selectedProvider === "netra") {
+    return (
+      <CustomProviderFields
+        apiKey={form.apiKey}
+        baseUrl={defaultDiscoveryBaseUrl("netra") ?? ""}
+        customModels={form.customModels}
+        density={density}
+        disabled={form.busy}
+        displayName="Netra Runtime"
+        hideIdentity
+        modelsError={form.modelsError}
+        onBaseUrlChange={form.setBaseUrl}
+        onCustomModelsChange={form.setCustomModels}
+        onDisplayNameChange={form.setDisplayName}
+        remoteProvider="netra"
+        showModelsEditor={canConnect}
+      />
+    );
+  }
+
   if (form.selectedProvider === "cloudflare") {
     return <CloudflareAccountIdField density={density} form={form} />;
   }

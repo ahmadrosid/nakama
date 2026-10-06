@@ -7,6 +7,7 @@ import {
 } from "@nakama/core";
 import { bodyLimit } from "hono/body-limit";
 import { requestId } from "hono/request-id";
+import { sessionTurnRegistry } from "../services/session-turn-registry";
 import { tryServeStaticWeb } from "../static-web";
 import { createAuditLogMiddleware } from "./audit-log";
 import { createAuthMiddleware } from "./auth-middleware";
@@ -86,6 +87,61 @@ function readPositiveEnv(name: string): number | undefined {
 
 export function createHonoApp(options: ServerOptions) {
   const app: HonoApp = new OpenAPIHono();
+  let restoringData = false;
+  let restorePending = false;
+  let activeDataRequests = 0;
+  const beforeRestore = options.onBeforeDataRestore;
+  const afterRestore = options.onDataRestored;
+  options = {
+    ...options,
+    async onBeforeDataRestore() {
+      restoringData = true;
+      const deadline = Date.now() + 30_000;
+      while (activeDataRequests > 0 || sessionTurnRegistry.hasActiveTurns()) {
+        if (Date.now() >= deadline) {
+          throw new Error("Active requests must finish before restoring data.");
+        }
+        await Bun.sleep(25);
+      }
+      await beforeRestore?.();
+    },
+    onDataRestored: afterRestore
+      ? async () => {
+          await afterRestore();
+          restoringData = false;
+        }
+      : undefined,
+  };
+  app.use("*", async (c, next) => {
+    if (restoringData) {
+      return errorResponse(
+        "Data restore requires a successful reload or restart.",
+        503
+      );
+    }
+    const isRestore =
+      c.req.method === "POST" &&
+      (c.req.path === "/v1/platform/data/import/restore" ||
+        c.req.path === "/v1/auth/setup/import/restore");
+    if (isRestore && restorePending) {
+      return errorResponse("A data restore is already in progress.", 409);
+    }
+    if (isRestore) {
+      restorePending = true;
+    }
+    if (!isRestore) {
+      activeDataRequests += 1;
+    }
+    try {
+      await next();
+    } finally {
+      if (isRestore) {
+        restorePending = false;
+      } else {
+        activeDataRequests -= 1;
+      }
+    }
+  });
   const metricsEnabled = process.env.NAKAMA_METRICS === "true";
   let requests = 0;
   let serverErrors = 0;
@@ -208,7 +264,9 @@ export function createHonoApp(options: ServerOptions) {
   app.use("*", (c, next) => {
     if (
       c.req.method === "POST" &&
-      /^\/v1\/profiles\/[^/]+\/knowledge-base$/.test(c.req.path)
+      /^\/v1\/profiles\/[^/]+\/knowledge-base(?:\/import-zip)?$/.test(
+        c.req.path
+      )
     ) {
       return knowledgeBodyLimit(c, next);
     }

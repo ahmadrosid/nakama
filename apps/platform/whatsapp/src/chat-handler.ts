@@ -209,7 +209,8 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         );
         senderJids.push(...resolvedSenderJids);
         authorized =
-          authStore.isAuthorized(senderJids) || requireGroupMention === false;
+          authStore.isAuthorized(senderJids) ||
+          authStore.getConfig()?.allowUnpairedGroupMembers === true;
       }
 
       if (authorized) {

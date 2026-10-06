@@ -9,7 +9,7 @@ Nakama is a multi-tenant Bun + TypeScript platform for running AI agent teams (o
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) 1.3+
+- [Bun](https://bun.sh) 1.4+
 - git
 - [GitHub CLI](https://cli.github.com/) (`gh`) for opening PRs
 

@@ -10,7 +10,7 @@ import {
 import { client } from "@/lib/client";
 import { buildPublicArtifactShareUrl } from "@/lib/public-artifact-share-url";
 
-export interface PublicShareMetadata {
+interface PublicShareMetadata {
   filename: string;
   inlineAllowed: boolean;
   mimeType: string;

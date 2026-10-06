@@ -28,16 +28,16 @@ function sampleReport(): ErrorReport {
   });
 }
 
-test("parseSentryDsn builds the store endpoint and key", () => {
+test("parseSentryDsn builds the envelope endpoint and key", () => {
   expect(parseSentryDsn("https://abc123@errors.example.com/7")).toEqual({
-    endpoint: "https://errors.example.com/api/7/store/",
+    endpoint: "https://errors.example.com/api/7/envelope/",
     publicKey: "abc123",
   });
 });
 
 test("parseSentryDsn keeps a path prefix for a subpath install", () => {
   expect(parseSentryDsn("https://k@example.com/glitchtip/12")?.endpoint).toBe(
-    "https://example.com/glitchtip/api/12/store/"
+    "https://example.com/glitchtip/api/12/envelope/"
   );
 });
 
@@ -90,15 +90,20 @@ test("a test event is sent at a lower level than a crash", () => {
   expect(testEvent.level).toBe("info");
 });
 
-test("sendSentryEvent posts the event with the auth header the ingest expects", async () => {
-  let received: { auth: string | null; body: any; method: string } | null =
-    null;
+test("sendSentryEvent posts an envelope with the auth header the ingest expects", async () => {
+  let received: {
+    auth: string | null;
+    body: string;
+    contentType: string | null;
+    method: string;
+  } | null = null;
 
   const server = Bun.serve({
     async fetch(request) {
       received = {
         auth: request.headers.get("x-sentry-auth"),
-        body: await request.json(),
+        body: await request.text(),
+        contentType: request.headers.get("content-type"),
         method: request.method,
       };
       return new Response("{}", { status: 200 });
@@ -110,16 +115,30 @@ test("sendSentryEvent posts the event with the auth header the ingest expects", 
     const dsn = parseSentryDsn(
       `http://pubkey@${server.hostname}:${server.port}/42`
     );
-    const ok = await sendSentryEvent(dsn!, toSentryEvent(sampleReport()));
+    const event = toSentryEvent(sampleReport());
+    const ok = await sendSentryEvent(dsn!, event);
 
     expect(ok).toBe(true);
     expect(dsn?.endpoint).toBe(
-      `http://${server.hostname}:${server.port}/api/42/store/`
+      `http://${server.hostname}:${server.port}/api/42/envelope/`
     );
     expect(received!.method).toBe("POST");
+    expect(received!.contentType).toBe("application/x-sentry-envelope");
     expect(received!.auth).toContain("sentry_version=7");
     expect(received!.auth).toContain("sentry_key=pubkey");
-    expect(received!.body.exception.values[0].value).toBe("tool loop exceeded");
+
+    // The envelope is the header line, the item header line, then the payload.
+    const [envelopeHeader, itemHeader, payload] = received!.body.split("\n");
+
+    expect(JSON.parse(envelopeHeader).event_id).toBe(event.event_id);
+    expect(JSON.parse(itemHeader)).toEqual({
+      content_type: "application/json",
+      length: Buffer.byteLength(payload),
+      type: "event",
+    });
+    expect(JSON.parse(payload).exception.values[0].value).toBe(
+      "tool loop exceeded"
+    );
   } finally {
     server.stop(true);
   }

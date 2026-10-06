@@ -158,21 +158,21 @@ export function isChatSessionPath(pathname: string): boolean {
   return chatProfileIdFromPath(pathname) !== null;
 }
 
-export const ACTIVE_CHAT_PROFILE_STORAGE_KEY = "nakama:active-chat-profile";
+const ACTIVE_CHAT_PROFILE_STORAGE_KEY = "nakama:active-chat-profile";
 
-export function activeChatProfileStorageKey(orgId?: string | null): string {
-  return orgId
-    ? `${ACTIVE_CHAT_PROFILE_STORAGE_KEY}:${orgId}`
-    : ACTIVE_CHAT_PROFILE_STORAGE_KEY;
+export function activeChatProfileStorageKey(orgId: string): string {
+  return `${ACTIVE_CHAT_PROFILE_STORAGE_KEY}:${orgId}`;
 }
 
 export function readStoredActiveChatProfileId(
   orgId?: string | null
 ): string | null {
-  if (typeof localStorage === "undefined") {
+  if (!orgId || typeof localStorage === "undefined") {
     return null;
   }
 
+  // The unscoped key predates org scoping and may hold another org's profile id.
+  localStorage.removeItem(ACTIVE_CHAT_PROFILE_STORAGE_KEY);
   const profileId = localStorage
     .getItem(activeChatProfileStorageKey(orgId))
     ?.trim();
@@ -183,14 +183,11 @@ export function writeStoredActiveChatProfileId(
   profileId: string,
   orgId?: string | null
 ): void {
-  if (typeof localStorage === "undefined") {
+  if (!orgId || typeof localStorage === "undefined") {
     return;
   }
 
-  if (orgId) {
-    localStorage.setItem(activeChatProfileStorageKey(orgId), profileId);
-  }
-  localStorage.setItem(ACTIVE_CHAT_PROFILE_STORAGE_KEY, profileId);
+  localStorage.setItem(activeChatProfileStorageKey(orgId), profileId);
 }
 
 export function pickKnownProfileId(
@@ -208,10 +205,24 @@ export function pickKnownProfileId(
 
 /** Initial profile for draft `/chat` before profiles list loads. */
 export function readInitialDraftChatProfileId(input: {
+  currentOrgId?: string | null;
+  currentProfileId?: string | null;
   search: string;
   orgId?: string | null;
   routeProfileId?: string | null;
 }): string {
+  if (
+    input.orgId &&
+    input.currentOrgId !== undefined &&
+    input.currentOrgId !== input.orgId
+  ) {
+    return "";
+  }
+
+  if (input.currentProfileId !== undefined && input.currentProfileId !== null) {
+    return input.currentProfileId;
+  }
+
   if (input.routeProfileId) {
     return input.routeProfileId;
   }

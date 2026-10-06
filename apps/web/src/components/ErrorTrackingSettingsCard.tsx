@@ -92,8 +92,8 @@ export function ErrorTrackingSettingsCard() {
             Sentry-compatible DSN
           </p>
           <p className="text-muted-foreground text-sm [text-wrap:pretty]">
-            Works with Sentry, GlitchTip, Bugsink and a self-hosted Sentry.
-            Leave it empty to send nothing.
+            Works with Sentry, GlitchTip, Bugsink, Rustrak and a self-hosted
+            Sentry. Leave it empty to send nothing.
           </p>
         </div>
 

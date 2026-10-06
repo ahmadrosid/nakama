@@ -1,12 +1,18 @@
+import { Database } from "bun:sqlite";
 import {
+  chmod,
   cp,
+  link,
   lstat,
   mkdir,
   mkdtemp,
   readdir,
   readFile,
+  realpath,
   rename,
   rm,
+  rmdir,
+  unlink,
   writeFile,
 } from "node:fs/promises";
 import {
@@ -20,6 +26,7 @@ import {
   sep,
 } from "node:path";
 import {
+  assertConfigPathSegment,
   type DataExportManifest,
   type DataExportSkippedItem,
   type DataImportPreviewResponse,
@@ -35,7 +42,11 @@ import {
   type RestoreDataImportResponse,
   readAttachmentBytes,
 } from "@nakama/core";
-import { type DatabaseAdapter, resolveDatabasePath } from "@nakama/db";
+import {
+  createSqliteDatabase,
+  type DatabaseAdapter,
+  resolveDatabasePath,
+} from "@nakama/db";
 import { unzipSync, zipSync } from "fflate";
 import {
   PluginExportBarrierError,
@@ -143,6 +154,148 @@ function resolveConfiguredDatabasePath(
   return databasePath === undefined
     ? resolveDatabasePath(loadConfig().databaseUrl, { baseDir: rootDir })
     : databasePath;
+}
+
+/** Keep retired data in full backups, outside every active profile workspace. */
+export async function retireAppUserData(
+  rootDir: string,
+  databasePath: string | null
+): Promise<void> {
+  const root = await realpath(resolveNakamaRootDir(rootDir));
+  const retired = join(root, "retired-app-users");
+  const sessions: Array<{ id: string; org_id: string; profile_id: string }> =
+    [];
+  const attachments: Array<{ id: string; org_id: string; profile_id: string }> =
+    [];
+  if (
+    databasePath &&
+    databasePath !== ":memory:" &&
+    (await pathExists(databasePath))
+  ) {
+    // Staged restores may predate these columns. Upgrade before inventorying.
+    const migrated = await createSqliteDatabase(`file:${databasePath}`);
+    migrated.release();
+    const db = new Database(databasePath, { readonly: true });
+    try {
+      sessions.push(
+        ...(db
+          .query(`SELECT s.id, p.org_id, s.profile_id
+        FROM sessions s JOIN profiles p ON p.id = s.profile_id
+        WHERE s.app_user_id IS NOT NULL`)
+          .all() as typeof sessions)
+      );
+      attachments.push(
+        ...(db
+          .query(`SELECT a.id, a.org_id, a.profile_id
+        FROM attachments a JOIN sessions s ON s.id = a.session_id
+        WHERE s.app_user_id IS NOT NULL`)
+          .all() as typeof attachments)
+      );
+    } finally {
+      db.close(true);
+    }
+  }
+
+  async function checkedStat(target: string) {
+    const rel = relative(root, target);
+    if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+      throw new Error("Retired data path escapes the config root.");
+    }
+    let current = root;
+    let result;
+    for (const segment of rel.split(sep).filter(Boolean)) {
+      current = join(current, segment);
+      try {
+        result = await lstat(current);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          return null;
+        }
+        throw error;
+      }
+      if (result.isSymbolicLink()) {
+        throw new Error("Retired data paths must not contain symlinks.");
+      }
+    }
+    return result ?? (await lstat(root));
+  }
+
+  async function moveRetiredPath(
+    source: string,
+    target: string
+  ): Promise<void> {
+    const sourceStat = await checkedStat(source);
+    if (!sourceStat) {
+      return;
+    }
+    if (sourceStat.isDirectory()) {
+      const targetStat = await checkedStat(target);
+      if (targetStat && !targetStat.isDirectory()) {
+        throw new Error("Retired data destination conflict.");
+      }
+      await mkdir(target, { mode: 0o700, recursive: true });
+      await chmod(target, 0o700);
+      for (const entry of await readdir(source)) {
+        await moveRetiredPath(join(source, entry), join(target, entry));
+      }
+      await rmdir(source);
+      return;
+    }
+    const targetStat = await checkedStat(target);
+    if (
+      targetStat &&
+      sourceStat.ino === targetStat.ino &&
+      sourceStat.dev === targetStat.dev
+    ) {
+      // A crash after link() left both names for the same file; finish the move.
+      await chmod(target, 0o600);
+      await unlink(source);
+      return;
+    }
+    if (!sourceStat.isFile() || targetStat) {
+      throw new Error("Retired data destination conflict or unsupported file.");
+    }
+    await mkdir(dirname(target), { mode: 0o700, recursive: true });
+    await checkedStat(target);
+    // link() refuses an existing destination instead of overwriting it.
+    await link(source, target);
+    await chmod(target, 0o600);
+    await unlink(source);
+  }
+
+  const orgsDir = join(root, "orgs");
+  if (await checkedStat(orgsDir)) {
+    for (const orgId of await readdir(orgsDir)) {
+      const profilesDir = join(orgsDir, orgId, "profiles");
+      if (!(await checkedStat(profilesDir))) {
+        continue;
+      }
+      for (const profileId of await readdir(profilesDir)) {
+        await moveRetiredPath(
+          join(profilesDir, profileId, "users"),
+          join(retired, orgId, profileId, "users")
+        );
+      }
+    }
+  }
+  for (const record of attachments) {
+    const orgId = assertConfigPathSegment(record.org_id, "orgId");
+    const profileId = assertConfigPathSegment(record.profile_id, "profileId");
+    const id = assertConfigPathSegment(record.id, "attachmentId");
+    await moveRetiredPath(
+      join(root, "orgs", orgId, "profiles", profileId, "attachments", id),
+      join(retired, orgId, profileId, "attachments", id)
+    );
+  }
+  for (const record of sessions) {
+    const orgId = assertConfigPathSegment(record.org_id, "orgId");
+    const profileId = assertConfigPathSegment(record.profile_id, "profileId");
+    const filename = `${encodeURIComponent(record.id)}.jsonl`;
+    await moveRetiredPath(
+      join(root, "orgs", orgId, "session-history", filename),
+      join(retired, orgId, profileId, "session-history", filename)
+    );
+  }
 }
 
 export async function createNakamaDataExport(
@@ -708,6 +861,24 @@ export async function restoreNakamaDataImport(
       liveDatabasePath
     );
 
+    const stagedDatabasePath = liveDatabasePath
+      ? join(stagedRoot, relative(rootDir, liveDatabasePath))
+      : null;
+    // Also sanitize known archive layouts when the live install has no matching
+    // database yet. An older backup must not retain usable key storage.
+    const stagedDatabases = new Set([
+      stagedDatabasePath,
+      ...MAIN_DATABASE_LAYOUTS.map((layout) => join(stagedRoot, layout)),
+      join(stagedRoot, "nakama.db"),
+      join(stagedRoot, "nakama.sqlite"),
+    ]);
+    await retireAppUserData(stagedRoot, null);
+    for (const candidate of stagedDatabases) {
+      if (candidate && (await pathExists(candidate))) {
+        await retireAppUserData(stagedRoot, candidate);
+      }
+    }
+
     if (options.beforeReplace) {
       // Set first: a hook that throws may already have released the handle.
       replaceStarted = true;
@@ -988,6 +1159,13 @@ function validateArchivePath(path: string): void {
 
   if (isAbsolute(path) || /^[a-zA-Z]:/.test(path)) {
     throw new NakamaApiError(`Archive entry must be relative: ${path}`, 400);
+  }
+
+  if (process.platform === "win32" && path.includes(":")) {
+    throw new NakamaApiError(
+      `Archive entry cannot name an NTFS alternate data stream: ${path}`,
+      400
+    );
   }
 
   const normalized = normalize(path).split(sep).join("/");

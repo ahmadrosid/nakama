@@ -110,7 +110,7 @@ export function AutomationsPageLayout(state: AutomationsPageState) {
                 </Button>
               </AutomationPanelPlaceholder>
             ) : selected ? (
-              <AutomationDetailPanel {...state} />
+              <AutomationDetailPanel key={selected.id} {...state} />
             ) : (
               <AutomationPanelPlaceholder>
                 Select an automation to view runs.

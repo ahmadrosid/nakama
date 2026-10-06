@@ -33,6 +33,7 @@ import type {
   ProviderModelOption,
   UpdateProviderRequest,
 } from "@nakama/core/contract";
+import { NETRA_AGENT_MODEL_ID } from "@nakama/core/discovery-providers";
 import type { DatabaseAdapter } from "@nakama/db";
 import {
   getDefaultModel,
@@ -171,6 +172,13 @@ export function modelExistsOnInstance(
     }
 
     return false;
+  }
+
+  if (instance.type === "netra") {
+    return (
+      trimmed === NETRA_AGENT_MODEL_ID &&
+      isCompatibleModelId(trimmed, instance.customModels)
+    );
   }
 
   if (instance.type === "openai_compatible") {
@@ -353,6 +361,12 @@ export function applyProviderInstanceUpdate(
   instance: ProviderInstance,
   request: UpdateProviderRequest
 ): ProviderInstance {
+  if (instance.type === "netra" && request.wireApi === "responses") {
+    throw new Error("Netra Runtime supports Chat Completions only.");
+  }
+  if (instance.type === "netra" && request.baseUrl !== undefined) {
+    throw new Error("Netra Runtime uses its fixed API URL.");
+  }
   const next: ProviderInstance = { ...instance };
 
   if (
@@ -398,7 +412,7 @@ export function applyProviderInstanceUpdate(
   }
 
   if (request.customModels !== undefined) {
-    if (instance.type === "openai_compatible") {
+    if (instance.type === "openai_compatible" || instance.type === "netra") {
       next.customModels = validateCustomModels(request.customModels);
       if (!next.customModels.length) {
         throw new Error("At least one model is required.");
@@ -503,6 +517,21 @@ function buildProviderFieldsFromRequest(
     }
 
     return { ...(customModels ? { customModels } : {}) };
+  }
+
+  if (type === "netra") {
+    if (request.wireApi === "responses") {
+      throw new Error("Netra Runtime supports Chat Completions only.");
+    }
+    const customModels = request.customModels?.length
+      ? validateCustomModels(request.customModels)
+      : request.model?.trim()
+        ? validateCustomModels([{ default: true, id: request.model.trim() }])
+        : undefined;
+    if (!customModels?.length) {
+      throw new Error("At least one Netra model is required.");
+    }
+    return { customModels };
   }
 
   if (type === "openai_compatible") {
@@ -642,9 +671,7 @@ export function decodeStoredModelSelection(
   };
 }
 
-export function extractStoredModelId(
-  value: string | null | undefined
-): string | null {
+function extractStoredModelId(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
 
   if (!trimmed) {

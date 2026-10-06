@@ -65,8 +65,12 @@ import {
 
 const MAX_TOOL_ITERATIONS = 100;
 const MAX_TURN_OUTPUT_TOKENS = 200_000;
+const EMPTY_REPLY_NUDGE =
+  "Reply to the user now with a final answer based on the work so far.";
+const EMPTY_REPLY_NOTICE =
+  "The model finished without writing a reply. Send another message to continue.";
 
-export interface StreamHandlers {
+interface StreamHandlers {
   onChunk: (delta: string) => void;
   onSubAgentActivity?: (event: {
     parentToolCallId: string;
@@ -96,7 +100,7 @@ export interface StreamHandlers {
   onUsage?: (usage: ChatUsage) => void;
 }
 
-export type SendMessageArg = string | SendMessageInput;
+type SendMessageArg = string | SendMessageInput;
 
 export interface AgentChatSession {
   clear(): void;
@@ -115,14 +119,14 @@ export interface AgentChatSession {
   ): Promise<string>;
 }
 
-export interface SendStreamOptions {
+interface SendStreamOptions {
   /** Persist the accepted user message before any provider call. */
   onUserMessage?: () => Promise<void>;
   /** Cancels the turn: stops the tool loop and asks running tools to abort. */
   signal?: AbortSignal;
 }
 
-export interface ResolvePromptContextInput {
+interface ResolvePromptContextInput {
   userMessage?: string;
 }
 
@@ -685,6 +689,7 @@ async function runConversation(
 ): Promise<string> {
   let producedTokens = 0;
   let stoppedReply = "";
+  let finalReplyOnly = false;
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
     signal?.throwIfAborted();
     if (producedTokens >= MAX_TURN_OUTPUT_TOKENS) {
@@ -692,13 +697,16 @@ async function runConversation(
     }
     const { localTools: iterationTools } = partitionTools(tools);
     const llmTools =
-      enableToolLoop && iterationTools.length
+      enableToolLoop && !finalReplyOnly && iterationTools.length
         ? toLlmToolDefinitions(iterationTools)
         : undefined;
+    const iterationPrompt = finalReplyOnly
+      ? `${systemPrompt}\n\n${EMPTY_REPLY_NUDGE}`
+      : systemPrompt;
     const reservedTokens =
       estimateHistoryTokens(
         history,
-        `${systemPrompt}\n\nToday is ${formatCurrentDate()}.`,
+        `${iterationPrompt}\n\nToday is ${formatCurrentDate()}.`,
         llmTools,
         providerReplaysThinking(provider.name)
       ) + Math.max(0, MAX_TURN_OUTPUT_TOKENS - producedTokens);
@@ -707,10 +715,12 @@ async function runConversation(
     const toolGroupId = createId("toolgroup");
     const result = await generateReply(
       provider,
-      systemPrompt,
+      iterationPrompt,
       history,
       llmTools,
-      providerOptions,
+      finalReplyOnly
+        ? { ...providerOptions, webSearch: false }
+        : providerOptions,
       mode,
       handlers,
       rehydrateMessagesForProvider,
@@ -722,7 +732,7 @@ async function runConversation(
       result.usage?.inputTokens ??
       estimateHistoryTokens(
         history,
-        `${systemPrompt}\n\nToday is ${formatCurrentDate()}.`,
+        `${iterationPrompt}\n\nToday is ${formatCurrentDate()}.`,
         llmTools,
         providerReplaysThinking(provider.name)
       );
@@ -769,6 +779,21 @@ async function runConversation(
       stoppedReply = result.content;
       break;
     }
+    if (
+      enableToolLoop &&
+      result.toolCalls.length === 0 &&
+      !result.content.trim()
+    ) {
+      if (!finalReplyOnly) {
+        finalReplyOnly = true;
+        continue;
+      }
+      history.push({ content: EMPTY_REPLY_NOTICE, role: "assistant" });
+      if (mode === "stream") {
+        handlers?.onChunk(EMPTY_REPLY_NOTICE);
+      }
+      return EMPTY_REPLY_NOTICE;
+    }
     history.push(
       result.usage
         ? { ...result.assistantMessage, usage: result.usage }
@@ -796,24 +821,17 @@ async function runConversation(
     );
   }
 
-  if (producedTokens >= MAX_TURN_OUTPUT_TOKENS) {
-    const notice = `${stoppedReply ? "\n\n" : ""}Stopped because this turn reached its output budget. Send another message to continue.`;
-    const content = stoppedReply + notice;
-    history.push({ content, role: "assistant" });
-    if (mode === "stream") {
-      handlers?.onChunk(notice);
-    }
-    return content;
+  const reason =
+    producedTokens >= MAX_TURN_OUTPUT_TOKENS
+      ? "its output budget"
+      : `its limit of ${MAX_TOOL_ITERATIONS} tool rounds`;
+  const notice = `${stoppedReply ? "\n\n" : ""}Stopped because this turn reached ${reason}. Send another message to continue.`;
+  const content = stoppedReply + notice;
+  history.push({ content, role: "assistant" });
+  if (mode === "stream") {
+    handlers?.onChunk(notice);
   }
-
-  const lastAssistant = [...history]
-    .reverse()
-    .find(
-      (message): message is Extract<ChatMessage, { role: "assistant" }> =>
-        message.role === "assistant"
-    );
-
-  return lastAssistant?.content ?? "";
+  return content;
 }
 
 async function executeToolCalls(

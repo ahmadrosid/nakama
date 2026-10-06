@@ -28,10 +28,10 @@ export function toSkillProposal(
   return warnings?.length ? { ...proposal, warnings } : proposal;
 }
 
-export const MAX_SKILL_PATCH_FIELD_LENGTH = 500;
-export const MAX_SKILL_PROPOSAL_CONTENT_BYTES = 64 * 1024;
+const MAX_SKILL_PATCH_FIELD_LENGTH = 500;
+const MAX_SKILL_PROPOSAL_CONTENT_BYTES = 64 * 1024;
 
-export type StageSkillProposalOutcome = "created" | "already_pending";
+type StageSkillProposalOutcome = "created" | "already_pending";
 
 export interface StageSkillProposalInput {
   action: SkillProposalAction;

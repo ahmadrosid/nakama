@@ -6,70 +6,34 @@ import {
   type PricingContext,
 } from "../providers/pricing";
 
+export interface LlmUsageRecordOptions {
+  cachedInputTokens?: number;
+  /** Owning tenant. The ledger is per org, so an unattributable call is not stored. */
+  orgId: string;
+  pricingContext?: PricingContext;
+}
+
+/**
+ * Token and cost totals, one ledger per org.
+ *
+ * The row is the source of truth. An earlier version kept a process-wide
+ * running total loaded once at boot, which meant every org-scoped read answered
+ * with the whole install's spend (#1306) and nothing on disk said whose it was.
+ */
 export class LlmUsageTracker {
-  private requestCount = 0;
-  private inputTokens = 0;
-  private outputTokens = 0;
-  private estimatedCostUsd = 0;
-  private trackedSince = new Date().toISOString();
-  private readonly usageByModel = new Map<
-    string,
-    Omit<LlmUsageModelStats, "totalTokens">
-  >();
-  private recordRevision = 0;
   private readonly pendingWrites = new Set<Promise<void>>();
 
-  private constructor(private readonly db?: DatabaseAdapter) {}
+  constructor(private readonly db?: DatabaseAdapter) {}
 
-  static async create(db?: DatabaseAdapter): Promise<LlmUsageTracker> {
-    const tracker = new LlmUsageTracker(db);
-    await tracker.loadSnapshotIfRevisionUnchanged();
-    return tracker;
-  }
-
-  private async loadSnapshotIfRevisionUnchanged(
-    expectedRevision = this.recordRevision
-  ): Promise<boolean> {
-    const stored = (await this.db?.getLlmUsageStats()) ?? null;
-    const byModel = (await this.db?.listLlmUsageStatsByModel()) ?? [];
-
-    // Publish only a snapshot that spans no record(), otherwise reload retries
-    // after the new record's database write finishes.
-    if (expectedRevision !== this.recordRevision) {
-      return false;
-    }
-
-    this.requestCount = stored?.requestCount ?? 0;
-    this.inputTokens = stored?.inputTokens ?? 0;
-    this.outputTokens = stored?.outputTokens ?? 0;
-    this.estimatedCostUsd = stored?.estimatedCostUsd ?? 0;
-    this.trackedSince = stored?.trackedSince ?? new Date().toISOString();
-    this.usageByModel.clear();
-    for (const entry of byModel) {
-      this.usageByModel.set(entry.modelId, {
-        estimatedCostUsd: entry.estimatedCostUsd,
-        inputTokens: entry.inputTokens,
-        modelId: entry.modelId,
-        outputTokens: entry.outputTokens,
-        requestCount: entry.requestCount,
-        trackedSince: entry.trackedSince,
-      });
-    }
-    return true;
-  }
-
-  async reloadFromDatabase(): Promise<void> {
-    while (true) {
-      const revision = this.recordRevision;
-      await Promise.all(this.pendingWrites);
-
-      if (revision !== this.recordRevision) {
-        continue;
-      }
-
-      if (await this.loadSnapshotIfRevisionUnchanged(revision)) {
-        return;
-      }
+  /**
+   * A read must not answer from a ledger a just-finished model call has not
+   * reached yet, so every read waits for the writes in flight. They are short
+   * local statements, and a read that skipped them would show totals lagging
+   * behind the traffic that produced them.
+   */
+  private async settled(): Promise<void> {
+    while (this.pendingWrites.size > 0) {
+      await Promise.all([...this.pendingWrites]);
     }
   }
 
@@ -82,9 +46,14 @@ export class LlmUsageTracker {
     modelId: string,
     inputTokens: number,
     outputTokens: number,
-    cachedInputTokens = 0,
-    pricingContext: PricingContext = {}
+    options: LlmUsageRecordOptions
   ): number | null {
+    const orgId = options.orgId.trim();
+    if (!orgId) {
+      return null;
+    }
+
+    const { cachedInputTokens = 0, pricingContext = {} } = options;
     const costDelta = estimateUsageCostUsd(
       modelId,
       inputTokens,
@@ -93,35 +62,18 @@ export class LlmUsageTracker {
       cachedInputTokens
     );
 
-    this.recordRevision += 1;
-    this.requestCount += 1;
-    this.inputTokens += inputTokens;
-    this.outputTokens += outputTokens;
-    this.estimatedCostUsd += costDelta;
-
-    const existing = this.usageByModel.get(modelId);
-    this.usageByModel.set(modelId, {
-      estimatedCostUsd: (existing?.estimatedCostUsd ?? 0) + costDelta,
-      inputTokens: (existing?.inputTokens ?? 0) + inputTokens,
-      modelId,
-      outputTokens: (existing?.outputTokens ?? 0) + outputTokens,
-      requestCount: (existing?.requestCount ?? 0) + 1,
-      trackedSince: existing?.trackedSince ?? new Date().toISOString(),
-    });
-
-    const persistence = this.persist(
-      {
-        estimatedCostUsd: costDelta,
-        inputTokens,
-        outputTokens,
-        requestCount: 1,
-      },
-      modelId
-    );
-    this.pendingWrites.add(persistence);
-    void persistence.then(() => {
-      this.pendingWrites.delete(persistence);
-    });
+    const delta = {
+      estimatedCostUsd: costDelta,
+      inputTokens,
+      outputTokens,
+      requestCount: 1,
+    };
+    // Fire and forget on purpose: a counter for a dashboard must never delay a
+    // model response or fail a turn, so the write is not awaited here and a
+    // rejection is swallowed inside persist().
+    const write = this.persist(orgId, modelId, delta);
+    this.pendingWrites.add(write);
+    void write.finally(() => this.pendingWrites.delete(write));
 
     return getExplicitModelPricing(modelId, pricingContext) === null
       ? null
@@ -129,46 +81,72 @@ export class LlmUsageTracker {
   }
 
   private async persist(
+    orgId: string,
+    modelId: string,
     delta: {
       requestCount: number;
       inputTokens: number;
       outputTokens: number;
       estimatedCostUsd: number;
-    },
-    modelId: string
+    }
   ): Promise<void> {
     if (!this.db) {
       return;
     }
 
+    const trackedSince = new Date().toISOString();
+
     try {
-      await this.db.incrementLlmUsageStats(delta, this.trackedSince);
+      await this.db.incrementLlmUsageStats(orgId, delta, trackedSince);
       await this.db.incrementLlmUsageStatsByModel(
+        orgId,
         modelId,
         delta,
-        this.usageByModel.get(modelId)?.trackedSince ?? this.trackedSince
+        trackedSince
       );
     } catch (error) {
       console.warn("Failed to persist LLM usage stats:", error);
     }
   }
 
-  getStats(): LlmUsageStats {
+  async getStats(orgId: string): Promise<LlmUsageStats> {
+    await this.settled();
+    const stored = await this.db?.getLlmUsageStats(orgId);
+
+    if (!stored) {
+      return {
+        estimatedCostUsd: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        requestCount: 0,
+        totalTokens: 0,
+        trackedSince: new Date().toISOString(),
+      };
+    }
+
     return {
-      estimatedCostUsd: this.estimatedCostUsd,
-      inputTokens: this.inputTokens,
-      outputTokens: this.outputTokens,
-      requestCount: this.requestCount,
-      totalTokens: this.inputTokens + this.outputTokens,
-      trackedSince: this.trackedSince,
+      estimatedCostUsd: stored.estimatedCostUsd,
+      inputTokens: stored.inputTokens,
+      outputTokens: stored.outputTokens,
+      requestCount: stored.requestCount,
+      totalTokens: stored.inputTokens + stored.outputTokens,
+      trackedSince: stored.trackedSince,
     };
   }
 
-  getStatsByModel(): LlmUsageModelStats[] {
-    return [...this.usageByModel.values()]
+  async getStatsByModel(orgId: string): Promise<LlmUsageModelStats[]> {
+    await this.settled();
+    const byModel = await this.db?.listLlmUsageStatsByModel(orgId);
+
+    return (byModel ?? [])
       .map((entry) => ({
-        ...entry,
+        estimatedCostUsd: entry.estimatedCostUsd,
+        inputTokens: entry.inputTokens,
+        modelId: entry.modelId,
+        outputTokens: entry.outputTokens,
+        requestCount: entry.requestCount,
         totalTokens: entry.inputTokens + entry.outputTokens,
+        trackedSince: entry.trackedSince,
       }))
       .sort((left, right) => {
         if (right.requestCount !== left.requestCount) {
