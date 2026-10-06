@@ -1713,7 +1713,12 @@ describe("AgentService automation resume", () => {
         return Promise.resolve({ ran: name });
       },
     });
-    const tools = [tool("read_only", true), tool("writes", false)];
+    const tools = [
+      tool("read_file", true),
+      tool("writes", false),
+      tool("sub_agent", true),
+      tool("custom_write", true),
+    ];
     const service = new AgentService(null, null, db);
     Object.assign(service, {
       _providerConfigured: true,
@@ -1757,8 +1762,12 @@ describe("AgentService automation resume", () => {
   test("continues from saved steps and repeats only read-only tools", async () => {
     const { calls, db, received, service, step } = await setup();
     await db.insertAutomationRunStep(step(0, "call_done", "writes", true));
-    await db.insertAutomationRunStep(step(1, "call_read", "read_only", false));
+    await db.insertAutomationRunStep(step(1, "call_read", "read_file", false));
     await db.insertAutomationRunStep(step(2, "call_write", "writes", false));
+    await db.insertAutomationRunStep(step(3, "call_sub", "sub_agent", false));
+    await db.insertAutomationRunStep(
+      step(4, "call_custom", "custom_write", false)
+    );
 
     const output = await service.runAutomationPrompt(
       ORG_ID,
@@ -1772,15 +1781,19 @@ describe("AgentService automation resume", () => {
 
     expect(output).toBe("Finished");
     // The cut read-only call runs again; neither write runs a second time.
-    expect(calls).toEqual(["read_only"]);
+    expect(calls).toEqual(["read_file"]);
     const toolMessages = received[0]?.filter((m) => m.role === "tool") ?? [];
     expect(toolMessages.map((m) => m.toolCallId)).toEqual([
       "call_done",
       "call_read",
       "call_write",
+      "call_sub",
+      "call_custom",
     ]);
-    expect(toolMessages[1]?.content).toContain("read_only");
+    expect(toolMessages[1]?.content).toContain("read_file");
     expect(toolMessages[2]?.content).toContain("error");
+    expect(toolMessages[3]?.content).toContain("error");
+    expect(toolMessages[4]?.content).toContain("error");
 
     const steps = await db.listAutomationRunSteps("run_resume");
     expect(steps.every((item) => item.status === "completed")).toBe(true);
@@ -1796,7 +1809,7 @@ describe("AgentService automation resume", () => {
             const done = input.messages.at(-1)?.role === "tool";
             const toolCalls = done
               ? []
-              : [{ arguments: { q: 1 }, id: "call_new", name: "read_only" }];
+              : [{ arguments: { q: 1 }, id: "call_new", name: "read_file" }];
             return Promise.resolve({
               assistantMessage: {
                 content: done ? "Done" : "",

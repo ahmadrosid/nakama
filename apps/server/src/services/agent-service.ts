@@ -1665,8 +1665,8 @@ export class AgentService {
 
   /**
    * Rebuilds the tool calls an interrupted run already made. A call cut in the
-   * middle runs again only when the tool is read-only (`parallelSafe`); any
-   * other tool is never repeated, and the model is told it was interrupted.
+   * middle runs again only for known read-only tools; any other tool is never
+   * repeated, and the model is told it was interrupted.
    */
   private async replayAutomationSteps(
     steps: StoredAutomationRunStepRecord[],
@@ -1685,9 +1685,9 @@ export class AgentService {
       for (const step of group) {
         let result = step.result;
         if (step.status !== "completed" || result === null) {
-          const tool = tools.find((item) => item.name === step.toolName);
           const value =
-            tool?.parallelSafe === true
+            REPLAYABLE_AUTOMATION_TOOLS.has(step.toolName) &&
+            tools.some((item) => item.name === step.toolName)
               ? await executeToolCall(
                   tools,
                   {
@@ -4950,6 +4950,20 @@ export class AgentService {
 
 const RESUME_AUTOMATION_PROMPT =
   "The server restarted while you were working on this task. Continue from the tool results above and finish it. Do not repeat work that already succeeded.";
+
+// parallelSafe means concurrent calls are allowed. It does not mean a tool has no side effects.
+const REPLAYABLE_AUTOMATION_TOOLS = new Set([
+  "knowledge_base_search",
+  "list_artifacts",
+  "list_profile_sessions",
+  "omni_retrieve",
+  "read_file",
+  "read_profile_session",
+  "read_session_history",
+  "search_files",
+  "web_fetch",
+  "web_search",
+]);
 
 function warnStepWrite(error: unknown): void {
   console.warn(
