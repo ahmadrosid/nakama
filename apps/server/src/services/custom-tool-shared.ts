@@ -100,10 +100,10 @@ async function readCredentialEncryptionKey(): Promise<Buffer> {
   }
 }
 
-async function encryptToolApiKey(
+async function encryptForOrg(
   orgId: string,
-  apiKey: string
-): Promise<Record<string, string>> {
+  plaintext: string
+): Promise<string> {
   const iv = randomBytes(12);
   const cipher = createCipheriv(
     "aes-256-gcm",
@@ -114,25 +114,16 @@ async function encryptToolApiKey(
   // from decrypting there.
   cipher.setAAD(Buffer.from(orgId, "utf8"));
   const ciphertext = Buffer.concat([
-    cipher.update(apiKey, "utf8"),
+    cipher.update(plaintext, "utf8"),
     cipher.final(),
   ]);
-  return {
-    api_key_enc: Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString(
-      "base64url"
-    ),
-  };
+  return Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString(
+    "base64url"
+  );
 }
 
-async function decryptToolApiKey(
-  orgId: string,
-  credential: Record<string, string> | undefined
-): Promise<string | undefined> {
-  if (!credential?.api_key_enc) {
-    // Keys saved before encryption stay readable until the next save.
-    return credential?.api_key;
-  }
-  const encoded = Buffer.from(credential.api_key_enc, "base64url");
+async function decryptForOrg(orgId: string, value: string): Promise<string> {
+  const encoded = Buffer.from(value, "base64url");
   const decipher = createDecipheriv(
     "aes-256-gcm",
     await readCredentialEncryptionKey(),
@@ -146,11 +137,52 @@ async function decryptToolApiKey(
   ]).toString("utf8");
 }
 
+async function encryptToolApiKey(
+  orgId: string,
+  apiKey: string
+): Promise<Record<string, string>> {
+  return { api_key_enc: await encryptForOrg(orgId, apiKey) };
+}
+
+async function decryptToolApiKey(
+  orgId: string,
+  credential: Record<string, string> | undefined
+): Promise<string | undefined> {
+  if (!credential?.api_key_enc) {
+    // Keys saved before encryption stay readable until the next save.
+    return credential?.api_key;
+  }
+  return decryptForOrg(orgId, credential.api_key_enc);
+}
+
+async function decryptToolEnv(
+  orgId: string,
+  credential: Record<string, string> | undefined
+): Promise<Record<string, string>> {
+  if (!credential?.env_enc) {
+    return {};
+  }
+  return JSON.parse(await decryptForOrg(orgId, credential.env_enc)) as Record<
+    string,
+    string
+  >;
+}
+
 export async function loadToolApiKey(
   orgId: string,
   toolId: string
 ): Promise<string | undefined> {
   return decryptToolApiKey(
+    orgId,
+    (await readConfig()).sections[credentialSection(orgId, toolId)]
+  );
+}
+
+export async function loadToolEnv(
+  orgId: string,
+  toolId: string
+): Promise<Record<string, string>> {
+  return decryptToolEnv(
     orgId,
     (await readConfig()).sections[credentialSection(orgId, toolId)]
   );
@@ -179,7 +211,130 @@ export function saveToolApiKey(
   const write = credentialWrite.then(async () => {
     const encrypted = await encryptToolApiKey(orgId, apiKey);
     const parsed = await readConfig();
-    parsed.sections[credentialSection(orgId, toolId)] = encrypted;
+    const section = credentialSection(orgId, toolId);
+    const { api_key: _legacy, ...existing } = parsed.sections[section] ?? {};
+    parsed.sections[section] = { ...existing, ...encrypted };
+    await writeParsedConfigIni(parsed.global, parsed.sections);
+  });
+  credentialWrite = write.catch(() => undefined);
+  return write;
+}
+
+/**
+ * Names a tool may declare in handlerConfig.env. Names that change how the
+ * interpreter starts (PATH, NODE_OPTIONS, PYTHONPATH, LD_PRELOAD, ...) or
+ * that Nakama itself sets are refused, so a saved value cannot load code.
+ */
+const TOOL_ENV_NAME_PATTERN = /^[A-Z][A-Z0-9_]{0,63}$/;
+const BLOCKED_TOOL_ENV_PREFIXES = [
+  "BUN_",
+  "DYLD_",
+  "LD_",
+  "NAKAMA_",
+  "NODE_",
+  "NPM_",
+  "PYTHON",
+];
+const BLOCKED_TOOL_ENV_NAMES = new Set([
+  "COMSPEC",
+  "HOME",
+  "PATH",
+  "PATHEXT",
+  "SHELL",
+  "SYSTEMROOT",
+  "TEMP",
+  "TMP",
+  "TMPDIR",
+  "USERPROFILE",
+]);
+
+export interface ToolEnvVar {
+  name: string;
+  secret: boolean;
+}
+
+/** Reads and validates handlerConfig.env. Throws on any invalid entry. */
+export function parseToolEnvDeclarations(value: unknown): ToolEnvVar[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value) || value.length > 20) {
+    throw new NakamaApiError(
+      "handlerConfig.env must be a list of up to 20 variables.",
+      400
+    );
+  }
+  const seen = new Set<string>();
+  return value.map((entry) => {
+    const record =
+      typeof entry === "object" && entry !== null
+        ? (entry as Record<string, unknown>)
+        : {};
+    const name = typeof record.name === "string" ? record.name.trim() : "";
+    if (
+      !TOOL_ENV_NAME_PATTERN.test(name) ||
+      BLOCKED_TOOL_ENV_NAMES.has(name) ||
+      BLOCKED_TOOL_ENV_PREFIXES.some((prefix) => name.startsWith(prefix)) ||
+      seen.has(name)
+    ) {
+      throw new NakamaApiError(
+        `handlerConfig.env name "${name}" is not allowed. Use unique UPPER_SNAKE_CASE names that are not system or NAKAMA_ variables.`,
+        400
+      );
+    }
+    if (record.secret !== undefined && typeof record.secret !== "boolean") {
+      throw new NakamaApiError(
+        "handlerConfig.env[].secret must be a boolean.",
+        400
+      );
+    }
+    seen.add(name);
+    return { name, secret: record.secret === true };
+  });
+}
+
+export function readToolEnvDeclarations(handlerConfig: unknown): ToolEnvVar[] {
+  try {
+    return parseToolEnvDeclarations(
+      (handlerConfig as Record<string, unknown> | null)?.env
+    );
+  } catch {
+    return [];
+  }
+}
+
+/** Merges the given values into the tool's saved environment. */
+export function saveToolEnv(
+  orgId: string,
+  toolId: string,
+  declared: ToolEnvVar[],
+  values: Record<string, unknown>
+): Promise<void> {
+  const names = new Set(declared.map((entry) => entry.name));
+  const updates: Record<string, string> = {};
+  for (const [name, value] of Object.entries(values)) {
+    if (!names.has(name)) {
+      throw new NakamaApiError(`${name} is not a variable of this tool.`, 400);
+    }
+    if (
+      typeof value !== "string" ||
+      !value.trim() ||
+      value.length > 8192 ||
+      /[\r\n\0]/.test(value)
+    ) {
+      throw new NakamaApiError(`Enter a valid value for ${name}.`, 400);
+    }
+    updates[name] = value.trim();
+  }
+  const write = credentialWrite.then(async () => {
+    const parsed = await readConfig();
+    const section = credentialSection(orgId, toolId);
+    const existing = parsed.sections[section] ?? {};
+    const env = { ...(await decryptToolEnv(orgId, existing)), ...updates };
+    parsed.sections[section] = {
+      ...existing,
+      env_enc: await encryptForOrg(orgId, JSON.stringify(env)),
+    };
     await writeParsedConfigIni(parsed.global, parsed.sections);
   });
   credentialWrite = write.catch(() => undefined);
@@ -338,7 +493,7 @@ export async function loadCustomSubprocessTool(options: {
     modulePath: string,
     input: unknown,
     context: ToolContext,
-    apiKey?: string
+    env?: Record<string, string>
   ) => Promise<unknown>;
   validateModule: (modulePath: string) => Promise<void>;
 }): Promise<ToolDefinition | null> {
@@ -383,8 +538,9 @@ export async function loadCustomSubprocessTool(options: {
       if (record.orgId && record.orgId !== context.orgId) {
         throw new Error("Tool not available in this organization.");
       }
+      const needsCredentials = config.requiresApiKey || config.env.length > 0;
       if (!context.orgId) {
-        if (config.requiresApiKey) {
+        if (needsCredentials) {
           throw new Error("Organization context is required.");
         }
         return run(modulePath, input, context);
@@ -392,22 +548,42 @@ export async function loadCustomSubprocessTool(options: {
       // A key saved from the playground reaches the tool even when the tool
       // was registered without requiresApiKey.
       const apiKey = await loadToolApiKey(context.orgId, record.id);
-      if (!apiKey) {
-        if (!config.requiresApiKey) {
-          return run(modulePath, input, context);
-        }
+      const saved = await loadToolEnv(context.orgId, record.id);
+      const missing = config.env
+        .map((entry) => entry.name)
+        .filter((name) => !saved[name]);
+      if ((config.requiresApiKey && !apiKey) || missing.length > 0) {
         return {
+          missing,
           orgId: context.orgId,
           toolId: record.id,
           toolName: record.name,
           type: "tool_credentials_required",
         };
       }
-      // Keep accidental key echoes and subprocess errors out of chat and logs.
+      const env: Record<string, string> = {};
+      for (const entry of config.env) {
+        env[entry.name] = saved[entry.name]!;
+      }
+      if (apiKey) {
+        env.NAKAMA_TOOL_API_KEY = apiKey;
+      }
+      // Keep accidental secret echoes and subprocess errors out of chat and
+      // logs. Plain values such as URLs stay readable.
+      const secrets = [
+        ...(apiKey ? [apiKey] : []),
+        ...config.env
+          .filter((entry) => entry.secret)
+          .map((entry) => env[entry.name]!),
+      ];
       const redact = (text: string) =>
-        text
-          .replaceAll(apiKey, "[REDACTED]")
-          .replaceAll(JSON.stringify(apiKey).slice(1, -1), "[REDACTED]");
+        secrets.reduce(
+          (current, secret) =>
+            current
+              .replaceAll(secret, "[REDACTED]")
+              .replaceAll(JSON.stringify(secret).slice(1, -1), "[REDACTED]"),
+          text
+        );
       const redactResult = (value: unknown): unknown => {
         if (typeof value === "string") {
           return redact(value);
@@ -426,8 +602,8 @@ export async function loadCustomSubprocessTool(options: {
         return value;
       };
       try {
-        const result = await run(modulePath, input, context, apiKey);
-        return redactResult(result);
+        const result = await run(modulePath, input, context, env);
+        return secrets.length > 0 ? redactResult(result) : result;
       } catch (error) {
         throw new Error(
           redact(error instanceof Error ? error.message : String(error))
@@ -449,6 +625,7 @@ function isPathInsideDirectory(
 }
 
 interface CustomToolHandlerConfig {
+  env: ToolEnvVar[];
   modulePath: string;
   parallelSafe?: boolean;
   parameters?: JsonSchema;
@@ -478,6 +655,7 @@ function readHandlerConfig(
   const parallelSafe = record.parallelSafe === true;
 
   return {
+    env: readToolEnvDeclarations(record),
     modulePath,
     parallelSafe,
     parameters,

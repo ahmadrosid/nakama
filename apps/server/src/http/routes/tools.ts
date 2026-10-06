@@ -16,8 +16,11 @@ import {
 import {
   approveToolSetup,
   loadToolApiKey,
+  loadToolEnv,
   loadToolSetup,
+  readToolEnvDeclarations,
   saveToolApiKey,
+  saveToolEnv,
 } from "../../services/custom-tool-shared";
 import type { ServerOptions } from "../context";
 import {
@@ -394,10 +397,23 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
     return json(await agent.createTool(body), 201);
   });
 
-  const credentialStatusSchema = z.object({ configured: z.boolean() });
-  const credentialInputSchema = z
-    .object({ apiKey: z.string().min(1).max(8192) })
-    .strict();
+  const credentialStatusSchema = z.object({
+    configured: z.boolean(),
+    env: z
+      .array(
+        z.object({
+          configured: z.boolean(),
+          name: z.string(),
+          secret: z.boolean(),
+          value: z.string().optional(),
+        })
+      )
+      .optional(),
+  });
+  const credentialInputSchema = z.union([
+    z.object({ apiKey: z.string().min(1).max(8192) }).strict(),
+    z.object({ env: z.record(z.string(), z.string().max(8192)) }).strict(),
+  ]);
   for (const method of ["get", "put"] as const) {
     app.openAPIRegistry.registerPath(
       createRoute({
@@ -441,29 +457,54 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
         400
       );
     }
+    return readToolEnvDeclarations(tool.handlerConfig);
+  }
+
+  async function credentialStatus(orgId: string, toolId: string) {
+    const declared = await requireCredentialTool(orgId, toolId);
+    const configured = Boolean(await loadToolApiKey(orgId, toolId));
+    if (declared.length === 0) {
+      return { configured };
+    }
+    const saved = await loadToolEnv(orgId, toolId);
+    return {
+      configured,
+      // Secret values never leave the server; plain values such as a base
+      // URL come back so an admin can see and edit them.
+      env: declared.map((entry) => ({
+        configured: Boolean(saved[entry.name]),
+        name: entry.name,
+        secret: entry.secret,
+        ...(entry.secret || !saved[entry.name]
+          ? {}
+          : { value: saved[entry.name] }),
+      })),
+    };
   }
 
   app.get("/v1/tools/:toolId/credentials", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
-    const toolId = c.req.param("toolId");
-    await requireCredentialTool(orgId, toolId);
-    return json({ configured: Boolean(await loadToolApiKey(orgId, toolId)) });
+    return json(await credentialStatus(orgId, c.req.param("toolId")));
   });
 
   app.put("/v1/tools/:toolId/credentials", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const toolId = c.req.param("toolId");
-    await requireCredentialTool(orgId, toolId);
+    const declared = await requireCredentialTool(orgId, toolId);
     const body = credentialInputSchema.safeParse(
       await readJson<unknown>(c.req.raw)
     );
     if (!body.success) {
-      throw new NakamaApiError("Enter a valid API key.", 400);
+      throw new NakamaApiError("Enter a valid value.", 400);
     }
-    await saveToolApiKey(orgId, toolId, body.data.apiKey);
-    return json({ configured: true });
+    if ("env" in body.data) {
+      await saveToolEnv(orgId, toolId, declared, body.data.env);
+    } else {
+      await saveToolApiKey(orgId, toolId, body.data.apiKey);
+    }
+    return json(await credentialStatus(orgId, toolId));
   });
 
   app.get("/v1/tools/:toolId/source", async (c) => {

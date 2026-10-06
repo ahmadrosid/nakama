@@ -87,6 +87,10 @@ import {
   getCustomToolHandler,
   isCustomToolType,
 } from "./custom-tool-handlers";
+import {
+  parseToolEnvDeclarations,
+  type ToolEnvVar,
+} from "./custom-tool-shared";
 import { toMcpServerSummaries } from "./mcp-service";
 import { MemoryBackendService } from "./memory-backend-service";
 import {
@@ -1432,7 +1436,12 @@ function readToolHandlerType(handlerType: string | undefined): CustomToolType {
 function readCustomToolHandlerConfig(
   handlerType: CustomToolType,
   handlerConfig: unknown
-): { modulePath: string; parameters?: JsonSchema; requiresApiKey?: boolean } {
+): {
+  env?: ToolEnvVar[];
+  modulePath: string;
+  parameters?: JsonSchema;
+  requiresApiKey?: boolean;
+} {
   const { extension } = CUSTOM_TOOL_HANDLERS[handlerType];
 
   if (typeof handlerConfig !== "object" || handlerConfig === null) {
@@ -1472,7 +1481,10 @@ function readCustomToolHandlerConfig(
     );
   }
 
+  const env = parseToolEnvDeclarations(config.env);
+
   return {
+    ...(env.length > 0 ? { env } : {}),
     modulePath: modulePath.trim(),
     ...(config.requiresApiKey === true ? { requiresApiKey: true } : {}),
     ...(parameters === undefined ? {} : { parameters }),

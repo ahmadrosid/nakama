@@ -2333,6 +2333,18 @@ export interface CreateToolRequest {
   name: string;
 }
 
+export interface ToolCredentialStatus {
+  configured: boolean;
+  /** Present when the tool declares handlerConfig.env. */
+  env?: {
+    configured: boolean;
+    name: string;
+    secret: boolean;
+    /** Only for non-secret variables. */
+    value?: string;
+  }[];
+}
+
 export interface ToolSetupPlan {
   description: string;
   id: string;

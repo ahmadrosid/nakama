@@ -128,6 +128,17 @@ describe("tool playground routes", () => {
                   handlerConfig: {},
                 },
                 {
+                  id: "tool_env",
+                  name: "env_tool",
+                  handlerType: "python",
+                  handlerConfig: {
+                    env: [
+                      { name: "SERVICE_URL" },
+                      { name: "SERVICE_KEY", secret: true },
+                    ],
+                  },
+                },
+                {
                   id: "tool_builtin",
                   name: "builtin_tool",
                   handlerType: "builtin",
@@ -187,6 +198,41 @@ describe("tool playground routes", () => {
     );
     expect(builtin.status).toBe(400);
     expect(await loadToolApiKey(orgId, "tool_builtin")).toBeUndefined();
+    const envUrl = url.replace("tool_key", "tool_env");
+    const envSaved = await app.fetch(
+      new Request(envUrl, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          env: { SERVICE_KEY: "env-secret", SERVICE_URL: "https://svc.test" },
+        }),
+      })
+    );
+    expect(envSaved.status).toBe(200);
+    const envStatus = await (
+      await app.fetch(new Request(envUrl, { headers }))
+    ).text();
+    expect(JSON.parse(envStatus)).toEqual({
+      configured: false,
+      env: [
+        {
+          configured: true,
+          name: "SERVICE_URL",
+          secret: false,
+          value: "https://svc.test",
+        },
+        { configured: true, name: "SERVICE_KEY", secret: true },
+      ],
+    });
+    expect(envStatus).not.toContain("env-secret");
+    const undeclared = await app.fetch(
+      new Request(envUrl, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ env: { PATH: "/tmp/evil" } }),
+      })
+    );
+    expect(undeclared.status).toBe(400);
     visibleOrg = "other_org";
     expect(
       (

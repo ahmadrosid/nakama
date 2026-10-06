@@ -22,7 +22,7 @@ export function ToolPlaygroundRunForm({
 }) {
   return (
     <div className="space-y-4">
-      <ToolApiKeyForm toolId={tool.id} />
+      <ToolConfigurationCard toolId={tool.id} />
       <div className="space-y-4 rounded-md border border-border bg-card p-4">
         <div>
           <h3 className="type-section-title">Run</h3>
@@ -108,7 +108,15 @@ export function ToolPlaygroundRunForm({
   );
 }
 
-function ToolApiKeyForm({ toolId }: { toolId: string }) {
+interface ConfigField {
+  configured: boolean;
+  label: string;
+  name: string;
+  secret: boolean;
+  value?: string;
+}
+
+function ToolConfigurationCard({ toolId }: { toolId: string }) {
   const queryClient = useQueryClient();
   const queryKey = ["tool-credentials", toolId];
   const status = useQuery({
@@ -118,8 +126,20 @@ function ToolApiKeyForm({ toolId }: { toolId: string }) {
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const inputId = `${toolId}-api-key`;
-  const configured = status.data?.configured === true;
+  const envFields = status.data?.env;
+  // Tools that declare handlerConfig.env get one field per variable; older
+  // tools keep the single API key field.
+  const fields: ConfigField[] = envFields
+    ? envFields.map((entry) => ({ ...entry, label: entry.name }))
+    : [
+        {
+          configured: status.data?.configured === true,
+          label: "API key",
+          name: "apiKey",
+          secret: true,
+        },
+      ];
+  const anyConfigured = fields.some((field) => field.configured);
 
   return (
     <form
@@ -130,16 +150,39 @@ function ToolApiKeyForm({ toolId }: { toolId: string }) {
           return;
         }
         const form = event.currentTarget;
-        const apiKey = String(new FormData(form).get("toolApiKey") ?? "");
+        const data = new FormData(form);
+        const values: Record<string, string> = {};
+        for (const field of fields) {
+          const value = String(data.get(`tool-config-${field.name}`) ?? "");
+          // A blank secret keeps the saved value; an unchanged plain value
+          // is not sent again.
+          if (value.trim() && value !== field.value) {
+            values[field.name] = value;
+          }
+        }
+        if (Object.keys(values).length === 0) {
+          return;
+        }
         setSaving(true);
         setJustSaved(false);
         setError(null);
         try {
           queryClient.setQueryData(
             queryKey,
-            await client.saveToolCredential(toolId, apiKey)
+            envFields
+              ? await client.saveToolEnv(toolId, values)
+              : await client.saveToolCredential(toolId, values.apiKey ?? "")
           );
-          form.reset();
+          for (const field of fields) {
+            if (field.secret) {
+              const input = form.elements.namedItem(
+                `tool-config-${field.name}`
+              );
+              if (input instanceof HTMLInputElement) {
+                input.value = "";
+              }
+            }
+          }
           setJustSaved(true);
         } catch (saveError) {
           setError(formatError(saveError));
@@ -149,48 +192,65 @@ function ToolApiKeyForm({ toolId }: { toolId: string }) {
       }}
     >
       <h3 className="type-section-title">Configuration</h3>
-      <div className="flex items-center justify-between gap-2">
-        <label
-          className="font-medium text-foreground text-xs"
-          htmlFor={inputId}
-        >
-          API key
-        </label>
-        {status.data ? (
-          <span
-            className={
-              configured
-                ? "flex items-center gap-1 text-emerald-700 text-xs dark:text-emerald-400"
-                : "text-muted-foreground text-xs"
-            }
-            role="status"
-          >
-            {configured ? (
-              <CheckmarkCircle02Icon aria-hidden className="size-3.5" />
-            ) : null}
-            {justSaved ? "Saved just now" : configured ? "Saved" : "Not set"}
-          </span>
-        ) : null}
-      </div>
-      <div className="flex gap-2">
-        {/* new-password + a non-login name keep browsers and password
-            managers from filling in the user's own sign-in password. */}
-        <Input
-          autoComplete="new-password"
-          data-1p-ignore
-          data-lpignore="true"
-          disabled={saving}
-          id={inputId}
-          maxLength={8192}
-          name="toolApiKey"
-          onChange={() => setJustSaved(false)}
-          required
-          type="password"
-        />
+      {fields.map((field) => {
+        const inputId = `${toolId}-config-${field.name}`;
+        return (
+          <div className="space-y-1.5" key={field.name}>
+            <div className="flex items-center justify-between gap-2">
+              <label
+                className={
+                  envFields
+                    ? "font-medium font-mono text-foreground text-xs"
+                    : "font-medium text-foreground text-xs"
+                }
+                htmlFor={inputId}
+              >
+                {field.label}
+              </label>
+              {status.data ? (
+                <span
+                  className={
+                    field.configured
+                      ? "flex items-center gap-1 text-emerald-700 text-xs dark:text-emerald-400"
+                      : "text-muted-foreground text-xs"
+                  }
+                >
+                  {field.configured ? (
+                    <CheckmarkCircle02Icon aria-hidden className="size-3.5" />
+                  ) : null}
+                  {field.configured ? "Saved" : "Not set"}
+                </span>
+              ) : null}
+            </div>
+            {/* new-password + a non-login name keep browsers and password
+                managers from filling in the user's own sign-in password. */}
+            <Input
+              autoComplete={field.secret ? "new-password" : "off"}
+              data-1p-ignore
+              data-lpignore="true"
+              defaultValue={field.value}
+              disabled={saving}
+              id={inputId}
+              key={field.value}
+              maxLength={8192}
+              name={`tool-config-${field.name}`}
+              onChange={() => setJustSaved(false)}
+              required={!field.configured}
+              type={field.secret ? "password" : "text"}
+            />
+          </div>
+        );
+      })}
+      <div className="flex items-center gap-3">
         <Button disabled={saving} type="submit" variant="outline">
           {saving ? <Spinner className="size-4" /> : null}
-          {configured ? "Replace" : "Save"}
+          {anyConfigured ? "Update" : "Save"}
         </Button>
+        {justSaved ? (
+          <span className="text-muted-foreground text-xs" role="status">
+            Saved just now
+          </span>
+        ) : null}
       </div>
       {error ? (
         <p className="text-destructive text-xs" role="alert">

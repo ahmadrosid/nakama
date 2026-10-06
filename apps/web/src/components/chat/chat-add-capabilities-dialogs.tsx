@@ -15,6 +15,7 @@ import {
 import { Input } from "@nakama/ui/input";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
+import { Link } from "react-router-dom";
 import { AddSkillDialog } from "@/components/SkillInstallDialog";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
 import { ToolAssignDialog } from "@/components/ToolAssignDialog";
@@ -40,6 +41,7 @@ import {
   useInstallSkillMutation,
 } from "@/hooks/use-resource-mutations";
 import { client, formatError } from "@/lib/client";
+import { toolPlaygroundPath } from "@/lib/navigation";
 
 export function ToolCredentialCard({
   result,
@@ -289,6 +291,31 @@ function ToolCredentialForm({
     queryFn: () => client.forOrg(orgId).getToolCredentialStatus(toolId),
     queryKey,
   });
+
+  const envFields = status.data?.env;
+  // Tools with several declared settings are filled in on the playground,
+  // which shows one field per variable.
+  if (canManage && envFields) {
+    return (
+      <div className="flex w-full max-w-sm items-center justify-between gap-3 rounded-xl border bg-card p-4">
+        <div className="min-w-0">
+          <p className="truncate font-medium text-sm">{toolName}</p>
+          <p className="text-muted-foreground text-xs" role="status">
+            {envFields.every((field) => field.configured)
+              ? "Settings saved"
+              : "Connect settings"}
+          </p>
+        </div>
+        <Button
+          render={<Link to={toolPlaygroundPath(toolId)} />}
+          size="sm"
+          variant="outline"
+        >
+          Configure
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex w-full max-w-sm items-center justify-between gap-3 rounded-xl border bg-card p-4">

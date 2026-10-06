@@ -491,19 +491,21 @@ Two handler types are supported, and both run as a subprocess per call rather th
 
 Neither handler inherits the server's full environment. The child process only gets `PATH` (to resolve the interpreter), `NAKAMA_CONFIG_DIR`, and `NAKAMA_WORKSPACE_ROOT` (the active profile workspace) — provider API keys and anything else in the server's environment are not visible to a tool. The child's working directory is the tool's own file, not the server's checkout, so relative file access stays scoped to `~/.nakama/tools/`.
 
-### Giving a tool an API key
+### Giving a tool its settings
 
-Some custom tools call a paid or private API. Nakama keeps that key out of chat, out of the model, and out of the tool's source.
+Some custom tools call a paid or private API. They need a key, and often a base URL or an account ID. Nakama keeps these values out of chat, out of the model, and out of the tool's source.
 
-Org admins add the key in one of these places:
+When Super Bot builds such a tool, it lists the settings the tool needs, for example `WEATHER_API_URL` and a secret `WEATHER_API_KEY`. Org admins fill them in:
 
-- **Super Bot setup card** — when Super Bot proposes a tool that needs a key, the approval card asks for it.
-- **Configure card in chat** — shown when a tool runs without a saved key.
-- **Tool playground** — open the tool, enter the key under **API key**, then **Save**. Use **Replace** to rotate it.
+- **Tool playground** — open the tool. The **Configuration** card shows one field per setting. Enter the values, then **Save**. Use **Update** to change them later. A blank secret field keeps the saved value.
+- **Configure card in chat** — shown when a tool runs before its settings are saved. It opens the playground.
+- **Super Bot setup card** — for a tool that only needs one API key, the approval card asks for it.
 
-![The tool playground with a saved API key and a successful run](/screenshots/tool-playground-api-key.png)
+![The tool playground with saved settings and a successful run](/screenshots/tool-playground-api-key.png)
 
-The tool reads the key from `NAKAMA_TOOL_API_KEY`. Each key belongs to one organization and one tool, is encrypted at rest, and is never shown again after saving. If a tool echoes the key in its output or errors, Nakama replaces it with `[REDACTED]`.
+Each setting reaches the tool as an environment variable with the same name. A tool with a single key reads it from `NAKAMA_TOOL_API_KEY`. Values belong to one organization and one tool, and are encrypted at rest. Secret values are never shown again after saving, and if a tool echoes one in its output or errors, Nakama replaces it with `[REDACTED]`. Plain values such as URLs stay visible so admins can edit them.
+
+Setting names use `UPPER_SNAKE_CASE`. Names that change how the tool process starts, such as `PATH`, `NODE_OPTIONS`, or `PYTHONPATH`, and names starting with `NAKAMA_` are not allowed.
 
 ### Authoring a JavaScript tool
 

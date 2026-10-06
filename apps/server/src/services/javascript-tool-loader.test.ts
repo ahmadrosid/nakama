@@ -9,8 +9,11 @@ import {
 } from "@nakama/core";
 import {
   loadToolApiKey,
+  loadToolEnv,
+  parseToolEnvDeclarations,
   resolveCustomToolModulePath,
   saveToolApiKey,
+  saveToolEnv,
 } from "./custom-tool-shared";
 import {
   makeCustomToolRecord,
@@ -168,6 +171,94 @@ if __name__ == "__main__":
     afterB.sections[sectionB] = { api_key: "legacy-plain" };
     await writeParsedConfigIni(afterB.global, afterB.sections);
     expect(await loadToolApiKey("org_b", "tool_x")).toBe("legacy-plain");
+  });
+
+  test("declared env values reach the tool, and only secrets are redacted", async () => {
+    const { configDir: dir, toolsDir } = await setupToolsDir();
+    configDir = dir;
+    await writeFile(
+      path.join(toolsDir, "env-tool.js"),
+      `export async function run() {
+      return {
+        url: process.env.WEATHER_API_URL,
+        key: process.env.WEATHER_API_KEY,
+        path: Boolean(process.env.PATH),
+      };
+    }`
+    );
+    const env = [
+      { name: "WEATHER_API_URL" },
+      { name: "WEATHER_API_KEY", secret: true },
+    ];
+    const record = makeRecord({
+      handlerConfig: { env, modulePath: "env-tool.js" },
+    });
+    const tool = (await loadJavascriptTool(record))!;
+    const declared = parseToolEnvDeclarations(env);
+    expect(await tool.run({}, { orgId: "org_a" })).toMatchObject({
+      missing: ["WEATHER_API_URL", "WEATHER_API_KEY"],
+      type: "tool_credentials_required",
+    });
+    await saveToolEnv("org_a", record.id, declared, {
+      WEATHER_API_URL: "https://api.example.com",
+    });
+    expect(await tool.run({}, { orgId: "org_a" })).toMatchObject({
+      missing: ["WEATHER_API_KEY"],
+    });
+    await saveToolEnv("org_a", record.id, declared, {
+      WEATHER_API_KEY: "secret-weather-key",
+    });
+    await saveToolApiKey("org_a", record.id, "legacy-key");
+    expect(await loadToolEnv("org_a", record.id)).toEqual({
+      WEATHER_API_KEY: "secret-weather-key",
+      WEATHER_API_URL: "https://api.example.com",
+    });
+    expect(await tool.run({}, { orgId: "org_a" })).toEqual({
+      key: "[REDACTED]",
+      path: true,
+      url: "https://api.example.com",
+    });
+    expect(await readFile(getUserConfigPath(), "utf8")).not.toContain(
+      "secret-weather-key"
+    );
+    expect(await tool.run({}, { orgId: "org_b" })).toMatchObject({
+      type: "tool_credentials_required",
+    });
+    expect(() =>
+      saveToolEnv("org_a", record.id, declared, { OTHER_NAME: "x" })
+    ).toThrow();
+    expect(() =>
+      saveToolEnv("org_a", record.id, declared, { WEATHER_API_URL: "a\nb" })
+    ).toThrow();
+  });
+
+  test("env declarations refuse names that change how the tool starts", () => {
+    for (const name of [
+      "PATH",
+      "NODE_OPTIONS",
+      "PYTHONPATH",
+      "LD_PRELOAD",
+      "DYLD_INSERT_LIBRARIES",
+      "NAKAMA_TOOL_API_KEY",
+      "BUN_OPTIONS",
+      "lower_case",
+      "WITH-DASH",
+    ]) {
+      expect(() => parseToolEnvDeclarations([{ name }])).toThrow();
+    }
+    expect(() =>
+      parseToolEnvDeclarations([{ name: "A_URL" }, { name: "A_URL" }])
+    ).toThrow();
+    let refused: unknown;
+    try {
+      parseToolEnvDeclarations([{ name: "NODE_OPTIONS" }]);
+    } catch (error) {
+      refused = error;
+    }
+    expect(refused).toMatchObject({ status: 400 });
+    expect(parseToolEnvDeclarations([{ name: "A_URL" }])).toEqual([
+      { name: "A_URL", secret: false },
+    ]);
   });
 
   test("a saved key reaches a tool registered without requiresApiKey", async () => {
