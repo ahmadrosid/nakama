@@ -2534,6 +2534,10 @@ export class NakamaClient {
     });
   }
 
+  async getBrowserOsNeoCdpPort(): Promise<{ port: number }> {
+    return this.request("/v1/settings/agent-browser/browseros-neo");
+  }
+
   async installAgentBrowser(
     handlers: {
       onProgress?: (message: string) => void;

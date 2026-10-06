@@ -39,7 +39,6 @@ import { queryKeys } from "@/lib/query-keys";
 
 const bundledNames = new Set<string>(BUNDLED_SKILL_NAMES);
 const runtimeOnlyNames = new Set<string>(RUNTIME_ONLY_BUNDLED_SKILL_NAMES);
-const BROWSEROS_NEO_CDP_PORT = 49_337;
 
 function needsBrowserInstall(
   mode: "managed" | "local_cdp",
@@ -141,18 +140,34 @@ function BrowserConnectionSettings({
     "managed" | "browseros_neo" | "local_cdp" | null
   >(null);
   const [message, setMessage] = useState<string | null>(null);
-  const choice =
-    choiceOverride ??
-    (mode === "local_cdp" && port === BROWSEROS_NEO_CDP_PORT
-      ? "browseros_neo"
-      : mode);
+  const choice = choiceOverride ?? mode;
   const portValue =
-    choice === "browseros_neo"
-      ? String(BROWSEROS_NEO_CDP_PORT)
-      : (portOverride ?? String(port ?? ""));
+    portOverride ?? (choice === "browseros_neo" ? "" : String(port ?? ""));
   const cdpPort = Number(portValue);
   const validPort =
     Number.isInteger(cdpPort) && cdpPort >= 1 && cdpPort <= 65_535;
+
+  async function selectConnection(value: string | null) {
+    if (value == null) {
+      return;
+    }
+    const nextChoice = value as typeof choice;
+    setChoiceOverride(nextChoice);
+    onModeChange(nextChoice === "managed" ? "managed" : "local_cdp");
+    setPortOverride(nextChoice === "browseros_neo" ? "" : null);
+    setMessage(null);
+    if (nextChoice === "browseros_neo") {
+      setRunning(true);
+      try {
+        const { port: neoPort } = await client.getBrowserOsNeoCdpPort();
+        setPortOverride(String(neoPort));
+      } catch (cause) {
+        setMessage(formatError(cause));
+      } finally {
+        setRunning(false);
+      }
+    }
+  }
 
   async function run(action: "save" | "test") {
     if (mode === "local_cdp" && !validPort) {
@@ -191,20 +206,7 @@ function BrowserConnectionSettings({
       </label>
       <Select
         disabled={busy}
-        onValueChange={(value) => {
-          if (value == null) {
-            return;
-          }
-          const nextChoice = value as typeof choice;
-          setChoiceOverride(nextChoice);
-          onModeChange(nextChoice === "managed" ? "managed" : "local_cdp");
-          setPortOverride(
-            nextChoice === "local_cdp" && port === BROWSEROS_NEO_CDP_PORT
-              ? ""
-              : null
-          );
-          setMessage(null);
-        }}
+        onValueChange={(value) => void selectConnection(value)}
         value={choice}
       >
         <SelectTrigger className="w-full" id="agent-browser-mode">

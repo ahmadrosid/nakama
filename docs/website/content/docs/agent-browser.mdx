@@ -65,7 +65,7 @@ The skill is opt-in. Nakama does not auto-assign it to Super Bot or default prof
 
 ### Local CDP connection
 
-A platform admin can select **BrowserOS Neo** in the skill picker to use Neo's default CDP port, `49337`. Test the connection, then save it for this profile. If Neo uses a different port, select **Local CDP** and enter that port. Use agent-browser 0.34.0 or newer. The install button installs the CLI without downloading Chrome in these modes.
+A platform admin can select **BrowserOS Neo** in the skill picker to read Neo's current CDP port from its local config. Test the connection, then save it for this profile. If Nakama cannot read Neo's config, select **Local CDP** and enter the port. Use agent-browser 0.34.0 or newer. The install button installs the CLI without downloading Chrome in these modes.
 
 Nakama tests the connection by listing tabs. The test does not open or change a tab. The agent opens its own pinned tab when it starts work.
 

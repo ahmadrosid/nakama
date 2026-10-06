@@ -75,6 +75,7 @@ import {
   startXaiOAuthDeviceSession,
 } from "../../providers/xai-oauth/oauth";
 import {
+  getBrowserOsNeoCdpPort,
   installAgentBrowser,
   testAgentBrowserCdp,
 } from "../../services/agent-browser-service";
@@ -1527,6 +1528,29 @@ export function registerModelRoutes(
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
+      operationId: "getBrowserOsNeoCdpPort",
+      path: "/v1/settings/agent-browser/browseros-neo",
+      responses: {
+        200: {
+          description: "BrowserOS Neo CDP port",
+          content: {
+            "application/json": {
+              schema: z.object({ port: z.number().int() }),
+            },
+          },
+        },
+        403: {
+          description: "Forbidden",
+          content: { "application/json": { schema: errorSchema } },
+        },
+      },
+      summary: "Find the BrowserOS Neo CDP port on this host",
+      tags: ["Models"],
+    })
+  );
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
       operationId: "getWhatsAppSettings",
       path: "/v1/settings/whatsapp",
       request: { query: z.object({ profileId: z.string().min(1) }) },
@@ -2014,6 +2038,11 @@ export function registerModelRoutes(
       throw new NakamaApiError("Local CDP needs a port from 1 to 65535.", 400);
     }
     return json(await testAgentBrowserCdp(body.data.port));
+  });
+
+  app.get("/v1/settings/agent-browser/browseros-neo", async (c) => {
+    requirePlatformAdminFromContext(c);
+    return json({ port: await getBrowserOsNeoCdpPort() });
   });
 
   app.post("/v1/settings/agent-browser/install", async (c) => {

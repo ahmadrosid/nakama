@@ -214,6 +214,7 @@ const INSTALL_WRITES: { body?: unknown; method: string; path: string }[] = [
   },
   { method: "POST", path: "/v1/settings/email/test" },
   { method: "POST", path: "/v1/settings/agent-browser/install" },
+  { method: "GET", path: "/v1/settings/agent-browser/browseros-neo" },
   {
     body: { port: 9110 },
     method: "POST",

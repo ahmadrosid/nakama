@@ -122,6 +122,9 @@ test("BrowserOS Neo saves its CDP port without a port entry", async () => {
     message: "Browser connection works.",
     ok: true,
   });
+  using _neo = spyOn(client, "getBrowserOsNeoCdpPort").mockResolvedValue({
+    port: 9110,
+  });
   using save = spyOn(client, "updateProfile").mockResolvedValue({} as never);
   const container = document.createElement("div");
   document.body.append(container);
@@ -174,10 +177,11 @@ test("BrowserOS Neo saves its CDP port without a port entry", async () => {
       (item) => item.textContent === label
     );
   await act(async () => button("Test connection")?.click());
-  expect(_test).toHaveBeenCalledWith(49_337);
+  expect(_neo).toHaveBeenCalledTimes(1);
+  expect(_test).toHaveBeenCalledWith(9110);
   await act(async () => button("Save connection")?.click());
   expect(save).toHaveBeenCalledWith("profile-a", {
-    agentBrowserCdpPort: 49_337,
+    agentBrowserCdpPort: 9110,
     agentBrowserMode: "local_cdp",
   });
 });

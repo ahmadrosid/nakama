@@ -9,6 +9,7 @@ import { setupFreshInstallSession } from "../http/test-session-helpers";
 import {
   getAgentBrowserInstallCommand,
   getAgentBrowserStatus,
+  getBrowserOsNeoCdpPort,
   installAgentBrowser,
   supportsAgentBrowserCdp,
   testAgentBrowserCdp,
@@ -74,6 +75,14 @@ describe("agent-browser service", () => {
     expect(supportsAgentBrowserCdp("agent-browser 0.33.9")).toBe(false);
     expect(supportsAgentBrowserCdp("agent-browser 0.34.0")).toBe(true);
     expect(supportsAgentBrowserCdp("agent-browser 1.0.0")).toBe(true);
+  });
+
+  test("reads BrowserOS Neo's current CDP port", async () => {
+    const configPath = join(tempBinDir, "neo-config.json");
+    await writeFile(configPath, JSON.stringify({ ports: { cdp: 9110 } }));
+    expect(await getBrowserOsNeoCdpPort(configPath)).toBe(9110);
+    await writeFile(configPath, JSON.stringify({ ports: { cdp: 0 } }));
+    await expect(getBrowserOsNeoCdpPort(configPath)).rejects.toThrow();
   });
 
   testPosix("CLI-only install skips the Chrome download", async () => {

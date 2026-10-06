@@ -1,4 +1,7 @@
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { type AgentBrowserStatusResponse, NakamaApiError } from "@nakama/core";
 import {
@@ -20,6 +23,46 @@ import {
 const AGENT_BROWSER_PACKAGE = "agent-browser";
 const AGENT_BROWSER_COMMAND = "agent-browser";
 const execFileAsync = promisify(execFile);
+
+function browserOsNeoConfigPath(): string {
+  if (process.platform === "darwin") {
+    return join(
+      homedir(),
+      "Library/Application Support/BrowserClaw/.browseros/config.json"
+    );
+  }
+  if (process.platform === "win32") {
+    return join(
+      process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
+      "BrowserClaw/User Data/.browseros/config.json"
+    );
+  }
+  return join(
+    process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
+    "browserclaw/.browseros/config.json"
+  );
+}
+
+export async function getBrowserOsNeoCdpPort(
+  configPath = browserOsNeoConfigPath()
+): Promise<number> {
+  if (resolveBashBackend() !== "host") {
+    throw new NakamaApiError("BrowserOS Neo needs host bash.", 400);
+  }
+  try {
+    const config = JSON.parse(await readFile(configPath, "utf8"));
+    const port = config?.ports?.cdp;
+    if (Number.isInteger(port) && port >= 1 && port <= 65_535) {
+      return port;
+    }
+  } catch {
+    // Missing or invalid local config has the same manual fallback.
+  }
+  throw new NakamaApiError(
+    "Cannot find BrowserOS Neo's CDP port on this host. Use Local CDP.",
+    404
+  );
+}
 
 export function supportsAgentBrowserCdp(version: string | null): boolean {
   const match = version?.match(/(?:^|\s)(\d+)\.(\d+)\.(\d+)(?:\s|$)/);
