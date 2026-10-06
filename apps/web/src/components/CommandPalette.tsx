@@ -10,8 +10,10 @@ import {
 } from "@nakama/ui/command";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useAuth } from "@/context/use-auth";
 import { useOrgPlugins } from "@/hooks/use-plugins";
+import { useSelectProfile } from "@/hooks/use-select-profile";
 import {
   enabledPluginNavEntries,
   navHrefForPage,
@@ -44,9 +46,10 @@ function fuzzyFilter<T>(
 }
 
 /**
- * Cmd+K jumps to any page the sidebar would offer this user. The destination
- * list comes from visibleNavGroups, the same gate the sidebar uses, so the
- * palette cannot route someone to a page their role hides.
+ * Cmd+K jumps to any page the sidebar would offer this user, or straight to
+ * one of their agents. The destination list comes from visibleNavGroups, the
+ * same gate the sidebar uses, so the palette cannot route someone to a page
+ * their role hides.
  */
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
@@ -54,6 +57,7 @@ export function CommandPalette() {
   const navigate = useNavigate();
   const { user, activeOrg } = useAuth();
   const { data: orgPlugins = [] } = useOrgPlugins();
+  const { profiles, selectProfile } = useSelectProfile();
   const pluginNav = useMemo(
     () => enabledPluginNavEntries(orgPlugins),
     [orgPlugins]
@@ -101,6 +105,17 @@ export function CommandPalette() {
         }),
     [groups, query]
   );
+  const filteredProfiles = useMemo(
+    () =>
+      fuzzyFilter(
+        profiles.toSorted(
+          (left, right) => Number(right.isSuper) - Number(left.isSuper)
+        ),
+        query,
+        (profile) => profile.name.toLowerCase()
+      ),
+    [profiles, query]
+  );
   const filteredPlugins = useMemo(
     () =>
       fuzzyFilter(pluginNav, query, (entry) =>
@@ -139,10 +154,16 @@ export function CommandPalette() {
     [navigate]
   );
 
+  function goToProfile(profileId: string) {
+    setOpen(false);
+    setQuery("");
+    selectProfile(profileId);
+  }
+
   return (
     <CommandDialog
       className="sm:max-w-2xl"
-      description="Jump to a page"
+      description="Jump to a page or agent"
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
         if (!nextOpen) {
@@ -157,10 +178,10 @@ export function CommandPalette() {
       <Command shouldFilter={false}>
         <CommandInput
           onValueChange={setQuery}
-          placeholder="Jump to a page..."
+          placeholder="Jump to a page or agent..."
         />
         <CommandList>
-          <CommandEmpty>No matching page.</CommandEmpty>
+          <CommandEmpty>No matching page or agent.</CommandEmpty>
           {filteredGroups.map((group) => (
             <CommandGroup heading={group.label} key={group.id}>
               {group.items.map((item) => (
@@ -209,6 +230,28 @@ export function CommandPalette() {
                   <span>{item.label}</span>
                   <span className="ml-auto min-w-0 flex-1 truncate text-right text-muted-foreground text-xs">
                     {item.description}
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          ) : null}
+          {filteredProfiles.length > 0 ? (
+            <CommandGroup heading="Agents">
+              {filteredProfiles.map((profile) => (
+                <CommandItem
+                  className="[&>svg:last-child]:hidden"
+                  key={profile.id}
+                  onSelect={() => goToProfile(profile.id)}
+                  value={`agent ${profile.id}`}
+                >
+                  <ProfileAvatar
+                    className="rounded-md"
+                    profile={profile}
+                    size="xs"
+                  />
+                  <span className="truncate">{profile.name}</span>
+                  <span className="ml-auto min-w-0 flex-1 truncate text-right text-muted-foreground text-xs">
+                    {profile.model}
                   </span>
                 </CommandItem>
               ))}
