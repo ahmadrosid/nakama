@@ -1,4 +1,5 @@
 import uFuzzy from "@leeoniya/ufuzzy";
+import type { ProfileSummary } from "@nakama/core/contract";
 import {
   Command,
   CommandDialog,
@@ -8,12 +9,16 @@ import {
   CommandItem,
   CommandList,
 } from "@nakama/ui/command";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
 import { useOrgPlugins } from "@/hooks/use-plugins";
 import { useSelectProfile } from "@/hooks/use-select-profile";
+import { buildNewChatPath } from "@/lib/chat-history";
+import { client } from "@/lib/client";
 import {
   enabledPluginNavEntries,
   navHrefForPage,
@@ -25,6 +30,12 @@ const paletteSearch = new uFuzzy({
   compare: () => 0,
   intraIns: Number.POSITIVE_INFINITY,
 });
+
+interface AgentResult {
+  orgId: string;
+  orgName: string;
+  profile: ProfileSummary;
+}
 
 function fuzzyFilter<T>(
   items: T[],
@@ -54,10 +65,75 @@ function fuzzyFilter<T>(
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [selectionError, setSelectionError] = useState<string | null>(null);
+  const switchingRef = useRef(false);
   const navigate = useNavigate();
-  const { user, activeOrg } = useAuth();
+  const {
+    user,
+    activeOrg,
+    platformOrgs,
+    platformOrgsError,
+    refreshPlatformOrgs,
+    switchOrg,
+  } = useAuth();
   const { data: orgPlugins = [] } = useOrgPlugins();
   const { profiles, selectProfile } = useSelectProfile();
+  const { syncForOrg } = useActiveChatProfile();
+  const isPlatformAdmin = user?.isPlatformAdmin === true;
+  const activePlatformOrgs = useMemo(
+    () => platformOrgs.filter((org) => !org.archivedAt),
+    [platformOrgs]
+  );
+
+  const search = useQuery({
+    enabled: open && isPlatformAdmin && !platformOrgsError,
+    queryFn: async () => {
+      const items: AgentResult[] = [];
+      let error = false;
+      for (let i = 0; i < activePlatformOrgs.length; i += 4) {
+        const batch = activePlatformOrgs.slice(i, i + 4);
+        const results = await Promise.allSettled(
+          batch.map((org) => client.listProfiles(org.id))
+        );
+        results.forEach((result, index) => {
+          const org = batch[index];
+          if (result.status === "fulfilled") {
+            items.push(
+              ...result.value.profiles
+                .filter(
+                  (profile) =>
+                    !(profile.isSuper || profile.isDefault) ||
+                    org.id === activeOrg?.id
+                )
+                .map((profile) => ({
+                  orgId: org.id,
+                  orgName: org.name,
+                  profile,
+                }))
+            );
+          } else {
+            error = true;
+          }
+        });
+      }
+      return { error, items };
+    },
+    queryKey: [
+      "platform-agent-search",
+      user?.id,
+      activeOrg?.id,
+      activePlatformOrgs.map((org) => [org.id, org.name]),
+    ],
+    staleTime: 30_000,
+  });
+
+  const agentResults = isPlatformAdmin
+    ? (search.data?.items ?? [])
+    : profiles.map((profile) => ({
+        orgId: activeOrg?.id ?? "",
+        orgName: activeOrg?.name ?? "",
+        profile,
+      }));
   const pluginNav = useMemo(
     () => enabledPluginNavEntries(orgPlugins),
     [orgPlugins]
@@ -105,16 +181,13 @@ export function CommandPalette() {
         }),
     [groups, query]
   );
-  const filteredProfiles = useMemo(
-    () =>
-      fuzzyFilter(
-        profiles.toSorted(
-          (left, right) => Number(right.isSuper) - Number(left.isSuper)
-        ),
-        query,
-        (profile) => profile.name.toLowerCase()
-      ),
-    [profiles, query]
+  const filteredProfiles = fuzzyFilter(
+    agentResults.toSorted(
+      (left, right) =>
+        Number(right.profile.isSuper) - Number(left.profile.isSuper)
+    ),
+    query,
+    (item) => `${item.profile.name} ${item.orgName}`.toLowerCase()
   );
   const filteredPlugins = useMemo(
     () =>
@@ -154,10 +227,36 @@ export function CommandPalette() {
     [navigate]
   );
 
-  function goToProfile(profileId: string) {
+  async function goToProfile(item: AgentResult) {
+    if (switchingRef.current) {
+      return;
+    }
+    setSelectionError(null);
+    if (item.orgId === activeOrg?.id) {
+      selectProfile(item.profile.id);
+    } else {
+      switchingRef.current = true;
+      try {
+        await switchOrg(item.orgId);
+        syncForOrg({
+          orgId: item.orgId,
+          preferredProfileId: item.profile.id,
+          profiles: [item.profile],
+        });
+        navigate(buildNewChatPath(item.profile.id));
+      } catch (error) {
+        setSelectionError(
+          error instanceof Error
+            ? error.message
+            : "Could not switch organization."
+        );
+        switchingRef.current = false;
+        return;
+      }
+      switchingRef.current = false;
+    }
     setOpen(false);
     setQuery("");
-    selectProfile(profileId);
   }
 
   return (
@@ -181,7 +280,11 @@ export function CommandPalette() {
           placeholder="Jump to a page or agent..."
         />
         <CommandList>
-          <CommandEmpty>No matching page or agent.</CommandEmpty>
+          <CommandEmpty>
+            {isPlatformAdmin && open && search.isPending
+              ? "Loading agents..."
+              : "No matching page or agent."}
+          </CommandEmpty>
           {filteredGroups.map((group) => (
             <CommandGroup heading={group.label} key={group.id}>
               {group.items.map((item) => (
@@ -235,26 +338,51 @@ export function CommandPalette() {
               ))}
             </CommandGroup>
           ) : null}
+          {isPlatformAdmin &&
+          (platformOrgsError || search.data?.error || search.isError) ? (
+            <CommandGroup heading="Agents">
+              <CommandItem
+                onSelect={() => {
+                  if (platformOrgsError) {
+                    void refreshPlatformOrgs().catch(() => undefined);
+                  } else {
+                    void search.refetch();
+                  }
+                }}
+              >
+                Could not load all agents. Retry
+              </CommandItem>
+            </CommandGroup>
+          ) : null}
           {filteredProfiles.length > 0 ? (
             <CommandGroup heading="Agents">
-              {filteredProfiles.map((profile) => (
+              {filteredProfiles.map((item) => (
                 <CommandItem
                   className="[&>svg:last-child]:hidden"
-                  key={profile.id}
-                  onSelect={() => goToProfile(profile.id)}
-                  value={`agent ${profile.id}`}
+                  key={`${item.orgId}:${item.profile.id}`}
+                  onSelect={() => void goToProfile(item)}
+                  value={`agent ${item.orgId} ${item.profile.id}`}
                 >
                   <ProfileAvatar
                     className="rounded-md"
-                    profile={profile}
+                    profile={
+                      item.orgId === activeOrg?.id
+                        ? item.profile
+                        : { ...item.profile, hasAvatar: false }
+                    }
                     size="xs"
                   />
-                  <span className="truncate">{profile.name}</span>
+                  <span className="truncate">{item.profile.name}</span>
                   <span className="ml-auto min-w-0 flex-1 truncate text-right text-muted-foreground text-xs">
-                    {profile.model}
+                    {isPlatformAdmin ? item.orgName : item.profile.model}
                   </span>
                 </CommandItem>
               ))}
+            </CommandGroup>
+          ) : null}
+          {selectionError ? (
+            <CommandGroup heading="Agents">
+              <CommandItem disabled>{selectionError}</CommandItem>
             </CommandGroup>
           ) : null}
         </CommandList>

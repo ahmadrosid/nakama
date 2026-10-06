@@ -5,8 +5,10 @@ import { join } from "node:path";
 import type { ListBrowserSessionsResponse } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentService } from "../../services/agent-service";
+import { AuthService } from "../../services/auth-service";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
+  loginPlatformAdminSession,
   loginUserSession,
   seedOrgAdmin,
   setupFreshInstallSession,
@@ -58,6 +60,77 @@ function revoke(
 }
 
 describe("browser session governance", () => {
+  test("platform admin selects an organization without membership", async () => {
+    const { app, databaseAdapter } = await createApp();
+    await setupFreshInstallSession(app, databaseAdapter);
+    const now = new Date().toISOString();
+    await databaseAdapter.upsertOrganization({
+      createdAt: now,
+      id: "org_remote",
+      name: "Remote",
+      slug: "remote",
+      updatedAt: now,
+    });
+    const admin = await loginPlatformAdminSession(
+      app,
+      new AuthService(),
+      databaseAdapter
+    );
+    const switched = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/active-org", {
+        body: JSON.stringify({ orgId: "org_remote" }),
+        headers: admin.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": admin.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+    expect(switched.status).toBe(200);
+    expect((await switched.json()).activeOrgId).toBe("org_remote");
+
+    const me = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/me", {
+        headers: admin.headers(),
+      })
+    );
+    expect((await me.json()).activeOrgId).toBe("org_remote");
+
+    await seedOrgAdmin(databaseAdapter, {
+      email: "member@example.com",
+      orgId: "org_member",
+      userId: "user_member",
+    });
+    const member = await loginUserSession(app, "member@example.com", PASSWORD);
+    const denied = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/active-org", {
+        body: JSON.stringify({ orgId: "org_remote" }),
+        headers: member.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": member.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+    expect(denied.status).toBe(404);
+
+    await databaseAdapter.upsertOrganization({
+      ...(await databaseAdapter.getOrganizationById("org_remote"))!,
+      archivedAt: new Date().toISOString(),
+    });
+    const archived = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/active-org", {
+        body: JSON.stringify({ orgId: "org_remote" }),
+        headers: admin.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": admin.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+    expect(archived.status).toBe(404);
+  });
+
   test("a user lists their own devices and marks the one making the request", async () => {
     const { app, databaseAdapter } = await createApp();
     const first = await setupFreshInstallSession(app, databaseAdapter);

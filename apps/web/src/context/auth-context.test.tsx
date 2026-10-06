@@ -79,3 +79,93 @@ test("a tenant's cached data does not survive logout or an org switch", async ()
     queryClient.clear();
   }
 });
+
+test("a platform admin resolves an active organization without membership", async () => {
+  const getMe = spyOn(client, "getMe").mockResolvedValue({
+    activeOrgId: ORG_B.id,
+    email: "platform@example.com",
+    id: "user-platform",
+    isPlatformAdmin: true,
+    orgId: ORG_B.id,
+  } as never);
+  const listUserOrgs = spyOn(client, "listUserOrgs").mockResolvedValue({
+    orgs: [],
+  } as never);
+  const listPlatformOrganizations = spyOn(
+    client,
+    "listPlatformOrganizations"
+  ).mockResolvedValue({
+    organizations: [{ id: ORG_B.id, name: ORG_B.name, slug: ORG_B.slug }],
+  } as never);
+  let auth: ReturnType<typeof useAuth> | null = null;
+  function Probe() {
+    auth = useAuth();
+    return null;
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <AuthProvider>
+          <Probe />
+        </AuthProvider>
+      )
+    );
+    const currentAuth = (): ReturnType<typeof useAuth> => {
+      if (!auth) {
+        throw new Error("Auth state did not load");
+      }
+      return auth;
+    };
+    expect(currentAuth().activeOrg?.id).toBe(ORG_B.id);
+    expect(currentAuth().activeOrg?.role).toBeUndefined();
+    expect(currentAuth().orgs).toEqual([]);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    for (const spy of [getMe, listUserOrgs, listPlatformOrganizations]) {
+      spy.mockRestore();
+    }
+  }
+});
+
+test("required MFA does not request the protected platform list", async () => {
+  const getMe = spyOn(client, "getMe").mockResolvedValue({
+    activeOrgId: ORG_A.id,
+    email: "platform@example.com",
+    id: "user-platform",
+    isPlatformAdmin: true,
+    mfaEnrolled: false,
+    mfaRequired: true,
+  } as never);
+  const listUserOrgs = spyOn(client, "listUserOrgs").mockResolvedValue({
+    orgs: [ORG_A],
+  } as never);
+  const listPlatformOrganizations = spyOn(client, "listPlatformOrganizations");
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  function Probe() {
+    const auth = useAuth();
+    return <span>{auth.user?.id}</span>;
+  }
+  try {
+    await act(async () =>
+      root.render(
+        <AuthProvider>
+          <Probe />
+        </AuthProvider>
+      )
+    );
+    expect(container.textContent).toBe("user-platform");
+    expect(listPlatformOrganizations).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    for (const spy of [getMe, listUserOrgs, listPlatformOrganizations]) {
+      spy.mockRestore();
+    }
+  }
+});

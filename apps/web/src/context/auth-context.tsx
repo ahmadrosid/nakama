@@ -1,5 +1,6 @@
 import type {
   AuthUserResponse,
+  OrganizationSummary,
   PasskeyCredentialResponse,
   SetupAuthRequest,
   UpdateOrganizationRequest,
@@ -35,23 +36,53 @@ function resetQueryCache(): void {
 async function loadSessionState(): Promise<{
   user: AuthUserResponse;
   orgs: UserOrgSummary[];
+  platformOrgs: OrganizationSummary[];
+  platformOrgsError: boolean;
 }> {
   const [user, { orgs }] = await Promise.all([
     client.getMe(),
     client.listUserOrgs(),
   ]);
-  return { orgs, user };
+  if (!user.isPlatformAdmin || (user.mfaRequired && !user.mfaEnrolled)) {
+    return { orgs, platformOrgs: [], platformOrgsError: false, user };
+  }
+  try {
+    const { organizations } = await client.listPlatformOrganizations();
+    return {
+      orgs,
+      platformOrgs: organizations,
+      platformOrgsError: false,
+      user,
+    };
+  } catch {
+    return { orgs, platformOrgs: [], platformOrgsError: true, user };
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUserResponse | null>(null);
   const [orgs, setOrgs] = useState<UserOrgSummary[]>([]);
+  const [platformOrgs, setPlatformOrgs] = useState<OrganizationSummary[]>([]);
+  const [platformOrgsError, setPlatformOrgsError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  const refreshPlatformOrgs = useCallback(async () => {
+    try {
+      const { organizations } = await client.listPlatformOrganizations();
+      setPlatformOrgs(organizations);
+      setPlatformOrgsError(false);
+    } catch (error) {
+      setPlatformOrgsError(true);
+      throw error;
+    }
+  }, []);
 
   const refreshSession = useCallback(async () => {
     const session = await loadSessionState();
     setUser(session.user);
     setOrgs(session.orgs);
+    setPlatformOrgs(session.platformOrgs);
+    setPlatformOrgsError(session.platformOrgsError);
     resetQueryCache();
   }, []);
 
@@ -60,11 +91,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((session) => {
         setUser(session.user);
         setOrgs(session.orgs);
+        setPlatformOrgs(session.platformOrgs);
+        setPlatformOrgsError(session.platformOrgsError);
         resetQueryCache();
       })
       .catch(() => {
         setUser(null);
         setOrgs([]);
+        setPlatformOrgs([]);
+        setPlatformOrgsError(false);
       })
       .finally(() => {
         setIsLoading(false);
@@ -77,8 +112,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return null;
     }
 
-    return orgs.find((org) => org.id === activeOrgId) ?? null;
-  }, [orgs, user]);
+    return (
+      orgs.find((org) => org.id === activeOrgId) ??
+      platformOrgs.find((org) => org.id === activeOrgId && !org.archivedAt) ??
+      null
+    );
+  }, [orgs, platformOrgs, user]);
 
   const setup = useCallback(
     async (request: SetupAuthRequest) => {
@@ -125,6 +164,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     client.setOrgId(null);
     setUser(null);
     setOrgs([]);
+    setPlatformOrgs([]);
+    setPlatformOrgsError(false);
     resetQueryCache();
   }, []);
 
@@ -141,13 +182,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       await client.archivePlatformOrganization(orgId);
-      const { orgs: nextOrgs } = await client.listUserOrgs();
-      const nextOrgId = nextOrgIdAfterArchive(nextOrgs, orgId);
+      const [{ orgs: nextOrgs }, { organizations }] = await Promise.all([
+        client.listUserOrgs(),
+        client.listPlatformOrganizations(),
+      ]);
+      const nextOrgId =
+        nextOrgIdAfterArchive(nextOrgs, orgId) ??
+        organizations.find((org) => !org.archivedAt && org.id !== orgId)?.id;
       setOrgs(nextOrgs);
+      setPlatformOrgs(organizations);
       if (nextOrgId) {
         setUser(await client.setActiveOrg(nextOrgId));
       } else {
         client.setOrgId(null);
+        setUser(await client.getMe());
       }
       resetQueryCache();
     },
@@ -166,6 +214,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         client.setActiveOrg(created.organization.id),
       ]);
       setOrgs(nextOrgs);
+      setPlatformOrgs((current) => [...current, created.organization]);
       setUser(nextUser);
       resetQueryCache();
     },
@@ -174,12 +223,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateOrg = useCallback(
     async (orgId: string, input: UpdateOrganizationRequest) => {
-      const org = orgs.find((entry) => entry.id === orgId);
+      const org =
+        orgs.find((entry) => entry.id === orgId) ??
+        platformOrgs.find((entry) => entry.id === orgId && !entry.archivedAt);
       if (!org) {
         throw new Error("Organization not found.");
       }
 
-      if (!user?.isPlatformAdmin && org.role !== "admin") {
+      if (
+        !user?.isPlatformAdmin &&
+        (!("role" in org) || org.role !== "admin")
+      ) {
         throw new Error("Only org admins can edit organizations.");
       }
 
@@ -191,9 +245,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const { orgs: nextOrgs } = await client.listUserOrgs();
       setOrgs(nextOrgs);
+      if (user?.isPlatformAdmin) {
+        await refreshPlatformOrgs();
+      }
       resetQueryCache();
     },
-    [orgs, user?.isPlatformAdmin]
+    [orgs, platformOrgs, refreshPlatformOrgs, user?.isPlatformAdmin]
   );
 
   const value = useMemo<AuthContextValue>(
@@ -206,6 +263,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       orgs,
+      platformOrgs,
+      platformOrgsError,
+      refreshPlatformOrgs,
       refreshSession,
       setup,
       switchOrg,
@@ -215,6 +275,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       user,
       orgs,
+      platformOrgs,
+      platformOrgsError,
+      refreshPlatformOrgs,
       activeOrg,
       isLoading,
       setup,
