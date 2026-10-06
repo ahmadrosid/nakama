@@ -65,9 +65,9 @@ The skill is opt-in. Nakama does not auto-assign it to Super Bot or default prof
 
 ### Local CDP connection
 
-A platform admin can select **Local CDP** in the skill picker. Enter the browser's current CDP port, test the connection, and save it for this profile. Use agent-browser 0.34.0 or newer. The install button installs the CLI without downloading Chrome in this mode.
+A platform admin can select **BrowserOS Neo** in the skill picker to use Neo's default CDP port, `49337`. Test the connection, then save it for this profile. If Neo uses a different port, select **Local CDP** and enter that port. Use agent-browser 0.34.0 or newer. The install button installs the CLI without downloading Chrome in these modes.
 
-For example, if your browser exposes port `9110`, enter `9110`. The port can change. Nakama tests the connection by listing tabs. The test does not open or change a tab. The agent opens its own pinned tab when it starts work.
+Nakama tests the connection by listing tabs. The test does not open or change a tab. The agent opens its own pinned tab when it starts work.
 
 Local CDP controls the browser directly. It does not use BrowserOS Neo MCP. Remove BrowserOS Neo MCP from this profile if you want to remove its tool definitions from model requests. The UI setting alone does not lower MCP token use. A local CDP session has its own tab selection, but it shares browser cookies and storage. Anyone who can chat with this profile can use that browser. Automations and sub-agents that use this profile can also use it.
 

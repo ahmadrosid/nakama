@@ -32,6 +32,7 @@ import { queryKeys } from "@/lib/query-keys";
 
 const bundledNames = new Set<string>(BUNDLED_SKILL_NAMES);
 const runtimeOnlyNames = new Set<string>(RUNTIME_ONLY_BUNDLED_SKILL_NAMES);
+const BROWSEROS_NEO_CDP_PORT = 49_337;
 
 function needsBrowserInstall(
   mode: "managed" | "local_cdp",
@@ -129,8 +130,19 @@ function BrowserConnectionSettings({
 }) {
   const queryClient = useQueryClient();
   const [portOverride, setPortOverride] = useState<string | null>(null);
+  const [choiceOverride, setChoiceOverride] = useState<
+    "managed" | "browseros_neo" | "local_cdp" | null
+  >(null);
   const [message, setMessage] = useState<string | null>(null);
-  const portValue = portOverride ?? String(port ?? "");
+  const choice =
+    choiceOverride ??
+    (mode === "local_cdp" && port === BROWSEROS_NEO_CDP_PORT
+      ? "browseros_neo"
+      : mode);
+  const portValue =
+    choice === "browseros_neo"
+      ? String(BROWSEROS_NEO_CDP_PORT)
+      : (portOverride ?? String(port ?? ""));
   const cdpPort = Number(portValue);
   const validPort =
     Number.isInteger(cdpPort) && cdpPort >= 1 && cdpPort <= 65_535;
@@ -154,6 +166,7 @@ function BrowserConnectionSettings({
           queryKey: queryKeys.profiles.detail(profileId),
         });
         onModeChange(null);
+        setChoiceOverride(null);
         setPortOverride(null);
         setMessage("Connection saved.");
       }
@@ -174,15 +187,23 @@ function BrowserConnectionSettings({
         disabled={busy}
         id="agent-browser-mode"
         onChange={(event) => {
-          onModeChange(event.target.value as "managed" | "local_cdp");
+          const nextChoice = event.target.value as typeof choice;
+          setChoiceOverride(nextChoice);
+          onModeChange(nextChoice === "managed" ? "managed" : "local_cdp");
+          setPortOverride(
+            nextChoice === "local_cdp" && port === BROWSEROS_NEO_CDP_PORT
+              ? ""
+              : null
+          );
           setMessage(null);
         }}
-        value={mode}
+        value={choice}
       >
         <option value="managed">Managed Chrome</option>
+        <option value="browseros_neo">BrowserOS Neo</option>
         <option value="local_cdp">Local CDP</option>
       </select>
-      {mode === "local_cdp" ? (
+      {choice === "local_cdp" ? (
         <>
           <label className="block text-sm" htmlFor="agent-browser-port">
             CDP port
@@ -199,6 +220,10 @@ function BrowserConnectionSettings({
             type="number"
             value={portValue}
           />
+        </>
+      ) : null}
+      {mode === "local_cdp" ? (
+        <>
           <p className="text-muted-foreground text-xs">
             Local CDP controls the browser directly. Remove BrowserOS Neo MCP
             from this profile to remove its tool definitions.
