@@ -249,7 +249,7 @@ export class McpService {
     return this.getServer(serverId);
   }
 
-  async deleteServer(serverId: string): Promise<void> {
+  async deleteServer(serverId: string, force = false): Promise<void> {
     const server = await this.requireServer(serverId);
 
     if (isPreinstalledMcpServerId(server.id)) {
@@ -260,7 +260,7 @@ export class McpService {
 
     const profiles = await this.db.listProfilesForMcpServer(serverId);
 
-    if (profiles.length > 0) {
+    if (profiles.length > 0 && !force) {
       const profileRefs = toProfileRefs(profiles);
       throw new NakamaApiError(
         formatMcpServerInUseMessage(profileRefs),

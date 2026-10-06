@@ -1139,10 +1139,12 @@ export class NakamaClient {
     );
   }
 
-  async deleteMcpServer(serverId: string): Promise<void> {
-    await this.request(`/v1/mcp/servers/${encodeURIComponent(serverId)}`, {
-      method: "DELETE",
-    });
+  async deleteMcpServer(serverId: string, force = false): Promise<void> {
+    const query = force ? "?force=true" : "";
+    await this.request(
+      `/v1/mcp/servers/${encodeURIComponent(serverId)}${query}`,
+      { method: "DELETE" }
+    );
   }
 
   async connectMcpServer(serverId: string): Promise<McpServerResponse> {

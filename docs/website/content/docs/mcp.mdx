@@ -70,7 +70,17 @@ Platform admins manage servers in **Control center → Agent tools → MCP** and
 
 1. Open **Agent** and select a profile
 2. In the **MCP** tab, click **Add MCP server**, then pick an existing server or create a new one
-3. Unassigning removes tools from the next chat. You must unassign a server from every profile before deleting it. Preinstalled servers cannot be deleted
+3. Unassigning removes tools from the next chat
+
+### Delete a server
+
+A platform admin can delete a custom MCP server even when profiles use it. Nakama disconnects the server and removes its assignment from every profile. Its tools stop appearing in later chats.
+
+1. Open **Control center → Agent tools → MCP** and select **Delete** on the server
+2. Review the number of assigned profiles in the dialog
+3. Select **Force delete** to delete the server and remove those assignments
+
+Preinstalled servers cannot be deleted.
 
 ### Example: Exa web search
 

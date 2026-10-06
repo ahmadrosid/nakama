@@ -301,8 +301,9 @@ export function useDeleteMcpServerMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (serverId: string) => client.deleteMcpServer(serverId),
-    onSuccess: async (_data, serverId) => {
+    mutationFn: ({ serverId, force }: { serverId: string; force: boolean }) =>
+      client.deleteMcpServer(serverId, force),
+    onSuccess: async (_data, { serverId }) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.mcp.all }),
         queryClient.invalidateQueries({

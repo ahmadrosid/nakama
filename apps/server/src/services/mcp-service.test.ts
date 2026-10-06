@@ -438,6 +438,11 @@ describe("McpService", () => {
     );
 
     expect(await db.getMcpServer(created.server.id)).not.toBeNull();
+
+    await service.deleteServer(created.server.id, true);
+
+    expect(await db.getMcpServer(created.server.id)).toBeNull();
+    expect(await db.listProfilesForMcpServer(created.server.id)).toEqual([]);
   });
 
   test("deletes MCP server when not assigned to any profile", async () => {

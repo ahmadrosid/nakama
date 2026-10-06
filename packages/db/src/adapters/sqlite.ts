@@ -1266,6 +1266,15 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const deleteMcpServerStmt = db.prepare(
     "DELETE FROM mcp_servers WHERE id = ?"
   );
+  const unassignMcpServerFromAllProfilesStmt = db.prepare(
+    "DELETE FROM profile_mcp_servers WHERE server_id = ?"
+  );
+  const deleteMcpServerEverywhereTransaction = db.transaction(
+    (serverId: string) => {
+      unassignMcpServerFromAllProfilesStmt.run(serverId);
+      return deleteMcpServerStmt.run(serverId);
+    }
+  );
   const listMcpServersForProfileStmt = db.prepare(`
     SELECT mcp_servers.*
     FROM mcp_servers
@@ -3202,7 +3211,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async deleteMcpServer(id) {
-      const result = deleteMcpServerStmt.run(id);
+      const result = deleteMcpServerEverywhereTransaction(id);
       return result.changes > 0;
     },
 
