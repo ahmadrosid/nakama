@@ -857,6 +857,49 @@ describe("AutomationRunner", () => {
     expect(runs[0]?.output).toBe("Hello from automation");
   });
 
+  test("resumes an interrupted run instead of failing it", async () => {
+    const db = await createTestDb();
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+    const automation = await service.create(
+      ORG_ID,
+      {
+        description: "Resume task",
+        name: "Resume task",
+        prompt: "Say hello",
+        trigger: { type: "manual" },
+      },
+      PROFILE_ID
+    );
+    const interrupted = await service.createRun(automation.id);
+    const resumeFlags: boolean[] = [];
+    const runner = new AutomationRunner(service, {
+      runAutomationPrompt: async (
+        _orgId: string,
+        _profileId: string,
+        _prompt: string,
+        _automationId: string,
+        runId: string,
+        _handlers: unknown,
+        resume: boolean
+      ) => {
+        resumeFlags.push(resume);
+        expect(runId).toBe(interrupted.id);
+        return "Finished after restart";
+      },
+    } as never);
+
+    const claimed = await db.claimInterruptedAutomationRuns(2);
+    await runner.resumeInterrupted(claimed);
+
+    expect(resumeFlags).toEqual([true]);
+    const runs = await service.listRuns(automation.id);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.status).toBe("completed");
+    expect(runs[0]?.output).toBe("Finished after restart");
+  });
+
   test("concurrent automation runs execute once", async () => {
     const db = await createTestDb();
     const service = new AutomationService(db, {

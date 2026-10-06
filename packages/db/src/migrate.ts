@@ -1635,6 +1635,29 @@ function migrateAutomationRunsTable(db: Database): void {
       ALTER TABLE automation_runs ADD COLUMN delivery_error TEXT;
     `);
   }
+
+  if (!columnNames.has("resume_count")) {
+    db.exec(`
+      ALTER TABLE automation_runs ADD COLUMN resume_count INTEGER NOT NULL DEFAULT 0;
+    `);
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_run_steps (
+      run_id TEXT NOT NULL,
+      tool_call_id TEXT NOT NULL,
+      tool_group_id TEXT,
+      tool_name TEXT NOT NULL,
+      args TEXT NOT NULL,
+      result TEXT,
+      status TEXT NOT NULL,
+      started_at TEXT NOT NULL,
+      completed_at TEXT,
+      position INTEGER NOT NULL,
+      PRIMARY KEY (run_id, tool_call_id),
+      FOREIGN KEY (run_id) REFERENCES automation_runs (id) ON DELETE CASCADE
+    );
+  `);
 }
 
 function migrateAutomationRunReadStateTable(db: Database): void {

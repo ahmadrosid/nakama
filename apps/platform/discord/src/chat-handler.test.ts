@@ -2212,7 +2212,8 @@ describe("createChatHandler guild thread routing", () => {
     await withTempHome(async (homeDir) => {
       await writeDiscordConfigIni(homeDir, {
         botToken: "discord-bot-token",
-        handshakeCode: "ABCD1234",
+        handshakeCode: "A1B2C3D4E5F60718293A4B5C6D7E8F90",
+        handshakeExpiresAt: new Date(Date.now() + 600_000).toISOString(),
         pairedUserIds: [],
       });
 
@@ -2240,7 +2241,7 @@ describe("createChatHandler guild thread routing", () => {
 
       const dm = createDmMessage({
         channelId: "dm_auth_lock",
-        content: "ABCD1234",
+        content: "A1B2C3D4E5F60718293A4B5C6D7E8F90",
         userId: "999999999999999999",
       });
       const conversationKey = dm.message.channel.id;

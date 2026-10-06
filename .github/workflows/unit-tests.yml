@@ -5,6 +5,8 @@ on:
     branches: [main]
     # Desktop version bumps are checked by Desktop Release; PR checks still run.
     paths-ignore: ['apps/desktop/package.json']
+  # Lets a merge queue test the merged result. Does nothing until one is on.
+  merge_group:
   pull_request:
     # Markdown-only PRs change no code.
     paths-ignore: ['**.md', '.agents/**', 'docs/**', 'scripts/**', 'assets/**']
@@ -13,6 +15,35 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      web_only: ${{ steps.scope.outputs.web_only }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Check PR files
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          web_only=false
+          if [[ "$EVENT_NAME" == pull_request ]]; then
+            files=$(git diff --name-only --no-renames "$BASE_SHA" "$HEAD_SHA")
+            if [[ -n "$files" ]]; then
+              web_only=true
+              while IFS= read -r file; do
+                [[ "$file" == apps/web/* ]] || { web_only=false; break; }
+              done <<< "$files"
+            fi
+          fi
+          echo "web_only=$web_only" >> "$GITHUB_OUTPUT"
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -47,9 +78,11 @@ jobs:
           sudo chmod 4755 apps/desktop/node_modules/electron/dist/chrome-sandbox
           xvfb-run -a bun run test
 
-  # The desktop app ships on Windows, so Windows gates changes like Linux.
+  # Windows tests cover server and shared packages, not apps/web.
   test-windows:
     name: test-windows (${{ matrix.shard }}/4)
+    needs: changes
+    if: needs.changes.outputs.web_only != 'true'
     runs-on: windows-latest
     timeout-minutes: 10
     strategy:

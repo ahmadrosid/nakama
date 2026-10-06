@@ -1,6 +1,5 @@
 import { buttonVariants } from "@nakama/ui/button-variants";
 import { cn } from "@nakama/ui/utils";
-import type { ReactNode } from "react";
 import { PairingStepTile } from "@/components/integration-settings.shared";
 import {
   DISCORD_DEVELOPER_PORTAL_URL,
@@ -129,46 +128,6 @@ export function DiscordPairingGuide({
           />
         </div>
       </details>
-    </div>
-  );
-}
-
-export function SettingsRow({
-  label,
-  description,
-  layout = "inline",
-  children,
-  className,
-}: {
-  label: string;
-  description?: ReactNode;
-  layout?: "inline" | "stacked";
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        "px-4 py-3",
-        layout === "stacked"
-          ? "flex flex-col gap-3"
-          : "flex flex-wrap items-center justify-between gap-3",
-        className
-      )}
-    >
-      <div className="min-w-0 space-y-0.5">
-        <p className="font-medium text-foreground text-sm">{label}</p>
-        {description ? (
-          <p className="text-muted-foreground text-xs [text-wrap:pretty]">
-            {description}
-          </p>
-        ) : null}
-      </div>
-      {layout === "stacked" ? (
-        <div className="w-full min-w-0">{children}</div>
-      ) : (
-        children
-      )}
     </div>
   );
 }

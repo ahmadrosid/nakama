@@ -215,6 +215,7 @@ import { canAccessSuperBotProfile } from "@nakama/core/profiles";
 import {
   type DatabaseAdapter,
   mergeWorkspaceSettings,
+  type StoredAutomationRunStepRecord,
   type StoredProfileRecord,
   type StoredSessionRecord,
   type StoredSessionSummaryRecord,
@@ -1560,7 +1561,8 @@ export class AgentService {
     prompt: string,
     automationId?: string,
     automationRunId?: string,
-    handlers?: Parameters<AgentChatSession["sendStream"]>[1]
+    handlers?: Parameters<AgentChatSession["sendStream"]>[1],
+    resume = false
   ): Promise<string> {
     if (!this._providerConfigured) {
       throw new Error("Provider is not configured.");
@@ -1583,29 +1585,152 @@ export class AgentService {
     const userTimezone = await this.getUserTimezone();
     const userContext = await this.loadUserContextForUser(orgId, undefined);
     const harness = this.createHarnessForProfile(profile);
+    const toolContext = buildToolExecutionContext({
+      assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
+      automationId,
+      ...this.memoryBackend.toolContext(orgId, profileId),
+      automationRunId,
+      orgId,
+      orgRole: "member",
+      profileId,
+      recordToolOutputSavings: this.savingsRecorderFor(orgId),
+      recordTurnUsage: this.turnUsageRecorderFor(orgId),
+    });
+
+    const savedSteps = automationRunId
+      ? await this.db.listAutomationRunSteps(automationRunId)
+      : [];
+    const replay =
+      resume && savedSteps.length > 0
+        ? await this.replayAutomationSteps(savedSteps, tools, toolContext)
+        : [];
+    let stepPosition = savedSteps.length;
+    // Each call is saved as it starts and again with its result, so a restart
+    // can continue from the last saved step. The insert runs synchronously up
+    // to the SQLite write, so it lands before the tool does.
+    const stepHandlers: typeof handlers = automationRunId
+      ? {
+          onChunk() {},
+          ...handlers,
+          onToolEnd: (event) => {
+            this.db
+              .completeAutomationRunStep(
+                automationRunId,
+                event.toolCallId,
+                JSON.stringify(event.result) ?? "null",
+                new Date().toISOString()
+              )
+              .catch(warnStepWrite);
+            handlers?.onToolEnd?.(event);
+          },
+          onToolStart: (event) => {
+            this.db
+              .insertAutomationRunStep({
+                args: JSON.stringify(event.input ?? {}),
+                completedAt: null,
+                position: stepPosition++,
+                result: null,
+                runId: automationRunId,
+                startedAt: new Date().toISOString(),
+                status: "running",
+                toolCallId: event.toolCallId,
+                toolGroupId: event.toolGroupId ?? null,
+                toolName: event.tool,
+              })
+              .catch(warnStepWrite);
+            handlers?.onToolStart?.(event);
+          },
+        }
+      : handlers;
 
     const session = createAgentChatSession(harness, {
       channel: "automation",
       enableToolLoop: true,
+      initialHistory: replay.length
+        ? [{ content: prompt, role: "user" }, ...replay]
+        : undefined,
       soul: soulActive,
       systemPrompt,
-      toolContext: buildToolExecutionContext({
-        assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
-        automationId,
-        ...this.memoryBackend.toolContext(orgId, profileId),
-        automationRunId,
-        orgId,
-        orgRole: "member",
-        profileId,
-        recordToolOutputSavings: this.savingsRecorderFor(orgId),
-        recordTurnUsage: this.turnUsageRecorderFor(orgId),
-      }),
+      toolContext,
       tools,
       userContext,
       userTimezone,
     });
 
-    return session.sendStream(prompt, handlers ?? { onChunk() {} });
+    return session.sendStream(
+      replay.length ? RESUME_AUTOMATION_PROMPT : prompt,
+      stepHandlers ?? { onChunk() {} }
+    );
+  }
+
+  /**
+   * Rebuilds the tool calls an interrupted run already made. A call cut in the
+   * middle runs again only for known read-only tools; any other tool is never
+   * repeated, and the model is told it was interrupted.
+   */
+  private async replayAutomationSteps(
+    steps: StoredAutomationRunStepRecord[],
+    tools: ToolDefinition[],
+    toolContext: ToolContext
+  ): Promise<ChatMessage[]> {
+    const messages: ChatMessage[] = [];
+    const groups = new Map<string, StoredAutomationRunStepRecord[]>();
+    for (const step of steps) {
+      const key = step.toolGroupId ?? step.toolCallId;
+      groups.set(key, [...(groups.get(key) ?? []), step]);
+    }
+
+    for (const [toolGroupId, group] of groups) {
+      const results: ChatMessage[] = [];
+      for (const step of group) {
+        let result = step.result;
+        if (step.status !== "completed" || result === null) {
+          const value =
+            REPLAYABLE_AUTOMATION_TOOLS.has(step.toolName) &&
+            tools.some((item) => item.name === step.toolName)
+              ? await executeToolCall(
+                  tools,
+                  {
+                    arguments: JSON.parse(step.args) as Record<string, unknown>,
+                    id: step.toolCallId,
+                    name: step.toolName,
+                  },
+                  toolContext
+                )
+              : {
+                  error:
+                    "Interrupted: the server restarted while this tool was running. It was not run again; check whether it took effect before repeating it.",
+                };
+          result = JSON.stringify(value) ?? "null";
+          await this.db.completeAutomationRunStep(
+            step.runId,
+            step.toolCallId,
+            result,
+            new Date().toISOString()
+          );
+        }
+        results.push({
+          content: result,
+          name: step.toolName,
+          role: "tool",
+          toolCallId: step.toolCallId,
+          toolGroupId,
+        });
+      }
+      messages.push(
+        {
+          content: "",
+          role: "assistant",
+          toolCalls: group.map((step) => ({
+            arguments: JSON.parse(step.args) as Record<string, unknown>,
+            id: step.toolCallId,
+            name: step.toolName,
+          })),
+        },
+        ...results
+      );
+    }
+    return messages;
   }
 
   async resolvePluginExecutionTools(
@@ -4829,6 +4954,30 @@ export class AgentService {
       enabled: this.userConfig?.thinkingEnabled ?? DEFAULT_THINKING_ENABLED,
     };
   }
+}
+
+const RESUME_AUTOMATION_PROMPT =
+  "The server restarted while you were working on this task. Continue from the tool results above and finish it. Do not repeat work that already succeeded.";
+
+// parallelSafe means concurrent calls are allowed. It does not mean a tool has no side effects.
+const REPLAYABLE_AUTOMATION_TOOLS = new Set([
+  "knowledge_base_search",
+  "list_artifacts",
+  "list_profile_sessions",
+  "omni_retrieve",
+  "read_file",
+  "read_profile_session",
+  "read_session_history",
+  "search_files",
+  "web_fetch",
+  "web_search",
+]);
+
+function warnStepWrite(error: unknown): void {
+  console.warn(
+    "Could not save automation run step:",
+    error instanceof Error ? error.message : error
+  );
 }
 
 function clampSubAgentTimeout(timeoutMs: number | undefined): number {

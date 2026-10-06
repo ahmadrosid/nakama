@@ -3,6 +3,7 @@ import type { ProfileSummary } from "@nakama/core/contract";
 import { cn } from "@nakama/ui/utils";
 import { hashToSeeds, oklchToCss } from "hashvatar";
 import { Hashvatar } from "hashvatar/react";
+import { useState } from "react";
 
 type ProfileAvatarProfile = Pick<
   ProfileSummary,
@@ -47,8 +48,11 @@ function tonesFromHash(hash: string): [string, string] {
   ];
 }
 
-function resolveAvatarSrc(profile: ProfileAvatarProfile): string | null {
-  const uploaded = getProfileAvatarUrl(profile);
+function resolveAvatarSrc(
+  profile: ProfileAvatarProfile,
+  orgId?: string
+): string | null {
+  const uploaded = getProfileAvatarUrl(profile, orgId);
   if (uploaded) {
     return uploaded;
   }
@@ -65,14 +69,17 @@ export function ProfileAvatar({
   size = "md",
   active = false,
   className,
+  orgId,
 }: {
   profile: ProfileAvatarProfile;
   size?: keyof typeof sizeClasses;
   /** Animate the hashvatar dither when this profile is selected. */
   active?: boolean;
   className?: string;
+  orgId?: string;
 }) {
-  const avatarUrl = resolveAvatarSrc(profile);
+  const avatarUrl = resolveAvatarSrc(profile, orgId);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
   const surfaceClass = cn(
     "shrink-0 rounded-full outline outline-1 outline-black/10 -outline-offset-1 dark:outline-white/10",
@@ -80,11 +87,12 @@ export function ProfileAvatar({
     className
   );
 
-  if (avatarUrl) {
+  if (avatarUrl && avatarUrl !== failedUrl) {
     return (
       <img
         alt=""
         className={cn(surfaceClass, "object-cover")}
+        onError={() => setFailedUrl(avatarUrl)}
         src={avatarUrl}
       />
     );

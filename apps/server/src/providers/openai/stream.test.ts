@@ -156,6 +156,86 @@ describe("OpenAI provider streaming", () => {
     }
   );
 
+  test("uses streamed text when no output item arrives", async () => {
+    globalThis.fetch = mock(
+      async () =>
+        new Response(
+          streamFromChunks([
+            'data:{"type":"response.output_text.delta","delta":"Hi"}\r\n\r\n',
+            'data:{"type":"response.completed","response":{"output":[]}}\r\n\r\n',
+          ]),
+          { status: 200 }
+        )
+    ) as unknown as typeof fetch;
+
+    const result = await createOpenAIProvider({
+      apiKey: "sk-test",
+      model: "gpt-6.1-sol",
+    }).streamChat(
+      {
+        messages: [{ content: "Say hi", role: "user" }],
+        providerOptions: { thinking: { enabled: true } },
+        system: "Be brief.",
+      },
+      { onChunk: () => {} }
+    );
+
+    expect(result.content).toBe("Hi");
+  });
+
+  test("uses completed response output when item events are absent", async () => {
+    globalThis.fetch = mock(
+      async () =>
+        new Response(
+          streamFromChunks([
+            'data:{"type":"response.completed","response":{"output":[{"id":"msg_1","type":"message","content":[{"type":"output_text","text":"Hi"}]}]}}\r\n\r\n',
+          ]),
+          { status: 200 }
+        )
+    ) as unknown as typeof fetch;
+
+    const result = await createOpenAIProvider({
+      apiKey: "sk-test",
+      model: "gpt-6.1-sol",
+    }).streamChat(
+      {
+        messages: [{ content: "Say hi", role: "user" }],
+        providerOptions: { thinking: { enabled: true } },
+        system: "Be brief.",
+      },
+      { onChunk: () => {} }
+    );
+
+    expect(result.content).toBe("Hi");
+  });
+
+  test("reports a failed Responses stream", async () => {
+    globalThis.fetch = mock(
+      async () =>
+        new Response(
+          streamFromChunks([
+            'data:{"type":"response.output_text.delta","delta":"Partial"}\r\n\r\n',
+            'data:{"type":"response.failed","response":{"error":{"message":"Provider failed"}}}\r\n\r\n',
+          ]),
+          { status: 200 }
+        )
+    ) as unknown as typeof fetch;
+
+    expect(
+      createOpenAIProvider({
+        apiKey: "sk-test",
+        model: "gpt-6.1-sol",
+      }).streamChat(
+        {
+          messages: [{ content: "Say hi", role: "user" }],
+          providerOptions: { thinking: { enabled: true } },
+          system: "Be brief.",
+        },
+        { onChunk: () => {} }
+      )
+    ).rejects.toThrow();
+  });
+
   test("streams chat completion chunks when thinking is enabled for an unsupported model", async () => {
     const fetchMock = mock(async (input: RequestInfo | URL) => {
       expect(String(input)).toBe("https://api.openai.com/v1/chat/completions");

@@ -2,8 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { ChatMessage } from "@nakama/core";
 import {
   extractOpenAITokenUsage,
+  finalizePendingToolCalls,
   formatHttpErrorBody,
+  mergePendingToolCall,
   normalizeThinkingEffort,
+  type PendingToolCall,
   parseJsonRecord,
   readRecord,
   readSseEvents,
@@ -56,6 +59,30 @@ describe("provider shared helpers", () => {
     expect(parseJsonRecord("[]")).toEqual({});
     expect(parseJsonRecord("")).toEqual({});
     expect(parseJsonRecord("{bad json")).toEqual({});
+  });
+
+  test("joins partial tool calls in index order and drops incomplete calls", () => {
+    const pending = new Map<number, PendingToolCall>();
+    mergePendingToolCall(pending, {
+      function: { arguments: '{"second":' },
+      index: 1,
+    });
+    mergePendingToolCall(pending, {
+      function: { arguments: "{bad json", name: "first" },
+      id: "call_0",
+      index: 0,
+    });
+    mergePendingToolCall(pending, {
+      function: { arguments: "2}", name: "second" },
+      id: "call_1",
+      index: 1,
+    });
+    mergePendingToolCall(pending, { id: "incomplete", index: 2 });
+
+    expect(finalizePendingToolCalls(pending)).toEqual([
+      { arguments: {}, id: "call_0", name: "first" },
+      { arguments: { second: 2 }, id: "call_1", name: "second" },
+    ]);
   });
 
   test("readRecord only accepts plain records", () => {

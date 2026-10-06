@@ -33,7 +33,6 @@ import type {
   ResetPasswordRequest,
   UpdateOrganizationRequest,
   UpdateOrgMemberRequest,
-  UserOrgSummary,
 } from "@nakama/core/contract";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import type {
@@ -360,22 +359,25 @@ export class OrgService {
   ): Promise<string | null> {
     const memberships =
       await this.databaseAdapter.listUserOrganizations(userId);
-    if (memberships.length === 0) {
-      if (sessionId) {
-        await this.databaseAdapter.updateBrowserSessionActiveOrgId(
-          sessionId,
-          null
-        );
-      }
-      return null;
-    }
-
+    const user = await this.databaseAdapter.getUserById(userId);
     const trimmed = requestedOrgId?.trim();
     const matched = trimmed
       ? memberships.find((membership) => membership.organization.id === trimmed)
       : undefined;
+    const platformOrg =
+      !matched && trimmed && user?.isPlatformAdmin
+        ? await this.databaseAdapter.getOrganizationById(trimmed)
+        : null;
     const activeOrgId =
-      matched?.organization.id ?? memberships[0].organization.id;
+      matched?.organization.id ??
+      (platformOrg && !platformOrg.archivedAt ? platformOrg.id : null) ??
+      memberships[0]?.organization.id ??
+      (user?.isPlatformAdmin
+        ? (await this.databaseAdapter.listOrganizations()).find(
+            (org) => !org.archivedAt
+          )?.id
+        : null) ??
+      null;
 
     if (sessionId && activeOrgId !== (trimmed ?? null)) {
       await this.databaseAdapter.updateBrowserSessionActiveOrgId(
@@ -391,28 +393,29 @@ export class OrgService {
     userId: string;
     orgId: string;
     sessionId?: string;
-  }): Promise<UserOrgSummary> {
+  }): Promise<OrganizationSummary & { role?: OrgRole }> {
     const memberships = await this.databaseAdapter.listUserOrganizations(
       input.userId
     );
     const membership = memberships.find(
       (record) => record.organization.id === input.orgId
     );
-
-    if (!membership) {
+    const user = await this.databaseAdapter.getUserById(input.userId);
+    if (!(membership || user?.isPlatformAdmin)) {
       throw new NakamaApiError("Not found", 404);
     }
+    const organization = await this.requireActiveOrganization(input.orgId);
 
     if (input.sessionId) {
       await this.databaseAdapter.updateBrowserSessionActiveOrgId(
         input.sessionId,
-        membership.organization.id
+        organization.id
       );
     }
 
     return {
-      ...toOrganizationSummary(membership.organization),
-      role: membership.role,
+      ...toOrganizationSummary(organization),
+      ...(membership ? { role: membership.role } : {}),
     };
   }
 
@@ -444,12 +447,15 @@ export class OrgService {
       mfaEnrolled: Boolean(
         (user.mfaEnabled && user.mfaTotpSecretEnc) || passkeyEnabled
       ),
+      // Mirrors isPendingBrowserMfa: platform admins are covered by a required
+      // policy even when they hold no membership in the active organization.
       mfaRequired:
         mfaPolicy.enabled &&
         mfaPolicy.required &&
-        (activeMember
-          ? mfaPolicy.enforcedRoles.includes(activeMember.role)
-          : false),
+        (Boolean(user.isPlatformAdmin) ||
+          (activeMember
+            ? mfaPolicy.enforcedRoles.includes(activeMember.role)
+            : false)),
       name: user.name ?? null,
       orgId: activeOrgId,
       passkeyEnabled,

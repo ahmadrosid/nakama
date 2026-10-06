@@ -174,7 +174,10 @@ test("workspace rename requires platform admin access and updates pins for every
   ).toBe(404);
   expect(
     (await request({ path: "drafts", newName: "other" }, other)).status
-  ).toBe(400);
+  ).toBe(200);
+  expect((await request({ path: "other", newName: "drafts" })).status).toBe(
+    200
+  );
   expect((await request({ path: "missing", newName: "other" })).status).toBe(
     404
   );

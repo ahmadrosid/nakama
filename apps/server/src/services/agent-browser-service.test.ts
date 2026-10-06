@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,6 +16,7 @@ import {
 import { AgentService } from "../services/agent-service";
 import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
+import * as cliPackageInstall from "./cli-package-install";
 import {
   waitForExit,
   waitForPidFile,
@@ -77,6 +79,13 @@ describe("agent-browser service", () => {
   testPosix("CLI-only install skips the Chrome download", async () => {
     await installFakeBinary(tempBinDir, "npm", "noop");
     await installFakeBinary(tempBinDir, "agent-browser", "installable");
+    using _download = spyOn(
+      cliPackageInstall,
+      "downloadPinnedPackageTarball"
+    ).mockResolvedValue({
+      cleanup: async () => undefined,
+      path: join(tempBinDir, "agent-browser.tgz"),
+    });
     const status = await installAgentBrowser(undefined, { cliOnly: true });
     expect(status.ready).toBe(true);
     await expect(
@@ -123,6 +132,50 @@ describe("agent-browser service", () => {
     },
     5000
   );
+
+  test("tells admins to install an exact version, not a floating name", () => {
+    expect(getAgentBrowserInstallCommand()).toMatch(
+      /^(?:npm install -g|bun install -g --trust) agent-browser@\d+\.\d+\.\d+ && agent-browser install$/
+    );
+  });
+
+  test("never runs the package manager when the registry hash is not the pinned one", async () => {
+    const npmRan = join(tempBinDir, "npm-ran");
+    await writeFile(join(tempBinDir, "npm"), `#!/bin/sh\ntouch ${npmRan}\n`);
+    await chmod(join(tempBinDir, "npm"), 0o755);
+    process.env.PATH = `${tempBinDir}:${originalPath}`;
+
+    // A registry that answers for the right version with someone else's
+    // tarball, which is what a hijacked or mirrored registry looks like.
+    const server = Bun.serve({
+      fetch(request) {
+        const url = new URL(request.url);
+        const version = url.pathname.split("/").pop() ?? "";
+
+        return Response.json({
+          dist: {
+            integrity:
+              "sha512-3a81oZNherrMQXNJriBBMRLm+k6JqX6iCp7u5ktV05ohkpkqJ0/BqDa6PCOj/uu9RU1EI2Q86A4qmslPpUyknw==",
+            tarball: `${url.origin}/tarball.tgz`,
+          },
+          name: "agent-browser",
+          version,
+        });
+      },
+      port: 0,
+    });
+
+    try {
+      await expect(
+        installAgentBrowser(undefined, {
+          registry: `http://localhost:${server.port}`,
+        })
+      ).rejects.toThrow("install refused");
+      expect(existsSync(npmRan)).toBe(false);
+    } finally {
+      server.stop(true);
+    }
+  }, 20_000);
 });
 
 describe("agent-browser settings routes", () => {
@@ -239,6 +292,15 @@ describe("agent-browser settings routes", () => {
   test("install stream emits progress events", async () => {
     await installFakeBinary(tempBinDir, "npm", "noop");
     await installFakeBinary(tempBinDir, "agent-browser", "installable");
+    // The pinned hash only matches the real 53 MB tarball, so the download is
+    // stubbed here; the hash check has its own tests against a local registry.
+    using _download = spyOn(
+      cliPackageInstall,
+      "downloadPinnedPackageTarball"
+    ).mockResolvedValue({
+      cleanup: async () => undefined,
+      path: join(tempBinDir, "agent-browser.tgz"),
+    });
 
     const databaseAdapter = createInMemoryDatabaseAdapter();
     const authService = new AuthService();

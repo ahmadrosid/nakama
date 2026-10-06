@@ -11,7 +11,9 @@ import { setupTestConfigDir } from "../test-config-dir";
 import { createMinimalHonoApp } from "./test-app-helpers";
 import type { AppFetch } from "./test-session-helpers";
 import {
+  browserSessionFromResponse,
   loginPlatformAdminSession,
+  seedOrgAdmin,
   setupFreshInstallSession,
 } from "./test-session-helpers";
 
@@ -79,6 +81,25 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
     databaseAdapter
   );
 
+  // Required policy covers the platform-admin flag itself, so enroll the
+  // platform admin before it is used to administer the policy below.
+  const platformUser = await databaseAdapter.getUserByEmail(
+    "platform@example.com"
+  );
+  if (!platformUser) {
+    throw new Error("Expected platform admin user");
+  }
+  await databaseAdapter.updateUserMfa(
+    platformUser.id,
+    {
+      enabled: true,
+      mfaTotpLastStep: null,
+      pendingTotpSecretEnc: null,
+      totpSecretEnc: encryptTotpSecret(generateTotpSecret()),
+    },
+    new Date().toISOString()
+  );
+
   const memberOnlyPolicy = await app.fetch(
     new Request("http://localhost:4310/v1/settings/mfa", {
       body: JSON.stringify({ enforcedRoles: ["member"] }),
@@ -93,6 +114,31 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
     })
   );
   expect(memberOnlyPolicy.status).toBe(200);
+  if (!session.orgId) {
+    throw new Error("Expected setup organization");
+  }
+  await seedOrgAdmin(databaseAdapter, {
+    authService,
+    email: "viewer@example.com",
+    orgId: session.orgId,
+    role: "viewer",
+    userId: "user_mfa_viewer",
+  });
+  const viewerLogin = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/login", {
+      body: JSON.stringify({
+        email: "viewer@example.com",
+        password: "password123",
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    })
+  );
+  expect(await viewerLogin.json()).toMatchObject({
+    mfaRequired: false,
+  });
+  // The setup user is a platform admin, so the required policy covers it even
+  // though its "admin" org role is not in enforcedRoles.
   const memberOnlyLogin = await app.fetch(
     new Request("http://localhost:4310/v1/auth/login", {
       body: JSON.stringify({
@@ -104,7 +150,7 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
     })
   );
   expect(await memberOnlyLogin.json()).toMatchObject({
-    mfaRequired: false,
+    mfaRequired: true,
   });
   const adminOnlyPolicy = await app.fetch(
     new Request("http://localhost:4310/v1/settings/mfa", {
@@ -292,4 +338,216 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
     })
   );
   expect(disableWithBackupResponse.status).toBe(200);
+});
+
+test("blocks a platform admin without an organization until MFA is enrolled", async () => {
+  const { app, authService, databaseAdapter } = createMinimalHonoApp();
+  const setupSession = await setupFreshInstallSession(
+    app as AppFetch,
+    databaseAdapter
+  );
+
+  const policyResponse = await app.fetch(
+    new Request("http://localhost:4310/v1/settings/mfa", {
+      body: JSON.stringify({ enabled: true, required: true }),
+      headers: setupSession.headers({
+        "Content-Type": "application/json",
+        "X-CSRF-Token": setupSession.csrfToken,
+      }),
+      method: "PUT",
+    })
+  );
+  expect(policyResponse.status).toBe(200);
+
+  // No organization membership at all: the platform-admin flag is the only
+  // authority this session carries.
+  const platformSession = await loginPlatformAdminSession(
+    app as AppFetch,
+    authService,
+    databaseAdapter
+  );
+  const platformUser = await databaseAdapter.getUserByEmail(
+    "platform@example.com"
+  );
+  if (!platformUser) {
+    throw new Error("Expected platform admin user");
+  }
+  expect(
+    await databaseAdapter.listUserOrganizations(platformUser.id)
+  ).toHaveLength(0);
+
+  const blockedOrgs = await app.fetch(
+    new Request("http://localhost:4310/v1/platform/orgs", {
+      headers: platformSession.headers(),
+    })
+  );
+  expect(blockedOrgs.status).toBe(403);
+  expect(await blockedOrgs.json()).toMatchObject({
+    error: "Complete MFA enrollment before accessing this resource.",
+  });
+
+  const blockedOrgCreate = await app.fetch(
+    new Request("http://localhost:4310/v1/platform/orgs", {
+      body: JSON.stringify({ name: "Should Not Exist", slug: "nope" }),
+      headers: platformSession.headers({
+        "Content-Type": "application/json",
+        "X-CSRF-Token": platformSession.csrfToken,
+      }),
+      method: "POST",
+    })
+  );
+  expect(blockedOrgCreate.status).toBe(403);
+
+  const startResponse = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/mfa/totp/start", {
+      headers: platformSession.headers({
+        "X-CSRF-Token": platformSession.csrfToken,
+      }),
+      method: "POST",
+    })
+  );
+  expect(startResponse.status).toBe(200);
+  const startBody = (await startResponse.json()) as { secret: string };
+  const verifyResponse = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/mfa/totp/verify", {
+      body: JSON.stringify({ code: createTotpCode(startBody.secret) }),
+      headers: platformSession.headers({
+        "Content-Type": "application/json",
+        "X-CSRF-Token": platformSession.csrfToken,
+      }),
+      method: "POST",
+    })
+  );
+  expect(verifyResponse.status).toBe(200);
+
+  const allowedOrgs = await app.fetch(
+    new Request("http://localhost:4310/v1/platform/orgs", {
+      headers: platformSession.headers(),
+    })
+  );
+  expect(allowedOrgs.status).toBe(200);
+  expect(
+    (await allowedOrgs.json()) as { organizations: unknown[] }
+  ).toMatchObject({
+    organizations: expect.any(Array),
+  });
+});
+
+test("MFA enrollment and disable revoke other browser sessions", async () => {
+  const { app, databaseAdapter } = createMinimalHonoApp();
+  const current = await setupFreshInstallSession(
+    app as AppFetch,
+    databaseAdapter
+  );
+
+  const policyResponse = await app.fetch(
+    new Request("http://localhost:4310/v1/settings/mfa", {
+      body: JSON.stringify({ enabled: true }),
+      headers: current.headers({
+        "Content-Type": "application/json",
+        "X-CSRF-Token": current.csrfToken,
+      }),
+      method: "PUT",
+    })
+  );
+  expect(policyResponse.status).toBe(200);
+
+  const enrollmentStart = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/mfa/totp/start", {
+      headers: current.headers({ "X-CSRF-Token": current.csrfToken }),
+      method: "POST",
+    })
+  );
+  expect(enrollmentStart.status).toBe(200);
+  const enrollmentBody = (await enrollmentStart.json()) as { secret: string };
+
+  const oldSessionResponse = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/login", {
+      body: JSON.stringify({
+        email: "admin@example.com",
+        password: "password123",
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    })
+  );
+  expect(oldSessionResponse.status).toBe(200);
+  const oldSession = browserSessionFromResponse(oldSessionResponse);
+
+  const enrollment = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/mfa/totp/verify", {
+      body: JSON.stringify({ code: createTotpCode(enrollmentBody.secret) }),
+      headers: current.headers({
+        "Content-Type": "application/json",
+        "X-CSRF-Token": current.csrfToken,
+      }),
+      method: "POST",
+    })
+  );
+  expect(enrollment.status).toBe(200);
+  const enrollmentResult = (await enrollment.json()) as {
+    backupCodes: string[];
+  };
+  expect(
+    (
+      await app.fetch(
+        new Request("http://localhost:4310/v1/auth/me", {
+          headers: oldSession.headers(),
+        })
+      )
+    ).status
+  ).toBe(401);
+  expect(
+    (
+      await app.fetch(
+        new Request("http://localhost:4310/v1/auth/me", {
+          headers: current.headers(),
+        })
+      )
+    ).status
+  ).toBe(200);
+
+  const sessionAfterEnrollment = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/login", {
+      body: JSON.stringify({
+        backupCode: enrollmentResult.backupCodes[0],
+        email: "admin@example.com",
+        password: "password123",
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    })
+  );
+  expect(sessionAfterEnrollment.status).toBe(200);
+  const sessionToRevoke = browserSessionFromResponse(sessionAfterEnrollment);
+
+  const disable = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/mfa/disable", {
+      body: JSON.stringify({ backupCode: enrollmentResult.backupCodes[1] }),
+      headers: current.headers({
+        "Content-Type": "application/json",
+        "X-CSRF-Token": current.csrfToken,
+      }),
+      method: "POST",
+    })
+  );
+  expect(disable.status).toBe(200);
+  expect(
+    (
+      await app.fetch(
+        new Request("http://localhost:4310/v1/auth/me", {
+          headers: sessionToRevoke.headers(),
+        })
+      )
+    ).status
+  ).toBe(401);
+  expect(
+    (
+      await app.fetch(
+        new Request("http://localhost:4310/v1/auth/me", {
+          headers: current.headers(),
+        })
+      )
+    ).status
+  ).toBe(200);
 });
