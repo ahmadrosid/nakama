@@ -367,11 +367,10 @@ export function CommandPalette() {
                 >
                   <ProfileAvatar
                     className="rounded-md"
-                    profile={
-                      item.orgId === activeOrg?.id
-                        ? item.profile
-                        : { ...item.profile, hasAvatar: false }
+                    orgId={
+                      item.orgId === activeOrg?.id ? undefined : item.orgId
                     }
+                    profile={item.profile}
                     size="xs"
                   />
                   <span className="truncate">{item.profile.name}</span>

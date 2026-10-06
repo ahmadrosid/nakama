@@ -152,7 +152,9 @@ test("platform admin finds and opens an agent in another organization", async ()
     expect(document.body.textContent).toContain("Default Bot");
     expect(listProfiles).toHaveBeenCalledWith("org-b");
     expect(document.body.textContent).not.toContain("Org C");
-    expect(document.querySelector('img[src*="agent-org-b"]')).toBeNull();
+    expect(
+      document.querySelector('img[src*="agent-org-b"][src*="orgId=org-b"]')
+    ).toBeTruthy();
 
     const remoteItems = [...document.querySelectorAll("[cmdk-item]")].filter(
       (item) => item.textContent?.includes("Org B")
