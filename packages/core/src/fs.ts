@@ -122,6 +122,12 @@ export async function writeTextFile(
     mode: preserveMode ?? mode,
   });
 
+  if (options.chmod ?? true) {
+    await chmod(tempPath, mode);
+  } else if (preserveMode !== undefined) {
+    await chmod(tempPath, preserveMode);
+  }
+
   const handle = await open(tempPath, "r+");
   try {
     await handle.sync();
@@ -130,12 +136,6 @@ export async function writeTextFile(
   }
 
   await replaceWithTempFile(tempPath, path);
-
-  if (options.chmod ?? true) {
-    await chmod(path, mode);
-  } else if (preserveMode !== undefined) {
-    await chmod(path, preserveMode);
-  }
 }
 
 export async function writePrivateTextFileIfMissing(
