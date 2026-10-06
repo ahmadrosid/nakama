@@ -779,11 +779,8 @@ function PluginIdentity({
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground text-xs">
             <span className="inline-flex items-center gap-1.5 capitalize">
               <span
-                className={
-                  plugin?.lifecycleState === "enabled"
-                    ? "size-1.5 rounded-full bg-emerald-500"
-                    : "size-1.5 rounded-full bg-muted-foreground/40"
-                }
+                className="size-1.5 rounded-full bg-muted-foreground/40 data-[state=enabled]:bg-emerald-500"
+                data-state={plugin?.lifecycleState}
               />
               {plugin?.lifecycleState ?? "Available"}
             </span>

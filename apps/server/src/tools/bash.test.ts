@@ -584,6 +584,43 @@ const timer = setInterval(() => {
     expect(result.stdout).toBe("http://127.0.0.1:4310");
   });
 
+  // Git Bash keeps the inherited Path, so the tool leaves Windows alone.
+  test.skipIf(process.platform === "win32")(
+    "finds a CLI the server can see when the login profile rebuilds PATH",
+    async () => {
+      workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+      const binDir = path.join(workspaceRoot, "bin");
+      const home = path.join(workspaceRoot, "home");
+      await mkdir(binDir);
+      await mkdir(home);
+      await writeFile(
+        path.join(binDir, "nakama-fake-cli"),
+        "#!/bin/sh\necho found\n"
+      );
+      await chmod(path.join(binDir, "nakama-fake-cli"), 0o755);
+      // Debian's /etc/profile does this, and the Docker image is Debian.
+      await writeFile(
+        path.join(home, ".bash_profile"),
+        "PATH=/usr/local/bin:/usr/bin:/bin\n"
+      );
+      const originalPath = process.env.PATH;
+      process.env.PATH = `${binDir}${path.delimiter}${originalPath}`;
+
+      try {
+        const result = await runBash(
+          { command: "nakama-fake-cli", env: { HOME: home } },
+          { orgId: "org_test", profileId: "profile_test" },
+          { workspaceRoot }
+        );
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout.trim()).toBe("found");
+      } finally {
+        process.env.PATH = originalPath;
+      }
+    }
+  );
+
   test("summarizes Cursor stream-json for coding-agent runs and saves a full log", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
     const agentPath = path.join(workspaceRoot, "agent");
