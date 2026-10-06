@@ -21,9 +21,9 @@ export function ToolPlaygroundRunForm({
   run: ToolPlaygroundRunControls;
 }) {
   return (
-    <>
+    <div className="space-y-4 p-4 sm:p-5">
       <ToolApiKeyForm toolId={tool.id} />
-      <div className="space-y-4 p-4 sm:p-5">
+      <div className="space-y-4 rounded-md border border-border bg-card p-4">
         <div>
           <h3 className="type-section-title">Run</h3>
           <p className="type-body mt-1 text-xs">
@@ -104,7 +104,7 @@ export function ToolPlaygroundRunForm({
           </p>
         ) : null}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -123,7 +123,7 @@ function ToolApiKeyForm({ toolId }: { toolId: string }) {
 
   return (
     <form
-      className="space-y-2.5 border-border border-b p-4 sm:p-5"
+      className="space-y-3 rounded-md border border-border bg-card p-4"
       onSubmit={async (event) => {
         event.preventDefault();
         if (saving) {
@@ -148,8 +148,12 @@ function ToolApiKeyForm({ toolId }: { toolId: string }) {
         }
       }}
     >
+      <h3 className="type-section-title">Configuration</h3>
       <div className="flex items-center justify-between gap-2">
-        <label className="type-section-title" htmlFor={inputId}>
+        <label
+          className="font-medium text-foreground text-xs"
+          htmlFor={inputId}
+        >
           API key
         </label>
         {status.data ? (
