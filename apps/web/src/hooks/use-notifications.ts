@@ -18,6 +18,7 @@ export interface NotificationItem {
   id: string;
   kind: NotificationKind;
   kindLabel: string;
+  profileId?: string;
   title: string;
 }
 
@@ -72,6 +73,7 @@ export function useNotifications(): {
           id: `automation-${automation.id}`,
           kind: "automation-run",
           kindLabel: "Automation",
+          profileId: automation.profileId,
           title: automation.name,
         });
       }

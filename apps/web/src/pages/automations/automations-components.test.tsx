@@ -6,7 +6,8 @@ import type {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
+import { NotificationList } from "@/components/notifications/notification-list";
 import { useActiveChatProfileStore } from "@/context/active-chat-profile-store";
 import {
   AuthContext,
@@ -18,6 +19,48 @@ import {
   type AutomationsPageState,
   useAutomationsPage,
 } from "./use-automations-page";
+
+test("automation notification opens the automation under its agent", async () => {
+  const previousState = useActiveChatProfileStore.getState();
+  useActiveChatProfileStore.setState({ profileId: "agent-a" });
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  let location = "";
+  function LocationProbe() {
+    const current = useLocation();
+    location = current.pathname + current.search;
+    return null;
+  }
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter initialEntries={["/notifications"]}>
+          <NotificationList
+            items={[
+              {
+                count: 1,
+                description: "1 unread automation run",
+                href: "/automations?automation=run-b",
+                id: "automation-run-b",
+                kind: "automation-run",
+                kindLabel: "Automation",
+                profileId: "agent-b",
+                title: "Run B",
+              },
+            ]}
+          />
+          <LocationProbe />
+        </MemoryRouter>
+      )
+    );
+    await act(async () => container.querySelector("a")!.click());
+    expect(useActiveChatProfileStore.getState().profileId).toBe("agent-b");
+    expect(location).toBe("/automations?automation=run-b");
+  } finally {
+    await act(async () => root.unmount());
+    useActiveChatProfileStore.setState(previousState);
+  }
+});
 
 test("automations follow the selected agent and Super Bot shows all", async () => {
   const queryClient = new QueryClient({
