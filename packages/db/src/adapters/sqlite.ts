@@ -23,6 +23,7 @@ import type {
   StoredAuditEvent,
   StoredAutomationRecord,
   StoredAutomationRunRecord,
+  StoredAutomationRunStepRecord,
   StoredBrowserSessionRecord,
   StoredComposioToolkitRecord,
   StoredComposioUserConnectionRecord,
@@ -669,11 +670,44 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     DELETE FROM workflow_runs
     WHERE workflow_id = ? AND id = ?
   `);
-  const failInterruptedAutomationRunsStmt = db.prepare(`
+  const failExhaustedAutomationRunsStmt = db.prepare(`
     UPDATE automation_runs
     SET status = 'failed', completed_at = ?, error = ?
-    WHERE status = 'running'
+    WHERE status = 'running' AND resume_count >= ?
   `);
+  const resumeInterruptedAutomationRunsStmt = db.prepare(`
+    UPDATE automation_runs
+    SET resume_count = resume_count + 1
+    WHERE status = 'running'
+    RETURNING id, automation_id
+  `);
+  const insertAutomationRunStepStmt = db.prepare(`
+    INSERT OR IGNORE INTO automation_run_steps (run_id, tool_call_id, tool_group_id, tool_name, args, result, status, started_at, completed_at, position)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const completeAutomationRunStepStmt = db.prepare(`
+    UPDATE automation_run_steps
+    SET status = 'completed', result = ?, completed_at = ?
+    WHERE run_id = ? AND tool_call_id = ?
+  `);
+  const listAutomationRunStepsStmt = db.prepare(`
+    SELECT * FROM automation_run_steps
+    WHERE run_id = ?
+    ORDER BY position ASC
+  `);
+  const claimInterruptedAutomationRunsTransaction = db.transaction(
+    (maxResumes: number, completedAt: string) => {
+      failExhaustedAutomationRunsStmt.run(
+        completedAt,
+        INTERRUPTED_RUN_ERROR,
+        maxResumes
+      );
+      return resumeInterruptedAutomationRunsStmt.all() as Array<{
+        automation_id: string;
+        id: string;
+      }>;
+    }
+  );
   const failInterruptedWorkflowRunsStmt = db.prepare(`
     UPDATE workflow_runs
     SET status = 'failed', completed_at = ?, error = ?
@@ -2856,6 +2890,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       statement.get();
     },
 
+    async claimInterruptedAutomationRuns(maxResumes) {
+      return claimInterruptedAutomationRunsTransaction
+        .immediate(maxResumes, new Date().toISOString())
+        .map((row) => ({ automationId: row.automation_id, id: row.id }));
+    },
+
     async claimNotificationWebhookDelivery(destinationId, eventId, createdAt) {
       // Bound ledger growth: drop rows outside the replay window before claim.
       const createdAtMs = Date.parse(createdAt);
@@ -2877,6 +2917,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async compareAndSetOrgPluginState(input) {
       return compareAndSetOrgPluginStateTx(input);
+    },
+
+    async completeAutomationRunStep(runId, toolCallId, result, completedAt) {
+      completeAutomationRunStepStmt.run(result, completedAt, runId, toolCallId);
     },
     async consumeMfaBackupCode(userId, codeHash, usedAt) {
       return consumeMfaBackupCodeStmt.run(usedAt, userId, codeHash).changes > 0;
@@ -3251,10 +3295,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async failInterruptedRuns() {
       const completedAt = new Date().toISOString();
-      const automations = failInterruptedAutomationRunsStmt.run(
-        completedAt,
-        INTERRUPTED_RUN_ERROR
-      );
       const workflows = failInterruptedWorkflowRunsStmt.run(
         completedAt,
         INTERRUPTED_RUN_ERROR
@@ -3265,7 +3305,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         completedAt,
         INTERRUPTED_RUN_ERROR
       );
-      return automations.changes + workflows.changes;
+      return workflows.changes;
     },
 
     async getActiveArtifactShareByPath(orgId, profileId, sourcePath) {
@@ -3737,6 +3777,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
+    async insertAutomationRunStep(step) {
+      insertAutomationRunStepStmt.run(
+        step.runId,
+        step.toolCallId,
+        step.toolGroupId,
+        step.toolName,
+        step.args,
+        step.result,
+        step.status,
+        step.startedAt,
+        step.completedAt,
+        step.position
+      );
+    },
+
     async insertWorkflowRun(record) {
       insertWorkflowRunStmt.run(
         record.id,
@@ -3790,6 +3845,34 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         options.offset ?? 0
       ) as AuditEventRow[];
       return rows.map(toAuditEventRecord);
+    },
+
+    async listAutomationRunSteps(runId) {
+      return (
+        listAutomationRunStepsStmt.all(runId) as Array<{
+          args: string;
+          completed_at: string | null;
+          position: number;
+          result: string | null;
+          run_id: string;
+          started_at: string;
+          status: StoredAutomationRunStepRecord["status"];
+          tool_call_id: string;
+          tool_group_id: string | null;
+          tool_name: string;
+        }>
+      ).map((row) => ({
+        args: row.args,
+        completedAt: row.completed_at,
+        position: row.position,
+        result: row.result,
+        runId: row.run_id,
+        startedAt: row.started_at,
+        status: row.status,
+        toolCallId: row.tool_call_id,
+        toolGroupId: row.tool_group_id,
+        toolName: row.tool_name,
+      }));
     },
 
     async listAutomationRuns(automationId, limit = 20) {
