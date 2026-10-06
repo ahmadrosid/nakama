@@ -15,7 +15,9 @@ import {
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
+import { getToolExecutionEnv } from "../lib/ensure-process-path";
 import { mergeCodingAgentSpawnEnv } from "../services/coding-agent-spawn-env";
+import { killProcessTree } from "../services/custom-tool-subprocess";
 import {
   type BashBackendKind,
   resolveBashBackend,
@@ -268,10 +270,18 @@ function runShellCommand(
 ): Promise<BashOutput> {
   return new Promise((resolve, reject) => {
     options.signal?.throwIfAborted();
-    const child = spawn(resolveHostBash(), ["-lc", command], {
+    const env = mergeCodingAgentSpawnEnv(getToolExecutionEnv(), envOverrides);
+    // A login shell may rebuild PATH from /etc/profile, as Debian in the Docker
+    // image does. Put back the dirs the harness probe finds CLIs in, after the
+    // profile's own so nothing that resolved before changes.
+    const restorePath =
+      process.platform !== "win32" && env.PATH
+        ? 'PATH="$PATH:$NAKAMA_TOOL_PATH"; unset NAKAMA_TOOL_PATH; '
+        : "";
+    const child = spawn(resolveHostBash(), ["-lc", restorePath + command], {
       cwd,
       detached: process.platform !== "win32",
-      env: mergeCodingAgentSpawnEnv(process.env, envOverrides),
+      env: restorePath ? { ...env, NAKAMA_TOOL_PATH: env.PATH } : env,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
@@ -288,37 +298,7 @@ function runShellCommand(
     let treeKilled: Promise<void> | undefined;
 
     const killCommand = () => {
-      if (!child.pid) {
-        return;
-      }
-      if (process.platform === "win32") {
-        treeKilled ??= new Promise<void>((done) => {
-          const killer = spawn(
-            path.join(
-              process.env.SystemRoot ?? "C:\\Windows",
-              "System32",
-              "taskkill.exe"
-            ),
-            ["/F", "/T", "/PID", String(child.pid)],
-            { stdio: "ignore", windowsHide: true }
-          );
-          killer.once("close", () => done());
-          killer.once("error", () => {
-            child.kill("SIGKILL");
-            done();
-          });
-        });
-        return;
-      }
-      try {
-        process.kill(-child.pid, "SIGKILL");
-      } catch {
-        try {
-          child.kill("SIGKILL");
-        } catch {
-          // already exited
-        }
-      }
+      treeKilled ??= killProcessTree(child, "SIGKILL");
     };
 
     const onAbort = () => {

@@ -255,23 +255,27 @@ CREATE TABLE IF NOT EXISTS profile_skills (
 );
 
 CREATE TABLE IF NOT EXISTS llm_usage_stats (
-  id TEXT PRIMARY KEY NOT NULL,
+  org_id TEXT NOT NULL,
+  id TEXT NOT NULL,
   request_count INTEGER NOT NULL DEFAULT 0,
   input_tokens INTEGER NOT NULL DEFAULT 0,
   output_tokens INTEGER NOT NULL DEFAULT 0,
   estimated_cost_usd REAL NOT NULL DEFAULT 0,
   tracked_since TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (org_id, id)
 );
 
 CREATE TABLE IF NOT EXISTS llm_usage_model_stats (
-  model_id TEXT PRIMARY KEY NOT NULL,
+  org_id TEXT NOT NULL,
+  model_id TEXT NOT NULL,
   request_count INTEGER NOT NULL DEFAULT 0,
   input_tokens INTEGER NOT NULL DEFAULT 0,
   output_tokens INTEGER NOT NULL DEFAULT 0,
   estimated_cost_usd REAL NOT NULL DEFAULT 0,
   tracked_since TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (org_id, model_id)
 );
 
 CREATE TABLE IF NOT EXISTS users (
@@ -380,25 +384,6 @@ CREATE TABLE IF NOT EXISTS org_invites (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS org_invites_token_hash_unique ON org_invites (token_hash);
-
-CREATE TABLE IF NOT EXISTS api_keys (
-  id TEXT PRIMARY KEY NOT NULL,
-  org_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  environment TEXT NOT NULL,
-  key_prefix TEXT NOT NULL,
-  secret_hash TEXT NOT NULL,
-  created_by_user_id TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  expires_at TEXT,
-  last_used_at TEXT,
-  revoked_at TEXT,
-  FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE,
-  FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE CASCADE
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS api_keys_prefix_unique ON api_keys (key_prefix);
-CREATE INDEX IF NOT EXISTS api_keys_org_id ON api_keys (org_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS org_memory_proposals (
   id TEXT PRIMARY KEY NOT NULL,

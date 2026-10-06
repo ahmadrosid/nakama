@@ -219,9 +219,11 @@ Spacing has layers. User-bubble padding, composer padding, and inter-message gap
 
 The schema is [`packages/db/sql/schema.sql`](./packages/db/sql/schema.sql).
 
+The internal `sessions.app_user_id` column marks retired sessions from the removed external-app integration. Normal reads and writes exclude these rows. Private files remain under `retired-app-users/` outside profile workspaces and are included only in full operator backups.
+
 | Area | Tables |
 |---|---|
-| Tenant / auth | `organizations`, `users`, `org_members`, `org_invites`, `browser_sessions`, `channel_org_mappings`, `api_keys`, `password_reset_tokens` |
+| Tenant / auth | `organizations`, `users`, `org_members`, `org_invites`, `browser_sessions`, `channel_org_mappings`, `password_reset_tokens` |
 | Agent config | `profiles`, `tools`, `profile_tools`, `skills`, `profile_skills`, `profile_skill_usage`, `mcp_servers`, `profile_mcp_servers` |
 | Runtime | `sessions`, `session_messages`, `attachments`, `artifact_shares` |
 | Execution | `automations`, `automation_runs`, `automation_run_read_state`, `workflows`, `workflow_runs`, `workflow_run_steps` |

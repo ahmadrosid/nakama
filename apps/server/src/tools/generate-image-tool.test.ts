@@ -310,7 +310,12 @@ describe("generate_image tool persistence (U4)", () => {
   test("prompt saves only the image and returns an attachmentId", async () => {
     await setupWorkspace();
     const db = createInMemoryDatabaseAdapter();
-    const usage: Array<{ model: string; input: number; output: number }> = [];
+    const usage: Array<{
+      model: string;
+      input: number;
+      orgId: string;
+      output: number;
+    }> = [];
 
     const result = await runGenerateImageTool(
       { filename: "cat.png", prompt: "a cat" },
@@ -333,8 +338,8 @@ describe("generate_image tool persistence (U4)", () => {
         }),
         getUserConfig: () =>
           openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
-        recordUsage: (model, input, output) => {
-          usage.push({ input, model, output });
+        recordUsage: (model, input, output, _instance, orgId) => {
+          usage.push({ input, model, orgId, output });
         },
       }
     );
@@ -366,7 +371,9 @@ describe("generate_image tool persistence (U4)", () => {
       sessionId: "session_1",
       sizeBytes: PNG_BYTES.byteLength,
     });
-    expect(usage).toEqual([{ input: 8, model: "gpt-image-2", output: 200 }]);
+    expect(usage).toEqual([
+      { input: 8, model: "gpt-image-2", orgId: "org_1", output: 200 },
+    ]);
   });
 
   test("filename collision saves a unique image without overwriting the original", async () => {

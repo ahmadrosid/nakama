@@ -24,7 +24,7 @@ export type ToolTokenEstimate = {
   parametersChars: number;
 };
 
-export type SystemSectionEstimate = {
+type SystemSectionEstimate = {
   title: string;
   chars: number;
   tokens: number;
@@ -86,9 +86,7 @@ export function estimateToolToken(tool: LlmToolDefinition): ToolTokenEstimate {
 }
 
 /** Split system prompt on markdown `#` headings for a coarse section cost map. */
-export function estimateSystemSections(
-  system: string
-): SystemSectionEstimate[] {
+function estimateSystemSections(system: string): SystemSectionEstimate[] {
   const lines = system.split("\n");
   const sections: { title: string; body: string[] }[] = [
     { body: [], title: "(preamble)" },
@@ -207,6 +205,7 @@ export function wrapProviderWithUsageTracking(
   provider: ProviderClient,
   tracker: LlmUsageTracker,
   modelId: string,
+  orgId: string,
   pricingContext: PricingContext = {}
 ): ProviderClient {
   function withRecordedUsage(
@@ -219,13 +218,11 @@ export function wrapProviderWithUsageTracking(
     const outputTokens =
       result.usage?.outputTokens ?? estimateChatOutputTokens(result);
     const cachedInputTokens = result.usage?.cachedInputTokens;
-    const costUsd = tracker.record(
-      modelId,
-      inputTokens,
-      outputTokens,
-      cachedInputTokens ?? 0,
-      pricingContext
-    );
+    const costUsd = tracker.record(modelId, inputTokens, outputTokens, {
+      cachedInputTokens: cachedInputTokens ?? 0,
+      orgId,
+      pricingContext,
+    });
 
     return {
       ...result,
@@ -256,7 +253,10 @@ export function wrapProviderWithUsageTracking(
         result.usage?.inputTokens ?? estimateTextInputTokens(input);
       const outputTokens =
         result.usage?.outputTokens ?? estimateTokens(result.content);
-      tracker.record(modelId, inputTokens, outputTokens, 0, pricingContext);
+      tracker.record(modelId, inputTokens, outputTokens, {
+        orgId,
+        pricingContext,
+      });
       return result;
     },
     async streamChat(

@@ -19,13 +19,13 @@ import {
   isDiscordAttachableArtifact,
 } from "@nakama/core/discord-attachment";
 
-export const SEND_DISCORD_ARTIFACT_TOOL_NAME = "send_discord_artifact";
+const SEND_DISCORD_ARTIFACT_TOOL_NAME = "send_discord_artifact";
 
 export interface SendDiscordArtifactInput {
   path: string;
 }
 
-export interface SendDiscordArtifactSuccess {
+interface SendDiscordArtifactSuccess {
   filename: string;
   mimeType: string;
   ok: true;
@@ -33,7 +33,7 @@ export interface SendDiscordArtifactSuccess {
   sizeBytes: number;
 }
 
-export interface SendDiscordArtifactFailure {
+interface SendDiscordArtifactFailure {
   error: string;
   ok: false;
 }

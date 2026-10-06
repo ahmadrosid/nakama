@@ -9,7 +9,7 @@ import {
 } from "@/components/ModelBrowseShell";
 import { filterRowsBySearch } from "@/components/model-browse-utils";
 
-export interface CatalogModelsBrowseQuery {
+interface CatalogModelsBrowseQuery {
   canFetch?: boolean;
   error?: Error | null;
   isFetching?: boolean;

@@ -14,7 +14,7 @@ async function fetchOpenRouterModels(): Promise<OpenRouterModelRow[]> {
   return normalizeOpenRouterModels(data);
 }
 
-export const openRouterModelsQueryOptions = queryOptions({
+const openRouterModelsQueryOptions = queryOptions({
   queryFn: fetchOpenRouterModels,
   queryKey: queryKeys.openRouterModels,
   staleTime: 1000 * 60 * 30,

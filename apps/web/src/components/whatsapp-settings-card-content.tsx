@@ -41,6 +41,8 @@ export function WhatsAppSettingsCardContent({
   onManageAllowedPhones,
   requireGroupMention,
   onRequireGroupMentionChange,
+  allowUnpairedGroupMembers,
+  onAllowUnpairedGroupMembersChange,
   onSave,
 }: {
   embedded: boolean;
@@ -74,6 +76,8 @@ export function WhatsAppSettingsCardContent({
   onManageAllowedPhones: () => void;
   requireGroupMention: boolean;
   onRequireGroupMentionChange: (value: boolean) => void;
+  allowUnpairedGroupMembers: boolean;
+  onAllowUnpairedGroupMembersChange: (value: boolean) => void;
   onSave: () => void;
 }) {
   const paneItemClass = "px-4 py-3";
@@ -176,6 +180,15 @@ export function WhatsAppSettingsCardContent({
             disabled={savePending}
             id="whatsapp-require-group-mention"
             onCheckedChange={onRequireGroupMentionChange}
+          />
+        </SettingsRow>
+        <SettingsRow label="Reply to unpaired group members">
+          <Switch
+            aria-label="Reply to unpaired group members"
+            checked={allowUnpairedGroupMembers}
+            disabled={savePending}
+            id="whatsapp-allow-unpaired-group-members"
+            onCheckedChange={onAllowUnpairedGroupMembersChange}
           />
         </SettingsRow>
         {linking}

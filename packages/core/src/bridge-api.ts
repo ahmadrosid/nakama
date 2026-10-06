@@ -14,8 +14,6 @@ export const BRIDGE_CLIENT_METHODS = [
   "createChatSession",
 ] as const;
 
-export type BridgeClientMethod = (typeof BRIDGE_CLIENT_METHODS)[number];
-
 export function assertBridgeClientMethods(client: object): void {
   for (const method of BRIDGE_CLIENT_METHODS) {
     if (typeof (client as Record<string, unknown>)[method] !== "function") {

@@ -2,12 +2,14 @@ import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import * as fsPromises from "node:fs/promises";
 import {
+  link,
   lstat,
   mkdir,
   mkdtemp,
   readdir,
   readFile,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -17,6 +19,7 @@ import { createDatabase } from "@nakama/db";
 import * as fflate from "fflate";
 import {
   createNakamaDataExport,
+  createNakamaOrgDataExport,
   decodeArchiveRequestData,
   MAX_IMPORT_ARCHIVE_BYTES,
   MAX_IMPORT_ENTRIES,
@@ -25,6 +28,7 @@ import {
   NAKAMA_EXPORT_MANIFEST,
   previewNakamaDataImport,
   restoreNakamaDataImport,
+  retireAppUserData,
 } from "./data-portability";
 import { MeetingStore } from "./google-meet/store";
 
@@ -48,6 +52,197 @@ afterEach(async () => {
 }, 30_000);
 
 describe("Nakama data portability", () => {
+  test("retirement preserves private bytes outside workspaces and normal exports, including orphan folders", async () => {
+    const databasePath = join(rootDir, "sqlite", "nakama.sqlite");
+    const database = await createDatabase(`file:${databasePath}`);
+    const raw = new Database(databasePath);
+    const oldConfigDir = process.env.NAKAMA_CONFIG_DIR;
+    process.env.NAKAMA_CONFIG_DIR = rootDir;
+    try {
+      raw.exec(
+        "INSERT INTO organizations (id,name,slug,created_at,updated_at) VALUES ('o','Org','o','now','now')"
+      );
+      raw.exec(
+        "INSERT INTO profiles (id,name,org_id,created_at,updated_at) VALUES ('p','Profile','o','now','now')"
+      );
+      raw.exec(
+        "INSERT INTO sessions (id,profile_id,channel,app_user_id,created_at,updated_at) VALUES ('old','p','web','alice','now','now')"
+      );
+      raw.exec(
+        "INSERT INTO attachments (id,org_id,profile_id,session_id,channel,kind,media_type,size_bytes,storage_path,created_at) VALUES ('attachment','o','p','old','web','image','image/png',7,'unused','now')"
+      );
+      raw.exec(
+        "CREATE TABLE api_keys (secret_hash TEXT); INSERT INTO api_keys VALUES ('old-key')"
+      );
+      const profile = join(rootDir, "orgs", "o", "profiles", "p");
+      const history = join(rootDir, "orgs", "o", "session-history");
+      await mkdir(join(profile, "users", "orphan", "artifacts"), {
+        recursive: true,
+      });
+      await mkdir(join(profile, "attachments"), { recursive: true });
+      await mkdir(history, { recursive: true });
+      await writeFile(join(profile, "MEMORY.md"), "shared memory");
+      await writeFile(
+        join(profile, "users", "orphan", "artifacts", "secret.txt"),
+        "private artifact"
+      );
+      await writeFile(
+        join(profile, "attachments", "attachment"),
+        "private attachment"
+      );
+      await writeFile(join(history, "old.jsonl"), "private history");
+      const legacyBackup = await createNakamaDataExport({
+        databasePath,
+        rootDir,
+      });
+      await retireAppUserData(rootDir, databasePath);
+      await retireAppUserData(rootDir, databasePath);
+      const retired = join(rootDir, "retired-app-users", "o", "p");
+      expect(
+        await readFile(
+          join(retired, "users", "orphan", "artifacts", "secret.txt"),
+          "utf8"
+        )
+      ).toBe("private artifact");
+      expect(
+        await readFile(join(retired, "attachments", "attachment"), "utf8")
+      ).toBe("private attachment");
+      expect(
+        await readFile(join(retired, "session-history", "old.jsonl"), "utf8")
+      ).toBe("private history");
+      expect(
+        await Bun.file(
+          join(profile, "users", "orphan", "artifacts", "secret.txt")
+        ).exists()
+      ).toBe(false);
+      expect(await readFile(join(profile, "MEMORY.md"), "utf8")).toBe(
+        "shared memory"
+      );
+      if (process.platform !== "win32") {
+        expect((await lstat(retired)).mode % 0o1000).toBe(0o700);
+        expect(
+          (await lstat(join(retired, "attachments", "attachment"))).mode %
+            0o1000
+        ).toBe(0o600);
+      }
+      expect(
+        raw.query("SELECT name FROM sqlite_master WHERE name='api_keys'").get()
+      ).toBeNull();
+      const normal = fflate.unzipSync(
+        (await createNakamaOrgDataExport(database.adapter, "o")).data
+      );
+      expect(JSON.stringify(Object.keys(normal))).not.toContain(
+        "retired-app-users"
+      );
+      expect(
+        Buffer.concat(
+          Object.values(normal).map((value) => Buffer.from(value))
+        ).toString()
+      ).not.toContain("private artifact");
+      const backup = await createNakamaDataExport({ databasePath, rootDir });
+      expect(
+        fflate.unzipSync(backup.data)[
+          "retired-app-users/o/p/attachments/attachment"
+        ]
+      ).toEqual(new Uint8Array(Buffer.from("private attachment")));
+      database.release();
+      raw.close(true);
+      await restoreNakamaDataImport(legacyBackup.data, {
+        confirm: true,
+        databasePath,
+        rootDir,
+      });
+      expect(
+        await readFile(join(retired, "attachments", "attachment"), "utf8")
+      ).toBe("private attachment");
+      const restored = new Database(databasePath, { readonly: true });
+      try {
+        expect(
+          restored
+            .query("SELECT name FROM sqlite_master WHERE name='api_keys'")
+            .get()
+        ).toBeNull();
+        expect(
+          restored
+            .query("SELECT app_user_id FROM sessions WHERE id='old'")
+            .get()
+        ).toEqual({ app_user_id: "alice" });
+      } finally {
+        restored.close(true);
+      }
+    } finally {
+      raw.close(true);
+      database.release();
+      if (oldConfigDir === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = oldConfigDir;
+      }
+    }
+  });
+
+  test("retirement resumes an interrupted move and refuses conflicting files or symlinks", async () => {
+    const source = join(
+      rootDir,
+      "orgs",
+      "o",
+      "profiles",
+      "p",
+      "users",
+      "alice"
+    );
+    const target = join(
+      rootDir,
+      "retired-app-users",
+      "o",
+      "p",
+      "users",
+      "alice"
+    );
+    await mkdir(source, { recursive: true });
+    await mkdir(target, { recursive: true });
+    await writeFile(join(source, "MEMORY.md"), "secret");
+    await link(join(source, "MEMORY.md"), join(target, "MEMORY.md"));
+    await retireAppUserData(rootDir, null);
+    expect(await Bun.file(join(source, "MEMORY.md")).exists()).toBe(false);
+    expect(await readFile(join(target, "MEMORY.md"), "utf8")).toBe("secret");
+    await mkdir(source, { recursive: true });
+    await writeFile(join(source, "MEMORY.md"), "new secret");
+    await expect(retireAppUserData(rootDir, null)).rejects.toThrow();
+    expect(await readFile(join(source, "MEMORY.md"), "utf8")).toBe(
+      "new secret"
+    );
+    expect(await readFile(join(target, "MEMORY.md"), "utf8")).toBe("secret");
+    await rm(join(source, "MEMORY.md"));
+    await symlink(join(target, "MEMORY.md"), join(source, "escape.md"));
+    await expect(retireAppUserData(rootDir, null)).rejects.toThrow();
+    expect(await readFile(join(target, "MEMORY.md"), "utf8")).toBe("secret");
+  });
+
+  test("legacy restore sanitation failure leaves live data and runtime untouched", async () => {
+    await writeFile(join(rootDir, "config.ini"), "live");
+    const archive = fflate.zipSync({
+      ...fflate.unzipSync(
+        (await createNakamaDataExport({ databasePath: null, rootDir })).data
+      ),
+      "orgs/o/profiles/p/users/alice/MEMORY.md": Buffer.from("private"),
+      "retired-app-users/o/p/users/alice/MEMORY.md": Buffer.from("conflict"),
+    });
+    let stopped = false;
+    await expect(
+      restoreNakamaDataImport(archive, {
+        beforeReplace: () => {
+          stopped = true;
+        },
+        confirm: true,
+        databasePath: null,
+        rootDir,
+      })
+    ).rejects.toThrow();
+    expect(stopped).toBe(false);
+    expect(await readFile(join(rootDir, "config.ini"), "utf8")).toBe("live");
+  });
+
   test("built-in Meet snapshots round-trip saved transcripts while excluding temporary audio", async () => {
     const directory = join(rootDir, "orgs", "a", "meet");
     const store = new MeetingStore(directory, "a");
@@ -72,7 +267,7 @@ describe("Nakama data portability", () => {
           .join("")
       ).toBe("Saved meeting");
     } finally {
-      restored.close();
+      restored.close(true);
     }
   });
   test("round-trips a backup at the restore entry-byte limit", async () => {
@@ -467,12 +662,14 @@ describe("Nakama data portability", () => {
         "nakama.sqlite"
       );
       await mkdir(join(sourceRoot, "data", "sqlite"), { recursive: true });
-      const source = new Database(sourceDatabase, { create: true });
+      const schema = await createDatabase(`file:${sourceDatabase}`);
+      schema.release();
+      const source = new Database(sourceDatabase);
       source.exec(
-        "CREATE TABLE org_plugins (org_id TEXT, plugin_id TEXT, lifecycle_state TEXT, revision INTEGER, pending_operation TEXT, updated_at TEXT)"
+        "INSERT INTO organizations (id,name,slug,created_at,updated_at) VALUES ('org-1','Org','org-1','now','now')"
       );
       source.exec(
-        "INSERT INTO org_plugins VALUES ('org-1', 'notes', 'enabled', 1, NULL, '2026-09-30T00:00:00.000Z')"
+        "INSERT INTO org_plugins (org_id,plugin_id,lifecycle_state,revision,pending_operation,created_at,updated_at) VALUES ('org-1', 'notes', 'enabled', 1, NULL, 'now', '2026-09-30T00:00:00.000Z')"
       );
       source.close(true);
       const exportResult = await createNakamaDataExport({
@@ -550,12 +747,14 @@ describe("Nakama data portability", () => {
     try {
       const sourceDatabase = join(sourceRoot, "sqlite", "nakama.sqlite");
       await mkdir(join(sourceRoot, "sqlite"), { recursive: true });
-      const source = new Database(sourceDatabase, { create: true });
+      const schema = await createDatabase(`file:${sourceDatabase}`);
+      schema.release();
+      const source = new Database(sourceDatabase);
       source.exec(
-        "CREATE TABLE org_plugins (org_id TEXT, plugin_id TEXT, lifecycle_state TEXT, revision INTEGER, pending_operation TEXT, updated_at TEXT)"
+        "INSERT INTO organizations (id,name,slug,created_at,updated_at) VALUES ('org-1','Org','org-1','now','now')"
       );
       source.exec(
-        "INSERT INTO org_plugins VALUES ('org-1', 'notes', 'enabled', 1, NULL, '2026-09-30T00:00:00.000Z')"
+        "INSERT INTO org_plugins (org_id,plugin_id,lifecycle_state,revision,pending_operation,created_at,updated_at) VALUES ('org-1', 'notes', 'enabled', 1, NULL, 'now', '2026-09-30T00:00:00.000Z')"
       );
       source.close(true);
       const exportResult = await createNakamaDataExport({

@@ -2,7 +2,6 @@ import { join } from "node:path";
 import { getUserConfigDir } from "./user-config";
 import {
   createWorkerHeartbeatStore,
-  isProcessAlive,
   type WorkerHeartbeatBase,
 } from "./worker-heartbeat";
 
@@ -41,13 +40,10 @@ const store = createWorkerHeartbeatStore<AutomationWorkerHeartbeat>({
     };
   },
 });
-
-export const getAutomationWorkerHeartbeatPath = store.getPath;
 export const parseAutomationWorkerHeartbeat = store.parse;
 export const readAutomationWorkerHeartbeat = store.read;
 export const clearAutomationWorkerHeartbeat = store.clear;
 export const isAutomationWorkerRunning = store.isRunning;
-export const isAutomationProcessAlive = isProcessAlive;
 export const isAutomationHeartbeatAlive = store.isAlive;
 
 export async function writeAutomationWorkerHeartbeat(

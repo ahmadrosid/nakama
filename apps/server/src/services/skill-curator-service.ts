@@ -28,7 +28,7 @@ import type { SkillsService } from "./skills-service";
 
 const bundledSkillNames = new Set<string>(BUNDLED_SKILL_NAMES);
 
-export type { SkillCuratorRunResult, SkillCuratorTrigger };
+export type { SkillCuratorRunResult };
 
 export interface SkillCuratorRunOptions {
   dryRun?: boolean;

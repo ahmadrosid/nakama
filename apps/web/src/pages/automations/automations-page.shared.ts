@@ -58,9 +58,6 @@ export function automationRunMessages(
   return messages;
 }
 
-export const agentWorkPanelClassName =
-  "flex min-h-0 flex-1 flex-col overflow-hidden";
-
 export function formatTrigger(trigger: AutomationTrigger): string {
   if (trigger.type === "manual") {
     return "Manual trigger";
@@ -108,7 +105,7 @@ export function groupRunsByDay(
   }));
 }
 
-export function formatRunDayLabel(value: string): string {
+function formatRunDayLabel(value: string): string {
   const date = new Date(value);
   const now = new Date();
 

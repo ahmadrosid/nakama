@@ -1,5 +1,4 @@
 export const SUPER_BOT_PROFILE_ID = "super_bot";
-export const DEFAULT_PROFILE_ID = "default";
 export const LLM_USAGE_STATS_ID = "default";
 export const WORKSPACE_SETTINGS_ID = "default";
 

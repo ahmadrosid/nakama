@@ -1,13 +1,16 @@
 import { Card, CardContent } from "@nakama/ui/card";
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@nakama/ui/command";
 import { ExpandableTextarea } from "@nakama/ui/expandable-textarea";
 import { Input } from "@nakama/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@nakama/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
+import { ArrowDown01Icon } from "hugeicons-react";
+import { useState } from "react";
 import {
   encodeModelSelection,
   extractModelId,
@@ -71,6 +74,7 @@ export function ProfileConfigIdentitySection({
     handleAvatarSelected,
     handleAvatarRemove,
   } = state;
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
 
   if (!detail) {
     return null;
@@ -123,48 +127,83 @@ export function ProfileConfigIdentitySection({
             htmlFor="profile-model"
             label="Model"
           >
-            <Select
-              disabled={identityDisabled || providerModelGroups.length === 0}
-              onValueChange={(value) => {
-                if (!value) {
-                  return;
-                }
-
-                handleEditModelChange(String(value));
-              }}
-              value={modelSelectionValue}
-            >
-              <SelectTrigger className="w-full" id="profile-model">
-                <SelectValue placeholder="Select model">
-                  {profileModelLabel(editModel, providerModelGroups)}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent
-                alignItemWithTrigger={false}
-                className="w-max min-w-72 max-w-[min(24rem,92vw)]"
+            <Popover onOpenChange={setModelPickerOpen} open={modelPickerOpen}>
+              <PopoverTrigger
+                aria-label="Select model"
+                className="flex h-8 w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50"
+                disabled={identityDisabled || providerModelGroups.length === 0}
+                id="profile-model"
               >
-                {extractModelId(editModel) && !modelInCatalog ? (
-                  <SelectItem
-                    value={encodeModelSelection(
-                      "__unknown__",
-                      extractModelId(editModel)!
+                <span className="min-w-0 flex-1 truncate text-left">
+                  {profileModelLabel(editModel, providerModelGroups)}
+                </span>
+                <ArrowDown01Icon
+                  aria-hidden
+                  className="size-4 shrink-0 text-muted-foreground"
+                />
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                className="max-w-[min(24rem,92vw)] overflow-hidden p-0"
+              >
+                <Command className="rounded-lg bg-transparent p-0">
+                  <div className="border-border/60 border-b p-2 [&_[data-slot=command-input-wrapper]]:p-0">
+                    <CommandInput
+                      aria-label="Search models"
+                      autoFocus
+                      placeholder="Search models…"
+                    />
+                  </div>
+                  <CommandList className="max-h-72 p-1">
+                    <CommandEmpty>No model found.</CommandEmpty>
+                    {extractModelId(editModel) && !modelInCatalog ? (
+                      <CommandItem
+                        data-checked={
+                          modelSelectionValue ===
+                          encodeModelSelection(
+                            "__unknown__",
+                            extractModelId(editModel)!
+                          )
+                        }
+                        onSelect={() => {
+                          handleEditModelChange(
+                            encodeModelSelection(
+                              "__unknown__",
+                              extractModelId(editModel)!
+                            )
+                          );
+                          setModelPickerOpen(false);
+                        }}
+                        value={extractModelId(editModel)!}
+                      >
+                        {extractModelId(editModel)}
+                      </CommandItem>
+                    ) : null}
+                    {providerModelGroups.flatMap((group) =>
+                      group.models.map((model) => {
+                        const value = encodeModelSelection(
+                          group.providerId,
+                          model.id
+                        );
+                        return (
+                          <CommandItem
+                            data-checked={modelSelectionValue === value}
+                            key={`${group.providerId}:${model.id}`}
+                            onSelect={() => {
+                              handleEditModelChange(value);
+                              setModelPickerOpen(false);
+                            }}
+                            value={`${group.providerLabel} ${model.name} ${model.id}`}
+                          >
+                            {group.providerLabel}: {model.name}
+                          </CommandItem>
+                        );
+                      })
                     )}
-                  >
-                    {extractModelId(editModel)}
-                  </SelectItem>
-                ) : null}
-                {providerModelGroups.flatMap((group) =>
-                  group.models.map((model) => (
-                    <SelectItem
-                      key={`${group.providerId}:${model.id}`}
-                      value={encodeModelSelection(group.providerId, model.id)}
-                    >
-                      {group.providerLabel}: {model.name}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </Field>
         </div>
 

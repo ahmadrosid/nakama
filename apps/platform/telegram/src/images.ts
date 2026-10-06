@@ -37,7 +37,7 @@ export async function buildTelegramImageInput(
   return null;
 }
 
-export async function downloadTelegramImage(
+async function downloadTelegramImage(
   ctx: Context,
   fileId: string
 ): Promise<ImageAttachment> {

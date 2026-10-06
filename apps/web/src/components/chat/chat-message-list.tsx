@@ -36,6 +36,7 @@ import { Message, MessageContent } from "@/components/ai-elements/message";
 import { ArtifactAttachmentPreview } from "@/components/chat/artifact-attachment-preview";
 import {
   AssistantTurnSegmentView,
+  LocalCitationPreview,
   ProfileCreatedCard,
 } from "@/components/chat/assistant-tool-group";
 import { segmentAssistantTurn } from "@/components/chat/assistant-tool-group.shared";
@@ -43,6 +44,7 @@ import { ToolCredentialCard } from "@/components/chat/chat-add-capabilities-dial
 import { ChatUsageBadge } from "@/components/chat/chat-usage-badge";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
+import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import { useArtifactsExist } from "@/hooks/use-resource-mutations";
 import { extractTurnArtifacts } from "@/lib/chat-artifacts";
 import {
@@ -129,10 +131,11 @@ interface ChatMessageListProps {
   /** True while the assistant reply SSE stream is in flight. */
   streamActive?: boolean;
   turnStartedAt?: string | null;
+  workStreamActive?: boolean;
 }
 
 export function ChatMessageList(props: ChatMessageListProps) {
-  const sessionAnchor = props.messages[0]?.id ?? "empty";
+  const sessionAnchor = props.sessionId ?? props.messages[0]?.id ?? "empty";
   return <ChatMessageListSession key={sessionAnchor} {...props} />;
 }
 
@@ -149,6 +152,7 @@ function ChatMessageListSession({
   readOnly = false,
   streamActive = false,
   turnStartedAt = null,
+  workStreamActive = streamActive,
   onBranchMessage,
   onEditMessage,
   onRetryMessage,
@@ -164,6 +168,20 @@ function ChatMessageListSession({
   const lastListHeightRef = useRef(0);
   const didInitialPinRef = useRef(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const canPreviewCitations = useOptionalChatAttachmentPanel() !== null;
+  const [citationPreview, setCitationPreview] = useState<{
+    path: string;
+    profileId: string;
+  } | null>(null);
+  const openCitationPreview = useCallback(
+    (path: string) => {
+      if (profileId) {
+        setCitationPreview({ path, profileId });
+      }
+    },
+    [profileId]
+  );
+  const closeCitationPreview = useCallback(() => setCitationPreview(null), []);
 
   const showAwaitingPlaceholder =
     streamActive && isAwaitingModelResponse(messages);
@@ -287,6 +305,9 @@ function ChatMessageListSession({
             modelLabel={modelLabel}
             onBranchMessage={onBranchMessage}
             onContinueToolSetup={onContinueToolSetup}
+            onOpenFileCitation={
+              canPreviewCitations ? openCitationPreview : undefined
+            }
             onRetryMessage={onRetryMessage}
             profileId={profileId}
             readOnly={readOnly}
@@ -298,7 +319,9 @@ function ChatMessageListSession({
             showUsage={showUsage}
             streamActive={streamActive}
             turnStartedAt={turnStartedAt}
-            workStreamActive={streamActive && turnIndex === turns.length - 1}
+            workStreamActive={
+              workStreamActive && turnIndex === turns.length - 1
+            }
           />
         </div>
       );
@@ -310,16 +333,19 @@ function ChatMessageListSession({
       actionsDisabled,
       awaitingLabel,
       branchingMessageId,
+      canPreviewCitations,
       contentClassName,
       modelLabel,
       onBranchMessage,
       onEditMessage,
       onRetryMessage,
+      openCitationPreview,
       profileId,
       showThinking,
       showUsage,
       streamActive,
       turnStartedAt,
+      workStreamActive,
       turns.length,
     ]
   );
@@ -365,6 +391,15 @@ function ChatMessageListSession({
         />
         <ConversationScrollButton />
       </Conversation>
+      {/* Keep the preview mounted when Virtuoso removes the citation row. */}
+      {citationPreview ? (
+        <LocalCitationPreview
+          key={`${citationPreview.profileId}:${citationPreview.path}`}
+          onClose={closeCitationPreview}
+          path={citationPreview.path}
+          profileId={citationPreview.profileId}
+        />
+      ) : null}
     </ConversationStickinessProvider>
   );
 }
@@ -385,6 +420,7 @@ function AssistantTurn({
   showAwaiting,
   turnStartedAt,
   onBranchMessage,
+  onOpenFileCitation,
   onRetryMessage,
 }: {
   readOnly?: boolean;
@@ -402,6 +438,7 @@ function AssistantTurn({
   showAwaiting?: boolean;
   turnStartedAt?: string | null;
   onBranchMessage?: (message: ChatListItem) => void;
+  onOpenFileCitation?: (path: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
 }) {
   const turnMessages = messages.map(({ message }) => message);
@@ -436,6 +473,7 @@ function AssistantTurn({
               : `text:${segment.message.id}`
           }
           modelLabel={modelLabel}
+          onOpenFileCitation={onOpenFileCitation}
           onRetryMessage={onRetryMessage}
           profileId={profileId}
           retryDisabled={retryDisabled}

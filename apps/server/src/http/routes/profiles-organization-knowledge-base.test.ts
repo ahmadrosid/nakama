@@ -1,6 +1,13 @@
-import { describe, expect, test } from "bun:test";
-import { attachSharedKnowledgeBaseDocument } from "@nakama/core";
+import { describe, expect, spyOn, test } from "bun:test";
+import { readFile } from "node:fs/promises";
+import {
+  attachSharedKnowledgeBaseDocument,
+  getKnowledgeBaseDir,
+  getKnowledgeBaseExtractedPath,
+} from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { zipSync } from "fflate";
+import { MemoryBackendService } from "../../services/memory-backend-service";
 import { ProfileService } from "../../services/profile-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
@@ -19,12 +26,296 @@ const textDocument = (content: string) => ({
   mediaType: "text/plain",
 });
 
+describe("profile knowledge base ZIP import", () => {
+  const body = (files: Record<string, Uint8Array>) =>
+    JSON.stringify({
+      zipBase64: Buffer.from(zipSync(files)).toString("base64"),
+    });
+
+  test("imports entries, reports partial results, and serves nested documents", async () => {
+    const { app, orgId, post, profileId, session } = await setupSession(
+      "platform-kb-zip-1@example.com"
+    );
+    const path = `/v1/profiles/${profileId}/knowledge-base/import-zip`;
+    const response = await post(
+      path,
+      body({
+        "guides/setup.md": Buffer.from("The comet manual"),
+        "copy.md": Buffer.from("The comet manual"),
+        "empty.txt": Buffer.from("  "),
+        "image.png": Buffer.from([1, 2, 3]),
+        "__MACOSX/._setup.md": Buffer.from("metadata"),
+      })
+    );
+    expect(response.status).toBe(200);
+    const result = (await response.json()) as {
+      entries: Array<{
+        documentId?: string;
+        filename: string;
+        match?: string;
+        outcome: string;
+        status?: string;
+      }>;
+      totals: Record<string, number>;
+    };
+    expect(result.totals).toEqual({
+      created: 2,
+      duplicate: 1,
+      unsupported: 1,
+      error: 0,
+      failedExtraction: 1,
+    });
+    expect(
+      result.entries.find((entry) => entry.filename === "copy.md")
+    ).toMatchObject({
+      match: "content_hash",
+      outcome: "duplicate",
+    });
+    expect(
+      result.entries.some((entry) => entry.filename.startsWith("__MACOSX"))
+    ).toBe(false);
+    const created = result.entries.find(
+      (entry) => entry.filename === "guides/setup.md"
+    )!;
+    expect(created.status).toBe("ready");
+    const extracted = await readFile(
+      getKnowledgeBaseExtractedPath(
+        getKnowledgeBaseDir(orgId, profileId),
+        created.documentId!
+      ),
+      "utf8"
+    );
+    expect(extracted).toContain("The comet manual");
+
+    const content = await app.fetch(
+      new Request(
+        `${BASE}/v1/profiles/${profileId}/knowledge-base/${created.documentId}/content`,
+        { headers: session.headers({}, orgId) }
+      )
+    );
+    expect(content.status).toBe(200);
+    expect(content.headers.get("content-disposition")).toContain(
+      "filename*=UTF-8''setup.md"
+    );
+    expect(await content.text()).toBe("The comet manual");
+
+    const retry = await post(
+      path,
+      body({ "guides/setup.md": Buffer.from("The comet manual") })
+    );
+    expect(retry.status).toBe(200);
+    expect((await retry.json()).totals.duplicate).toBe(1);
+    const removed = await app.fetch(
+      new Request(
+        `${BASE}/v1/profiles/${profileId}/knowledge-base/${created.documentId}`,
+        {
+          headers: session.headers(
+            { "X-CSRF-Token": session.csrfToken },
+            orgId
+          ),
+          method: "DELETE",
+        }
+      )
+    );
+    expect(removed.status).toBe(200);
+    expect((await removed.json()).deleted).toBe(true);
+  }, 30_000);
+
+  test("reports a name and size conflict without replacing the document", async () => {
+    const { post, profileId } = await setupSession(
+      "platform-kb-zip-2@example.com"
+    );
+    const path = `/v1/profiles/${profileId}/knowledge-base/import-zip`;
+    expect(
+      (await post(path, body({ "same.txt": Buffer.from("one") }))).status
+    ).toBe(200);
+    const response = await post(path, body({ "same.txt": Buffer.from("two") }));
+    expect(response.status).toBe(200);
+    expect((await response.json()).entries[0]).toMatchObject({
+      match: "name_size",
+      outcome: "duplicate",
+    });
+  }, 30_000);
+
+  test("syncs once and can retry after a sync error", async () => {
+    const { post, profileId } = await setupSession(
+      "platform-kb-zip-sync@example.com"
+    );
+    const path = `/v1/profiles/${profileId}/knowledge-base/import-zip`;
+    const payload = body({
+      "a.txt": Buffer.from("first"),
+      "b.txt": Buffer.from("second"),
+    });
+    const sync = spyOn(MemoryBackendService.prototype, "syncKnowledge");
+    try {
+      expect((await post(path, payload)).status).toBe(200);
+      expect(sync).toHaveBeenCalledTimes(1);
+      sync.mockRejectedValueOnce(new Error("sync unavailable"));
+      expect((await post(path, payload)).status).toBe(500);
+      expect(sync).toHaveBeenCalledTimes(2);
+      const retry = await post(path, payload);
+      expect(retry.status).toBe(200);
+      expect((await retry.json()).totals.duplicate).toBe(2);
+      expect(sync).toHaveBeenCalledTimes(3);
+    } finally {
+      sync.mockRestore();
+    }
+  }, 30_000);
+
+  test("rejects invalid ZIPs before adding documents", async () => {
+    const { app, orgId, post, profileId, session } = await setupSession(
+      "platform-kb-zip-3@example.com"
+    );
+    const path = `/v1/profiles/${profileId}/knowledge-base/import-zip`;
+    const invalid = [
+      JSON.stringify({ zipBase64: "invalid!" }),
+      JSON.stringify({
+        zipBase64: Buffer.from("not a ZIP").toString("base64"),
+      }),
+      body({ "../escape.md": Buffer.from("bad") }),
+      body({ "a/./b.md": Buffer.from("bad") }),
+      body({ "a\\b.md": Buffer.from("bad") }),
+      body({ "bad\nname.md": Buffer.from("bad") }),
+      body({ "e\u0301.md": Buffer.from("one"), "é.md": Buffer.from("two") }),
+      body({ "nope.png": Buffer.from("bad") }),
+      body({}),
+    ];
+    for (const payload of invalid) {
+      const response = await post(path, payload);
+      expect(response.status).toBe(400);
+    }
+    expect(
+      (
+        await post(
+          path,
+          body({ "big.txt": Buffer.alloc(20 * 1024 * 1024 + 1) })
+        )
+      ).status
+    ).toBe(413);
+    const many: Record<string, Uint8Array> = {};
+    for (let index = 0; index < 101; index += 1) {
+      many[`file-${index}.txt`] = Buffer.from("x");
+    }
+    expect((await post(path, body(many))).status).toBe(413);
+    const total: Record<string, Uint8Array> = {};
+    for (let index = 0; index < 6; index += 1) {
+      total[`large-${index}.txt`] = Buffer.alloc(17 * 1024 * 1024);
+    }
+    expect((await post(path, body(total))).status).toBe(413);
+    expect(
+      (
+        await post(
+          path,
+          JSON.stringify({
+            zipBase64: "A".repeat(Math.ceil((20 * 1024 * 1024) / 3) * 4 + 4),
+          })
+        )
+      ).status
+    ).toBe(413);
+    const list = await app.fetch(
+      new Request(`${BASE}/v1/profiles/${profileId}/knowledge-base`, {
+        headers: session.headers({}, orgId),
+      })
+    );
+    expect(list.status).toBe(200);
+    expect((await list.json()).documents).toEqual([]);
+  }, 30_000);
+
+  test("openapi describes the ZIP import route", async () => {
+    const { app } = createApp();
+    const response = await app.fetch(new Request(`${BASE}/openapi.json`));
+    const spec = (await response.json()) as {
+      paths: Record<string, Record<string, unknown>>;
+    };
+    expect(
+      spec.paths["/v1/profiles/{profileId}/knowledge-base/import-zip"]?.post
+    ).toBeDefined();
+  });
+
+  test("requires a platform administrator and the active organization", async () => {
+    const { app, authService, databaseAdapter } = createApp();
+    const { adminSession, orgId } = await createOrgAdminSession(
+      app,
+      authService,
+      databaseAdapter,
+      "acme-org-kb-zip-guard",
+      "org-admin-kb-zip@acme.com"
+    );
+    const denied = await app.fetch(
+      new Request(`${BASE}/v1/profiles/profile_1/knowledge-base/import-zip`, {
+        body: body({ "x.txt": Buffer.from("x") }),
+        headers: adminSession.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": adminSession.csrfToken,
+          },
+          orgId
+        ),
+        method: "POST",
+      })
+    );
+    expect(denied.status).toBe(403);
+    const {
+      post,
+      profileId,
+      session: platformSession,
+      app: otherApp,
+      authService: otherAuthService,
+      databaseAdapter: otherDatabase,
+      orgId: firstOrgId,
+    } = await setupSession("platform-kb-zip-4@example.com");
+    expect(
+      (
+        await post(
+          `/v1/profiles/${profileId}-other/knowledge-base/import-zip`,
+          body({ "x.txt": Buffer.from("x") })
+        )
+      ).status
+    ).toBe(404);
+    const { orgId: secondOrgId } = await createOrgAdminSession(
+      otherApp,
+      otherAuthService,
+      otherDatabase,
+      "other-kb-zip-org",
+      "other-kb-zip-admin@example.com"
+    );
+    expect(secondOrgId).not.toBe(firstOrgId);
+    const crossOrg = await otherApp.fetch(
+      new Request(
+        `${BASE}/v1/profiles/${profileId}/knowledge-base/import-zip`,
+        {
+          body: body({ "x.txt": Buffer.from("x") }),
+          headers: platformSession.headers(
+            {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": platformSession.csrfToken,
+            },
+            secondOrgId
+          ),
+          method: "POST",
+        }
+      )
+    );
+    expect(crossOrg.status).toBe(404);
+  }, 30_000);
+});
+
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const profileService = new ProfileService(databaseAdapter);
   return {
     ...createMinimalHonoApp({
       agent: {
+        deleteKnowledgeBaseDocument: (
+          orgId: string,
+          profileId: string,
+          documentId: string
+        ) =>
+          profileService.deleteKnowledgeBaseDocument(
+            orgId,
+            profileId,
+            documentId
+          ),
         deleteOrganizationKnowledgeBaseDocument: (
           orgId: string,
           documentId: string
@@ -35,6 +326,13 @@ function createApp() {
           ),
         getProfile: (orgId: string, profileId: string) =>
           profileService.getProfile(orgId, profileId),
+        importKnowledgeBaseZip: (
+          orgId: string,
+          profileId: string,
+          zipBase64: string
+        ) => profileService.importKnowledgeBaseZip(orgId, profileId, zipBase64),
+        listKnowledgeBase: (orgId: string, profileId: string) =>
+          profileService.listKnowledgeBase(orgId, profileId),
         listOrganizationKnowledgeBase: (orgId: string) =>
           profileService.listOrganizationKnowledgeBase(orgId),
         listProfiles: async () => ({ profiles: [] }),
@@ -45,6 +343,18 @@ function createApp() {
         ) =>
           profileService.readOrganizationKnowledgeBaseDocument(
             orgId,
+            documentId,
+            options
+          ),
+        readKnowledgeBaseDocument: (
+          orgId: string,
+          profileId: string,
+          documentId: string,
+          options: { render?: "text" }
+        ) =>
+          profileService.readKnowledgeBaseDocument(
+            orgId,
+            profileId,
             documentId,
             options
           ),
@@ -68,7 +378,7 @@ function createApp() {
 }
 
 async function setupSession(email: string) {
-  const { app, databaseAdapter } = createApp();
+  const { app, authService, databaseAdapter } = createApp();
   const session = await setupFreshInstallSession(app, databaseAdapter, email);
   const orgId = session.orgId!;
   const profiles = await databaseAdapter.listProfilesForOrg(orgId);
@@ -85,7 +395,15 @@ async function setupSession(email: string) {
         method: "POST",
       })
     );
-  return { app, orgId, post, profileId: profile.id, session };
+  return {
+    app,
+    authService,
+    databaseAdapter,
+    orgId,
+    post,
+    profileId: profile.id,
+    session,
+  };
 }
 
 describe("organization knowledge base routes", () => {

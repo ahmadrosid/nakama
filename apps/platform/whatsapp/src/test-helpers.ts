@@ -284,6 +284,7 @@ export async function writeWhatsAppConfigIni(
     pairingCode?: string | null;
     pairedJid?: string | null;
     allowedPhones?: string[];
+    allowUnpairedGroupMembers?: boolean;
     requireGroupMention?: boolean;
   }
 ): Promise<void> {
@@ -312,6 +313,12 @@ export async function writeWhatsAppConfigIni(
     lines.push("require_group_mention=false");
   }
 
+  if (config.allowUnpairedGroupMembers !== undefined) {
+    lines.push(
+      `allow_unpaired_group_members=${config.allowUnpairedGroupMembers}`
+    );
+  }
+
   lines.push("");
   await writeFile(path.join(dir, "config.ini"), lines.join("\n"), "utf8");
 }
@@ -335,7 +342,7 @@ export async function waitForStreamControl(
   throw new Error("Timed out waiting for stream control");
 }
 
-export { createDefaultTestOrgs, createMultiTestOrgs };
+export { createMultiTestOrgs };
 
 export function createTestOrgStore(homeDir: string): ChannelOrgStore {
   return createSharedTestOrgStore(homeDir, "whatsapp");

@@ -17,6 +17,7 @@ const BUILTIN_LABELS: Record<
   mistral: "Mistral",
   moonshot: "Moonshot Kimi",
   moonshot_cn: "Moonshot Kimi (CN)",
+  netra: "Netra Runtime",
   ollama: "Ollama",
   openai: "OpenAI",
   opencode_go: "OpenCode Go",

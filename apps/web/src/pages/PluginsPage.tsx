@@ -221,13 +221,29 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
           pluginId: dialog.plugin.pluginId,
         });
       } else if (dialog.type === "update") {
-        await updateOrg.mutateAsync({
-          pluginId: dialog.plugin.pluginId,
+        let plugin = dialog.plugin;
+        const wasEnabled = plugin.lifecycleState === "enabled";
+        if (wasEnabled) {
+          // The server only swaps releases on a disabled plugin.
+          plugin = await disableOrg.mutateAsync({
+            expectedRevision: plugin.revision,
+            pluginId: plugin.pluginId,
+          });
+          setDialog({ ...dialog, plugin });
+        }
+        plugin = await updateOrg.mutateAsync({
+          pluginId: plugin.pluginId,
           request: {
-            expectedRevision: dialog.plugin.revision,
+            expectedRevision: plugin.revision,
             targetVersion: dialog.targetVersion,
           },
         });
+        if (wasEnabled) {
+          await enableOrg.mutateAsync({
+            expectedRevision: plugin.revision,
+            pluginId: plugin.pluginId,
+          });
+        }
       } else if (dialog.type === "uninstall") {
         let plugin = dialog.plugin;
         if (plugin.lifecycleState === "enabled") {
@@ -753,16 +769,18 @@ function PluginIdentity({
           }
         >
           {name}
+          {!detail && plugin?.selectedVersion ? (
+            <span className="ml-2 font-normal text-muted-foreground text-xs">
+              {plugin.selectedVersion}
+            </span>
+          ) : null}
         </h2>
         {detail ? (
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground text-xs">
             <span className="inline-flex items-center gap-1.5 capitalize">
               <span
-                className={
-                  plugin?.lifecycleState === "enabled"
-                    ? "size-1.5 rounded-full bg-emerald-500"
-                    : "size-1.5 rounded-full bg-muted-foreground/40"
-                }
+                className="size-1.5 rounded-full bg-muted-foreground/40 data-[state=enabled]:bg-emerald-500"
+                data-state={plugin?.lifecycleState}
               />
               {plugin?.lifecycleState ?? "Available"}
             </span>

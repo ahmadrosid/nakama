@@ -16,6 +16,7 @@ export const MAX_ATTACHMENTS_PER_MESSAGE = 5;
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
 export const MAX_KNOWLEDGE_DOCUMENT_BYTES = 20 * 1024 * 1024;
+export const MAX_KNOWLEDGE_ZIP_BYTES = 20 * 1024 * 1024;
 export const TOKENS_PER_IMAGE_ESTIMATE = 1500;
 export const TOKENS_PER_DOCUMENT_ESTIMATE = 2000;
 
@@ -412,27 +413,6 @@ export function parseDocumentDataUrl(
 
 export function toDataUrl(mediaType: string, base64: string): string {
   return `data:${mediaType};base64,${base64}`;
-}
-
-export function imageAttachmentFromBase64(
-  mediaType: string,
-  base64: string
-): ImageAttachment {
-  const data = base64.includes(",") ? (base64.split(",")[1] ?? base64) : base64;
-  return { data, mediaType };
-}
-
-export function documentAttachmentFromBase64(
-  filename: string,
-  mediaType: string,
-  base64: string
-): DocumentAttachment {
-  const data = base64.includes(",") ? (base64.split(",")[1] ?? base64) : base64;
-  return {
-    data,
-    filename,
-    mediaType: normalizeDocumentMediaType(mediaType, filename),
-  };
 }
 
 type ProviderContentBlock = Record<string, unknown>;

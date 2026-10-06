@@ -48,6 +48,7 @@ import {
   createDatabase,
   type Database,
   ensureBundledSkillsAssigned,
+  resolveDatabasePath,
   seedDatabase,
 } from "@nakama/db";
 import { createHonoApp, MAX_HTTP_REQUEST_BODY_LIMIT_BYTES } from "./http/app";
@@ -64,6 +65,7 @@ import { AutomationRunner } from "./services/automation-runner";
 import { AutomationService } from "./services/automation-service";
 import { resolveComposioCallbackBaseUrl } from "./services/composio-callback-url";
 import { ComposioService } from "./services/composio-service";
+import { retireAppUserData } from "./services/data-portability";
 import { GoogleMeetService } from "./services/google-meet/service";
 import { LlmUsageTracker } from "./services/llm-usage-tracker";
 import { McpClientManager } from "./services/mcp-client-manager";
@@ -127,6 +129,11 @@ const database = await createDatabase(config.databaseUrl, {
 await seedDatabase(database.adapter);
 await cleanupInterruptedMeetImports();
 
+await retireAppUserData(
+  getUserConfigDir(),
+  resolveDatabasePath(config.databaseUrl, { baseDir: getUserConfigDir() })
+);
+
 // Runs are only completed by the process that started them, so a crash or a
 // kill leaves rows claiming work nothing is doing. Settle them before serving.
 // ponytail: correct while this is a single process; two servers would mean one
@@ -142,7 +149,7 @@ if (interruptedRuns > 0) {
 const organizations = await database.adapter.listOrganizations();
 const authService = new AuthService();
 
-const llmUsageTracker = await LlmUsageTracker.create(database.adapter);
+const llmUsageTracker = new LlmUsageTracker(database.adapter);
 const agent = new AgentService(
   userConfig,
   provider,
@@ -161,9 +168,16 @@ agent.setServerTools({
     db: database.adapter,
     ensureSettingsLoaded: () => agent.ensureImageGenerationSettingsLoaded(),
     getUserConfig: () => agent.getUserConfig(),
-    recordUsage: (modelId, inputTokens, outputTokens, providerInstance) => {
-      llmUsageTracker.record(modelId, inputTokens, outputTokens, 0, {
-        providerInstance,
+    recordUsage: (
+      modelId,
+      inputTokens,
+      outputTokens,
+      providerInstance,
+      orgId
+    ) => {
+      llmUsageTracker.record(modelId, inputTokens, outputTokens, {
+        orgId,
+        pricingContext: { providerInstance },
       });
     },
   }),
@@ -379,6 +393,7 @@ const app = createHonoApp({
   mcpService,
   // Windows cannot move an open SQLite file; POSIX restores keep the handle open as before.
   onBeforeDataRestore: async () => {
+    await workerManager.pauseDataWorkers();
     await googleMeetService.close();
     if (process.platform === "win32") {
       database.release();
@@ -388,6 +403,7 @@ const app = createHonoApp({
     await database.reopen();
     await agent.reloadAfterDataRestore();
     await googleMeetService.reopen();
+    await workerManager.recoverDesiredWorkers();
   },
   orgMemoryService,
   orgService,

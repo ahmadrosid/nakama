@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NakamaApiError } from "./api-error";
 import {
   normalizeAutomationDelivery,
   shouldDeliverForRun,
@@ -209,7 +210,6 @@ describe("validateAutomationDelivery", () => {
   test("rejects discord without pairing when channelId is omitted", async () => {
     const configDir = await mkdtemp(join(tmpdir(), "nakama-discord-delivery-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const { mkdir } = await import("node:fs/promises");
     await mkdir(getDiscordConfigDir(owner), { recursive: true });
     await writeFile(
       getDiscordConfigPath(owner),
@@ -229,7 +229,6 @@ describe("validateAutomationDelivery", () => {
   test("accepts discord with token and pairing", async () => {
     const configDir = await mkdtemp(join(tmpdir(), "nakama-discord-delivery-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const { mkdir } = await import("node:fs/promises");
     await mkdir(getDiscordConfigDir(owner), { recursive: true });
     await writeFile(
       getDiscordConfigPath(owner),
@@ -244,26 +243,26 @@ describe("validateAutomationDelivery", () => {
     await rm(configDir, { force: true, recursive: true });
   });
 
-  test("accepts discord with token and channelId without pairing", async () => {
+  test("rejects a member discord channelId even when users are paired", async () => {
     const configDir = await mkdtemp(join(tmpdir(), "nakama-discord-delivery-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const { mkdir } = await import("node:fs/promises");
     await mkdir(getDiscordConfigDir(owner), { recursive: true });
     await writeFile(
       getDiscordConfigPath(owner),
-      "bot_token=test-token\n",
+      "bot_token=test-token\npaired_user_ids=123456789012345678\n",
       "utf8"
     );
 
-    await expect(
-      validateAutomationDelivery(
-        {
-          channel: "discord",
-          channelId: "123456789012345678",
-        },
-        owner
-      )
-    ).resolves.toBeUndefined();
+    const error = await validateAutomationDelivery(
+      {
+        channel: "discord",
+        channelId: "123456789012345679",
+      },
+      { ...owner, access: { orgRole: "member" } }
+    ).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(NakamaApiError);
+    expect((error as NakamaApiError).status).toBe(403);
 
     await rm(configDir, { force: true, recursive: true });
   });

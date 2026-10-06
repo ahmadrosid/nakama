@@ -13,7 +13,7 @@ import type { TerminalInput } from "./terminal-input";
 import { getTerminalColumns, TerminalLayout } from "./terminal-layout";
 import { truncateText, visibleLength } from "./text-measure";
 
-export interface ComposerSuggestion {
+interface ComposerSuggestion {
   description: string;
   label: string;
 }

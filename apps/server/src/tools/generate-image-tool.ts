@@ -45,13 +45,7 @@ export function formatImageMentionContext(
     : `The user tagged @image, but the ${GENERATE_IMAGE_TOOL_NAME} tool is not assigned to this agent. Tell them image generation is off here: assign the ${GENERATE_IMAGE_TOOL_NAME} tool to this agent and pick an image generation model in Settings.`;
 }
 
-export interface GenerateImageToolInput {
-  filename?: string;
-  prompt: string;
-  size?: string;
-}
-
-export interface GenerateImageToolSuccess {
+interface GenerateImageToolSuccess {
   attachmentId: string | null;
   mimeType: string;
   model: string;
@@ -59,7 +53,7 @@ export interface GenerateImageToolSuccess {
   sizeBytes: number;
 }
 
-export interface GenerateImageToolFailure {
+interface GenerateImageToolFailure {
   error: string;
 }
 
@@ -77,7 +71,8 @@ export interface GenerateImageToolDeps {
     modelId: string,
     inputTokens: number,
     outputTokens: number,
-    providerInstance: ProviderInstance
+    providerInstance: ProviderInstance,
+    orgId: string
   ) => void;
 }
 
@@ -245,7 +240,8 @@ export async function runGenerateImageTool(
       result.model,
       result.usage.inputTokens,
       result.usage.outputTokens,
-      selection.instance
+      selection.instance,
+      orgId
     );
   }
 

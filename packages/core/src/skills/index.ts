@@ -1,8 +1,5 @@
 export * from "./archive";
-export {
-  readBundledSkillBody,
-  readBundledSkillMarkdown,
-} from "./bundled/index";
+export { readBundledSkillBody } from "./bundled/index";
 export * from "./bundled/install";
 export * from "./bundled-names";
 export * from "./compose";

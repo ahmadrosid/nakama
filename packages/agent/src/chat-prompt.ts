@@ -97,7 +97,7 @@ export function buildWebSearchUnavailableGuidance(
     : WEB_SEARCH_UNAVAILABLE_GUIDANCE;
 }
 
-export function shouldIncludeUntrustedDocumentGuidance(options: {
+function shouldIncludeUntrustedDocumentGuidance(options: {
   tools: ToolDefinition[];
   hasDocumentAttachments?: boolean;
 }): boolean {

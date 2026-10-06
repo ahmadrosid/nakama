@@ -451,33 +451,34 @@ function InviteDomainsForm({
 
   return (
     <form
-      className="flex flex-wrap items-end gap-3 px-4 py-3"
+      className="space-y-1.5 px-4 py-3"
       onSubmit={(event) => void handleSubmit(event)}
     >
-      <div className="min-w-56 flex-1 space-y-1.5">
-        <label
-          className="font-medium text-foreground text-sm"
-          htmlFor="allowed-invite-domains"
-        >
-          Allowed invite domains
-        </label>
+      <label
+        className="font-medium text-foreground text-sm"
+        htmlFor="allowed-invite-domains"
+      >
+        Allowed invite domains
+      </label>
+      <div className="flex items-center gap-3">
         <Input
+          className="min-w-0 flex-1"
           id="allowed-invite-domains"
           onChange={(event) => setValue(event.target.value)}
           value={value}
         />
-        <p className="text-muted-foreground text-xs">
-          Separate domains with commas. Leave empty to allow any domain.
-        </p>
-        {error ? (
-          <p className="text-destructive text-sm" role="alert">
-            {error}
-          </p>
-        ) : null}
+        <Button disabled={saving} type="submit" variant="outline">
+          Save domains
+        </Button>
       </div>
-      <Button disabled={saving} type="submit" variant="outline">
-        Save domains
-      </Button>
+      <p className="text-muted-foreground text-xs">
+        Separate domains with commas. Leave empty to allow any domain.
+      </p>
+      {error ? (
+        <p className="text-destructive text-sm" role="alert">
+          {error}
+        </p>
+      ) : null}
     </form>
   );
 }

@@ -171,6 +171,10 @@ function trimBuffer(turn: ActiveTurn): void {
 export class SessionTurnRegistry {
   private readonly turns = new Map<string, ActiveTurn>();
 
+  hasActiveTurns(): boolean {
+    return this.turns.size > 0;
+  }
+
   beginTurn(sessionId: string): BeginTurnResult {
     if (this.turns.has(sessionId)) {
       return { started: false };

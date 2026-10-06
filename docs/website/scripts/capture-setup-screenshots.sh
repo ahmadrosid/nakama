@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+source "$(dirname "$0")/capture-common.sh"
 SCREENSHOT_DIR="$(cd "$(dirname "$0")/.." && pwd)/public/screenshots"
 TEMP_CONFIG="/tmp/nakama-docs-screenshots-$$"
 PORT=4312
@@ -22,6 +23,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$SCREENSHOT_DIR" "$TEMP_CONFIG"
+ensure_current_web_build "$ROOT"
 NAKAMA_CONFIG_DIR="$TEMP_CONFIG" NAKAMA_PORT="$PORT" \
   bun run "$ROOT/apps/server/src/index.ts" > /tmp/nakama-docs-screenshot-server.log 2>&1 &
 SERVER_PID=$!
@@ -47,21 +49,17 @@ capture_step() {
   agent-browser --session "$SESSION" snapshot -i >/dev/null
   agent-browser --session "$SESSION" screenshot "$output"
 }
-
 capture_step 740 "$SCREENSHOT_DIR/setup-step-account.png"
-agent-browser --session "$SESSION" fill @e4 "Admin"
-agent-browser --session "$SESSION" fill @e5 "admin@docs.demo"
-agent-browser --session "$SESSION" fill @e7 "password123"
-agent-browser --session "$SESSION" fill @e8 "password123"
-agent-browser --session "$SESSION" focus @e9
-agent-browser --session "$SESSION" press Enter
+agent-browser --session "$SESSION" fill "#setup-name" "Admin"
+agent-browser --session "$SESSION" fill "#setup-email" "admin@docs.demo"
+agent-browser --session "$SESSION" fill "#setup-password" "password123"
+agent-browser --session "$SESSION" fill "#setup-confirm" "password123"
+agent-browser --session "$SESSION" find text "Continue" click --exact
 agent-browser --session "$SESSION" wait 1500
-
 capture_step 600 "$SCREENSHOT_DIR/setup-step-organization.png"
-agent-browser --session "$SESSION" fill @e4 "Docs Demo"
-agent-browser --session "$SESSION" fill @e5 "docs-demo"
-agent-browser --session "$SESSION" focus @e7
-agent-browser --session "$SESSION" press Enter
+agent-browser --session "$SESSION" fill "#setup-org-name" "Docs Demo"
+agent-browser --session "$SESSION" fill "#setup-org-slug" "docs-demo"
+agent-browser --session "$SESSION" find text "Create Organization" click --exact
 agent-browser --session "$SESSION" wait 4000
 
 capture_step 600 "$SCREENSHOT_DIR/setup-step-provider.png"

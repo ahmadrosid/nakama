@@ -9,6 +9,7 @@ import {
   type ToolContext,
 } from "@nakama/core";
 import type { StoredToolRecord } from "@nakama/db";
+import { waitForExit, waitForPidFile } from "./coding-agent-test-fixtures";
 import {
   CUSTOM_TOOL_HANDLERS,
   getCustomToolHandler,
@@ -17,6 +18,7 @@ import {
   TOOL_RETRYABLE_EXIT_CODE,
   withToolRetries,
 } from "./custom-tool-handlers";
+import { spawnJsonTool } from "./custom-tool-subprocess";
 
 function ctx(signal?: AbortSignal): ToolContext {
   return { signal };
@@ -433,4 +435,63 @@ export async function run(input, context) {
       await rm(configDir, { force: true, recursive: true });
     }
   });
+});
+
+// Exercise real process groups, including a descendant that outlives its parent.
+describe("custom-tool process cleanup", () => {
+  for (const mode of ["abort", "timeout"] as const) {
+    test.skipIf(process.platform === "win32")(
+      `${mode} stops a descendant that ignores SIGTERM`,
+      async () => {
+        const dir = await mkdtemp(path.join(os.tmpdir(), "nakama-tool-tree-"));
+        const modulePath = path.join(dir, "spawn-child.js");
+        const pidFile = path.join(dir, "descendant.pid");
+        const descendantCode = [
+          'process.on("SIGTERM", () => {});',
+          `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
+          "setInterval(() => {}, 1000);",
+        ].join("\n");
+        await writeFile(
+          modulePath,
+          `
+const { spawn } = require("node:child_process");
+spawn(process.execPath, ["-e", ${JSON.stringify(descendantCode)}], { stdio: "ignore" });
+setInterval(() => {}, 1000);
+`
+        );
+        const controller = new AbortController();
+        let descendantPid: number | undefined;
+        const pending = spawnJsonTool({
+          args: [modulePath],
+          bin: process.execPath,
+          context: { signal: controller.signal },
+          cwd: dir,
+          input: {},
+          label: "process tree test",
+          transport: { timeoutMs: mode === "timeout" ? 1000 : 30_000 },
+        });
+        // Attach immediately: the parent can exit before the PID is read.
+        const outcome = pending.then(
+          () => false,
+          () => true
+        );
+        try {
+          descendantPid = await waitForPidFile(pidFile, 2000);
+          if (mode === "abort") {
+            controller.abort();
+          }
+          expect(await outcome).toBe(true);
+          expect(await waitForExit(descendantPid, 7000)).toBe(true);
+        } finally {
+          controller.abort();
+          if (descendantPid && !(await waitForExit(descendantPid, 100))) {
+            process.kill(descendantPid, "SIGKILL");
+          }
+          await outcome;
+          await rm(dir, { force: true, recursive: true });
+        }
+      },
+      15_000
+    );
+  }
 });

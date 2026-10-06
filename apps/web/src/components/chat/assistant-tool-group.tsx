@@ -1,12 +1,19 @@
 import { Button } from "@nakama/ui/button";
 import { cn } from "@nakama/ui/utils";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowDown01Icon,
   ArrowRight01Icon,
+  Audit02Icon,
+  BookOpen01Icon,
+  ComputerTerminal01Icon,
+  McpServerIcon,
+  PropertySearchIcon,
   Rotate02Icon,
+  TaskEdit01Icon,
   Wrench01Icon,
 } from "hugeicons-react";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -16,6 +23,8 @@ import {
 } from "@/components/ai-elements/message";
 import {
   type AssistantTurnSegment,
+  formatLocalCitations,
+  type LocalFileCitation,
   toolGroupElapsedSeconds,
 } from "@/components/chat/assistant-tool-group.shared";
 import { ImageGenerationToolRow } from "@/components/chat/ImageGenerationToolRow";
@@ -24,6 +33,7 @@ import thinkingStyles from "@/components/chat/ThinkingReasoning.module.css";
 import { WebFetchToolRow } from "@/components/chat/WebFetchToolRow";
 import { WebSearchToolRow } from "@/components/chat/WebSearchToolRow";
 import { WorkflowRunToolRow } from "@/components/chat/WorkflowRunToolRow";
+import { WorkspaceFilePreview } from "@/components/chat/workspace-file-preview";
 import { PluginSurface } from "@/components/PluginSurface";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useAuth } from "@/context/use-auth";
@@ -56,6 +66,7 @@ import {
   shouldRenderWebSearchToolRow,
 } from "@/lib/chat-stream-web-search";
 import { isRunWorkflowTool } from "@/lib/chat-stream-workflow";
+import { client, formatError } from "@/lib/client";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
 import { findPluginTool } from "@/lib/plugin-runtime";
 import { splitStreamingMarkdown } from "@/lib/streaming-markdown-seal";
@@ -64,6 +75,7 @@ export function AssistantTurnSegmentView({
   showThinking = true,
   modelLabel,
   profileId,
+  onOpenFileCitation,
   onRetryMessage,
   retryDisabled = false,
 }: {
@@ -71,6 +83,7 @@ export function AssistantTurnSegmentView({
   showThinking?: boolean;
   modelLabel?: string | null;
   profileId?: string | null;
+  onOpenFileCitation?: (path: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
   retryDisabled?: boolean;
 }) {
@@ -97,11 +110,13 @@ export function AssistantTurnSegmentView({
         ) : null}
         <AssistantTextContent
           message={segment.message}
+          onOpenFileCitation={onOpenFileCitation}
           onRetry={
             segment.message.failed && onRetryMessage
               ? () => onRetryMessage(segment.message)
               : undefined
           }
+          profileId={profileId}
           retryDisabled={retryDisabled}
         />
       </MessageContent>
@@ -124,15 +139,41 @@ function StreamingPlainTail({ text }: { text: string }) {
 
 function AssistantTextContent({
   message,
+  profileId,
+  onOpenFileCitation,
   onRetry,
   retryDisabled = false,
 }: {
   message: ChatListItem;
+  profileId?: string | null;
+  onOpenFileCitation?: (path: string) => void;
   onRetry?: () => void;
   retryDisabled?: boolean;
 }) {
+  const { user } = useAuth();
   const streaming = Boolean(message.streaming && !message.thinkingStreaming);
   const content = useRafCoalescedValue(message.content, streaming);
+  const citedProfileId =
+    user?.isPlatformAdmin && onOpenFileCitation ? profileId : null;
+
+  function openCitation(event: MouseEvent<HTMLElement>) {
+    const link =
+      event.target instanceof Element
+        ? event.target.closest('a[href^="#file-citation?"]')
+        : null;
+    if (!(link && event.currentTarget.contains(link))) {
+      return;
+    }
+    const query = new URLSearchParams(
+      link.getAttribute("href")?.split("?")[1] ?? ""
+    );
+    const path = query.get("file");
+    if (!path || query.get("profile") !== citedProfileId) {
+      return;
+    }
+    event.preventDefault();
+    onOpenFileCitation?.(path);
+  }
 
   if (message.failed) {
     return (
@@ -163,20 +204,103 @@ function AssistantTextContent({
     );
   }
 
+  // oxlint-disable react-doctor/click-events-have-key-events react-doctor/no-static-element-interactions -- Citation anchors receive native keyboard clicks; this wrapper only delegates them.
   if (!streaming) {
-    return <MessageResponse>{content || "…"}</MessageResponse>;
+    const { markdown, citations } = formatLocalCitations(
+      content,
+      citedProfileId
+    );
+    return (
+      <div
+        className="flex w-full min-w-0 flex-col gap-0"
+        onClick={openCitation}
+      >
+        <MessageResponse>{markdown || "…"}</MessageResponse>
+        <LocalCitationFooter citations={citations} />
+      </div>
+    );
   }
 
   const { sealed, tail } = splitStreamingMarkdown(content);
+  const { markdown } = formatLocalCitations(sealed, citedProfileId);
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-0">
+    <div className="flex w-full min-w-0 flex-col gap-0" onClick={openCitation}>
       {sealed ? (
         <MessageResponse isAnimating={false} mode="streaming">
-          {sealed}
+          {markdown}
         </MessageResponse>
       ) : null}
       {tail || !sealed ? <StreamingPlainTail text={tail} /> : null}
+    </div>
+  );
+}
+// oxlint-enable react-doctor/click-events-have-key-events react-doctor/no-static-element-interactions
+
+export function LocalCitationPreview({
+  path,
+  profileId,
+  onClose,
+}: {
+  path: string;
+  profileId: string;
+  onClose: () => void;
+}) {
+  const { activeOrg } = useAuth();
+  const folder = path.slice(0, path.lastIndexOf("/"));
+  const { data, error } = useQuery({
+    queryFn: () => client.listProfileWorkspaceFiles(profileId, folder),
+    queryKey: ["citation-file", activeOrg?.id, profileId, folder],
+  });
+  const entry = data?.entries.find(
+    (candidate) => candidate.kind === "file" && candidate.path === path
+  );
+  if (entry) {
+    return (
+      <WorkspaceFilePreview
+        entry={entry}
+        id={`citation:${profileId}:${path}`}
+        onClose={onClose}
+        profileId={profileId}
+      />
+    );
+  }
+  if (error || data) {
+    return (
+      <p className="text-destructive text-sm" role="alert">
+        {error ? formatError(error) : "File not found."}
+      </p>
+    );
+  }
+  return null;
+}
+
+function LocalCitationFooter({
+  citations,
+}: {
+  citations: LocalFileCitation[];
+}) {
+  if (citations.length === 0) {
+    return null;
+  }
+  return (
+    <div
+      aria-label="Sources"
+      className="mt-3 flex flex-wrap gap-1.5 border-border/60 border-t pt-2 text-xs"
+    >
+      {citations.map(({ href, label, number, path }) => (
+        <a
+          aria-label={`Open ${label} in file preview`}
+          className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary"
+          href={href}
+          key={path}
+          title={path}
+        >
+          <span className="font-semibold text-primary">{number}</span>
+          <span className="truncate">{label}</span>
+          <span className="truncate text-muted-foreground">· {path}</span>
+        </a>
+      ))}
     </div>
   );
 }
@@ -259,6 +383,7 @@ function OtherWorkGroup({
   profileId?: string | null;
 }) {
   const isThinkingStreaming = active && Boolean(thinking?.thinkingStreaming);
+  const runningTool = tools.findLast((tool) => tool.toolStatus === "running");
 
   if (!thinking) {
     return (
@@ -273,6 +398,9 @@ function OtherWorkGroup({
 
   return (
     <ThinkingReasoning
+      activityLabel={
+        runningTool ? toolActivityLabel(runningTool.tool) : undefined
+      }
       className="w-full max-w-full"
       isThinkingStreaming={isThinkingStreaming}
       isWorkActive={active}
@@ -281,6 +409,7 @@ function OtherWorkGroup({
       thinkingDurationMs={
         tools.length === 0 && !active ? thinking.thinkingDurationMs : undefined
       }
+      toolCount={tools.length}
     >
       {tools.map((tool, index) => (
         <TimelineStep isLast={index === tools.length - 1} key={tool.id}>
@@ -295,6 +424,25 @@ function OtherWorkGroup({
   );
 }
 
+function toolActivityLabel(tool: string | undefined): string {
+  switch (tool) {
+    case "web_search":
+      return "Searching the web…";
+    case "web_fetch":
+      return "Reading webpage…";
+    case "knowledge_base_search":
+      return "Searching knowledge base…";
+    case "search_files":
+      return "Searching files…";
+    case "read_file":
+      return "Reading file…";
+    case "bash":
+      return "Running command…";
+    default:
+      return "Using tool…";
+  }
+}
+
 function ToolOnlyWorkGroup({
   isWorkActive,
   tools,
@@ -306,83 +454,75 @@ function ToolOnlyWorkGroup({
   modelLabel?: string | null;
   profileId?: string | null;
 }) {
-  const [open, setOpen] = useState(isWorkActive);
+  const [open, setOpen] = useState(true);
   const elapsedSeconds = useWorkDuration(isWorkActive, tools);
 
-  useEffect(() => {
-    if (isWorkActive) {
-      setOpen(true);
-      return;
-    }
-
-    const reducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-    const delay = reducedMotion ? 0 : 360;
-    const timerId = window.setTimeout(() => setOpen(false), delay);
-    return () => window.clearTimeout(timerId);
-  }, [isWorkActive]);
-
   const done = !isWorkActive;
-  const expanded = done ? open : true;
-  const toolLabel = tools.length === 1 ? "1 tool" : `${tools.length} tools`;
+  const expanded = open;
+  const toolLabel = `${tools.length} ${tools.length === 1 ? "step" : "steps"}`;
+  const runningTool = tools.findLast((tool) => tool.toolStatus === "running");
 
   return (
     <div className={cn(thinkingStyles.root, "w-full max-w-full")}>
       <button
         aria-expanded={expanded}
-        aria-label="Toggle tools"
+        aria-label="Toggle activity"
         className={cn(
           thinkingStyles.header,
-          done && thinkingStyles.headerClickable,
+          thinkingStyles.headerClickable,
           expanded && thinkingStyles.headerExpanded
         )}
-        onClick={() => done && setOpen((current) => !current)}
+        onClick={() => setOpen((current) => !current)}
         type="button"
       >
         {done ? (
           <span className={thinkingStyles.label}>
-            <span className={thinkingStyles.verb}>Used</span> {toolLabel}
+            <span className={thinkingStyles.verb}>{toolLabel}</span>
             {elapsedSeconds === null
               ? null
               : ` · ${formatElapsedSeconds(elapsedSeconds)}`}
           </span>
         ) : (
           <span className={cn(thinkingStyles.label, thinkingStyles.shimmer)}>
-            Working…
+            {runningTool ? toolActivityLabel(runningTool.tool) : "Working…"}
+            {` · ${toolLabel}`}
             {elapsedSeconds === null
               ? null
               : ` · ${formatElapsedSeconds(elapsedSeconds)}`}
           </span>
         )}
-        {done ? (
-          <svg
-            aria-hidden="true"
-            className={thinkingStyles.chevron}
-            height="12"
-            viewBox="0 0 24 24"
-            width="12"
-          >
-            <path
-              d="m4.5 15.75 7.5-7.5 7.5 7.5"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.8"
-            />
-          </svg>
-        ) : null}
+        <svg
+          aria-hidden="true"
+          className={thinkingStyles.chevron}
+          height="12"
+          viewBox="0 0 24 24"
+          width="12"
+        >
+          <path
+            d="m4.5 15.75 7.5-7.5 7.5 7.5"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.8"
+          />
+        </svg>
       </button>
 
       <div
+        aria-hidden={!expanded}
         className={cn(
           thinkingStyles.collapsible,
           !expanded && thinkingStyles.collapsibleCollapsed
         )}
       >
         <div className={thinkingStyles.inner}>
-          <div className={thinkingStyles.timeline}>
+          <div
+            className={cn(
+              thinkingStyles.timeline,
+              thinkingStyles.timelineWithTools
+            )}
+          >
             <div className={thinkingStyles.tools}>
               {tools.map((tool, index) => (
                 <TimelineStep isLast={index === tools.length - 1} key={tool.id}>
@@ -829,16 +969,21 @@ function ToolTimelineDetails({
   isError,
   isRunning,
   output,
+  query,
 }: {
   command: string | null;
   isError: boolean;
   isRunning: boolean;
   output: string | null;
+  query: string | null;
 }) {
   return (
-    <div className="mt-2 space-y-2">
+    <div className="mt-2 space-y-2 pl-5">
       {command ? (
         <DetailBlock content={command} label="Command" tone="command" />
+      ) : null}
+      {query ? (
+        <DetailBlock content={query} label="Query" tone="command" />
       ) : null}
       <ToolTimelineOutput
         command={command}
@@ -860,10 +1005,14 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
     message.toolStatus === "done"
       ? formatToolResult(message.tool, message.toolResult)
       : null;
+  const query =
+    typeof message.toolInput?.query === "string"
+      ? message.toolInput.query.trim() || null
+      : null;
   const isError =
     message.toolStatus === "done" &&
     isToolResultError(message.toolResult, output);
-  const hasDetails = Boolean(isRunning || command || output);
+  const hasDetails = Boolean(isRunning || command || query || output);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   return (
@@ -879,6 +1028,7 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
           }
         }}
         open={detailsOpen}
+        tool={message.tool}
       />
       {detailsOpen && hasDetails ? (
         <ToolTimelineDetails
@@ -886,20 +1036,20 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
           isError={isError}
           isRunning={isRunning}
           output={output}
+          query={query}
         />
       ) : null}
     </div>
   );
 }
 
-function DefaultToolIcon({ className }: { className?: string }) {
-  return (
-    <Wrench01Icon
-      aria-hidden
-      className={cn("size-3.5 shrink-0 text-muted-foreground", className)}
-    />
-  );
-}
+const TOOL_ICONS: Record<string, typeof Wrench01Icon> = {
+  bash: ComputerTerminal01Icon,
+  edit_file: TaskEdit01Icon,
+  knowledge_base_search: PropertySearchIcon,
+  read_file: BookOpen01Icon,
+  search_files: Audit02Icon,
+};
 
 function CollapsibleTrigger({
   open,
@@ -908,6 +1058,7 @@ function CollapsibleTrigger({
   labelClassName,
   disabled = false,
   className,
+  tool,
 }: {
   open: boolean;
   onToggle: () => void;
@@ -915,7 +1066,16 @@ function CollapsibleTrigger({
   labelClassName?: string;
   disabled?: boolean;
   className?: string;
+  tool?: string;
 }) {
+  const isMcpTool =
+    tool?.includes("__") &&
+    !tool.startsWith("plugin_") &&
+    !tool.startsWith("composio__");
+  const ToolIcon =
+    (tool ? TOOL_ICONS[tool] : undefined) ??
+    (isMcpTool ? McpServerIcon : Wrench01Icon);
+
   return (
     <button
       aria-expanded={disabled ? undefined : open}
@@ -927,7 +1087,12 @@ function CollapsibleTrigger({
       onClick={onToggle}
       type="button"
     >
-      <DefaultToolIcon />
+      <span
+        aria-hidden="true"
+        className="relative z-10 flex h-5 w-3.5 shrink-0 items-center justify-center bg-background"
+      >
+        <ToolIcon className="size-3.5 text-muted-foreground opacity-50" />
+      </span>
       <span className={cn("min-w-0 flex-1 truncate", labelClassName)}>
         {label}
       </span>
@@ -984,7 +1149,7 @@ function DetailBlock({
       </div>
       <pre
         className={cn(
-          "max-h-64 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed",
+          "max-h-32 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed",
           tone === "error"
             ? "text-red-700 dark:text-red-300"
             : tone === "output"

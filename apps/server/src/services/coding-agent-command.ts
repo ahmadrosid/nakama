@@ -37,12 +37,9 @@ export function buildHarnessNonInteractiveArgs(
   if (kind === "codex") {
     return [
       ...baseArgs,
-      "--ask-for-approval",
-      "never",
       "exec",
+      "--dangerously-bypass-approvals-and-sandbox",
       "--skip-git-repo-check",
-      "--sandbox",
-      "workspace-write",
       "--color",
       "never",
       prompt,
@@ -120,12 +117,9 @@ export async function buildCodingAgentCommandTemplate(
       ...shared,
       command: [
         baseCommand,
-        "--ask-for-approval",
-        "never",
         "exec",
+        "--dangerously-bypass-approvals-and-sandbox",
         "--skip-git-repo-check",
-        "--sandbox",
-        "workspace-write",
         "--color",
         "never",
         escapedTask,

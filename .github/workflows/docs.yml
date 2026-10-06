@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
     paths: ['docs/website/**', '.github/workflows/docs.yml']
+  # Build only. A broken page should fail here, not after the merge.
+  pull_request:
+    paths: ['docs/website/**', '.github/workflows/docs.yml']
   workflow_dispatch:
 
 # Default to read-only. Only the deploy job holds the Pages OIDC token, so the
@@ -11,8 +14,9 @@ on:
 permissions:
   contents: read
 
+# A pull request gets its own group so it can never cancel a deploy.
 concurrency:
-  group: pages
+  group: ${{ github.event_name == 'pull_request' && format('docs-{0}', github.ref) || 'pages' }}
   cancel-in-progress: true
 
 jobs:
@@ -31,6 +35,10 @@ jobs:
         run: bun install --frozen-lockfile --ignore-scripts
         working-directory: docs/website
 
+      - name: Check docs pipeline
+        run: bun run check:pipeline
+        working-directory: docs/website
+
       - name: Build docs
         run: bun run build
         working-directory: docs/website
@@ -39,15 +47,18 @@ jobs:
           NAKAMA_DOCS_GITHUB_PAGES: 'true'
 
       - name: Setup Pages
+        if: github.event_name != 'pull_request'
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
 
       - name: Upload artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
         with:
           path: docs/website/out
 
   deploy:
     needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

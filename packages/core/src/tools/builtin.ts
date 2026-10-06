@@ -307,79 +307,16 @@ function fileToolWorkspaceRoot(
   return workspaceRoot;
 }
 
-/**
- * A session that belongs to an app user may reach its own user directory and
- * nothing else under `users/`. The profile stays readable because the soul
- * stack, the knowledge base and the skills live there, and `users/` is the one
- * part of it that belongs to somebody in particular.
- *
- * Without this, every app user of a profile could read every other app user's
- * generated documents: the read side rooted at the profile while only the
- * artifact write side followed the app user.
- */
 function buildFileGuardOptions(
   context: ToolContext,
   options: FileToolRunOptions = {}
 ): PathGuardOptions {
   const workspaceRoot = fileToolWorkspaceRoot(context, options);
-  const sessionRoot = appUserSessionRoot(context);
-  const allowedDirs = [workspaceRoot, getCustomToolsDir()];
-
-  if (sessionRoot) {
-    allowedDirs.push(sessionRoot);
-  }
-
   return {
     ...defaultGuardOptions,
-    allowedDirs,
+    allowedDirs: [workspaceRoot, getCustomToolsDir()],
     cwd: workspaceRoot,
-    deniedDirs: sessionRoot ? [appUsersDir(workspaceRoot)] : [],
   };
-}
-
-/** The session's own app user directory, or null for a profile-level session. */
-function appUserSessionRoot(context: ToolContext): string | null {
-  const sessionRoot = context.workspaceRoot?.trim();
-
-  return sessionRoot && path.isAbsolute(sessionRoot) ? sessionRoot : null;
-}
-
-/**
- * `<root>/users` — denied as a whole, with the session's own dir allowed back in.
- * Derived from the effective workspace root rather than the profile dir, so an
- * `options.workspaceRoot` override keeps the guard pointing at the same tree the
- * tools actually read.
- */
-function appUsersDir(workspaceRoot: string): string {
-  return path.join(workspaceRoot, "users");
-}
-
-/**
- * Where `artifacts/...` resolves to. A session created for an app user runs with
- * that user's soul dir as its workspace root, and the artifact read side looks
- * for the file under `users/<hash>/artifacts`. Resolving the write against the
- * profile root instead put every generated document where the read never looks.
- *
- * Only artifact paths follow the app user. The rest of the soul stack, the
- * knowledge base and the skills live on the profile, and an app-user session
- * still has to read them.
- */
-function artifactWriteRoot(
-  context: ToolContext,
-  options: FileToolRunOptions,
-  targetPath: string
-): string {
-  const profileRoot = fileToolWorkspaceRoot(context, options);
-
-  if (options.workspaceRoot || !isArtifactPath(targetPath)) {
-    return profileRoot;
-  }
-
-  const sessionRoot = context.workspaceRoot?.trim();
-
-  return sessionRoot && path.isAbsolute(sessionRoot)
-    ? sessionRoot
-    : profileRoot;
 }
 
 function assertAbsoluteWorkspaceRoot(workspaceRoot: string): void {
@@ -430,7 +367,7 @@ export async function runWriteFile(
   refuseWordExtension(parsed.path);
   const contentBytes = Buffer.byteLength(parsed.content, "utf8");
   const guardOptions = buildFileGuardOptions(context, options);
-  const artifactRoot = artifactWriteRoot(context, options, parsed.path);
+  const artifactRoot = fileToolWorkspaceRoot(context, options);
 
   const guarded = await guardFilePath(
     parsed.path,
@@ -512,7 +449,7 @@ export async function runWriteDocx(
     bytes.length,
     {
       ...guardOptions,
-      cwd: artifactWriteRoot(context, options, parsed.path),
+      cwd: fileToolWorkspaceRoot(context, options),
     }
   );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);

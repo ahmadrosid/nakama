@@ -15,6 +15,7 @@ import {
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
+import { NETRA_AGENT_MODEL_ID } from "@nakama/core/discovery-providers";
 import type { StoredProfileRecord } from "@nakama/db";
 import {
   createInMemoryDatabaseAdapter,
@@ -532,14 +533,48 @@ describe("AgentService thinking provider options", () => {
   });
 });
 
+test("rejects a Netra provider when the model endpoint rejects its API key", async () => {
+  using fetchMock = spyOn(globalThis, "fetch").mockImplementation(
+    async () => new Response("invalid key", { status: 401 })
+  );
+  const service = new AgentService(null, null, createInMemoryDatabaseAdapter());
+
+  await expect(
+    service.createProvider({
+      apiKey: "invalid-key",
+      model: NETRA_AGENT_MODEL_ID,
+      type: "netra",
+    })
+  ).rejects.toMatchObject({ status: 400 });
+  expect(fetchMock).toHaveBeenCalled();
+});
+
+test("discovers the supported Netra model without a custom base URL", async () => {
+  using fetchMock = spyOn(globalThis, "fetch").mockImplementation(async () =>
+    Response.json({ data: [{ id: NETRA_AGENT_MODEL_ID }] })
+  );
+  const service = new AgentService(null, null, createInMemoryDatabaseAdapter());
+
+  const result = await service.discoverModels({
+    apiKey: "test-key",
+    provider: "netra",
+  });
+  expect(result.provider).toBe("netra");
+  expect(result.models.map((model) => model.id)).toEqual([
+    NETRA_AGENT_MODEL_ID,
+  ]);
+  expect(fetchMock).toHaveBeenCalled();
+});
+
 describe("AgentService usage pricing context", () => {
   setupTestConfigDir("nakama-usage-context-");
 
   test("retains each harness's rates when another provider completes during a stream", async () => {
     const db = createInMemoryDatabaseAdapter();
-    const tracker = await LlmUsageTracker.create(db);
+    const tracker = new LlmUsageTracker(db);
     const service = new AgentService(null, null, db, tracker) as unknown as {
       createHarness(options: {
+        orgId: string;
         provider: ProviderClient;
         providerInstance: ProviderInstance;
         modelId: string;
@@ -565,6 +600,7 @@ describe("AgentService usage pricing context", () => {
     };
     const options = {
       modelId: "gpt-5.5",
+      orgId: ORG_ID,
       provider,
       providerInstance: {
         apiKey: "test",
@@ -594,9 +630,8 @@ describe("AgentService usage pricing context", () => {
     expect((await pending).usage?.costUsd).toBeCloseTo(1.1);
     // Cached harnesses keep their own rates after another harness is built.
     expect((await api.generateChat(input)).usage?.costUsd).toBeCloseTo(1.1);
-    await tracker.reloadFromDatabase();
-    expect(tracker.getStats().estimatedCostUsd).toBeCloseTo(2.2);
-    expect(tracker.getStats().requestCount).toBe(3);
+    expect((await tracker.getStats(ORG_ID)).estimatedCostUsd).toBeCloseTo(2.2);
+    expect((await tracker.getStats(ORG_ID)).requestCount).toBe(3);
   });
 
   test("prices OpenAI image parsing independently of a DeepSeek primary", async () => {
@@ -606,7 +641,7 @@ describe("AgentService usage pricing context", () => {
       model: "primary::deepseek-v4-flash",
     };
     await db.upsertProfile(profile);
-    const tracker = await LlmUsageTracker.create(db);
+    const tracker = new LlmUsageTracker(db);
     const service = new AgentService(
       {
         defaultProviderId: "primary",
@@ -653,8 +688,7 @@ describe("AgentService usage pricing context", () => {
     await session!.send({
       message: [{ data: "aGVsbG8=", mediaType: "image/png", type: "image" }],
     });
-    await tracker.reloadFromDatabase();
-    const byModel = tracker.getStatsByModel();
+    const byModel = await tracker.getStatsByModel(ORG_ID);
     expect(
       byModel.find((row) => row.modelId === "gpt-4o-mini")?.estimatedCostUsd
     ).toBeCloseTo(0.027, 6);
@@ -662,7 +696,10 @@ describe("AgentService usage pricing context", () => {
       byModel.find((row) => row.modelId === "deepseek-v4-flash")
         ?.estimatedCostUsd
     ).toBeCloseTo(0.054, 6);
-    expect(tracker.getStats().estimatedCostUsd).toBeCloseTo(0.081, 6);
+    expect((await tracker.getStats(ORG_ID)).estimatedCostUsd).toBeCloseTo(
+      0.081,
+      6
+    );
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
@@ -1544,6 +1581,23 @@ describe("AgentService WhatsApp allowed phones", () => {
     expect((await loadWhatsAppConfigFile(ORG_ID))?.requireGroupMention).toBe(
       false
     );
+  });
+
+  test("writes allowUnpairedGroupMembers to WhatsApp config", async () => {
+    const service = await createWhatsAppService();
+
+    const saved = await service.setWhatsAppSettings(ORG_ID, {
+      allowUnpairedGroupMembers: true,
+      profileId: "default",
+    });
+
+    expect(saved.allowUnpairedGroupMembers).toBe(true);
+    expect(
+      (await service.getWhatsAppSettings(ORG_ID)).allowUnpairedGroupMembers
+    ).toBe(true);
+    expect(
+      (await loadWhatsAppConfigFile(ORG_ID))?.allowUnpairedGroupMembers
+    ).toBe(true);
   });
 });
 

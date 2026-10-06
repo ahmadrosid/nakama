@@ -395,9 +395,11 @@ describe("AgentService compatible image model settings", () => {
 });
 
 describe("AgentService image generation usage (AE5)", () => {
+  const ORG_ID = "org_image_test";
+
   test("successful generate increments gpt-image-2 stats and estimated cost", async () => {
     const db = createInMemoryDatabaseAdapter();
-    const tracker = await LlmUsageTracker.create(db);
+    const tracker = new LlmUsageTracker(db);
     const service = new AgentService(
       openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
       null,
@@ -408,15 +410,18 @@ describe("AgentService image generation usage (AE5)", () => {
     await withMswCassette(
       "image-generation-gpt-image-2",
       async () => {
-        await service.generateImage({
-          prompt: "A tiny red circle on white background, minimal",
-          size: "1024x1024",
-        });
+        await service.generateImage(
+          {
+            prompt: "A tiny red circle on white background, minimal",
+            size: "1024x1024",
+          },
+          ORG_ID
+        );
       },
       { mode: "replay", url: imagesUrl }
     );
 
-    const stats = tracker.getStats();
+    const stats = await tracker.getStats(ORG_ID);
     expect(stats.requestCount).toBe(1);
     expect(stats.inputTokens).toBe(16);
     expect(stats.outputTokens).toBe(200);
@@ -424,7 +429,7 @@ describe("AgentService image generation usage (AE5)", () => {
       estimateUsageCostUsd("gpt-image-2", 16, 200)
     );
     expect(stats.estimatedCostUsd).toBeGreaterThan(0);
-    expect(tracker.getStatsByModel()).toEqual([
+    expect(await tracker.getStatsByModel(ORG_ID)).toEqual([
       expect.objectContaining({
         inputTokens: 16,
         modelId: "gpt-image-2",
@@ -439,7 +444,7 @@ describe("AgentService image generation usage (AE5)", () => {
     "a custom image model %s is priced from its own rates",
     async (modelId) => {
       const db = createInMemoryDatabaseAdapter();
-      const tracker = await LlmUsageTracker.create(db);
+      const tracker = new LlmUsageTracker(db);
       const config = gatewayConfig({ imageModel: `p-gateway::${modelId}` });
       config.providers[1].customModels = [
         { id: modelId, inputPerMillionUsd: 2, outputPerMillionUsd: 40 },
@@ -456,19 +461,22 @@ describe("AgentService image generation usage (AE5)", () => {
         )) as unknown as typeof fetch;
 
       try {
-        await service.generateImage({ prompt: "a cat" });
+        await service.generateImage({ prompt: "a cat" }, ORG_ID);
       } finally {
         globalThis.fetch = originalFetch;
       }
 
       // 10 input at $2/M plus 100 output at $40/M, not the $1/$3 fallback.
-      expect(tracker.getStats().estimatedCostUsd).toBeCloseTo(0.004_02, 10);
+      expect((await tracker.getStats(ORG_ID)).estimatedCostUsd).toBeCloseTo(
+        0.004_02,
+        10
+      );
     }
   );
 
   test("failed OpenAI response does not increment usage", async () => {
     const db = createInMemoryDatabaseAdapter();
-    const tracker = await LlmUsageTracker.create(db);
+    const tracker = new LlmUsageTracker(db);
     const service = new AgentService(
       openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
       null,
@@ -480,21 +488,21 @@ describe("AgentService image generation usage (AE5)", () => {
       withMswCassette(
         "image-generation-usage-failure",
         async () =>
-          service.generateImage({
-            prompt: "should fail",
-            size: "1024x1024",
-          }),
+          service.generateImage(
+            { prompt: "should fail", size: "1024x1024" },
+            ORG_ID
+          ),
         { mode: "replay", url: imagesUrl }
       )
     ).rejects.toBeTruthy();
 
-    expect(tracker.getStats().requestCount).toBe(0);
-    expect(tracker.getStatsByModel()).toEqual([]);
+    expect((await tracker.getStats(ORG_ID)).requestCount).toBe(0);
+    expect(await tracker.getStatsByModel(ORG_ID)).toEqual([]);
   });
 
   test("missing usage object still records fallback tokens so cost moves", async () => {
     const db = createInMemoryDatabaseAdapter();
-    const tracker = await LlmUsageTracker.create(db);
+    const tracker = new LlmUsageTracker(db);
     const service = new AgentService(
       openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
       null,
@@ -505,16 +513,16 @@ describe("AgentService image generation usage (AE5)", () => {
     await withMswCassette(
       "image-generation-usage-no-usage-field",
       async () => {
-        await service.generateImage({
-          prompt: "abcd",
-          size: "1024x1024",
-        });
+        await service.generateImage(
+          { prompt: "abcd", size: "1024x1024" },
+          ORG_ID
+        );
       },
       { mode: "replay", url: imagesUrl }
     );
 
     const fallback = fallbackImageGenerationTokens("abcd", "1024x1024");
-    const stats = tracker.getStats();
+    const stats = await tracker.getStats(ORG_ID);
     expect(stats.requestCount).toBe(1);
     expect(stats.inputTokens).toBe(fallback.inputTokens);
     expect(stats.outputTokens).toBe(fallback.outputTokens);

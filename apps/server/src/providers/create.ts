@@ -15,7 +15,10 @@ import type {
   ChatgptOAuthCredentials,
   XaiOAuthCredentials,
 } from "@nakama/core/contract";
-import { defaultDiscoveryBaseUrl } from "@nakama/core/discovery-providers";
+import {
+  defaultDiscoveryBaseUrl,
+  NETRA_AGENT_MODEL_ID,
+} from "@nakama/core/discovery-providers";
 import { resolveDefaultModelForInstance } from "../services/provider-instance-helpers";
 import { createAnthropicProvider } from "./anthropic";
 import { CEREBRAS_CHAT_BASE_URL } from "./cerebras";
@@ -45,7 +48,7 @@ const DEFAULT_QWEN_CN_BASE_URL =
 const DEFAULT_PERPLEXITY_BASE_URL = "https://api.perplexity.ai";
 const DEFAULT_XAI_BASE_URL = "https://api.x.ai/v1";
 
-export interface CreateProviderOptions {
+interface CreateProviderOptions {
   apiKey: string;
   instance?: ProviderInstance | null;
   model?: string;
@@ -96,6 +99,21 @@ function createProvider(options: CreateProviderOptions): ProviderClient {
         baseUrl: baseUrlOverride ?? DEFAULT_DEEPSEEK_BASE_URL,
         model,
         providerName: "deepseek",
+      });
+    case "netra":
+      if (model !== NETRA_AGENT_MODEL_ID) {
+        throw new Error("This Netra model needs a verified tool-turn test.");
+      }
+      return createOpenAICompatibleProvider({
+        apiKey: options.apiKey,
+        baseUrl: discoveryBaseUrl!,
+        displayName: "Netra Runtime",
+        model,
+        providerName: "netra",
+        supportsThinking: compatibleModelSupportsThinking(
+          model,
+          options.instance?.customModels
+        ),
       });
     case "doubao":
       return createOpenAIProvider({

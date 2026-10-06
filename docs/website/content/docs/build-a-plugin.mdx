@@ -178,7 +178,7 @@ export function apply(ctx) {
 
 Use Nakama's React instance and shared UI controls; do not bundle React, React DOM, or `@nakama/ui`. This example uses `createElement` so no JSX configuration is needed. Declare each service you use in `inject`.
 
-The `page` slot makes your page available in the sidebar. The `tool:greet` slot customizes the result of your own `greet` action in chat. Use the original action key after `tool:`, not the full agent tool name. Exactly one page is required; tool renderers are optional.
+The `page` slot makes your page available under **Control center → Installed plugins**. The `tool:greet` slot customizes the result of your own `greet` action in chat. Use the original action key after `tool:`, not the full agent tool name. Exactly one page is required; tool renderers are optional.
 
 Tool renderers receive four props:
 
@@ -216,10 +216,10 @@ npm login
 npm publish --access public
 ```
 
-1. As a platform admin, open **System → Plugins**. Enter your package name and exact version, choose **Preview package**, then install it.
+1. As a platform admin, open **Control center → Agent tools → Plugins**. Enter your package name and exact version, choose **Preview package**, then install it.
 2. As an org admin, add and enable Greeting in the active organization.
-3. Open **Greeting** from the sidebar. Enter a name and click **Greet**.
-4. As a platform admin, open **System → Profiles** and assign the Greeting tool to a profile.
+3. Open **Greeting** from **Control center → Installed plugins**. Enter a name and click **Greet**.
+4. As a platform admin, open **Agent**, select a profile, and assign the Greeting tool.
 5. Chat with that profile: “Use the Greeting plugin to greet Ada.” The result should use your `GreetingCard`.
 
 Assigned plugin tools are discovered through the agent's `find_tools` capability. Installing a package alone does not assign its tools to every profile.
@@ -262,7 +262,7 @@ Add `"skills"` to the package's `files` list. Write the skill with a `name`, `de
 
 ## Update and maintain
 
-Bump both manifest and package versions, rebuild, inspect the package, and publish. A platform admin installs the new release; an org admin disables the plugin, updates it, then enables it. Never change published bytes under an existing version. New actions need profile assignment after an update.
+Bump both manifest and package versions, rebuild, inspect the package, and publish. A platform admin installs the new release; an org admin then chooses **Update** on the plugin. Never change published bytes under an existing version. New actions need profile assignment after an update.
 
 Uninstall retains organization data. Deleting that data is a separate admin action. Installed plugins are trusted server and browser code, not sandboxed extensions; only approve code you trust.
 

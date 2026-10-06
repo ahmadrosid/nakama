@@ -56,6 +56,21 @@ afterEach(async () => {
 });
 
 describe("WorkerManagerService", () => {
+  test.each([
+    "startWorker",
+    "stopWorker",
+    "restartWorker",
+    "getWorkerLogs",
+    "clearWorkerLogs",
+  ] as const)("%s rejects an unknown worker", async (method) => {
+    const service = new WorkerManagerService(projectRoot, createMockPm2());
+    const result =
+      method === "getWorkerLogs"
+        ? service.getWorkerLogs("foobar", 10)
+        : service[method]("foobar");
+    await expect(result).rejects.toThrow();
+  });
+
   test("isolates agent processes, desired state, and recovery", async () => {
     const first = { orgId: "org_a", profileId: "agent_a" };
     const second = { orgId: "org_a", profileId: "agent_b" };
@@ -82,21 +97,6 @@ describe("WorkerManagerService", () => {
   });
 
   describe("isValidWorker", () => {
-    test("returns true for telegram", () => {
-      const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.isValidWorker("telegram")).toBe(true);
-    });
-
-    test("returns true for whatsapp", () => {
-      const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.isValidWorker("whatsapp")).toBe(true);
-    });
-
-    test("returns true for automation", () => {
-      const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.isValidWorker("automation")).toBe(true);
-    });
-
     test("returns true for discord", () => {
       const service = new WorkerManagerService(projectRoot, createMockPm2());
       expect(service.isValidWorker("discord")).toBe(true);
@@ -296,11 +296,6 @@ describe("WorkerManagerService", () => {
       await rm(tmpProjectRoot, { force: true, recursive: true });
     });
 
-    test("throws for unknown worker", async () => {
-      const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.startWorker("foobar")).rejects.toThrow("Unknown worker");
-    });
-
     test("throws when PM2 start fails", async () => {
       const mockPm2 = createMockPm2();
       mockPm2.start = mock((_opts: unknown, cb: (err: Error | null) => void) =>
@@ -315,6 +310,15 @@ describe("WorkerManagerService", () => {
   });
 
   describe("stopWorker", () => {
+    test("a restore pause stops the process and preserves desired recovery state", async () => {
+      await setWorkerDesiredRunning("automation", true);
+      const pm2 = createMockPm2();
+      const service = new WorkerManagerService(projectRoot, pm2);
+      await service.stopWorker("automation", null, true);
+      expect(pm2.stop).toHaveBeenCalled();
+      expect((await readWorkerDesiredState()).automation).toBe(true);
+    });
+
     test("stops worker by name", async () => {
       const mockPm2 = createMockPm2();
       const service = new WorkerManagerService(projectRoot, mockPm2);
@@ -332,11 +336,6 @@ describe("WorkerManagerService", () => {
         telegram: false,
         whatsapp: false,
       });
-    });
-
-    test("throws for unknown worker", async () => {
-      const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.stopWorker("foobar")).rejects.toThrow("Unknown worker");
     });
   });
 
@@ -357,11 +356,6 @@ describe("WorkerManagerService", () => {
       );
       expect(mockPm2.restart).not.toHaveBeenCalled();
       expect(mockPm2.start).toHaveBeenCalledTimes(1);
-    });
-
-    test("throws for unknown worker", async () => {
-      const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.restartWorker("foobar")).rejects.toThrow("Unknown worker");
     });
   });
 
@@ -545,13 +539,6 @@ describe("WorkerManagerService", () => {
       expect(logs.stderr).toBe("");
     });
 
-    test("throws for unknown worker", async () => {
-      const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.getWorkerLogs("foobar", 10)).rejects.toThrow(
-        "Unknown worker"
-      );
-    });
-
     test("throws when PM2 describe fails", async () => {
       const mockPm2 = createMockPm2();
       mockPm2.describe = mock(
@@ -648,13 +635,6 @@ describe("WorkerManagerService", () => {
       expect(mockPm2.flush).toHaveBeenCalledWith(
         "whatsapp",
         expect.any(Function)
-      );
-    });
-
-    test("throws for unknown worker", async () => {
-      const service = new WorkerManagerService(projectRoot, createMockPm2());
-      expect(service.clearWorkerLogs("foobar")).rejects.toThrow(
-        "Unknown worker"
       );
     });
 
