@@ -1,6 +1,8 @@
 name: Knip
 
 on:
+  # Lets a merge queue test the merged result. Does nothing until one is on.
+  merge_group:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     # Markdown-only PRs change no code.
