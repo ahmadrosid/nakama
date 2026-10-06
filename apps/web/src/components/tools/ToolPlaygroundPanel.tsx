@@ -21,7 +21,7 @@ export function ToolPlaygroundRunForm({
   run: ToolPlaygroundRunControls;
 }) {
   return (
-    <div className="space-y-4 p-4 sm:p-5">
+    <div className="space-y-4">
       <ToolApiKeyForm toolId={tool.id} />
       <div className="space-y-4 rounded-md border border-border bg-card p-4">
         <div>
