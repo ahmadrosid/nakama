@@ -1,4 +1,3 @@
-import type { UserOrgSummary } from "@nakama/core/contract";
 import { parseOrgMemoryContent } from "@nakama/core/soul/org-memory";
 import { Button } from "@nakama/ui/button";
 import { Card } from "@nakama/ui/card";
@@ -20,6 +19,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { OrgMemoryHistoryPanel } from "@/components/settings/OrgMemoryHistoryPanel";
 import { OrgMemoryProposalsPanel } from "@/components/settings/OrgMemoryProposalsPanel";
+import type { AuthContextValue } from "@/context/auth-context-shared";
 import { useAuth } from "@/context/use-auth";
 import { useOrgMemory, useUpdateOrgMemory } from "@/hooks/use-org-memory";
 import { useOrgMemoryProposals } from "@/hooks/use-org-memory-proposals";
@@ -170,7 +170,7 @@ function orgMemoryStatusLine(
   return null;
 }
 
-function useOrgMemoryCard(org: UserOrgSummary | null) {
+function useOrgMemoryCard(org: AuthContextValue["activeOrg"]) {
   const [searchParams] = useSearchParams();
   const orgId = org?.id ?? null;
   const isAdmin = org?.role === "admin";
@@ -378,7 +378,7 @@ export function OrgMemoryCard() {
   return <OrgMemoryCardForOrg key={activeOrg?.id} org={activeOrg} />;
 }
 
-function OrgMemoryCardForOrg({ org }: { org: UserOrgSummary | null }) {
+function OrgMemoryCardForOrg({ org }: { org: AuthContextValue["activeOrg"] }) {
   const card = useOrgMemoryCard(org);
   if (!card.isAdmin) {
     return null;

@@ -1,5 +1,7 @@
 import type {
   AuthUserResponse,
+  OrganizationSummary,
+  OrgRole,
   PasskeyCredentialResponse,
   SetupAuthRequest,
   UpdateOrganizationRequest,
@@ -8,7 +10,7 @@ import type {
 import { createContext } from "react";
 
 export interface AuthContextValue {
-  activeOrg: UserOrgSummary | null;
+  activeOrg: (OrganizationSummary & { role?: OrgRole }) | null;
   archiveOrg: (orgId: string) => Promise<void>;
   createOrg: (input: { name: string; slug: string }) => Promise<void>;
   isAuthenticated: boolean;
@@ -25,6 +27,9 @@ export interface AuthContextValue {
   ) => Promise<AuthUserResponse>;
   logout: () => Promise<void>;
   orgs: UserOrgSummary[];
+  platformOrgs: OrganizationSummary[];
+  platformOrgsError: boolean;
+  refreshPlatformOrgs: () => Promise<void>;
   refreshSession: () => Promise<void>;
   setup: (request: SetupAuthRequest) => Promise<void>;
   switchOrg: (orgId: string) => Promise<void>;
