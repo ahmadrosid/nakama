@@ -30,29 +30,34 @@ test("platform admin finds and opens an agent in another organization", async ()
         profiles: [
           {
             hasAvatar: true,
-            id: orgId === "org-b" ? "agent-b" : "agent-a",
+            id: orgId === "org-c" ? "default-c" : `agent-${orgId}`,
+            isDefault: orgId !== "org-a",
             isSuper: false,
             model: "test-model",
-            name: "Shared name",
+            name: orgId === "org-c" ? "Default Bot" : "Shared name",
             updatedAt: "2026-10-06T00:00:00Z",
           },
           {
             hasAvatar: false,
-            id: orgId === "org-b" ? "super-b" : "super-a",
+            id: `super-${orgId}`,
             isSuper: true,
             model: "test-model",
-            name: orgId === "org-b" ? "Super Bot B" : "Super Bot A",
+            name: `Super Bot ${orgId}`,
             updatedAt: "2026-10-06T00:00:00Z",
           },
-          {
-            hasAvatar: false,
-            id: orgId === "org-b" ? "default-b" : "default-a",
-            isDefault: true,
-            isSuper: false,
-            model: "test-model",
-            name: orgId === "org-b" ? "Default Bot B" : "Default Bot A",
-            updatedAt: "2026-10-06T00:00:00Z",
-          },
+          ...(orgId === "org-a"
+            ? [
+                {
+                  hasAvatar: false,
+                  id: "default-a",
+                  isDefault: true,
+                  isSuper: false,
+                  model: "test-model",
+                  name: "Default Bot",
+                  updatedAt: "2026-10-06T00:00:00Z",
+                },
+              ]
+            : []),
         ],
       }) as never
   );
@@ -88,6 +93,13 @@ test("platform admin finds and opens an agent in another organization", async ()
         id: "org-b",
         name: "Org B",
         slug: "org-b",
+        updatedAt: "2026-10-06T00:00:00Z",
+      },
+      {
+        createdAt: "2026-10-06T00:00:00Z",
+        id: "org-c",
+        name: "Org C",
+        slug: "org-c",
         updatedAt: "2026-10-06T00:00:00Z",
       },
     ],
@@ -135,25 +147,28 @@ test("platform admin finds and opens an agent in another organization", async ()
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(document.body.textContent).toContain("Org B");
-    expect(document.body.textContent).toContain("Super Bot A");
-    expect(document.body.textContent).not.toContain("Super Bot B");
-    expect(document.body.textContent).toContain("Default Bot A");
-    expect(document.body.textContent).not.toContain("Default Bot B");
+    expect(document.body.textContent).toContain("Super Bot org-a");
+    expect(document.body.textContent).not.toContain("Super Bot org-b");
+    expect(document.body.textContent).toContain("Default Bot");
     expect(listProfiles).toHaveBeenCalledWith("org-b");
-    expect(document.querySelector('img[src*="agent-b"]')).toBeNull();
+    expect(document.body.textContent).not.toContain("Org C");
+    expect(document.querySelector('img[src*="agent-org-b"]')).toBeNull();
 
-    const remote = [...document.querySelectorAll("[cmdk-item]")].find((item) =>
-      item.textContent?.includes("Org B")
+    const remoteItems = [...document.querySelectorAll("[cmdk-item]")].filter(
+      (item) => item.textContent?.includes("Org B")
     );
+    expect(remoteItems).toHaveLength(1);
+    const remote = remoteItems[0];
+    expect(remote?.textContent).toContain("Shared name");
     expect(remote).toBeTruthy();
     await act(async () => {
       (remote as HTMLElement).click();
     });
     expect(switchOrg).toHaveBeenCalledWith("org-b");
-    expect(path).toBe("/chat?new=1&profile=agent-b");
+    expect(path).toBe("/chat?new=1&profile=agent-org-b");
     expect(useActiveChatProfileStore.getState()).toMatchObject({
       orgId: "org-b",
-      profileId: "agent-b",
+      profileId: "agent-org-b",
     });
   } finally {
     await act(async () => root.unmount());

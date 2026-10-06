@@ -102,8 +102,10 @@ export function CommandPalette() {
               ...result.value.profiles
                 .filter(
                   (profile) =>
-                    !(profile.isSuper || profile.isDefault) ||
-                    org.id === activeOrg?.id
+                    !(
+                      profile.isSuper ||
+                      (profile.isDefault && profile.name === "Default Bot")
+                    ) || org.id === activeOrg?.id
                 )
                 .map((profile) => ({
                   orgId: org.id,

@@ -71,6 +71,17 @@ describe("browser session governance", () => {
       slug: "remote",
       updatedAt: now,
     });
+    await databaseAdapter.upsertProfile({
+      createdAt: now,
+      id: "agent_remote",
+      isDefault: false,
+      isSuper: false,
+      model: null,
+      name: "Remote agent",
+      orgId: "org_remote",
+      systemPrompt: "",
+      updatedAt: now,
+    });
     const admin = await loginPlatformAdminSession(
       app,
       new AuthService(),
@@ -95,6 +106,16 @@ describe("browser session governance", () => {
       })
     );
     expect((await me.json()).activeOrgId).toBe("org_remote");
+
+    const remoteProfiles = await app.fetch(
+      new Request("http://localhost:4310/v1/profiles", {
+        headers: admin.headers({}, "org_remote"),
+      })
+    );
+    expect(remoteProfiles.status).toBe(200);
+    expect((await remoteProfiles.json()).profiles).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "agent_remote" })])
+    );
 
     await seedOrgAdmin(databaseAdapter, {
       email: "member@example.com",
