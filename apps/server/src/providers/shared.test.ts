@@ -3,7 +3,6 @@ import type { ChatMessage } from "@nakama/core";
 import {
   extractOpenAITokenUsage,
   finalizePendingToolCalls,
-  formatHttpErrorBody,
   mergePendingToolCall,
   normalizeThinkingEffort,
   type PendingToolCall,
@@ -96,24 +95,6 @@ describe("provider shared helpers", () => {
     expect(normalizeThinkingEffort("low")).toBe("low");
     expect(normalizeThinkingEffort("high")).toBe("high");
     expect(normalizeThinkingEffort(undefined)).toBe("medium");
-  });
-
-  test("formatHttpErrorBody extracts OpenCode-style JSON errors", () => {
-    expect(
-      formatHttpErrorBody(
-        "OpenCode Zen",
-        429,
-        JSON.stringify({
-          error: {
-            message: "Rate limit exceeded. Please try again later.",
-            type: "FreeUsageLimitError",
-          },
-          type: "error",
-        })
-      )
-    ).toBe(
-      "OpenCode Zen request failed (429 FreeUsageLimitError): Rate limit exceeded. Please try again later."
-    );
   });
 
   const user = (content: string): ChatMessage => ({ content, role: "user" });

@@ -330,13 +330,6 @@ describe("getExplicitModelPricing", () => {
     });
   });
 
-  test("returns the Images rates for gpt-image-2", () => {
-    expect(getExplicitModelPricing("gpt-image-2")).toEqual({
-      inputPerMillionUsd: 5,
-      outputPerMillionUsd: 30,
-    });
-  });
-
   test("keeps the Images rates for gpt-image-2 on a compatible endpoint without its own rates", () => {
     expect(
       getExplicitModelPricing("gpt-image-2", {

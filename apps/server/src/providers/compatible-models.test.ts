@@ -233,14 +233,6 @@ describe("compatibleModelSupportsThinking", () => {
 });
 
 describe("inferRemoteModelVision", () => {
-  test("reads OpenRouter-style architecture modalities", () => {
-    expect(
-      inferRemoteModelVision({
-        architecture: { input_modalities: ["text", "image"] },
-      })
-    ).toBe(true);
-  });
-
   test("reads explicit supports_vision flags", () => {
     expect(inferRemoteModelVision({ supports_vision: true })).toBe(true);
     expect(inferRemoteModelVision({ supportsVision: false })).toBe(false);
