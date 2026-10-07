@@ -1,4 +1,5 @@
 import type {
+  LlmUsageDayStats,
   LlmUsageGroupStats,
   LlmUsageStats,
   LlmUsageStatus,
@@ -15,7 +16,7 @@ import {
   SparklesIcon,
   ZapIcon,
 } from "hugeicons-react";
-import { type ReactNode, useMemo } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { OrgLlmQuotaCard } from "@/components/settings/OrgLlmQuotaCard";
 import {
@@ -332,7 +333,6 @@ function LlmUsageTrackedBody({
   modelLabel: string;
 }) {
   const trackedModelCount = usage.models.length;
-  const maxModelTokens = usage.models[0]?.totalTokens ?? 0;
 
   return (
     <div className="space-y-8">
@@ -390,30 +390,7 @@ function LlmUsageTrackedBody({
         </CardContent>
       </Card>
 
-      {trackedModelCount > 0 ? (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="type-section-title">By model</h2>
-            <p className="text-muted-foreground text-xs">
-              {trackedModelCount} tracked
-            </p>
-          </div>
-          <Card className="w-full overflow-hidden shadow-none">
-            <CardContent className="p-0">
-              {usage.models.map((modelUsage) => (
-                <UsageRow
-                  costEstimated={usage.costEstimated}
-                  key={modelUsage.modelId}
-                  label={modelUsage.modelId}
-                  maxTokens={maxModelTokens}
-                  monospace
-                  usage={modelUsage}
-                />
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-      ) : null}
+      <UsageDashboard usage={usage} />
 
       {usage.agents?.length ? (
         <UsageGroupList
@@ -422,15 +399,397 @@ function LlmUsageTrackedBody({
           title="By agent"
         />
       ) : null}
-
-      {usage.users?.length ? (
-        <UsageGroupList
-          costEstimated={usage.costEstimated}
-          groups={usage.users}
-          title="By user"
-        />
-      ) : null}
     </div>
+  );
+}
+
+const compactNumber = new Intl.NumberFormat(undefined, {
+  maximumFractionDigits: 1,
+  notation: "compact",
+});
+
+function formatUsageDay(day: string): string {
+  return new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+}
+
+function initialsOf(label: string): string {
+  const words = label
+    .replace(/@.*/, "")
+    .split(/[\s._-]+/)
+    .filter(Boolean);
+  return (
+    words
+      .slice(0, 2)
+      .map((word) => word[0]?.toUpperCase() ?? "")
+      .join("") || "?"
+  );
+}
+
+/** Darkest shade goes to the provider with the most tokens in the window. */
+const PROVIDER_SHADES = [
+  "bg-primary/85",
+  "bg-primary/55",
+  "bg-primary/35",
+  "bg-muted-foreground/30",
+];
+
+function UsageDashboard({ usage }: { usage: LlmUsageStatus }) {
+  const daily = usage.daily ?? [];
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const selected = activeIndex ?? daily.length - 1;
+  // Money only when every model has published rates; tokens otherwise.
+  const metric = (entry: { estimatedCostUsd: number; totalTokens: number }) =>
+    usage.costEstimated ? entry.estimatedCostUsd : entry.totalTokens;
+  const formatMetric = (value: number) =>
+    usage.costEstimated
+      ? formatUsd(value)
+      : `${compactNumber.format(value)} tokens`;
+  const users = usage.users ?? [];
+
+  return (
+    <Card className="w-full overflow-hidden shadow-none">
+      <CardContent className="grid p-0 md:grid-cols-2">
+        <UsagePanel
+          aside={
+            daily[selected]
+              ? `${formatUsageDay(daily[selected].day)} · ${formatMetric(metric(daily[selected]))}`
+              : null
+          }
+          title="AI spend"
+        >
+          <SpendChart
+            daily={daily}
+            metric={metric}
+            onSelect={setActiveIndex}
+            selected={selected}
+          />
+        </UsagePanel>
+        <UsagePanel
+          aside={providerAside(daily[selected])}
+          className="border-border border-t md:border-t-0 md:border-l"
+          title="Model providers"
+        >
+          <ProviderBars
+            daily={daily}
+            onSelect={setActiveIndex}
+            selected={selected}
+          />
+        </UsagePanel>
+        <UsagePanel className="border-border border-t" title="Models">
+          <ModelShareList
+            formatMetric={formatMetric}
+            metric={metric}
+            models={usage.models}
+          />
+        </UsagePanel>
+        {users.length > 0 ? (
+          <UsagePanel
+            className="border-border border-t md:border-l"
+            title="Adoption"
+          >
+            <AdoptionGrid users={users} />
+          </UsagePanel>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function providerAside(day: LlmUsageDayStats | undefined): string | null {
+  const top = day?.providers[0];
+  if (!(day && top) || day.totalTokens === 0) {
+    return null;
+  }
+  const percent = Math.round((top.totalTokens / day.totalTokens) * 100);
+  return `${formatUsageDay(day.day)} · ${formatProviderLabel(top.provider)} ${percent}%`;
+}
+
+function UsagePanel({
+  title,
+  aside,
+  className,
+  children,
+}: {
+  title: string;
+  aside?: string | null;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className={cn("min-w-0 space-y-4 p-4", className)}>
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="type-section-title">{title}</h2>
+        {aside ? (
+          <p className="truncate text-muted-foreground text-xs tabular-nums">
+            {aside}
+          </p>
+        ) : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function DayAxis({ daily }: { daily: LlmUsageDayStats[] }) {
+  if (daily.length === 0) {
+    return null;
+  }
+  const middle = daily[Math.floor((daily.length - 1) / 2)];
+  const last = daily.at(-1);
+  return (
+    <div className="flex justify-between text-2xs text-muted-foreground tabular-nums">
+      <span>{formatUsageDay(daily[0].day)}</span>
+      {middle ? <span>{formatUsageDay(middle.day)}</span> : null}
+      {last ? <span>{formatUsageDay(last.day)}</span> : null}
+    </div>
+  );
+}
+
+const CHART_WIDTH = 300;
+const CHART_HEIGHT = 120;
+
+function SpendChart({
+  daily,
+  metric,
+  selected,
+  onSelect,
+}: {
+  daily: LlmUsageDayStats[];
+  metric: (day: LlmUsageDayStats) => number;
+  selected: number;
+  onSelect: (index: number | null) => void;
+}) {
+  const values = daily.map(metric);
+  const max = Math.max(...values, 0);
+  const step = daily.length > 1 ? CHART_WIDTH / (daily.length - 1) : 0;
+  const points = values.map((value, index) => ({
+    x: index * step,
+    y:
+      max > 0
+        ? CHART_HEIGHT - (value / max) * (CHART_HEIGHT - 8) - 4
+        : CHART_HEIGHT - 4,
+  }));
+  const line = points.map((point) => `${point.x},${point.y}`).join(" ");
+  const active = points[selected];
+
+  return (
+    <div className="space-y-2">
+      <svg
+        aria-label="Spend per day"
+        className="h-32 w-full overflow-visible text-primary"
+        onMouseLeave={() => onSelect(null)}
+        onMouseMove={(event) => {
+          const box = event.currentTarget.getBoundingClientRect();
+          const ratio = (event.clientX - box.left) / box.width;
+          onSelect(Math.round(ratio * (daily.length - 1)));
+        }}
+        preserveAspectRatio="none"
+        role="img"
+        viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+      >
+        <defs>
+          <linearGradient id="usage-spend-fill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="currentColor" stopOpacity={0.18} />
+            <stop offset="100%" stopColor="currentColor" stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        {points.length > 1 ? (
+          <>
+            <polygon
+              fill="url(#usage-spend-fill)"
+              points={`0,${CHART_HEIGHT} ${line} ${CHART_WIDTH},${CHART_HEIGHT}`}
+            />
+            <polyline
+              fill="none"
+              points={line}
+              stroke="currentColor"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              vectorEffect="non-scaling-stroke"
+            />
+          </>
+        ) : null}
+        {active ? (
+          <line
+            stroke="currentColor"
+            strokeDasharray="2 3"
+            strokeOpacity={0.4}
+            vectorEffect="non-scaling-stroke"
+            x1={active.x}
+            x2={active.x}
+            y1={0}
+            y2={CHART_HEIGHT}
+          />
+        ) : null}
+      </svg>
+      <DayAxis daily={daily} />
+    </div>
+  );
+}
+
+function ProviderBars({
+  daily,
+  selected,
+  onSelect,
+}: {
+  daily: LlmUsageDayStats[];
+  selected: number;
+  onSelect: (index: number | null) => void;
+}) {
+  const ranked = useMemo(() => {
+    const totals = new Map<string | null, number>();
+    for (const day of daily) {
+      for (const share of day.providers) {
+        totals.set(
+          share.provider,
+          (totals.get(share.provider) ?? 0) + share.totalTokens
+        );
+      }
+    }
+    return [...totals.entries()]
+      .sort((left, right) => right[1] - left[1])
+      .map(([provider]) => provider);
+  }, [daily]);
+  const shadeOf = (provider: string | null) =>
+    PROVIDER_SHADES[
+      Math.min(ranked.indexOf(provider), PROVIDER_SHADES.length - 1)
+    ];
+
+  return (
+    <div className="space-y-2">
+      <div
+        aria-label="Provider share per day"
+        className="flex h-32 items-stretch gap-0.5"
+        onMouseLeave={() => onSelect(null)}
+        role="img"
+      >
+        {daily.map((day, index) => (
+          <div
+            className={cn(
+              "flex flex-1 flex-col-reverse overflow-hidden rounded-xs bg-muted transition-opacity",
+              index === selected ? "opacity-100" : "opacity-70"
+            )}
+            key={day.day}
+            onMouseEnter={() => onSelect(index)}
+          >
+            {day.totalTokens > 0
+              ? [...day.providers]
+                  .sort(
+                    (left, right) =>
+                      ranked.indexOf(left.provider) -
+                      ranked.indexOf(right.provider)
+                  )
+                  .map((share) => (
+                    <div
+                      className={shadeOf(share.provider)}
+                      key={share.provider ?? ""}
+                      style={{
+                        height: `${(share.totalTokens / day.totalTokens) * 100}%`,
+                      }}
+                    />
+                  ))
+              : null}
+          </div>
+        ))}
+      </div>
+      <DayAxis daily={daily} />
+    </div>
+  );
+}
+
+function ShareRing({ share }: { share: number }) {
+  const radius = 7;
+  const circumference = 2 * Math.PI * radius;
+  return (
+    <svg
+      aria-label={`${Math.round(share * 100)} percent`}
+      className="size-5 shrink-0 -rotate-90 text-primary"
+      role="img"
+      viewBox="0 0 20 20"
+    >
+      <circle
+        className="text-muted"
+        cx={10}
+        cy={10}
+        fill="none"
+        r={radius}
+        stroke="currentColor"
+        strokeWidth={3}
+      />
+      <circle
+        cx={10}
+        cy={10}
+        fill="none"
+        r={radius}
+        stroke="currentColor"
+        strokeDasharray={`${share * circumference} ${circumference}`}
+        strokeLinecap="round"
+        strokeWidth={3}
+      />
+    </svg>
+  );
+}
+
+function ModelShareList({
+  models,
+  metric,
+  formatMetric,
+}: {
+  models: LlmUsageStatus["models"];
+  metric: (entry: LlmUsageStats) => number;
+  formatMetric: (value: number) => string;
+}) {
+  const total = models.reduce((sum, model) => sum + metric(model), 0);
+  return (
+    <ul className="space-y-3">
+      {models.map((model) => (
+        <li className="flex items-center gap-3" key={model.modelId}>
+          <span className="min-w-0 flex-1 truncate font-mono text-sm">
+            {model.modelId}
+          </span>
+          <span className="text-sm tabular-nums">
+            {formatMetric(metric(model))}
+          </span>
+          <ShareRing share={total > 0 ? metric(model) / total : 0} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function AdoptionGrid({ users }: { users: LlmUsageGroupStats[] }) {
+  return (
+    <ul className="grid grid-cols-3 gap-x-2 gap-y-4 sm:grid-cols-4">
+      {users.map((user) => {
+        const label = user.id ? (user.name ?? user.id) : "Unattributed";
+        return (
+          <li
+            className="flex min-w-0 flex-col items-center gap-1 text-center"
+            key={user.id ?? ""}
+          >
+            <span
+              aria-hidden="true"
+              className={cn(
+                "flex size-10 items-center justify-center rounded-full font-medium text-sm",
+                user.id
+                  ? "bg-primary/15 text-primary"
+                  : "bg-muted text-muted-foreground"
+              )}
+            >
+              {user.id ? initialsOf(label) : "–"}
+            </span>
+            <span className="w-full truncate text-sm">{label}</span>
+            <span className="whitespace-nowrap text-muted-foreground text-xs tabular-nums">
+              {compactNumber.format(user.requestCount)} requests
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -594,13 +953,11 @@ function CompactUsageStat({
 
 function UsageRow({
   label,
-  monospace = false,
   usage,
   costEstimated,
   maxTokens,
 }: {
   label: string;
-  monospace?: boolean;
   usage: LlmUsageStats;
   costEstimated: boolean;
   maxTokens: number;
@@ -610,14 +967,7 @@ function UsageRow({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 space-y-2 lg:flex-1">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <p
-              className={cn(
-                "truncate text-foreground text-sm",
-                monospace && "font-mono"
-              )}
-            >
-              {label}
-            </p>
+            <p className="truncate text-foreground text-sm">{label}</p>
             <p className="text-muted-foreground text-xs">
               {usage.totalTokens.toLocaleString()} tokens
             </p>

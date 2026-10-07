@@ -44,6 +44,8 @@ function createService(
     // The service only reads these members; the rest of AgentService is not
     // part of what a status response depends on.
     {
+      getLlmUsageDailyStats: async (orgId: string | null) =>
+        (orgId ? await usageTracker?.getDailyStats(orgId) : null) ?? [],
       getLlmUsageStats: async (orgId: string | null) =>
         (orgId ? await usageTracker?.getStats(orgId) : null) ?? {
           estimatedCostUsd: 0,

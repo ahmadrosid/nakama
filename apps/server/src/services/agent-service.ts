@@ -3309,6 +3309,12 @@ export class AgentService {
     );
   }
 
+  async getLlmUsageDailyStats(orgId: string | null) {
+    return orgId
+      ? ((await this.llmUsageTracker?.getDailyStats(orgId)) ?? [])
+      : [];
+  }
+
   async getLlmUsageStatsByModel(orgId: string | null) {
     return orgId
       ? ((await this.llmUsageTracker?.getStatsByModel(orgId)) ?? [])

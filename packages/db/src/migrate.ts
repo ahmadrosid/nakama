@@ -56,6 +56,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateToolOutputSavingsTable);
   atomic(migrateLlmTurnUsageTable);
   atomic(migrateLlmUsageActorStatsTable);
+  atomic(migrateLlmUsageDailyStatsTable);
   atomic(migrateAttachmentsTable);
   atomic(migrateAutomationRunsTable);
   atomic(migrateAutomationRunReadStateTable);
@@ -625,6 +626,28 @@ function migrateLlmUsageActorStatsTable(db: Database): void {
       estimated_cost_usd, tracked_since, updated_at
     FROM llm_usage_stats
     WHERE id = 'default';
+  `);
+}
+
+/**
+ * LLM usage per org, per UTC day, per model, per provider, for the usage
+ * charts. Running totals carry no dates, so this table starts empty: it cannot
+ * say on which day old spend happened.
+ */
+function migrateLlmUsageDailyStatsTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS llm_usage_daily_stats (
+      org_id TEXT NOT NULL,
+      day TEXT NOT NULL,
+      model_id TEXT NOT NULL,
+      provider TEXT NOT NULL DEFAULT '',
+      request_count INTEGER NOT NULL DEFAULT 0,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      estimated_cost_usd REAL NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (org_id, day, model_id, provider)
+    );
   `);
 }
 
