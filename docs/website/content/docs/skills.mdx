@@ -282,6 +282,47 @@ The `coding-agent` bundled skill teaches when to invoke a coding agent, how to i
 
 The `agent-browser` bundled skill teaches agents to drive interactive browsers through `bash` for login walls, forms, and client-rendered pages. Setup, usage, session policy, optional Cloak stealth Chromium, and troubleshooting are in [Agent browser](/agent-browser).
 
+## Version history
+
+Skills change over time. People edit them, and agents patch them. Version history shows each change, so you can see what changed, who changed it, and go back if a change makes the skill worse.
+
+![Version history with a pending suggestion and its diff](/screenshots/skill-version-history.png)
+
+To open it:
+
+1. Open **Agent**
+2. Open a profile
+3. In the **Skills** section, open a skill
+4. Scroll below `SKILL.md` to **Version history**
+
+Each row is one saved version of `SKILL.md`:
+
+| Label | Meaning |
+|------|---------|
+| **Created** | The first version, saved when the skill was created in the dashboard |
+| **Original** | The text before the first tracked change, for skills made before version history, by an agent, or by an install |
+| **Updated** | A saved edit from the dashboard, an agent, or an approved proposal |
+| **Restored** | An older version that someone put back |
+| **Suggested · Pending review** | A proposal that waits for admin approval (only when [write approval](#write-approval-optional) is on) |
+
+The newest saved version has the **Current** tag. Click a row to see its changes compared to the version before it. For a suggestion, the changes are compared to the current `SKILL.md`. To approve or reject a suggestion, use **Review**, as in [Self-improving skills](/self-improving-skills#review-proposals).
+
+### Add a change note
+
+When you edit a skill in the dashboard, type a short note in **Change note** before you click **Save**. The note shows as the title of that version, for example "Added Google Ads to the weekly pull". The note is optional.
+
+### Restore an older version
+
+1. Click the version you want to go back to
+2. Look at its changes
+3. Click **Restore this version**
+
+![An older version, open, with Restore this version](/screenshots/skill-version-restore.png)
+
+Restore does not delete history. It saves the older text as a new **Restored** version on top, so you can undo a restore the same way.
+
+Version history covers `SKILL.md` only. Other files in the skill folder, such as templates, have no history. Bundled skills and plugin skills cannot be edited, so you cannot restore them.
+
 ## Sync behavior
 
 Nakama discovers skills from disk and syncs them into the database.
