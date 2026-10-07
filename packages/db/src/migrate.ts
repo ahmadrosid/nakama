@@ -1023,15 +1023,17 @@ function migrateLlmUsageQuotaColumns(db: Database): void {
 
 function migrateOrgLlmMonthlyQuotaTable(db: Database): void {
   db.exec(`
-    CREATE TABLE IF NOT EXISTS org_llm_monthly_quota (
+    -- Its counters only ever grew, so every row in it is a false exhaustion.
+    DROP TABLE IF EXISTS org_llm_monthly_quota;
+    CREATE TABLE IF NOT EXISTS org_llm_quota_reservations (
+      id TEXT PRIMARY KEY,
       org_id TEXT NOT NULL,
-      month TEXT NOT NULL,
-      reserved_turns INTEGER NOT NULL DEFAULT 0,
-      reserved_tokens INTEGER NOT NULL DEFAULT 0,
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY (org_id, month),
+      reserved_tokens INTEGER NOT NULL CHECK (reserved_tokens >= 0),
+      created_at TEXT NOT NULL,
       FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE
     );
+    CREATE INDEX IF NOT EXISTS idx_org_llm_quota_reservations_org
+      ON org_llm_quota_reservations(org_id);
   `);
 }
 

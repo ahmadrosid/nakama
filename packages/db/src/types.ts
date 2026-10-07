@@ -1295,6 +1295,8 @@ export interface DatabaseAdapter {
   publishOrgPluginRelease(
     input: PublishOrgPluginReleaseInput
   ): Promise<PluginPublishResult>;
+  /** Gives back one hold taken by tryReserveMonthlyLlmQuota, at most once. */
+  releaseMonthlyLlmQuota(orgId: string, reservationId: string): Promise<void>;
   renameFilePins(
     orgId: string,
     profileId: string,
@@ -1362,12 +1364,12 @@ export interface DatabaseAdapter {
     archivedAt: string
   ): Promise<boolean>;
   tryReserveMonthlyLlmQuota(input: {
+    createdAt: string;
     existingTokens: number;
     existingTurns: number;
-    month: string;
     orgId: string;
+    reservationId: string;
     reservedTokens: number;
-    updatedAt: string;
   }): Promise<boolean>;
   unassignMcpServerFromProfile(
     profileId: string,

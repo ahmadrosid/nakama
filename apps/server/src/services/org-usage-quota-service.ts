@@ -61,7 +61,7 @@ export class OrgUsageQuotaService {
   async assertCanStartLlmTurn(
     orgId: string,
     reservedTokens = 0
-  ): Promise<void> {
+  ): Promise<() => Promise<void>> {
     const organization = (await this.db.getOrganizationById(
       orgId
     )) as OrganizationWithLlmTurnLimit | null;
@@ -74,7 +74,7 @@ export class OrgUsageQuotaService {
           organization.monthlyLlmTokenLimit > 0)
       )
     ) {
-      return;
+      return () => Promise.resolve();
     }
 
     const status = await this.getStatus(orgId);
@@ -88,16 +88,18 @@ export class OrgUsageQuotaService {
     ) {
       throw new NakamaApiError("Monthly LLM quota reached.", 429);
     }
+    const reservationId = crypto.randomUUID();
     const reserved = await this.db.tryReserveMonthlyLlmQuota({
+      createdAt: this.now().toISOString(),
       existingTokens: status.tokens,
       existingTurns: status.turns,
-      month: status.month,
       orgId,
+      reservationId,
       reservedTokens: Math.max(0, Math.ceil(reservedTokens)),
-      updatedAt: new Date().toISOString(),
     });
     if (!reserved) {
       throw new NakamaApiError("Monthly LLM quota reached.", 429);
     }
+    return () => this.db.releaseMonthlyLlmQuota(orgId, reservationId);
   }
 }

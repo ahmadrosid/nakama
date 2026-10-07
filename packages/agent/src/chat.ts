@@ -710,51 +710,59 @@ async function runConversation(
         llmTools,
         providerReplaysThinking(provider.name)
       ) + Math.max(0, MAX_TURN_OUTPUT_TOKENS - producedTokens);
-    await toolContext?.assertCanStartLlmTurn?.(reservedTokens);
+    const releaseReservation =
+      await toolContext?.assertCanStartLlmTurn?.(reservedTokens);
 
     const toolGroupId = createId("toolgroup");
-    const result = await generateReply(
-      provider,
-      iterationPrompt,
-      history,
-      llmTools,
-      finalReplyOnly
-        ? { ...providerOptions, webSearch: false }
-        : providerOptions,
-      mode,
-      handlers,
-      rehydrateMessagesForProvider,
-      signal,
-      toolGroupId
-    );
-
-    const usedTokens =
-      result.usage?.inputTokens ??
-      estimateHistoryTokens(
-        history,
-        `${iterationPrompt}\n\nToday is ${formatCurrentDate()}.`,
-        llmTools,
-        providerReplaysThinking(provider.name)
-      );
-    onContextUsage?.(
-      usedTokens,
-      result.usage && !result.usage.estimated ? "provider" : "estimate"
-    );
-
-    // The arm is what the optimiser did in this session, not what a setting
-    // says: a session where nothing was ever shortened belongs in the control
-    // arm even with the feature switched on, or the comparison flatters itself.
+    let result: Awaited<ReturnType<typeof generateReply>>;
     try {
-      toolContext.recordTurnUsage?.({
-        estimated: Boolean(result.usage?.estimated ?? !result.usage),
-        inputTokens: result.usage?.inputTokens ?? 0,
-        // Overwritten by the session wrapper, which is the only scope that
-        // knows whether anything was shortened.
-        optimized: false,
-        outputTokens: result.usage?.outputTokens ?? 0,
-      });
-    } catch {
-      // never let accounting break a turn
+      result = await generateReply(
+        provider,
+        iterationPrompt,
+        history,
+        llmTools,
+        finalReplyOnly
+          ? { ...providerOptions, webSearch: false }
+          : providerOptions,
+        mode,
+        handlers,
+        rehydrateMessagesForProvider,
+        signal,
+        toolGroupId
+      );
+
+      const usedTokens =
+        result.usage?.inputTokens ??
+        estimateHistoryTokens(
+          history,
+          `${iterationPrompt}\n\nToday is ${formatCurrentDate()}.`,
+          llmTools,
+          providerReplaysThinking(provider.name)
+        );
+      onContextUsage?.(
+        usedTokens,
+        result.usage && !result.usage.estimated ? "provider" : "estimate"
+      );
+
+      // The arm is what the optimiser did in this session, not what a setting
+      // says: a session where nothing was ever shortened belongs in the control
+      // arm even with the feature switched on, or the comparison flatters itself.
+      try {
+        toolContext.recordTurnUsage?.({
+          estimated: Boolean(result.usage?.estimated ?? !result.usage),
+          inputTokens: result.usage?.inputTokens ?? 0,
+          // Overwritten by the session wrapper, which is the only scope that
+          // knows whether anything was shortened.
+          optimized: false,
+          outputTokens: result.usage?.outputTokens ?? 0,
+        });
+      } catch {
+        // never let accounting break a turn
+      }
+    } finally {
+      // The hold covers one provider call. Usage is on the ledger by now if the
+      // call returned, and a call that threw or was aborted spent nothing.
+      await releaseReservation?.().catch(() => undefined);
     }
 
     // Backstop for providers that ignore the signal. The in-flight request is

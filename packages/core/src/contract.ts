@@ -2898,8 +2898,13 @@ export interface ProviderClient {
 export interface ToolContext {
   /** Nesting depth for sub-agent execution (0 = parent, 1 = child). */
   agentDepth?: number;
-  /** Atomically reserves quota before a new LLM invocation. */
-  assertCanStartLlmTurn?: (reservedTokens: number) => Promise<void>;
+  /**
+   * Atomically reserves quota before a new LLM invocation. The reservation is
+   * a hold, not a charge: call the returned function once the call settles.
+   */
+  assertCanStartLlmTurn?: (
+    reservedTokens: number
+  ) => Promise<() => Promise<void>>;
   automationId?: string;
   automationRunId?: string;
   /** Session channel when known (used for interactive-only tool gates). */
