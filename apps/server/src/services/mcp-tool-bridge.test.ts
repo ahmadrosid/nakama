@@ -1,12 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import type { StoredMcpServerRecord } from "@nakama/db";
-import { McpClientManager } from "./mcp-client-manager";
+import type { McpService } from "./mcp-service";
 import {
   buildMcpToolDefinitions,
   isValidLlmToolName,
   namespacedMcpToolName,
   sanitizeLlmToolNamePart,
 } from "./mcp-tool-bridge";
+
+function failingMcpService(message: string): Pick<McpService, "callTool"> {
+  return {
+    callTool() {
+      return Promise.reject(new Error(message));
+    },
+  };
+}
 
 function serverLookup(servers: StoredMcpServerRecord[]) {
   return {
@@ -34,7 +42,7 @@ describe("mcp tool bridge", () => {
   });
 
   test("deduplicates sanitized tool names", () => {
-    const manager = new McpClientManager();
+    const mcpService = failingMcpService("unused");
     const servers: StoredMcpServerRecord[] = [
       {
         cachedTools: [
@@ -55,7 +63,7 @@ describe("mcp tool bridge", () => {
 
     const tools = buildMcpToolDefinitions(
       servers,
-      manager,
+      mcpService,
       serverLookup(servers),
       "org_test",
       "profile_test"
@@ -69,7 +77,7 @@ describe("mcp tool bridge", () => {
   });
 
   test("builds tools only from attached servers", () => {
-    const manager = new McpClientManager();
+    const mcpService = failingMcpService("unused");
     const servers: StoredMcpServerRecord[] = [
       {
         cachedTools: [
@@ -96,7 +104,7 @@ describe("mcp tool bridge", () => {
 
     const tools = buildMcpToolDefinitions(
       servers,
-      manager,
+      mcpService,
       serverLookup(servers),
       "org_test",
       "profile_test"
@@ -106,8 +114,10 @@ describe("mcp tool bridge", () => {
     expect(tools[0]?.name).toBe("filesystem__read_file");
   });
 
-  test("returns an error when the server is disconnected", async () => {
-    const manager = new McpClientManager();
+  test("returns an error when the call fails", async () => {
+    const mcpService = failingMcpService(
+      'MCP server "filesystem" is not connected.'
+    );
     const servers: StoredMcpServerRecord[] = [
       {
         cachedTools: [{ description: "Read a file", name: "read_file" }],
@@ -125,7 +135,7 @@ describe("mcp tool bridge", () => {
 
     const tools = buildMcpToolDefinitions(
       servers,
-      manager,
+      mcpService,
       serverLookup(servers),
       "org_test",
       "profile_test"
@@ -138,7 +148,7 @@ describe("mcp tool bridge", () => {
   });
 
   test("excludes disabled servers from new tool definitions", () => {
-    const manager = new McpClientManager();
+    const mcpService = failingMcpService("unused");
     const servers: StoredMcpServerRecord[] = [
       {
         cachedTools: [{ description: "Read a file", name: "read_file" }],
@@ -156,7 +166,7 @@ describe("mcp tool bridge", () => {
 
     const tools = buildMcpToolDefinitions(
       servers,
-      manager,
+      mcpService,
       serverLookup(servers),
       "org_test",
       "profile_test"
@@ -168,15 +178,12 @@ describe("mcp tool bridge", () => {
   test("blocks an existing tool definition after its server is disabled", async () => {
     let enabled = true;
     const calls: string[] = [];
-    const manager = {
-      async callTool() {
+    const mcpService: Pick<McpService, "callTool"> = {
+      callTool() {
         calls.push("callTool");
-        return { ok: true };
+        return Promise.resolve({ ok: true });
       },
-      async ensureConnected() {
-        calls.push("ensureConnected");
-      },
-    } as unknown as McpClientManager;
+    };
     const server: StoredMcpServerRecord = {
       cachedTools: [{ description: "Read a file", name: "read_file" }],
       config: { command: "mcp-filesystem" },
@@ -191,7 +198,7 @@ describe("mcp tool bridge", () => {
     };
     const tools = buildMcpToolDefinitions(
       [server],
-      manager,
+      mcpService,
       {
         async getMcpServer() {
           return { ...server, enabled };

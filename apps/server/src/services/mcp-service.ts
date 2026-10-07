@@ -21,6 +21,7 @@ import type {
   StoredProfileRecord,
 } from "@nakama/db";
 import {
+  isMcpReconnectableError,
   type McpClientManager,
   toCachedMcpToolSummaries,
 } from "./mcp-client-manager";
@@ -55,14 +56,19 @@ function buildOAuthProvider(
   options: McpConnectOptions,
   persist: (grant: McpOAuthGrant) => Promise<void>
 ): McpServerOAuthProvider | undefined {
-  if (server.transport !== "http" || !options.callbackBaseUrl) {
+  const grant = readMcpOAuthGrant(server.config);
+  // A reconnect has no request to read an origin from; the grant remembers the
+  // one it was issued for, and a token refresh needs no redirect anyway.
+  const callbackBaseUrl = options.callbackBaseUrl ?? grant?.callbackBaseUrl;
+
+  if (server.transport !== "http" || !callbackBaseUrl) {
     return;
   }
 
   const provider = new McpServerOAuthProvider(
     server.id,
-    options.callbackBaseUrl,
-    readMcpOAuthGrant(server.config),
+    callbackBaseUrl,
+    grant,
     persist
   );
 
@@ -93,7 +99,10 @@ export class McpService {
 
     return {
       servers: servers.map((server) =>
-        toMcpServerSummary(server, profileCounts[server.id] ?? 0)
+        toMcpServerSummary(
+          this.withLiveStatus(server),
+          profileCounts[server.id] ?? 0
+        )
       ),
     };
   }
@@ -102,7 +111,12 @@ export class McpService {
     const server = await this.requireServer(serverId);
     const profileCounts = await this.db.listMcpServerProfileCounts();
 
-    return { server: toMcpServerDetail(server, profileCounts[serverId] ?? 0) };
+    return {
+      server: toMcpServerDetail(
+        this.withLiveStatus(server),
+        profileCounts[serverId] ?? 0
+      ),
+    };
   }
 
   async createServer(
@@ -442,6 +456,90 @@ export class McpService {
         tools: [],
       };
     }
+  }
+
+  /**
+   * Calls a tool on a profile's server, connecting first when the connection is
+   * missing or has dropped. Retries once on a new connection when the server
+   * did not run the request (for example it restarted and lost the session).
+   */
+  async callTool(
+    server: StoredMcpServerRecord,
+    toolName: string,
+    input: unknown,
+    orgId: string | undefined,
+    profileId: string
+  ): Promise<unknown> {
+    const stdio = server.transport === "stdio";
+
+    for (let attempt = 1; ; attempt++) {
+      await this.ensureConnected(server, orgId, profileId);
+
+      try {
+        return await this.manager.callTool(
+          server.id,
+          server.transport,
+          toolName,
+          input,
+          stdio ? profileId : undefined,
+          stdio ? orgId : undefined
+        );
+      } catch (error) {
+        if (attempt > 1 || !isMcpReconnectableError(error)) {
+          throw error;
+        }
+
+        await this.manager.dropConnection(
+          server.id,
+          server.transport,
+          stdio ? profileId : undefined,
+          stdio ? orgId : undefined
+        );
+      }
+    }
+  }
+
+  private async ensureConnected(
+    server: StoredMcpServerRecord,
+    orgId: string | undefined,
+    profileId: string
+  ): Promise<void> {
+    if (server.transport === "stdio") {
+      if (!orgId) {
+        throw new Error("Profile organization is missing for stdio MCP.");
+      }
+
+      await this.manager.ensureConnected(server, orgId, profileId);
+      return;
+    }
+
+    if (this.manager.isConnected(server.id, server.transport)) {
+      return;
+    }
+
+    if (server.status === "needs_auth") {
+      throw new Error(
+        `MCP server "${server.name}" needs sign-in. Connect it on the MCP page.`
+      );
+    }
+
+    await this.connectServer(server.id, { reauthorize: false });
+  }
+
+  /**
+   * The stored status is written at connect time. An HTTP connection lives in
+   * memory, so a restart or a dropped stream leaves the row saying connected.
+   */
+  private withLiveStatus(server: StoredMcpServerRecord): StoredMcpServerRecord {
+    if (
+      server.transport === "http" &&
+      server.status === "connected" &&
+      !this.manager.isConnected(server.id, server.transport)
+    ) {
+      return { ...server, status: "disconnected" };
+    }
+
+    return server;
   }
 
   async connectEnabledServers(options: McpConnectOptions = {}): Promise<void> {

@@ -10,7 +10,7 @@ import type {
   DatabaseAdapter,
   StoredMcpServerRecord,
 } from "@nakama/db";
-import type { McpClientManager } from "./mcp-client-manager";
+import type { McpService } from "./mcp-service";
 
 interface McpEmailTarget {
   server: StoredMcpServerRecord;
@@ -70,7 +70,7 @@ export async function hasAutomationEmailDeliveryPath(
 
 export function createMcpAwareEmailOutboundAdapter(
   db: DatabaseAdapter,
-  manager: McpClientManager,
+  mcpService: Pick<McpService, "callTool">,
   dependencies: McpEmailDeliveryDependencies = {}
 ): EmailOutboundAdapter {
   return {
@@ -99,21 +99,12 @@ export function createMcpAwareEmailOutboundAdapter(
           return { error: "Email is not configured.", ok: false };
         }
 
-        await ensureConnected(
-          manager,
+        const result = await mcpService.callTool(
           target.server,
-          input.orgId ?? undefined,
-          input.profileId
-        );
-        const result = await manager.callTool(
-          target.server.id,
-          target.server.transport,
           target.tool.name,
           buildToolArguments(target.tool, input),
-          target.server.transport === "stdio" ? input.profileId : undefined,
-          target.server.transport === "stdio"
-            ? (input.orgId ?? undefined)
-            : undefined
+          input.orgId ?? undefined,
+          input.profileId
         );
 
         if (isErrorResult(result)) {
@@ -209,28 +200,6 @@ function scoreEmailTool(
   }
 
   return score;
-}
-
-async function ensureConnected(
-  manager: McpClientManager,
-  server: StoredMcpServerRecord,
-  orgId: string | undefined,
-  profileId: string
-): Promise<void> {
-  if (server.transport === "stdio") {
-    if (!orgId) {
-      throw new Error(
-        "Profile organization is missing for stdio MCP email delivery."
-      );
-    }
-
-    await manager.ensureConnected(server, orgId, profileId);
-    return;
-  }
-
-  if (!manager.isConnected(server.id, server.transport)) {
-    await manager.connect(server);
-  }
 }
 
 function buildToolArguments(
