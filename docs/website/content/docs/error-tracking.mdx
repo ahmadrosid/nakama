@@ -13,7 +13,7 @@ Nakama only sends. It stores no errors, and there is no error page inside Nakama
 
 - A project on **Sentry**, **GlitchTip**, **Bugsink**, **Rustrak**, or a **self-hosted Sentry**. They all speak the same protocol, so one field covers all five.
 - The **DSN** for that project. It looks like `https://<key>@sentry.example.com/42`.
-- The **org admin** role in Nakama.
+- The **platform admin** role in Nakama.
 - Nothing at all if you would rather not do this. Error tracking is off until you paste a DSN, and off means nothing is sent and nothing is written to disk.
 
 ## Setup
@@ -86,8 +86,8 @@ To force it off for a whole deployment regardless of what is saved, set `DO_NOT_
 | --- | --- |
 | See whether error tracking is on | Any member |
 | See the DSN in full | Nobody. The dashboard and the API only ever show it masked |
-| Save or clear the DSN | Org admin, or platform admin |
-| Send a test event | Org admin, or platform admin |
+| Save or clear the DSN | Platform admin |
+| Send a test event | Platform admin |
 
 The DSN applies to the whole installation, not to one organisation. There is no per-org error tracking, because a crashed process does not belong to an organisation.
 
