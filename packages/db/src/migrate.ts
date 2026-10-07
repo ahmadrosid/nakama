@@ -65,6 +65,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateComposioUserConnections);
   atomic(migrateAuditEventsTable);
   atomic(migrateProfileChangeEventsTable);
+  atomic(migrateSkillVersionsTable);
   atomic(migratePluginTables);
   atomic(migrateRemoveGoogleMeetPlugin);
   atomic(migrateFilePinsTable);
@@ -1968,6 +1969,26 @@ function migrateProfileChangeEventsTable(db: Database): void {
 
     CREATE INDEX IF NOT EXISTS profile_change_events_profile_created
       ON profile_change_events (profile_id, created_at DESC);
+  `);
+}
+
+function migrateSkillVersionsTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS skill_versions (
+      id TEXT PRIMARY KEY NOT NULL,
+      skill_id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      content TEXT NOT NULL,
+      note TEXT,
+      actor_user_id TEXT,
+      source TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_version
+      ON skill_versions (skill_id, version);
   `);
 }
 

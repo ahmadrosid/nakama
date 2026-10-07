@@ -634,6 +634,20 @@ export interface StoredProfileChangeEvent {
   source: ProfileChangeSource;
 }
 
+export type SkillVersionKind = "created" | "original" | "restored" | "updated";
+
+export interface StoredSkillVersion {
+  actorUserId: string | null;
+  content: string;
+  createdAt: string;
+  id: string;
+  kind: SkillVersionKind;
+  note: string | null;
+  skillId: string;
+  source: ProfileChangeSource | null;
+  version: number;
+}
+
 export interface StoredOrgMemoryProposal {
   bullet: string;
   createdAt: string;
@@ -851,6 +865,11 @@ export interface DatabaseAdapter {
   createSkillProposal(record: StoredSkillProposal): Promise<void>;
 
   createSkillSuggestion(record: StoredSkillSuggestion): Promise<void>;
+
+  /** Appends a snapshot; the adapter assigns the next version number. */
+  createSkillVersion(
+    record: Omit<StoredSkillVersion, "version">
+  ): Promise<StoredSkillVersion>;
   createUser(record: StoredUserRecord): Promise<void>;
   deleteAttachment(id: string): Promise<boolean>;
   deleteAutomation(id: string): Promise<boolean>;
@@ -1029,6 +1048,10 @@ export interface DatabaseAdapter {
     profileId: string,
     skillId: string
   ): Promise<StoredSkillUsageRecord | null>;
+  getSkillVersion(
+    skillId: string,
+    versionId: string
+  ): Promise<StoredSkillVersion | null>;
   getTool(id: string): Promise<StoredToolRecord | null>;
   getToolByName(name: string): Promise<StoredToolRecord | null>;
   getToolByNameForOrg(
@@ -1208,6 +1231,7 @@ export interface DatabaseAdapter {
 
   listSessions(): Promise<StoredSessionRecord[]>;
   listSessionsForUser(userId: string): Promise<StoredSessionRecord[]>;
+
   listSkillProposals(
     orgId: string,
     options?: {
@@ -1232,6 +1256,12 @@ export interface DatabaseAdapter {
   listSkillUsageForProfile(
     profileId: string
   ): Promise<StoredSkillUsageRecord[]>;
+
+  /** Newest first. */
+  listSkillVersions(
+    skillId: string,
+    options?: { limit?: number }
+  ): Promise<StoredSkillVersion[]>;
 
   listToolOutputSavings(
     orgId: string

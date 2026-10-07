@@ -4,6 +4,7 @@ import {
   type CreateSkillRequest,
   type InstallSkillRequest,
   type ListSkillsResponse,
+  type ListSkillVersionsResponse,
   NakamaApiError,
   type PatchSkillRequest,
   type ProfileResponse,
@@ -269,6 +270,7 @@ export function registerSkillRoutes(
   for (const [suffix, operationId, summary] of [
     ["files", "listSkillFiles", "List skill files and folders"],
     ["file", "readSkillFile", "Read a skill file"],
+    ["versions", "listSkillVersions", "List SKILL.md versions"],
   ] as const) {
     app.openAPIRegistry.registerPath(
       createRoute({
@@ -316,11 +318,67 @@ export function registerSkillRoutes(
     );
   });
 
-  app.post("/v1/skills", async (c) => {
+  app.get("/v1/skills/:skillId/versions", async (c) => {
     requirePlatformAdminFromContext(c);
+    return json<ListSkillVersionsResponse>(
+      await agent.listSkillVersions(
+        requireActiveOrgIdFromContext(c),
+        decodeURIComponent(c.req.param("skillId"))
+      )
+    );
+  });
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "restoreSkillVersion",
+      path: "/v1/skills/{skillId}/versions/{versionId}/restore",
+      request: {
+        params: z.object({
+          skillId: z
+            .string()
+            .openapi({ param: { in: "path", name: "skillId" } }),
+          versionId: z
+            .string()
+            .openapi({ param: { in: "path", name: "versionId" } }),
+        }),
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: skillSchema } },
+          description: "Skill detail",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Restore a SKILL.md version",
+      tags: ["Skills"],
+    })
+  );
+
+  app.post("/v1/skills/:skillId/versions/:versionId/restore", async (c) => {
+    const auth = requirePlatformAdminFromContext(c);
+    return json<SkillResponse>(
+      await agent.restoreSkillVersion(
+        requireActiveOrgIdFromContext(c),
+        decodeURIComponent(c.req.param("skillId")),
+        decodeURIComponent(c.req.param("versionId")),
+        { actorUserId: auth.user.id, source: "dashboard" }
+      )
+    );
+  });
+
+  app.post("/v1/skills", async (c) => {
+    const auth = requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson<CreateSkillRequest>(c.req.raw);
-    return json<SkillResponse>(await agent.createSkill(orgId, body));
+    return json<SkillResponse>(
+      await agent.createSkill(orgId, body, {
+        meta: { actorUserId: auth.user.id, source: "dashboard" },
+      })
+    );
   });
 
   app.post("/v1/skills/install", async (c) => {
@@ -349,7 +407,7 @@ export function registerSkillRoutes(
   });
 
   app.patch("/v1/skills/:skillId", async (c) => {
-    requirePlatformAdminFromContext(c);
+    const auth = requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const skillId = decodeURIComponent(c.req.param("skillId"));
     const existing = await agent.getSkill(skillId);
@@ -359,12 +417,10 @@ export function registerSkillRoutes(
     const body = await readJson<PatchSkillRequest>(c.req.raw);
     const profileId = c.req.query("profileId")?.trim() || undefined;
     return json<SkillResponse>(
-      await agent.patchSkill(
-        orgId,
-        skillId,
-        body,
-        profileId ? { profileId } : undefined
-      )
+      await agent.patchSkill(orgId, skillId, body, {
+        meta: { actorUserId: auth.user.id, source: "dashboard" },
+        profileId,
+      })
     );
   });
 

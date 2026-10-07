@@ -2153,6 +2153,8 @@ export interface PatchSkillRequest {
   body?: string;
   description?: string;
   disableModelInvocation?: boolean;
+  /** Optional change note, shown as the version title. */
+  note?: string;
 }
 
 export interface SyncSkillsResponse {
@@ -2349,6 +2351,35 @@ export interface ProfileChangeEvent {
   orgId: string;
   profileId: string;
   source: ProfileChangeSource;
+}
+
+export interface SkillVersion {
+  actorName: string | null;
+  content: string;
+  createdAt: string;
+  id: string;
+  /** "original" is the content saved before the first tracked change. */
+  kind: "created" | "original" | "restored" | "updated";
+  note: string | null;
+  source: ProfileChangeSource | null;
+  version: number;
+}
+
+/** A pending skill proposal, shown as the SKILL.md it would produce. */
+export interface PendingSkillVersion {
+  content: string;
+  createdAt: string;
+  id: string;
+  proposedByName: string | null;
+}
+
+export interface ListSkillVersionsResponse {
+  /** SKILL.md on disk; the base for pending diffs. */
+  currentContent: string;
+  /** Newest first. */
+  pending: PendingSkillVersion[];
+  /** Newest first. */
+  versions: SkillVersion[];
 }
 
 export interface ListProfileChangeHistoryResponse {
