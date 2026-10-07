@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
+import type { ComposioService } from "../composio-service";
+import { importMeetRecording } from "../meet-recording-import";
 import { type Meeting, MeetingStore } from "./store";
 import { transcriptionConfig } from "./transcription";
 
@@ -24,8 +26,15 @@ export const meetingActionSchemas = {
     })
     .strict(),
   delete: z.object({ meetingId: z.string() }).strict(),
+  "import-recording": z
+    .object({
+      fileId: z.string().regex(/^[A-Za-z0-9_-]{10,128}$/),
+      messageId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
+    })
+    .strict(),
   leave: z.object({ meetingId: z.string() }).strict(),
   meetings: z.object({}).strict(),
+  recordings: z.object({}).strict(),
   "start-capture": z
     .object({
       durationMinutes: z.number().int().min(1).max(120).optional(),
@@ -51,6 +60,10 @@ export interface MeetExecutionContext {
   actionKey: string;
   actor: { id: string; role: "admin" | "member" | "viewer" };
   captureUrl?(): Promise<string>;
+  composio?: Pick<
+    ComposioService,
+    "listMeetRecordings" | "downloadMeetRecording"
+  >;
   createCapture?(meeting: Meeting): { token: string; url: string };
   dataDir: string;
   orgId: string;
@@ -202,6 +215,38 @@ export async function run(
       }
       return store.importFile(
         filename,
+        result.text,
+        context.actor.id,
+        context.profileId
+      );
+    }
+    if (action === "recordings" || action === "import-recording") {
+      if (!context.composio) {
+        throw new Error("Recording import is unavailable");
+      }
+      if (action === "recordings") {
+        return context.composio.listMeetRecordings(
+          context.orgId,
+          context.actor.id
+        );
+      }
+      const result = await importMeetRecording(
+        context.composio,
+        {
+          dataDir: context.dataDir,
+          fileId: input.fileId as string,
+          messageId: input.messageId as string,
+          orgId: context.orgId,
+          userId: context.actor.id,
+        },
+        context.signal ?? AbortSignal.timeout(20 * 60_000)
+      );
+      context.signal?.throwIfAborted();
+      if (!result.text.trim()) {
+        throw new Error("Recording transcription returned no speech");
+      }
+      return store.importFile(
+        result.filename,
         result.text,
         context.actor.id,
         context.profileId

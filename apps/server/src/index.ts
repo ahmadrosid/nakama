@@ -74,6 +74,7 @@ import {
   hasAutomationEmailDeliveryPath,
 } from "./services/mcp-email-delivery";
 import { McpService } from "./services/mcp-service";
+import { cleanupInterruptedMeetImports } from "./services/meet-recording-import";
 import { OrgMemoryService } from "./services/org-memory-service";
 import { OrgService } from "./services/org-service";
 import {
@@ -128,6 +129,7 @@ const database = await createDatabase(config.databaseUrl, {
 const MAX_AUTOMATION_RUN_RESUMES = 2;
 
 await seedDatabase(database.adapter);
+await cleanupInterruptedMeetImports();
 
 await retireAppUserData(
   getUserConfigDir(),
@@ -162,10 +164,12 @@ const agent = new AgentService(
   database.adapter,
   llmUsageTracker
 );
+const composioService = new ComposioService(database.adapter, authService);
 const googleMeetService = new GoogleMeetService(
   database.adapter,
   getUserConfigDir(),
-  (request, signal) => agent.transcribeAudio(request, signal)
+  (request, signal) => agent.transcribeAudio(request, signal),
+  composioService
 );
 agent.setServerTools({
   generateImage: createGenerateImageTool({
@@ -202,7 +206,6 @@ if (sweptAttachments > 0) {
 }
 const mcpClientManager = new McpClientManager();
 const mcpService = new McpService(database.adapter, mcpClientManager);
-const composioService = new ComposioService(database.adapter, authService);
 const skillsService = new SkillsService(database.adapter);
 
 agent.setMcpClientManager(mcpClientManager);

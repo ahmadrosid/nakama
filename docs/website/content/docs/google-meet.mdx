@@ -70,6 +70,14 @@ Assign the Google Meet tools and skill to the profile you want to use. The agent
 
 You can also upload a Markdown transcript (up to 1 MiB) or audio file (up to 7 MiB). Audio uploads use the organization's regular transcription settings; live capture uses the key saved in Google Meet settings.
 
+## Import a recorded meeting
+
+If a Meet call was recorded, connect **Gmail** and **Google Drive** in **Customize → Connections**. Ask an organization admin to save an OpenAI key in **Google Meet → Settings**.
+
+Open **Google Meet → Meeting history**, choose **Import recording**, and select the video from your Meet recording email. Keep the page open while Nakama downloads the video and sends its audio to OpenAI Whisper. The finished transcript appears in meeting history. To save it to an agent’s history, ask that agent to import the recording using its assigned Google Meet tools.
+
+The recording must be no larger than 1 GiB or two hours. If an import fails, choose it again. Imported transcripts do not identify speakers.
+
 ## Stop and save
 
 Choose **Leave** in Nakama or stop capture from the Chrome extension. Nakama finishes the current transcript and keeps the saved meeting available under **Saved transcripts**.
