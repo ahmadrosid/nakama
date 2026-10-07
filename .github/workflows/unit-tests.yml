@@ -59,24 +59,27 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile --ignore-scripts
 
-      # bun test does not type-check or bundle. Docker Publish does both, but
-      # only after the merge. Keep this list the same as the one in Dockerfile.
-      - name: Build what the image builds
-        run: |
-          bun run --filter @nakama/web build
-          bun run --filter @nakama/server build
-          bun run --filter @nakama/automation build
-          bun run --filter @nakama/telegram build
-          bun run --filter @nakama/whatsapp build
-          bun run --filter @nakama/discord build
-          bun run --filter @nakama/slack build
+      - parallel:
+          # bun test does not type-check or bundle. Docker Publish does both, but
+          # only after the merge. Keep this list the same as the one in Dockerfile.
+          - name: Build what the image builds
+            run: |
+              bun run --filter @nakama/web build
+              bun run --filter @nakama/server build
+              bun run --filter @nakama/automation build
+              bun run --filter @nakama/telegram build
+              bun run --filter @nakama/whatsapp build
+              bun run --filter @nakama/discord build
+              bun run --filter @nakama/slack build
+
+          - name: Set up Electron
+            run: |
+              bun apps/desktop/node_modules/electron/install.js
+              sudo chown root:root apps/desktop/node_modules/electron/dist/chrome-sandbox
+              sudo chmod 4755 apps/desktop/node_modules/electron/dist/chrome-sandbox
 
       - name: Run tests
-        run: |
-          bun apps/desktop/node_modules/electron/install.js
-          sudo chown root:root apps/desktop/node_modules/electron/dist/chrome-sandbox
-          sudo chmod 4755 apps/desktop/node_modules/electron/dist/chrome-sandbox
-          xvfb-run -a bun run test
+        run: xvfb-run -a bun run test
 
   # Windows tests cover server and shared packages, not apps/web.
   test-windows:
