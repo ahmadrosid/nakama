@@ -1,4 +1,4 @@
-export interface CerebrasApiPricing {
+interface CerebrasApiPricing {
   completion?: string;
   prompt?: string;
 }
@@ -88,7 +88,7 @@ export const CEREBRAS_FALLBACK_MODELS: CerebrasModelRow[] = [
   },
 ];
 
-export function cerebrasPricingPerMillion(
+function cerebrasPricingPerMillion(
   pricing: CerebrasApiPricing | undefined
 ):
   | Pick<CerebrasModelRow, "inputPerMillionUsd" | "outputPerMillionUsd">
