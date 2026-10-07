@@ -55,6 +55,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateLlmUsageOrgScope);
   atomic(migrateToolOutputSavingsTable);
   atomic(migrateLlmTurnUsageTable);
+  atomic(migrateLlmUsageActorStatsTable);
   atomic(migrateAttachmentsTable);
   atomic(migrateAutomationRunsTable);
   atomic(migrateAutomationRunReadStateTable);
@@ -581,6 +582,49 @@ function migrateLlmTurnUsageTable(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS llm_turn_usage_org_bucket
       ON llm_turn_usage (org_id, bucket);
+  `);
+}
+
+/**
+ * LLM usage per org, per agent (profile), per user (#1626). An empty
+ * `profile_id` or `user_id` is the unattributed group.
+ *
+ * Totals recorded before this table existed carry no agent or user, so they
+ * move in as one unattributed row per org. That keeps the groups summing to the
+ * org total without guessing who ran up the old spend. The copy happens only
+ * when the table is created, so it is not repeated on later opens.
+ */
+function migrateLlmUsageActorStatsTable(db: Database): void {
+  const exists = db
+    .prepare(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'llm_usage_actor_stats'"
+    )
+    .get();
+  if (exists) {
+    return;
+  }
+
+  db.exec(`
+    CREATE TABLE llm_usage_actor_stats (
+      org_id TEXT NOT NULL,
+      profile_id TEXT NOT NULL DEFAULT '',
+      user_id TEXT NOT NULL DEFAULT '',
+      request_count INTEGER NOT NULL DEFAULT 0,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      estimated_cost_usd REAL NOT NULL DEFAULT 0,
+      tracked_since TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (org_id, profile_id, user_id)
+    );
+    INSERT INTO llm_usage_actor_stats (
+      org_id, profile_id, user_id, request_count, input_tokens, output_tokens,
+      estimated_cost_usd, tracked_since, updated_at
+    )
+    SELECT org_id, '', '', request_count, input_tokens, output_tokens,
+      estimated_cost_usd, tracked_since, updated_at
+    FROM llm_usage_stats
+    WHERE id = 'default';
   `);
 }
 

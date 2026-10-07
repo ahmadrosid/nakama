@@ -315,6 +315,8 @@ describe("generate_image tool persistence (U4)", () => {
       input: number;
       orgId: string;
       output: number;
+      profileId: string;
+      userId?: string;
     }> = [];
 
     const result = await runGenerateImageTool(
@@ -324,6 +326,7 @@ describe("generate_image tool persistence (U4)", () => {
         orgId: "org_1",
         profileId: "profile_1",
         sessionId: "session_1",
+        userId: "user_1",
         workspaceRoot,
       },
       {
@@ -338,8 +341,8 @@ describe("generate_image tool persistence (U4)", () => {
         }),
         getUserConfig: () =>
           openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
-        recordUsage: (model, input, output, _instance, orgId) => {
-          usage.push({ input, model, orgId, output });
+        recordUsage: (model, input, output, _instance, attribution) => {
+          usage.push({ input, model, output, ...attribution });
         },
       }
     );
@@ -372,7 +375,14 @@ describe("generate_image tool persistence (U4)", () => {
       sizeBytes: PNG_BYTES.byteLength,
     });
     expect(usage).toEqual([
-      { input: 8, model: "gpt-image-2", orgId: "org_1", output: 200 },
+      {
+        input: 8,
+        model: "gpt-image-2",
+        orgId: "org_1",
+        output: 200,
+        profileId: "profile_1",
+        userId: "user_1",
+      },
     ]);
   });
 

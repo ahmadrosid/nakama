@@ -40,7 +40,7 @@ describe("usage tracking", () => {
       providerReporting(usage),
       tracker,
       "claude-sonnet-4-6",
-      ORG_ID
+      { orgId: ORG_ID }
     ).generateChat(input);
     expect(priced.usage?.costUsd).toBeCloseTo(
       estimateUsageCostUsd("claude-sonnet-4-6", 123, 45),
@@ -53,7 +53,7 @@ describe("usage tracking", () => {
       providerReporting(usage),
       tracker,
       "gpt-4o",
-      ORG_ID
+      { orgId: ORG_ID }
     ).generateChat(input);
     expect(offCatalog.usage).toEqual({ ...usage, modelId: "gpt-4o" });
 
@@ -61,10 +61,47 @@ describe("usage tracking", () => {
       providerReporting(usage),
       tracker,
       "my-local-model",
-      ORG_ID,
+      { orgId: ORG_ID },
       { provider: "openai_compatible" }
     ).generateChat(input);
     expect(unpriced.usage).toEqual({ ...usage, modelId: "my-local-model" });
+  });
+
+  test("counts estimated tokens under the agent and user that made the call", async () => {
+    const tracker = new LlmUsageTracker(createInMemoryDatabaseAdapter());
+    const provider: ProviderClient = {
+      generateChat: () =>
+        Promise.resolve({
+          assistantMessage: { content: "Hello there", role: "assistant" },
+          content: "Hello there",
+          toolCalls: [],
+        }),
+      generateText: () => Promise.resolve({ content: "unused" }),
+      name: "openai",
+      streamChat: () => Promise.reject(new Error("unused")),
+    };
+
+    const result = await wrapProviderWithUsageTracking(
+      provider,
+      tracker,
+      "gpt-4o",
+      { orgId: ORG_ID, profileId: "agent_1", userId: "user_1" }
+    ).generateChat({
+      messages: [{ content: "hi", role: "user" }],
+      system: "system",
+    });
+
+    expect(result.usage?.estimated).toBe(true);
+    const { agents, users } = await tracker.getStatsByActor(ORG_ID);
+    expect(agents).toMatchObject([
+      {
+        id: "agent_1",
+        inputTokens: result.usage?.inputTokens,
+        outputTokens: result.usage?.outputTokens,
+        requestCount: 1,
+      },
+    ]);
+    expect(users).toMatchObject([{ id: "user_1", requestCount: 1 }]);
   });
 
   test("prefers provider-reported usage for chat calls", async () => {
@@ -92,12 +129,9 @@ describe("usage tracking", () => {
       },
     };
 
-    const wrapped = wrapProviderWithUsageTracking(
-      provider,
-      tracker,
-      "gpt-4o",
-      ORG_ID
-    );
+    const wrapped = wrapProviderWithUsageTracking(provider, tracker, "gpt-4o", {
+      orgId: ORG_ID,
+    });
     await wrapped.generateChat({
       messages: [{ content: "hi", role: "user" }],
       system: "system",
@@ -133,7 +167,7 @@ describe("usage tracking", () => {
       provider,
       tracker,
       "gpt-5.5",
-      ORG_ID,
+      { orgId: ORG_ID },
       {
         providerInstance: {
           apiKey: "test",
@@ -188,12 +222,9 @@ describe("usage tracking", () => {
       },
     };
 
-    const wrapped = wrapProviderWithUsageTracking(
-      provider,
-      tracker,
-      "gpt-4o",
-      ORG_ID
-    );
+    const wrapped = wrapProviderWithUsageTracking(provider, tracker, "gpt-4o", {
+      orgId: ORG_ID,
+    });
     const result = await wrapped.generateChat({
       messages: [{ content: "hi", role: "user" }],
       system: "system",
@@ -224,12 +255,9 @@ describe("usage tracking", () => {
       },
     };
 
-    const wrapped = wrapProviderWithUsageTracking(
-      provider,
-      tracker,
-      "gpt-4o",
-      ORG_ID
-    );
+    const wrapped = wrapProviderWithUsageTracking(provider, tracker, "gpt-4o", {
+      orgId: ORG_ID,
+    });
     const result = await wrapped.generateChat({
       messages: [{ content: "hi", role: "user" }],
       system: "system",

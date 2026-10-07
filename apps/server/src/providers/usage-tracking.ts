@@ -9,7 +9,10 @@ import type {
   StreamChatHandlers,
 } from "@nakama/core";
 import { estimateUserContentTokens } from "@nakama/core";
-import type { LlmUsageTracker } from "../services/llm-usage-tracker";
+import type {
+  LlmUsageRecordOptions,
+  LlmUsageTracker,
+} from "../services/llm-usage-tracker";
 import type { PricingContext } from "./pricing";
 
 function estimateTokens(text: string): number {
@@ -205,7 +208,7 @@ export function wrapProviderWithUsageTracking(
   provider: ProviderClient,
   tracker: LlmUsageTracker,
   modelId: string,
-  orgId: string,
+  attribution: Pick<LlmUsageRecordOptions, "orgId" | "profileId" | "userId">,
   pricingContext: PricingContext = {}
 ): ProviderClient {
   function withRecordedUsage(
@@ -219,8 +222,8 @@ export function wrapProviderWithUsageTracking(
       result.usage?.outputTokens ?? estimateChatOutputTokens(result);
     const cachedInputTokens = result.usage?.cachedInputTokens;
     const costUsd = tracker.record(modelId, inputTokens, outputTokens, {
+      ...attribution,
       cachedInputTokens: cachedInputTokens ?? 0,
-      orgId,
       pricingContext,
     });
 
@@ -254,7 +257,7 @@ export function wrapProviderWithUsageTracking(
       const outputTokens =
         result.usage?.outputTokens ?? estimateTokens(result.content);
       tracker.record(modelId, inputTokens, outputTokens, {
-        orgId,
+        ...attribution,
         pricingContext,
       });
       return result;

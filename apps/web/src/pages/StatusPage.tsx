@@ -1,4 +1,6 @@
 import type {
+  LlmUsageGroupStats,
+  LlmUsageStats,
   LlmUsageStatus,
   SystemStatusResponse,
 } from "@nakama/core/contract";
@@ -399,10 +401,12 @@ function LlmUsageTrackedBody({
           <Card className="w-full overflow-hidden shadow-none">
             <CardContent className="p-0">
               {usage.models.map((modelUsage) => (
-                <ModelUsageRow
+                <UsageRow
                   costEstimated={usage.costEstimated}
                   key={modelUsage.modelId}
+                  label={modelUsage.modelId}
                   maxTokens={maxModelTokens}
+                  monospace
                   usage={modelUsage}
                 />
               ))}
@@ -410,6 +414,53 @@ function LlmUsageTrackedBody({
           </Card>
         </div>
       ) : null}
+
+      {usage.agents?.length ? (
+        <UsageGroupList
+          costEstimated={usage.costEstimated}
+          groups={usage.agents}
+          title="By agent"
+        />
+      ) : null}
+
+      {usage.users?.length ? (
+        <UsageGroupList
+          costEstimated={usage.costEstimated}
+          groups={usage.users}
+          title="By user"
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function UsageGroupList({
+  title,
+  groups,
+  costEstimated,
+}: {
+  title: string;
+  groups: LlmUsageGroupStats[];
+  costEstimated: boolean;
+}) {
+  const maxTokens = Math.max(...groups.map((group) => group.totalTokens), 0);
+
+  return (
+    <div className="space-y-3">
+      <h2 className="type-section-title">{title}</h2>
+      <Card className="w-full overflow-hidden shadow-none">
+        <CardContent className="p-0">
+          {groups.map((group) => (
+            <UsageRow
+              costEstimated={costEstimated}
+              key={group.id ?? ""}
+              label={group.id ? (group.name ?? group.id) : "Unattributed"}
+              maxTokens={maxTokens}
+              usage={group}
+            />
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -541,12 +592,16 @@ function CompactUsageStat({
   );
 }
 
-function ModelUsageRow({
+function UsageRow({
+  label,
+  monospace = false,
   usage,
   costEstimated,
   maxTokens,
 }: {
-  usage: LlmUsageStatus["models"][number];
+  label: string;
+  monospace?: boolean;
+  usage: LlmUsageStats;
   costEstimated: boolean;
   maxTokens: number;
 }) {
@@ -555,8 +610,13 @@ function ModelUsageRow({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 space-y-2 lg:flex-1">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <p className="truncate font-mono text-foreground text-sm">
-              {usage.modelId}
+            <p
+              className={cn(
+                "truncate text-foreground text-sm",
+                monospace && "font-mono"
+              )}
+            >
+              {label}
             </p>
             <p className="text-muted-foreground text-xs">
               {usage.totalTokens.toLocaleString()} tokens

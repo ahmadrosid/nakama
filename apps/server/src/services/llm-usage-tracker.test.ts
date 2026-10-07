@@ -105,6 +105,60 @@ describe("LlmUsageTracker", () => {
     });
   });
 
+  test("splits usage by agent and by user, and both add up to the org total", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const tracker = new LlmUsageTracker(db);
+
+    tracker.record("gpt-4o", 100, 10, {
+      orgId: ORG_A,
+      profileId: "agent_1",
+      userId: "user_1",
+    });
+    tracker.record("gpt-4o", 200, 20, {
+      orgId: ORG_A,
+      profileId: "agent_1",
+      userId: "user_2",
+    });
+    // An automation run: an agent, no user.
+    tracker.record("gpt-4o", 300, 30, { orgId: ORG_A, profileId: "agent_2" });
+    // A workspace call: no agent, no user.
+    tracker.record("gpt-4o", 400, 40, { orgId: ORG_A });
+    tracker.record("gpt-4o", 9000, 900, {
+      orgId: ORG_B,
+      profileId: "agent_1",
+      userId: "user_1",
+    });
+
+    const { agents, users } = await tracker.getStatsByActor(ORG_A);
+    const pick = (groups: typeof agents) =>
+      Object.fromEntries(
+        groups.map((group) => [
+          group.id ?? "unattributed",
+          [group.requestCount, group.inputTokens, group.outputTokens],
+        ])
+      );
+
+    expect(pick(agents)).toEqual({
+      agent_1: [2, 300, 30],
+      agent_2: [1, 300, 30],
+      unattributed: [1, 400, 40],
+    });
+    expect(pick(users)).toEqual({
+      unattributed: [2, 700, 70],
+      user_1: [1, 100, 10],
+      user_2: [1, 200, 20],
+    });
+
+    const total = await tracker.getStats(ORG_A);
+    for (const groups of [agents, users]) {
+      const sum = (key: "requestCount" | "totalTokens" | "estimatedCostUsd") =>
+        groups.reduce((acc, group) => acc + group[key], 0);
+      expect(sum("requestCount")).toBe(total.requestCount);
+      expect(sum("totalTokens")).toBe(total.totalTokens);
+      expect(sum("estimatedCostUsd")).toBeCloseTo(total.estimatedCostUsd, 12);
+    }
+  });
+
   test("returns zero totals without a database", async () => {
     const tracker = new LlmUsageTracker();
 
@@ -113,5 +167,9 @@ describe("LlmUsageTracker", () => {
       requestCount: 0,
     });
     expect(await tracker.getStatsByModel(ORG_A)).toEqual([]);
+    expect(await tracker.getStatsByActor(ORG_A)).toEqual({
+      agents: [],
+      users: [],
+    });
   });
 });

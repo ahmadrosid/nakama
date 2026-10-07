@@ -990,7 +990,8 @@ export class AgentService {
 
   async generateImage(
     input: GenerateImageRequest,
-    orgId: string | null
+    orgId: string | null,
+    userId?: string | null
   ): Promise<GenerateImageResponse> {
     await this.ensureImageGenerationSettingsLoaded();
 
@@ -1022,7 +1023,11 @@ export class AgentService {
         result.model,
         usage.inputTokens,
         usage.outputTokens,
-        { orgId, pricingContext: { providerInstance: selection.instance } }
+        {
+          orgId,
+          pricingContext: { providerInstance: selection.instance },
+          userId,
+        }
       );
     }
 
@@ -1858,7 +1863,11 @@ export class AgentService {
       input.orgId,
       input.userId
     );
-    const harness = this.createHarnessForProfile(profile);
+    const harness = this.createHarnessForProfile(
+      profile,
+      profile.model,
+      input.userId
+    );
     const prompt = buildSubAgentPrompt(task, input.context);
 
     const session = createAgentChatSession(harness, {
@@ -3306,6 +3315,42 @@ export class AgentService {
       : [];
   }
 
+  /**
+   * Usage per agent and per user in one org, with display names. A deleted
+   * agent or user keeps its row so the groups still add up to the org total;
+   * it only loses its name.
+   */
+  async getLlmUsageStatsByActor(orgId: string) {
+    const byActor = await this.llmUsageTracker?.getStatsByActor(orgId);
+    if (!byActor) {
+      return { agents: [], users: [] };
+    }
+
+    const profileNames = new Map(
+      (await this.db.listProfilesForOrg(orgId)).map((profile) => [
+        profile.id,
+        profile.name,
+      ])
+    );
+    const users = await Promise.all(
+      byActor.users.map(async (group) => {
+        if (!group.id) {
+          return group;
+        }
+        const user = await this.db.getUserById(group.id);
+        return { ...group, name: user ? user.name || user.email : null };
+      })
+    );
+
+    return {
+      agents: byActor.agents.map((group) => ({
+        ...group,
+        name: group.id ? (profileNames.get(group.id) ?? null) : null,
+      })),
+      users,
+    };
+  }
+
   async configureProvider(
     request: ConfigureProviderRequest
   ): Promise<ConfigureProviderResponse> {
@@ -4015,6 +4060,8 @@ export class AgentService {
     providerInstance?: ProviderInstance | null;
     modelId?: string | null;
     orgId?: string | null;
+    profileId?: string | null;
+    userId?: string | null;
     thinking: ThinkingSettings;
   }): AgentDependencies {
     const providerInstance = options.providerInstance ?? null;
@@ -4026,7 +4073,11 @@ export class AgentService {
             options.provider,
             this.llmUsageTracker,
             options.modelId,
-            usageOrgId,
+            {
+              orgId: usageOrgId,
+              profileId: options.profileId,
+              userId: options.userId,
+            },
             {
               provider: providerInstance?.type ?? options.provider.name,
               providerInstance,
@@ -4387,7 +4438,11 @@ export class AgentService {
       ? this.normalizeSessionModelOverride(modelOverride)
       : profile.model;
     const compaction = this.resolveCompactionConfig(profile, selectedModel);
-    const harness = this.createHarnessForProfile(profile, selectedModel);
+    const harness = this.createHarnessForProfile(
+      profile,
+      selectedModel,
+      userId
+    );
     // Part of the "no tools" contract: session-history and channel-artifact
     // helpers are also platform groups, so a profile that resolved to zero
     // tools must not receive them either.
@@ -4483,7 +4538,7 @@ export class AgentService {
             visionProvider,
             this.llmUsageTracker,
             visionSelection.model,
-            orgId,
+            { orgId, profileId, userId },
             {
               provider: visionSelection.instance.type,
               providerInstance: visionSelection.instance,
@@ -4817,7 +4872,8 @@ export class AgentService {
 
   private createHarnessForProfile(
     profile: StoredProfileRecord,
-    selectedModel: string | null = profile.model
+    selectedModel: string | null = profile.model,
+    userId?: string | null
   ): AgentDependencies {
     const resolved = resolveProfileProviderSelection({
       defaultProviderId: this.userConfig?.defaultProviderId,
@@ -4829,6 +4885,7 @@ export class AgentService {
       return this.createHarness({
         modelId: null,
         orgId: profile.orgId,
+        profileId: profile.id,
         provider: null,
         providerInstance: null,
         thinking: this.resolveWorkspaceThinkingDefaults(),
@@ -4860,9 +4917,11 @@ export class AgentService {
     return this.createHarness({
       modelId: resolved.model,
       orgId: profile.orgId,
+      profileId: profile.id,
       provider: resolvedProvider,
       providerInstance: resolved.instance,
       thinking: this.resolveWorkspaceThinkingDefaults(),
+      userId,
     });
   }
 
