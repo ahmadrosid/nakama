@@ -13,7 +13,11 @@ import {
 import { SUPER_BOT_SYSTEM_PROMPT } from "./constants";
 import type { DatabaseAdapter, StoredProfileRecord } from "./types";
 
-const DEFAULT_BUILTIN_TOOL_IDS = Object.values(BUILTIN_TOOL_IDS);
+// The mailbox is one config for the whole install, so email is opt-in. This
+// list is re-applied on every boot and would hand it back after an unassign.
+const DEFAULT_BUILTIN_TOOL_IDS = Object.values(BUILTIN_TOOL_IDS).filter(
+  (toolId) => toolId !== BUILTIN_TOOL_IDS.email
+);
 
 export async function ensureProfileDefaultBuiltinTools(
   db: DatabaseAdapter,
