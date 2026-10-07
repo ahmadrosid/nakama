@@ -928,12 +928,17 @@ function PluginRowMenu({
   ] as const;
   const { pinned, toggle: togglePin } = usePinnedPlugins();
   const canPin = plugin?.lifecycleState === "enabled" && plugin.ui !== null;
+  const canManageAccess =
+    canManageAgentAccess && plugin?.lifecycleState === "enabled";
+  const visibleSecondaryActions = canManage
+    ? secondaryActions.filter(([, , visible]) => visible)
+    : [];
   const hasMenu =
-    !detail ||
-    canPin ||
-    (canManageAgentAccess && plugin?.lifecycleState === "enabled") ||
-    (canManage && secondaryActions.some(([, , visible]) => visible));
-  return hasMenu ? (
+    !detail || canPin || canManageAccess || visibleSecondaryActions.length > 0;
+  if (!hasMenu) {
+    return null;
+  }
+  return (
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
@@ -965,7 +970,7 @@ function PluginRowMenu({
               : "Pin to sidebar"}
           </DropdownMenuItem>
         ) : null}
-        {canManageAgentAccess && plugin?.lifecycleState === "enabled" ? (
+        {canManageAccess ? (
           <DropdownMenuItem
             disabled={busy}
             onClick={() => onAction("access", menuRef.current)}
@@ -973,25 +978,23 @@ function PluginRowMenu({
             Manage agent access
           </DropdownMenuItem>
         ) : null}
-        {secondaryActions
-          .filter(([, , visible]) => canManage && visible)
-          .map(([type, label]) => (
-            <DropdownMenuItem
-              disabled={busy}
-              key={type}
-              onClick={() => onAction(type, menuRef.current)}
-              variant={
-                type === "purge" || type === "uninstall"
-                  ? "destructive"
-                  : "default"
-              }
-            >
-              {label}
-            </DropdownMenuItem>
-          ))}
+        {visibleSecondaryActions.map(([type, label]) => (
+          <DropdownMenuItem
+            disabled={busy}
+            key={type}
+            onClick={() => onAction(type, menuRef.current)}
+            variant={
+              type === "purge" || type === "uninstall"
+                ? "destructive"
+                : "default"
+            }
+          >
+            {label}
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
-  ) : null;
+  );
 }
 
 function PluginRowDetails({

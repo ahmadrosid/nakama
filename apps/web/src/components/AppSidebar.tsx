@@ -94,9 +94,10 @@ export function AppSidebar({
     .filter((item) => SIDEBAR_PAGE_IDS.includes(item.id));
   const { data: orgPlugins = [] } = useOrgPlugins();
   const { pinned } = usePinnedPlugins();
+  const pinnedIds = new Set(pinned);
   // Built from the enabled list, so a pin hides while its plugin is off.
   const pinnedPlugins = enabledPluginNavEntries(orgPlugins).filter((entry) =>
-    pinned.includes(entry.pluginId)
+    pinnedIds.has(entry.pluginId)
   );
   const activePluginId = pluginIdFromPath(location.pathname);
   const onPinnedPlugin = pinnedPlugins.some(
