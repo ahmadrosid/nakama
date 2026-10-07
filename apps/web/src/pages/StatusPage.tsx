@@ -8,14 +8,7 @@ import type {
 import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
 import { cn } from "@nakama/ui/utils";
-import {
-  ArrowDownLeft01Icon,
-  ArrowUpRight01Icon,
-  type Clock01Icon,
-  Coins01Icon,
-  SparklesIcon,
-  ZapIcon,
-} from "hugeicons-react";
+import type { Clock01Icon } from "hugeicons-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { OrgLlmQuotaCard } from "@/components/settings/OrgLlmQuotaCard";
@@ -293,38 +286,6 @@ function llmUsageCostNote(
   return "Add input/output $/1M per model in Customize → AI Providers → Manage models to estimate cost.";
 }
 
-function LlmUsageHeader({ usage }: { usage: LlmUsageStatus }) {
-  return (
-    <div className="flex flex-wrap items-start justify-between gap-4 px-4 py-3">
-      <div className="min-w-0 space-y-1">
-        <div className="flex items-center gap-2">
-          <h2 className="type-section-title">LLM usage</h2>
-          {usage.providerConfigured ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 font-medium text-2xs text-emerald-700 dark:text-emerald-300">
-              <span
-                aria-hidden
-                className="size-1.5 rounded-full bg-emerald-500"
-              />
-              Tracking
-            </span>
-          ) : null}
-        </div>
-        <p className="text-muted-foreground text-sm">
-          Estimated spend and token volume since the server started.
-        </p>
-      </div>
-
-      {usage.providerConfigured && usage.provider ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center rounded-full border border-border bg-muted/30 px-2.5 py-1 font-medium text-foreground text-xs">
-            {formatProviderLabel(usage.provider, usage.displayName)}
-          </span>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function LlmUsageTrackedBody({
   usage,
   modelLabel,
@@ -336,60 +297,6 @@ function LlmUsageTrackedBody({
 
   return (
     <div className="space-y-8">
-      <Card className="w-full overflow-hidden shadow-none">
-        <CardContent className="p-0">
-          <div className="divide-y divide-border">
-            <CompactUsageStat
-              icon={Coins01Icon}
-              label="API cost"
-              value={
-                usage.costEstimated ? formatUsd(usage.estimatedCostUsd) : "—"
-              }
-            />
-            <CompactUsageStat
-              icon={ZapIcon}
-              label="Requests"
-              value={usage.requestCount.toLocaleString()}
-            />
-            <CompactUsageStat
-              icon={ArrowDownLeft01Icon}
-              label="Input"
-              value={usage.inputTokens.toLocaleString()}
-            />
-            <CompactUsageStat
-              icon={ArrowUpRight01Icon}
-              label="Output"
-              value={usage.outputTokens.toLocaleString()}
-            />
-            <CompactUsageStat
-              icon={SparklesIcon}
-              label="Total"
-              value={usage.totalTokens.toLocaleString()}
-            />
-          </div>
-
-          <div className="border-border border-t px-4 py-3">
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-              <p className="font-medium text-muted-foreground text-xs uppercase tracking-[0.12em]">
-                Token mix
-              </p>
-              <p className="text-muted-foreground text-xs tabular-nums">
-                {usage.inputTokens.toLocaleString()} in /{" "}
-                {usage.outputTokens.toLocaleString()} out
-              </p>
-            </div>
-            <TokenMixBar
-              inputTokens={usage.inputTokens}
-              outputTokens={usage.outputTokens}
-            />
-          </div>
-
-          <p className="px-4 pb-3 text-muted-foreground text-xs leading-relaxed">
-            {llmUsageCostNote(usage, modelLabel, trackedModelCount)}
-          </p>
-        </CardContent>
-      </Card>
-
       <UsageDashboard usage={usage} />
 
       {usage.agents?.length ? (
@@ -399,6 +306,10 @@ function LlmUsageTrackedBody({
           title="By agent"
         />
       ) : null}
+
+      <p className="px-4 text-muted-foreground text-xs">
+        {llmUsageCostNote(usage, modelLabel, trackedModelCount)}
+      </p>
     </div>
   );
 }
@@ -455,9 +366,9 @@ function UsageDashboard({ usage }: { usage: LlmUsageStatus }) {
       <CardContent className="grid p-0 md:grid-cols-2">
         <UsagePanel
           aside={
-            daily[selected]
-              ? `${formatUsageDay(daily[selected].day)} · ${formatMetric(metric(daily[selected]))}`
-              : null
+            activeIndex !== null && daily[activeIndex]
+              ? `${formatUsageDay(daily[activeIndex].day)} · ${formatMetric(metric(daily[activeIndex]))}`
+              : `${formatMetric(metric(usage))} · ${usage.requestCount.toLocaleString()} requests`
           }
           title="AI spend"
         >
@@ -861,11 +772,6 @@ function LlmUsageBody({ usage }: { usage: LlmUsageStatus }) {
 function LlmUsageSection({ usage }: { usage: LlmUsageStatus }) {
   return (
     <section className="min-w-0 space-y-8">
-      <Card className="w-full shadow-none">
-        <CardContent className="p-0">
-          <LlmUsageHeader usage={usage} />
-        </CardContent>
-      </Card>
       <LlmUsageBody usage={usage} />
 
       <div className="px-4">
@@ -897,57 +803,6 @@ function LlmUsageEmptyState({
         {action ? <div className="mt-4">{action}</div> : null}
       </CardContent>
     </Card>
-  );
-}
-
-function TokenMixBar({
-  inputTokens,
-  outputTokens,
-}: {
-  inputTokens: number;
-  outputTokens: number;
-}) {
-  const total = inputTokens + outputTokens;
-  const inputPercent = total > 0 ? (inputTokens / total) * 100 : 0;
-  const outputPercent = total > 0 ? 100 - inputPercent : 0;
-
-  return (
-    <div
-      aria-label={`Input ${inputPercent.toFixed(0)} percent, output ${outputPercent.toFixed(0)} percent`}
-      className="flex h-2.5 overflow-hidden rounded-full bg-muted"
-      role="img"
-    >
-      <div
-        className="bg-primary/80 transition-[width] duration-300 motion-reduce:transition-none"
-        style={{ width: `${inputPercent}%` }}
-      />
-      <div
-        className="bg-emerald-500/80 transition-[width] duration-300 motion-reduce:transition-none"
-        style={{ width: `${outputPercent}%` }}
-      />
-    </div>
-  );
-}
-
-function CompactUsageStat({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof Clock01Icon;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-      <div className="flex items-center gap-2">
-        <Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-        <p className="font-medium text-foreground text-sm">{label}</p>
-      </div>
-      <p className="font-medium text-foreground text-sm tabular-nums">
-        {value}
-      </p>
-    </div>
   );
 }
 

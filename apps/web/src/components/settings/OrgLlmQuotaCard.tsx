@@ -4,6 +4,11 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/context/use-auth";
 import { client, formatError } from "@/lib/client";
 
+const compactNumber = new Intl.NumberFormat(undefined, {
+  maximumFractionDigits: 1,
+  notation: "compact",
+});
+
 export function OrgLlmQuotaCard() {
   const { activeOrg } = useAuth();
   const [quotaState, setQuotaState] = useState<{
@@ -46,6 +51,15 @@ export function OrgLlmQuotaCard() {
 
   if (!activeOrg || activeOrg.role !== "admin") {
     return null;
+  }
+
+  if (quota && !quota.tokenLimit && !quota.turnLimit) {
+    return (
+      <p className="px-4 text-muted-foreground text-sm tabular-nums">
+        This month: {quota.turns.toLocaleString()} turns ·{" "}
+        {compactNumber.format(quota.tokens)} tokens · no limit
+      </p>
+    );
   }
 
   return (
