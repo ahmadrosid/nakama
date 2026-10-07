@@ -345,9 +345,15 @@ export function useChatPage() {
     () =>
       effectiveProfileModelSelection(
         sessionModel ?? activeProfile?.model,
-        providerModelGroups
+        providerModelGroups,
+        models?.currentProviderId
       ),
-    [activeProfile?.model, providerModelGroups, sessionModel]
+    [
+      activeProfile?.model,
+      models?.currentProviderId,
+      providerModelGroups,
+      sessionModel,
+    ]
   );
 
   const renderModelLabel = useCallback(

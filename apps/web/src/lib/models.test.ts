@@ -3,6 +3,7 @@ import { USER_PROVIDER_NAMES } from "@nakama/core/provider-resolution";
 import {
   appendOpenRouterModelRow,
   buildCreateProviderRequest,
+  effectiveProfileModelSelection,
   encodeModelSelection,
   filterVisionCapableProviderGroups,
   firstAvailableProviderOption,
@@ -358,6 +359,34 @@ describe("profileModelSelectionValue", () => {
     expect(profileModelSelectionValue("openai-1::gpt-5.6-luna", groups)).toBe(
       "openai-1::gpt-5.6-luna"
     );
+  });
+});
+
+describe("effectiveProfileModelSelection", () => {
+  test("uses the active provider's default when the profile has no model", () => {
+    const groups = [
+      ...group("openai-1", "openai"),
+      {
+        models: [
+          {
+            default: true,
+            id: "deepseek/deepseek-v4-flash-0731",
+            name: "DeepSeek V4 Flash 0731",
+            provider: "netra" as const,
+          },
+        ],
+        providerId: "netra-1",
+        providerLabel: "Netra Runtime",
+      },
+    ];
+
+    expect(effectiveProfileModelSelection(null, groups, "netra-1")).toBe(
+      "netra-1::deepseek/deepseek-v4-flash-0731"
+    );
+    expect(effectiveProfileModelSelection(null, groups, null)).toBeNull();
+    expect(
+      effectiveProfileModelSelection("openai-1::model-1", groups, "netra-1")
+    ).toBe("openai-1::model-1");
   });
 });
 
