@@ -249,7 +249,7 @@ for (const role of ["member", "viewer"] as const) {
   }
 }
 
-function createApp() {
+function createApp(systemStatus?: object) {
   const calls: string[] = [];
   const record =
     (name: string) =>
@@ -289,13 +289,18 @@ function createApp() {
       startWorker: record("startWorker"),
       stopWorker: record("stopWorker"),
     } as unknown as ServerOptions["workerManager"],
+    systemStatus,
   });
 
   return { app, authService, calls, databaseAdapter };
 }
 
-async function login(role: OrgRole, isPlatformAdmin = false) {
-  const { app, authService, calls, databaseAdapter } = createApp();
+async function login(
+  role: OrgRole,
+  isPlatformAdmin = false,
+  systemStatus?: object
+) {
+  const { app, authService, calls, databaseAdapter } = createApp(systemStatus);
   const suffix = isPlatformAdmin ? "_platform" : "";
   const email = `${role}${suffix}@example.com`;
   const userId = `user_${role}${suffix}`;
@@ -529,4 +534,31 @@ test("channel settings require an owner and keep sibling agents separate", async
     profileId: "agent_b",
     allowedPhones: ["628222222222"],
   });
+});
+
+describe("usage by agent and user is for admins only", () => {
+  for (const [role, isPlatformAdmin, expected] of [
+    ["admin", false, true],
+    ["member", true, true],
+    ["member", false, false],
+    ["viewer", false, false],
+  ] as const) {
+    test(`${role}${isPlatformAdmin ? " (platform admin)" : ""} -> ${expected}`, async () => {
+      const requested: unknown[] = [];
+      const { app, session } = await login(role, isPlatformAdmin, {
+        getStatus: async (_orgId: unknown, options: unknown) => {
+          requested.push(options);
+          return { ok: true };
+        },
+      });
+
+      const response = await callRoute(app, session, {
+        method: "GET",
+        path: "/v1/system/status",
+      });
+
+      expect(response.status).toBe(200);
+      expect(requested).toEqual([{ includeUsageByActor: expected }]);
+    });
+  }
 });

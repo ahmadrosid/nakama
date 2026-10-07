@@ -1882,9 +1882,11 @@ export function registerModelRoutes(
     requireNotViewerFromContext(c);
     const body = await readJson<GenerateImageRequest>(c.req.raw);
 
+    const auth = getRequestAuth(c);
+
     try {
       return json<GenerateImageResponse>(
-        await agent.generateImage(body, getRequestAuth(c).activeOrgId ?? null)
+        await agent.generateImage(body, auth.activeOrgId ?? null, auth.user.id)
       );
     } catch (error) {
       if (error instanceof NakamaApiError) {

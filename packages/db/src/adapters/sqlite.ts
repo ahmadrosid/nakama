@@ -27,6 +27,7 @@ import type {
   StoredBrowserSessionRecord,
   StoredComposioToolkitRecord,
   StoredComposioUserConnectionRecord,
+  StoredLlmUsageActorStatsRecord,
   StoredLlmUsageModelStatsRecord,
   StoredLlmUsageStatsRecord,
   StoredMcpServerRecord,
@@ -248,6 +249,18 @@ interface LlmUsageModelStatsRow {
   request_count: number;
   tracked_since: string;
   updated_at: string;
+}
+
+interface LlmUsageActorStatsRow {
+  estimated_cost_usd: number;
+  input_tokens: number;
+  org_id: string;
+  output_tokens: number;
+  profile_id: string;
+  request_count: number;
+  tracked_since: string;
+  updated_at: string;
+  user_id: string;
 }
 
 interface WorkspaceSettingsRow {
@@ -1243,6 +1256,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE org_id = ?
     ORDER BY request_count DESC, input_tokens + output_tokens DESC, model_id ASC
   `);
+  const listLlmUsageStatsByActorStmt = db.prepare(`
+    SELECT * FROM llm_usage_actor_stats
+    WHERE org_id = ?
+    ORDER BY request_count DESC, input_tokens + output_tokens DESC
+  `);
   const listMcpServersStmt = db.prepare("SELECT * FROM mcp_servers");
   const getMcpServerStmt = db.prepare("SELECT * FROM mcp_servers WHERE id = ?");
   const getMcpServerByNameStmt = db.prepare(
@@ -1497,6 +1515,28 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       input_tokens = llm_usage_model_stats.input_tokens + excluded.input_tokens,
       output_tokens = llm_usage_model_stats.output_tokens + excluded.output_tokens,
       estimated_cost_usd = llm_usage_model_stats.estimated_cost_usd + excluded.estimated_cost_usd,
+      updated_at = excluded.updated_at
+  `);
+  // An empty string stands for "no agent" or "no user": SQLite treats every
+  // NULL in a primary key as distinct, so NULL would split the unattributed group.
+  const incrementLlmUsageStatsByActorStmt = db.prepare(`
+    INSERT INTO llm_usage_actor_stats (
+      org_id,
+      profile_id,
+      user_id,
+      request_count,
+      input_tokens,
+      output_tokens,
+      estimated_cost_usd,
+      tracked_since,
+      updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(org_id, profile_id, user_id) DO UPDATE SET
+      request_count = llm_usage_actor_stats.request_count + excluded.request_count,
+      input_tokens = llm_usage_actor_stats.input_tokens + excluded.input_tokens,
+      output_tokens = llm_usage_actor_stats.output_tokens + excluded.output_tokens,
+      estimated_cost_usd = llm_usage_actor_stats.estimated_cost_usd + excluded.estimated_cost_usd,
       updated_at = excluded.updated_at
   `);
   const incrementToolOutputSavingsStmt = db.prepare(`
@@ -2148,6 +2188,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     // schema definitions, so the organization cascade cannot remove them.
     for (const table of [
       "llm_turn_usage",
+      "llm_usage_actor_stats",
       "llm_usage_stats",
       "llm_usage_model_stats",
       "mcp_servers",
@@ -3711,6 +3752,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
+    async incrementLlmUsageStatsByActor(orgId, actor, delta, trackedSince) {
+      const updatedAt = new Date().toISOString();
+      incrementLlmUsageStatsByActorStmt.run(
+        orgId,
+        actor.profileId?.trim() ?? "",
+        actor.userId?.trim() ?? "",
+        delta.requestCount,
+        delta.inputTokens,
+        delta.outputTokens,
+        delta.estimatedCostUsd,
+        trackedSince,
+        updatedAt
+      );
+    },
+
     async incrementLlmUsageStatsByModel(orgId, modelId, delta, trackedSince) {
       const updatedAt = new Date().toISOString();
       incrementLlmUsageStatsByModelStmt.run(
@@ -3965,6 +4021,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         outputTokens: row.output_tokens,
         turns: row.turns,
       }));
+    },
+
+    async listLlmUsageStatsByActor(orgId) {
+      return listLlmUsageStatsByActorStmt
+        .all(orgId)
+        .map((row) => toLlmUsageActorStatsRecord(row as LlmUsageActorStatsRow));
     },
 
     async listLlmUsageStatsByModel(orgId) {
@@ -5182,6 +5244,22 @@ function toLlmUsageStatsRecord(
     requestCount: row.request_count,
     trackedSince: row.tracked_since,
     updatedAt: row.updated_at,
+  };
+}
+
+function toLlmUsageActorStatsRecord(
+  row: LlmUsageActorStatsRow
+): StoredLlmUsageActorStatsRecord {
+  return {
+    estimatedCostUsd: row.estimated_cost_usd,
+    inputTokens: row.input_tokens,
+    orgId: row.org_id,
+    outputTokens: row.output_tokens,
+    profileId: row.profile_id || null,
+    requestCount: row.request_count,
+    trackedSince: row.tracked_since,
+    updatedAt: row.updated_at,
+    userId: row.user_id || null,
   };
 }
 

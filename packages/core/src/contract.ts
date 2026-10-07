@@ -217,13 +217,23 @@ export interface LlmUsageModelStats extends LlmUsageStats {
   modelId: string;
 }
 
+/** One agent's or one user's share of the org ledger. A null `id` is the unattributed group. */
+export interface LlmUsageGroupStats extends LlmUsageStats {
+  id: string | null;
+  name: string | null;
+}
+
 export interface LlmUsageStatus extends LlmUsageStats {
+  /** Org admins and platform admins only. */
+  agents?: LlmUsageGroupStats[];
   costEstimated: boolean;
   currentModel: string | null;
   displayName: string | null;
   models: LlmUsageModelStats[];
   provider: ProviderName | null;
   providerConfigured: boolean;
+  /** Org admins and platform admins only. */
+  users?: LlmUsageGroupStats[];
 }
 
 export interface McpStatus {

@@ -1263,6 +1263,59 @@ describe("llm usage org scope", () => {
   });
 });
 
+describe("llm usage by agent and user", () => {
+  test("moves existing org totals into the unattributed group once", () => {
+    const db = new Database(":memory:");
+    try {
+      migrateDatabase(db);
+      // The ledger as it was before usage had an agent or user.
+      db.exec(`
+        DROP TABLE llm_usage_actor_stats;
+        INSERT INTO llm_usage_stats (
+          org_id, id, request_count, input_tokens, output_tokens,
+          estimated_cost_usd, tracked_since, updated_at
+        ) VALUES
+          ('org-a', 'default', 7, 900, 300, 1.25, '2026-01-01', '2026-02-01'),
+          ('org-b', 'default', 2, 50, 10, 0.5, '2026-01-03', '2026-02-01');
+      `);
+
+      migrateDatabase(db);
+      const rows = () =>
+        db
+          .query(
+            "SELECT org_id, profile_id, user_id, request_count, input_tokens, output_tokens, estimated_cost_usd FROM llm_usage_actor_stats ORDER BY org_id"
+          )
+          .all();
+      const migrated = rows();
+      expect(migrated).toEqual([
+        {
+          estimated_cost_usd: 1.25,
+          input_tokens: 900,
+          org_id: "org-a",
+          output_tokens: 300,
+          profile_id: "",
+          request_count: 7,
+          user_id: "",
+        },
+        {
+          estimated_cost_usd: 0.5,
+          input_tokens: 50,
+          org_id: "org-b",
+          output_tokens: 10,
+          profile_id: "",
+          request_count: 2,
+          user_id: "",
+        },
+      ]);
+
+      migrateDatabase(db);
+      expect(rows()).toEqual(migrated);
+    } finally {
+      db.close();
+    }
+  });
+});
+
 test("upgrading skill proposals preserves pending content and adds supporting files once", () => {
   const db = new Database(":memory:");
   try {

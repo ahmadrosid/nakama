@@ -177,10 +177,10 @@ agent.setServerTools({
       inputTokens,
       outputTokens,
       providerInstance,
-      orgId
+      attribution
     ) => {
       llmUsageTracker.record(modelId, inputTokens, outputTokens, {
-        orgId,
+        ...attribution,
         pricingContext: { providerInstance },
       });
     },

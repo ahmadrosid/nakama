@@ -210,6 +210,19 @@ export interface StoredLlmUsageModelStatsRecord {
   updatedAt: string;
 }
 
+/** One org's ledger for one agent and user pair. Null means the call had no such context. */
+export interface StoredLlmUsageActorStatsRecord {
+  estimatedCostUsd: number;
+  inputTokens: number;
+  orgId: string;
+  outputTokens: number;
+  profileId: string | null;
+  requestCount: number;
+  trackedSince: string;
+  updatedAt: string;
+  userId: string | null;
+}
+
 export interface StoredWorkspaceSettingsRecord {
   /** Workspace-global interval for refreshing automation schedules and curator work. */
   automationWorkerPollIntervalMs: number;
@@ -312,6 +325,12 @@ export interface StoredProfileComposioToolkitRecord {
   allowedActions: string[] | null;
   profileId: string;
   toolkitId: string;
+}
+
+/** Who caused an LLM call. A missing ID puts the call in the unattributed group. */
+export interface LlmUsageActor {
+  profileId?: string | null;
+  userId?: string | null;
 }
 
 export interface LlmUsageStatsDelta {
@@ -1010,6 +1029,12 @@ export interface DatabaseAdapter {
     delta: LlmUsageStatsDelta,
     trackedSince: string
   ): Promise<void>;
+  incrementLlmUsageStatsByActor(
+    orgId: string,
+    actor: LlmUsageActor,
+    delta: LlmUsageStatsDelta,
+    trackedSince: string
+  ): Promise<void>;
   incrementLlmUsageStatsByModel(
     orgId: string,
     modelId: string,
@@ -1086,6 +1111,9 @@ export interface DatabaseAdapter {
     profileId: string
   ): Promise<string[]>;
   listLlmTurnUsage(orgId: string): Promise<StoredLlmTurnUsageRecord[]>;
+  listLlmUsageStatsByActor(
+    orgId: string
+  ): Promise<StoredLlmUsageActorStatsRecord[]>;
   listLlmUsageStatsByModel(
     orgId: string
   ): Promise<StoredLlmUsageModelStatsRecord[]>;
