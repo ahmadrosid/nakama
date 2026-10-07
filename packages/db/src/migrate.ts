@@ -67,6 +67,20 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateRemoveGoogleMeetPlugin);
   atomic(migrateFilePinsTable);
   atomic(migrateNotificationWebhookDeliveriesTable);
+  atomic(migrateManagedSecretsTable);
+}
+
+function migrateManagedSecretsTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS managed_secrets (
+      scope TEXT NOT NULL,
+      name TEXT NOT NULL,
+      source TEXT NOT NULL CHECK(source IN ('environment', 'settings')),
+      encrypted_value TEXT,
+      version INTEGER NOT NULL DEFAULT 1,
+      PRIMARY KEY (scope, name)
+    );
+  `);
 }
 
 function migrateSessionAppUserId(db: Database): void {

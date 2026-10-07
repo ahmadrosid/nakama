@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   clearAutomationWorkerHeartbeat,
-  saveComposioConfig,
   type WorkerProcessInfo,
   writeAutomationWorkerHeartbeat,
 } from "@nakama/core";
@@ -24,6 +23,7 @@ afterEach(async () => {
   }
 
   delete process.env.NAKAMA_CONFIG_DIR;
+  delete process.env.COMPOSIO_API_KEY;
 });
 
 async function withConfigDir(): Promise<void> {
@@ -150,7 +150,7 @@ describe("SystemStatusService", () => {
 
   test("probes Composio reachability on system status when configured", async () => {
     await withConfigDir();
-    await saveComposioConfig({ apiKey: "test-key" });
+    process.env.COMPOSIO_API_KEY = "test-key";
 
     let reachabilityCalls = 0;
     const service = createService(null, {

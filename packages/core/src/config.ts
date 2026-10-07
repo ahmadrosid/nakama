@@ -16,6 +16,33 @@ export function readEnvValue(
   return readFileSync(filePath, "utf8").trim() || undefined;
 }
 
+type ManagedSecretResolver = (
+  scope: string,
+  name: string,
+  envNames: string[]
+) => Promise<string | null>;
+
+let managedSecretResolver: ManagedSecretResolver = async (
+  _scope,
+  _name,
+  envNames
+) =>
+  envNames.map((name) => readEnvValue(process.env, name)).find(Boolean) ?? null;
+
+export function setManagedSecretResolver(
+  resolver: ManagedSecretResolver
+): void {
+  managedSecretResolver = resolver;
+}
+
+export function resolveManagedSecret(
+  scope: string,
+  name: string,
+  envNames: string[] = []
+): Promise<string | null> {
+  return managedSecretResolver(scope, name, envNames);
+}
+
 export interface AppConfig {
   databaseUrl: string;
 }

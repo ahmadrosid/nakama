@@ -590,6 +590,54 @@ export function registerModelRoutes(
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "put",
+      operationId: "setProviderSecret",
+      path: "/v1/providers/{providerId}/secret",
+      request: {
+        params: providerIdParam,
+        body: {
+          content: {
+            "application/json": { schema: z.object({ apiKey: z.string() }) },
+          },
+          required: true,
+        },
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: updateProviderResponseSchema },
+          },
+          description: "Provider key saved",
+        },
+      },
+      summary: "Save a provider API key",
+      tags: ["Models"],
+    })
+  );
+  for (const [method, suffix, operationId] of [
+    ["delete", "", "clearProviderSecret"],
+    ["post", "/use-stored", "useStoredProviderSecret"],
+  ] as const) {
+    app.openAPIRegistry.registerPath(
+      createRoute({
+        method,
+        operationId,
+        path: `/v1/providers/{providerId}/secret${suffix}`,
+        request: { params: providerIdParam },
+        responses: {
+          200: {
+            content: {
+              "application/json": { schema: updateProviderResponseSchema },
+            },
+            description: "Provider key status",
+          },
+        },
+        tags: ["Models"],
+      })
+    );
+  }
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "put",
       operationId: "configureProvider",
       path: "/v1/settings/provider",
       request: {
@@ -1307,6 +1355,36 @@ export function registerModelRoutes(
       tags: ["Models"],
     })
   );
+  for (const [kind, requestSchema, responseSchema] of [
+    ["email", z.object({ password: z.string() }), emailSettingsSchema],
+    [
+      "web-search",
+      z.object({ provider: z.enum(["exa", "firecrawl"]), apiKey: z.string() }),
+      webSearchSettingsSchema,
+    ],
+    ["composio", z.object({ apiKey: z.string() }), composioSettingsSchema],
+  ] as const) {
+    app.openAPIRegistry.registerPath(
+      createRoute({
+        method: "put",
+        operationId: `set${kind.replace("-", "")}Secret`,
+        path: `/v1/settings/${kind}/secret`,
+        request: {
+          body: {
+            content: { "application/json": { schema: requestSchema } },
+            required: true,
+          },
+        },
+        responses: {
+          200: {
+            content: { "application/json": { schema: responseSchema } },
+            description: "Secret status",
+          },
+        },
+        tags: ["Models"],
+      })
+    );
+  }
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
@@ -1649,6 +1727,38 @@ export function registerModelRoutes(
     );
   });
 
+  app.put("/v1/providers/:providerId/secret", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const body = await readJson<{ apiKey: string }>(c.req.raw);
+    try {
+      return json<UpdateProviderResponse>(
+        await agent.setProviderSecret(
+          decodeURIComponent(c.req.param("providerId")),
+          body.apiKey
+        )
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
+    }
+  });
+  for (const [method, suffix, action] of [
+    ["delete", "", "clear"],
+    ["post", "/use-stored", "use-stored"],
+  ] as const) {
+    app[method](`/v1/providers/:providerId/secret${suffix}`, async (c) => {
+      requirePlatformAdminFromContext(c);
+      return json<UpdateProviderResponse>(
+        await agent.manageProviderSecret(c.req.param("providerId"), action)
+      );
+    });
+  }
+
   app.post("/v1/xai-oauth/device/start", async (c) => {
     const auth = requirePlatformAdminFromContext(c);
     const owner = JSON.stringify([auth.user.id, auth.activeOrgId]);
@@ -1919,6 +2029,24 @@ export function registerModelRoutes(
     }
   });
 
+  app.put("/v1/settings/email/secret", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const body = await readJson<{ password: string }>(c.req.raw);
+    try {
+      return json<EmailSettingsResponse>(
+        await agent.setEmailSecret(body.password)
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
+    }
+  });
+
   app.post("/v1/settings/email/test", async (c) => {
     const auth = requirePlatformAdminFromContext(c);
     const body = await readOptionalJson<SendEmailTestRequest>(c.req.raw, {});
@@ -1955,6 +2083,27 @@ export function registerModelRoutes(
       }
       const message = error instanceof Error ? error.message : String(error);
       return errorResponse(message, 400);
+    }
+  });
+
+  app.put("/v1/settings/web-search/secret", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const body = await readJson<{
+      provider: "exa" | "firecrawl";
+      apiKey: string;
+    }>(c.req.raw);
+    try {
+      return json<WebSearchSettingsResponse>(
+        await agent.setWebSearchSecret(body.provider, body.apiKey)
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
     }
   });
 
@@ -2317,6 +2466,43 @@ export function registerModelRoutes(
       return errorResponse(message, 400);
     }
   });
+  app.put("/v1/settings/composio/secret", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const body = await readJson<{ apiKey: string }>(c.req.raw);
+    try {
+      return json<ComposioSettingsResponse>(
+        await agent.setComposioSecret(body.apiKey)
+      );
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        return errorResponse(error.message, error.status);
+      }
+      return errorResponse(
+        error instanceof Error ? error.message : String(error),
+        400
+      );
+    }
+  });
+  for (const kind of ["email", "web-search", "composio"] as const) {
+    for (const [method, suffix, action] of [
+      ["delete", "", "clear"],
+      ["post", "/use-stored", "use-stored"],
+    ] as const) {
+      app.openAPIRegistry.registerPath(
+        createRoute({
+          method,
+          operationId: `${action === "clear" ? "clear" : "useStored"}${kind.replace("-", "")}Secret`,
+          path: `/v1/settings/${kind}/secret${suffix}`,
+          responses: { 200: { description: "Secret status" } },
+          tags: ["Settings"],
+        })
+      );
+      app[method](`/v1/settings/${kind}/secret${suffix}`, async (c) => {
+        requirePlatformAdminFromContext(c);
+        return json(await agent.manageSettingSecret(kind, action));
+      });
+    }
+  }
   app.get("/v1/settings/error-tracking", async (c) => {
     getRequestAuth(c);
     return json<ErrorTrackingSettingsResponse>(

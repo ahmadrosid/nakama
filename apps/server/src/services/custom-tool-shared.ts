@@ -14,10 +14,23 @@ import {
   permissiveObjectSchema,
   writeParsedConfigIni,
 } from "@nakama/core";
-import type { StoredToolRecord } from "@nakama/db";
+import type { DatabaseAdapter, StoredToolRecord } from "@nakama/db";
+import { type ManagedSecrets, toolSecretEnvName } from "./managed-secrets";
 
 const CREDENTIAL_SECTION_PREFIX = "tool-key.";
 const SETUP_SECTION_PREFIX = "tool-setup.";
+let toolSecrets: ManagedSecrets | null = null;
+
+export function setToolSecrets(secrets: ManagedSecrets): void {
+  toolSecrets = secrets;
+}
+
+function requireToolSecrets(): ManagedSecrets {
+  if (!toolSecrets) {
+    throw new Error("Tool secret store is not ready.");
+  }
+  return toolSecrets;
+}
 
 /**
  * Section names encode `[orgId, id]` as base64url so every entry belonging to
@@ -29,10 +42,6 @@ function encodeOrgScopedSection(
   id: string
 ): string {
   return `${prefix}${Buffer.from(JSON.stringify([orgId, id])).toString("base64url")}`;
-}
-
-function credentialSection(orgId: string, toolId: string): string {
-  return encodeOrgScopedSection(CREDENTIAL_SECTION_PREFIX, orgId, toolId);
 }
 
 function belongsToOrgSection(
@@ -69,8 +78,37 @@ export async function loadToolApiKey(
   orgId: string,
   toolId: string
 ): Promise<string | undefined> {
-  return (await readConfig()).sections[credentialSection(orgId, toolId)]
-    ?.api_key;
+  return (
+    (
+      await requireToolSecrets().resolve(orgId, `tool:${toolId}`, [
+        toolSecretEnvName(orgId, toolId),
+      ])
+    ).value ?? undefined
+  );
+}
+
+export async function getToolApiKeyStatus(orgId: string, toolId: string) {
+  const envName = toolSecretEnvName(orgId, toolId);
+  return {
+    ...(await requireToolSecrets().status(orgId, `tool:${toolId}`, [envName])),
+    envName,
+  };
+}
+
+export async function manageToolApiKey(
+  orgId: string,
+  toolId: string,
+  action: "clear" | "use-stored"
+) {
+  const secrets = requireToolSecrets();
+  if (action === "clear") {
+    await secrets.delete(orgId, `tool:${toolId}`);
+  } else {
+    await secrets.useStored(orgId, `tool:${toolId}`, [
+      toolSecretEnvName(orgId, toolId),
+    ]);
+  }
+  return getToolApiKeyStatus(orgId, toolId);
 }
 
 let credentialWrite: Promise<void> = Promise.resolve();
@@ -93,11 +131,11 @@ export function saveToolApiKey(
   value: unknown
 ): Promise<void> {
   const apiKey = validateApiKey(value);
-  const write = credentialWrite.then(async () => {
-    const parsed = await readConfig();
-    parsed.sections[credentialSection(orgId, toolId)] = { api_key: apiKey };
-    await writeParsedConfigIni(parsed.global, parsed.sections);
-  });
+  const write = credentialWrite.then(() =>
+    requireToolSecrets().save(orgId, `tool:${toolId}`, apiKey, [
+      toolSecretEnvName(orgId, toolId),
+    ])
+  );
   credentialWrite = write.catch(() => undefined);
   return write;
 }
@@ -115,7 +153,46 @@ export async function loadToolSetup(
   if (!value) {
     throw new NakamaApiError("Tool setup not found.", 404);
   }
-  return JSON.parse(value) as ToolSetupPlan;
+  const plan = JSON.parse(value) as ToolSetupPlan;
+  return isExpiredToolSetup(plan) ? rejectToolSetup(orgId, setupId) : plan;
+}
+
+const TOOL_SETUP_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+
+function isExpiredToolSetup(plan: ToolSetupPlan): boolean {
+  return (
+    (plan.status === "pending" || plan.status === "approved") &&
+    !!plan.createdAt &&
+    Date.now() - Date.parse(plan.createdAt) > TOOL_SETUP_LIFETIME_MS
+  );
+}
+
+export function rejectToolSetup(
+  orgId: string,
+  setupId: string
+): Promise<ToolSetupPlan> {
+  const write = credentialWrite.then(async () => {
+    const parsed = await readConfig();
+    const section = setupSection(orgId, setupId);
+    const value = parsed.sections[section]?.plan;
+    if (!value) {
+      throw new NakamaApiError("Tool setup not found.", 404);
+    }
+    const plan = JSON.parse(value) as ToolSetupPlan;
+    if (plan.status === "ready") {
+      throw new NakamaApiError("Tool setup is complete.", 409);
+    }
+    await requireToolSecrets().delete(orgId, `tool:${setupId}`);
+    const rejected: ToolSetupPlan = { ...plan, status: "rejected" };
+    parsed.sections[section] = { plan: JSON.stringify(rejected) };
+    await writeParsedConfigIni(parsed.global, parsed.sections);
+    return rejected;
+  });
+  credentialWrite = write.then(
+    () => undefined,
+    () => undefined
+  );
+  return write;
 }
 
 export function saveToolSetup(
@@ -146,13 +223,23 @@ export function approveToolSetup(
       throw new NakamaApiError("Tool setup not found.", 404);
     }
     const plan = JSON.parse(value) as ToolSetupPlan;
+    if (isExpiredToolSetup(plan)) {
+      await requireToolSecrets().delete(orgId, `tool:${setupId}`);
+      parsed.sections[section] = {
+        plan: JSON.stringify({ ...plan, status: "rejected" }),
+      };
+      await writeParsedConfigIni(parsed.global, parsed.sections);
+      throw new NakamaApiError("Tool setup expired.", 410);
+    }
     if (plan.status !== "pending") {
       return plan;
     }
     if (plan.requiresApiKey) {
-      parsed.sections[credentialSection(orgId, setupId)] = {
-        api_key: validateApiKey(input.apiKey),
-      };
+      await requireToolSecrets().save(
+        orgId,
+        `tool:${setupId}`,
+        validateApiKey(input.apiKey)
+      );
     }
     const approved: ToolSetupPlan = {
       ...plan,
@@ -177,16 +264,29 @@ export function completeToolSetup(
 ): Promise<void> {
   const write = credentialWrite.then(async () => {
     const parsed = await readConfig();
-    const staged = credentialSection(orgId, plan.id);
+    const current = parsed.sections[setupSection(orgId, plan.id)]?.plan;
+    if (
+      !current ||
+      (JSON.parse(current) as ToolSetupPlan).status !== "approved"
+    ) {
+      throw new NakamaApiError("Tool setup is not approved.", 409);
+    }
     if (plan.requiresApiKey) {
-      const credential = parsed.sections[staged];
-      if (!credential?.api_key) {
+      const credential = await requireToolSecrets().resolve(
+        orgId,
+        `tool:${plan.id}`
+      );
+      if (!credential.value) {
         throw new Error(
           "The API key is missing. Configure the tool before using it."
         );
       }
-      parsed.sections[credentialSection(orgId, toolId)] = credential;
-      delete parsed.sections[staged];
+      await requireToolSecrets().save(
+        orgId,
+        `tool:${toolId}`,
+        credential.value
+      );
+      await requireToolSecrets().delete(orgId, `tool:${plan.id}`);
     }
     parsed.sections[setupSection(orgId, plan.id)] = {
       plan: JSON.stringify({ ...plan, status: "ready", toolId }),
@@ -203,8 +303,16 @@ export function completeToolSetup(
  * shadow copy holding the secret; pre-deletion operator backups remain under
  * the operator's own retention policy.
  */
-export function deleteOrgToolCredentials(orgId: string): Promise<void> {
+export function deleteOrgToolCredentials(
+  orgId: string,
+  databaseAdapter: DatabaseAdapter
+): Promise<void> {
   const write = credentialWrite.then(async () => {
+    for (const secret of await databaseAdapter.listManagedSecrets()) {
+      if (secret.scope === orgId && secret.name.startsWith("tool:")) {
+        await databaseAdapter.deleteManagedSecret(orgId, secret.name);
+      }
+    }
     const parsed = await readConfig();
     let removed = false;
     for (const prefix of [CREDENTIAL_SECTION_PREFIX, SETUP_SECTION_PREFIX]) {

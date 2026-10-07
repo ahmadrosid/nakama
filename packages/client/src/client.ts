@@ -705,6 +705,26 @@ export class NakamaClient {
     );
   }
 
+  async setProviderSecret(
+    providerId: string,
+    apiKey: string
+  ): Promise<UpdateProviderResponse> {
+    return this.request<UpdateProviderResponse>(
+      `/v1/providers/${encodeURIComponent(providerId)}/secret`,
+      { body: JSON.stringify({ apiKey }), method: "PUT" }
+    );
+  }
+
+  async manageProviderSecret(
+    providerId: string,
+    action: "clear" | "use-stored"
+  ): Promise<UpdateProviderResponse> {
+    return this.request<UpdateProviderResponse>(
+      `/v1/providers/${encodeURIComponent(providerId)}/secret${action === "use-stored" ? "/use-stored" : ""}`,
+      { method: action === "clear" ? "DELETE" : "POST" }
+    );
+  }
+
   async deleteProvider(providerId: string): Promise<DeleteProviderResponse> {
     return this.request<DeleteProviderResponse>(
       `/v1/providers/${encodeURIComponent(providerId)}`,
@@ -1006,9 +1026,12 @@ export class NakamaClient {
     );
   }
 
-  async getToolCredentialStatus(
-    toolId: string
-  ): Promise<{ configured: boolean }> {
+  async getToolCredentialStatus(toolId: string): Promise<{
+    configured: boolean;
+    envName: string;
+    savedAvailable: boolean;
+    source: "environment" | "settings" | "missing";
+  }> {
     return this.request(`/v1/tools/${encodeURIComponent(toolId)}/credentials`);
   }
 
@@ -1026,14 +1049,34 @@ export class NakamaClient {
     });
   }
 
+  async rejectToolSetup(setupId: string): Promise<ToolSetupPlan> {
+    return this.request(`/v1/tool-setups/${encodeURIComponent(setupId)}`, {
+      method: "DELETE",
+    });
+  }
+
   async saveToolCredential(
     toolId: string,
     apiKey: string
-  ): Promise<{ configured: boolean }> {
+  ): Promise<{
+    configured: boolean;
+    envName: string;
+    savedAvailable: boolean;
+    source: "environment" | "settings" | "missing";
+  }> {
     return this.request(`/v1/tools/${encodeURIComponent(toolId)}/credentials`, {
       body: JSON.stringify({ apiKey }),
       method: "PUT",
     });
+  }
+
+  async manageToolCredential(toolId: string, action: "clear" | "use-stored") {
+    return this.request<
+      Awaited<ReturnType<typeof this.getToolCredentialStatus>>
+    >(
+      `/v1/tools/${encodeURIComponent(toolId)}/credentials${action === "use-stored" ? "/use-stored" : ""}`,
+      { method: action === "clear" ? "DELETE" : "POST" }
+    );
   }
 
   async createTool(request: CreateToolRequest) {
@@ -2355,6 +2398,30 @@ export class NakamaClient {
       method: "PUT",
     });
   }
+  async setComposioSecret(apiKey: string): Promise<ComposioSettingsResponse> {
+    return this.request<ComposioSettingsResponse>(
+      "/v1/settings/composio/secret",
+      {
+        body: JSON.stringify({ apiKey }),
+        method: "PUT",
+      }
+    );
+  }
+  async manageSettingSecret<T extends "email" | "web-search" | "composio">(
+    kind: T,
+    action: "clear" | "use-stored"
+  ): Promise<
+    T extends "email"
+      ? EmailSettingsResponse
+      : T extends "web-search"
+        ? WebSearchSettingsResponse
+        : ComposioSettingsResponse
+  > {
+    return this.request(
+      `/v1/settings/${kind}/secret${action === "use-stored" ? "/use-stored" : ""}`,
+      { method: action === "clear" ? "DELETE" : "POST" }
+    );
+  }
   async listNotificationDestinations(): Promise<ListNotificationDestinationsResponse> {
     return this.request<ListNotificationDestinationsResponse>(
       "/v1/notification-destinations"
@@ -2499,6 +2566,19 @@ export class NakamaClient {
     });
   }
 
+  async setWebSearchSecret(
+    provider: "exa" | "firecrawl",
+    apiKey: string
+  ): Promise<WebSearchSettingsResponse> {
+    return this.request<WebSearchSettingsResponse>(
+      "/v1/settings/web-search/secret",
+      {
+        body: JSON.stringify({ apiKey, provider }),
+        method: "PUT",
+      }
+    );
+  }
+
   async getEmailSettings(): Promise<EmailSettingsResponse> {
     return this.request<EmailSettingsResponse>("/v1/settings/email");
   }
@@ -2508,6 +2588,13 @@ export class NakamaClient {
   ): Promise<EmailSettingsResponse> {
     return this.request<EmailSettingsResponse>("/v1/settings/email", {
       body: JSON.stringify(request),
+      method: "PUT",
+    });
+  }
+
+  async setEmailSecret(password: string): Promise<EmailSettingsResponse> {
+    return this.request<EmailSettingsResponse>("/v1/settings/email/secret", {
+      body: JSON.stringify({ password }),
       method: "PUT",
     });
   }

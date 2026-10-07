@@ -39,6 +39,7 @@ Replace `VERSION` with a release tag you have tested:
 docker run -d \
   -p 127.0.0.1:4310:4310 \
   -v nakama-data:/nakama/data \
+  --env-file nakama-secrets.env \
   -e NAKAMA_WEB_PUBLIC_URL=https://nakama.example.com \
   --name nakama \
   ghcr.io/ahmadrosid/nakama:VERSION

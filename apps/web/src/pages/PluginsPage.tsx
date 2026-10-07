@@ -775,30 +775,60 @@ function PluginIdentity({
             </span>
           ) : null}
         </h2>
-        {detail ? (
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground text-xs">
-            <span className="inline-flex items-center gap-1.5 capitalize">
-              <span
-                className="size-1.5 rounded-full bg-muted-foreground/40 data-[state=enabled]:bg-emerald-500"
-                data-state={plugin?.lifecycleState}
-              />
-              {plugin?.lifecycleState ?? "Available"}
-            </span>
-            {official ? (
-              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
-                Official
-              </span>
-            ) : null}
-          </div>
-        ) : (
-          <p className="mt-1 break-words text-muted-foreground text-sm">
-            {PLUGIN_DESCRIPTIONS[pluginId] ||
-              plugin?.description ||
-              catalogDescription ||
-              releases[0]?.manifest.description}
-          </p>
-        )}
+        <PluginIdentityMeta
+          catalogDescription={catalogDescription}
+          detail={detail}
+          official={official}
+          plugin={plugin}
+          pluginId={pluginId}
+          releases={releases}
+        />
       </div>
+    </div>
+  );
+}
+
+function PluginIdentityMeta({
+  catalogDescription,
+  detail,
+  official,
+  plugin,
+  pluginId,
+  releases,
+}: Pick<
+  PluginRowProps,
+  | "catalogDescription"
+  | "detail"
+  | "official"
+  | "plugin"
+  | "pluginId"
+  | "releases"
+>) {
+  if (!detail) {
+    return (
+      <p className="mt-1 break-words text-muted-foreground text-sm">
+        {PLUGIN_DESCRIPTIONS[pluginId] ||
+          plugin?.description ||
+          catalogDescription ||
+          releases[0]?.manifest.description}
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground text-xs">
+      <span className="inline-flex items-center gap-1.5 capitalize">
+        <span
+          className="size-1.5 rounded-full bg-muted-foreground/40 data-[state=enabled]:bg-emerald-500"
+          data-state={plugin?.lifecycleState}
+        />
+        {plugin?.lifecycleState ?? "Available"}
+      </span>
+      {official ? (
+        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
+          Official
+        </span>
+      ) : null}
     </div>
   );
 }

@@ -163,7 +163,11 @@ function ProviderInstanceTableRow({
             </ProviderActionButton>
           ) : null}
           <ProviderActionButton
-            label={providerKeyActionLabel(card, instance.hasApiKey)}
+            label={
+              instance.secretSource === "environment"
+                ? `Managed by ${instance.secretEnvName}`
+                : providerKeyActionLabel(card, instance.hasApiKey)
+            }
             onClick={() => card.setReplaceKeyOpen(true)}
           >
             <Key01Icon className="size-3.5" />
@@ -280,6 +284,7 @@ function ProviderInstanceCardDialogs({
         instance={instance}
         onApiKeyChange={card.setApiKey}
         onChatgptOAuthChange={card.setChatgptOAuth}
+        onManage={(action) => void card.handleManageKey(action)}
         onOpenChange={card.setReplaceKeyOpen}
         onSave={() => void card.handleReplaceKey()}
         onToggleShowApiKey={() => card.setShowApiKey((current) => !current)}
@@ -340,6 +345,7 @@ export function ProviderInstanceCard({
   catalog,
   onUpdate,
   onDelete,
+  onManage,
   onError,
   isSole = false,
 }: {
@@ -350,6 +356,10 @@ export function ProviderInstanceCard({
     request: UpdateProviderRequest
   ) => Promise<void>;
   onDelete: (providerId: string) => Promise<void>;
+  onManage?: (
+    providerId: string,
+    action: "clear" | "use-stored"
+  ) => Promise<void>;
   onError: (error: string | null) => void;
   isSole?: boolean;
 }) {
@@ -358,6 +368,7 @@ export function ProviderInstanceCard({
     instance,
     onDelete,
     onError,
+    onManage,
     onUpdate,
   });
   const canManage = canManageProviderModels(card);

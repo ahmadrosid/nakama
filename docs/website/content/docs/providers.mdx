@@ -13,7 +13,8 @@ description: "Configure AI providers, API keys, and models in Nakama."
 
 On first run, Nakama can also prompt for a provider during the setup wizard. See [First-time setup](/first-time-setup).
 
-Settings are saved in `~/.nakama/config.ini` (or under `NAKAMA_CONFIG_DIR` when set).
+Provider settings are saved in `~/.nakama/config.ini` (or under `NAKAMA_CONFIG_DIR` when set).
+API keys are encrypted in SQLite. See [Docker](/docker#saved-secrets) for the required master key.
 
 During [First-time setup](/first-time-setup), the wizard uses the same provider form:
 
@@ -33,8 +34,8 @@ This works for built-in providers that expose an API-key environment variable,
 including `ANTHROPIC_API_KEY_FILE` and `GEMINI_API_KEY_FILE`. On first boot,
 set `NAKAMA_PROVIDER` as well when more than one provider secret is mounted.
 
-Nakama trims the file contents and leaves the API key empty in its saved
-settings. A directly set API-key variable takes priority over its `_FILE`
+Nakama trims the file contents and does not copy the API key into `config.ini`.
+A directly set API-key variable takes priority over its `_FILE`
 partner. Startup fails when a configured secret file cannot be read.
 
 ## Supported providers
@@ -60,7 +61,7 @@ Nakama supports these built-in provider types:
 | Qwen (DashScope CN) | Alibaba DashScope China (`QWEN_CN_API_KEY`) |
 | Perplexity Sonar | Search-grounded Sonar models with citation links |
 | Cerebras | Cerebras models |
-| Cloudflare Worker AI | Workers AI models; add an API key and account ID in AI Providers (saved to `config.ini`). Llama 3.1 8B is the cheaper catalog option. `CLOUDFLARE_ACCOUNT_ID` is a fallback only |
+| Cloudflare Worker AI | Workers AI models; add an API key and account ID in AI Providers. The account ID is saved to `config.ini`. Llama 3.1 8B is the cheaper catalog option. `CLOUDFLARE_ACCOUNT_ID` is a fallback only |
 | Fireworks | Fireworks AI models |
 | Ollama | Local or Ollama Cloud; multiple instances allowed |
 | OpenCode Go | OpenCode Go endpoint |

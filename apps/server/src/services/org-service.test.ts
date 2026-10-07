@@ -20,7 +20,9 @@ import {
   loadToolSetup,
   saveToolApiKey,
   saveToolSetup,
+  setToolSecrets,
 } from "./custom-tool-shared";
+import { ManagedSecrets } from "./managed-secrets";
 import { OrgService } from "./org-service";
 
 setupTestConfigDir("nakama-org-service-test-");
@@ -30,6 +32,9 @@ function createOrgService(
   getWebPublicUrl?: () => string | undefined
 ) {
   const databaseAdapter = createInMemoryDatabaseAdapter();
+  setToolSecrets(
+    new ManagedSecrets(databaseAdapter, Buffer.alloc(32, 1).toString("base64"))
+  );
   const authService = new AuthService();
   return {
     authService,
@@ -1349,9 +1354,9 @@ describe("OrgService", () => {
 
     const raw = await readFile(getUserConfigPath(), "utf8");
     expect(raw).not.toContain("sk-deleted-org-secret");
-    expect(raw).toContain("sk-kept-org-secret");
-    expect(raw).toContain("sk-keep-provider");
-    expect(raw).toContain("sk-foreign-shape");
+    expect(raw).not.toContain("sk-kept-org-secret");
+    expect(raw).not.toContain("sk-keep-provider");
+    expect(raw).not.toContain("sk-foreign-shape");
     expect(raw).toContain("web_public_url=https://acme.example.com");
     expect(await loadToolApiKey(kept.organization.id, "tool_kept_org")).toBe(
       "sk-kept-org-secret"

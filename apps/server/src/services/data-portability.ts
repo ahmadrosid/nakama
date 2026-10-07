@@ -48,6 +48,7 @@ import {
   resolveDatabasePath,
 } from "@nakama/db";
 import { unzipSync, zipSync } from "fflate";
+import { ManagedSecrets } from "./managed-secrets";
 import {
   PluginExportBarrierError,
   quarantineInvalidPluginReleases,
@@ -345,7 +346,18 @@ export async function createNakamaDataExport(
           const entries: Record<string, Uint8Array> = {};
           for (const file of files) {
             validateArchivePath(file.relativePath);
-            entries[file.relativePath] = await readFile(file.absolutePath);
+            const data = await readFile(file.absolutePath);
+            if (
+              (file.relativePath === "config.ini" ||
+                file.relativePath === "composio/config.ini") &&
+              /(?:^|\n)\s*(?:api_key|password)\s*=/m.test(data.toString("utf8"))
+            ) {
+              throw new NakamaApiError(
+                "Legacy plaintext secrets must migrate before export.",
+                409
+              );
+            }
+            entries[file.relativePath] = data;
           }
           for (const [relativePath, absolutePath] of snapshots) {
             validateArchivePath(relativePath);
@@ -876,6 +888,44 @@ export async function restoreNakamaDataImport(
     for (const candidate of stagedDatabases) {
       if (candidate && (await pathExists(candidate))) {
         await retireAppUserData(stagedRoot, candidate);
+      }
+    }
+
+    const secretDatabasePath =
+      stagedDatabasePath && (await pathExists(stagedDatabasePath))
+        ? stagedDatabasePath
+        : (
+            await Promise.all(
+              [...stagedDatabases]
+                .filter(Boolean)
+                .map(async (candidate) =>
+                  candidate && (await pathExists(candidate)) ? candidate : null
+                )
+            )
+          ).find(Boolean);
+    const hasLegacySecrets = (
+      await Promise.all(
+        ["config.ini", "composio/config.ini"].map(async (name) => {
+          const file = join(stagedRoot, name);
+          return (
+            (await pathExists(file)) &&
+            /(?:^|\n)\s*(?:api_key|password)\s*=/m.test(
+              await readFile(file, "utf8")
+            )
+          );
+        })
+      )
+    ).some(Boolean);
+    if (secretDatabasePath || hasLegacySecrets) {
+      const stagedDatabase = await createSqliteDatabase(
+        `file:${secretDatabasePath ?? join(stagedRoot, "sqlite", "nakama.sqlite")}`
+      );
+      try {
+        await new ManagedSecrets(stagedDatabase.adapter).migrateLegacyFiles(
+          stagedRoot
+        );
+      } finally {
+        stagedDatabase.release();
       }
     }
 

@@ -43,7 +43,9 @@ export function useSaveComposioSettings() {
 
   return useMutation({
     mutationFn: (request: UpdateComposioSettingsRequest) =>
-      client.setComposioSettings(request),
+      request.apiKey?.trim()
+        ? client.setComposioSecret(request.apiKey)
+        : client.getComposioSettings(),
     onSuccess: async (saved) => {
       queryClient.setQueryData(queryKeys.composio.settings, saved);
       await Promise.all([

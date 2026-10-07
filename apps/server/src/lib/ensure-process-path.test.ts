@@ -68,3 +68,25 @@ describe("getToolExecutionEnv with NAKAMA_DISABLE_FIX_PATH", () => {
     }
   );
 });
+
+test("does not pass the master key to child processes", () => {
+  const previous = process.env.NAKAMA_SECRETS_KEY;
+  const previousProvider = process.env.OPENAI_API_KEY;
+  process.env.NAKAMA_SECRETS_KEY = "private";
+  process.env.OPENAI_API_KEY = "provider-private";
+  try {
+    expect(getToolExecutionEnv().NAKAMA_SECRETS_KEY).toBeUndefined();
+    expect(getToolExecutionEnv().OPENAI_API_KEY).toBeUndefined();
+  } finally {
+    if (previous === undefined) {
+      delete process.env.NAKAMA_SECRETS_KEY;
+    } else {
+      process.env.NAKAMA_SECRETS_KEY = previous;
+    }
+    if (previousProvider === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = previousProvider;
+    }
+  }
+});

@@ -46,6 +46,7 @@ export function ProviderReplaceKeyDialog({
   onChatgptOAuthChange,
   onToggleShowApiKey,
   onSave,
+  onManage,
 }: {
   open: boolean;
   instance: ProviderInstanceSummary;
@@ -62,14 +63,148 @@ export function ProviderReplaceKeyDialog({
   onChatgptOAuthChange: (oauth: ChatgptOAuthCredentials | null) => void;
   onToggleShowApiKey: () => void;
   onSave: () => void;
+  onManage?: (action: "clear" | "use-stored") => void;
 }) {
   let title = `${instance.hasApiKey ? "Update API key" : "Add API key"} for ${instance.label}`;
   let hasCredentials = Boolean(apiKey.trim());
-  let credentialField = (
+
+  switch (providerType) {
+    case "xai_oauth":
+      title = `Reconnect ${instance.label}`;
+      hasCredentials = Boolean(xaiOAuth);
+      break;
+    case "chatgpt":
+      title = `Reconnect ${instance.label}`;
+      hasCredentials = Boolean(chatgptOAuth);
+      break;
+    default:
+      break;
+  }
+
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <ProviderCredentialField
+          apiKey={apiKey}
+          busy={busy}
+          chatgptOAuth={chatgptOAuth}
+          instance={instance}
+          onApiKeyChange={onApiKeyChange}
+          onChatgptOAuthChange={onChatgptOAuthChange}
+          onToggleShowApiKey={onToggleShowApiKey}
+          onXaiOAuthChange={onXaiOAuthChange}
+          providerType={providerType}
+          showApiKey={showApiKey}
+          xaiOAuth={xaiOAuth}
+        />
+        {instance.secretSource === "environment" ? (
+          <p className="text-sm">
+            Managed by {instance.secretEnvName}. Restart Nakama after you change
+            it.
+          </p>
+        ) : null}
+        {dialogError ? (
+          <p className="text-destructive text-sm" role="alert">
+            {dialogError}
+          </p>
+        ) : null}
+        <DialogFooter>
+          {instance.secretSource === "settings" ? (
+            <Button
+              disabled={busy}
+              onClick={() => onManage?.("clear")}
+              type="button"
+              variant="outline"
+            >
+              Clear saved key
+            </Button>
+          ) : null}
+          {instance.secretSource === "missing" &&
+          instance.savedSecretAvailable ? (
+            <Button
+              disabled={busy}
+              onClick={() => onManage?.("use-stored")}
+              type="button"
+              variant="outline"
+            >
+              Use saved key
+            </Button>
+          ) : null}
+          <Button
+            disabled={busy}
+            onClick={() => onOpenChange(false)}
+            type="button"
+            variant="outline"
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={
+              busy || instance.secretSource === "environment" || !hasCredentials
+            }
+            onClick={onSave}
+            type="button"
+          >
+            {busy ? <Spinner className="mr-2" /> : null}
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ProviderCredentialField({
+  apiKey,
+  busy,
+  chatgptOAuth,
+  instance,
+  onApiKeyChange,
+  onChatgptOAuthChange,
+  onToggleShowApiKey,
+  onXaiOAuthChange,
+  providerType,
+  showApiKey,
+  xaiOAuth,
+}: {
+  apiKey: string;
+  busy: boolean;
+  chatgptOAuth: ChatgptOAuthCredentials | null;
+  instance: ProviderInstanceSummary;
+  onApiKeyChange: (value: string) => void;
+  onChatgptOAuthChange: (oauth: ChatgptOAuthCredentials | null) => void;
+  onToggleShowApiKey: () => void;
+  onXaiOAuthChange: (oauth: XaiOAuthCredentials | null) => void;
+  providerType: SelectedProvider;
+  showApiKey: boolean;
+  xaiOAuth: XaiOAuthCredentials | null;
+}) {
+  if (providerType === "xai_oauth") {
+    return (
+      <XaiSignInPanel
+        disabled={busy}
+        oauth={xaiOAuth}
+        onOAuthChange={onXaiOAuthChange}
+      />
+    );
+  }
+  if (providerType === "chatgpt") {
+    return (
+      <ChatgptSignInPanel
+        disabled={busy}
+        oauth={chatgptOAuth}
+        onOAuthChange={onChatgptOAuthChange}
+      />
+    );
+  }
+  return (
     <InputGroup>
       <InputGroupInput
         autoComplete="off"
-        disabled={busy}
+        disabled={busy || instance.secretSource === "environment"}
         onChange={(event) => onApiKeyChange(event.target.value)}
         placeholder={apiKeyPlaceholder(providerType)}
         type={showApiKey ? "text" : "password"}
@@ -85,67 +220,6 @@ export function ProviderReplaceKeyDialog({
         </InputGroupButton>
       </InputGroupAddon>
     </InputGroup>
-  );
-
-  switch (providerType) {
-    case "xai_oauth":
-      title = `Reconnect ${instance.label}`;
-      hasCredentials = Boolean(xaiOAuth);
-      credentialField = (
-        <XaiSignInPanel
-          disabled={busy}
-          oauth={xaiOAuth}
-          onOAuthChange={onXaiOAuthChange}
-        />
-      );
-      break;
-    case "chatgpt":
-      title = `Reconnect ${instance.label}`;
-      hasCredentials = Boolean(chatgptOAuth);
-      credentialField = (
-        <ChatgptSignInPanel
-          disabled={busy}
-          oauth={chatgptOAuth}
-          onOAuthChange={onChatgptOAuthChange}
-        />
-      );
-      break;
-    default:
-      break;
-  }
-
-  return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
-        {credentialField}
-        {dialogError ? (
-          <p className="text-destructive text-sm" role="alert">
-            {dialogError}
-          </p>
-        ) : null}
-        <DialogFooter>
-          <Button
-            disabled={busy}
-            onClick={() => onOpenChange(false)}
-            type="button"
-            variant="outline"
-          >
-            Cancel
-          </Button>
-          <Button
-            disabled={busy || !hasCredentials}
-            onClick={onSave}
-            type="button"
-          >
-            {busy ? <Spinner className="mr-2" /> : null}
-            Save
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 

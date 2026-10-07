@@ -93,7 +93,7 @@ export function apiKeyEnvVarForProvider(
     case "gemini":
       return "GEMINI_API_KEY";
     case "deepseek":
-      return null;
+      return "DEEPSEEK_API_KEY";
     case "netra":
       return "NETRA_API_KEY";
     case "doubao":

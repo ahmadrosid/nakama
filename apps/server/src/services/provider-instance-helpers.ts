@@ -13,7 +13,6 @@ import {
   normalizeBaseUrl,
   normalizeProviderInstanceLabel,
   type OllamaHostMode,
-  ollamaRequiresApiKey,
   type ProviderClient,
   type ProviderInstance,
   parseWireApi,
@@ -219,16 +218,6 @@ export function buildProviderInstanceFromCreateRequest(
 
   const apiKey = request.apiKey?.trim() ?? "";
 
-  if (
-    !apiKey &&
-    type !== "openai_compatible" &&
-    type !== "ollama" &&
-    type !== "chatgpt" &&
-    type !== "xai_oauth"
-  ) {
-    throw new NakamaApiError("API key is required.", 400);
-  }
-
   if (type === "xai_oauth") {
     if (!request.xaiOAuth) {
       throw new NakamaApiError(
@@ -289,17 +278,6 @@ export function buildProviderInstanceFromCreateRequest(
 
   if (apiKey) {
     validateProviderApiKeyFormat(apiKey, type);
-  }
-
-  if (type === "ollama") {
-    const hostMode = resolveOllamaHostMode({
-      baseUrl: request.baseUrl,
-      hostMode: request.hostMode,
-    });
-
-    if (ollamaRequiresApiKey(hostMode) && !apiKey) {
-      throw new NakamaApiError("API key is required for Ollama Cloud.", 400);
-    }
   }
 
   const fields = buildProviderFieldsFromRequest({ ...request, apiKey, type });
@@ -412,14 +390,6 @@ export function applyProviderInstanceUpdate(
       instance.type === "perplexity"
     ) {
       next.customModels = validateCustomModels(request.customModels);
-    }
-  }
-
-  if (next.type === "ollama") {
-    const hostMode = resolveOllamaHostMode(next);
-
-    if (ollamaRequiresApiKey(hostMode) && !next.apiKey.trim()) {
-      throw new Error("API key is required for Ollama Cloud.");
     }
   }
 

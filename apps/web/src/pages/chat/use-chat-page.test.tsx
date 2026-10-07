@@ -660,7 +660,7 @@ test("waits for the active org profile query before selecting a profile", async 
     orgs: [{ id: "org-b", name: "Org B", role: "admin" }],
   } as never);
   const listProfiles = spyOn(client, "listProfiles").mockImplementation(
-    () => profiles.promise as never
+    () => profiles.promise as ReturnType<typeof client.listProfiles>
   );
   const getProfile = spyOn(client, "getProfile").mockResolvedValue({
     profile: { id: "default", name: "Default", skills: [] },

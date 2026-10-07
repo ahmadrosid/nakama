@@ -14,7 +14,7 @@ import {
   useComposioSettings,
   useSaveComposioSettings,
 } from "@/hooks/use-composio";
-import { formatError } from "@/lib/client";
+import { client, formatError } from "@/lib/client";
 
 function ComposioStatusBadge({
   configured,
@@ -115,7 +115,12 @@ function composioSettingsError(
 }
 
 function useComposioSettingsForm() {
-  const { data: settings, isLoading, error: loadError } = useComposioSettings();
+  const {
+    data: settings,
+    isLoading,
+    error: loadError,
+    refetch,
+  } = useComposioSettings();
   const saveMutation = useSaveComposioSettings();
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
@@ -142,12 +147,23 @@ function useComposioSettingsForm() {
     }
   }
 
+  async function manageKey(action: "clear" | "use-stored") {
+    setFormError(null);
+    try {
+      await client.manageSettingSecret("composio", action);
+      await refetch();
+    } catch (error) {
+      setFormError(formatError(error));
+    }
+  }
+
   return {
     apiKey,
     formError,
     handleSave,
     isLoading,
     loadError,
+    manageKey,
     savePending: saveMutation.isPending,
     setApiKey,
     setFormError,
@@ -199,7 +215,7 @@ function ComposioApiKeySection({
   configured,
   embedded,
   errorMessage,
-  maskedKey,
+  source,
   onApiKeyChange,
   onSave,
   onToggleShowApiKey,
@@ -211,7 +227,7 @@ function ComposioApiKeySection({
   configured: boolean;
   embedded: boolean;
   errorMessage: string | null;
-  maskedKey: string | null | undefined;
+  source?: "environment" | "settings" | "missing";
   onApiKeyChange: (value: string) => void;
   onSave: () => void;
   onToggleShowApiKey: () => void;
@@ -219,8 +235,6 @@ function ComposioApiKeySection({
   showApiKey: boolean;
 }) {
   const sectionPadding = embedded ? "pb-1.5" : "p-5";
-  const canSave = configured || apiKey.trim().length > 0;
-
   return (
     <div className={cn("space-y-2", sectionPadding, embedded && "pt-0")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -238,18 +252,71 @@ function ComposioApiKeySection({
         ) : null}
       </div>
 
-      <div className="flex items-center gap-2">
-        <InputGroup className="h-9 min-w-0 flex-1">
-          <InputGroupInput
-            autoComplete="off"
-            disabled={savePending}
-            onChange={(event) => onApiKeyChange(event.target.value)}
-            placeholder={
-              configured && maskedKey ? `Saved (${maskedKey})` : "Paste API key"
-            }
-            type={showApiKey ? "text" : "password"}
-            value={apiKey}
-          />
+      <ComposioApiKeyInput
+        apiKey={apiKey}
+        configured={configured}
+        onApiKeyChange={onApiKeyChange}
+        onSave={onSave}
+        onToggleShowApiKey={onToggleShowApiKey}
+        savePending={savePending}
+        showApiKey={showApiKey}
+        source={source}
+      />
+
+      {configured && !composioReachable ? (
+        <p className="text-amber-800 text-sm dark:text-amber-200" role="status">
+          The saved key could not reach Composio. Check that it is a project API
+          key from Settings → Project Settings → API Keys.
+        </p>
+      ) : null}
+
+      {errorMessage ? (
+        <p className="text-destructive text-sm" role="alert">
+          {errorMessage}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function ComposioApiKeyInput({
+  apiKey,
+  configured,
+  onApiKeyChange,
+  onSave,
+  onToggleShowApiKey,
+  savePending,
+  showApiKey,
+  source,
+}: {
+  apiKey: string;
+  configured: boolean;
+  onApiKeyChange: (value: string) => void;
+  onSave: () => void;
+  onToggleShowApiKey: () => void;
+  savePending: boolean;
+  showApiKey: boolean;
+  source?: "environment" | "settings" | "missing";
+}) {
+  const canSave = source !== "environment" && apiKey.trim().length > 0;
+  return (
+    <div className="flex items-center gap-2">
+      <InputGroup className="h-9 min-w-0 flex-1">
+        <InputGroupInput
+          autoComplete="off"
+          disabled={savePending || source === "environment"}
+          onChange={(event) => onApiKeyChange(event.target.value)}
+          placeholder={
+            source === "environment"
+              ? "Managed by environment"
+              : configured
+                ? "Saved"
+                : "Paste API key"
+          }
+          type={showApiKey ? "text" : "password"}
+          value={apiKey}
+        />
+        {source === "environment" ? null : (
           <InputGroupAddon align="inline-end">
             <InputGroupButton
               aria-label={showApiKey ? "Hide API key" : "Show API key"}
@@ -265,30 +332,17 @@ function ComposioApiKeySection({
               )}
             </InputGroupButton>
           </InputGroupAddon>
-        </InputGroup>
-        <Button
-          className="min-w-[4.5rem] shrink-0"
-          disabled={!canSave || savePending}
-          onClick={onSave}
-          size="lg"
-          type="button"
-        >
-          {savePending ? <Spinner className="size-4" /> : "Save"}
-        </Button>
-      </div>
-
-      {configured && !composioReachable ? (
-        <p className="text-amber-800 text-sm dark:text-amber-200" role="status">
-          The saved key could not reach Composio. Check that it is a project API
-          key from Settings → Project Settings → API Keys.
-        </p>
-      ) : null}
-
-      {errorMessage ? (
-        <p className="text-destructive text-sm" role="alert">
-          {errorMessage}
-        </p>
-      ) : null}
+        )}
+      </InputGroup>
+      <Button
+        className="min-w-[4.5rem] shrink-0"
+        disabled={!canSave || savePending}
+        onClick={onSave}
+        size="lg"
+        type="button"
+      >
+        {savePending ? <Spinner className="size-4" /> : "Save"}
+      </Button>
     </div>
   );
 }
@@ -318,7 +372,6 @@ function ComposioSettingsFormBody({
         configured={configured}
         embedded={embedded}
         errorMessage={composioSettingsError(form.formError, form.loadError)}
-        maskedKey={form.settings?.apiKeyMasked}
         onApiKeyChange={(value) => {
           form.setApiKey(value);
           form.setFormError(null);
@@ -327,7 +380,28 @@ function ComposioSettingsFormBody({
         onToggleShowApiKey={() => form.setShowApiKey((current) => !current)}
         savePending={form.savePending}
         showApiKey={form.showApiKey}
+        source={form.settings?.source}
       />
+
+      {form.settings?.source === "settings" ||
+      (form.settings?.source === "missing" && form.settings.savedAvailable) ? (
+        <div className={cn(embedded ? "pb-2" : "px-5 pb-3")}>
+          <Button
+            onClick={() =>
+              void form.manageKey(
+                form.settings?.source === "settings" ? "clear" : "use-stored"
+              )
+            }
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {form.settings.source === "settings"
+              ? "Clear saved key"
+              : "Use saved key"}
+          </Button>
+        </div>
+      ) : null}
 
       <div className={cn(footerPadding)}>
         <a

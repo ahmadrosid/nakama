@@ -32,7 +32,9 @@ For a single-container deployment:
 
 ```bash
 docker pull ghcr.io/ahmadrosid/nakama:latest
-docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahmadrosid/nakama:latest
+umask 077
+printf 'NAKAMA_SECRETS_KEY=%s\n' "$(openssl rand -base64 32)" > nakama-secrets.env
+docker run -d -p 4310:4310 -v nakama-data:/nakama/data --env-file nakama-secrets.env --name nakama ghcr.io/ahmadrosid/nakama:latest
 ```
 
 Open `http://localhost:4310`. See [Docker](/docker) for build-from-source, volumes, and production notes.

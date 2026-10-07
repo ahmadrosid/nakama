@@ -559,10 +559,7 @@ describe("buildProviderInstanceFromCreateRequest", () => {
   // readJson casts the body without validating it, so both fields can arrive
   // undefined however the contract types them.
   test("names the missing field and answers 400, not a TypeError at 500", () => {
-    const cases = [
-      [{}, "Provider type is required."],
-      [{ type: "openai" }, "API key is required."],
-    ] as const;
+    const cases = [[{}, "Provider type is required."]] as const;
 
     for (const [request, message] of cases) {
       try {

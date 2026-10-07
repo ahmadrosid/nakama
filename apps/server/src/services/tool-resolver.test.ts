@@ -144,6 +144,7 @@ describe("resolveProfileStoredTools web_search", () => {
       configDir = "";
     }
     delete process.env.NAKAMA_CONFIG_DIR;
+    delete process.env.EXA_API_KEY;
   });
 
   async function useTempConfigDir(): Promise<void> {
@@ -171,7 +172,8 @@ describe("resolveProfileStoredTools web_search", () => {
 
   test("swaps in a locally executed tool once a back-end is configured", async () => {
     await useTempConfigDir();
-    await saveWebSearchConfig({ apiKey: "exa-key", provider: "exa" });
+    process.env.EXA_API_KEY = "exa-key";
+    await saveWebSearchConfig({ provider: "exa" });
     const db = createInMemoryDatabaseAdapter();
     await upsertTool(db, {
       handlerType: "builtin",

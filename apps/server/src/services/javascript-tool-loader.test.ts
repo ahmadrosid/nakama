@@ -2,16 +2,19 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import {
   loadToolApiKey,
   resolveCustomToolModulePath,
   saveToolApiKey,
+  setToolSecrets,
 } from "./custom-tool-shared";
 import {
   makeCustomToolRecord,
   setupCustomToolsDir,
 } from "./custom-tool-test-helpers";
 import { loadJavascriptTool } from "./javascript-tool-loader";
+import { ManagedSecrets } from "./managed-secrets";
 import { loadPythonTool } from "./python-tool-loader";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
@@ -19,6 +22,12 @@ const setupToolsDir = setupCustomToolsDir;
 const makeRecord = makeCustomToolRecord;
 
 describe("javascript tool loader", () => {
+  setToolSecrets(
+    new ManagedSecrets(
+      createInMemoryDatabaseAdapter(),
+      Buffer.alloc(32, 1).toString("base64")
+    )
+  );
   let configDir = "";
 
   afterEach(async () => {
