@@ -1,4 +1,5 @@
 import type {
+  LlmUsageDayStats,
   LlmUsageGroupStats,
   LlmUsageModelStats,
   LlmUsageStats,
@@ -9,6 +10,12 @@ import {
   getExplicitModelPricing,
   type PricingContext,
 } from "../providers/pricing";
+
+const LLM_USAGE_DAILY_WINDOW_DAYS = 30;
+
+function utcDay(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
 
 export interface LlmUsageRecordOptions extends LlmUsageActor {
   cachedInputTokens?: number;
@@ -75,9 +82,12 @@ export class LlmUsageTracker {
     // Fire and forget on purpose: a counter for a dashboard must never delay a
     // model response or fail a turn, so the write is not awaited here and a
     // rejection is swallowed inside persist().
+    const provider =
+      pricingContext.provider ?? pricingContext.providerInstance?.type ?? "";
     const write = this.persist(
       orgId,
       modelId,
+      provider,
       { profileId: options.profileId, userId: options.userId },
       delta
     );
@@ -92,6 +102,7 @@ export class LlmUsageTracker {
   private async persist(
     orgId: string,
     modelId: string,
+    provider: string,
     actor: LlmUsageActor,
     delta: {
       requestCount: number;
@@ -104,7 +115,8 @@ export class LlmUsageTracker {
       return;
     }
 
-    const trackedSince = new Date().toISOString();
+    const now = new Date();
+    const trackedSince = now.toISOString();
 
     try {
       await this.db.incrementLlmUsageStats(orgId, delta, trackedSince);
@@ -119,6 +131,11 @@ export class LlmUsageTracker {
         actor,
         delta,
         trackedSince
+      );
+      await this.db.incrementLlmUsageDailyStats(
+        orgId,
+        { day: utcDay(now), modelId, provider },
+        delta
       );
     } catch (error) {
       console.warn("Failed to persist LLM usage stats:", error);
@@ -199,6 +216,72 @@ export class LlmUsageTracker {
       agents: [...agents.values()].sort(byUsage),
       users: [...users.values()].sort(byUsage),
     };
+  }
+
+  /**
+   * One entry per UTC day for the last `days` days, oldest first, today
+   * included. A day without calls is present with zeros so a chart has an
+   * even x axis.
+   */
+  async getDailyStats(
+    orgId: string,
+    days = LLM_USAGE_DAILY_WINDOW_DAYS,
+    now = new Date()
+  ): Promise<LlmUsageDayStats[]> {
+    await this.settled();
+    const today = Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate()
+    );
+    const window = Array.from({ length: days }, (_, index) =>
+      utcDay(new Date(today - (days - 1 - index) * 86_400_000))
+    );
+    const rows =
+      (await this.db?.listLlmUsageDailyStats(orgId, window[0] ?? "")) ?? [];
+    const byDay = new Map<string, LlmUsageDayStats>(
+      window.map((day) => [
+        day,
+        {
+          day,
+          estimatedCostUsd: 0,
+          providers: [],
+          requestCount: 0,
+          totalTokens: 0,
+        },
+      ])
+    );
+
+    for (const row of rows) {
+      const entry = byDay.get(row.day);
+      if (!entry) {
+        continue;
+      }
+      const tokens = row.inputTokens + row.outputTokens;
+      const provider = row.provider || null;
+      entry.estimatedCostUsd += row.estimatedCostUsd;
+      entry.requestCount += row.requestCount;
+      entry.totalTokens += tokens;
+      const share = entry.providers.find((item) => item.provider === provider);
+      if (share) {
+        share.estimatedCostUsd += row.estimatedCostUsd;
+        share.totalTokens += tokens;
+      } else {
+        entry.providers.push({
+          estimatedCostUsd: row.estimatedCostUsd,
+          provider,
+          totalTokens: tokens,
+        });
+      }
+    }
+
+    return window.map((day) => {
+      const entry = byDay.get(day) as LlmUsageDayStats;
+      entry.providers.sort(
+        (left, right) => right.totalTokens - left.totalTokens
+      );
+      return entry;
+    });
   }
 
   async getStatsByModel(orgId: string): Promise<LlmUsageModelStats[]> {

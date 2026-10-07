@@ -159,6 +159,101 @@ describe("LlmUsageTracker", () => {
     }
   });
 
+  test("reports the last days oldest first, split by provider, zero-filled", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const delta = (tokens: number) => ({
+      estimatedCostUsd: tokens / 1000,
+      inputTokens: tokens,
+      outputTokens: 0,
+      requestCount: 1,
+    });
+    await db.incrementLlmUsageDailyStats(
+      ORG_A,
+      { day: "2026-10-05", modelId: "gpt-4o", provider: "openai" },
+      delta(300)
+    );
+    await db.incrementLlmUsageDailyStats(
+      ORG_A,
+      { day: "2026-10-05", modelId: "claude", provider: "anthropic" },
+      delta(900)
+    );
+    await db.incrementLlmUsageDailyStats(
+      ORG_A,
+      { day: "2026-10-07", modelId: "gpt-4o", provider: "openai" },
+      delta(100)
+    );
+    // Outside the window, and another org.
+    await db.incrementLlmUsageDailyStats(
+      ORG_A,
+      { day: "2026-10-01", modelId: "gpt-4o", provider: "openai" },
+      delta(5000)
+    );
+    await db.incrementLlmUsageDailyStats(
+      ORG_B,
+      { day: "2026-10-07", modelId: "gpt-4o", provider: "openai" },
+      delta(7000)
+    );
+
+    const daily = await new LlmUsageTracker(db).getDailyStats(
+      ORG_A,
+      3,
+      new Date("2026-10-07T12:00:00Z")
+    );
+
+    expect(daily).toEqual([
+      {
+        day: "2026-10-05",
+        estimatedCostUsd: 1.2,
+        providers: [
+          { estimatedCostUsd: 0.9, provider: "anthropic", totalTokens: 900 },
+          { estimatedCostUsd: 0.3, provider: "openai", totalTokens: 300 },
+        ],
+        requestCount: 2,
+        totalTokens: 1200,
+      },
+      {
+        day: "2026-10-06",
+        estimatedCostUsd: 0,
+        providers: [],
+        requestCount: 0,
+        totalTokens: 0,
+      },
+      {
+        day: "2026-10-07",
+        estimatedCostUsd: 0.1,
+        providers: [
+          { estimatedCostUsd: 0.1, provider: "openai", totalTokens: 100 },
+        ],
+        requestCount: 1,
+        totalTokens: 100,
+      },
+    ]);
+  });
+
+  test("records each call under today and its provider", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const tracker = new LlmUsageTracker(db);
+
+    tracker.record("gpt-4o", 100, 10, {
+      orgId: ORG_A,
+      pricingContext: { provider: "openai" },
+    });
+    tracker.record("gpt-4o", 50, 5, { orgId: ORG_A });
+
+    const today = (await tracker.getDailyStats(ORG_A, 1))[0];
+    expect(today).toMatchObject({
+      providers: [
+        { provider: "openai", totalTokens: 110 },
+        { provider: null, totalTokens: 55 },
+      ],
+      requestCount: 2,
+      totalTokens: 165,
+    });
+    expect(today?.totalTokens).toBe(
+      (await tracker.getStats(ORG_A)).totalTokens
+    );
+  });
+
   test("returns zero totals without a database", async () => {
     const tracker = new LlmUsageTracker();
 

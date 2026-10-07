@@ -52,13 +52,15 @@ export class SystemStatusService {
     // already resolved, never install-wide, or one org reads another's spend.
     const usageOrgId =
       typeof orgId === "string" ? orgId : (orgId?.orgId ?? null);
-    const [usageStats, usageByModel, usageByActor] = await Promise.all([
-      this.agent.getLlmUsageStats(usageOrgId),
-      this.agent.getLlmUsageStatsByModel(usageOrgId),
-      options.includeUsageByActor && usageOrgId
-        ? this.agent.getLlmUsageStatsByActor(usageOrgId)
-        : null,
-    ]);
+    const [usageStats, usageByModel, usageDaily, usageByActor] =
+      await Promise.all([
+        this.agent.getLlmUsageStats(usageOrgId),
+        this.agent.getLlmUsageStatsByModel(usageOrgId),
+        this.agent.getLlmUsageDailyStats(usageOrgId),
+        options.includeUsageByActor && usageOrgId
+          ? this.agent.getLlmUsageStatsByActor(usageOrgId)
+          : null,
+      ]);
 
     const statuses = await this.workerManager.getAllWorkerStatuses(orgId);
     const automationProcess = statuses.automation ?? null;
@@ -103,6 +105,7 @@ export class SystemStatusService {
           providerConfigured,
           usageFields,
           usageByModel,
+          usageDaily,
           usageStats
         ),
         ...(usageByActor ?? {}),
@@ -177,12 +180,14 @@ export class SystemStatusService {
     providerConfigured: boolean,
     usageFields: { displayName: string | null; costEstimated: boolean },
     models: LlmUsageStatus["models"],
+    daily: LlmUsageStatus["daily"],
     stats: LlmUsageStats
   ): LlmUsageStatus {
     return {
       ...stats,
       costEstimated: usageFields.costEstimated,
       currentModel,
+      daily,
       displayName: usageFields.displayName,
       models,
       provider,

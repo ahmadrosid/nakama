@@ -223,6 +223,20 @@ export interface StoredLlmUsageActorStatsRecord {
   userId: string | null;
 }
 
+/** One org's ledger for one UTC day, model, and provider. */
+export interface StoredLlmUsageDailyStatsRecord {
+  /** `YYYY-MM-DD`, UTC. */
+  day: string;
+  estimatedCostUsd: number;
+  inputTokens: number;
+  modelId: string;
+  orgId: string;
+  outputTokens: number;
+  /** Empty when the call had no provider context. */
+  provider: string;
+  requestCount: number;
+}
+
 export interface StoredWorkspaceSettingsRecord {
   /** Workspace-global interval for refreshing automation schedules and curator work. */
   automationWorkerPollIntervalMs: number;
@@ -1024,6 +1038,11 @@ export interface DatabaseAdapter {
 
   getWorkspaceSettings(): Promise<StoredWorkspaceSettingsRecord | null>;
   incrementLlmTurnUsage(orgId: string, delta: LlmTurnUsageDelta): Promise<void>;
+  incrementLlmUsageDailyStats(
+    orgId: string,
+    key: { day: string; modelId: string; provider: string },
+    delta: LlmUsageStatsDelta
+  ): Promise<void>;
   incrementLlmUsageStats(
     orgId: string,
     delta: LlmUsageStatsDelta,
@@ -1111,6 +1130,11 @@ export interface DatabaseAdapter {
     profileId: string
   ): Promise<string[]>;
   listLlmTurnUsage(orgId: string): Promise<StoredLlmTurnUsageRecord[]>;
+  /** Rows from `sinceDay` (inclusive, `YYYY-MM-DD`) onward. */
+  listLlmUsageDailyStats(
+    orgId: string,
+    sinceDay: string
+  ): Promise<StoredLlmUsageDailyStatsRecord[]>;
   listLlmUsageStatsByActor(
     orgId: string
   ): Promise<StoredLlmUsageActorStatsRecord[]>;
