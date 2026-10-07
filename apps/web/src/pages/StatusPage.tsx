@@ -276,7 +276,7 @@ function llmUsageCostNote(
       return `Based on pricing saved in Settings for ${modelLabel}. Actual billing may differ.`;
     }
 
-    return `Based on catalog pricing for ${modelLabel}. Actual billing may differ.`;
+    return "Estimated cost uses Nakama's built-in model prices. Your provider may charge a different amount.";
   }
 
   if (usesBrowsePricingHint(usage.provider)) {
