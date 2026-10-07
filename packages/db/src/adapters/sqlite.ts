@@ -1189,6 +1189,31 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listAttachmentsForSessionStmt = db.prepare(
     "SELECT * FROM attachments WHERE session_id = ? AND NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = attachments.session_id AND app_user_id IS NOT NULL)"
   );
+  // Gives each attachment of a session to another live session whose messages
+  // still name it, so purging the first one leaves the file in place. The new
+  // owner must be on the attachment's own profile, the only place the file can
+  // be read from, and that profile must belong to the caller's org. A session
+  // elsewhere that names the same id keeps nothing alive. An attachment nobody
+  // else names keeps its owner and is deleted with it.
+  const handOverSharedAttachmentsStmt = db.prepare(`
+    UPDATE attachments
+    SET session_id = COALESCE(
+      (
+        SELECT s.id
+        FROM sessions AS s
+        JOIN profiles AS p ON p.id = s.profile_id
+        JOIN session_messages AS m ON m.session_id = s.id
+        WHERE p.org_id = ?2
+          AND s.profile_id = attachments.profile_id
+          AND s.app_user_id IS NULL
+          AND s.id != ?1
+          AND instr(m.payload, '"attachmentId":"' || attachments.id || '"') > 0
+        LIMIT 1
+      ),
+      session_id
+    )
+    WHERE session_id = ?1 AND org_id = ?2
+  `);
   const listEphemeralAttachmentsStmt = db.prepare(
     "SELECT * FROM attachments WHERE ephemeral = 1 AND NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = attachments.session_id AND app_user_id IS NOT NULL)"
   );
@@ -3843,6 +3868,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         WORKSPACE_SETTINGS_ID
       ) as WorkspaceSettingsRow | null;
       return row ? toWorkspaceSettingsRecord(row) : null;
+    },
+
+    async handOverSharedAttachments(sessionId, orgId) {
+      handOverSharedAttachmentsStmt.run(sessionId, orgId);
     },
 
     async incrementLlmTurnUsage(orgId, delta) {
