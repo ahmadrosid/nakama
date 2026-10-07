@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
+  ChannelOrgStore,
   findOrgBySelectionInput,
   formatOrgSelectionPrompt,
   prepareChannelOrgContext,
@@ -102,5 +106,29 @@ describe("prepareChannelOrgContext", () => {
       status: "ready",
     });
     expect(saved).toBe("org_b");
+  });
+});
+
+describe("ChannelOrgStore", () => {
+  test("a slow save does not land after a newer one", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "nakama-org-store-"));
+    const filePath = path.join(dir, "org-selection.json");
+    try {
+      const store = new ChannelOrgStore(filePath);
+      // Big enough that this snapshot is still being written when the next
+      // save, a few bytes long, has already been renamed into place.
+      store.set("user_a", "x".repeat(16_000_000));
+      const first = store.save();
+      store.delete("user_a");
+      store.set("user_b", "org_b");
+      await Promise.all([first, store.save()]);
+
+      const reloaded = new ChannelOrgStore(filePath);
+      await reloaded.load();
+      expect(reloaded.get("user_b")?.orgId).toBe("org_b");
+      expect(reloaded.get("user_a")).toBeUndefined();
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
   });
 });

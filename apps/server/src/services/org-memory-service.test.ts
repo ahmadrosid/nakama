@@ -420,4 +420,41 @@ describe("OrgMemoryService", () => {
     const parsed = parseOrgMemoryContent(await service.getMemory("org_b"));
     expect(parsed.pinned).toEqual(["active fact"]);
   });
+
+  test("concurrent fact additions all survive", async () => {
+    const service = await setup();
+    const facts = ["first fact", "second fact", "third fact", "fourth fact"];
+
+    await Promise.all(
+      facts.map((fact) => service.addFact("org_a", fact, { pin: true }))
+    );
+
+    const parsed = parseOrgMemoryContent(await service.getMemory("org_a"));
+    expect(parsed.pinned.sort()).toEqual([...facts].sort());
+  });
+
+  test("concurrent approvals and a write from a second service instance all survive", async () => {
+    const service = await setup();
+    // The server builds one service for the routes and one inside AgentService.
+    const second = new OrgMemoryService(null, { configDir: tempDir });
+    const proposals = [
+      await service.propose("org_a", { bullet: "approved one" }),
+      await service.propose("org_a", { bullet: "approved two" }),
+    ];
+
+    await Promise.all([
+      ...proposals.map((proposal) =>
+        service.approveProposal("org_a", proposal.proposalId!, "admin_user", {
+          pin: true,
+        })
+      ),
+      second.addRecentLogFact("org_a", "logged fact", "2026-01-01"),
+    ]);
+
+    const parsed = parseOrgMemoryContent(await service.getMemory("org_a"));
+    expect(parsed.pinned.sort()).toEqual(["approved one", "approved two"]);
+    expect(parsed.sections.flatMap((section) => section.bullets)).toEqual([
+      "logged fact",
+    ]);
+  });
 });
