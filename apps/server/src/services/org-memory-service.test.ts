@@ -99,6 +99,18 @@ describe("OrgMemoryService", () => {
     );
   });
 
+  test("no-op save does not create history", async () => {
+    const service = await setup();
+    const content = `${ORG_MEMORY_PREAMBLE}\n\n- stable fact\n`;
+
+    await service.setMemory("org_a", content);
+    expect((await service.listHistory("org_a")).changes).toHaveLength(1);
+
+    await service.setMemory("org_a", content);
+
+    expect((await service.listHistory("org_a")).changes).toHaveLength(1);
+  });
+
   test("search finds bullets in the live file and archive files", async () => {
     const service = await setup();
     await service.addFact("org_a", "we use Bun not Node", { pin: true });
