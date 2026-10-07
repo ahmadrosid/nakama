@@ -174,7 +174,10 @@ test("workspace rename requires platform admin access and updates pins for every
   ).toBe(404);
   expect(
     (await request({ path: "drafts", newName: "other" }, other)).status
-  ).toBe(400);
+  ).toBe(200);
+  expect((await request({ path: "other", newName: "drafts" })).status).toBe(
+    200
+  );
   expect((await request({ path: "missing", newName: "other" })).status).toBe(
     404
   );
@@ -221,7 +224,11 @@ test("workspace rename requires platform admin access and updates pins for every
 });
 
 function createApp() {
-  const readCalls: Array<{ render?: "markdown" }> = [];
+  const listCalls: Array<Record<string, unknown>> = [];
+  const readCalls: Array<{
+    headOnly?: boolean;
+    render?: "markdown";
+  }> = [];
   const writeCalls: Array<{ content: string; filename: string }> = [];
   const agent = {
     getProfile: async (_orgId: string, profileId: string) => {
@@ -235,19 +242,32 @@ function createApp() {
       filename: "report.md",
       profileId: "profile_1",
     }),
-    listProfileArtifacts: async () => ({
-      artifacts: [],
-      directory: "/tmp/artifacts",
-      profileId: "profile_1",
-      total: 0,
-    }),
+    listProfileArtifacts: async (
+      _orgId: string,
+      _profileId: string,
+      options: Record<string, unknown> = {}
+    ) => {
+      listCalls.push(options);
+      return {
+        artifacts: [],
+        directory: "/tmp/artifacts",
+        profileId: "profile_1",
+        total: 0,
+      };
+    },
     readProfileArtifact: async (
       _orgId: string,
       _profileId: string,
-      _filename: string,
-      options: { render?: "markdown" } = {}
+      filename: string,
+      options: {
+        headOnly?: boolean;
+        render?: "markdown";
+      } = {}
     ) => {
       readCalls.push(options);
+      if (filename === "missing.md") {
+        throw new NakamaApiError(`Artifact not found: ${filename}`, 404);
+      }
       return {
         bytes: new TextEncoder().encode("# Report"),
         contentType: "text/markdown",
@@ -272,6 +292,7 @@ function createApp() {
   return {
     ...createMinimalHonoApp({ agent }),
     readCalls,
+    listCalls,
     writeCalls,
   };
 }
@@ -348,6 +369,35 @@ describe("profile artifact content auth", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Disposition")).toContain("attachment");
+  });
+
+  test("org viewer can check with HEAD whether an artifact still exists", async () => {
+    const { app, databaseAdapter, readCalls } = createApp();
+    const viewerSession = await setupFreshInstallSession(
+      app,
+      databaseAdapter,
+      "viewer-head@example.com",
+      "viewer"
+    );
+    const head = (path: string) =>
+      app.fetch(
+        new Request(
+          `http://localhost:4310/v1/profiles/profile_1/artifacts/content?path=${path}`,
+          {
+            headers: viewerSession.headers({}, viewerSession.orgId),
+            method: "HEAD",
+          }
+        )
+      );
+
+    const present = await head("report.md");
+    expect(present.status).toBe(200);
+    expect(await present.text()).toBe("");
+    expect((await head("missing.md")).status).toBe(404);
+    expect(readCalls).toEqual([
+      { headOnly: true, render: undefined },
+      { headOnly: true, render: undefined },
+    ]);
   });
 
   test("forwards render=markdown so a .docx is converted for preview", async () => {
@@ -648,7 +698,9 @@ test("personal file pins persist and enforce user, org, profile and path boundar
   const root = getProfileSoulDir(owner.orgId!, "pins-profile");
   await mkdir(path.join(root, "artifacts"), { recursive: true });
   await writeFile(path.join(root, "artifacts/report.md"), "Report");
-  await symlink("/etc/passwd", path.join(root, "outside"));
+  const outside = path.join(root, "..", "pin-secret.txt");
+  await writeFile(outside, "Secret");
+  await symlink(outside, path.join(root, "outside"));
   const request = (
     session = owner,
     body?: unknown,

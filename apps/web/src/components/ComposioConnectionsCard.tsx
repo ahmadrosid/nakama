@@ -8,7 +8,14 @@ import type {
   UpdateProfileComposioToolkitsRequest,
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
-import { ConfirmDialog } from "@nakama/ui/dialog";
+import {
+  ConfirmDialog,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@nakama/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -981,7 +988,17 @@ function ComposioConnectionsReady({
   state: ReturnType<typeof useComposioConnectionsState>;
 }) {
   const [disconnectTarget, setDisconnectTarget] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState<{
+    slug: string;
+    message: string;
+  } | null>(null);
+  const needsCustomAuthConfig = connectError?.message.includes(
+    "Auth_Config_DefaultAuthConfigNotFound"
+  );
   const data = state.toolkitsQuery.data;
+  const toolkitName =
+    data?.catalog.find((item) => item.slug === connectError?.slug)?.name ??
+    connectError?.slug;
   const configured =
     state.settings?.configured === true || data?.configured === true;
 
@@ -1017,7 +1034,12 @@ function ComposioConnectionsReady({
         busy={state.busy}
         data={data}
         isOrgAdmin={state.isOrgAdmin}
-        onConnect={(slug) => state.connectMutation.mutate(slug)}
+        onConnect={(slug) =>
+          state.connectMutation.mutate(slug, {
+            onError: (error) =>
+              setConnectError({ message: formatError(error), slug }),
+          })
+        }
         onDisable={(slug) => state.disableMutation.mutate(slug)}
         onDisconnect={setDisconnectTarget}
         onEnable={(slug) => state.enableMutation.mutate(slug)}
@@ -1036,6 +1058,49 @@ function ComposioConnectionsReady({
           title="Disconnect toolkit?"
         />
       ) : null}
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) {
+            setConnectError(null);
+          }
+        }}
+        open={connectError !== null}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {needsCustomAuthConfig
+                ? `${toolkitName} needs a custom auth config`
+                : "Could not connect toolkit"}
+            </DialogTitle>
+          </DialogHeader>
+          {needsCustomAuthConfig ? (
+            <>
+              <DialogDescription>
+                Composio has no managed credentials for {toolkitName}.
+              </DialogDescription>
+              <ol className="list-decimal space-y-2 pl-5 text-sm">
+                <li>Open the Composio project for this API key.</li>
+                <li>
+                  Create a custom auth config for {toolkitName}. Enter the
+                  credentials that Composio requests.
+                </li>
+                <li>Return here and try Connect again.</li>
+              </ol>
+              <a
+                className="text-sm underline underline-offset-3"
+                href="https://next.docs.composio.dev/docs/auth-configuration/custom-auth-configs"
+                rel="noreferrer"
+                target="_blank"
+              >
+                View setup guide
+              </a>
+            </>
+          ) : (
+            <DialogDescription>{connectError?.message}</DialogDescription>
+          )}
+        </DialogContent>
+      </Dialog>
     </IntegrationCardShell>
   );
 }

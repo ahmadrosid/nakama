@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import {
   getOrgPluginDataDir,
   getProfileSoulDir,
@@ -237,7 +237,7 @@ test("knowledge tool migrates uploads and preserves filename scoping and citatio
     }
   );
   expect(result.matches).toHaveLength(1);
-  expect(result.matches[0]!.file).toStartWith("knowledge-base/");
+  expect(result.matches[0]!.file).toStartWith(`knowledge-base${sep}`);
   expect(result.matches[0]!.text).toContain("twenty days");
 });
 

@@ -7,6 +7,7 @@ import type {
 } from "@nakama/core";
 import {
   createNakamaDataExport,
+  createNakamaOrgDataExport,
   createNakamaUserDataExport,
   decodeArchiveRequestData,
   previewNakamaDataImport,
@@ -44,6 +45,43 @@ export function registerDataPortabilityRoutes(
     .object({})
     .passthrough()
     .openapi("RestoreDataImportResponse");
+
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "exportPlatformOrganizationData",
+      path: "/v1/platform/orgs/{orgId}/data/export",
+      request: {
+        params: z.object({
+          orgId: z.string().openapi({ param: { in: "path", name: "orgId" } }),
+        }),
+      },
+      responses: {
+        200: {
+          content: {
+            "application/zip": {
+              schema: z.string().openapi({ format: "binary", type: "string" }),
+            },
+          },
+          description: "Organization data export ZIP",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Export one organization's portable data",
+      tags: ["Platform"],
+    })
+  );
 
   app.openAPIRegistry.registerPath(
     createRoute({
@@ -186,6 +224,21 @@ export function registerDataPortabilityRoutes(
     })
   );
 
+  app.get("/v1/platform/orgs/:orgId/data/export", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+    const result = await createNakamaOrgDataExport(
+      options.databaseAdapter,
+      orgId
+    );
+    return new Response(result.data, {
+      headers: {
+        "Content-Disposition": `attachment; filename="${result.filename}"`,
+        "Content-Type": "application/zip",
+      },
+    });
+  });
+
   app.get("/v1/platform/users/:userId/data/export", async (c) => {
     requirePlatformAdminFromContext(c);
     const userId = decodeURIComponent(c.req.param("userId"));
@@ -203,7 +256,11 @@ export function registerDataPortabilityRoutes(
 
   app.get("/v1/platform/data/export", async (c) => {
     requirePlatformAdminFromContext(c);
-    const result = await createNakamaDataExport();
+    const result = options.googleMeetService
+      ? await options.googleMeetService.withSnapshot(() =>
+          createNakamaDataExport()
+        )
+      : await createNakamaDataExport();
     return new Response(result.data, {
       headers: {
         "Content-Disposition": `attachment; filename="${result.filename}"`,
@@ -239,19 +296,36 @@ export function registerDataPortabilityRoutes(
 
     let restore;
     try {
-      restore = await runWithPluginExportBarrier(async () => {
-        const result = await restoreNakamaDataImport(archive, {
-          confirm: body.confirm,
-        });
-        // Drop registrations before reloading restored data; restored plugins stay disabled.
-        await options.workerManager.clearPluginWorkers?.();
-        try {
+      const restoreOperation = () =>
+        runWithPluginExportBarrier(async () => {
+          const { onBeforeDataRestore } = options;
+          let databaseReleased = false;
+          const result = await restoreNakamaDataImport(archive, {
+            afterFailedReplace: options.onDataRestored,
+            beforeReplace: onBeforeDataRestore
+              ? async () => {
+                  databaseReleased = true;
+                  await onBeforeDataRestore();
+                }
+              : undefined,
+            confirm: body.confirm,
+          });
+          // Drop registrations before reloading restored data; restored plugins stay disabled.
+          try {
+            await options.workerManager.clearPluginWorkers?.();
+          } catch (error) {
+            // The restore committed with the database released; reopen it before failing.
+            if (databaseReleased) {
+              await options.onDataRestored?.().catch(() => undefined);
+            }
+            throw error;
+          }
           await options.onDataRestored?.();
-        } catch {
-          // Restore committed; workers remain unregistered until the host reloads.
-        }
-        return result;
-      });
+          return result;
+        });
+      restore = options.googleMeetService
+        ? await options.googleMeetService.withSnapshot(restoreOperation)
+        : await restoreOperation();
     } catch (error) {
       return errorResponse(formatImportError(error), 400);
     }

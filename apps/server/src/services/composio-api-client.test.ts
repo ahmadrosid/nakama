@@ -82,6 +82,29 @@ describe("parseLinkRedirectUrl", () => {
 });
 
 describe("resolveAuthConfigId", () => {
+  test("uses a custom auth config when the toolkit has no managed credentials", async () => {
+    const composio = {
+      authConfigs: {
+        async create() {
+          throw new Error("should not create when a custom config exists");
+        },
+        async list(query: { toolkit?: string }) {
+          expect(query).toEqual({ toolkit: "metaads" });
+          return {
+            items: [
+              { id: "ac_managed", isComposioManaged: true },
+              { id: "ac_custom", isComposioManaged: false },
+            ],
+          };
+        },
+      },
+    };
+
+    await expect(resolveAuthConfigId(composio, "MetaAds")).resolves.toBe(
+      "ac_custom"
+    );
+  });
+
   test("reuses an existing composio-managed auth config", async () => {
     const composio = {
       authConfigs: {

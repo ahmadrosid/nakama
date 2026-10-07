@@ -1,13 +1,17 @@
-import type {
-  WebSearchSource,
-  WebSearchToolState,
+import {
+  dedupeSources,
+  normalizeSourceUrl,
+  readRecord,
+  readString,
+  type WebSearchSource,
+  type WebSearchToolState,
 } from "@/components/chat/web-search.shared";
 import type { ChatListItem } from "@/lib/chat-history";
 
 export const WEB_SEARCH_TOOL_NAME = "web_search";
 
 /** Exa MCP tools are namespaced as `{server}__web_search_exa` (see packages/core/src/mcp/preinstalled.ts). */
-export const MCP_EXA_WEB_SEARCH_TOOL_PATTERN =
+const MCP_EXA_WEB_SEARCH_TOOL_PATTERN =
   /^[a-zA-Z0-9_-]+__web_search(?:_advanced)?_exa(?:_\d+)?$/;
 
 export function isWebSearchTool(tool: string | undefined): boolean {
@@ -20,18 +24,6 @@ export function isWebSearchTool(tool: string | undefined): boolean {
   }
 
   return MCP_EXA_WEB_SEARCH_TOOL_PATTERN.test(tool);
-}
-
-function readRecord(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
-}
-
-function readString(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 export function parseWebSearchQuery(input: unknown): string | null {
@@ -59,12 +51,6 @@ export function parseWebSearchQuery(input: unknown): string | null {
   return null;
 }
 
-function normalizeSourceUrl(url: string): { url: string; href: string } {
-  const trimmed = url.trim();
-  const href = trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;
-  return { href, url: trimmed };
-}
-
 function sourceFromRecord(
   record: Record<string, unknown>
 ): WebSearchSource | null {
@@ -86,23 +72,6 @@ function sourceFromRecord(
     title,
     url: normalized.url,
   };
-}
-
-function dedupeSources(sources: WebSearchSource[]): WebSearchSource[] {
-  const seen = new Set<string>();
-  const next: WebSearchSource[] = [];
-
-  for (const source of sources) {
-    const key = source.href ?? source.url;
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    next.push(source);
-  }
-
-  return next;
 }
 
 function parseSourcesFromContentArray(content: unknown): WebSearchSource[] {
@@ -158,7 +127,7 @@ function parseMcpTextContent(content: unknown): string | null {
 }
 
 /** Parse Exa MCP `web_search_exa` formatted text blocks (Title/URL fields separated by ---). */
-export function parseExaWebSearchTextResult(text: string): WebSearchSource[] {
+function parseExaWebSearchTextResult(text: string): WebSearchSource[] {
   const trimmed = text.trim();
   if (!trimmed || /^no search results found/i.test(trimmed)) {
     return [];

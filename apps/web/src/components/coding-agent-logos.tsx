@@ -113,6 +113,40 @@ function PiLogo({ className }: { className?: string }) {
   );
 }
 
+const CODING_AGENT_LOGOS = {
+  agent: CursorLogo,
+  claude: ClaudeLogo,
+  codex: CodexLogo,
+  opencode: OpenCodeLogo,
+  pi: PiLogo,
+} as const;
+
+const CODING_AGENT_COMMAND_PATTERN =
+  /(?:^|[;&|(]\s*)(codex|claude|opencode|pi|agent|cursor-agent)(?=\s|$)/m;
+
+/** Logo for the coding agent a shell command runs, else `fallback`. */
+export function CodingAgentCommandLogo({
+  command,
+  className,
+  fallback,
+}: {
+  command: string;
+  className?: string;
+  fallback: ReactNode;
+}) {
+  const match = command.trim().match(CODING_AGENT_COMMAND_PATTERN)?.[1];
+  if (!match) {
+    return fallback;
+  }
+  const Logo =
+    CODING_AGENT_LOGOS[
+      match === "cursor-agent"
+        ? "agent"
+        : (match as keyof typeof CODING_AGENT_LOGOS)
+    ];
+  return <Logo className={className} />;
+}
+
 export function CodingAgentLogo({
   command,
   name,

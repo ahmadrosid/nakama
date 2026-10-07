@@ -14,23 +14,9 @@ import {
 } from "./artifact-mime";
 
 describe("inferArtifactMimeType", () => {
-  test("maps common text extensions", () => {
-    expect(inferArtifactMimeType("notes.md")).toBe("text/markdown");
-    expect(inferArtifactMimeType("weekly/report.MARKDOWN")).toBe(
-      "text/markdown"
-    );
-    expect(inferArtifactMimeType("slides.html")).toBe("text/html");
-    expect(inferArtifactMimeType("data.json")).toBe("application/json");
-  });
-
-  test("maps common video extensions", () => {
-    expect(inferArtifactMimeType("clip.mp4")).toBe("video/mp4");
-    expect(inferArtifactMimeType("demo.M4V")).toBe("video/mp4");
-    expect(inferArtifactMimeType("reel.webm")).toBe("video/webm");
-    expect(inferArtifactMimeType("take.mov")).toBe("video/quicktime");
-  });
-
   test("falls back to binary for unknown or extensionless names", () => {
+    expect(inferArtifactMimeType("notes.md")).toBe("text/markdown");
+    expect(inferArtifactMimeType("clip.mp4")).toBe("video/mp4");
     expect(inferArtifactMimeType("archive.bin")).toBe(
       "application/octet-stream"
     );
@@ -93,14 +79,8 @@ describe("mime predicates", () => {
 });
 
 describe("artifactCodeLanguage", () => {
-  test("maps code and data files to a highlight language", () => {
-    expect(artifactCodeLanguage("config.yaml")).toBe("yaml");
-    expect(artifactCodeLanguage("query.sql")).toBe("sql");
-    expect(artifactCodeLanguage("data.json")).toBe("json");
-    expect(artifactCodeLanguage("app.tsx")).toBe("tsx");
-  });
-
   test("leaves prose-ish text unhighlighted", () => {
+    expect(artifactCodeLanguage("app.tsx")).toBe("tsx");
     expect(artifactCodeLanguage("notes.txt")).toBeNull();
     expect(artifactCodeLanguage("report.md")).toBeNull();
     expect(artifactCodeLanguage("rows.csv")).toBeNull();

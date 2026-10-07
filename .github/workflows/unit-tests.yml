@@ -3,12 +3,47 @@ name: Unit Tests
 on:
   push:
     branches: [main]
+    # Desktop version bumps are checked by Desktop Release; PR checks still run.
+    paths-ignore: ['apps/desktop/package.json']
+  # Lets a merge queue test the merged result. Does nothing until one is on.
+  merge_group:
   pull_request:
+    # Markdown-only PRs change no code.
+    paths-ignore: ['**.md', '.agents/**', 'docs/**', 'scripts/**', 'assets/**']
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      web_only: ${{ steps.scope.outputs.web_only }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Check PR files
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          web_only=false
+          if [[ "$EVENT_NAME" == pull_request ]]; then
+            files=$(git diff --name-only --no-renames "$BASE_SHA" "$HEAD_SHA")
+            if [[ -n "$files" ]]; then
+              web_only=true
+              while IFS= read -r file; do
+                [[ "$file" == apps/web/* ]] || { web_only=false; break; }
+              done <<< "$files"
+            fi
+          fi
+          echo "web_only=$web_only" >> "$GITHUB_OUTPUT"
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -22,11 +57,82 @@ jobs:
           bun-version: 1.4.0
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - parallel:
+          # bun test does not type-check or bundle. Docker Publish does both, but
+          # only after the merge. Keep this list the same as the one in Dockerfile.
+          - name: Build what the image builds
+            run: |
+              bun run --filter @nakama/web build
+              bun run --filter @nakama/server build
+              bun run --filter @nakama/automation build
+              bun run --filter @nakama/telegram build
+              bun run --filter @nakama/whatsapp build
+              bun run --filter @nakama/discord build
+              bun run --filter @nakama/slack build
+
+          - name: Set up Electron
+            run: |
+              bun apps/desktop/node_modules/electron/install.js
+              sudo chown root:root apps/desktop/node_modules/electron/dist/chrome-sandbox
+              sudo chmod 4755 apps/desktop/node_modules/electron/dist/chrome-sandbox
 
       - name: Run tests
+        run: xvfb-run -a bun run test
+
+  # Windows tests cover server and shared packages, not apps/web.
+  test-windows:
+    name: test-windows (${{ matrix.shard }}/4)
+    needs: changes
+    if: needs.changes.outputs.web_only != 'true'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.0
+
+      - name: Restore Bun downloads
+        id: dependencies
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-downloads-${{ runner.os }}-${{ runner.arch }}-1.4.0-${{ hashFiles('bun.lock', 'patches/**') }}
+          restore-keys: bun-downloads-${{ runner.os }}-${{ runner.arch }}-1.4.0-
+
+      - name: Install dependencies
+        # Recreate Windows junctions locally; tar archives do not preserve them.
+        run: bun install --frozen-lockfile --ignore-scripts --filter nakama --filter '@nakama/server...' --filter './packages/*' --filter './packages/plugins/*'
+
+      # Save before tests: a failing run must not discard it.
+      - name: Save Bun downloads
+        if: steps.dependencies.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ steps.dependencies.outputs.cache-primary-key }}
+
+      - name: Run tests
+        # Split the slow server suite across runners; run each smaller suite once.
+        # Keep files isolated and budget for Windows filesystem and subprocess work.
+        shell: bash
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
-          bun apps/desktop/node_modules/electron/install.js
-          sudo chown root:root apps/desktop/node_modules/electron/dist/chrome-sandbox
-          sudo chmod 4755 apps/desktop/node_modules/electron/dist/chrome-sandbox
-          xvfb-run -a bun run test
+          status=0
+          bun run --cwd apps/server test --shard="$SHARD/4" --parallel=2 --timeout=30000 || status=1
+          case "$SHARD" in
+            1) bun run --cwd packages/core test --parallel=2 --timeout=30000 || status=1 ;;
+            2) bun run --cwd packages/db test --parallel=2 --timeout=30000 || status=1 ;;
+            3) bun run --cwd packages/agent test --parallel=2 --timeout=30000 || status=1 ;;
+          esac
+          exit "$status"

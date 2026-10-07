@@ -1,6 +1,7 @@
 import { readdir, readFile, rm } from "node:fs/promises";
 import {
   basename,
+  extname,
   isAbsolute,
   join,
   normalize,
@@ -43,6 +44,11 @@ import type {
 import { unzipSync, zipSync } from "fflate";
 import { getCustomToolHandler, isCustomToolType } from "./custom-tool-handlers";
 import { readHandlerModulePath } from "./custom-tool-shared";
+import {
+  MAX_IMPORT_ENTRY_BYTES,
+  MAX_IMPORT_UNCOMPRESSED_BYTES,
+} from "./data-portability";
+import { findMcpServerForOrg } from "./mcp-server-access";
 import { recordProfileChangeEvent } from "./profile-change-history";
 
 export const PROFILE_PACK_KIND = "nakama-profile-export" as const;
@@ -50,6 +56,7 @@ const PROFILE_PACK_MANIFEST_FILENAME = "nakama-profile-export.json";
 const PROFILE_PACK_FORMAT_VERSION = 1;
 const CUSTOM_TOOLS_ARCHIVE_DIR = "custom-tools";
 
+export const MAX_PROFILE_PACK_ENTRY_COUNT = 10_000;
 /** Only these workspace paths ever leave (export) or enter (import) a pack. */
 const ROOT_ALLOWED_FILES = new Set([
   "SOUL.md",
@@ -59,6 +66,26 @@ const ROOT_ALLOWED_FILES = new Set([
 ]);
 const ALLOWED_ROOT_SUBDIRS = new Set(["examples", "knowledge-base", "skills"]);
 const AVATAR_BASENAME_PATTERN = /^avatar\.[a-z0-9]+$/i;
+/**
+ * A skill-local `tool.js`/`tool.ts` is `import()`ed straight into the
+ * long-lived server process, so a pack carrying one turns a profile import
+ * into arbitrary code execution holding the deployment's secrets, the
+ * database handle, and the server's network identity. Python skill tools run
+ * in a separate interpreter and are not covered here.
+ */
+const IN_PROCESS_SKILL_SOURCE_EXTENSIONS = new Set([
+  ".cjs",
+  ".cts",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".mts",
+  ".ts",
+  ".tsx",
+]);
+const IN_PROCESS_SKILL_SOURCE_REASON =
+  "Executable JavaScript/TypeScript skill sources run inside the Nakama server process and are never installed from a profile pack.";
+
 const AVATAR_EXTENSION_MEDIA_TYPES: Record<string, string> = {
   gif: "image/gif",
   jpeg: "image/jpeg",
@@ -102,6 +129,7 @@ export interface CreateProfilePackOptions {
 }
 
 export interface PreviewProfilePackImportOptions {
+  isPlatformAdmin?: boolean;
   restoreCustomTools?: boolean;
 }
 
@@ -114,6 +142,7 @@ export interface CreateProfilePackResult {
 export interface ImportProfilePackOptions {
   actorUserId?: string | null;
   confirm: boolean;
+  isPlatformAdmin?: boolean;
   name?: string;
   now?: Date;
   restoreCustomTools?: boolean;
@@ -211,6 +240,7 @@ export async function previewProfilePackImport(
   const skippedAssignments: ProfilePackSkippedItem[] = [];
   await previewToolAssignments(
     db,
+    orgId,
     manifest,
     entries,
     options.restoreCustomTools === true,
@@ -218,11 +248,14 @@ export async function previewProfilePackImport(
   );
   await eachNamedOrSkip(
     manifest.meta.mcpServerNames,
-    (name) => db.getMcpServerByName(name),
+    (name) =>
+      findMcpServerForOrg(db, orgId, name, {
+        isPlatformAdmin: options.isPlatformAdmin,
+      }),
     skippedAssignments,
     (name) => ({
       path: `MCP server:${name}`,
-      reason: `MCP server "${name}" was not found in the destination and will be skipped.`,
+      reason: `MCP server "${name}" is not available to this organization and will be skipped.`,
     })
   );
   await eachNamedOrSkip(
@@ -328,6 +361,7 @@ export async function importProfilePack(
     await restoreToolAssignments(
       db,
       profileId,
+      orgId,
       manifest,
       entries,
       options.restoreCustomTools === true,
@@ -336,11 +370,14 @@ export async function importProfilePack(
     );
     await eachNamedOrSkip(
       manifest.meta.mcpServerNames,
-      (serverName) => db.getMcpServerByName(serverName),
+      (serverName) =>
+        findMcpServerForOrg(db, orgId, serverName, {
+          isPlatformAdmin: options.isPlatformAdmin,
+        }),
       skippedAssignments,
       (name) => ({
         path: `MCP server:${name}`,
-        reason: `MCP server "${name}" was not found in the destination and was skipped.`,
+        reason: `MCP server "${name}" is not available to this organization and was skipped.`,
       }),
       async (server) => {
         await db.assignMcpServerToProfile(profileId, server.id);
@@ -470,7 +507,8 @@ async function inventorySkillsDir(
     await collectFilesRecursively(
       join(skillsDir, entry.name),
       relativePath,
-      files
+      files,
+      skipped
     );
   }
 }
@@ -478,7 +516,8 @@ async function inventorySkillsDir(
 async function collectFilesRecursively(
   dir: string,
   relativeBase: string,
-  out: ProfilePackFile[]
+  out: ProfilePackFile[],
+  skipped?: ProfilePackSkippedItem[]
 ): Promise<void> {
   const entries = await readdir(dir, { withFileTypes: true });
 
@@ -487,10 +526,25 @@ async function collectFilesRecursively(
     const relativePath = `${relativeBase}/${entry.name}`;
 
     if (entry.isDirectory()) {
-      await collectFilesRecursively(absolutePath, relativePath, out);
-    } else if (entry.isFile()) {
-      out.push({ absolutePath, relativePath });
+      await collectFilesRecursively(absolutePath, relativePath, out, skipped);
+      continue;
     }
+
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    // A pack is a transport, not an approval channel: anything a receiver
+    // would have to refuse on import never leaves the exporting server either.
+    if (skipped && isInProcessSkillSource(relativePath)) {
+      skipped.push({
+        path: relativePath,
+        reason: IN_PROCESS_SKILL_SOURCE_REASON,
+      });
+      continue;
+    }
+
+    out.push({ absolutePath, relativePath });
   }
 }
 
@@ -637,6 +691,7 @@ async function collectPackedCustomTools(
 
 async function previewToolAssignments(
   db: DatabaseAdapter,
+  orgId: string,
   manifest: ProfilePackManifest,
   entries: ProfilePackZipEntry[],
   restoreCustomTools: boolean,
@@ -645,6 +700,7 @@ async function previewToolAssignments(
   for (const name of manifest.meta.toolNames) {
     await resolveToolAssignment(
       db,
+      orgId,
       manifest,
       entries,
       name,
@@ -657,6 +713,7 @@ async function previewToolAssignments(
 async function restoreToolAssignments(
   db: DatabaseAdapter,
   profileId: string,
+  orgId: string,
   manifest: ProfilePackManifest,
   entries: ProfilePackZipEntry[],
   restoreCustomTools: boolean,
@@ -666,6 +723,7 @@ async function restoreToolAssignments(
   for (const name of manifest.meta.toolNames) {
     const resolution = await resolveToolAssignment(
       db,
+      orgId,
       manifest,
       entries,
       name,
@@ -734,13 +792,16 @@ async function restoreToolAssignments(
 
 async function resolveToolAssignment(
   db: DatabaseAdapter,
+  orgId: string,
   manifest: ProfilePackManifest,
   entries: ProfilePackZipEntry[],
   name: string,
   restoreCustomTools: boolean,
   skipped: ProfilePackSkippedItem[]
 ): Promise<ToolAssignmentResolution | null> {
-  const existing = await db.getToolByName(name);
+  // Never resolve tools another organization owns: an unscoped name lookup
+  // would let a pack attach a foreign tenant's tool to this profile.
+  const existing = await db.getToolByNameForOrg(orgId, name);
   const packed = findPackedCustomTool(manifest, name);
 
   if (!packed) {
@@ -1206,6 +1267,24 @@ function isAvatarEntry(relativePath: string): boolean {
   );
 }
 
+/**
+ * True for pack paths the server would `import()` while building a session's
+ * tools. Only paths under `skills/` qualify: the same extensions elsewhere in
+ * a profile are inert documentation, and the agent write tools already refuse
+ * skill-local executables.
+ */
+function isInProcessSkillSource(relativePath: string): boolean {
+  const [first, ...rest] = relativePath.split("/");
+
+  if (first !== "skills" || rest.length === 0) {
+    return false;
+  }
+
+  return IN_PROCESS_SKILL_SOURCE_EXTENSIONS.has(
+    extname(relativePath).toLowerCase()
+  );
+}
+
 function isAllowlistedProfilePackPath(relativePath: string): boolean {
   if (ROOT_ALLOWED_FILES.has(relativePath)) {
     return true;
@@ -1227,21 +1306,68 @@ function isAllowlistedProfilePackPath(relativePath: string): boolean {
 function readProfilePackZip(
   archive: Buffer | Uint8Array | ArrayBuffer
 ): ProfilePackZipEntry[] {
+  let entryCount = 0;
+  let uncompressedTotal = 0;
+
+  // fflate invokes the filter after reading ZIP metadata and before allocating
+  // or inflating the entry, so these checks reject bombs from their declarations.
+  const admitEntry = (name: string, size: number): boolean => {
+    entryCount += 1;
+    if (entryCount > MAX_PROFILE_PACK_ENTRY_COUNT) {
+      throw new NakamaApiError(
+        `Profile pack exceeds the ${MAX_PROFILE_PACK_ENTRY_COUNT} entry limit.`,
+        413
+      );
+    }
+
+    if (size > MAX_IMPORT_ENTRY_BYTES) {
+      throw new NakamaApiError(
+        `Profile pack entry ${name} exceeds the ${MAX_IMPORT_ENTRY_BYTES / (1024 * 1024)} MB limit.`,
+        413
+      );
+    }
+
+    uncompressedTotal += size;
+    if (uncompressedTotal > MAX_IMPORT_UNCOMPRESSED_BYTES) {
+      throw new NakamaApiError(
+        `Profile pack exceeds the ${MAX_IMPORT_UNCOMPRESSED_BYTES / (1024 * 1024)} MB uncompressed limit.`,
+        413
+      );
+    }
+
+    return true;
+  };
+
   try {
-    return Object.entries(unzipSync(toBuffer(archive)))
+    return Object.entries(
+      unzipSync(toBuffer(archive), {
+        filter: (file) => admitEntry(file.name, file.originalSize),
+      })
+    )
       .filter(([name]) => !name.endsWith("/"))
       .map(([name, data]) => {
-        validateProfilePackEntryPath(name);
-        return { data: Buffer.from(data), name };
+        const entryPath = validateProfilePackEntryPath(name);
+
+        if (isInProcessSkillSource(entryPath)) {
+          throw new NakamaApiError(
+            `Profile pack entry ${entryPath} is not importable. ${IN_PROCESS_SKILL_SOURCE_REASON}`,
+            400
+          );
+        }
+
+        return { data: Buffer.from(data), name: entryPath };
       });
   } catch (error) {
+    if (error instanceof NakamaApiError) {
+      throw error;
+    }
     if (error instanceof Error) {
       if (error.message === "invalid zip data") {
-        throw new Error("Invalid ZIP archive.");
+        throw new NakamaApiError("Invalid ZIP archive.", 400);
       }
       throw error;
     }
-    throw new Error("Invalid ZIP archive.");
+    throw new NakamaApiError("Invalid ZIP archive.", 400);
   }
 }
 
@@ -1279,28 +1405,35 @@ function readProfilePackManifest(
   return manifest;
 }
 
-function validateProfilePackEntryPath(path: string): void {
-  if (!path || path.includes("\0")) {
+/**
+ * Returns the canonical POSIX form of the entry path, so the guard below and
+ * the write that follows it see the same string: `./skills/x/tool.js` and
+ * `skills/x/tool.js` must not slip past as two different entries.
+ */
+function validateProfilePackEntryPath(entryPath: string): string {
+  if (!entryPath || entryPath.includes("\0")) {
     throw new Error("Archive entry path is empty or invalid.");
   }
 
-  if (path !== toZipPath(path)) {
-    throw new Error(`Archive entry must use POSIX separators: ${path}`);
+  if (entryPath !== toZipPath(entryPath)) {
+    throw new Error(`Archive entry must use POSIX separators: ${entryPath}`);
   }
 
-  if (isAbsolute(path) || /^[a-zA-Z]:/.test(path)) {
-    throw new Error(`Archive entry must be relative: ${path}`);
+  if (isAbsolute(entryPath) || /^[a-zA-Z]:/.test(entryPath)) {
+    throw new Error(`Archive entry must be relative: ${entryPath}`);
   }
 
-  const normalized = normalize(path).split(sep).join("/");
+  const normalized = normalize(entryPath).split(sep).join("/");
 
   if (
     normalized === ".." ||
     normalized.startsWith("../") ||
     normalized.includes("/../")
   ) {
-    throw new Error(`Archive entry escapes profile pack root: ${path}`);
+    throw new Error(`Archive entry escapes profile pack root: ${entryPath}`);
   }
+
+  return normalized;
 }
 
 function toZipPath(path: string): string {

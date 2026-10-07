@@ -72,6 +72,15 @@ export function createAuthMiddleware(
       return;
     }
 
+    if (
+      c.req.header("X-Nakama-App-User-Id") !== undefined &&
+      (c.req.path.startsWith("/v1/sessions") ||
+        c.req.path.startsWith("/v1/attachments/") ||
+        /^\/v1\/profiles\/[^/]+\/artifacts(?:\/|$)/.test(c.req.path))
+    ) {
+      c.res = errorResponse("App-user scope is no longer supported.", 400);
+      return;
+    }
     c.set("auth", auth);
     await next();
   };

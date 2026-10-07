@@ -7,7 +7,6 @@ import {
 /** Same as `createSqliteMemoryAdapter` — kept for existing test imports. */
 export {
   createSqliteDatabase,
-  createSqliteMemoryAdapter,
   createSqliteMemoryAdapter as createInMemoryDatabaseAdapter,
 } from "./adapters/sqlite";
 export * from "./automation-store";

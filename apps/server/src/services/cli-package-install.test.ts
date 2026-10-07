@@ -1,8 +1,26 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runTimedInstallCommand } from "./cli-package-install";
+import {
+  assertPinnedNpmPackage,
+  buildPinnedPackageInstallPlan,
+  buildPinnedPackageMetadataUrl,
+  buildRestrictedInstallEnv,
+  downloadPinnedPackageTarball,
+  type PinnedNpmPackage,
+  readPinnedPackageDist,
+  runTimedInstallCommand,
+  verifyPackageTarballIntegrity,
+} from "./cli-package-install";
 
 const STALLING_PLAN = {
   args: ["-c", "printf partial; exec sleep 5"],
@@ -123,54 +141,63 @@ describe("runTimedInstallCommand", () => {
       timedOut: false,
     });
   });
-  test("settles only once the timed-out installer has actually exited", async () => {
-    const startedAt = performance.now();
 
-    const result = await runTimedInstallCommand(
-      SIGTERM_IGNORING_PLAN,
-      undefined,
-      {
-        sigtermGraceMs: 200,
-        timeoutMs: 50,
-      }
-    );
-    const elapsedMs = performance.now() - startedAt;
+  // The two SIGTERM_IGNORING_PLAN tests are POSIX-only: Windows has no SIGTERM
+  // to trap, so the first kill step already force-kills the tree there.
+  test.skipIf(process.platform === "win32")(
+    "settles only once the timed-out installer has actually exited",
+    async () => {
+      const startedAt = performance.now();
 
-    expect({
-      settledAfterTheEscalation: elapsedMs >= 250,
-      settledBeforeTheSelfExit: elapsedMs < 800,
-      timedOut: result.timedOut,
-    }).toEqual({
-      settledAfterTheEscalation: true,
-      settledBeforeTheSelfExit: true,
-      timedOut: true,
-    });
-  });
+      const result = await runTimedInstallCommand(
+        SIGTERM_IGNORING_PLAN,
+        undefined,
+        {
+          sigtermGraceMs: 200,
+          timeoutMs: 50,
+        }
+      );
+      const elapsedMs = performance.now() - startedAt;
 
-  test("gives up waiting when the kill escalation has not landed yet", async () => {
-    const startedAt = performance.now();
+      expect({
+        settledAfterTheEscalation: elapsedMs >= 250,
+        settledBeforeTheSelfExit: elapsedMs < 800,
+        timedOut: result.timedOut,
+      }).toEqual({
+        settledAfterTheEscalation: true,
+        settledBeforeTheSelfExit: true,
+        timedOut: true,
+      });
+    }
+  );
 
-    const result = await runTimedInstallCommand(
-      SIGTERM_IGNORING_PLAN,
-      undefined,
-      {
-        settleTimeoutMs: 150,
-        sigtermGraceMs: 10_000,
-        timeoutMs: 50,
-      }
-    );
-    const elapsedMs = performance.now() - startedAt;
+  test.skipIf(process.platform === "win32")(
+    "gives up waiting when the kill escalation has not landed yet",
+    async () => {
+      const startedAt = performance.now();
 
-    expect({
-      settledAfterTheSettleBound: elapsedMs >= 200,
-      settledBeforeTheSelfExit: elapsedMs < 800,
-      timedOut: result.timedOut,
-    }).toEqual({
-      settledAfterTheSettleBound: true,
-      settledBeforeTheSelfExit: true,
-      timedOut: true,
-    });
-  });
+      const result = await runTimedInstallCommand(
+        SIGTERM_IGNORING_PLAN,
+        undefined,
+        {
+          settleTimeoutMs: 150,
+          sigtermGraceMs: 10_000,
+          timeoutMs: 50,
+        }
+      );
+      const elapsedMs = performance.now() - startedAt;
+
+      expect({
+        settledAfterTheSettleBound: elapsedMs >= 200,
+        settledBeforeTheSelfExit: elapsedMs < 800,
+        timedOut: result.timedOut,
+      }).toEqual({
+        settledAfterTheSettleBound: true,
+        settledBeforeTheSelfExit: true,
+        timedOut: true,
+      });
+    }
+  );
   test("does not wait out the settle bound for a process that already exited", async () => {
     const startedAt = performance.now();
 
@@ -192,33 +219,93 @@ describe("runTimedInstallCommand", () => {
    * The installer shells out and the grandchild outlives its parent. A kill
    * aimed at the direct child leaves that grandchild running, which is what
    * "the timeout does not cancel the install" meant in practice.
+   *
+   * POSIX-only: under Git Bash the `&` child is not a Windows child of the
+   * sh.exe spawned here (MSYS fork re-parents it to a short-lived helper), so
+   * no tree kill can reach it. The `.cmd` shim test below covers Windows.
    */
-  test("a timed-out install stops the processes it started, not just the one it spawned", async () => {
-    const marker = join(tmpdir(), `nakama-install-grandchild-${Date.now()}`);
-    rmSync(marker, { force: true });
+  test.skipIf(process.platform === "win32")(
+    "a timed-out install stops the processes it started, not just the one it spawned",
+    async () => {
+      const marker = join(tmpdir(), `nakama-install-grandchild-${Date.now()}`);
+      rmSync(marker, { force: true });
 
-    const result = await runTimedInstallCommand(
-      {
-        args: [
-          "-c",
-          `sh -c 'sleep 1.2; echo alive > ${marker}' & echo started; wait`,
-        ],
-        command: "sh",
-        displayCommand: "sh -c 'grandchild'",
-      },
-      undefined,
-      { settleTimeoutMs: 1000, sigtermGraceMs: 100, timeoutMs: 200 }
-    );
+      const result = await runTimedInstallCommand(
+        {
+          args: [
+            "-c",
+            `sh -c 'sleep 1.2; echo alive > ${marker}' & echo started; wait`,
+          ],
+          command: "sh",
+          displayCommand: "sh -c 'grandchild'",
+        },
+        undefined,
+        { settleTimeoutMs: 1000, sigtermGraceMs: 100, timeoutMs: 200 }
+      );
 
-    expect(result.timedOut).toBe(true);
+      expect(result.timedOut).toBe(true);
 
-    // Past the grandchild's own sleep: if the group was signalled it never
-    // wrote, and if only the direct child was signalled it has by now.
-    await Bun.sleep(1600);
-    const survived = existsSync(marker);
-    rmSync(marker, { force: true });
-    expect(survived).toBe(false);
-  }, 15_000);
+      // Past the grandchild's own sleep: if the group was signalled it never
+      // wrote, and if only the direct child was signalled it has by now.
+      await Bun.sleep(1600);
+      const survived = existsSync(marker);
+      rmSync(marker, { force: true });
+      expect(survived).toBe(false);
+    },
+    15_000
+  );
+
+  /**
+   * A global npm install on Windows runs through a `.cmd` shim: cmd.exe with
+   * node.exe under it. Ending cmd.exe alone leaves node.exe running.
+   */
+  test.skipIf(process.platform !== "win32")(
+    "a stopped install on Windows ends the node process under a .cmd shim",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "nakama-install-shim-"));
+      const marker = join(dir, "alive");
+      const grandchild = join(dir, "grandchild.js");
+      const shim = join(dir, "installer.cmd");
+      writeFileSync(
+        grandchild,
+        `console.log("started");\nsetTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(marker)}, "alive"), 1500);\n`
+      );
+      writeFileSync(
+        shim,
+        `@echo off\r\n"${process.execPath}" "${grandchild}"\r\n`
+      );
+      const controller = new AbortController();
+
+      try {
+        const result = await runTimedInstallCommand(
+          {
+            args: ["/d", "/c", shim],
+            command: "cmd.exe",
+            displayCommand: "installer.cmd",
+          },
+          (message) => {
+            // Stop only once node.exe is running, or there is nothing to prove.
+            if (message === "stdout: started") {
+              controller.abort();
+            }
+          },
+          {
+            settleTimeoutMs: 1000,
+            signal: controller.signal,
+            timeoutMs: 30_000,
+          }
+        );
+
+        expect(result.timedOut).toBe(true);
+        // Past the grandchild's own timer: had it survived, it has written.
+        await Bun.sleep(2500);
+        expect(existsSync(marker)).toBe(false);
+      } finally {
+        rmSync(dir, { force: true, recursive: true });
+      }
+    },
+    15_000
+  );
 
   test("an aborted signal ends the install without waiting for the deadline", async () => {
     const controller = new AbortController();
@@ -236,4 +323,269 @@ describe("runTimedInstallCommand", () => {
     expect(result.timedOut).toBe(true);
     expect(Date.now() - startedAt).toBeLessThan(10_000);
   }, 15_000);
+});
+
+/** NIST SHA-512("abc"), so the digest itself is checked, not just its shape. */
+const SHA512_OF_ABC =
+  "sha512-3a81oZNherrMQXNJriBBMRLm+k6JqX6iCp7u5ktV05ohkpkqJ0/BqDa6PCOj/uu9RU1EI2Q86A4qmslPpUyknw==";
+
+const TARBALL_BYTES = Buffer.from("nakama pinned tarball fixture");
+const PINNED_FIXTURE: PinnedNpmPackage = {
+  integrity: `sha512-${createHash("sha512").update(TARBALL_BYTES).digest("base64")}`,
+  name: "pinned-probe",
+  version: "1.2.3",
+};
+
+interface FakeRegistry {
+  stop: () => void;
+  url: string;
+}
+
+function startFakeRegistry(
+  metadataFor: (request: {
+    name: string;
+    origin: string;
+    version: string;
+  }) => unknown,
+  body: Uint8Array
+): FakeRegistry {
+  const server = Bun.serve({
+    fetch(request) {
+      const url = new URL(request.url);
+
+      if (url.pathname === "/tarball.tgz") {
+        return new Response(body);
+      }
+
+      const [, name, version] = url.pathname.split("/");
+
+      return Response.json(
+        metadataFor({
+          name: name ?? "",
+          origin: url.origin,
+          version: version ?? "",
+        })
+      );
+    },
+    port: 0,
+  });
+
+  return {
+    stop: () => {
+      server.stop(true);
+    },
+    url: `http://localhost:${server.port}`,
+  };
+}
+
+function servingPinnedHash({
+  name,
+  origin,
+  version,
+}: {
+  name: string;
+  origin: string;
+  version: string;
+}) {
+  return {
+    dist: {
+      integrity: PINNED_FIXTURE.integrity,
+      tarball: `${origin}/tarball.tgz`,
+    },
+    name,
+    version,
+  };
+}
+
+describe("pinned package verification", () => {
+  test("accepts bytes that match the hash and rejects tampered ones", () => {
+    expect(() =>
+      verifyPackageTarballIntegrity(Buffer.from("abc"), SHA512_OF_ABC)
+    ).not.toThrow();
+
+    expect(() =>
+      verifyPackageTarballIntegrity(Buffer.from("abcd"), SHA512_OF_ABC)
+    ).toThrow("integrity check");
+  });
+
+  test("refuses a pin that is a range, a dist-tag, or unhashed", () => {
+    for (const version of ["latest", "^1.2.3", "1.x", "1.2"]) {
+      expect(() =>
+        assertPinnedNpmPackage({ ...PINNED_FIXTURE, version })
+      ).toThrow("exact version");
+    }
+
+    expect(() =>
+      assertPinnedNpmPackage({ ...PINNED_FIXTURE, integrity: "md5-abc" })
+    ).toThrow("integrity hash");
+  });
+
+  test("addresses the exact version and refuses a plaintext off-host tarball", () => {
+    expect(buildPinnedPackageMetadataUrl(PINNED_FIXTURE)).toBe(
+      "https://registry.npmjs.org/pinned-probe/1.2.3"
+    );
+
+    expect(() =>
+      readPinnedPackageDist(
+        {
+          dist: {
+            integrity: PINNED_FIXTURE.integrity,
+            tarball: "http://evil.test/pkg.tgz",
+          },
+          name: "pinned-probe",
+          version: "1.2.3",
+        },
+        PINNED_FIXTURE
+      )
+    ).toThrow("https");
+  });
+
+  test("refuses registry metadata for another version or another hash", () => {
+    expect(() =>
+      readPinnedPackageDist(
+        {
+          dist: {
+            integrity: PINNED_FIXTURE.integrity,
+            tarball: "https://registry.test/p.tgz",
+          },
+          name: "pinned-probe",
+          version: "1.2.4",
+        },
+        PINNED_FIXTURE
+      )
+    ).toThrow("Registry served");
+
+    expect(() =>
+      readPinnedPackageDist(
+        {
+          dist: {
+            integrity: SHA512_OF_ABC,
+            tarball: "https://registry.test/p.tgz",
+          },
+          name: "pinned-probe",
+          version: "1.2.3",
+        },
+        PINNED_FIXTURE
+      )
+    ).toThrow("registry integrity does not match");
+  });
+
+  test("downloads nothing when the registry reports another hash", async () => {
+    const registry = startFakeRegistry(
+      ({ name, origin, version }) => ({
+        dist: {
+          integrity: SHA512_OF_ABC,
+          tarball: `${origin}/tarball.tgz`,
+        },
+        name,
+        version,
+      }),
+      TARBALL_BYTES
+    );
+
+    try {
+      await expect(
+        downloadPinnedPackageTarball(PINNED_FIXTURE, { registry: registry.url })
+      ).rejects.toThrow("registry integrity does not match");
+    } finally {
+      registry.stop();
+    }
+  });
+
+  test("never writes a tampered tarball to the installer", async () => {
+    // The metadata still claims the pinned hash, so only a byte-level check
+    // over the download can catch this.
+    const registry = startFakeRegistry(
+      servingPinnedHash,
+      Buffer.from("tampered payload")
+    );
+
+    try {
+      await expect(
+        downloadPinnedPackageTarball(PINNED_FIXTURE, { registry: registry.url })
+      ).rejects.toThrow("integrity check");
+    } finally {
+      registry.stop();
+    }
+  });
+
+  test("keeps installer plumbing and drops server secrets from the env", () => {
+    const restricted = buildRestrictedInstallEnv({
+      AWS_SECRET_ACCESS_KEY: "super-secret",
+      HOME: "/home/nakama",
+      HTTPS_PROXY: "http://proxy.test",
+      NAKAMA_SESSION_SECRET: "super-secret",
+      "npm_config_//registry.test/:_authToken": "super-secret",
+      npm_config_registry: "https://registry.test",
+      PATH: "/usr/bin",
+    });
+
+    expect(restricted).toEqual({
+      HOME: "/home/nakama",
+      HTTPS_PROXY: "http://proxy.test",
+      npm_config_registry: "https://registry.test",
+      PATH: "/usr/bin",
+    });
+  });
+
+  // POSIX-only: the fake npm is a /bin/sh script, which Windows cannot spawn.
+  test.skipIf(process.platform === "win32")(
+    "installs the verified tarball under a restricted env",
+    async () => {
+      const binDir = await mkdtemp(join(tmpdir(), "nakama-pinned-bin-"));
+      const argsLog = join(binDir, "install.args");
+      const envLog = join(binDir, "install.env");
+      const originalDisableFixPath = process.env.NAKAMA_DISABLE_FIX_PATH;
+      const originalPath = process.env.PATH;
+      const originalSecret = process.env.NAKAMA_TEST_PROVIDER_KEY;
+
+      await writeFile(
+        join(binDir, "npm"),
+        `#!/bin/sh\nprintf '%s' "$*" > ${argsLog}\nenv > ${envLog}\n`
+      );
+      await chmod(join(binDir, "npm"), 0o755);
+      process.env.NAKAMA_DISABLE_FIX_PATH = "1";
+      process.env.NAKAMA_TEST_PROVIDER_KEY = "super-secret";
+      process.env.PATH = `${binDir}:${originalPath ?? ""}`;
+
+      const registry = startFakeRegistry(servingPinnedHash, TARBALL_BYTES);
+
+      try {
+        const tarball = await downloadPinnedPackageTarball(PINNED_FIXTURE, {
+          registry: registry.url,
+        });
+        const result = await runTimedInstallCommand(
+          buildPinnedPackageInstallPlan(tarball.path, "npm")
+        );
+
+        expect(result.exitCode).toBe(0);
+        expect(readFileSync(tarball.path).equals(TARBALL_BYTES)).toBe(true);
+        // A local tarball, not a spec: the installer resolves nothing itself.
+        expect(readFileSync(argsLog, "utf8")).toBe(
+          `install -g ${tarball.path}`
+        );
+        expect(readFileSync(envLog, "utf8")).not.toContain(
+          "NAKAMA_TEST_PROVIDER_KEY"
+        );
+
+        await tarball.cleanup();
+        expect(existsSync(tarball.path)).toBe(false);
+      } finally {
+        registry.stop();
+        process.env.PATH = originalPath;
+        if (originalDisableFixPath === undefined) {
+          delete process.env.NAKAMA_DISABLE_FIX_PATH;
+        } else {
+          process.env.NAKAMA_DISABLE_FIX_PATH = originalDisableFixPath;
+        }
+        if (originalSecret === undefined) {
+          delete process.env.NAKAMA_TEST_PROVIDER_KEY;
+        } else {
+          process.env.NAKAMA_TEST_PROVIDER_KEY = originalSecret;
+        }
+        await rm(binDir, { force: true, recursive: true });
+      }
+    },
+    20_000
+  );
 });

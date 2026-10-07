@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import {
   mkdir,
   readdir,
@@ -14,7 +15,9 @@ import {
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
+import { getToolExecutionEnv } from "../lib/ensure-process-path";
 import { mergeCodingAgentSpawnEnv } from "../services/coding-agent-spawn-env";
+import { killProcessTree } from "../services/custom-tool-subprocess";
 import {
   type BashBackendKind,
   resolveBashBackend,
@@ -219,6 +222,45 @@ export async function runBash(
   });
 }
 
+export function resolveHostBash(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+  exists: (file: string) => boolean = existsSync,
+  which: (name: string) => string | null = Bun.which
+): string {
+  if (platform !== "win32") {
+    const shell = exists("/bin/bash") ? "/bin/bash" : which("bash");
+    if (shell) {
+      return shell;
+    }
+    throw new Error("No Bash shell found. Install Bash and add it to PATH.");
+  }
+
+  for (const root of [env.ProgramFiles, env["ProgramFiles(x86)"]]) {
+    if (root) {
+      // Use Bash itself, rather than Git's launcher, so its PID owns the tree.
+      const shell = path.win32.join(root, "Git", "usr", "bin", "bash.exe");
+      if (exists(shell)) {
+        return shell;
+      }
+    }
+  }
+
+  const shell = which("bash.exe");
+  // The WSL launcher uses a different filesystem and toolchain from the host.
+  if (
+    shell &&
+    !/^[a-z]:\\windows\\(?:system32|sysnative)\\bash\.exe$/i.test(
+      shell.replaceAll("/", "\\")
+    )
+  ) {
+    return shell;
+  }
+  throw new Error(
+    "No native Bash shell found. Install Git for Windows (https://git-scm.com/download/win) or add a native Bash executable to PATH."
+  );
+}
+
 function runShellCommand(
   command: string,
   cwd: string,
@@ -228,10 +270,18 @@ function runShellCommand(
 ): Promise<BashOutput> {
   return new Promise((resolve, reject) => {
     options.signal?.throwIfAborted();
-    const child = spawn("/bin/bash", ["-lc", command], {
+    const env = mergeCodingAgentSpawnEnv(getToolExecutionEnv(), envOverrides);
+    // A login shell may rebuild PATH from /etc/profile, as Debian in the Docker
+    // image does. Put back the dirs the harness probe finds CLIs in, after the
+    // profile's own so nothing that resolved before changes.
+    const restorePath =
+      process.platform !== "win32" && env.PATH
+        ? 'PATH="$PATH:$NAKAMA_TOOL_PATH"; unset NAKAMA_TOOL_PATH; '
+        : "";
+    const child = spawn(resolveHostBash(), ["-lc", restorePath + command], {
       cwd,
       detached: process.platform !== "win32",
-      env: mergeCodingAgentSpawnEnv(process.env, envOverrides),
+      env: restorePath ? { ...env, NAKAMA_TOOL_PATH: env.PATH } : env,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
@@ -245,33 +295,10 @@ function runShellCommand(
     let exited = false;
     let settled = false;
     let abortHandled = false;
+    let treeKilled: Promise<void> | undefined;
 
     const killCommand = () => {
-      if (!child.pid) {
-        return;
-      }
-      if (process.platform === "win32") {
-        const killer = spawn(
-          path.join(
-            process.env.SystemRoot ?? "C:\\Windows",
-            "System32",
-            "taskkill.exe"
-          ),
-          ["/F", "/T", "/PID", String(child.pid)],
-          { stdio: "ignore", windowsHide: true }
-        );
-        killer.once("error", () => child.kill("SIGKILL"));
-        return;
-      }
-      try {
-        process.kill(-child.pid, "SIGKILL");
-      } catch {
-        try {
-          child.kill("SIGKILL");
-        } catch {
-          // already exited
-        }
-      }
+      treeKilled ??= killProcessTree(child, "SIGKILL");
     };
 
     const onAbort = () => {
@@ -328,7 +355,7 @@ function runShellCommand(
       stderr = appendOutput(stderr, String(chunk));
     });
 
-    function finish(exitCode: number | null, error?: Error) {
+    async function finish(exitCode: number | null, error?: Error) {
       if (settled) {
         return;
       }
@@ -338,6 +365,8 @@ function runShellCommand(
       options.signal?.removeEventListener("abort", onAbort);
       child.stdout?.destroy();
       child.stderr?.destroy();
+      // The shell can exit before taskkill finishes terminating descendants.
+      await treeKilled;
       if (error || abortHandled) {
         reject(
           error ?? new DOMException("The operation was aborted", "AbortError")

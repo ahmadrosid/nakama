@@ -16,6 +16,7 @@ export const MAX_ATTACHMENTS_PER_MESSAGE = 5;
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
 export const MAX_KNOWLEDGE_DOCUMENT_BYTES = 20 * 1024 * 1024;
+export const MAX_KNOWLEDGE_ZIP_BYTES = 20 * 1024 * 1024;
 export const TOKENS_PER_IMAGE_ESTIMATE = 1500;
 export const TOKENS_PER_DOCUMENT_ESTIMATE = 2000;
 
@@ -43,6 +44,9 @@ const ALLOWED_DOCUMENT_MEDIA_TYPES = new Set([
   "text/csv",
   "text/markdown",
 ]);
+
+const CANONICAL_BASE64_PATTERN =
+  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
 const DOCUMENT_EXTENSION_MEDIA_TYPES: Record<string, string> = {
   ".csv": "text/csv",
@@ -201,14 +205,32 @@ function validateAttachmentBytes(
   maxBytes: number,
   label: string
 ): void {
+  normalizeAttachmentBase64(data, maxBytes, label);
+}
+
+export function normalizeAttachmentBase64(
+  data: string,
+  maxBytes = MAX_DOCUMENT_BYTES,
+  label = "attachment"
+): string {
   const raw = data.trim();
 
   if (!raw) {
     throw new NakamaApiError(`${label} data must not be empty.`, 400);
   }
 
-  const base64 = raw.includes(",") ? (raw.split(",")[1] ?? "") : raw;
+  const dataUrl = /^data:[^,]*;base64,([^,]+)$/is.exec(raw);
+  const base64 = dataUrl?.[1] ?? raw;
+
+  if (!CANONICAL_BASE64_PATTERN.test(base64)) {
+    throw new NakamaApiError(`${label} data must be valid base64.`, 400);
+  }
+
   const byteLength = estimateBase64DecodedLength(base64);
+
+  if (byteLength === 0) {
+    throw new NakamaApiError(`${label} data must not be empty.`, 400);
+  }
 
   if (byteLength > maxBytes) {
     throw new NakamaApiError(
@@ -216,6 +238,17 @@ function validateAttachmentBytes(
       400
     );
   }
+
+  try {
+    const decoded = atob(base64);
+    if (decoded.length !== byteLength || btoa(decoded) !== base64) {
+      throw new Error("noncanonical base64");
+    }
+  } catch {
+    throw new NakamaApiError(`${label} data must be valid base64.`, 400);
+  }
+
+  return base64;
 }
 
 function estimateBase64DecodedLength(base64: string): number {
@@ -380,27 +413,6 @@ export function parseDocumentDataUrl(
 
 export function toDataUrl(mediaType: string, base64: string): string {
   return `data:${mediaType};base64,${base64}`;
-}
-
-export function imageAttachmentFromBase64(
-  mediaType: string,
-  base64: string
-): ImageAttachment {
-  const data = base64.includes(",") ? (base64.split(",")[1] ?? base64) : base64;
-  return { data, mediaType };
-}
-
-export function documentAttachmentFromBase64(
-  filename: string,
-  mediaType: string,
-  base64: string
-): DocumentAttachment {
-  const data = base64.includes(",") ? (base64.split(",")[1] ?? base64) : base64;
-  return {
-    data,
-    filename,
-    mediaType: normalizeDocumentMediaType(mediaType, filename),
-  };
 }
 
 type ProviderContentBlock = Record<string, unknown>;

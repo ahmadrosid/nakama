@@ -71,6 +71,8 @@ export interface AutomationRunRecord {
   error: string | null;
   id: string;
   output: string | null;
+  /** Chat transcript, updated live and retained when the run completes. */
+  progress?: ChatMessage[];
   /** Present when the API resolves read state for the current user. */
   read?: boolean;
   startedAt: string;
@@ -215,13 +217,42 @@ export interface LlmUsageModelStats extends LlmUsageStats {
   modelId: string;
 }
 
+/** One agent's or one user's share of the org ledger. A null `id` is the unattributed group. */
+export interface LlmUsageGroupStats extends LlmUsageStats {
+  id: string | null;
+  name: string | null;
+}
+
+/** One provider's share of one day. A null provider means the call had no provider context. */
+export interface LlmUsageDayProviderStats {
+  estimatedCostUsd: number;
+  provider: string | null;
+  totalTokens: number;
+}
+
+/** One UTC day of the org ledger. Days without calls are present with zeros. */
+export interface LlmUsageDayStats {
+  /** `YYYY-MM-DD`, UTC. */
+  day: string;
+  estimatedCostUsd: number;
+  providers: LlmUsageDayProviderStats[];
+  requestCount: number;
+  totalTokens: number;
+}
+
 export interface LlmUsageStatus extends LlmUsageStats {
+  /** Org admins and platform admins only. */
+  agents?: LlmUsageGroupStats[];
   costEstimated: boolean;
   currentModel: string | null;
+  /** The last 30 UTC days, oldest first. */
+  daily: LlmUsageDayStats[];
   displayName: string | null;
   models: LlmUsageModelStats[];
   provider: ProviderName | null;
   providerConfigured: boolean;
+  /** Org admins and platform admins only. */
+  users?: LlmUsageGroupStats[];
 }
 
 export interface McpStatus {
@@ -310,10 +341,6 @@ export interface UpdateAutomationWorkerSettingsRequest {
 
 export interface CodingHarnessSettingsResponse {
   loginCommands: CodingHarnessLoginCommand[];
-  providerPassthroughEnabled: boolean;
-}
-
-export interface UpdateCodingHarnessSettingsRequest {
   providerPassthroughEnabled: boolean;
 }
 
@@ -486,20 +513,18 @@ export interface WebPublicUrlSettingsResponse {
 
 export interface AuthUserResponse {
   activeOrgId?: string | null;
+  backupCodesEnabled?: boolean;
   email: string;
   id: string;
-  /**
-   * What this credential may do, not what its owner may do. An API key minted
-   * by a platform admin is de-privileged, so it reports false here.
-   */
   isPlatformAdmin?: boolean;
   mfaEnabled?: boolean;
   mfaEnrolled?: boolean;
   mfaRequired?: boolean;
-  /** Which credential answered, which is what explains the flag above. */
-  mode?: "api-key" | "browser-session" | "local-token";
+  /** Credential used for this request. */
+  mode?: "browser-session" | "local-token";
   name?: string | null;
   orgId?: string | null;
+  passkeyEnabled?: boolean;
   phone?: string | null;
 }
 
@@ -519,6 +544,39 @@ export interface MfaTotpVerifyResponse {
   backupCodes: string[];
   enabled: boolean;
 }
+export interface MfaBackupCodesResponse {
+  backupCodes: string[];
+}
+export interface PasskeyVerificationResponse {
+  backupCodes: string[];
+  enabled: boolean;
+}
+export interface PasskeyRegistrationOptionsResponse {
+  challenge: string;
+  options: Record<string, unknown>;
+}
+
+export interface PasskeyAuthenticationOptionsResponse {
+  challenge: string;
+  options: Record<string, unknown>;
+}
+
+export interface PasskeyCredentialResponse {
+  authenticatorAttachment?: string;
+  clientExtensionResults: Record<string, unknown>;
+  id: string;
+  rawId: string;
+  response: {
+    attestationObject?: string;
+    authenticatorData?: string;
+    clientDataJSON: string;
+    signature?: string;
+    transports?: string[];
+    userHandle?: string;
+  };
+  type: string;
+}
+
 export interface UpdateAuthProfileRequest {
   currentPassword?: string;
   email?: string;
@@ -530,6 +588,7 @@ export type OrgRole = "admin" | "member" | "viewer";
 export type ChannelType = "telegram" | "whatsapp" | "discord";
 
 export interface OrganizationSummary {
+  allowedInviteDomains?: string[];
   archivedAt?: string | null;
   createdAt: string;
   id: string;
@@ -559,6 +618,7 @@ export interface CreateOrganizationRequest {
 }
 
 export interface UpdateOrganizationRequest {
+  allowedInviteDomains?: string[];
   monthlyLlmTokenLimit?: number;
   monthlyLlmTurnLimit?: number;
   monthlyLlmWarningPercent?: number;
@@ -726,36 +786,6 @@ export interface RevokeBrowserSessionsResponse {
   revoked: number;
 }
 
-export interface ApiKeySummary {
-  createdAt: string;
-  environment: "live" | "test";
-  expiresAt: string | null;
-  id: string;
-  keyPrefix: string;
-  lastUsedAt: string | null;
-  name: string;
-  revokedAt: string | null;
-}
-
-export interface CreateApiKeyRequest {
-  expiresAt?: string | null;
-  name: string;
-}
-
-export interface CreateApiKeyResponse {
-  key: ApiKeySummary;
-  secret: string;
-}
-
-export interface ListApiKeysResponse {
-  keys: ApiKeySummary[];
-}
-
-export interface RotateApiKeyResponse {
-  key: ApiKeySummary;
-  secret: string;
-}
-
 export interface OrgMemoryResponse {
   content: string;
 }
@@ -879,7 +909,8 @@ export type SkillProposalAction =
   | "delete"
   | "edit"
   | "write_file"
-  | "remove_file";
+  | "remove_file"
+  | "approve_code";
 
 export interface SkillProposal {
   action: SkillProposalAction;
@@ -991,27 +1022,7 @@ export interface ResetPasswordRequest {
   token: string;
 }
 
-export interface ChannelOrgMappingSummary {
-  channel: ChannelType;
-  channelUserId: string;
-  createdAt: string;
-  orgId: string;
-  userId: string;
-}
-
-export interface CreateChannelOrgMappingRequest {
-  channel: ChannelType;
-  channelUserId: string;
-  userId: string;
-}
-
-export interface ListChannelOrgMappingsResponse {
-  mappings: ChannelOrgMappingSummary[];
-}
-
 export interface CreateSessionRequest {
-  /** Stable end-user identifier supplied by a trusted backend using an API key. */
-  appUserId?: string;
   channel: AgentChannel;
   codingWorkspaceRoot?: string;
   /**
@@ -1424,10 +1435,6 @@ export interface ListWorkflowsResponse {
   workflows: StoredWorkflow[];
 }
 
-export interface WorkflowResponse {
-  workflow: StoredWorkflow;
-}
-
 export interface CreateWorkflowRequest {
   description: string;
   enabled?: boolean;
@@ -1708,7 +1715,10 @@ export interface SendErrorTrackingTestResponse {
   delivered: boolean;
 }
 
-export type NotificationDestinationChannel = "telegram";
+export type NotificationDestinationChannel =
+  | "telegram"
+  | "discord"
+  | "whatsapp";
 
 export type NotificationWebhookLevel = "info" | "success" | "warning" | "error";
 
@@ -1718,15 +1728,26 @@ export interface TelegramNotificationDestinationConfig {
   topicId?: number | null;
 }
 
-export interface NotificationDestinationSummary {
-  channel: NotificationDestinationChannel;
+export interface DiscordNotificationDestinationConfig {
+  channelId: string;
+  profileId: string;
+}
+
+export interface WhatsAppNotificationDestinationConfig {
+  profileId: string;
+}
+
+export type NotificationDestinationSummary = {
   createdAt: string;
   id: string;
   name: string;
-  telegram: TelegramNotificationDestinationConfig;
   updatedAt: string;
   webhookPath: string;
-}
+} & (
+  | { channel: "telegram"; telegram: TelegramNotificationDestinationConfig }
+  | { channel: "discord"; discord: DiscordNotificationDestinationConfig }
+  | { channel: "whatsapp"; whatsapp: WhatsAppNotificationDestinationConfig }
+);
 
 export interface NotificationDestinationWithSecret {
   apiKey: string;
@@ -1737,16 +1758,21 @@ export interface ListNotificationDestinationsResponse {
   destinations: NotificationDestinationSummary[];
 }
 
-export interface CreateNotificationDestinationRequest {
-  channel: NotificationDestinationChannel;
+export type CreateNotificationDestinationRequest = {
   name: string;
-  telegram: TelegramNotificationDestinationConfig;
-}
+} & (
+  | { channel: "telegram"; telegram: TelegramNotificationDestinationConfig }
+  | { channel: "discord"; discord: DiscordNotificationDestinationConfig }
+  | { channel: "whatsapp"; whatsapp: WhatsAppNotificationDestinationConfig }
+);
 
-export interface UpdateNotificationDestinationRequest {
+export type UpdateNotificationDestinationRequest = {
   name: string;
-  telegram: TelegramNotificationDestinationConfig;
-}
+} & (
+  | { channel?: "telegram"; telegram: TelegramNotificationDestinationConfig }
+  | { channel: "discord"; discord: DiscordNotificationDestinationConfig }
+  | { channel: "whatsapp"; whatsapp: WhatsAppNotificationDestinationConfig }
+);
 
 export interface RegenerateNotificationDestinationKeyResponse {
   apiKey: string;
@@ -1796,15 +1822,6 @@ export interface SendEmailTestResponse {
   to: string;
 }
 
-export type CodingAgentProviderPassthroughSummary = {
-  active: boolean;
-  configured: boolean;
-  compatible: boolean;
-  providerLabel: string | null;
-  model: string | null;
-  message?: string | null;
-};
-
 export interface AgentBrowserStatusResponse {
   installCommand: string;
   installed: boolean;
@@ -1830,6 +1847,7 @@ export type AgentBrowserInstallEvent =
 
 export interface WhatsAppSettingsResponse {
   allowedPhones: string[];
+  allowUnpairedGroupMembers: boolean;
   configured: boolean;
   pairedJid: string | null;
   pairingCode: string | null;
@@ -1840,6 +1858,7 @@ export interface WhatsAppSettingsResponse {
 
 export interface UpdateWhatsAppSettingsRequest {
   allowedPhones?: string;
+  allowUnpairedGroupMembers?: boolean;
   phoneNumber?: string;
   profileId?: string;
   requireGroupMention?: boolean;
@@ -1876,6 +1895,7 @@ export interface ProfileRef {
 export interface ApiErrorResponse {
   error: string;
   profiles?: ProfileRef[];
+  totpEnabled?: boolean;
   /** Tokens a failed turn had already spent. They are billable regardless. */
   usage?: ChatTurnUsage;
 }
@@ -1911,6 +1931,12 @@ export interface ProviderModelOption {
   supportsVision?: boolean;
 }
 
+export interface OpenRouterRoutingSettings {
+  dataCollection?: "allow" | "deny";
+  requireParameters?: boolean;
+  zdr?: boolean;
+}
+
 export interface ProviderInstanceSummary {
   baseUrl?: string | null;
   createdAt: string;
@@ -1920,6 +1946,7 @@ export interface ProviderInstanceSummary {
   id: string;
   label: string;
   modelCount: number;
+  openRouterRouting?: OpenRouterRoutingSettings;
   type: ProviderName;
   wireApi?: WireApi | null;
 }
@@ -1937,6 +1964,7 @@ export interface CreateProviderRequest {
   hostMode?: OllamaHostMode;
   label?: string;
   model?: string;
+  openRouterRouting?: OpenRouterRoutingSettings;
   type: ProviderName;
   wireApi?: WireApi;
   xaiOAuth?: XaiOAuthCredentials;
@@ -1955,6 +1983,8 @@ export interface UpdateProviderRequest {
   customModels?: CustomModelEntry[];
   hostMode?: OllamaHostMode;
   label?: string;
+  /** Replaces the routing settings; {} clears request-level overrides. */
+  openRouterRouting?: OpenRouterRoutingSettings;
   wireApi?: WireApi;
   xaiOAuth?: XaiOAuthCredentials;
 }
@@ -1984,7 +2014,7 @@ export interface DiscoverModelsRequest {
   baseUrl?: string;
   hostMode?: OllamaHostMode;
   /** When set, discovery uses the matching remote fetch path (Ollama includes `/api/tags` fallback). */
-  provider?: "ollama" | "openai_compatible" | "fireworks";
+  provider?: "ollama" | "openai_compatible" | "fireworks" | "netra";
   providerId?: string;
 }
 
@@ -2332,6 +2362,18 @@ export interface CreateToolRequest {
   name: string;
 }
 
+export interface ToolCredentialStatus {
+  configured: boolean;
+  /** Present when the tool declares handlerConfig.env. */
+  env?: {
+    configured: boolean;
+    name: string;
+    secret: boolean;
+    /** Only for non-secret variables. */
+    value?: string;
+  }[];
+}
+
 export interface ToolSetupPlan {
   description: string;
   id: string;
@@ -2426,8 +2468,6 @@ export interface ListWorkspaceFilesResponse {
 }
 
 export interface ListArtifactsOptions {
-  /** Scopes the listing to one end user's artifacts, when the caller names one. */
-  appUserId?: string | null;
   folder?: string;
   limit?: number;
   offset?: number;
@@ -2543,6 +2583,31 @@ export interface UploadKnowledgeBaseResponse {
   profileId: string;
 }
 
+export interface ImportKnowledgeBaseZipRequest {
+  zipBase64: string;
+}
+
+export interface ImportKnowledgeBaseZipEntry {
+  documentId?: string;
+  filename: string;
+  match?: "content_hash" | "name_size";
+  outcome: "created" | "duplicate" | "unsupported" | "error";
+  reason?: string;
+  status?: KnowledgeBaseDocumentStatus;
+}
+
+export interface ImportKnowledgeBaseZipResponse {
+  entries: ImportKnowledgeBaseZipEntry[];
+  profileId: string;
+  totals: {
+    created: number;
+    duplicate: number;
+    unsupported: number;
+    error: number;
+    failedExtraction: number;
+  };
+}
+
 export interface DeleteKnowledgeBaseResponse {
   deleted: boolean;
   documentId: string;
@@ -2579,6 +2644,7 @@ export type ProviderName =
   | "openrouter"
   | "gemini"
   | "deepseek"
+  | "netra"
   | "doubao"
   | "mistral"
   | "perplexity"

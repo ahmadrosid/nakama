@@ -1,5 +1,6 @@
 import type {
   HealthResponse,
+  LlmUsageStats,
   LlmUsageStatus,
   SystemStatusResponse,
   WorkerProcessInfo,
@@ -35,10 +36,31 @@ export class SystemStatusService {
     private readonly databaseAdapter: DatabaseAdapter | null = null
   ) {}
 
-  async getStatus(orgId: ChannelConfigScope): Promise<SystemStatusResponse> {
+  /**
+   * `includeUsageByActor` adds usage per agent and per user. It names who
+   * spent what, so only org admins and platform admins get it.
+   */
+  async getStatus(
+    orgId: ChannelConfigScope,
+    options: { includeUsageByActor?: boolean } = {}
+  ): Promise<SystemStatusResponse> {
     const providerConfigured = this.agent.providerConfigured;
     const models = await this.agent.getModels();
     const usageFields = this.agent.getUsageStatusFields();
+
+    // Usage is a tenant ledger: read it with the same scope the request
+    // already resolved, never install-wide, or one org reads another's spend.
+    const usageOrgId =
+      typeof orgId === "string" ? orgId : (orgId?.orgId ?? null);
+    const [usageStats, usageByModel, usageDaily, usageByActor] =
+      await Promise.all([
+        this.agent.getLlmUsageStats(usageOrgId),
+        this.agent.getLlmUsageStatsByModel(usageOrgId),
+        this.agent.getLlmUsageDailyStats(usageOrgId),
+        options.includeUsageByActor && usageOrgId
+          ? this.agent.getLlmUsageStatsByActor(usageOrgId)
+          : null,
+      ]);
 
     const statuses = await this.workerManager.getAllWorkerStatuses(orgId);
     const automationProcess = statuses.automation ?? null;
@@ -76,13 +98,18 @@ export class SystemStatusService {
       },
       checkedAt: new Date().toISOString(),
       discordWorker: discordStatus,
-      llmUsage: this.getLlmUsage(
-        models.provider,
-        usageFields.currentModel,
-        providerConfigured,
-        usageFields,
-        this.agent.getLlmUsageStatsByModel()
-      ),
+      llmUsage: {
+        ...this.getLlmUsage(
+          models.provider,
+          usageFields.currentModel,
+          providerConfigured,
+          usageFields,
+          usageByModel,
+          usageDaily,
+          usageStats
+        ),
+        ...(usageByActor ?? {}),
+      },
       mcp: this.mcpService
         ? await this.mcpService.getStatusSummary()
         : { assignedProfileCount: 0, connectedCount: 0, serverCount: 0 },
@@ -152,12 +179,15 @@ export class SystemStatusService {
     currentModel: string | null,
     providerConfigured: boolean,
     usageFields: { displayName: string | null; costEstimated: boolean },
-    models: LlmUsageStatus["models"]
+    models: LlmUsageStatus["models"],
+    daily: LlmUsageStatus["daily"],
+    stats: LlmUsageStats
   ): LlmUsageStatus {
     return {
-      ...this.agent.getLlmUsageStats(),
+      ...stats,
       costEstimated: usageFields.costEstimated,
       currentModel,
+      daily,
       displayName: usageFields.displayName,
       models,
       provider,

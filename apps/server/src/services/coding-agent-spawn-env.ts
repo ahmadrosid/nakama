@@ -100,7 +100,7 @@ export interface CodingAgentSpawnEnvResult {
   env: Record<string, string>;
 }
 
-export const CODING_AGENT_CREDENTIAL_ENV_KEYS = [
+const CODING_AGENT_CREDENTIAL_ENV_KEYS = [
   "ANTHROPIC_BASE_URL",
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
@@ -222,7 +222,7 @@ export function buildCodexSpawnEnv(
   };
 }
 
-export async function buildOpenCodeSpawnEnv(
+async function buildOpenCodeSpawnEnv(
   routing: CodingAgentProviderRouting,
   providerType: ProviderName = "openai"
 ): Promise<CodingAgentSpawnEnvResult> {

@@ -1,8 +1,13 @@
 import {
   NakamaApiError,
   NakamaAuthExpiredError,
+  readApiErrorDetails,
   readApiErrorMessage,
 } from "@nakama/core/api-error";
+import {
+  HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES,
+  PLAIN_BROWSER_SESSION_COOKIE_NAMES,
+} from "@nakama/core/browser-session-cookies";
 import type {
   AcceptOrgInviteRequest,
   AcceptOrgInviteResponse,
@@ -40,8 +45,6 @@ import type {
   ComposioToolkitSummary,
   ConfigureProviderRequest,
   ConfigureProviderResponse,
-  CreateApiKeyRequest,
-  CreateApiKeyResponse,
   CreateAutomationRequest,
   CreateMcpServerRequest,
   CreateNotificationDestinationRequest,
@@ -73,6 +76,8 @@ import type {
   ImageAttachment,
   ImageGenerationSettings,
   ImageGenerationSettingsResponse,
+  ImportKnowledgeBaseZipRequest,
+  ImportKnowledgeBaseZipResponse,
   InitSoulResponse,
   InitUserContextResponse,
   InstallOrgPluginRequest,
@@ -83,7 +88,6 @@ import type {
   InvokePluginActionRequest,
   InvokePluginActionResponse,
   KnowledgeBaseDuplicateAction,
-  ListApiKeysResponse,
   ListArtifactsResponse,
   ListAutomationRunsResponse,
   ListAutomationsResponse,
@@ -115,6 +119,7 @@ import type {
   ListWorkspaceFilesResponse,
   MarkAutomationRunsReadResponse,
   McpServerResponse,
+  MfaBackupCodesResponse,
   MfaPolicyResponse,
   MfaTotpStartResponse,
   MfaTotpVerifyResponse,
@@ -132,6 +137,10 @@ import type {
   OrgMemorySearchRequest,
   OrgMemorySearchResponse,
   OrgPluginDetail,
+  PasskeyAuthenticationOptionsResponse,
+  PasskeyCredentialResponse,
+  PasskeyRegistrationOptionsResponse,
+  PasskeyVerificationResponse,
   PatchSkillRequest,
   PinOrgMemoryRequest,
   PluginContributionChangePreview,
@@ -156,7 +165,6 @@ import type {
   RestoreOrgMemoryHistoryResponse,
   RevokeArtifactShareResponse,
   RevokeBrowserSessionsResponse,
-  RotateApiKeyResponse,
   RotateLocalAuthTokenResponse,
   RunAutomationResponse,
   RunSkillCuratorInternalRequest,
@@ -201,6 +209,7 @@ import type {
   TimezoneSettingsResponse,
   TokenOptimizationResponse,
   TokenOptimizationUpdateResponse,
+  ToolCredentialStatus,
   ToolResponse,
   ToolSetupPlan,
   ToolSourceResponse,
@@ -258,6 +267,7 @@ import type {
   XaiOAuthDeviceStartResponse,
 } from "@nakama/core/contract";
 import { withDisabledFetchIdle } from "@nakama/core/fetch-idle";
+import type { MeetAction, MeetActionResults } from "@nakama/core/google-meet";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
 import { resolveServerUrl } from "@nakama/core/runtime";
 import { readBrowserOrigin, readCookie } from "./browser";
@@ -278,6 +288,20 @@ import type {
 } from "./types";
 
 export class NakamaClient {
+  invokeGoogleMeet<Action extends MeetAction>(
+    action: Action,
+    input: unknown,
+    orgId: string,
+    signal?: AbortSignal
+  ): Promise<MeetActionResults[Action]> {
+    return this.request(`/v1/meet/actions/${encodeURIComponent(action)}`, {
+      body: JSON.stringify(input ?? {}),
+      headers: { "X-Org-Id": orgId },
+      method: "POST",
+      signal,
+    });
+  }
+
   readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly credentials: RequestCredentials;
@@ -647,7 +671,7 @@ export class NakamaClient {
     baseUrl?: string;
     apiKey?: string;
     providerId?: string;
-    provider?: "ollama" | "openai_compatible" | "fireworks";
+    provider?: "ollama" | "openai_compatible" | "fireworks" | "netra";
     hostMode?: "local" | "cloud";
   }): Promise<ModelsResponse> {
     return this.request<ModelsResponse>("/v1/models/discover", {
@@ -756,10 +780,12 @@ export class NakamaClient {
   }
 
   async getSessionMessages(
-    sessionId: string
+    sessionId: string,
+    options: { signal?: AbortSignal } = {}
   ): Promise<SessionMessagesResponse> {
     return this.request<SessionMessagesResponse>(
-      `/v1/sessions/${encodeURIComponent(sessionId)}/messages`
+      `/v1/sessions/${encodeURIComponent(sessionId)}/messages`,
+      { signal: options.signal }
     );
   }
 
@@ -981,9 +1007,7 @@ export class NakamaClient {
     );
   }
 
-  async getToolCredentialStatus(
-    toolId: string
-  ): Promise<{ configured: boolean }> {
+  async getToolCredentialStatus(toolId: string): Promise<ToolCredentialStatus> {
     return this.request(`/v1/tools/${encodeURIComponent(toolId)}/credentials`);
   }
 
@@ -1004,9 +1028,19 @@ export class NakamaClient {
   async saveToolCredential(
     toolId: string,
     apiKey: string
-  ): Promise<{ configured: boolean }> {
+  ): Promise<ToolCredentialStatus> {
     return this.request(`/v1/tools/${encodeURIComponent(toolId)}/credentials`, {
       body: JSON.stringify({ apiKey }),
+      method: "PUT",
+    });
+  }
+
+  async saveToolEnv(
+    toolId: string,
+    env: Record<string, string>
+  ): Promise<ToolCredentialStatus> {
+    return this.request(`/v1/tools/${encodeURIComponent(toolId)}/credentials`, {
+      body: JSON.stringify({ env }),
       method: "PUT",
     });
   }
@@ -1114,10 +1148,12 @@ export class NakamaClient {
     );
   }
 
-  async deleteMcpServer(serverId: string): Promise<void> {
-    await this.request(`/v1/mcp/servers/${encodeURIComponent(serverId)}`, {
-      method: "DELETE",
-    });
+  async deleteMcpServer(serverId: string, force = false): Promise<void> {
+    const query = force ? "?force=true" : "";
+    await this.request(
+      `/v1/mcp/servers/${encodeURIComponent(serverId)}${query}`,
+      { method: "DELETE" }
+    );
   }
 
   async connectMcpServer(serverId: string): Promise<McpServerResponse> {
@@ -1448,7 +1484,12 @@ export class NakamaClient {
   async readProfileArtifactContent(
     profileId: string,
     artifactPath: string,
-    options: { inline?: boolean; render?: "markdown" } = {}
+    options: {
+      inline?: boolean;
+      render?: "markdown";
+      signal?: AbortSignal;
+      maxBytes?: number;
+    } = {}
   ): Promise<{ contentType: string; data: ArrayBuffer }> {
     const query = new URLSearchParams({ path: artifactPath });
     if (options.inline) {
@@ -1459,14 +1500,83 @@ export class NakamaClient {
     }
 
     const response = await this.fetchRaw(
-      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`
+      `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`,
+      { signal: options.signal }
     );
 
+    let data: ArrayBuffer;
+    if (options.maxBytes === undefined) {
+      data = await response.arrayBuffer();
+    } else {
+      const maxBytes = options.maxBytes;
+      if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+        await response.body?.cancel();
+        throw new Error("maxBytes must be a nonnegative integer.");
+      }
+      const reader = response.body?.getReader();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      const onAbort = () => {
+        void reader?.cancel().catch(() => {});
+      };
+      options.signal?.addEventListener("abort", onAbort, { once: true });
+      try {
+        if (Number(response.headers.get("Content-Length")) > maxBytes) {
+          throw new Error("Artifact exceeds the download byte budget.");
+        }
+        while (reader) {
+          options.signal?.throwIfAborted();
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+          size += value.byteLength;
+          if (size > maxBytes) {
+            throw new Error("Artifact exceeds the download byte budget.");
+          }
+          chunks.push(value);
+        }
+        options.signal?.throwIfAborted();
+        const bytes = new Uint8Array(size);
+        let offset = 0;
+        for (const chunk of chunks) {
+          bytes.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
+        data = bytes.buffer;
+      } catch (error) {
+        await reader?.cancel().catch(() => {});
+        throw error;
+      } finally {
+        options.signal?.removeEventListener("abort", onAbort);
+        reader?.releaseLock();
+      }
+    }
     return {
       contentType:
         response.headers.get("Content-Type") ?? "application/octet-stream",
-      data: await response.arrayBuffer(),
+      data,
     };
+  }
+
+  async hasProfileArtifact(
+    profileId: string,
+    artifactPath: string
+  ): Promise<boolean> {
+    const query = new URLSearchParams({ path: artifactPath });
+
+    try {
+      await this.fetchRaw(
+        `/v1/profiles/${encodeURIComponent(profileId)}/artifacts/content?${query.toString()}`,
+        { method: "HEAD" }
+      );
+      return true;
+    } catch (error) {
+      if (error instanceof NakamaApiError && error.status === 404) {
+        return false;
+      }
+      throw error;
+    }
   }
 
   async writeProfileArtifactContent(
@@ -1563,6 +1673,21 @@ export class NakamaClient {
     );
   }
 
+  async importKnowledgeBaseZip(
+    profileId: string,
+    zipBase64: string
+  ): Promise<ImportKnowledgeBaseZipResponse> {
+    return this.request<ImportKnowledgeBaseZipResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base/import-zip`,
+      {
+        body: JSON.stringify({
+          zipBase64,
+        } satisfies ImportKnowledgeBaseZipRequest),
+        method: "POST",
+      }
+    );
+  }
+
   async deleteKnowledgeBaseDocument(
     profileId: string,
     documentId: string
@@ -1644,8 +1769,8 @@ export class NakamaClient {
 
         return response.automation;
       },
-      getMessages: async () => {
-        const response = await this.getSessionMessages(sessionId);
+      getMessages: async (options) => {
+        const response = await this.getSessionMessages(sessionId, options);
         return response.messages;
       },
       id: sessionId,
@@ -2508,7 +2633,12 @@ export class NakamaClient {
   async login(
     email: string,
     password: string,
-    mfa?: { backupCode?: string; mfaCode?: string }
+    mfa?: {
+      backupCode?: string;
+      mfaCode?: string;
+      passkey?: PasskeyCredentialResponse;
+      passkeyChallenge?: string;
+    }
   ): Promise<AuthUserResponse> {
     const response = await this.request<AuthUserResponse>("/v1/auth/login", {
       body: JSON.stringify({ email, password, ...mfa }),
@@ -2517,6 +2647,15 @@ export class NakamaClient {
 
     this.applyAuthUserResponse(response);
     return response;
+  }
+  async getPasskeyLoginOptions(): Promise<PasskeyAuthenticationOptionsResponse> {
+    return this.request<PasskeyAuthenticationOptionsResponse>(
+      "/v1/auth/passkey/login/options",
+      {
+        body: JSON.stringify({}),
+        method: "POST",
+      }
+    );
   }
   async getMfaPolicy(): Promise<MfaPolicyResponse> {
     return this.request<MfaPolicyResponse>("/v1/settings/mfa");
@@ -2535,6 +2674,53 @@ export class NakamaClient {
 
   async startTotp(): Promise<MfaTotpStartResponse> {
     return this.request<MfaTotpStartResponse>("/v1/auth/mfa/totp/start", {
+      method: "POST",
+    });
+  }
+  async generateBackupCodes(input: {
+    mfaCode?: string;
+    passkey?: PasskeyCredentialResponse;
+    passkeyChallenge?: string;
+    password?: string;
+  }): Promise<MfaBackupCodesResponse> {
+    return this.request<MfaBackupCodesResponse>("/v1/auth/mfa/backup-codes", {
+      body: JSON.stringify(input),
+      method: "POST",
+    });
+  }
+
+  async startPasskey(): Promise<PasskeyRegistrationOptionsResponse> {
+    return this.request<PasskeyRegistrationOptionsResponse>(
+      "/v1/auth/mfa/passkey/start",
+      { method: "POST" }
+    );
+  }
+
+  async verifyPasskey(
+    challenge: string,
+    credential: PasskeyCredentialResponse,
+    name?: string
+  ): Promise<PasskeyVerificationResponse> {
+    return this.request<PasskeyVerificationResponse>(
+      "/v1/auth/mfa/passkey/verify",
+      {
+        body: JSON.stringify({
+          challenge,
+          credential,
+          ...(name ? { name } : {}),
+        }),
+        method: "POST",
+      }
+    );
+  }
+
+  async disablePasskey(input: {
+    backupCode?: string;
+    challenge?: string;
+    credential?: PasskeyCredentialResponse;
+  }): Promise<{ enabled: boolean }> {
+    return this.request<{ enabled: boolean }>("/v1/auth/mfa/passkey/disable", {
+      body: JSON.stringify(input),
       method: "POST",
     });
   }
@@ -2945,39 +3131,6 @@ export class NakamaClient {
   ): Promise<RevokeBrowserSessionsResponse> {
     return this.request<RevokeBrowserSessionsResponse>(
       `/v1/auth/users/${encodeURIComponent(userId)}/sessions`,
-      { method: "DELETE" }
-    );
-  }
-
-  async createApiKey(
-    orgId: string,
-    request: CreateApiKeyRequest
-  ): Promise<CreateApiKeyResponse> {
-    return this.request<CreateApiKeyResponse>(
-      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys`,
-      { body: JSON.stringify(request), method: "POST" }
-    );
-  }
-
-  async listApiKeys(orgId: string): Promise<ListApiKeysResponse> {
-    return this.request<ListApiKeysResponse>(
-      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys`
-    );
-  }
-
-  async rotateApiKey(
-    orgId: string,
-    keyId: string
-  ): Promise<RotateApiKeyResponse> {
-    return this.request<RotateApiKeyResponse>(
-      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys/${encodeURIComponent(keyId)}/rotate`,
-      { method: "POST" }
-    );
-  }
-
-  async deleteApiKey(orgId: string, keyId: string): Promise<void> {
-    await this.request(
-      `/v1/orgs/${encodeURIComponent(orgId)}/api-keys/${encodeURIComponent(keyId)}`,
       { method: "DELETE" }
     );
   }
@@ -3417,7 +3570,12 @@ export class NakamaClient {
     }
 
     if (isMutatingMethod(method)) {
-      const csrfToken = readCookie("nakama_csrf");
+      // HTTPS deployments issue the host-bound cookie; plain HTTP uses the
+      // unprefixed one. A cookie planted by a sibling host is never read on
+      // HTTPS because the server only trusts the prefixed name there.
+      const csrfToken =
+        readCookie(HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES.csrf) ??
+        readCookie(PLAIN_BROWSER_SESSION_COOKIE_NAMES.csrf);
       if (csrfToken) {
         merged["X-CSRF-Token"] = csrfToken;
       }
@@ -3430,8 +3588,10 @@ async function createApiError(
   response: Response,
   path: string
 ): Promise<NakamaApiError> {
-  const message = await readApiErrorMessage(response);
-  return new NakamaApiError(message, response.status, path);
+  const details = await readApiErrorDetails(response);
+  return new NakamaApiError(details.message, response.status, path, undefined, {
+    totpEnabled: details.totpEnabled,
+  });
 }
 
 function isMutatingMethod(method: string): boolean {

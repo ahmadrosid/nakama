@@ -9,9 +9,12 @@ import {
   type ChatTurnUsage,
   type ChatUsage,
   formatServerError,
+  HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES,
   LOCAL_CLIENT_EMAIL,
   NakamaApiError,
+  PLAIN_BROWSER_SESSION_COOKIE_NAMES,
   reportError,
+  browserSessionCookieNames as resolveBrowserSessionCookieNames,
   resolveChatFirstTokenTimeoutMs,
   resolveChatStreamTimeoutMs,
   type SendMessageInput,
@@ -20,7 +23,6 @@ import {
 } from "@nakama/core";
 import type {
   DatabaseAdapter,
-  StoredApiKeyRecord,
   StoredBrowserSessionRecord,
   StoredUserRecord,
 } from "@nakama/db";
@@ -32,8 +34,8 @@ import { loadMfaPolicy } from "../services/mfa-config";
 import { sessionTurnRegistry } from "../services/session-turn-registry";
 import type { AppEnv } from "./types";
 
-const SESSION_COOKIE_NAME = "nakama_session";
-const CSRF_COOKIE_NAME = "nakama_csrf";
+const LEGACY_COOKIE_NAMES = PLAIN_BROWSER_SESSION_COOKIE_NAMES;
+const HOST_BOUND_COOKIE_NAMES = HOST_BOUND_BROWSER_SESSION_COOKIE_NAMES;
 const CSRF_HEADER_NAME = "x-csrf-token";
 const SESSION_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
@@ -134,7 +136,7 @@ export function isSecureRequest(request: Request): boolean {
 export interface RequestAuthContext {
   activeOrgId?: string;
   isPlatformAdmin: boolean;
-  mode: "api-key" | "browser-session" | "local-token";
+  mode: "browser-session" | "local-token";
   orgRole?: OrgRole;
   session?: StoredBrowserSessionRecord;
   user: Pick<StoredUserRecord, "id" | "email">;
@@ -166,7 +168,9 @@ export function isPendingMfaAllowedRequest(
     (method === "POST" &&
       (pathname === "/v1/auth/logout" ||
         pathname === "/v1/auth/mfa/totp/start" ||
-        pathname === "/v1/auth/mfa/totp/verify"))
+        pathname === "/v1/auth/mfa/totp/verify" ||
+        pathname === "/v1/auth/mfa/passkey/start" ||
+        pathname === "/v1/auth/mfa/passkey/verify"))
   );
 }
 
@@ -179,6 +183,28 @@ export async function isPendingBrowserMfa(
     return false;
   }
 
+  const user = await databaseAdapter.getUserById(auth.user.id);
+  if (
+    !user ||
+    (user.mfaEnabled && user.mfaTotpSecretEnc) ||
+    (await databaseAdapter.listPasskeys(user.id)).length > 0
+  ) {
+    return false;
+  }
+
+  const policy = await loadMfaPolicy();
+  if (!(policy.enabled && policy.required)) {
+    return false;
+  }
+
+  // Platform-admin authority outlives every organization membership, so a
+  // required policy gates it on the account flag alone. Deriving this from the
+  // active org role instead let a non-member admin drive /v1/platform/*
+  // with nothing but a password.
+  if (auth.isPlatformAdmin) {
+    return true;
+  }
+
   const activeOrgId =
     orgId?.trim() ||
     auth.activeOrgId?.trim() ||
@@ -187,22 +213,10 @@ export async function isPendingBrowserMfa(
     return false;
   }
 
-  const user = await databaseAdapter.getUserById(auth.user.id);
-  if (!user || (user.mfaEnabled && user.mfaTotpSecretEnc)) {
-    return false;
-  }
-
   const role =
     auth.orgRole ??
     (await databaseAdapter.getOrgMember(activeOrgId, auth.user.id))?.role;
-  if (!role) {
-    return false;
-  }
-
-  const policy = await loadMfaPolicy();
-  return (
-    policy.enabled && policy.required && policy.enforcedRoles.includes(role)
-  );
+  return role ? policy.enforcedRoles.includes(role) : false;
 }
 
 export async function authenticateRequest(
@@ -213,25 +227,6 @@ export async function authenticateRequest(
   const authHeader = request.headers.get("Authorization");
   if (authHeader?.startsWith("Bearer ")) {
     const token = authHeader.slice(7).trim();
-    const apiKey = await resolveApiKey(token, authService, databaseAdapter);
-    if (apiKey) {
-      const user = await databaseAdapter.getUserById(apiKey.createdByUserId);
-      if (!user || user.disabledAt) {
-        return null;
-      }
-
-      await databaseAdapter.updateApiKeyLastUsedAt(
-        apiKey.id,
-        new Date().toISOString()
-      );
-      return {
-        activeOrgId: apiKey.orgId,
-        isPlatformAdmin: false,
-        mode: "api-key",
-        user: toAuthUser(user),
-      };
-    }
-
     const payload = await verifyLocalAuthToken(token);
     if (!payload) {
       return null;
@@ -253,7 +248,10 @@ export async function authenticateRequest(
     };
   }
 
-  const sessionToken = getRequestTokenFromCookies(request, SESSION_COOKIE_NAME);
+  const sessionToken = getRequestTokenFromCookies(
+    request,
+    resolveBrowserSessionCookieNames(isSecureRequest(request)).session
+  );
   if (!sessionToken) {
     const anthropicApiKey = request.headers.get("x-api-key")?.trim();
 
@@ -310,29 +308,6 @@ export async function authenticateRequest(
   };
 }
 
-async function resolveApiKey(
-  token: string,
-  authService: AuthService,
-  databaseAdapter: DatabaseAdapter
-): Promise<StoredApiKeyRecord | null> {
-  const match = /^nk_(test|live)_([a-f0-9]{64})$/.exec(token);
-  if (!match) {
-    return null;
-  }
-
-  const keyPrefix = `nk_${match[1]}_${match[2].slice(0, 12)}`;
-  const record = await databaseAdapter.getApiKeyByPrefix(keyPrefix);
-  if (
-    !record ||
-    record.revokedAt ||
-    (record.expiresAt && new Date(record.expiresAt).getTime() <= Date.now())
-  ) {
-    return null;
-  }
-
-  return authService.hashToken(token) === record.secretHash ? record : null;
-}
-
 export function assertBrowserCsrf(
   request: Request,
   auth: RequestAuthContext,
@@ -342,7 +317,10 @@ export function assertBrowserCsrf(
     return;
   }
 
-  const csrfToken = getRequestTokenFromCookies(request, CSRF_COOKIE_NAME);
+  const csrfToken = getRequestTokenFromCookies(
+    request,
+    resolveBrowserSessionCookieNames(isSecureRequest(request)).csrf
+  );
   const csrfHeader = request.headers.get(CSRF_HEADER_NAME);
 
   if (!(csrfToken && csrfHeader) || csrfToken !== csrfHeader.trim()) {
@@ -360,15 +338,17 @@ function applyBrowserSessionCookies(
   csrfToken: string,
   request: Request
 ): void {
+  const secure = isSecureRequest(request);
+  const names = resolveBrowserSessionCookieNames(secure);
   const cookieBase = {
     path: "/",
     sameSite: "Lax" as const,
-    secure: isSecureRequest(request),
+    secure,
   };
 
   appendSetCookie(
     headers,
-    buildCookie(SESSION_COOKIE_NAME, sessionToken, {
+    buildCookie(names.session, sessionToken, {
       ...cookieBase,
       httpOnly: true,
       maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
@@ -377,10 +357,40 @@ function applyBrowserSessionCookies(
 
   appendSetCookie(
     headers,
-    buildCookie(CSRF_COOKIE_NAME, csrfToken, {
+    buildCookie(names.csrf, csrfToken, {
       ...cookieBase,
       maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
     })
+  );
+
+  if (secure) {
+    // Drop the pre-migration unprefixed cookies so a host-only legacy cookie
+    // stops shadowing the host-bound one after the upgrade.
+    clearLegacyBrowserSessionCookies(headers);
+  }
+}
+
+function clearLegacyBrowserSessionCookies(headers: Headers): void {
+  // A browser matches a clear by name, domain and path, so one Secure clear
+  // from an HTTPS response removes the cookie whichever Secure flag the
+  // pre-migration copy was stored with.
+  const cookieBase = {
+    maxAge: 0,
+    path: "/",
+    sameSite: "Lax" as const,
+    secure: true,
+  };
+
+  appendSetCookie(
+    headers,
+    buildCookie(LEGACY_COOKIE_NAMES.session, "", {
+      ...cookieBase,
+      httpOnly: true,
+    })
+  );
+  appendSetCookie(
+    headers,
+    buildCookie(LEGACY_COOKIE_NAMES.csrf, "", { ...cookieBase })
   );
 }
 
@@ -426,30 +436,40 @@ export async function createBrowserSessionResponse(
 }
 
 export function clearBrowserSessionCookies(headers: Headers): void {
-  const cookieBase = {
-    path: "/",
-    sameSite: "Lax" as const,
-  };
+  const cookieBase = { maxAge: 0, path: "/", sameSite: "Lax" as const };
+
+  // `__Host-` cookies are Secure by definition, and browsers ignore them on
+  // http:// origins, so these clears are emitted unconditionally.
+  appendSetCookie(
+    headers,
+    buildCookie(HOST_BOUND_COOKIE_NAMES.session, "", {
+      ...cookieBase,
+      httpOnly: true,
+      secure: true,
+    })
+  );
+  appendSetCookie(
+    headers,
+    buildCookie(HOST_BOUND_COOKIE_NAMES.csrf, "", {
+      ...cookieBase,
+      secure: true,
+    })
+  );
 
   // Clear both Secure and non-Secure variants so logout still works if the
   // Secure decision differs between login and logout (proxy header drift).
   for (const secure of [true, false] as const) {
     appendSetCookie(
       headers,
-      buildCookie(SESSION_COOKIE_NAME, "", {
+      buildCookie(LEGACY_COOKIE_NAMES.session, "", {
         ...cookieBase,
         httpOnly: true,
-        maxAge: 0,
         secure,
       })
     );
     appendSetCookie(
       headers,
-      buildCookie(CSRF_COOKIE_NAME, "", {
-        ...cookieBase,
-        maxAge: 0,
-        secure,
-      })
+      buildCookie(LEGACY_COOKIE_NAMES.csrf, "", { ...cookieBase, secure })
     );
   }
 }

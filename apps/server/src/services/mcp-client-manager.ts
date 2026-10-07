@@ -1,7 +1,11 @@
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import {
+  StreamableHTTPClientTransport,
+  StreamableHTTPError,
+} from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type {
   CachedMcpToolSummary,
@@ -11,6 +15,33 @@ import type {
 } from "@nakama/core";
 import { getProfileSoulDir } from "@nakama/core";
 import type { CachedMcpTool, StoredMcpServerRecord } from "@nakama/db";
+
+/** A server that does not answer `initialize` must not hold a connect open. */
+const CONNECT_TIMEOUT_MS = 30_000;
+
+/**
+ * Long tools stay alive while they report progress. The SDK sends a progress
+ * token only when `onprogress` is set.
+ */
+const CALL_TOOL_OPTIONS: RequestOptions = {
+  onprogress: () => {},
+  resetTimeoutOnProgress: true,
+};
+
+/** Thrown before a request is sent, so the caller can reconnect and retry. */
+class McpNotConnectedError extends Error {}
+
+/**
+ * True when the server did not run the request: no client was connected, or
+ * the server no longer knows the session (restart, deploy). A retry on a new
+ * connection is safe. A tool call that failed any other way may have run.
+ */
+export function isMcpReconnectableError(error: unknown): boolean {
+  return (
+    error instanceof McpNotConnectedError ||
+    (error instanceof StreamableHTTPError && error.code === 404)
+  );
+}
 
 interface ConnectedMcpClient {
   client: Client;
@@ -26,6 +57,7 @@ interface ConnectOptions {
 
 export class McpClientManager {
   private readonly connections = new Map<string, ConnectedMcpClient>();
+  private readonly inflight = new Map<string, Promise<CachedMcpTool[]>>();
 
   isConnected(
     serverId: string,
@@ -47,8 +79,19 @@ export class McpClientManager {
     orgId: string,
     profileId: string
   ): Promise<void> {
-    if (this.isConnected(server.id, server.transport, profileId, orgId)) {
+    const key = connectionKey(server.id, server.transport, profileId, orgId);
+
+    if (this.connections.has(key)) {
       return;
+    }
+
+    const pending = this.inflight.get(key);
+    if (pending) {
+      await pending;
+      // Disconnect may have run after the shared connect settled.
+      if (this.connections.has(key)) {
+        return;
+      }
     }
 
     await this.connect(server, { orgId, profileId });
@@ -64,6 +107,27 @@ export class McpClientManager {
       options?.profileId,
       options?.orgId
     );
+
+    const pending = this.inflight.get(key);
+    if (pending) {
+      return pending;
+    }
+
+    const run = this.establishConnection(server, options, key);
+    const tracked = run.finally(() => {
+      if (this.inflight.get(key) === tracked) {
+        this.inflight.delete(key);
+      }
+    });
+    this.inflight.set(key, tracked);
+    return tracked;
+  }
+
+  private async establishConnection(
+    server: StoredMcpServerRecord,
+    options: ConnectOptions | undefined,
+    key: string
+  ): Promise<CachedMcpTool[]> {
     await this.disconnectKey(key);
 
     const transport = createTransport(server.transport, server.config, options);
@@ -72,13 +136,54 @@ export class McpClientManager {
       version: "1.0.0",
     });
 
-    await client.connect(transport);
-    const result = await client.listTools();
-    const tools = normalizeListedTools(result.tools);
+    let connectionStored = false;
 
+    try {
+      await client.connect(transport, { timeout: CONNECT_TIMEOUT_MS });
+      const result = await client.listTools(undefined, {
+        timeout: CONNECT_TIMEOUT_MS,
+      });
+      const tools = normalizeListedTools(result.tools);
+
+      this.store(key, client, transport);
+      connectionStored = true;
+
+      return tools;
+    } finally {
+      if (!connectionStored) {
+        try {
+          await transport.close();
+        } catch {
+          // Ignore transport shutdown errors.
+        }
+      }
+    }
+  }
+
+  /**
+   * Keeps a connection and forgets it when its transport closes (stdio process
+   * exit, dropped stream), so the next call reconnects instead of failing on a
+   * dead client.
+   */
+  private store(key: string, client: Client, transport: Transport): void {
     this.connections.set(key, { client, transport });
+    client.onclose = () => {
+      if (this.connections.get(key)?.client === client) {
+        this.connections.delete(key);
+      }
+    };
+  }
 
-    return tools;
+  /** Forgets a connection the server no longer accepts, so it reconnects. */
+  async dropConnection(
+    serverId: string,
+    transport: McpTransport,
+    profileId?: string,
+    orgId?: string
+  ): Promise<void> {
+    await this.disconnectKey(
+      connectionKey(serverId, transport, profileId, orgId)
+    );
   }
 
   async disconnect(serverId: string): Promise<void> {
@@ -118,10 +223,14 @@ export class McpClientManager {
     orgId?: string
   ): Promise<unknown> {
     const client = this.requireClient(serverId, transport, profileId, orgId);
-    const result = await client.callTool({
-      arguments: asToolArguments(input),
-      name: toolName,
-    });
+    const result = await client.callTool(
+      {
+        arguments: asToolArguments(input),
+        name: toolName,
+      },
+      undefined,
+      CALL_TOOL_OPTIONS
+    );
 
     if ("toolResult" in result) {
       return result.toolResult;
@@ -154,8 +263,10 @@ export class McpClientManager {
     });
 
     try {
-      await client.connect(mcpTransport);
-      const result = await client.listTools();
+      await client.connect(mcpTransport, { timeout: CONNECT_TIMEOUT_MS });
+      const result = await client.listTools(undefined, {
+        timeout: CONNECT_TIMEOUT_MS,
+      });
       return normalizeListedTools(result.tools);
     } finally {
       try {
@@ -183,11 +294,26 @@ export class McpClientManager {
       version: "1.0.0",
     });
 
-    await client.connect(transport);
-    const result = await client.listTools();
-    const tools = normalizeListedTools(result.tools);
-    this.connections.set(connectionKey, { client, transport });
-    return tools;
+    let connectionStored = false;
+
+    try {
+      await client.connect(transport, { timeout: CONNECT_TIMEOUT_MS });
+      const result = await client.listTools(undefined, {
+        timeout: CONNECT_TIMEOUT_MS,
+      });
+      const tools = normalizeListedTools(result.tools);
+      this.store(connectionKey, client, transport);
+      connectionStored = true;
+      return tools;
+    } finally {
+      if (!connectionStored) {
+        try {
+          await transport.close();
+        } catch {
+          // Ignore transport shutdown errors.
+        }
+      }
+    }
   }
 
   isHttpEndpointConnected(connectionKey: string): boolean {
@@ -200,10 +326,14 @@ export class McpClientManager {
     input: unknown
   ): Promise<unknown> {
     const client = this.requireClientByKey(connectionKey);
-    const result = await client.callTool({
-      arguments: asToolArguments(input),
-      name: toolName,
-    });
+    const result = await client.callTool(
+      {
+        arguments: asToolArguments(input),
+        name: toolName,
+      },
+      undefined,
+      CALL_TOOL_OPTIONS
+    );
 
     if ("toolResult" in result) {
       return result.toolResult;
@@ -233,7 +363,9 @@ export class McpClientManager {
     const connection = this.connections.get(connectionKey);
 
     if (!connection) {
-      throw new Error(`HTTP MCP endpoint "${connectionKey}" is not connected.`);
+      throw new McpNotConnectedError(
+        `HTTP MCP endpoint "${connectionKey}" is not connected.`
+      );
     }
 
     return connection.client;
@@ -250,7 +382,9 @@ export class McpClientManager {
     );
 
     if (!connection) {
-      throw new Error(`MCP server "${serverId}" is not connected.`);
+      throw new McpNotConnectedError(
+        `MCP server "${serverId}" is not connected.`
+      );
     }
 
     return connection.client;

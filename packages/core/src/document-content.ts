@@ -83,6 +83,7 @@ const NATIVE_DOCUMENT_MEDIA_TYPES: Record<ProviderName, ReadonlySet<string>> = {
   mistral: new Set<string>(),
   moonshot: new Set<string>(),
   moonshot_cn: new Set<string>(),
+  netra: new Set<string>(),
   ollama: new Set<string>(),
   openai: new Set([
     "application/pdf",

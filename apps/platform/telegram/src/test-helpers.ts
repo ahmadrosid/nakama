@@ -107,7 +107,7 @@ function isHtmlParseMode(options: unknown): options is { parse_mode: "HTML" } {
   );
 }
 
-export interface MockStreamControl {
+interface MockStreamControl {
   complete(reply?: string): void;
   fail(error?: Error): void;
   readonly signal: AbortSignal | undefined;
@@ -387,6 +387,8 @@ export async function writeTelegramConfigIni(
     botToken: string;
     profileId?: string;
     handshakeCode?: string | null;
+    /** Defaults to a live window so a fixture code can actually be used. */
+    handshakeExpiresAt?: string | null;
     pairedUserIds?: number[];
     allowedUserIds?: number[];
   }
@@ -404,6 +406,10 @@ export async function writeTelegramConfigIni(
     lines.push(`handshake_code=${config.handshakeCode}`);
   }
 
+  if (config.handshakeExpiresAt) {
+    lines.push(`handshake_expires_at=${config.handshakeExpiresAt}`);
+  }
+
   if (config.pairedUserIds?.length) {
     lines.push(`paired_user_ids=${config.pairedUserIds.join(",")}`);
   }
@@ -416,7 +422,7 @@ export async function writeTelegramConfigIni(
   await writeFile(path.join(dir, "config.ini"), lines.join("\n"), "utf8");
 }
 
-export { createDefaultTestOrgs, createMultiTestOrgs };
+export { createMultiTestOrgs };
 
 export function createTestOrgStore(homeDir: string): ChannelOrgStore {
   return createSharedTestOrgStore(homeDir, "telegram");

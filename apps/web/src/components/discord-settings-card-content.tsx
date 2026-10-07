@@ -5,7 +5,6 @@ import {
   InputGroupInput,
 } from "@nakama/ui/input-group";
 import { ViewIcon, ViewOffIcon } from "hugeicons-react";
-import { SettingsRow } from "@/components/discord-settings-card.shared";
 import { DiscordSettingsPairingSection } from "@/components/discord-settings-pairing-section";
 import {
   ChannelAccessSettings,
@@ -13,6 +12,7 @@ import {
   ChannelSettings,
   ChannelSetupChecklist,
   IntegrationSettingsFooter,
+  SettingsRow,
 } from "@/components/integration-settings.shared";
 import { WorkerActionBar } from "@/components/WorkerActionBar";
 import {

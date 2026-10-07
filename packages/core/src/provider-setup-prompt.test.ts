@@ -15,6 +15,44 @@ function scriptedPrompt(answers: string[]) {
 }
 
 describe("promptForProviderConfig", () => {
+  test("saves a discovered Netra model with its exact ID", async () => {
+    const config = await promptForProviderConfig({
+      ...scriptedPrompt(["netra", "test-key"]),
+      discoverModels: async () => [
+        {
+          id: "deepseek/deepseek-v4-flash-0731",
+          name: "DeepSeek V4 Flash 0731",
+          provider: "netra",
+          supportsThinking: true,
+          supportsVision: false,
+        },
+      ],
+    });
+    expect(config.providers[0]?.type).toBe("netra");
+    expect(config.providers[0]?.customModels).toEqual([
+      {
+        default: true,
+        id: "deepseek/deepseek-v4-flash-0731",
+        supportsThinking: true,
+        supportsVision: false,
+      },
+    ]);
+  });
+  test("accepts an exact Netra model ID when discovery fails", async () => {
+    const config = await promptForProviderConfig({
+      ...scriptedPrompt([
+        "netra",
+        "test-key",
+        "deepseek/deepseek-v4-flash-0731",
+      ]),
+      discoverModels: async () => {
+        throw new Error("offline");
+      },
+    });
+    expect(config.providers[0]?.customModels?.[0]?.id).toBe(
+      "deepseek/deepseek-v4-flash-0731"
+    );
+  });
   test("accepts Perplexity as a first-party provider", async () => {
     const config = await promptForProviderConfig(
       scriptedPrompt(["perplexity", "test-key", ""])

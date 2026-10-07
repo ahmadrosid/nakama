@@ -156,11 +156,11 @@ export function visibleLength(text: string): number {
   return length;
 }
 
-export function isSgrSequence(seq: string): boolean {
+function isSgrSequence(seq: string): boolean {
   return /^\x1b\[[0-9;]*m$/.test(seq);
 }
 
-export function parseSgrParams(seq: string): number[] {
+function parseSgrParams(seq: string): number[] {
   const body = seq.slice(2, -1);
   if (body === "") {
     return [0];
@@ -172,7 +172,7 @@ export function parseSgrParams(seq: string): number[] {
 }
 
 /** Last open SGR sequence stack as a re-emit prefix (reset clears). */
-export function activeAnsiPrefix(text: string): string {
+function activeAnsiPrefix(text: string): string {
   const opens: string[] = [];
 
   for (const token of tokenizeText(text)) {

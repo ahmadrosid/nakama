@@ -48,6 +48,10 @@ export class EphemeralSessionStore {
     return entry;
   }
 
+  clear(): void {
+    this.entries.clear();
+  }
+
   has(sessionId: string): boolean {
     return this.entries.has(sessionId);
   }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   derivePluginToolName,
   getOrgPluginDatabasePath,
@@ -446,7 +446,7 @@ describe("validatePluginJsonInstance", () => {
 
 describe("plugin package paths", () => {
   test("resolves release and staging dirs from the config root", () => {
-    const configDir = "/tmp/nakama-config";
+    const configDir = resolve("/tmp/nakama-config");
     expect(getPluginsRootDir(configDir)).toBe(join(configDir, "plugins"));
     expect(getPluginReleaseDir("notes", "1.0.0", configDir)).toBe(
       join(configDir, "plugins", "notes", "1.0.0")

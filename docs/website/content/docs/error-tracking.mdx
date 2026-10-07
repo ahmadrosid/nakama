@@ -1,6 +1,6 @@
 ---
 title: "Error tracking"
-description: "Send this instance's own errors to the Sentry, GlitchTip, Bugsink, or self-hosted Sentry project you already run."
+description: "Send this instance's own errors to the Sentry, GlitchTip, Bugsink, Rustrak, or self-hosted Sentry project you already run."
 ---
 
 When a self-hosted Nakama crashes, the evidence is one line of stderr on whatever machine it ran on. Nobody reads that until somebody complains.
@@ -11,7 +11,7 @@ Nakama only sends. It stores no errors, and there is no error page inside Nakama
 
 ## What you need first
 
-- A project on **Sentry**, **GlitchTip**, **Bugsink**, or a **self-hosted Sentry**. They all speak the same protocol, so one field covers all four.
+- A project on **Sentry**, **GlitchTip**, **Bugsink**, **Rustrak**, or a **self-hosted Sentry**. They all speak the same protocol, so one field covers all five.
 - The **DSN** for that project. It looks like `https://<key>@sentry.example.com/42`.
 - The **org admin** role in Nakama.
 - Nothing at all if you would rather not do this. Error tracking is off until you paste a DSN, and off means nothing is sent and nothing is written to disk.
@@ -22,7 +22,7 @@ Nakama only sends. It stores no errors, and there is no error page inside Nakama
 
 GlitchTip also shows a second address under the same page, ending in `/security/?glitchtip_key=...`. That one is the browser CSP report endpoint and it will not accept error events. The DSN is the one you want.
 
-**2. Paste it into Nakama.** Open **Integrations**, then **Error tracking**, paste the DSN, and press **Save**.
+**2. Paste it into Nakama.** Open **Control center → Integrations → Error tracking**, paste the DSN, and press **Save**.
 
 ![The Error tracking page in Nakama before a DSN is saved, showing the badge reading Off](/screenshots/error-tracking-empty.png)
 
@@ -40,7 +40,11 @@ Uncaught exceptions and unhandled rejections, from four processes: the server an
 
 Each report carries the error name and message, the stack trace, which process it came from, and the Bun version, platform, and architecture.
 
-**Not sent:** HTTP 4xx responses, a turn the user cancelled, and anything a user typed. A rejected request is not a defect, and reporting every bad password would bury the real crashes.
+**Not intentionally attached:** request bodies or prompts. HTTP 4xx responses
+and turns the user cancelled are not reported. Error messages and stack traces
+can still repeat user-derived or operational text that the scrubber does not
+recognize, so treat the tracker as a sensitive destination. A rejected request
+is not a defect, and reporting every bad password would bury the real crashes.
 
 ## What is stripped before it leaves
 
@@ -92,7 +96,7 @@ The DSN applies to the whole installation, not to one organisation. There is no 
 For anyone who wants the mechanics rather than the steps.
 
 - The DSN is stored as `dsn` in `~/.nakama/error-tracking/config.ini` on the server. The API never returns the raw value, only a masked one.
-- Reports are posted to the DSN's store endpoint with the `X-Sentry-Auth` header, which is what makes Sentry, GlitchTip, and Bugsink interchangeable here. There is no SDK and no extra dependency.
+- Reports are posted as Sentry envelopes to the DSN's envelope endpoint with the `X-Sentry-Auth` header, which is what makes Sentry, GlitchTip, Bugsink, and Rustrak interchangeable here. There is no SDK and no extra dependency. The older `/store/` endpoint is deliberately not used: Sentry deprecates it and Rustrak rejects it outright.
 - Grouping uses a fingerprint Nakama computes from the error name, message, and stack, with uuids and line numbers normalised out. That way one bug stays one issue even when the stack differs between installs.
 - The DSN is read per send, not at startup. That is why saving one takes effect without restarting four processes.
 - **The queue is the interesting part.** Handlers use `uncaughtExceptionMonitor`, which leaves Bun's own crash and exit behaviour intact, so the process dies before an asynchronous send can finish. Measured on Bun 1.3.14: not even an `exit` handler runs. So a report is written to `~/.nakama/error-tracking/pending.json` synchronously before the send, and removed only once the ingest confirms it. The next process to start drains what is left, which also covers a send that simply failed.

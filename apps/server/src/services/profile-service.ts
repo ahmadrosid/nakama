@@ -1,5 +1,5 @@
 import { existsSync, lstatSync, mkdirSync, renameSync } from "node:fs";
-import { cp } from "node:fs/promises";
+import { cp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type {
   AssignMcpServerRequest,
@@ -12,6 +12,8 @@ import type {
   DeleteOrganizationKnowledgeBaseResponse,
   DocumentAttachment,
   ImageAttachment,
+  ImportKnowledgeBaseZipEntry,
+  ImportKnowledgeBaseZipResponse,
   JsonSchema,
   KnowledgeBaseDocument,
   KnowledgeBaseDuplicateAction,
@@ -19,7 +21,6 @@ import type {
   ListProfilesResponse,
   ListToolsResponse,
   MoveProfileRequest,
-  ProfileDetail,
   ProfileResponse,
   ProfileSummary,
   ToolDetail,
@@ -34,6 +35,7 @@ import {
   createId,
   DEFAULT_KNOWLEDGE_SOURCES,
   deleteProfileAvatar,
+  ensureKnowledgeBaseDirs,
   getKnowledgeBaseDir,
   getProfileSharedDocumentIds,
   getProfileSoulDir,
@@ -44,6 +46,8 @@ import {
   listKnowledgeBaseDocuments,
   listOrganizationKnowledgeBaseDocuments,
   NakamaApiError,
+  nanoid,
+  normalizeKnowledgeBaseMediaType,
   pathExists,
   uploadKnowledgeBaseDocument as persistKnowledgeBaseDocument,
   uploadOrganizationKnowledgeBaseDocument as persistOrganizationKnowledgeBaseDocument,
@@ -59,6 +63,10 @@ import {
 import { listChannelOwners } from "@nakama/core/channel-config-shared";
 import { readTextIfExists } from "@nakama/core/fs";
 import {
+  MAX_KNOWLEDGE_DOCUMENT_BYTES,
+  MAX_KNOWLEDGE_ZIP_BYTES,
+} from "@nakama/core/message-content";
+import {
   BUILTIN_TOOL_IDS,
   isProtectedToolId,
 } from "@nakama/core/tools/protected";
@@ -71,6 +79,7 @@ import {
   ensureBuiltinToolDefinitions,
   ensureProfileDefaultBundledSkills,
 } from "@nakama/db";
+import { unzipSync } from "fflate";
 import {
   CUSTOM_TOOL_HANDLERS,
   type CustomToolType,
@@ -78,6 +87,10 @@ import {
   getCustomToolHandler,
   isCustomToolType,
 } from "./custom-tool-handlers";
+import {
+  parseToolEnvDeclarations,
+  type ToolEnvVar,
+} from "./custom-tool-shared";
 import { toMcpServerSummaries } from "./mcp-service";
 import { MemoryBackendService } from "./memory-backend-service";
 import {
@@ -96,6 +109,87 @@ import { toSkillSummaries } from "./skills-service";
 import { readToolSource } from "./tool-source";
 
 const PROFILE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
+const MAX_KNOWLEDGE_ZIP_ENTRIES = 100;
+const MAX_KNOWLEDGE_ZIP_UNCOMPRESSED_BYTES = 100 * 1024 * 1024;
+const KNOWLEDGE_ZIP_EXTENSIONS = new Set([
+  ".txt",
+  ".md",
+  ".csv",
+  ".pdf",
+  ".docx",
+]);
+
+function readKnowledgeZip(zipBase64: string): Record<string, Uint8Array> {
+  if (typeof zipBase64 !== "string" || zipBase64.length === 0) {
+    throw new NakamaApiError("ZIP data is required.", 400);
+  }
+  if (zipBase64.length > Math.ceil(MAX_KNOWLEDGE_ZIP_BYTES / 3) * 4) {
+    throw new NakamaApiError("ZIP file exceeds the 20 MiB limit.", 413);
+  }
+  if (
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+      zipBase64
+    )
+  ) {
+    throw new NakamaApiError("Invalid base64 ZIP data.", 400);
+  }
+
+  const archive = Buffer.from(zipBase64, "base64");
+  if (archive.length > MAX_KNOWLEDGE_ZIP_BYTES) {
+    throw new NakamaApiError("ZIP file exceeds the 20 MiB limit.", 413);
+  }
+  if (archive.toString("base64") !== zipBase64) {
+    throw new NakamaApiError("Invalid base64 ZIP data.", 400);
+  }
+
+  let count = 0;
+  let totalBytes = 0;
+  const names = new Set<string>();
+  try {
+    return unzipSync(archive, {
+      filter: ({ name, originalSize }) => {
+        count += 1;
+        totalBytes += originalSize;
+        if (
+          count > MAX_KNOWLEDGE_ZIP_ENTRIES ||
+          !Number.isSafeInteger(originalSize) ||
+          originalSize < 0 ||
+          originalSize > MAX_KNOWLEDGE_DOCUMENT_BYTES ||
+          totalBytes > MAX_KNOWLEDGE_ZIP_UNCOMPRESSED_BYTES
+        ) {
+          throw new NakamaApiError("ZIP file exceeds the entry limits.", 413);
+        }
+
+        const path = name.endsWith("/") ? name.slice(0, -1) : name;
+        if (
+          !path ||
+          path.startsWith("/") ||
+          path.includes("\\") ||
+          /^[A-Za-z]:/.test(path) ||
+          /[\u0000-\u001f\u007f]/.test(path) ||
+          path
+            .split("/")
+            .some((segment) => !segment || segment === "." || segment === "..")
+        ) {
+          throw new NakamaApiError("ZIP file contains an invalid path.", 400);
+        }
+        if (!name.endsWith("/")) {
+          const normalized = path.normalize("NFC");
+          if (names.has(normalized)) {
+            throw new NakamaApiError("ZIP file contains duplicate paths.", 400);
+          }
+          names.add(normalized);
+        }
+        return true;
+      },
+    });
+  } catch (error) {
+    if (error instanceof NakamaApiError) {
+      throw error;
+    }
+    throw new NakamaApiError("Invalid ZIP file.", 400);
+  }
+}
 const BASIC_PROFILE_TOOL_IDS = [
   BUILTIN_TOOL_IDS.write_file,
   BUILTIN_TOOL_IDS.edit_file,
@@ -113,9 +207,6 @@ const SOUL_FILE_KEY_BY_NAME = {
 
 /** Everything in the soul stack except MEMORY.md, which a clone starts fresh. */
 const CLONED_SOUL_FILE_KEYS = ["instructions", "soul", "style"] as const;
-
-/** How many `-2`, `-3` suffixes to try before giving up on a generated id. */
-const CLONE_ID_ATTEMPTS = 50;
 
 async function copyProfileAvatarTo(
   orgId: string,
@@ -139,6 +230,9 @@ async function copyKnowledgeBaseTo(
   sourceId: string,
   profileId: string
 ): Promise<void> {
+  // A legacy `data/knowledge-base` is only moved by KB operations, so migrate
+  // it before looking for the current-layout directory.
+  await ensureKnowledgeBaseDirs(orgId, sourceId);
   const from = getKnowledgeBaseDir(orgId, sourceId);
 
   if (!(await pathExists(from))) {
@@ -151,17 +245,6 @@ async function copyKnowledgeBaseTo(
     force: true,
     recursive: true,
   });
-}
-
-function slugifyProfileName(name: string): string {
-  return (
-    name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 64) || "profile"
-  );
 }
 
 export class ProfileService {
@@ -213,7 +296,7 @@ export class ProfileService {
 
     validateGeneratedSoulFiles(request.soulFiles);
 
-    const profileId = await this.resolveNewProfileId(request.id, name);
+    const profileId = await this.resolveNewProfileId(request.id);
     const now = new Date().toISOString();
     const profile: StoredProfileRecord = {
       automationsEnabled: true,
@@ -258,7 +341,7 @@ export class ProfileService {
     }
 
     const name = request.name?.trim() || `${source.name} (copy)`;
-    const profileId = await this.resolveCloneProfileId(request.id, name);
+    const profileId = await this.resolveNewProfileId(request.id);
     const now = new Date().toISOString();
 
     await this.db.upsertProfile({
@@ -277,12 +360,43 @@ export class ProfileService {
       updatedAt: now,
     });
 
-    await this.copyProfileSoul(orgId, sourceId, profileId);
-    await this.copyProfileAssignments(sourceId, profileId);
-    await copyProfileAvatarTo(orgId, sourceId, profileId);
-    await copyKnowledgeBaseTo(orgId, sourceId, profileId);
+    try {
+      await this.copyProfileSoul(orgId, sourceId, profileId);
+      await this.copyProfileAssignments(sourceId, profileId);
+      await copyProfileAvatarTo(orgId, sourceId, profileId);
+      await copyKnowledgeBaseTo(orgId, sourceId, profileId);
+    } catch (error) {
+      await this.cleanupFailedClone(orgId, sourceId, profileId);
+      throw error;
+    }
 
     return this.getProfile(orgId, profileId);
+  }
+
+  private async cleanupFailedClone(
+    orgId: string,
+    sourceId: string,
+    profileId: string
+  ): Promise<void> {
+    await rm(getProfileSoulDir(orgId, profileId), {
+      force: true,
+      recursive: true,
+    });
+
+    for (const tool of await this.db.listToolsForProfile(sourceId)) {
+      await this.db.unassignToolFromProfile(profileId, tool.id);
+    }
+
+    for (const skill of await this.db.listSkillsForProfile(sourceId)) {
+      await this.db.unassignSkillFromProfile(profileId, skill.id);
+    }
+
+    for (const server of await this.db.listMcpServersForProfile(sourceId)) {
+      await this.db.unassignMcpServerFromProfile(profileId, server.id);
+    }
+
+    await this.db.replaceProfileComposioToolkits(profileId, []);
+    await this.db.deleteProfile(profileId);
   }
 
   private async copyProfileSoul(
@@ -328,34 +442,6 @@ export class ProfileService {
         toolkits.map((toolkit) => ({ ...toolkit, profileId }))
       );
     }
-  }
-
-  /**
-   * An explicit id must be free, same as create. A generated one is suffixed
-   * until it is, because cloning twice is a normal thing to do.
-   */
-  private async resolveCloneProfileId(
-    requestedId: string | undefined,
-    name: string
-  ): Promise<string> {
-    if (requestedId?.trim()) {
-      return this.resolveNewProfileId(requestedId, name);
-    }
-
-    const base = slugifyProfileName(name);
-
-    for (let suffix = 1; suffix <= CLONE_ID_ATTEMPTS; suffix++) {
-      const candidate = suffix === 1 ? base : `${base}-${suffix}`;
-
-      if (!(await this.db.getProfile(candidate))) {
-        return this.resolveNewProfileId(candidate, name);
-      }
-    }
-
-    throw new NakamaApiError(
-      `Could not find a free profile id for "${name}".`,
-      409
-    );
   }
 
   async updateProfile(
@@ -768,7 +854,7 @@ export class ProfileService {
 
     const skill = await this.db.getSkill(request.skillId);
 
-    if (!skill) {
+    if (!skill || (skill.orgId != null && skill.orgId !== orgId)) {
       throw new Error("Skill not found.");
     }
 
@@ -932,6 +1018,98 @@ export class ProfileService {
     }
   }
 
+  async importKnowledgeBaseZip(
+    orgId: string,
+    profileId: string,
+    zipBase64: string
+  ): Promise<ImportKnowledgeBaseZipResponse> {
+    await this.requireProfile(orgId, profileId);
+    const archive = readKnowledgeZip(zipBase64);
+    const files = Object.entries(archive).filter(
+      ([name]) =>
+        !(name.endsWith("/") || name.startsWith("__MACOSX/")) &&
+        name.split("/").at(-1) !== ".DS_Store"
+    );
+    if (
+      !files.some(([name]) =>
+        KNOWLEDGE_ZIP_EXTENSIONS.has(
+          name.slice(name.lastIndexOf(".")).toLowerCase()
+        )
+      )
+    ) {
+      throw new NakamaApiError("ZIP file has no supported documents.", 400);
+    }
+
+    const entries: ImportKnowledgeBaseZipEntry[] = [];
+    for (const [filename, bytes] of files) {
+      const extension = filename.slice(filename.lastIndexOf(".")).toLowerCase();
+      if (!KNOWLEDGE_ZIP_EXTENSIONS.has(extension)) {
+        entries.push({
+          filename,
+          outcome: "unsupported",
+          reason: "Unsupported document type.",
+        });
+        continue;
+      }
+
+      try {
+        const { document } = await persistKnowledgeBaseDocument(
+          orgId,
+          profileId,
+          {
+            data: Buffer.from(bytes).toString("base64"),
+            filename,
+            mediaType: normalizeKnowledgeBaseMediaType("", filename),
+          },
+          "error"
+        );
+        entries.push({
+          documentId: document.id,
+          filename,
+          outcome: "created",
+          status: document.status,
+          ...(document.error ? { reason: document.error } : {}),
+        });
+      } catch (error) {
+        if (error instanceof KnowledgeBaseDuplicateError) {
+          entries.push({
+            documentId: error.existing.id,
+            filename,
+            match: error.match,
+            outcome: "duplicate",
+            status: error.existing.status,
+          });
+          continue;
+        }
+        entries.push({
+          filename,
+          outcome: "error",
+          reason:
+            error instanceof Error
+              ? error.message
+              : "Could not import document.",
+        });
+      }
+    }
+
+    await this.memoryBackend.syncKnowledge(orgId, profileId);
+    return {
+      entries,
+      profileId,
+      totals: {
+        created: entries.filter((entry) => entry.outcome === "created").length,
+        duplicate: entries.filter((entry) => entry.outcome === "duplicate")
+          .length,
+        error: entries.filter((entry) => entry.outcome === "error").length,
+        failedExtraction: entries.filter(
+          (entry) => entry.outcome === "created" && entry.status === "failed"
+        ).length,
+        unsupported: entries.filter((entry) => entry.outcome === "unsupported")
+          .length,
+      },
+    };
+  }
+
   async deleteKnowledgeBaseDocument(
     orgId: string,
     profileId: string,
@@ -1075,11 +1253,18 @@ export class ProfileService {
     }
   }
 
+  /**
+   * Generated ids are random (names may repeat across orgs), so an id only
+   * collides when the caller asked for a specific one.
+   */
   private async resolveNewProfileId(
-    requestedId: string | undefined,
-    name: string
+    requestedId: string | undefined
   ): Promise<string> {
-    const trimmed = requestedId?.trim() || slugifyProfileName(name);
+    const trimmed = requestedId?.trim();
+
+    if (!trimmed) {
+      return nanoid();
+    }
 
     if (!PROFILE_ID_PATTERN.test(trimmed)) {
       throw new NakamaApiError(
@@ -1088,13 +1273,33 @@ export class ProfileService {
       );
     }
 
-    const existing = await this.db.getProfile(trimmed);
-
-    if (existing) {
-      throw new NakamaApiError("Profile id already exists.", 409);
+    if (await this.isProfileIdTaken(trimmed)) {
+      throw new NakamaApiError(
+        `Profile id "${trimmed}" is already taken.`,
+        409
+      );
     }
 
     return trimmed;
+  }
+
+  /**
+   * On Windows `Sales` and `sales` would share one profile folder, because
+   * NTFS names are case-insensitive, so there an id taken in any case is taken.
+   */
+  private async isProfileIdTaken(id: string): Promise<boolean> {
+    if (await this.db.getProfile(id)) {
+      return true;
+    }
+
+    if (process.platform !== "win32") {
+      return false;
+    }
+
+    const lowered = id.toLowerCase();
+    return (await this.db.listProfiles()).some(
+      (profile) => profile.id.toLowerCase() === lowered
+    );
   }
 
   private async requireProfile(
@@ -1214,8 +1419,6 @@ function toToolDetail(record: StoredToolRecord): ToolDetail {
   };
 }
 
-export type { ProfileDetail };
-
 function readToolHandlerType(handlerType: string | undefined): CustomToolType {
   if (handlerType === undefined) {
     return "javascript";
@@ -1233,7 +1436,12 @@ function readToolHandlerType(handlerType: string | undefined): CustomToolType {
 function readCustomToolHandlerConfig(
   handlerType: CustomToolType,
   handlerConfig: unknown
-): { modulePath: string; parameters?: JsonSchema; requiresApiKey?: boolean } {
+): {
+  env?: ToolEnvVar[];
+  modulePath: string;
+  parameters?: JsonSchema;
+  requiresApiKey?: boolean;
+} {
   const { extension } = CUSTOM_TOOL_HANDLERS[handlerType];
 
   if (typeof handlerConfig !== "object" || handlerConfig === null) {
@@ -1273,7 +1481,10 @@ function readCustomToolHandlerConfig(
     );
   }
 
+  const env = parseToolEnvDeclarations(config.env);
+
   return {
+    ...(env.length > 0 ? { env } : {}),
     modulePath: modulePath.trim(),
     ...(config.requiresApiKey === true ? { requiresApiKey: true } : {}),
     ...(parameters === undefined ? {} : { parameters }),

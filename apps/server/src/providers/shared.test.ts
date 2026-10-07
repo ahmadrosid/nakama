@@ -2,27 +2,16 @@ import { describe, expect, test } from "bun:test";
 import type { ChatMessage } from "@nakama/core";
 import {
   extractOpenAITokenUsage,
-  formatHttpErrorBody,
+  finalizePendingToolCalls,
+  mergePendingToolCall,
   normalizeThinkingEffort,
+  type PendingToolCall,
   parseJsonRecord,
   readRecord,
   readSseEvents,
   sanitizeToolCallHistory,
 } from "./shared";
-
-function streamFromChunks(chunks: string[]): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
-
-  return new ReadableStream({
-    start(controller) {
-      for (const chunk of chunks) {
-        controller.enqueue(encoder.encode(chunk));
-      }
-
-      controller.close();
-    },
-  });
-}
+import { streamFromChunks } from "./test-helpers";
 
 describe("provider shared helpers", () => {
   test("readSseEvents parses event names and skips done markers", async () => {
@@ -71,6 +60,30 @@ describe("provider shared helpers", () => {
     expect(parseJsonRecord("{bad json")).toEqual({});
   });
 
+  test("joins partial tool calls in index order and drops incomplete calls", () => {
+    const pending = new Map<number, PendingToolCall>();
+    mergePendingToolCall(pending, {
+      function: { arguments: '{"second":' },
+      index: 1,
+    });
+    mergePendingToolCall(pending, {
+      function: { arguments: "{bad json", name: "first" },
+      id: "call_0",
+      index: 0,
+    });
+    mergePendingToolCall(pending, {
+      function: { arguments: "2}", name: "second" },
+      id: "call_1",
+      index: 1,
+    });
+    mergePendingToolCall(pending, { id: "incomplete", index: 2 });
+
+    expect(finalizePendingToolCalls(pending)).toEqual([
+      { arguments: {}, id: "call_0", name: "first" },
+      { arguments: { second: 2 }, id: "call_1", name: "second" },
+    ]);
+  });
+
   test("readRecord only accepts plain records", () => {
     expect(readRecord({ ok: true })).toEqual({ ok: true });
     expect(readRecord(null)).toEqual({});
@@ -82,24 +95,6 @@ describe("provider shared helpers", () => {
     expect(normalizeThinkingEffort("low")).toBe("low");
     expect(normalizeThinkingEffort("high")).toBe("high");
     expect(normalizeThinkingEffort(undefined)).toBe("medium");
-  });
-
-  test("formatHttpErrorBody extracts OpenCode-style JSON errors", () => {
-    expect(
-      formatHttpErrorBody(
-        "OpenCode Zen",
-        429,
-        JSON.stringify({
-          error: {
-            message: "Rate limit exceeded. Please try again later.",
-            type: "FreeUsageLimitError",
-          },
-          type: "error",
-        })
-      )
-    ).toBe(
-      "OpenCode Zen request failed (429 FreeUsageLimitError): Rate limit exceeded. Please try again later."
-    );
   });
 
   const user = (content: string): ChatMessage => ({ content, role: "user" });

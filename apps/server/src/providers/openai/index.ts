@@ -21,9 +21,12 @@ import {
 import {
   buildChatCompletionResult,
   extractOpenAITokenUsage,
+  finalizePendingToolCalls,
   formatHttpErrorBody,
+  mergePendingToolCall,
   normalizeThinkingEffort,
   notifyToolInputDelta,
+  type PendingToolCall,
   parseJsonRecord,
   readSseEvents,
   sanitizeToolCallHistory,
@@ -214,7 +217,8 @@ function usesResponsesApi(
   // gpt-5.4+ reject tools + reasoning_effort on chat/completions; Responses supports both.
   if (
     (input.tools?.length ?? 0) > 0 &&
-    (openAIModelRejectsChatToolsWithReasoning(model) ||
+    (model.trim().toLowerCase().startsWith("gpt-6.1-sol") ||
+      openAIModelRejectsChatToolsWithReasoning(model) ||
       openAIModelSupportsThinking(model, customModels))
   ) {
     return true;
@@ -240,6 +244,7 @@ type OpenAIMessage =
       role: "assistant";
       content: string | null;
       reasoning_content?: string;
+      reasoning_details?: unknown[];
       tool_calls?: Array<{
         id: string;
         type: "function";
@@ -276,7 +281,7 @@ async function toOpenAIMessage(
   }
 
   if (message.role === "assistant") {
-    return toOpenAIAssistantMessage(message);
+    return toOpenAIAssistantMessage(message, provider);
   }
 
   return {
@@ -287,14 +292,20 @@ async function toOpenAIMessage(
 }
 
 function toOpenAIAssistantMessage(
-  message: Extract<ChatMessage, { role: "assistant" }>
+  message: Extract<ChatMessage, { role: "assistant" }>,
+  provider: ProviderName
 ): Extract<OpenAIMessage, { role: "assistant" }> {
   const thinking = message.thinking?.trim();
 
   return {
     content: message.content || null,
     role: "assistant",
-    ...(thinking ? { reasoning_content: thinking } : {}),
+    ...(thinking && !(provider === "netra" && message.providerContent?.length)
+      ? { reasoning_content: thinking }
+      : {}),
+    ...(provider === "netra" && message.providerContent?.length
+      ? { reasoning_details: message.providerContent }
+      : {}),
     ...(message.toolCalls?.length
       ? { tool_calls: toOpenAIAssistantToolCalls(message.toolCalls) }
       : {}),
@@ -371,9 +382,11 @@ async function buildChatCompletionRequestBody(options: {
   const hasTools = provider !== "perplexity" && Boolean(options.tools?.length);
   if (
     hasTools &&
-    options.model.trim().toLowerCase().startsWith("gpt-6-astra")
+    (options.model.trim().toLowerCase().startsWith("gpt-6-astra") ||
+      (provider === "openai" &&
+        options.model.trim().toLowerCase().startsWith("gpt-6.1-sol")))
   ) {
-    throw new Error("GPT-6 Astra requires the Responses API for tools.");
+    throw new Error(`${options.model} requires the Responses API for tools.`);
   }
 
   return {
@@ -688,63 +701,6 @@ async function requestCompletion(
     content,
     ...(usage ? { usage } : {}),
   };
-}
-
-interface PendingToolCall {
-  arguments: string;
-  id: string;
-  name: string;
-}
-
-function mergePendingToolCall(
-  pending: Map<number, PendingToolCall>,
-  toolDelta: {
-    index?: number;
-    id?: string;
-    function?: { name?: string; arguments?: string };
-  }
-): void {
-  const index = toolDelta.index ?? 0;
-  const current = pending.get(index) ?? {
-    arguments: "",
-    id: "",
-    name: "",
-  };
-
-  if (toolDelta.id) {
-    current.id = toolDelta.id;
-  }
-
-  if (toolDelta.function?.name) {
-    current.name = toolDelta.function.name;
-  }
-
-  if (toolDelta.function?.arguments) {
-    current.arguments += toolDelta.function.arguments;
-  }
-
-  pending.set(index, current);
-}
-
-function finalizePendingToolCalls(
-  pending: Map<number, PendingToolCall>
-): ToolCall[] {
-  return [...pending.entries()]
-    .sort(([left], [right]) => left - right)
-    .map(([, call]) => call)
-    .flatMap((call) => {
-      if (!(call.id && call.name)) {
-        return [];
-      }
-
-      return [
-        {
-          arguments: parseJsonRecord(call.arguments),
-          id: call.id,
-          name: call.name,
-        },
-      ];
-    });
 }
 
 async function readOpenAIStream(

@@ -1,4 +1,7 @@
-import type { TelegramNotificationDestinationConfig } from "@nakama/core/contract";
+import type {
+  NotificationDestinationSummary,
+  TelegramNotificationDestinationConfig,
+} from "@nakama/core/contract";
 
 export function maskWebhookApiKey(apiKey: string): string {
   const trimmed = apiKey.trim();
@@ -24,6 +27,21 @@ export function formatTelegramDestinationLabel(
   }
 
   return `Chat ${telegram.chatId}`;
+}
+
+export function formatNotificationDestinationLabel(
+  destination: NotificationDestinationSummary
+): string {
+  switch (destination.channel) {
+    case "telegram":
+      return `Telegram · ${formatTelegramDestinationLabel(destination.telegram)}`;
+    case "discord":
+      return `Discord · Channel ${destination.discord.channelId}`;
+    case "whatsapp":
+      return "WhatsApp · Agent's paired contact";
+    default:
+      return "Unknown channel";
+  }
 }
 
 export function parseTelegramTopicLink(input: string): {

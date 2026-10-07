@@ -14,7 +14,7 @@ import {
   restoreNakamaDataImport,
 } from "../../services/data-portability";
 import type { ServerOptions } from "../context";
-import { errorResponse, json, readJson } from "../shared";
+import { assertJsonRequest, errorResponse, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
 export function registerSetupImportRoutes(
@@ -126,6 +126,8 @@ export function registerSetupImportRoutes(
       return errorResponse("Authentication not configured", 500);
     }
 
+    assertJsonRequest(c.req.raw);
+
     await assertSetupImportAllowed(databaseAdapter);
 
     const body = await readJson<PreviewDataImportRequest>(
@@ -148,6 +150,8 @@ export function registerSetupImportRoutes(
       return errorResponse("Authentication not configured", 500);
     }
 
+    assertJsonRequest(c.req.raw);
+
     await assertSetupImportAllowed(databaseAdapter);
 
     const body = await readJson<RestoreDataImportRequest>(
@@ -159,6 +163,8 @@ export function registerSetupImportRoutes(
     let restore;
     try {
       restore = await restoreNakamaDataImport(archive, {
+        afterFailedReplace: options.onDataRestored,
+        beforeReplace: options.onBeforeDataRestore,
         confirm: body.confirm,
       });
     } catch (error) {

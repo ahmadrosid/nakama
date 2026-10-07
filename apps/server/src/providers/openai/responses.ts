@@ -275,7 +275,8 @@ function parseResponsesOutput(
     input_tokens?: number;
     output_tokens?: number;
     total_tokens?: number;
-  }
+  },
+  streamContent = ""
 ): ChatCompletionResult {
   const textParts: string[] = [];
   const thinkingParts: string[] = [];
@@ -332,7 +333,11 @@ function parseResponsesOutput(
     totalTokens: usage?.total_tokens,
   });
 
-  if (!content && toolCalls.length === 0 && !providerContent?.length) {
+  if (
+    !(content || streamContent.trim()) &&
+    toolCalls.length === 0 &&
+    !providerContent?.length
+  ) {
     throw new Error("OpenAI returned an empty response.");
   }
 
@@ -411,6 +416,25 @@ async function readOpenAIResponsesStream(
     const payload = JSON.parse(data) as Record<string, unknown>;
     const type = String(payload.type ?? "");
     const responseRecord = readRecord(payload.response);
+    if (type === "response.failed") {
+      throw new Error(
+        String(
+          readRecord(responseRecord.error).message ?? "OpenAI response failed."
+        )
+      );
+    }
+    if (type === "response.incomplete") {
+      throw new Error(
+        `OpenAI response incomplete: ${String(readRecord(responseRecord.incomplete_details).reason ?? "unknown reason")}`
+      );
+    }
+    if (
+      type === "response.completed" &&
+      output.length === 0 &&
+      Array.isArray(responseRecord.output)
+    ) {
+      output.push(...responseRecord.output);
+    }
     usage =
       buildTokenUsage({
         inputTokens:
@@ -462,7 +486,7 @@ async function readOpenAIResponsesStream(
     output.push(...outputIndex.values());
   }
 
-  const parsed = parseResponsesOutput(output, handlers);
+  const parsed = parseResponsesOutput(output, handlers, undefined, content);
 
   const thinkingText = thinking.trim() || parsed.assistantMessage.thinking;
 

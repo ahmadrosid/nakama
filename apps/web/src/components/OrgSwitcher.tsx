@@ -343,7 +343,7 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
   const { user, orgs, activeOrg, switchOrg } = useAuth();
   const dialogs = useOrgSwitcherDialogs();
 
-  if (!user || orgs.length === 0) {
+  if (!user || (!activeOrg && orgs.length === 0)) {
     return null;
   }
 
@@ -375,6 +375,9 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
             </p>
           </div>
           <div className="p-1">
+            {activeOrg && !orgs.some((org) => org.id === activeOrg.id) ? (
+              <DropdownMenuItem>{activeOrg.name}</DropdownMenuItem>
+            ) : null}
             {orgs.map((org) => (
               <DropdownMenuItem
                 className="pr-1"

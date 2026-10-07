@@ -4,11 +4,70 @@ import { createMinimalHonoApp } from "./test-app-helpers";
 import {
   browserSessionFromResponse,
   loginPlatformAdminSession,
+  setupFreshInstallSession,
 } from "./test-session-helpers";
 
 setupTestConfigDir("nakama-org-invites-test-");
 
 describe("direct org member provisioning", () => {
+  test("domain settings reach admins and restrict invites without changing direct add", async () => {
+    const { app, databaseAdapter } = createMinimalHonoApp();
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    const orgId = session.orgId!;
+
+    const update = await app.fetch(
+      new Request(`http://localhost:4310/v1/orgs/${orgId}`, {
+        body: JSON.stringify({ allowedInviteDomains: ["Acme.COM"] }),
+        headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
+        method: "PATCH",
+      })
+    );
+    expect(update.status).toBe(200);
+    expect(
+      (
+        (await update.json()) as {
+          organization: { allowedInviteDomains: string[] };
+        }
+      ).organization.allowedInviteDomains
+    ).toEqual(["acme.com"]);
+
+    const list = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/orgs", {
+        headers: session.headers(),
+      })
+    );
+    expect(list.status).toBe(200);
+    expect(
+      (
+        (await list.json()) as {
+          orgs: Array<{ allowedInviteDomains: string[] }>;
+        }
+      ).orgs[0]?.allowedInviteDomains
+    ).toEqual(["acme.com"]);
+
+    const invite = await app.fetch(
+      new Request(`http://localhost:4310/v1/orgs/${orgId}/invites`, {
+        body: JSON.stringify({ email: "guest@other.com", role: "member" }),
+        headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
+        method: "POST",
+      })
+    );
+    expect(invite.status).toBe(400);
+
+    const directAdd = await app.fetch(
+      new Request(`http://localhost:4310/v1/orgs/${orgId}/members`, {
+        body: JSON.stringify({
+          email: "guest@other.com",
+          name: "Guest",
+          role: "member",
+        }),
+        headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
+        method: "POST",
+      })
+    );
+    expect(directAdd.status).toBe(201);
+  });
+
   test("platform admin can manage an org without becoming a member", async () => {
     const { app, authService, databaseAdapter } = createMinimalHonoApp();
     const platformSession = await loginPlatformAdminSession(

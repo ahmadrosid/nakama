@@ -4,15 +4,19 @@ Agent platform built to work with your team — not replace them. Multi-tenant m
 
 ## Rules
 
+**Before code**
+- Read [CONTRIBUTING.md, "Before you start building"](./CONTRIBUTING.md#before-you-start-building) first. Four questions, and a closed PR here usually failed one of them. You can produce a working change faster than anyone can decide it was the right one, so check the shape before the diff
+
 **Code**
-- Prefer edit over extract; no new package/file unless an existing module cannot hold the change
+- Prefer edit over extract; no new package/file unless an existing module cannot hold the change. CI fails a new workspace unless the PR carries the `new-package` label
 - No new abstractions for a single call site
 - Tests assert behavior (status, data, side effects), not prompt/description/error copy
 - React UI: one self-explanatory heading/label; no subtitles or helper copy unless the user asks or misunderstanding would cause errors
 
 **Replies**
 - ADHD-shaped: lead with the action; numbered steps; no preamble/recap
-- Human voice — short, concrete, plain words (not tech jargon), no corporate filler
+- Use [ASD-STE100 Simplified Technical English](https://www.asd-ste100.org/) in every reply to the user, including progress updates. Keep code names, commands, and paths exact.
+- Human voice — short, concrete, plain words, no corporate filler
 - If ambiguous, give 3 options numbered — the user will reply with a number
 
 **Process**
@@ -21,7 +25,7 @@ Agent platform built to work with your team — not replace them. Multi-tenant m
 
 ## Dev
 
-- Bun 1.3+: `bun install`, `bun run`, `bun test`
+- Bun 1.4+: `bun install`, `bun run`, `bun test`
 - Servers: `bun run dev:server` | `dev:web` | `cli`
 - Format / lint: `bun x ultracite fix` | `check` | `doctor`; unused exports: `bun run knip` (CI fails on findings)
 
@@ -84,11 +88,20 @@ docker run -d -p 4310:4310 -v nakama-data:/nakama/data --name nakama ghcr.io/ahm
 ./scripts/docker-build-run.sh
 ```
 
+Runtime dependencies are baked into the image from committed lockfiles, not resolved
+at build time. To change them, edit the manifest, regenerate the lockfile for both
+image architectures, and commit both files:
+
+```bash
+cd .docker/runtime-deps   # or .docker/meet-deps for the optional Meet build
+bun install --lockfile-only --os=linux --cpu='*'
+```
+
 ## Multi-tenancy
 
 Orgs isolate profiles, sessions, automations, tools, MCP, skills, usage (`org_id` — see `packages/db/sql/schema.sql`, `migrateTenantOrgScope`).
 
-**Org context:** every authed call except `/v1/auth/*` and `/v1/platform/*` needs `X-Org-Id` (`@nakama/client`) or `active_org_id` cookie (`POST /v1/auth/active-org`). Middleware: `org-middleware.ts`; guards: `org-guards.ts`.
+**Org context:** every authed call except `/v1/auth/*` and `/v1/platform/*` needs `X-Org-Id` (`@nakama/client`) or the active org stored on the browser session (`active_org_id`, set by `POST /v1/auth/active-org`). Middleware: `org-middleware.ts`; guards: `org-guards.ts`.
 
 | Change | Where |
 |---|---|

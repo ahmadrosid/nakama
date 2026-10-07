@@ -234,10 +234,25 @@ export class VirtualMessageList {
 
   private formatUserMessageLines(text: string, width: number): StyledLine[] {
     const contentWidth = Math.max(1, width);
-    const lines = this.wrapMessageText(
-      text,
-      width + VirtualMessageList.HORIZONTAL_PADDING * 2
-    ).map((line) => plainLine(this.surfaceLine(line, contentWidth)));
+    const lines = text
+      .replace(/\r\n?/g, "\n")
+      .split("\n")
+      .flatMap((line) => {
+        const prefix = line.match(/^(?:[>›] | +)/)?.[0] ?? "";
+        const prefixWidth = visibleLength(prefix);
+        const wrapped = wrapText(
+          line.slice(prefix.length),
+          Math.max(1, contentWidth - prefixWidth - 1)
+        );
+        return wrapped.map((part, index) =>
+          plainLine(
+            this.surfaceLine(
+              `${index === 0 ? prefix : " ".repeat(prefixWidth)}${part}`,
+              contentWidth
+            )
+          )
+        );
+      });
     // Submitted user messages intentionally keep a padded blank row above and
     // below the content to preserve the "bubble" treatment in the CLI.
     return [

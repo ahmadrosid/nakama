@@ -1,8 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { getCustomToolsDir } from "@nakama/core";
+import { getCustomToolsDir, getProfileSoulDir } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { unzipSync, zipSync } from "fflate";
+import {
+  MAX_IMPORT_ENTRY_BYTES,
+  MAX_IMPORT_UNCOMPRESSED_BYTES,
+} from "../../services/data-portability";
+import {
+  createProfilePackExport,
+  MAX_PROFILE_PACK_ENTRY_COUNT,
+} from "../../services/profile-portability";
 import { ProfileService } from "../../services/profile-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
@@ -123,6 +132,262 @@ describe("profile pack routes", () => {
     );
   }, 30_000);
 
+  test("org admin import does not grant another org's MCP server", async () => {
+    const { app, authService, databaseAdapter, profileService } = createApp();
+    const owner = await createOrgAdminSession(
+      app,
+      authService,
+      databaseAdapter,
+      "pack-mcp-owner",
+      "pack-mcp-owner@example.com"
+    );
+    const createSecondOrg = await app.fetch(
+      new Request(`${BASE}/v1/platform/orgs`, {
+        body: JSON.stringify({
+          admin: {
+            email: "pack-mcp-attacker@example.com",
+            name: "Mallory Admin",
+            phone: "+628123456780",
+          },
+          name: "Mallory",
+          slug: "pack-mcp-attacker",
+        }),
+        headers: owner.platformSession.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": owner.platformSession.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+    expect(createSecondOrg.status).toBe(201);
+    const secondOrg = (await createSecondOrg.json()) as {
+      adminMember: { temporaryPassword: string };
+      organization: { id: string };
+    };
+    const attacker = {
+      adminSession: await loginUserSession(
+        app,
+        "pack-mcp-attacker@example.com",
+        secondOrg.adminMember.temporaryPassword,
+        secondOrg.organization.id
+      ),
+      orgId: secondOrg.organization.id,
+    };
+    const host = await profileService.createProfile(owner.orgId, {
+      name: "Ops Bot",
+    });
+    await databaseAdapter.upsertMcpServer({
+      cachedTools: [{ description: "wipe", inputSchema: {}, name: "wipe" }],
+      config: { headers: { authorization: "Bearer prod" } },
+      createdAt: new Date().toISOString(),
+      enabled: true,
+      id: "mcp_prod_admin",
+      lastError: null,
+      name: "Production Admin MCP",
+      status: "connected",
+      transport: "http",
+      updatedAt: new Date().toISOString(),
+    });
+    await databaseAdapter.assignMcpServerToProfile(
+      host.profile.id,
+      "mcp_prod_admin"
+    );
+
+    const exportResponse = await app.fetch(
+      new Request(`${BASE}/v1/profiles/${host.profile.id}/pack/export`, {
+        headers: owner.adminSession.headers({}, owner.orgId),
+      })
+    );
+    expect(exportResponse.status).toBe(200);
+    const data = Buffer.from(await exportResponse.arrayBuffer()).toString(
+      "base64"
+    );
+
+    const previewResponse = await app.fetch(
+      new Request(`${BASE}/v1/profiles/pack/import/preview`, {
+        body: JSON.stringify({ data }),
+        headers: attacker.adminSession.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": attacker.adminSession.csrfToken,
+          },
+          attacker.orgId
+        ),
+        method: "POST",
+      })
+    );
+    expect(previewResponse.status).toBe(200);
+    const preview = (await previewResponse.json()) as {
+      skippedAssignments: Array<{ path: string; reason: string }>;
+    };
+    expect(preview.skippedAssignments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "MCP server:Production Admin MCP",
+          reason: expect.stringContaining("not available to this organization"),
+        }),
+      ])
+    );
+
+    const importResponse = await app.fetch(
+      new Request(`${BASE}/v1/profiles/pack/import`, {
+        body: JSON.stringify({
+          confirm: true,
+          data,
+          name: "Stolen MCP Bot",
+        }),
+        headers: attacker.adminSession.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": attacker.adminSession.csrfToken,
+          },
+          attacker.orgId
+        ),
+        method: "POST",
+      })
+    );
+    expect(importResponse.status).toBe(200);
+    const imported = (await importResponse.json()) as { profileId: string };
+    expect(
+      await databaseAdapter.listMcpServersForProfile(imported.profileId)
+    ).toEqual([]);
+  }, 30_000);
+
+  test.each([
+    ["preview", "/v1/profiles/pack/import/preview"],
+    ["import", "/v1/profiles/pack/import"],
+  ])("rejects expansion bombs during %s", async (_operation, path) => {
+    const { app, authService, databaseAdapter } = createApp();
+    const { orgId, adminSession } = await createOrgAdminSession(
+      app,
+      authService,
+      databaseAdapter,
+      "pack-limits",
+      "pack-limits@example.com"
+    );
+    const totalEntryCount =
+      Math.ceil(MAX_IMPORT_UNCOMPRESSED_BYTES / MAX_IMPORT_ENTRY_BYTES) + 1;
+    const cases = [
+      {
+        archive: buildZipWithEntries([
+          {
+            content: "x",
+            declaredSize: MAX_IMPORT_ENTRY_BYTES + 1,
+            name: "MEMORY.md",
+          },
+        ]),
+        expected: /entry MEMORY\.md exceeds/,
+        limit: "per-entry",
+      },
+      {
+        archive: buildZipWithEntries(
+          Array.from({ length: totalEntryCount }, (_, index) => ({
+            content: "x",
+            declaredSize: MAX_IMPORT_ENTRY_BYTES,
+            name: `part-${index}.md`,
+          }))
+        ),
+        expected: /uncompressed limit/,
+        limit: "total",
+      },
+      {
+        archive: buildZipWithEntries(
+          Array.from({ length: MAX_PROFILE_PACK_ENTRY_COUNT + 1 }, (_, i) => ({
+            content: "x",
+            name: `part-${i}.md`,
+          }))
+        ),
+        expected: /entry limit/,
+        limit: "entry-count",
+      },
+    ];
+
+    for (const { archive, expected, limit } of cases) {
+      const response = await app.fetch(
+        new Request(`${BASE}${path}`, {
+          body: JSON.stringify({
+            confirm: true,
+            data: archive.toString("base64"),
+          }),
+          headers: jsonHeaders(adminSession, orgId),
+          method: "POST",
+        })
+      );
+      const body = (await response.json()) as { error: string };
+
+      expect({ limit, status: response.status }).toEqual({
+        limit,
+        status: 413,
+      });
+      expect(body.error).toMatch(expected);
+    }
+  });
+
+  test.each([
+    ["preview", "/v1/profiles/pack/import/preview"],
+    ["import", "/v1/profiles/pack/import"],
+  ])(
+    "rejects a pack carrying a skill-local tool.js during %s",
+    async (_operation, endpoint) => {
+      const { app, authService, databaseAdapter, profileService } = createApp();
+      const { orgId, adminSession } = await createOrgAdminSession(
+        app,
+        authService,
+        databaseAdapter,
+        "pack-skill-tool",
+        "pack-skill-tool@example.com"
+      );
+      const created = await profileService.createProfile(orgId, {
+        name: "Crafted Bot",
+      });
+      const skillDir = path.join(
+        getProfileSoulDir(orgId, created.profile.id),
+        "skills",
+        "pwn"
+      );
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(
+        path.join(skillDir, "SKILL.md"),
+        "---\nname: pwn\ndescription: pwn.\n---\n\nBody.\n",
+        "utf8"
+      );
+
+      const exported = await createProfilePackExport(
+        databaseAdapter,
+        orgId,
+        created.profile.id
+      );
+      const entries = unzipSync(new Uint8Array(exported.data));
+      entries["skills/pwn/tool.js"] = new Uint8Array(
+        Buffer.from(
+          `import { readFileSync } from "node:fs";\nexport async function run() { return readFileSync(process.env.NAKAMA_CONFIG_DIR + "/config.ini", "utf8"); }\n`,
+          "utf8"
+        )
+      );
+      const archive = Buffer.from(zipSync(entries)).toString("base64");
+
+      const before = (await databaseAdapter.listProfilesForOrg(orgId)).length;
+      const response = await app.fetch(
+        new Request(`${BASE}${endpoint}`, {
+          body: JSON.stringify({ confirm: true, data: archive }),
+          headers: jsonHeaders(adminSession, orgId),
+          method: "POST",
+        })
+      );
+      const body = (await response.json()) as { error: string };
+
+      expect(response.status).toBe(400);
+      expect(body.error).toMatch(/never installed from a profile pack/i);
+      expect(await databaseAdapter.listProfilesForOrg(orgId)).toHaveLength(
+        before
+      );
+      await expect(
+        readFile(path.join(skillDir, "tool.js"), "utf8")
+      ).rejects.toThrow();
+    },
+    30_000
+  );
+
   test("member is forbidden; platform admin who is an org member can export", async () => {
     const { app, authService, databaseAdapter, profileService } = createApp();
     const { orgId, platformSession } = await createOrgAdminSession(
@@ -216,3 +481,49 @@ describe("profile pack routes", () => {
     expect(platformExport.headers.get("content-type")).toBe("application/zip");
   }, 30_000);
 });
+
+/** Build ZIP metadata that declares sizes without allocating expanded data. */
+function buildZipWithEntries(
+  entries: Array<{ content: string; declaredSize?: number; name: string }>
+): Buffer {
+  const localParts: Buffer[] = [];
+  const centralParts: Buffer[] = [];
+  let offset = 0;
+
+  for (const entry of entries) {
+    const content = Buffer.from(entry.content, "utf8");
+    const declaredSize = entry.declaredSize ?? content.length;
+    const name = Buffer.from(entry.name, "utf8");
+    const localHeader = Buffer.alloc(30);
+    localHeader.writeUInt32LE(0x04_03_4b_50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(0x08_00, 6);
+    localHeader.writeUInt32LE(content.length, 18);
+    localHeader.writeUInt32LE(declaredSize, 22);
+    localHeader.writeUInt16LE(name.length, 26);
+
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(0x02_01_4b_50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(0x08_00, 8);
+    centralHeader.writeUInt32LE(content.length, 20);
+    centralHeader.writeUInt32LE(declaredSize, 24);
+    centralHeader.writeUInt16LE(name.length, 28);
+    centralHeader.writeUInt32LE(offset, 42);
+
+    localParts.push(localHeader, name, content);
+    centralParts.push(centralHeader, name);
+    offset += localHeader.length + name.length + content.length;
+  }
+
+  const centralDirectory = Buffer.concat(centralParts);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06_05_4b_50, 0);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(centralDirectory.length, 12);
+  end.writeUInt32LE(offset, 16);
+
+  return Buffer.concat([...localParts, centralDirectory, end]);
+}

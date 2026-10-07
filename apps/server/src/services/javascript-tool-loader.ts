@@ -54,17 +54,18 @@ async function runJavascriptTool(
   modulePath: string,
   input: unknown,
   context: ToolContext,
-  apiKey?: string
+  env?: Record<string, string>
 ): Promise<unknown> {
   // No try/catch here on purpose: a failed spawn must reject so the retry
-  // policy in withToolRetries can retry transient failures. executeToolCall
-  // converts the throw into `{ error: message }`.
+  // policy in withToolRetries can retry explicitly opt-in transient failures
+  // (RetryableToolError / exit 75). executeToolCall converts the throw into
+  // `{ error: message }`.
   return spawnJsonTool({
-    apiKey,
     args: [RUNNER_PATH, modulePath],
     bin: BUN_BIN,
     context,
     cwd: path.dirname(modulePath),
+    env,
     input,
     label: "JavaScript tool",
     workspaceRoot: readOptionalString(context?.workspaceRoot),

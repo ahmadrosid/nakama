@@ -57,8 +57,9 @@ describe("database reopen after restore", () => {
     await writeFile(join(stagedSqliteDir, "marker.txt"), "restored");
     staged.close();
 
-    // Still holding the old connection — same situation as a live restore.
+    // A live restore releases its connection before moving the files.
     expect(await database.adapter.countHumanUsers()).toBe(1);
+    database.release();
 
     await rename(liveSqliteDir, backupSqliteDir);
     await rename(stagedSqliteDir, liveSqliteDir);
@@ -73,5 +74,24 @@ describe("database reopen after restore", () => {
     ).toBeNull();
 
     database.close();
+  }, 30_000);
+
+  test("release frees the sqlite file so its directory can move, then reopen recovers", async () => {
+    rootDir = await mkdtemp(join(tmpdir(), "nakama-db-release-"));
+    const database = await createDatabase(
+      `file:${join(rootDir, "sqlite", "nakama.sqlite")}`
+    );
+    expect(await database.adapter.countHumanUsers()).toBe(0);
+
+    database.release();
+
+    // close() would leave the prepared statements, and the file, alive.
+    await expect(database.adapter.countHumanUsers()).rejects.toThrow();
+    await rename(join(rootDir, "sqlite"), join(rootDir, "sqlite-moved"));
+    await rename(join(rootDir, "sqlite-moved"), join(rootDir, "sqlite"));
+
+    await database.reopen();
+    expect(await database.adapter.countHumanUsers()).toBe(0);
+    database.release();
   }, 30_000);
 });

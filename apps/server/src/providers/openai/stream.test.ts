@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { streamFromChunks } from "../test-helpers";
 import { createOpenAIProvider } from "./index";
 
 const originalFetch = globalThis.fetch;
@@ -6,20 +7,6 @@ const originalFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = originalFetch;
 });
-
-function streamFromChunks(chunks: string[]): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
-
-  return new ReadableStream({
-    start(controller) {
-      for (const chunk of chunks) {
-        controller.enqueue(encoder.encode(chunk));
-      }
-
-      controller.close();
-    },
-  });
-}
 
 describe("OpenAI provider streaming", () => {
   test("streams chat completion chunks", async () => {
@@ -105,49 +92,148 @@ describe("OpenAI provider streaming", () => {
     expect(chunks.join("")).toBe(result.content);
   });
 
-  test("streams responses api text and thinking", async () => {
-    const fetchMock = mock(async (input: RequestInfo | URL) => {
-      expect(String(input)).toBe("https://api.openai.com/v1/responses");
+  test.each([false, true])(
+    "streams GPT-6.1 Sol tools through Responses (thinking: %s)",
+    async (enabled) => {
+      const fetchMock = mock(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          expect(String(input)).toBe("https://api.openai.com/v1/responses");
+          const body = JSON.parse(String(init?.body));
+          expect(body.model).toBe("gpt-6.1-sol");
+          expect(body.reasoning).toEqual(
+            enabled ? { effort: "medium", summary: "auto" } : undefined
+          );
+          expect(body.reasoning_effort).toBeUndefined();
+          expect(body.tools).toHaveLength(1);
 
-      return new Response(
-        streamFromChunks([
-          'event: response.output_text.delta\r\ndata:{"type":"response.output_text.delta","delta":"Hi"}\r\n\r\n',
-          'data:{"type":"response.reasoning_summary_text.delta","delta":"Plan"}\r\n\r\n',
-          'data:{"type":"response.output_item.done","item":{"id":"msg_1","type":"message","content":[{"type":"output_text","text":"Hi"}]}}\r\n\r\n',
-          "data:[DONE]\r\n\r\n",
-        ]),
-        { headers: { "Content-Type": "text/event-stream" }, status: 200 }
+          return new Response(
+            streamFromChunks([
+              'event: response.output_text.delta\r\ndata:{"type":"response.output_text.delta","delta":"Hi"}\r\n\r\n',
+              'data:{"type":"response.reasoning_summary_text.delta","delta":"Plan"}\r\n\r\n',
+              'data:{"type":"response.output_item.done","item":{"id":"msg_1","type":"message","content":[{"type":"output_text","text":"Hi"}]}}\r\n\r\n',
+              "data:[DONE]\r\n\r\n",
+            ]),
+            { headers: { "Content-Type": "text/event-stream" }, status: 200 }
+          );
+        }
       );
-    });
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-    const provider = createOpenAIProvider({
-      apiKey: "sk-test",
-      model: "gpt-5.4",
-    });
+      const provider = createOpenAIProvider({
+        apiKey: "sk-test",
+        model: "gpt-6.1-sol",
+      });
 
-    const chunks: string[] = [];
-    const thinking: string[] = [];
-    const result = await provider.streamChat(
-      {
-        messages: [{ content: "Think, then answer", role: "user" }],
-        providerOptions: {
-          thinking: { effort: "medium", enabled: true },
+      const chunks: string[] = [];
+      const thinking: string[] = [];
+      const result = await provider.streamChat(
+        {
+          messages: [{ content: "Think, then answer", role: "user" }],
+          providerOptions: {
+            thinking: { effort: "medium", enabled },
+          },
+          system: "You are helpful.",
+          tools: [
+            {
+              description: "Search files",
+              name: "search_files",
+              parameters: { properties: {}, type: "object" },
+            },
+          ],
         },
-        system: "You are helpful.",
-      },
+        {
+          onChunk: (delta) => chunks.push(delta),
+          onThinking: (delta) => thinking.push(delta),
+        }
+      );
+
+      expect(result.content).toBe("Hi");
+      expect(result.assistantMessage.thinking).toBe("Plan");
+      expect(chunks).toEqual(["Hi"]);
+      expect(thinking).toEqual(["Plan"]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  test("uses streamed text when no output item arrives", async () => {
+    globalThis.fetch = mock(
+      async () =>
+        new Response(
+          streamFromChunks([
+            'data:{"type":"response.output_text.delta","delta":"Hi"}\r\n\r\n',
+            'data:{"type":"response.completed","response":{"output":[]}}\r\n\r\n',
+          ]),
+          { status: 200 }
+        )
+    ) as unknown as typeof fetch;
+
+    const result = await createOpenAIProvider({
+      apiKey: "sk-test",
+      model: "gpt-6.1-sol",
+    }).streamChat(
       {
-        onChunk: (delta) => chunks.push(delta),
-        onThinking: (delta) => thinking.push(delta),
-      }
+        messages: [{ content: "Say hi", role: "user" }],
+        providerOptions: { thinking: { enabled: true } },
+        system: "Be brief.",
+      },
+      { onChunk: () => {} }
     );
 
     expect(result.content).toBe("Hi");
-    expect(result.assistantMessage.thinking).toBe("Plan");
-    expect(chunks).toEqual(["Hi"]);
-    expect(thinking).toEqual(["Plan"]);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("uses completed response output when item events are absent", async () => {
+    globalThis.fetch = mock(
+      async () =>
+        new Response(
+          streamFromChunks([
+            'data:{"type":"response.completed","response":{"output":[{"id":"msg_1","type":"message","content":[{"type":"output_text","text":"Hi"}]}]}}\r\n\r\n',
+          ]),
+          { status: 200 }
+        )
+    ) as unknown as typeof fetch;
+
+    const result = await createOpenAIProvider({
+      apiKey: "sk-test",
+      model: "gpt-6.1-sol",
+    }).streamChat(
+      {
+        messages: [{ content: "Say hi", role: "user" }],
+        providerOptions: { thinking: { enabled: true } },
+        system: "Be brief.",
+      },
+      { onChunk: () => {} }
+    );
+
+    expect(result.content).toBe("Hi");
+  });
+
+  test("reports a failed Responses stream", async () => {
+    globalThis.fetch = mock(
+      async () =>
+        new Response(
+          streamFromChunks([
+            'data:{"type":"response.output_text.delta","delta":"Partial"}\r\n\r\n',
+            'data:{"type":"response.failed","response":{"error":{"message":"Provider failed"}}}\r\n\r\n',
+          ]),
+          { status: 200 }
+        )
+    ) as unknown as typeof fetch;
+
+    expect(
+      createOpenAIProvider({
+        apiKey: "sk-test",
+        model: "gpt-6.1-sol",
+      }).streamChat(
+        {
+          messages: [{ content: "Say hi", role: "user" }],
+          providerOptions: { thinking: { enabled: true } },
+          system: "Be brief.",
+        },
+        { onChunk: () => {} }
+      )
+    ).rejects.toThrow();
   });
 
   test("streams chat completion chunks when thinking is enabled for an unsupported model", async () => {

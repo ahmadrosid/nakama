@@ -1,9 +1,9 @@
-export interface CerebrasApiPricing {
+interface CerebrasApiPricing {
   completion?: string;
   prompt?: string;
 }
 
-export interface CerebrasApiCapabilities {
+interface CerebrasApiCapabilities {
   function_calling?: boolean;
   json_mode?: boolean;
   reasoning?: boolean;
@@ -88,7 +88,7 @@ export const CEREBRAS_FALLBACK_MODELS: CerebrasModelRow[] = [
   },
 ];
 
-export function cerebrasPricingPerMillion(
+function cerebrasPricingPerMillion(
   pricing: CerebrasApiPricing | undefined
 ):
   | Pick<CerebrasModelRow, "inputPerMillionUsd" | "outputPerMillionUsd">
@@ -149,7 +149,7 @@ export function normalizeCerebrasModels(
   return data.map(normalizeCerebrasModel).sort(compareCerebrasModelRows);
 }
 
-export function compareCerebrasModelRows(
+function compareCerebrasModelRows(
   a: CerebrasModelRow,
   b: CerebrasModelRow
 ): number {

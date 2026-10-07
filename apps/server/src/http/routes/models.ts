@@ -1882,8 +1882,12 @@ export function registerModelRoutes(
     requireNotViewerFromContext(c);
     const body = await readJson<GenerateImageRequest>(c.req.raw);
 
+    const auth = getRequestAuth(c);
+
     try {
-      return json<GenerateImageResponse>(await agent.generateImage(body));
+      return json<GenerateImageResponse>(
+        await agent.generateImage(body, auth.activeOrgId ?? null, auth.user.id)
+      );
     } catch (error) {
       if (error instanceof NakamaApiError) {
         if (error.status >= 500) {
@@ -2085,7 +2089,15 @@ export function registerModelRoutes(
         400
       );
     }
-    await agent.getProfile(orgId, profileId);
+    const { profile } = await agent.getProfile(orgId, profileId);
+    // A channel worker talks to the server as the local client, and the server
+    // refuses that client for Super Bot, so such a bridge can never answer.
+    if (profile.isSuper) {
+      throw new NakamaApiError(
+        "Super Bot cannot be connected to a channel. Choose another agent.",
+        400
+      );
+    }
     return { orgId, profileId };
   }
 

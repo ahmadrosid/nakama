@@ -249,7 +249,7 @@ for (const role of ["member", "viewer"] as const) {
   }
 }
 
-function createApp() {
+function createApp(systemStatus?: object) {
   const calls: string[] = [];
   const record =
     (name: string) =>
@@ -264,7 +264,9 @@ function createApp() {
       createProvider: record("createProvider"),
       deleteProvider: record("deleteProvider"),
       discoverModels: record("discoverModels"),
-      getProfile: async () => ({ profile: { id: "default" } }),
+      getProfile: async (_orgId: string, profileId: string) => ({
+        profile: { id: "default", isSuper: profileId === "super_bot" },
+      }),
       listProfiles: async () => ({ profiles: [{ id: "default" }] }),
       sendErrorTrackingTest: record("sendErrorTrackingTest"),
       setComposioSettings: record("setComposioSettings"),
@@ -287,13 +289,18 @@ function createApp() {
       startWorker: record("startWorker"),
       stopWorker: record("stopWorker"),
     } as unknown as ServerOptions["workerManager"],
+    systemStatus,
   });
 
   return { app, authService, calls, databaseAdapter };
 }
 
-async function login(role: OrgRole, isPlatformAdmin = false) {
-  const { app, authService, calls, databaseAdapter } = createApp();
+async function login(
+  role: OrgRole,
+  isPlatformAdmin = false,
+  systemStatus?: object
+) {
+  const { app, authService, calls, databaseAdapter } = createApp(systemStatus);
   const suffix = isPlatformAdmin ? "_platform" : "";
   const email = `${role}${suffix}@example.com`;
   const userId = `user_${role}${suffix}`;
@@ -372,6 +379,20 @@ describe("install-wide settings writes require a platform admin", () => {
     expect(response.status).not.toBe(403);
     expect(calls).toEqual(["updateProvider"]);
   });
+
+  for (const channel of ["telegram", "discord", "whatsapp"]) {
+    test(`an admin cannot connect ${channel} to Super Bot`, async () => {
+      const { app, calls, session } = await login("admin", true);
+      const response = await callRoute(app, session, {
+        body: { botToken: "token" },
+        method: "PUT",
+        path: `/v1/settings/${channel}?profileId=super_bot`,
+      });
+
+      expect(response.status).toBe(400);
+      expect(calls).toEqual([]);
+    });
+  }
 
   test("an org admin can still change org-scoped Telegram settings", async () => {
     const { app, calls, session } = await login("admin");
@@ -513,4 +534,31 @@ test("channel settings require an owner and keep sibling agents separate", async
     profileId: "agent_b",
     allowedPhones: ["628222222222"],
   });
+});
+
+describe("usage by agent and user is for admins only", () => {
+  for (const [role, isPlatformAdmin, expected] of [
+    ["admin", false, true],
+    ["member", true, true],
+    ["member", false, false],
+    ["viewer", false, false],
+  ] as const) {
+    test(`${role}${isPlatformAdmin ? " (platform admin)" : ""} -> ${expected}`, async () => {
+      const requested: unknown[] = [];
+      const { app, session } = await login(role, isPlatformAdmin, {
+        getStatus: async (_orgId: unknown, options: unknown) => {
+          requested.push(options);
+          return { ok: true };
+        },
+      });
+
+      const response = await callRoute(app, session, {
+        method: "GET",
+        path: "/v1/system/status",
+      });
+
+      expect(response.status).toBe(200);
+      expect(requested).toEqual([{ includeUsageByActor: expected }]);
+    });
+  }
 });

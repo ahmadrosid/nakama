@@ -1,19 +1,15 @@
 import type {
+  LlmUsageDayStats,
+  LlmUsageGroupStats,
+  LlmUsageStats,
   LlmUsageStatus,
   SystemStatusResponse,
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
 import { cn } from "@nakama/ui/utils";
-import {
-  ArrowDownLeft01Icon,
-  ArrowUpRight01Icon,
-  type Clock01Icon,
-  Coins01Icon,
-  SparklesIcon,
-  ZapIcon,
-} from "hugeicons-react";
-import { type ReactNode, useMemo } from "react";
+import type { Clock01Icon } from "hugeicons-react";
+import { type ReactNode, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { OrgLlmQuotaCard } from "@/components/settings/OrgLlmQuotaCard";
 import {
@@ -290,38 +286,6 @@ function llmUsageCostNote(
   return "Add input/output $/1M per model in Customize → AI Providers → Manage models to estimate cost.";
 }
 
-function LlmUsageHeader({ usage }: { usage: LlmUsageStatus }) {
-  return (
-    <div className="flex flex-wrap items-start justify-between gap-4 px-4 py-3">
-      <div className="min-w-0 space-y-1">
-        <div className="flex items-center gap-2">
-          <h2 className="type-section-title">LLM usage</h2>
-          {usage.providerConfigured ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 font-medium text-2xs text-emerald-700 dark:text-emerald-300">
-              <span
-                aria-hidden
-                className="size-1.5 rounded-full bg-emerald-500"
-              />
-              Tracking
-            </span>
-          ) : null}
-        </div>
-        <p className="text-muted-foreground text-sm">
-          Estimated spend and token volume since the server started.
-        </p>
-      </div>
-
-      {usage.providerConfigured && usage.provider ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center rounded-full border border-border bg-muted/30 px-2.5 py-1 font-medium text-foreground text-xs">
-            {formatProviderLabel(usage.provider, usage.displayName)}
-          </span>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function LlmUsageTrackedBody({
   usage,
   modelLabel,
@@ -330,86 +294,443 @@ function LlmUsageTrackedBody({
   modelLabel: string;
 }) {
   const trackedModelCount = usage.models.length;
-  const maxModelTokens = usage.models[0]?.totalTokens ?? 0;
 
   return (
     <div className="space-y-8">
+      <UsageDashboard usage={usage} />
+
+      {usage.agents?.length ? (
+        <UsageGroupList
+          costEstimated={usage.costEstimated}
+          groups={usage.agents}
+          title="By agent"
+        />
+      ) : null}
+
+      <p className="px-4 text-muted-foreground text-xs">
+        {llmUsageCostNote(usage, modelLabel, trackedModelCount)}
+      </p>
+    </div>
+  );
+}
+
+const compactNumber = new Intl.NumberFormat(undefined, {
+  maximumFractionDigits: 1,
+  notation: "compact",
+});
+
+function formatUsageDay(day: string): string {
+  return new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+}
+
+function initialsOf(label: string): string {
+  const words = label
+    .replace(/@.*/, "")
+    .split(/[\s._-]+/)
+    .filter(Boolean);
+  return (
+    words
+      .slice(0, 2)
+      .map((word) => word[0]?.toUpperCase() ?? "")
+      .join("") || "?"
+  );
+}
+
+/** Darkest shade goes to the provider with the most tokens in the window. */
+const PROVIDER_SHADES = [
+  "bg-primary/85",
+  "bg-primary/55",
+  "bg-primary/35",
+  "bg-muted-foreground/30",
+];
+
+function UsageDashboard({ usage }: { usage: LlmUsageStatus }) {
+  const daily = usage.daily ?? [];
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const selected = activeIndex ?? daily.length - 1;
+  // Money only when every model has published rates; tokens otherwise.
+  const metric = (entry: { estimatedCostUsd: number; totalTokens: number }) =>
+    usage.costEstimated ? entry.estimatedCostUsd : entry.totalTokens;
+  const formatMetric = (value: number) =>
+    usage.costEstimated
+      ? formatUsd(value)
+      : `${compactNumber.format(value)} tokens`;
+  const users = usage.users ?? [];
+
+  return (
+    <Card className="w-full overflow-hidden shadow-none">
+      <CardContent className="grid p-0 md:grid-cols-2">
+        <UsagePanel
+          aside={
+            activeIndex !== null && daily[activeIndex]
+              ? `${formatUsageDay(daily[activeIndex].day)} · ${formatMetric(metric(daily[activeIndex]))}`
+              : `${formatMetric(metric(usage))} · ${usage.requestCount.toLocaleString()} requests`
+          }
+          title="AI spend"
+        >
+          <SpendChart
+            daily={daily}
+            metric={metric}
+            onSelect={setActiveIndex}
+            selected={selected}
+          />
+        </UsagePanel>
+        <UsagePanel
+          aside={providerAside(daily[selected])}
+          className="border-border border-t md:border-t-0 md:border-l"
+          title="Model providers"
+        >
+          <ProviderBars
+            daily={daily}
+            onSelect={setActiveIndex}
+            selected={selected}
+          />
+        </UsagePanel>
+        <UsagePanel className="border-border border-t" title="Models">
+          <ModelShareList
+            formatMetric={formatMetric}
+            metric={metric}
+            models={usage.models}
+          />
+        </UsagePanel>
+        {users.length > 0 ? (
+          <UsagePanel
+            className="border-border border-t md:border-l"
+            title="Adoption"
+          >
+            <AdoptionGrid users={users} />
+          </UsagePanel>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function providerAside(day: LlmUsageDayStats | undefined): string | null {
+  const top = day?.providers[0];
+  if (!(day && top) || day.totalTokens === 0) {
+    return null;
+  }
+  const percent = Math.round((top.totalTokens / day.totalTokens) * 100);
+  return `${formatUsageDay(day.day)} · ${formatProviderLabel(top.provider)} ${percent}%`;
+}
+
+function UsagePanel({
+  title,
+  aside,
+  className,
+  children,
+}: {
+  title: string;
+  aside?: string | null;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className={cn("min-w-0 space-y-4 p-4", className)}>
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="type-section-title">{title}</h2>
+        {aside ? (
+          <p className="truncate text-muted-foreground text-xs tabular-nums">
+            {aside}
+          </p>
+        ) : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function DayAxis({ daily }: { daily: LlmUsageDayStats[] }) {
+  if (daily.length === 0) {
+    return null;
+  }
+  const middle = daily[Math.floor((daily.length - 1) / 2)];
+  const last = daily.at(-1);
+  return (
+    <div className="flex justify-between text-2xs text-muted-foreground tabular-nums">
+      <span>{formatUsageDay(daily[0].day)}</span>
+      {middle ? <span>{formatUsageDay(middle.day)}</span> : null}
+      {last ? <span>{formatUsageDay(last.day)}</span> : null}
+    </div>
+  );
+}
+
+const CHART_WIDTH = 300;
+const CHART_HEIGHT = 120;
+
+function SpendChart({
+  daily,
+  metric,
+  selected,
+  onSelect,
+}: {
+  daily: LlmUsageDayStats[];
+  metric: (day: LlmUsageDayStats) => number;
+  selected: number;
+  onSelect: (index: number | null) => void;
+}) {
+  const values = daily.map(metric);
+  const max = Math.max(...values, 0);
+  const step = daily.length > 1 ? CHART_WIDTH / (daily.length - 1) : 0;
+  const points = values.map((value, index) => ({
+    x: index * step,
+    y:
+      max > 0
+        ? CHART_HEIGHT - (value / max) * (CHART_HEIGHT - 8) - 4
+        : CHART_HEIGHT - 4,
+  }));
+  const line = points.map((point) => `${point.x},${point.y}`).join(" ");
+  const active = points[selected];
+
+  return (
+    <div className="space-y-2">
+      <svg
+        aria-label="Spend per day"
+        className="h-32 w-full overflow-visible text-primary"
+        onMouseLeave={() => onSelect(null)}
+        onMouseMove={(event) => {
+          const box = event.currentTarget.getBoundingClientRect();
+          const ratio = (event.clientX - box.left) / box.width;
+          onSelect(Math.round(ratio * (daily.length - 1)));
+        }}
+        preserveAspectRatio="none"
+        role="img"
+        viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+      >
+        <defs>
+          <linearGradient id="usage-spend-fill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="currentColor" stopOpacity={0.18} />
+            <stop offset="100%" stopColor="currentColor" stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        {points.length > 1 ? (
+          <>
+            <polygon
+              fill="url(#usage-spend-fill)"
+              points={`0,${CHART_HEIGHT} ${line} ${CHART_WIDTH},${CHART_HEIGHT}`}
+            />
+            <polyline
+              fill="none"
+              points={line}
+              stroke="currentColor"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              vectorEffect="non-scaling-stroke"
+            />
+          </>
+        ) : null}
+        {active ? (
+          <line
+            stroke="currentColor"
+            strokeDasharray="2 3"
+            strokeOpacity={0.4}
+            vectorEffect="non-scaling-stroke"
+            x1={active.x}
+            x2={active.x}
+            y1={0}
+            y2={CHART_HEIGHT}
+          />
+        ) : null}
+      </svg>
+      <DayAxis daily={daily} />
+    </div>
+  );
+}
+
+function ProviderBars({
+  daily,
+  selected,
+  onSelect,
+}: {
+  daily: LlmUsageDayStats[];
+  selected: number;
+  onSelect: (index: number | null) => void;
+}) {
+  const ranked = useMemo(() => {
+    const totals = new Map<string | null, number>();
+    for (const day of daily) {
+      for (const share of day.providers) {
+        totals.set(
+          share.provider,
+          (totals.get(share.provider) ?? 0) + share.totalTokens
+        );
+      }
+    }
+    return [...totals.entries()]
+      .sort((left, right) => right[1] - left[1])
+      .map(([provider]) => provider);
+  }, [daily]);
+  const shadeOf = (provider: string | null) =>
+    PROVIDER_SHADES[
+      Math.min(ranked.indexOf(provider), PROVIDER_SHADES.length - 1)
+    ];
+
+  return (
+    <div className="space-y-2">
+      <div
+        aria-label="Provider share per day"
+        className="flex h-32 items-stretch gap-0.5"
+        onMouseLeave={() => onSelect(null)}
+        role="img"
+      >
+        {daily.map((day, index) => (
+          <div
+            className={cn(
+              "flex flex-1 flex-col-reverse overflow-hidden rounded-xs bg-muted transition-opacity",
+              index === selected ? "opacity-100" : "opacity-70"
+            )}
+            key={day.day}
+            onMouseEnter={() => onSelect(index)}
+          >
+            {day.totalTokens > 0
+              ? [...day.providers]
+                  .sort(
+                    (left, right) =>
+                      ranked.indexOf(left.provider) -
+                      ranked.indexOf(right.provider)
+                  )
+                  .map((share) => (
+                    <div
+                      className={shadeOf(share.provider)}
+                      key={share.provider ?? ""}
+                      style={{
+                        height: `${(share.totalTokens / day.totalTokens) * 100}%`,
+                      }}
+                    />
+                  ))
+              : null}
+          </div>
+        ))}
+      </div>
+      <DayAxis daily={daily} />
+    </div>
+  );
+}
+
+function ShareRing({ share }: { share: number }) {
+  const radius = 7;
+  const circumference = 2 * Math.PI * radius;
+  return (
+    <svg
+      aria-label={`${Math.round(share * 100)} percent`}
+      className="size-5 shrink-0 -rotate-90 text-primary"
+      role="img"
+      viewBox="0 0 20 20"
+    >
+      <circle
+        className="text-muted"
+        cx={10}
+        cy={10}
+        fill="none"
+        r={radius}
+        stroke="currentColor"
+        strokeWidth={3}
+      />
+      <circle
+        cx={10}
+        cy={10}
+        fill="none"
+        r={radius}
+        stroke="currentColor"
+        strokeDasharray={`${share * circumference} ${circumference}`}
+        strokeLinecap="round"
+        strokeWidth={3}
+      />
+    </svg>
+  );
+}
+
+function ModelShareList({
+  models,
+  metric,
+  formatMetric,
+}: {
+  models: LlmUsageStatus["models"];
+  metric: (entry: LlmUsageStats) => number;
+  formatMetric: (value: number) => string;
+}) {
+  const total = models.reduce((sum, model) => sum + metric(model), 0);
+  return (
+    <ul className="space-y-3">
+      {models.map((model) => (
+        <li className="flex items-center gap-3" key={model.modelId}>
+          <span className="min-w-0 flex-1 truncate font-mono text-sm">
+            {model.modelId}
+          </span>
+          <span className="text-sm tabular-nums">
+            {formatMetric(metric(model))}
+          </span>
+          <ShareRing share={total > 0 ? metric(model) / total : 0} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function AdoptionGrid({ users }: { users: LlmUsageGroupStats[] }) {
+  return (
+    <ul className="grid grid-cols-3 gap-x-2 gap-y-4 sm:grid-cols-4">
+      {users.map((user) => {
+        const label = user.id ? (user.name ?? user.id) : "Unattributed";
+        return (
+          <li
+            className="flex min-w-0 flex-col items-center gap-1 text-center"
+            key={user.id ?? ""}
+          >
+            <span
+              aria-hidden="true"
+              className={cn(
+                "flex size-10 items-center justify-center rounded-full font-medium text-sm",
+                user.id
+                  ? "bg-primary/15 text-primary"
+                  : "bg-muted text-muted-foreground"
+              )}
+            >
+              {user.id ? initialsOf(label) : "–"}
+            </span>
+            <span className="w-full truncate text-sm">{label}</span>
+            <span className="whitespace-nowrap text-muted-foreground text-xs tabular-nums">
+              {compactNumber.format(user.requestCount)} requests
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function UsageGroupList({
+  title,
+  groups,
+  costEstimated,
+}: {
+  title: string;
+  groups: LlmUsageGroupStats[];
+  costEstimated: boolean;
+}) {
+  const maxTokens = Math.max(...groups.map((group) => group.totalTokens), 0);
+
+  return (
+    <div className="space-y-3">
+      <h2 className="type-section-title">{title}</h2>
       <Card className="w-full overflow-hidden shadow-none">
         <CardContent className="p-0">
-          <div className="divide-y divide-border">
-            <CompactUsageStat
-              icon={Coins01Icon}
-              label="API cost"
-              value={
-                usage.costEstimated ? formatUsd(usage.estimatedCostUsd) : "—"
-              }
+          {groups.map((group) => (
+            <UsageRow
+              costEstimated={costEstimated}
+              key={group.id ?? ""}
+              label={group.id ? (group.name ?? group.id) : "Unattributed"}
+              maxTokens={maxTokens}
+              usage={group}
             />
-            <CompactUsageStat
-              icon={ZapIcon}
-              label="Requests"
-              value={usage.requestCount.toLocaleString()}
-            />
-            <CompactUsageStat
-              icon={ArrowDownLeft01Icon}
-              label="Input"
-              value={usage.inputTokens.toLocaleString()}
-            />
-            <CompactUsageStat
-              icon={ArrowUpRight01Icon}
-              label="Output"
-              value={usage.outputTokens.toLocaleString()}
-            />
-            <CompactUsageStat
-              icon={SparklesIcon}
-              label="Total"
-              value={usage.totalTokens.toLocaleString()}
-            />
-          </div>
-
-          <div className="border-border border-t px-4 py-3">
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-              <p className="font-medium text-muted-foreground text-xs uppercase tracking-[0.12em]">
-                Token mix
-              </p>
-              <p className="text-muted-foreground text-xs tabular-nums">
-                {usage.inputTokens.toLocaleString()} in /{" "}
-                {usage.outputTokens.toLocaleString()} out
-              </p>
-            </div>
-            <TokenMixBar
-              inputTokens={usage.inputTokens}
-              outputTokens={usage.outputTokens}
-            />
-          </div>
-
-          <p className="px-4 pb-3 text-muted-foreground text-xs leading-relaxed">
-            {llmUsageCostNote(usage, modelLabel, trackedModelCount)}
-          </p>
+          ))}
         </CardContent>
       </Card>
-
-      {trackedModelCount > 0 ? (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="type-section-title">By model</h2>
-            <p className="text-muted-foreground text-xs">
-              {trackedModelCount} tracked
-            </p>
-          </div>
-          <Card className="w-full overflow-hidden shadow-none">
-            <CardContent className="p-0">
-              {usage.models.map((modelUsage) => (
-                <ModelUsageRow
-                  costEstimated={usage.costEstimated}
-                  key={modelUsage.modelId}
-                  maxTokens={maxModelTokens}
-                  usage={modelUsage}
-                />
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -451,11 +772,6 @@ function LlmUsageBody({ usage }: { usage: LlmUsageStatus }) {
 function LlmUsageSection({ usage }: { usage: LlmUsageStatus }) {
   return (
     <section className="min-w-0 space-y-8">
-      <Card className="w-full shadow-none">
-        <CardContent className="p-0">
-          <LlmUsageHeader usage={usage} />
-        </CardContent>
-      </Card>
       <LlmUsageBody usage={usage} />
 
       <div className="px-4">
@@ -490,63 +806,14 @@ function LlmUsageEmptyState({
   );
 }
 
-function TokenMixBar({
-  inputTokens,
-  outputTokens,
-}: {
-  inputTokens: number;
-  outputTokens: number;
-}) {
-  const total = inputTokens + outputTokens;
-  const inputPercent = total > 0 ? (inputTokens / total) * 100 : 0;
-  const outputPercent = total > 0 ? 100 - inputPercent : 0;
-
-  return (
-    <div
-      aria-label={`Input ${inputPercent.toFixed(0)} percent, output ${outputPercent.toFixed(0)} percent`}
-      className="flex h-2.5 overflow-hidden rounded-full bg-muted"
-      role="img"
-    >
-      <div
-        className="bg-primary/80 transition-[width] duration-300 motion-reduce:transition-none"
-        style={{ width: `${inputPercent}%` }}
-      />
-      <div
-        className="bg-emerald-500/80 transition-[width] duration-300 motion-reduce:transition-none"
-        style={{ width: `${outputPercent}%` }}
-      />
-    </div>
-  );
-}
-
-function CompactUsageStat({
-  icon: Icon,
+function UsageRow({
   label,
-  value,
-}: {
-  icon: typeof Clock01Icon;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-      <div className="flex items-center gap-2">
-        <Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-        <p className="font-medium text-foreground text-sm">{label}</p>
-      </div>
-      <p className="font-medium text-foreground text-sm tabular-nums">
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function ModelUsageRow({
   usage,
   costEstimated,
   maxTokens,
 }: {
-  usage: LlmUsageStatus["models"][number];
+  label: string;
+  usage: LlmUsageStats;
   costEstimated: boolean;
   maxTokens: number;
 }) {
@@ -555,9 +822,7 @@ function ModelUsageRow({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 space-y-2 lg:flex-1">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <p className="truncate font-mono text-foreground text-sm">
-              {usage.modelId}
-            </p>
+            <p className="truncate text-foreground text-sm">{label}</p>
             <p className="text-muted-foreground text-xs">
               {usage.totalTokens.toLocaleString()} tokens
             </p>

@@ -184,10 +184,11 @@ export interface SseEvent {
 export async function readSseEvents(
   body: ReadableStream<Uint8Array>,
   onEvent: (event: SseEvent) => void | Promise<void>
-): Promise<void> {
+): Promise<boolean> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let sawDone = false;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -209,7 +210,7 @@ export async function readSseEvents(
 
       const eventBlock = buffer.slice(0, boundary.index);
       buffer = buffer.slice(boundary.index + boundary.length);
-      await emitSseEvent(eventBlock, onEvent);
+      sawDone = (await emitSseEvent(eventBlock, onEvent)) || sawDone;
     }
 
     if (done) {
@@ -218,14 +219,15 @@ export async function readSseEvents(
   }
 
   if (buffer.trim()) {
-    await emitSseEvent(buffer, onEvent);
+    sawDone = (await emitSseEvent(buffer, onEvent)) || sawDone;
   }
+  return sawDone;
 }
 
 async function emitSseEvent(
   eventBlock: string,
   onEvent: (event: SseEvent) => void | Promise<void>
-): Promise<void> {
+): Promise<boolean> {
   let event = "message";
   const dataLines: string[] = [];
 
@@ -247,11 +249,15 @@ async function emitSseEvent(
   const data = dataLines.join("\n");
   const normalized = data.trim();
 
-  if (!normalized || normalized === "[DONE]") {
-    return;
+  if (normalized === "[DONE]") {
+    return true;
+  }
+  if (!normalized) {
+    return false;
   }
 
   await onEvent({ data, event });
+  return false;
 }
 
 function findSseBoundary(
@@ -296,6 +302,63 @@ export function parseJsonRecord(raw: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+export interface PendingToolCall {
+  arguments: string;
+  id: string;
+  name: string;
+}
+
+export function mergePendingToolCall(
+  pending: Map<number, PendingToolCall>,
+  toolDelta: {
+    index?: number;
+    id?: string;
+    function?: { name?: string; arguments?: string };
+  }
+): void {
+  const index = toolDelta.index ?? 0;
+  const current = pending.get(index) ?? {
+    arguments: "",
+    id: "",
+    name: "",
+  };
+
+  if (toolDelta.id) {
+    current.id = toolDelta.id;
+  }
+
+  if (toolDelta.function?.name) {
+    current.name = toolDelta.function.name;
+  }
+
+  if (toolDelta.function?.arguments) {
+    current.arguments += toolDelta.function.arguments;
+  }
+
+  pending.set(index, current);
+}
+
+export function finalizePendingToolCalls(
+  pending: Map<number, PendingToolCall>
+): ToolCall[] {
+  return [...pending.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([, call]) => call)
+    .flatMap((call) => {
+      if (!(call.id && call.name)) {
+        return [];
+      }
+
+      return [
+        {
+          arguments: parseJsonRecord(call.arguments),
+          id: call.id,
+          name: call.name,
+        },
+      ];
+    });
 }
 
 export function readRecord(value: unknown): Record<string, unknown> {

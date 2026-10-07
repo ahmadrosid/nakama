@@ -11,9 +11,10 @@ import {
 } from "./shared";
 import type { AppEnv } from "./types";
 
-export const ORG_ID_HEADER = "x-org-id";
+const ORG_ID_HEADER = "x-org-id";
 const PLUGIN_UI_PATH = /^\/v1\/plugins\/ui\/([^/]+)(?:\/|$)/;
 const PLUGIN_ACTION_PATH = /^\/v1\/plugins\/[^/]+\/actions\/[^/]+$/;
+const PROFILE_AVATAR_PATH = /^\/v1\/profiles\/[^/]+\/avatar$/;
 
 function isPlatformRoute(pathname: string): boolean {
   return pathname === "/v1/platform" || pathname.startsWith("/v1/platform/");
@@ -41,12 +42,15 @@ function resolveOrgId(
 ): { conflict: true } | { orgId: string | null } {
   const headerOrgId = request.headers.get(ORG_ID_HEADER)?.trim() || null;
   const pathOrgId = pluginUiPathOrgId(pathname);
-  const authOrgId = auth.activeOrgId?.trim() || null;
+  const avatarOrgId =
+    request.method === "GET" && PROFILE_AVATAR_PATH.test(pathname)
+      ? new URL(request.url).searchParams.get("orgId")?.trim() || null
+      : null;
 
-  if (headerOrgId && pathOrgId && headerOrgId !== pathOrgId) {
-    return { conflict: true };
-  }
-  if (headerOrgId && authOrgId && headerOrgId !== authOrgId) {
+  if (
+    (headerOrgId && pathOrgId && headerOrgId !== pathOrgId) ||
+    (headerOrgId && avatarOrgId && headerOrgId !== avatarOrgId)
+  ) {
     return { conflict: true };
   }
 
@@ -56,12 +60,11 @@ function resolveOrgId(
   if (pathOrgId) {
     return { orgId: pathOrgId };
   }
+  if (avatarOrgId) {
+    return { orgId: avatarOrgId };
+  }
   if (PLUGIN_ACTION_PATH.test(pathname) && request.method === "POST") {
     return { orgId: null };
-  }
-
-  if (authOrgId) {
-    return { orgId: authOrgId };
   }
 
   const sessionOrgId = auth.session?.activeOrgId?.trim();

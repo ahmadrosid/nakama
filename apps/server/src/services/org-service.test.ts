@@ -1,16 +1,26 @@
 import { describe, expect, test } from "bun:test";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type EmailOutboundAdapter,
   getOrgConfigDir,
   getProfileSoulDir,
+  getUserConfigDir,
+  getUserConfigPath,
   NakamaApiError,
+  type ToolSetupPlan,
+  writeParsedConfigIni,
 } from "@nakama/core";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AuthService } from "./auth-service";
+import {
+  loadToolApiKey,
+  loadToolSetup,
+  saveToolApiKey,
+  saveToolSetup,
+} from "./custom-tool-shared";
 import { OrgService } from "./org-service";
 
 setupTestConfigDir("nakama-org-service-test-");
@@ -140,6 +150,55 @@ describe("OrgService", () => {
         monthlyLlmTurnLimit: -1,
       })
     ).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("stores normalized allowed invite domains for an organization", async () => {
+    const { databaseAdapter, orgService } = createOrgService();
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-invite-domains",
+    });
+
+    const updated = await orgService.updateOrganization(
+      created.organization.id,
+      { allowedInviteDomains: [" Acme.COM ", "partner.example", "acme.com"] }
+    );
+
+    expect(updated.allowedInviteDomains).toEqual([
+      "acme.com",
+      "partner.example",
+    ]);
+    expect(
+      (await databaseAdapter.getOrganizationById(created.organization.id))
+        ?.allowedInviteDomains
+    ).toEqual(["acme.com", "partner.example"]);
+  });
+
+  test("rejects malformed invite-domain settings without replacing the policy", async () => {
+    const { databaseAdapter, orgService } = createOrgService();
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-invalid-invite-domains",
+    });
+    await orgService.updateOrganization(created.organization.id, {
+      allowedInviteDomains: ["acme.com"],
+    });
+
+    for (const allowedInviteDomains of [
+      ["*.acme.com"],
+      [""],
+      "acme.com" as unknown as string[],
+    ]) {
+      await expect(
+        orgService.updateOrganization(created.organization.id, {
+          allowedInviteDomains,
+        })
+      ).rejects.toMatchObject({ status: 400 });
+    }
+    expect(
+      (await databaseAdapter.getOrganizationById(created.organization.id))
+        ?.allowedInviteDomains
+    ).toEqual(["acme.com"]);
   });
 
   test("updates organization consolidate flag", async () => {
@@ -545,6 +604,79 @@ describe("OrgService", () => {
     expect(accepted.user.email).toBe("legacy@acme.com");
     expect(accepted.orgId).toBe(created.organization.id);
     expect(accepted.role).toBe("member");
+  });
+
+  test("only creates invites for allowed email domains", async () => {
+    const sent: string[] = [];
+    const { databaseAdapter, orgService } = createOrgService({
+      send: async (input) => {
+        sent.push(input.to);
+        return { ok: true };
+      },
+    });
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-invite-restriction",
+    });
+    await orgService.updateOrganization(created.organization.id, {
+      allowedInviteDomains: ["acme.com"],
+    });
+
+    await expect(
+      orgService.createInvite({
+        email: "guest@other.com",
+        invitedByUserId: "user_platform",
+        orgId: created.organization.id,
+        role: "member",
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    expect(
+      await databaseAdapter.getPendingOrgInvite(
+        created.organization.id,
+        "guest@other.com"
+      )
+    ).toBeNull();
+    expect(sent).toEqual([]);
+
+    const allowed = await orgService.createInvite({
+      email: "guest@ACME.COM",
+      invitedByUserId: "user_platform",
+      orgId: created.organization.id,
+      role: "member",
+    });
+    expect(allowed.invite.email).toBe("guest@acme.com");
+    expect(sent).toEqual(["guest@acme.com"]);
+  });
+
+  test("rejects an existing invite if the allowed domains change before acceptance", async () => {
+    const { databaseAdapter, orgService } = createOrgService();
+    const created = await orgService.createOrganization({
+      name: "Acme",
+      slug: "acme-invite-policy-change",
+    });
+    const invite = await orgService.createInvite({
+      email: "guest@other.com",
+      invitedByUserId: "user_platform",
+      orgId: created.organization.id,
+      role: "member",
+    });
+    await orgService.updateOrganization(created.organization.id, {
+      allowedInviteDomains: ["acme.com"],
+    });
+
+    await expect(
+      orgService.acceptInvite({
+        password: "secret123",
+        token: invite.token!,
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    expect(await databaseAdapter.getUserByEmail("guest@other.com")).toBeNull();
+    expect(
+      await databaseAdapter.getPendingOrgInvite(
+        created.organization.id,
+        "guest@other.com"
+      )
+    ).not.toBeNull();
   });
 
   test("emails an invite link without returning its raw token", async () => {
@@ -1083,6 +1215,20 @@ describe("OrgService", () => {
     const orgDir = getOrgConfigDir(bootstrapped.organization.id);
     await mkdir(orgDir, { recursive: true });
     await writeFile(join(orgDir, "private-data.txt"), "private data");
+    const retiredDir = join(
+      getUserConfigDir(),
+      "retired-app-users",
+      bootstrapped.organization.id
+    );
+    const keptRetired = join(
+      getUserConfigDir(),
+      "retired-app-users",
+      kept.organization.id
+    );
+    await mkdir(retiredDir, { recursive: true });
+    await mkdir(keptRetired, { recursive: true });
+    await writeFile(join(retiredDir, "private.txt"), "retired data");
+    await writeFile(join(keptRetired, "private.txt"), "kept data");
     const deletedProfile = (
       await databaseAdapter.listProfilesForOrg(bootstrapped.organization.id)
     )[0]!;
@@ -1125,6 +1271,109 @@ describe("OrgService", () => {
       )
     ).toMatchObject({ activeOrgId: null });
     await expect(access(orgDir)).rejects.toThrow();
+    await expect(access(retiredDir)).rejects.toThrow();
+    expect(await readFile(join(keptRetired, "private.txt"), "utf8")).toBe(
+      "kept data"
+    );
+  });
+
+  test("permanent deletion removes tool secrets from the global config", async () => {
+    const { orgService, authService } = createOrgService();
+    const bootstrapped = await orgService.bootstrapInitialSetup({
+      admin: {
+        email: "admin@acme.com",
+        name: "Acme Admin",
+        passwordHash: await authService.hashPassword("password123"),
+        phone: "",
+      },
+      organization: { name: "Acme", slug: "acme-tool-secret-delete" },
+    });
+    const kept = await orgService.createOrganization(
+      { name: "Beta", slug: "beta-tool-secret-delete" },
+      bootstrapped.user.id
+    );
+    // Unrelated sections share the file; the purge must leave them alone.
+    await writeParsedConfigIni(
+      { web_public_url: "https://acme.example.com" },
+      {
+        "provider.keep-me": {
+          api_key: "sk-keep-provider",
+          label: "Keep",
+          type: "openai",
+        },
+        "tool-key.not-an-encoded-section": { api_key: "sk-foreign-shape" },
+      }
+    );
+
+    const deletedPlan: ToolSetupPlan = {
+      description: "Connect the Acme tool",
+      id: "setup_deleted_org",
+      name: "Acme tool",
+      plan: "paste the api key",
+      requiresApiKey: true,
+      sessionId: "session_deleted_org",
+      status: "pending",
+    };
+    await saveToolApiKey(
+      bootstrapped.organization.id,
+      "tool_deleted_org",
+      "sk-deleted-org-secret"
+    );
+    await saveToolSetup(bootstrapped.organization.id, deletedPlan);
+    await saveToolApiKey(
+      kept.organization.id,
+      "tool_kept_org",
+      "sk-kept-org-secret"
+    );
+    await saveToolSetup(kept.organization.id, {
+      ...deletedPlan,
+      id: "setup_kept_org",
+      name: "Beta tool",
+      sessionId: "session_kept_org",
+    });
+
+    await orgService.archiveOrganization(
+      bootstrapped.organization.id,
+      bootstrapped.user.id
+    );
+    await orgService.permanentlyDeleteOrganization(
+      bootstrapped.organization.id
+    );
+
+    expect(
+      await loadToolApiKey(bootstrapped.organization.id, "tool_deleted_org")
+    ).toBeUndefined();
+    await expect(
+      loadToolSetup(bootstrapped.organization.id, "setup_deleted_org")
+    ).rejects.toMatchObject({ status: 404 });
+
+    const raw = await readFile(getUserConfigPath(), "utf8");
+    expect(raw).not.toContain("sk-deleted-org-secret");
+    expect(raw).toContain("sk-keep-provider");
+    expect(raw).toContain("sk-foreign-shape");
+    expect(raw).toContain("web_public_url=https://acme.example.com");
+    expect(await loadToolApiKey(kept.organization.id, "tool_kept_org")).toBe(
+      "sk-kept-org-secret"
+    );
+    expect(
+      (await loadToolSetup(kept.organization.id, "setup_kept_org")).id
+    ).toBe("setup_kept_org");
+
+    // Retention: the purge rewrites in place and keeps no shadow copy of the
+    // secret anywhere under the config directory.
+    const files = await readdir(getUserConfigDir(), {
+      encoding: "utf8",
+      recursive: true,
+    });
+    for (const file of files) {
+      let content: string;
+      try {
+        content = await readFile(join(getUserConfigDir(), file), "utf8");
+      } catch {
+        continue;
+      }
+      expect(content).not.toContain("sk-deleted-org-secret");
+    }
   });
 
   test("refuses to permanently delete an active org", async () => {

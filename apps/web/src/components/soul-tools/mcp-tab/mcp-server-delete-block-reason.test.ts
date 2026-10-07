@@ -47,7 +47,7 @@ describe("mcpServerDeleteBlockReason", () => {
     ).toBe("Preinstalled MCP servers cannot be deleted.");
   });
 
-  test("blocks servers assigned to profiles", () => {
+  test("allows servers assigned to profiles", () => {
     expect(
       mcpServerDeleteBlockReason(
         summary({
@@ -56,9 +56,7 @@ describe("mcpServerDeleteBlockReason", () => {
           name: "QA-probe",
         })
       )
-    ).toBe(
-      "Assigned to 1 profile. Unassign on the Profiles page before deleting."
-    );
+    ).toBeNull();
 
     expect(
       mcpServerDeleteBlockReason(
@@ -68,8 +66,6 @@ describe("mcpServerDeleteBlockReason", () => {
           name: "QA-probe",
         })
       )
-    ).toBe(
-      "Assigned to 3 profiles. Unassign on the Profiles page before deleting."
-    );
+    ).toBeNull();
   });
 });

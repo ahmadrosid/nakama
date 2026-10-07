@@ -4,17 +4,25 @@ import {
   type BotChannelConfigFile,
   type ChannelOwner,
   claimChannelIdentity,
-  generateHandshakeCode,
+  createPairingCodeSecret,
   getChannelConfigDir,
+  hasActiveHandshakeCode,
   isBotChannelUserAuthorized,
   maskBotToken,
   releaseChannelClaims,
   resetChannelConversationState,
-  resolveHandshakeCodeOnSave,
+  resolveHandshakeOnSave,
   verifyAndPairBotChannelUser,
 } from "./channel-config-shared";
 import { parseSlackMemberIdInput } from "./contract";
 import { parseIni, readTextOrNull, writeTextFile } from "./fs";
+
+export {
+  hasActiveHandshakeCode,
+  isPairingCodeActive,
+  looksLikePairingCode,
+} from "./channel-config-shared";
+export { generatePairingCode } from "./pairing-code";
 
 export const DEFAULT_SLACK_PROFILE_ID = "default";
 export const SLACK_API_BASE_URL = "https://slack.com/api";
@@ -138,6 +146,7 @@ export async function loadSlackConfigFile(
     appToken: values.app_token?.trim() ?? "",
     botToken,
     handshakeCode: values.handshake_code?.trim() || null,
+    handshakeExpiresAt: values.handshake_expires_at?.trim() || null,
     pairedUserIds: paired ? parseSlackUserIds(paired) : [],
     profileId: values.profile_id?.trim() || DEFAULT_SLACK_PROFILE_ID,
   };
@@ -153,7 +162,14 @@ async function writeSlackConfigFile(
     `app_token=${config.appToken}`,
     `profile_id=${config.profileId}`,
     ...(config.allowWorkspace ? ["allow_workspace=true"] : []),
-    ...(config.handshakeCode ? [`handshake_code=${config.handshakeCode}`] : []),
+    ...(config.handshakeCode
+      ? [
+          `handshake_code=${config.handshakeCode}`,
+          ...(config.handshakeExpiresAt
+            ? [`handshake_expires_at=${config.handshakeExpiresAt}`]
+            : []),
+        ]
+      : []),
     ...(config.pairedUserIds.length > 0
       ? [`paired_user_ids=${config.pairedUserIds.join(",")}`]
       : []),
@@ -177,7 +193,9 @@ export function toSlackSettingsPublic(
     appTokenMasked: file?.appToken ? maskBotToken(file.appToken) : null,
     botTokenMasked: file ? maskBotToken(file.botToken) : null,
     configured: Boolean(file?.botToken && file.appToken),
-    handshakeCode: file?.handshakeCode ?? null,
+    // An expired code is worse than none: the dashboard would offer a secret
+    // that no longer works.
+    handshakeCode: hasActiveHandshakeCode(file) ? file?.handshakeCode : null,
     pairedUserIds: file?.pairedUserIds ?? [],
     profileId: file?.profileId ?? DEFAULT_SLACK_PROFILE_ID,
   };
@@ -344,7 +362,7 @@ export async function saveSlackConfig(
         : input.allowWorkspace === true,
     appToken,
     botToken,
-    handshakeCode: resolveHandshakeCodeOnSave(existing, allowedUserIds),
+    ...resolveHandshakeOnSave(existing, allowedUserIds),
     // The dashboard edits one access list (paired + allowed), so a paired
     // member left out of the submitted list loses access too.
     pairedUserIds:
@@ -383,7 +401,12 @@ export async function regenerateSlackHandshake(
     throw new Error("Save the Slack tokens before generating a pairing code.");
   }
 
-  const next = { ...existing, handshakeCode: generateHandshakeCode() };
+  const { code, expiresAt } = createPairingCodeSecret();
+  const next = {
+    ...existing,
+    handshakeCode: code,
+    handshakeExpiresAt: expiresAt,
+  };
   await writeSlackConfigFile(owner, next);
   return toSlackSettingsPublic(next);
 }
@@ -394,6 +417,7 @@ export function verifyAndPairSlackUser(
   userId: string
 ): Promise<{ ok: boolean; message: string }> {
   return verifyAndPairBotChannelUser<string, SlackConfigFile>({
+    configDir: getSlackConfigDir(owner),
     handshakeInput,
     isAuthorized: isSlackUserAuthorized,
     label: "Slack",

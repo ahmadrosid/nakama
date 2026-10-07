@@ -6,7 +6,7 @@ import {
 import { useCerebrasModels } from "@/hooks/use-cerebras-models";
 import type { CerebrasModelRow } from "@/lib/cerebras-models";
 
-export type CerebrasBrowseSelectHandler = (row: CerebrasModelRow) => void;
+type CerebrasBrowseSelectHandler = (row: CerebrasModelRow) => void;
 
 interface CerebrasModelsBrowseListProps {
   className?: string;

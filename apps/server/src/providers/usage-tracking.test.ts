@@ -25,11 +25,11 @@ function providerReporting(
   };
 }
 
+const ORG_ID = "org_test";
+
 describe("usage tracking", () => {
   test("attaches the call cost to the result, absent without pricing", async () => {
-    const tracker = await LlmUsageTracker.create(
-      createInMemoryDatabaseAdapter()
-    );
+    const tracker = new LlmUsageTracker(createInMemoryDatabaseAdapter());
     const usage = { inputTokens: 123, outputTokens: 45, totalTokens: 168 };
     const input = {
       messages: [{ content: "hi", role: "user" as const }],
@@ -39,7 +39,8 @@ describe("usage tracking", () => {
     const priced = await wrapProviderWithUsageTracking(
       providerReporting(usage),
       tracker,
-      "claude-sonnet-4-6"
+      "claude-sonnet-4-6",
+      { orgId: ORG_ID }
     ).generateChat(input);
     expect(priced.usage?.costUsd).toBeCloseTo(
       estimateUsageCostUsd("claude-sonnet-4-6", 123, 45),
@@ -51,7 +52,8 @@ describe("usage tracking", () => {
     const offCatalog = await wrapProviderWithUsageTracking(
       providerReporting(usage),
       tracker,
-      "gpt-4o"
+      "gpt-4o",
+      { orgId: ORG_ID }
     ).generateChat(input);
     expect(offCatalog.usage).toEqual({ ...usage, modelId: "gpt-4o" });
 
@@ -59,15 +61,51 @@ describe("usage tracking", () => {
       providerReporting(usage),
       tracker,
       "my-local-model",
+      { orgId: ORG_ID },
       { provider: "openai_compatible" }
     ).generateChat(input);
     expect(unpriced.usage).toEqual({ ...usage, modelId: "my-local-model" });
   });
 
+  test("counts estimated tokens under the agent and user that made the call", async () => {
+    const tracker = new LlmUsageTracker(createInMemoryDatabaseAdapter());
+    const provider: ProviderClient = {
+      generateChat: () =>
+        Promise.resolve({
+          assistantMessage: { content: "Hello there", role: "assistant" },
+          content: "Hello there",
+          toolCalls: [],
+        }),
+      generateText: () => Promise.resolve({ content: "unused" }),
+      name: "openai",
+      streamChat: () => Promise.reject(new Error("unused")),
+    };
+
+    const result = await wrapProviderWithUsageTracking(
+      provider,
+      tracker,
+      "gpt-4o",
+      { orgId: ORG_ID, profileId: "agent_1", userId: "user_1" }
+    ).generateChat({
+      messages: [{ content: "hi", role: "user" }],
+      system: "system",
+    });
+
+    expect(result.usage?.estimated).toBe(true);
+    const { agents, users } = await tracker.getStatsByActor(ORG_ID);
+    expect(agents).toMatchObject([
+      {
+        id: "agent_1",
+        inputTokens: result.usage?.inputTokens,
+        outputTokens: result.usage?.outputTokens,
+        requestCount: 1,
+      },
+    ]);
+    expect(users).toMatchObject([{ id: "user_1", requestCount: 1 }]);
+  });
+
   test("prefers provider-reported usage for chat calls", async () => {
-    const tracker = await LlmUsageTracker.create(
-      createInMemoryDatabaseAdapter()
-    );
+    const tracker = new LlmUsageTracker(createInMemoryDatabaseAdapter());
     const provider: ProviderClient = {
       async generateChat() {
         return {
@@ -91,13 +129,15 @@ describe("usage tracking", () => {
       },
     };
 
-    const wrapped = wrapProviderWithUsageTracking(provider, tracker, "gpt-4o");
+    const wrapped = wrapProviderWithUsageTracking(provider, tracker, "gpt-4o", {
+      orgId: ORG_ID,
+    });
     await wrapped.generateChat({
       messages: [{ content: "hi", role: "user" }],
       system: "system",
     });
 
-    expect(tracker.getStats()).toMatchObject({
+    expect(await tracker.getStats(ORG_ID)).toMatchObject({
       inputTokens: 123,
       outputTokens: 45,
       requestCount: 1,
@@ -106,9 +146,7 @@ describe("usage tracking", () => {
   });
 
   test("uses reported text usage and the wrapper's custom pricing", async () => {
-    const tracker = await LlmUsageTracker.create(
-      createInMemoryDatabaseAdapter()
-    );
+    const tracker = new LlmUsageTracker(createInMemoryDatabaseAdapter());
     const provider: ProviderClient = {
       async generateChat() {
         throw new Error("unused");
@@ -129,6 +167,7 @@ describe("usage tracking", () => {
       provider,
       tracker,
       "gpt-5.5",
+      { orgId: ORG_ID },
       {
         providerInstance: {
           apiKey: "test",
@@ -152,19 +191,20 @@ describe("usage tracking", () => {
       content: "Hello",
       usage: { inputTokens: 40, outputTokens: 10, totalTokens: 50 },
     });
-    expect(tracker.getStats()).toMatchObject({
+    expect(await tracker.getStats(ORG_ID)).toMatchObject({
       inputTokens: 40,
       outputTokens: 10,
       requestCount: 1,
       totalTokens: 50,
     });
-    expect(tracker.getStats().estimatedCostUsd).toBeCloseTo(0.000_12, 8);
+    expect((await tracker.getStats(ORG_ID)).estimatedCostUsd).toBeCloseTo(
+      0.000_12,
+      8
+    );
   });
 
   test("stamps estimated usage onto chat results when the provider omits it", async () => {
-    const tracker = await LlmUsageTracker.create(
-      createInMemoryDatabaseAdapter()
-    );
+    const tracker = new LlmUsageTracker(createInMemoryDatabaseAdapter());
     const provider: ProviderClient = {
       async generateChat() {
         return {
@@ -182,7 +222,9 @@ describe("usage tracking", () => {
       },
     };
 
-    const wrapped = wrapProviderWithUsageTracking(provider, tracker, "gpt-4o");
+    const wrapped = wrapProviderWithUsageTracking(provider, tracker, "gpt-4o", {
+      orgId: ORG_ID,
+    });
     const result = await wrapped.generateChat({
       messages: [{ content: "hi", role: "user" }],
       system: "system",
@@ -190,13 +232,11 @@ describe("usage tracking", () => {
 
     expect(result.usage?.estimated).toBe(true);
     expect(result.usage?.inputTokens).toBeGreaterThan(0);
-    expect(tracker.getStats().requestCount).toBe(1);
+    expect((await tracker.getStats(ORG_ID)).requestCount).toBe(1);
   });
 
   test("leaves provider usage unmarked as estimated", async () => {
-    const tracker = await LlmUsageTracker.create(
-      createInMemoryDatabaseAdapter()
-    );
+    const tracker = new LlmUsageTracker(createInMemoryDatabaseAdapter());
     const provider: ProviderClient = {
       async generateChat() {
         return {
@@ -215,7 +255,9 @@ describe("usage tracking", () => {
       },
     };
 
-    const wrapped = wrapProviderWithUsageTracking(provider, tracker, "gpt-4o");
+    const wrapped = wrapProviderWithUsageTracking(provider, tracker, "gpt-4o", {
+      orgId: ORG_ID,
+    });
     const result = await wrapped.generateChat({
       messages: [{ content: "hi", role: "user" }],
       system: "system",

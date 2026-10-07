@@ -12,7 +12,7 @@ import {
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
-export function orgMembersQueryOptions(orgId: string) {
+function orgMembersQueryOptions(orgId: string) {
   return queryOptions({
     queryFn: () => client.listOrgMembers(orgId),
     queryKey: queryKeys.orgMembers(orgId),

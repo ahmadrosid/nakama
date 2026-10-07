@@ -56,6 +56,12 @@ const WORKER_DIST_SCRIPTS: Partial<Record<string, string>> = {
 };
 
 const VALID_WORKERS = Object.keys(WORKER_SCRIPTS);
+/**
+ * pm2 stops Windows processes with `taskkill /F`, so no signal handler runs.
+ * A "shutdown" message lets the worker clean up before pm2 escalates.
+ */
+const PM2_SHUTDOWN_OPTIONS =
+  process.platform === "win32" ? { shutdown_with_message: true } : {};
 
 export interface PluginWorkerRegistration {
   configDir?: string;
@@ -694,18 +700,6 @@ export class WorkerManagerService {
         NAKAMA_PLUGIN_WORKER_ROOT: worker.registration.configDir ?? "",
         NAKAMA_WORKER_DATA_DIR: worker.directory,
       };
-      if (worker.registration.pluginId === "google-meet") {
-        for (const key of [
-          "NAKAMA_MEET_CAPTURE_HOST",
-          "NAKAMA_MEET_CAPTURE_PORT",
-          "NAKAMA_MEET_CAPTURE_ORIGIN",
-        ]) {
-          const value = process.env[key];
-          if (value) {
-            (env as Record<string, string>)[key] = value;
-          }
-        }
-      }
       if (
         worker.registration.pluginId === "supermemory" &&
         worker.contribution.key === "server"
@@ -744,6 +738,7 @@ export class WorkerManagerService {
             name,
             output: join(worker.directory, "stdout.log"),
             script: process.env.NAKAMA_BUN_BIN ?? "bun",
+            ...PM2_SHUTDOWN_OPTIONS,
           },
           (error) => cb(error)
         )
@@ -873,6 +868,7 @@ export class WorkerManagerService {
               : {}),
             name: processName,
             script: "bun",
+            ...PM2_SHUTDOWN_OPTIONS,
           },
           (error) => cb(error)
         )
@@ -882,7 +878,8 @@ export class WorkerManagerService {
 
   async stopWorker(
     name: string,
-    orgId: ChannelConfigScope = null
+    orgId: ChannelConfigScope = null,
+    preserveDesired = false
   ): Promise<void> {
     if (!this.isValidWorker(name)) {
       throw new Error(`Unknown worker: ${name}`);
@@ -911,7 +908,7 @@ export class WorkerManagerService {
           pm2.stop(processName, (error) => cb(error))
         );
       }
-      if (pluginWorker) {
+      if (pluginWorker && !preserveDesired) {
         await this.writePluginWorkerDesired(pluginWorker, false);
       }
       if (!pluginWorker) {
@@ -923,13 +920,35 @@ export class WorkerManagerService {
             throw new Error("Stop the manually started agent worker first");
           }
         }
-        await setWorkerDesiredRunning(
-          name as PlatformWorkerName,
-          false,
-          isChannelOwner(orgId) || name === "whatsapp" ? orgId : null
-        );
+        if (!preserveDesired) {
+          await setWorkerDesiredRunning(
+            name as PlatformWorkerName,
+            false,
+            isChannelOwner(orgId) || name === "whatsapp" ? orgId : null
+          );
+        }
       }
     });
+  }
+
+  async pauseDataWorkers(): Promise<void> {
+    for (const platform of [
+      "telegram",
+      "discord",
+      "whatsapp",
+      "slack",
+    ] as const) {
+      for (const owner of await listChannelOwners(platform)) {
+        if (
+          (await this.getWorkerStatus(platform, owner))?.status === "online"
+        ) {
+          await this.stopWorker(platform, owner, true);
+        }
+      }
+    }
+    if ((await this.getWorkerStatus("automation"))?.status === "online") {
+      await this.stopWorker("automation", null, true);
+    }
   }
 
   async recoverDesiredWorkers(): Promise<void> {
@@ -946,6 +965,12 @@ export class WorkerManagerService {
         if (
           (await this.getWorkerStatus(platform, owner))?.status === "online"
         ) {
+          continue;
+        }
+        const heartbeat = await createWorkerHeartbeatStore({
+          getDir: () => getChannelConfigDir(platform, owner),
+        }).read();
+        if (heartbeat && isProcessAlive(heartbeat.pid)) {
           continue;
         }
         try {

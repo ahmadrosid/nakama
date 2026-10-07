@@ -213,6 +213,7 @@ export function ProviderCompatibleEditDialog({
   remoteProvider = "openai_compatible",
   providerInstanceId,
   hostMode,
+  hideIdentity = false,
   browseLabel,
   onOpenChange,
   onDisplayNameChange,
@@ -230,7 +231,8 @@ export function ProviderCompatibleEditDialog({
   manageModels: ModelListRow[];
   apiKey?: string;
   browseSource?: "remote" | "models.dev";
-  remoteProvider?: "ollama" | "openai_compatible";
+  remoteProvider?: "ollama" | "openai_compatible" | "netra";
+  hideIdentity?: boolean;
   providerInstanceId?: string;
   hostMode?: "local" | "cloud";
   browseLabel?: string;
@@ -261,6 +263,7 @@ export function ProviderCompatibleEditDialog({
         disabled={busy}
         displayName={editLabel}
         displayNameError={null}
+        hideIdentity={hideIdentity}
         hostMode={hostMode}
         modelsError={null}
         onBaseUrlChange={onBaseUrlChange}
@@ -337,6 +340,7 @@ export function ProviderManageModelsDialog({
   onOpenChange,
   onSave,
   children,
+  title = "Manage models",
 }: {
   open: boolean;
   busy: boolean;
@@ -344,6 +348,7 @@ export function ProviderManageModelsDialog({
   onOpenChange: (open: boolean) => void;
   onSave: () => void;
   children: ReactNode;
+  title?: string;
 }) {
   return (
     <ProviderModelsDialogShell
@@ -353,7 +358,7 @@ export function ProviderManageModelsDialog({
       onOpenChange={onOpenChange}
       onSave={onSave}
       open={open}
-      title="Manage models"
+      title={title}
     >
       {children}
     </ProviderModelsDialogShell>

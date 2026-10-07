@@ -22,6 +22,7 @@ import {
 type NavIcon = typeof SharedWifiIcon;
 
 export type PageId =
+  | "google-meet"
   | "chat"
   | "customize"
   | "usage"
@@ -67,7 +68,7 @@ const navItem = (
   label,
 });
 
-export const NAV_GROUPS: NavGroup[] = [
+const NAV_GROUPS: NavGroup[] = [
   {
     id: "chat",
     items: [
@@ -82,6 +83,12 @@ export const NAV_GROUPS: NavGroup[] = [
         "Agent",
         "Manage bot configs and tool allowlists",
         UserSquareIcon
+      ),
+      navItem(
+        "google-meet",
+        "Google Meet",
+        "Capture and read meeting transcripts",
+        SharedWifiIcon
       ),
       navItem(
         "files",
@@ -154,7 +161,7 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
+const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 
 export const SIDEBAR_PAGE_IDS: readonly PageId[] = [
   "chat",
@@ -175,7 +182,7 @@ export const STANDALONE_PAGES: Partial<Record<PageId, NavItem>> = {
 
 export const SETUP_PATH = "/setup";
 
-export const PLATFORM_ADMIN_PAGE_IDS: ReadonlySet<PageId> = new Set([
+const PLATFORM_ADMIN_PAGE_IDS: ReadonlySet<PageId> = new Set([
   "files",
   "soul",
   "mcp",
@@ -215,6 +222,9 @@ export function visibleNavGroups(access: {
 
   for (const group of NAV_GROUPS) {
     const items = group.items.filter((item) => {
+      if (item.id === "google-meet") {
+        return canAccessIntegrationsPage(access.orgRole);
+      }
       if (
         item.id === "usage" ||
         item.id === "plugin-management" ||
@@ -242,12 +252,12 @@ export function visibleNavGroups(access: {
 const queryPath = (path: string, params: Record<string, string>): string =>
   `${path}?${new URLSearchParams(params)}`;
 
-export const toolsTabPath = (): string => PAGE_PATHS.tools;
+const toolsTabPath = (): string => PAGE_PATHS.tools;
 
 export const pluginManagementPath = (): string =>
   PAGE_PATHS["plugin-management"];
 
-export const PLUGIN_PAGE_PREFIX = "/plugins";
+const PLUGIN_PAGE_PREFIX = "/plugins";
 
 export function pluginPagePath(pluginId: string): string {
   return `${PLUGIN_PAGE_PREFIX}/${encodeURIComponent(pluginId)}`;
@@ -394,6 +404,7 @@ export const PAGE_PATHS: Record<PageId, string> = {
   chat: "/chat",
   customize: "/customize",
   files: "/files",
+  "google-meet": "/plugins/google-meet",
   mcp: "/customize/mcp",
   notifications: "/notifications",
   organization: "/organization",
@@ -445,6 +456,9 @@ export function findNavItem(pageId: PageId): NavItem | undefined {
 }
 
 export function pageIdFromPath(pathname: string): PageId | null {
+  if (pathname === "/plugins/google-meet") {
+    return "google-meet";
+  }
   if (pathname === "/tasks") {
     return "automations";
   }

@@ -9,6 +9,7 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
   "openrouter",
   "gemini",
   "deepseek",
+  "netra",
   "doubao",
   "mistral",
   "perplexity",
@@ -35,7 +36,6 @@ export const USER_PROVIDER_NAMES: readonly UserProviderName[] = [
 ] as const;
 
 export {
-  DISCOVERY_MODEL_PROVIDERS,
   defaultDiscoveryBaseUrl,
   isDiscoveryModelProvider,
 } from "./discovery-providers";
@@ -51,6 +51,7 @@ export function parseProviderName(
     normalized === "openrouter" ||
     normalized === "gemini" ||
     normalized === "deepseek" ||
+    normalized === "netra" ||
     normalized === "doubao" ||
     normalized === "mistral" ||
     normalized === "perplexity" ||
@@ -93,6 +94,8 @@ export function apiKeyEnvVarForProvider(
       return "GEMINI_API_KEY";
     case "deepseek":
       return null;
+    case "netra":
+      return "NETRA_API_KEY";
     case "doubao":
       return "DOUBAO_API_KEY";
     case "mistral":

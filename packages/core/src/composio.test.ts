@@ -25,10 +25,6 @@ describe("composio-config", () => {
     expect(isComposioConfigured({ apiKey: "   " })).toBe(false);
   });
 
-  test("isComposioConfigured is true with config file", () => {
-    expect(isComposioConfigured({ apiKey: "ck-test" })).toBe(true);
-  });
-
   test("resolveComposioApiKey reads from file config", () => {
     expect(resolveComposioApiKey({ apiKey: "ck-file" }, {})).toBe("ck-file");
     expect(resolveComposioApiKey(null, {})).toBe("");

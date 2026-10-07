@@ -3,30 +3,35 @@ import {
   assertChannelPath,
   type ChannelConfigScope,
   claimChannelIdentity,
-  generateHandshakeCode,
+  createPairingCodeSecret,
   getChannelConfigDir,
+  hasActiveHandshakeCode,
   isBotChannelUserAuthorized,
   isChannelOwner,
   loadBotChannelIniConfig,
   maskBotToken,
   releaseChannelClaims,
   resetChannelConversationState,
-  resolveHandshakeCodeOnSave,
+  resolveHandshakeOnSave,
   verifyAndPairBotChannelUser,
   writeBotChannelIniConfig,
 } from "./channel-config-shared";
 import { readEnvValue } from "./config";
 
 export {
-  generateHandshakeCode,
+  hasActiveHandshakeCode,
+  isPairingCodeActive,
+  looksLikePairingCode,
   maskBotToken,
-  normalizeHandshakeInput,
 } from "./channel-config-shared";
+export { generatePairingCode } from "./pairing-code";
 
 export const DEFAULT_DISCORD_PROFILE_ID = "default";
 
 export const SNOWFLAKE_PATTERN = /^\d{17,20}$/;
 export const DISCORD_API_BASE_URL = "https://discord.com/api/v10";
+export const DISCORD_USER_AGENT =
+  "DiscordBot (https://github.com/ahmadrosid/nakama, 1.0)";
 
 export function isDiscordSnowflake(value: string): boolean {
   return SNOWFLAKE_PATTERN.test(value);
@@ -36,6 +41,7 @@ export interface DiscordConfigFile {
   allowedUserIds: string[];
   botToken: string;
   handshakeCode: string | null;
+  handshakeExpiresAt: string | null;
   pairedUserIds: string[];
   profileId: string;
 }
@@ -209,7 +215,9 @@ export function toDiscordSettingsPublic(
     allowedUserIds: file.allowedUserIds,
     botTokenMasked: maskBotToken(file.botToken),
     configured: Boolean(file.botToken.trim()),
-    handshakeCode: file.handshakeCode,
+    // An expired code is worse than none: the dashboard would offer a secret
+    // that no longer works.
+    handshakeCode: hasActiveHandshakeCode(file) ? file.handshakeCode : null,
     inviteUrl: null,
     pairedUserIds: file.pairedUserIds,
     profileId: file.profileId,
@@ -281,7 +289,7 @@ function buildSavedDiscordConfig(
   return {
     allowedUserIds,
     botToken,
-    handshakeCode: resolveHandshakeCodeOnSave(existing, allowedUserIds),
+    ...resolveHandshakeOnSave(existing, allowedUserIds),
     pairedUserIds: existing?.pairedUserIds ?? [],
     profileId: resolveDiscordProfileId(input, existing),
   };
@@ -386,9 +394,11 @@ export async function regenerateDiscordHandshake(
     throw new Error("Save a bot token before generating a pairing code.");
   }
 
+  const { code, expiresAt } = createPairingCodeSecret();
   const next: DiscordConfigFile = {
     ...existing,
-    handshakeCode: generateHandshakeCode(),
+    handshakeCode: code,
+    handshakeExpiresAt: expiresAt,
   };
 
   await writeDiscordConfigFile(next, scope);
@@ -401,6 +411,7 @@ export async function verifyAndPairDiscordUser(
   scope: ChannelConfigScope = null
 ): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
   return verifyAndPairBotChannelUser({
+    configDir: getDiscordConfigDir(scope),
     handshakeInput,
     isAuthorized: isDiscordUserAuthorized,
     label: "Discord",
@@ -431,6 +442,7 @@ export function resolveDiscordConfigFromSources(options: {
       : (file?.allowedUserIds ?? []),
     botToken,
     handshakeCode: file?.handshakeCode ?? null,
+    handshakeExpiresAt: file?.handshakeExpiresAt ?? null,
     pairedUserIds: file?.pairedUserIds ?? [],
     profileId:
       env.NAKAMA_DISCORD_PROFILE_ID?.trim() ||

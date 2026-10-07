@@ -8,7 +8,6 @@ import type {
   ProviderChatOptions,
   ProviderClient,
   StreamChatHandlers,
-  ToolCall,
   WireApi,
 } from "@nakama/core";
 import { fetchWithoutIdleTimeout, normalizeBaseUrl } from "@nakama/core";
@@ -23,10 +22,12 @@ import { openAIModelRejectsChatToolsWithReasoning } from "../openai/thinking";
 import {
   buildChatCompletionResult,
   extractOpenAITokenUsage,
+  finalizePendingToolCalls,
   formatHttpErrorBody,
+  mergePendingToolCall,
   normalizeThinkingEffort,
   notifyToolInputDelta,
-  parseJsonRecord,
+  type PendingToolCall,
   readSseEvents,
 } from "../shared";
 
@@ -39,12 +40,6 @@ export interface OpenAICompatibleProviderOptions {
   supportsThinking: boolean;
   /** `responses` targets `/responses`; anything else stays on `/chat/completions`. */
   wireApi?: WireApi;
-}
-
-interface PendingToolCall {
-  arguments: string;
-  id: string;
-  name: string;
 }
 
 export function createOpenAICompatibleProvider(
@@ -80,6 +75,7 @@ export function createOpenAICompatibleProvider(
       return requestChatCompletion(client, label, {
         messages: input.messages,
         model,
+        netra: options.providerName === "netra",
         signal: input.signal,
         system: input.system,
         thinking: options.supportsThinking
@@ -125,7 +121,10 @@ export function createOpenAICompatibleProvider(
           { content: input.prompt, role: "user" },
         ],
         model,
-        responseFormat: useJson ? { type: "json_object" } : undefined,
+        responseFormat:
+          useJson && options.providerName !== "netra"
+            ? { type: "json_object" }
+            : undefined,
       });
     },
     name: options.providerName ?? "openai_compatible",
@@ -150,6 +149,7 @@ export function createOpenAICompatibleProvider(
         label,
         messages: input.messages,
         model,
+        netra: options.providerName === "netra",
         signal: input.signal,
         system: input.system,
         thinking: options.supportsThinking
@@ -181,12 +181,13 @@ function formatSdkError(label: string, error: unknown): Error {
 
 async function buildMessages(
   system: string,
-  messages: ChatMessage[]
+  messages: ChatMessage[],
+  netra = false
 ): Promise<OpenAI.Chat.ChatCompletionMessageParam[]> {
   return (await toOpenAIMessages(
     system,
     messages,
-    "openai_compatible"
+    netra ? "netra" : "openai_compatible"
   )) as OpenAI.Chat.ChatCompletionMessageParam[];
 }
 
@@ -199,12 +200,24 @@ function readReasoningText(
   }
 
   const record = value as Record<string, unknown>;
+  const details = readReasoningDetails(value);
+  const detailText = details
+    .map((item) => {
+      const detail = item as Record<string, unknown>;
+      return typeof detail.text === "string"
+        ? detail.text
+        : typeof detail.summary === "string"
+          ? detail.summary
+          : "";
+    })
+    .join("");
   const direct =
-    typeof record.reasoning === "string"
+    detailText ||
+    (typeof record.reasoning === "string"
       ? record.reasoning
       : typeof record.reasoning_content === "string"
         ? record.reasoning_content
-        : undefined;
+        : undefined);
 
   if (direct === undefined) {
     return;
@@ -218,10 +231,23 @@ function readReasoningText(
   return trimmed ? trimmed : undefined;
 }
 
+function readReasoningDetails(value: unknown): unknown[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return [];
+  }
+  const details = (value as Record<string, unknown>).reasoning_details;
+  return Array.isArray(details) ? details : [];
+}
+
 function buildThinkingBody(
   thinking: ProviderChatOptions["thinking"] | undefined,
-  options: { model: string; hasTools: boolean }
+  options: { model: string; hasTools: boolean; netra?: boolean }
 ) {
+  if (options.netra) {
+    return thinking?.enabled
+      ? { reasoning: { effort: thinking.effort === "low" ? "low" : "high" } }
+      : { reasoning: { enabled: false } };
+  }
   if (
     options.hasTools &&
     options.model.trim().toLowerCase().startsWith("gpt-6-astra")
@@ -261,16 +287,22 @@ async function requestChatCompletion(
     signal?: AbortSignal;
     tools?: LlmToolDefinition[];
     thinking?: ProviderChatOptions["thinking"];
+    netra?: boolean;
   }
 ): Promise<ChatCompletionResult> {
   try {
     const completion = await client.chat.completions.create(
       {
-        messages: await buildMessages(options.system, options.messages),
+        messages: await buildMessages(
+          options.system,
+          options.messages,
+          options.netra
+        ),
         model: options.model,
         ...buildThinkingBody(options.thinking, {
           hasTools: Boolean(options.tools?.length),
           model: options.model,
+          netra: options.netra,
         }),
         ...(options.tools?.length
           ? {
@@ -293,6 +325,7 @@ async function requestChatCompletion(
     );
     const content = message?.content ?? "";
     const thinking = readReasoningText(message);
+    const reasoningDetails = options.netra ? readReasoningDetails(message) : [];
 
     if (!content.trim() && toolCalls.length === 0 && !thinking?.trim()) {
       throw new Error(`${label} returned an empty response.`);
@@ -300,6 +333,7 @@ async function requestChatCompletion(
 
     return buildChatCompletionResult({
       content,
+      providerContent: reasoningDetails,
       thinking,
       toolCalls,
       usage: extractOpenAITokenUsage(completion.usage),
@@ -318,6 +352,7 @@ async function streamChatCompletion(options: {
   messages: ChatMessage[];
   tools?: LlmToolDefinition[];
   thinking?: ProviderChatOptions["thinking"];
+  netra?: boolean;
   handlers: StreamChatHandlers;
   signal?: AbortSignal;
 }): Promise<ChatCompletionResult> {
@@ -325,13 +360,18 @@ async function streamChatCompletion(options: {
     `${options.baseUrl}/chat/completions`,
     {
       body: JSON.stringify({
-        messages: await buildMessages(options.system, options.messages),
+        messages: await buildMessages(
+          options.system,
+          options.messages,
+          options.netra
+        ),
         model: options.model,
         stream: true,
         stream_options: { include_usage: true },
         ...buildThinkingBody(options.thinking, {
           hasTools: Boolean(options.tools?.length),
           model: options.model,
+          netra: options.netra,
         }),
         ...(options.tools?.length
           ? {
@@ -372,10 +412,12 @@ async function streamChatCompletion(options: {
   let content = "";
   let thinking = "";
   let usage: ChatCompletionResult["usage"];
+  const reasoningDetails: unknown[] = [];
   const pending = new Map<number, PendingToolCall>();
 
-  await readSseEvents(response.body, ({ data }) => {
+  const ended = await readSseEvents(response.body, ({ data, event }) => {
     const payload = JSON.parse(data) as {
+      error?: unknown;
       usage?: Record<string, unknown>;
       choices?: Array<{
         delta?: {
@@ -389,9 +431,16 @@ async function streamChatCompletion(options: {
       }>;
     };
 
+    if (options.netra && (event === "error" || payload.error)) {
+      throw new Error(`${options.label} stream failed after it started.`);
+    }
+
     usage = extractOpenAITokenUsage(payload.usage) ?? usage;
 
     const delta = payload.choices?.[0]?.delta;
+    if (options.netra) {
+      reasoningDetails.push(...readReasoningDetails(delta));
+    }
 
     if (delta?.content) {
       content += delta.content;
@@ -423,13 +472,23 @@ async function streamChatCompletion(options: {
     }
   });
 
+  if (options.netra && !ended) {
+    throw new Error(`${options.label} stream ended before [DONE].`);
+  }
+
   const toolCalls = finalizePendingToolCalls(pending);
 
   if (!content.trim() && toolCalls.length === 0 && !thinking.trim()) {
     throw new Error(`${options.label} returned an empty response.`);
   }
 
-  return buildChatCompletionResult({ content, thinking, toolCalls, usage });
+  return buildChatCompletionResult({
+    content,
+    providerContent: reasoningDetails,
+    thinking,
+    toolCalls,
+    usage,
+  });
 }
 
 async function requestCompletion(
@@ -464,55 +523,4 @@ async function requestCompletion(
   } catch (error) {
     throw formatSdkError(label, error);
   }
-}
-
-function mergePendingToolCall(
-  pending: Map<number, PendingToolCall>,
-  toolDelta: {
-    index?: number;
-    id?: string;
-    function?: { name?: string; arguments?: string };
-  }
-): void {
-  const index = toolDelta.index ?? 0;
-  const current = pending.get(index) ?? {
-    arguments: "",
-    id: "",
-    name: "",
-  };
-
-  if (toolDelta.id) {
-    current.id = toolDelta.id;
-  }
-
-  if (toolDelta.function?.name) {
-    current.name = toolDelta.function.name;
-  }
-
-  if (toolDelta.function?.arguments) {
-    current.arguments += toolDelta.function.arguments;
-  }
-
-  pending.set(index, current);
-}
-
-function finalizePendingToolCalls(
-  pending: Map<number, PendingToolCall>
-): ToolCall[] {
-  return [...pending.entries()]
-    .sort(([left], [right]) => left - right)
-    .map(([, call]) => call)
-    .flatMap((call) => {
-      if (!(call.id && call.name)) {
-        return [];
-      }
-
-      return [
-        {
-          arguments: parseJsonRecord(call.arguments),
-          id: call.id,
-          name: call.name,
-        },
-      ];
-    });
 }

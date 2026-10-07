@@ -1,7 +1,6 @@
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import type { ListUserOrgsResponse, UserOrgSummary } from "./contract";
 import { readTextOrNull, writeTextFile } from "./fs";
-import { getUserConfigDir } from "./user-config";
 
 export type ChannelOrgSelectionChannel = "telegram" | "whatsapp" | "discord";
 
@@ -11,12 +10,6 @@ export interface ChannelOrgRecord {
 }
 
 type ChannelOrgMap = Record<string, ChannelOrgRecord>;
-
-export function getChannelOrgSelectionPath(
-  channel: ChannelOrgSelectionChannel
-): string {
-  return join(getUserConfigDir(), channel, "org-selection.json");
-}
 
 export class ChannelOrgStore {
   private readonly path: string;
@@ -113,24 +106,6 @@ export function findOrgBySelectionInput(
         org.name.toLowerCase() === normalized
     ) ?? null
   );
-}
-
-export function isOrgSelectionInput(input: string, orgCount: number): boolean {
-  if (orgCount <= 1) {
-    return false;
-  }
-
-  const trimmed = input.trim();
-  if (!trimmed || trimmed.startsWith("/") || /\s/.test(trimmed)) {
-    return false;
-  }
-
-  const index = Number(trimmed);
-  if (Number.isInteger(index) && index >= 1 && index <= orgCount) {
-    return true;
-  }
-
-  return trimmed.length > 0;
 }
 
 export type PrepareChannelOrgResult =

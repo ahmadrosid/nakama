@@ -14,8 +14,8 @@ import {
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireOrgAdminFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
+  requirePlatformAdminFromContext,
 } from "../org-guards";
 import { errorResponse, getRequestAuth, readJson } from "../shared";
 import type { HonoApp } from "../types";
@@ -167,6 +167,10 @@ export function registerSystemRoutes(
         content: { "application/json": { schema: errorSchema } },
         description: "Error",
       },
+      403: {
+        content: { "application/json": { schema: errorSchema } },
+        description: "Platform admin required",
+      },
     },
     summary: "Persist the public web app URL for OAuth callbacks",
     tags: ["Health"],
@@ -189,6 +193,10 @@ export function registerSystemRoutes(
           },
         },
         description: "Web public URL settings",
+      },
+      403: {
+        content: { "application/json": { schema: errorSchema } },
+        description: "Platform admin required",
       },
     },
     summary: "Read the saved public web app URL for OAuth callbacks",
@@ -240,28 +248,35 @@ export function registerSystemRoutes(
 
   app.openapi(systemStatusRoute, async (c) => {
     const profileId = c.req.query("profileId")?.trim();
-    const orgId = getRequestAuth(c).activeOrgId ?? null;
+    const auth = getRequestAuth(c);
+    const orgId = auth.activeOrgId ?? null;
     if (profileId) {
       requireOrgAdminOrPlatformAdminFromContext(c);
       await agent.getProfile(requireActiveOrgIdFromContext(c), profileId);
     }
     return c.json(
       await systemStatus.getStatus(
-        profileId && orgId ? { orgId, profileId } : orgId
+        profileId && orgId ? { orgId, profileId } : orgId,
+        {
+          includeUsageByActor: auth.orgRole === "admin" || auth.isPlatformAdmin,
+        }
       ),
       200
     );
   });
 
   app.openapi(getWebPublicUrlRoute, async (c) => {
-    requireOrgAdminFromContext(c);
+    requirePlatformAdminFromContext(c);
     return c.json(await getWebPublicUrlSettings(), 200);
   });
 
   app.openAPIRegistry.registerPath(updateWebPublicUrlRoute);
 
   app.put("/v1/system/web-public-url", async (c) => {
-    requireOrgAdminFromContext(c);
+    // Install-wide config, not an organization setting: this base is where
+    // OAuth state and share links are delivered, so an org admin must not be
+    // able to point it at a host they control.
+    requirePlatformAdminFromContext(c);
     const body = await readJson<UpdateWebPublicUrlRequest>(c.req.raw);
     // Only the body sets this. Falling back to Origin/Referer would let a header
     // pin the base an OAuth code is delivered to, which is what #712 took away
@@ -274,7 +289,9 @@ export function registerSystemRoutes(
 
     try {
       return c.json(
-        { webPublicUrl: await persistWebPublicUrl(webPublicUrl) },
+        {
+          webPublicUrl: await persistWebPublicUrl(webPublicUrl, c.req.raw),
+        },
         200
       );
     } catch (error) {
