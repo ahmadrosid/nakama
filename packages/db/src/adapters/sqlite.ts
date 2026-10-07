@@ -2313,26 +2313,32 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       archived_at = excluded.archived_at,
       updated_at = excluded.updated_at
   `);
+  // One row per LLM call in flight. Usage already spent comes from the ledger
+  // (?5, ?6), so a hold only has to cover calls that have not reported yet.
+  // ponytail: a hold older than an hour belongs to a call that died without
+  // releasing (crash, hung provider) and is ignored; nothing sweeps those rows.
   const tryReserveMonthlyLlmQuotaStmt = db.prepare(`
-    INSERT INTO org_llm_monthly_quota (
-      org_id, month, reserved_turns, reserved_tokens, updated_at
+    WITH held AS (
+      SELECT COUNT(*) AS turns, COALESCE(SUM(reserved_tokens), 0) AS tokens
+      FROM org_llm_quota_reservations
+      WHERE org_id = ?1
+        AND created_at > strftime('%Y-%m-%dT%H:%M:%fZ', ?4, '-1 hour')
     )
-    SELECT o.id, ?, ? + 1, ? + ?, ?
-    FROM organizations AS o
-    WHERE o.id = ?
+    INSERT INTO org_llm_quota_reservations (
+      id, org_id, reserved_tokens, created_at
+    )
+    SELECT ?2, o.id, ?3, ?4
+    FROM organizations AS o, held
+    WHERE o.id = ?1
       AND o.archived_at IS NULL
-      AND (o.monthly_llm_turn_limit IS NULL OR o.monthly_llm_turn_limit <= 0 OR ? + 1 <= o.monthly_llm_turn_limit)
-      AND (o.monthly_llm_token_limit IS NULL OR o.monthly_llm_token_limit <= 0 OR ? + ? <= o.monthly_llm_token_limit)
-    ON CONFLICT(org_id, month) DO UPDATE SET
-      reserved_turns = org_llm_monthly_quota.reserved_turns + 1,
-      reserved_tokens = org_llm_monthly_quota.reserved_tokens + excluded.reserved_tokens,
-      updated_at = excluded.updated_at
-    WHERE
-      (COALESCE((SELECT monthly_llm_turn_limit FROM organizations WHERE id = org_llm_monthly_quota.org_id), 0) <= 0
-        OR org_llm_monthly_quota.reserved_turns + 1 <= (SELECT monthly_llm_turn_limit FROM organizations WHERE id = org_llm_monthly_quota.org_id))
-      AND (COALESCE((SELECT monthly_llm_token_limit FROM organizations WHERE id = org_llm_monthly_quota.org_id), 0) <= 0
-        OR org_llm_monthly_quota.reserved_tokens + excluded.reserved_tokens <= (SELECT monthly_llm_token_limit FROM organizations WHERE id = org_llm_monthly_quota.org_id));
+      AND (o.monthly_llm_turn_limit IS NULL OR o.monthly_llm_turn_limit <= 0 OR ?5 + held.turns + 1 <= o.monthly_llm_turn_limit)
+      AND (o.monthly_llm_token_limit IS NULL OR o.monthly_llm_token_limit <= 0 OR ?6 + held.tokens + ?3 <= o.monthly_llm_token_limit)
   `);
+  // Deleting the row is the release, so a second call for the same id frees
+  // nothing and the held total cannot go below zero.
+  const releaseMonthlyLlmQuotaStmt = db.prepare(
+    "DELETE FROM org_llm_quota_reservations WHERE id = ? AND org_id = ?"
+  );
   const listOrganizationsStmt = db.prepare(`
     SELECT id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
@@ -4510,6 +4516,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return publishOrgPluginReleaseTx(input);
     },
 
+    async releaseMonthlyLlmQuota(orgId, reservationId) {
+      releaseMonthlyLlmQuotaStmt.run(reservationId, orgId);
+    },
+
     async renameFilePins(orgId, profileId, oldPath, newPath) {
       if (oldPath === newPath) {
         return;
@@ -4613,15 +4623,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async tryReserveMonthlyLlmQuota(input) {
       const result = tryReserveMonthlyLlmQuotaStmt.run(
-        input.month,
-        input.existingTurns,
-        input.existingTokens,
-        input.reservedTokens,
-        input.updatedAt,
         input.orgId,
+        input.reservationId,
+        input.reservedTokens,
+        input.createdAt,
         input.existingTurns,
-        input.existingTokens,
-        input.reservedTokens
+        input.existingTokens
       );
       return result.changes === 1;
     },

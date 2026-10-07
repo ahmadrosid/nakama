@@ -1485,3 +1485,40 @@ test("file pins migrate existing databases, survive reopen and cascade with prof
     rmSync(directory, { force: true, recursive: true });
   }
 });
+
+test("llm quota reservations: an upgrade drops the old counter table and its false exhaustion", () => {
+  const db = new Database(":memory:");
+  try {
+    migrateDatabase(db);
+    db.exec(`
+      INSERT INTO organizations (id, name, slug, created_at, updated_at)
+      VALUES ('org_acme', 'Acme', 'acme', '2026-01-01', '2026-01-01');
+      DROP TABLE org_llm_quota_reservations;
+      CREATE TABLE org_llm_monthly_quota (
+        org_id TEXT NOT NULL,
+        month TEXT NOT NULL,
+        reserved_turns INTEGER NOT NULL DEFAULT 0,
+        reserved_tokens INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (org_id, month)
+      );
+      INSERT INTO org_llm_monthly_quota
+      VALUES ('org_acme', '2026-10', 900, 9000000, '2026-10-01');
+    `);
+
+    migrateDatabase(db);
+    migrateDatabase(db);
+
+    const tables = db
+      .query(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'org_llm_%quota%' ORDER BY name"
+      )
+      .all();
+    expect(tables).toEqual([{ name: "org_llm_quota_reservations" }]);
+    expect(
+      db.query("SELECT COUNT(*) AS held FROM org_llm_quota_reservations").get()
+    ).toEqual({ held: 0 });
+  } finally {
+    db.close();
+  }
+});

@@ -666,6 +666,7 @@ describe("agent chat tool loop", () => {
               if (checks === 2) {
                 throw new Error("Quota exhausted");
               }
+              return () => Promise.resolve();
             },
           },
           tools: [sampleTool],
