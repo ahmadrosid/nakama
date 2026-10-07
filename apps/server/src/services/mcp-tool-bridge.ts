@@ -1,13 +1,13 @@
 import type { JsonSchema, ToolDefinition } from "@nakama/core";
 import { emptyObjectSchema } from "@nakama/core";
 import type { DatabaseAdapter, StoredMcpServerRecord } from "@nakama/db";
-import type { McpClientManager } from "./mcp-client-manager";
+import type { McpService } from "./mcp-service";
 
 const LLM_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 export function buildMcpToolDefinitions(
   servers: StoredMcpServerRecord[],
-  manager: McpClientManager,
+  mcpService: Pick<McpService, "callTool">,
   db: Pick<DatabaseAdapter, "getMcpServer">,
   orgId: string,
   profileId: string
@@ -41,21 +41,12 @@ export function buildMcpToolDefinitions(
               };
             }
 
-            if (server.transport === "stdio") {
-              await manager.ensureConnected(server, orgId, profileId);
-            } else if (!manager.isConnected(server.id, server.transport)) {
-              return {
-                error: `MCP server "${server.name}" is not connected.`,
-              };
-            }
-
-            return await manager.callTool(
-              server.id,
-              server.transport,
+            return await mcpService.callTool(
+              currentServer,
               cachedTool.name,
               input,
-              server.transport === "stdio" ? profileId : undefined,
-              server.transport === "stdio" ? orgId : undefined
+              orgId,
+              profileId
             );
           } catch (error) {
             return {

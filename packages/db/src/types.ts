@@ -395,7 +395,11 @@ export interface StoredToolOutputSavingsRecord {
   updatedAt: string;
 }
 
-export type McpServerStatus = "connected" | "disconnected" | "error";
+export type McpServerStatus =
+  | "connected"
+  | "disconnected"
+  | "error"
+  | "needs_auth";
 export type McpTransport = "http" | "stdio";
 
 export interface CachedMcpTool {

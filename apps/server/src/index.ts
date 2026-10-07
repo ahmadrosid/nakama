@@ -218,10 +218,7 @@ const automationService = new AutomationService(database.adapter, {
 const automationDeliveryService = new AutomationDeliveryService(
   automationService,
   {
-    email: createMcpAwareEmailOutboundAdapter(
-      database.adapter,
-      mcpClientManager
-    ),
+    email: createMcpAwareEmailOutboundAdapter(database.adapter, mcpService),
   }
 );
 const automationRunner = new AutomationRunner(

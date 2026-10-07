@@ -1374,23 +1374,15 @@ describe("AutomationRunner", () => {
       version: 1,
     });
 
-    const manager = {
-      callTool: async (
-        _serverId: string,
-        _transport: string,
-        _toolName: string,
-        input: unknown
-      ) => {
+    const mcpService = {
+      callTool: async (_server: unknown, _toolName: string, input: unknown) => {
         sent.push(input as Record<string, unknown>);
         return { ok: true };
       },
-      connect: async () => [],
-      ensureConnected: async () => undefined,
-      isConnected: () => true,
     };
 
     const deliveryService = new AutomationDeliveryService(service, {
-      email: createMcpAwareEmailOutboundAdapter(db, manager as never, {
+      email: createMcpAwareEmailOutboundAdapter(db, mcpService as never, {
         loadConfig: async () => null,
       }),
     });
@@ -1433,18 +1425,14 @@ describe("AutomationRunner", () => {
       db,
       {
         callTool: async (
-          _serverId: string,
-          _transport: string,
+          _server: unknown,
           _toolName: string,
           input: unknown
         ) => {
           sent.push(input as Record<string, unknown>);
           return { ok: true };
         },
-        connect: async () => [],
-        ensureConnected: async () => undefined,
-        isConnected: () => true,
-      } as never,
+      },
       { loadConfig: async () => null }
     );
 

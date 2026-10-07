@@ -4244,7 +4244,7 @@ export class AgentService {
 
     let resolved = [...tools];
 
-    if (this.mcpClientManager) {
+    if (this.mcpService) {
       const mcpServers = await this.db.listMcpServersForProfile(profile.id);
       const orgId = profile.orgId;
 
@@ -4256,7 +4256,7 @@ export class AgentService {
         ...resolved,
         ...buildMcpToolDefinitions(
           mcpServers,
-          this.mcpClientManager,
+          this.mcpService,
           this.db,
           orgId,
           profile.id
