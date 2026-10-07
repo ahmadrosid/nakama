@@ -50,6 +50,7 @@ import {
   useUninstallOrgPlugin,
   useUpdateOrgPlugin,
 } from "@/hooks/use-plugins";
+import { usePinnedPlugins } from "@/hooks/use-sidebar-collapsed";
 import { formatError } from "@/lib/client";
 import {
   canAccessSystemPage,
@@ -925,8 +926,11 @@ function PluginRowMenu({
     ["uninstall", "Uninstall", actions?.uninstall],
     ["purge", "Delete data", actions?.purge],
   ] as const;
+  const { pinned, toggle: togglePin } = usePinnedPlugins();
+  const canPin = plugin?.lifecycleState === "enabled" && plugin.ui !== null;
   const hasMenu =
     !detail ||
+    canPin ||
     (canManageAgentAccess && plugin?.lifecycleState === "enabled") ||
     (canManage && secondaryActions.some(([, , visible]) => visible));
   return hasMenu ? (
@@ -954,6 +958,13 @@ function PluginRowMenu({
             Details
           </DropdownMenuItem>
         )}
+        {canPin ? (
+          <DropdownMenuItem onClick={() => togglePin(pluginId)}>
+            {pinned.includes(pluginId)
+              ? "Unpin from sidebar"
+              : "Pin to sidebar"}
+          </DropdownMenuItem>
+        ) : null}
         {canManageAgentAccess && plugin?.lifecycleState === "enabled" ? (
           <DropdownMenuItem
             disabled={busy}

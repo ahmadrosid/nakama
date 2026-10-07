@@ -38,6 +38,7 @@ import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
 import { usePrefetchAppData, useProfilesQuery } from "@/hooks/use-app-queries";
 import { useAutomationUnreadTotal } from "@/hooks/use-automations";
+import { useOrgPlugins } from "@/hooks/use-plugins";
 import {
   useDeleteSessionMutation,
   useHistorySessionsQuery,
@@ -45,6 +46,7 @@ import {
 } from "@/hooks/use-resource-mutations";
 import {
   useLocalStorageFlag,
+  usePinnedPlugins,
   useSidebarCollapsed,
 } from "@/hooks/use-sidebar-collapsed";
 import {
@@ -53,9 +55,12 @@ import {
   resolveRecentChatsProfileId,
 } from "@/lib/chat-history";
 import {
+  enabledPluginNavEntries,
   type NavItem,
   navHrefForPage,
   pageIdFromPath,
+  pluginIcon,
+  pluginIdFromPath,
   SIDEBAR_PAGE_IDS,
   visibleNavGroups,
 } from "@/lib/navigation";
@@ -87,6 +92,16 @@ export function AppSidebar({
   })
     .flatMap((group) => group.items)
     .filter((item) => SIDEBAR_PAGE_IDS.includes(item.id));
+  const { data: orgPlugins = [] } = useOrgPlugins();
+  const { pinned } = usePinnedPlugins();
+  // Built from the enabled list, so a pin hides while its plugin is off.
+  const pinnedPlugins = enabledPluginNavEntries(orgPlugins).filter((entry) =>
+    pinned.includes(entry.pluginId)
+  );
+  const activePluginId = pluginIdFromPath(location.pathname);
+  const onPinnedPlugin = pinnedPlugins.some(
+    (entry) => entry.pluginId === activePluginId
+  );
 
   return (
     <aside
@@ -108,7 +123,8 @@ export function AppSidebar({
             <SidebarNavButton
               active={
                 item.id === "customize"
-                  ? page === "customize" || !SIDEBAR_PAGE_IDS.includes(page)
+                  ? !onPinnedPlugin &&
+                    (page === "customize" || !SIDEBAR_PAGE_IDS.includes(page))
                   : item.id === page &&
                     (page !== "chat" ||
                       !chatProfileIdFromPath(location.pathname))
@@ -127,6 +143,21 @@ export function AppSidebar({
                 item.id,
                 chatProfileIdFromPath(location.pathname)
               )}
+            />
+          ))}
+          {pinnedPlugins.map((entry) => (
+            <SidebarNavButton
+              active={entry.pluginId === activePluginId}
+              collapsed={collapsed}
+              icon={pluginIcon(entry.pluginId)}
+              item={{
+                description: entry.label,
+                icon: pluginIcon(entry.pluginId),
+                id: "plugins",
+                label: entry.label,
+              }}
+              key={entry.pluginId}
+              to={entry.href}
             />
           ))}
         </div>
