@@ -113,6 +113,30 @@ function PiLogo({ className }: { className?: string }) {
   );
 }
 
+const CODING_AGENT_LOGOS = {
+  agent: CursorLogo,
+  claude: ClaudeLogo,
+  codex: CodexLogo,
+  opencode: OpenCodeLogo,
+  pi: PiLogo,
+} as const;
+
+const CODING_AGENT_COMMAND_PATTERN =
+  /(?:^|[;&|(]\s*)(codex|claude|opencode|pi|agent|cursor-agent)(?=\s|$)/m;
+
+/** Logo for the coding agent a shell command runs, or null. */
+export function getCodingAgentCommandLogo(command: string) {
+  const match = command.trim().match(CODING_AGENT_COMMAND_PATTERN)?.[1];
+  if (!match) {
+    return null;
+  }
+  return CODING_AGENT_LOGOS[
+    match === "cursor-agent"
+      ? "agent"
+      : (match as keyof typeof CODING_AGENT_LOGOS)
+  ];
+}
+
 export function CodingAgentLogo({
   command,
   name,

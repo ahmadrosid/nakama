@@ -34,6 +34,7 @@ import { WebFetchToolRow } from "@/components/chat/WebFetchToolRow";
 import { WebSearchToolRow } from "@/components/chat/WebSearchToolRow";
 import { WorkflowRunToolRow } from "@/components/chat/WorkflowRunToolRow";
 import { WorkspaceFilePreview } from "@/components/chat/workspace-file-preview";
+import { getCodingAgentCommandLogo } from "@/components/coding-agent-logos";
 import { PluginSurface } from "@/components/PluginSurface";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useAuth } from "@/context/use-auth";
@@ -1019,6 +1020,7 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
     <div>
       <CollapsibleTrigger
         className="pl-0"
+        command={command}
         disabled={!hasDetails}
         label={formatToolActionLabel(message.tool, message.toolInput)}
         labelClassName={isError ? "text-red-600 dark:text-red-400" : undefined}
@@ -1058,8 +1060,10 @@ function CollapsibleTrigger({
   labelClassName,
   disabled = false,
   className,
+  command,
   tool,
 }: {
+  command?: string | null;
   open: boolean;
   onToggle: () => void;
   label: string;
@@ -1075,6 +1079,7 @@ function CollapsibleTrigger({
   const ToolIcon =
     (tool ? TOOL_ICONS[tool] : undefined) ??
     (isMcpTool ? McpServerIcon : Wrench01Icon);
+  const AgentLogo = command ? getCodingAgentCommandLogo(command) : null;
 
   return (
     <button
@@ -1091,7 +1096,11 @@ function CollapsibleTrigger({
         aria-hidden="true"
         className="relative z-10 flex h-5 w-3.5 shrink-0 items-center justify-center bg-background"
       >
-        <ToolIcon className="size-3.5 text-muted-foreground opacity-50" />
+        {AgentLogo ? (
+          <AgentLogo className="size-3.5 text-foreground" />
+        ) : (
+          <ToolIcon className="size-3.5 text-muted-foreground opacity-50" />
+        )}
       </span>
       <span className={cn("min-w-0 flex-1 truncate", labelClassName)}>
         {label}
