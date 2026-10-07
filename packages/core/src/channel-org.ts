@@ -1,4 +1,5 @@
 import { dirname } from "node:path";
+import { createChatLock } from "./channel-chat-lock";
 import type { ListUserOrgsResponse, UserOrgSummary } from "./contract";
 import { readTextOrNull, writeTextFile } from "./fs";
 
@@ -10,6 +11,10 @@ export interface ChannelOrgRecord {
 }
 
 type ChannelOrgMap = Record<string, ChannelOrgRecord>;
+
+// Each save rewrites the whole map. Unserialized, an older snapshot can be
+// renamed into place after a newer one and undo it on the next restart.
+const saveLock = createChatLock();
 
 export class ChannelOrgStore {
   private readonly path: string;
@@ -57,9 +62,11 @@ export class ChannelOrgStore {
   }
 
   async save(): Promise<void> {
-    await writeTextFile(this.path, `${JSON.stringify(this.map, null, 2)}\n`, {
-      ensureDir: dirname(this.path),
-    });
+    await saveLock.withLock(this.path, () =>
+      writeTextFile(this.path, `${JSON.stringify(this.map, null, 2)}\n`, {
+        ensureDir: dirname(this.path),
+      })
+    );
   }
 }
 

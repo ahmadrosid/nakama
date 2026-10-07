@@ -22,6 +22,7 @@ import {
   parseOrgMemoryContent,
   rebuildOrgMemoryContent,
 } from "@nakama/core";
+import { createChatLock } from "@nakama/core/channel-chat-lock";
 import {
   pathExists,
   readDirectoryEntries,
@@ -107,6 +108,10 @@ export interface OrgMemoryChangeContext {
   restoredFromId?: string | null;
 }
 
+// MEMORY.md is one file rewritten whole. Module level because the server
+// builds more than one OrgMemoryService. In-process only.
+const memoryLock = createChatLock();
+
 /**
  * Both sides on purpose. Normalization collapses newlines, so the raw bullet is
  * the only place a line-anchored pattern can still be seen: `x\n## Pinned`
@@ -189,14 +194,16 @@ export class OrgMemoryService {
       trimmed.length > 0
         ? `${trimmed.replace(/\n+$/, "")}\n`
         : `${ORG_MEMORY_PREAMBLE}\n`;
-    await this.commitMemory(
-      orgId,
-      normalized,
-      change ?? {
-        action: "edit",
-        label: "Manual edit",
-      }
-    );
+    await this.locked(orgId, async () => {
+      await this.commitMemory(
+        orgId,
+        normalized,
+        change ?? {
+          action: "edit",
+          label: "Manual edit",
+        }
+      );
+    });
   }
 
   async listHistory(
@@ -235,11 +242,13 @@ export class OrgMemoryService {
       throw new NakamaApiError("Org memory history revision not found.", 404);
     }
 
-    await this.commitMemory(orgId, record.content, {
-      action: "restore",
-      actorUserId,
-      label: `Restored snapshot from ${new Date(record.createdAt).toLocaleString()}`,
-      restoredFromId: revisionId,
+    await this.locked(orgId, async () => {
+      await this.commitMemory(orgId, record.content, {
+        action: "restore",
+        actorUserId,
+        label: `Restored snapshot from ${new Date(record.createdAt).toLocaleString()}`,
+        restoredFromId: revisionId,
+      });
     });
     return record.content;
   }
@@ -281,22 +290,24 @@ export class OrgMemoryService {
   ): Promise<void> {
     await this.requireActiveOrganization(orgId);
     const text = this.normalizeBullet(bullet);
-    const content = await this.getMemory(orgId);
-    const parsed = parseOrgMemoryContent(content);
+    await this.locked(orgId, async () => {
+      const content = await this.getMemory(orgId);
+      const parsed = parseOrgMemoryContent(content);
 
-    if (parsed.pinned.some((existing) => existing.trim() === text)) {
-      return;
-    }
-
-    const next = applyApprovedOrgMemoryBullet(content, text, { pin: true });
-    await this.commitMemory(
-      orgId,
-      next,
-      options.change ?? {
-        action: "add_fact",
-        label: `Added fact: ${truncateLabel(text)}`,
+      if (parsed.pinned.some((existing) => existing.trim() === text)) {
+        return;
       }
-    );
+
+      const next = applyApprovedOrgMemoryBullet(content, text, { pin: true });
+      await this.commitMemory(
+        orgId,
+        next,
+        options.change ?? {
+          action: "add_fact",
+          label: `Added fact: ${truncateLabel(text)}`,
+        }
+      );
+    });
   }
 
   async addRecentLogFact(
@@ -306,23 +317,25 @@ export class OrgMemoryService {
     change?: OrgMemoryChangeContext
   ): Promise<void> {
     const text = this.normalizeBullet(bullet);
-    const content = await this.getMemory(orgId);
-    const parsedBefore = parseOrgMemoryContent(content);
-    if (this.bulletExistsInMemory(parsedBefore, text)) {
-      return;
-    }
-    const next = applyApprovedOrgMemoryBullet(content, text, {
-      dateUtc,
-      pin: false,
-    });
-    await this.commitMemory(
-      orgId,
-      next,
-      change ?? {
-        action: "add_fact",
-        label: `Added recent log fact: ${truncateLabel(text)}`,
+    await this.locked(orgId, async () => {
+      const content = await this.getMemory(orgId);
+      const parsedBefore = parseOrgMemoryContent(content);
+      if (this.bulletExistsInMemory(parsedBefore, text)) {
+        return;
       }
-    );
+      const next = applyApprovedOrgMemoryBullet(content, text, {
+        dateUtc,
+        pin: false,
+      });
+      await this.commitMemory(
+        orgId,
+        next,
+        change ?? {
+          action: "add_fact",
+          label: `Added recent log fact: ${truncateLabel(text)}`,
+        }
+      );
+    });
   }
 
   /** Pin an existing bullet (move to pinned if dated, or add). */
@@ -332,31 +345,33 @@ export class OrgMemoryService {
     change?: OrgMemoryChangeContext
   ): Promise<void> {
     const text = this.normalizeBullet(bullet);
-    const content = await this.getMemory(orgId);
-    const parsed = parseOrgMemoryContent(content);
+    await this.locked(orgId, async () => {
+      const content = await this.getMemory(orgId);
+      const parsed = parseOrgMemoryContent(content);
 
-    if (parsed.pinned.some((existing) => existing.trim() === text)) {
-      return;
-    }
+      if (parsed.pinned.some((existing) => existing.trim() === text)) {
+        return;
+      }
 
-    for (const section of parsed.sections) {
-      const index = section.bullets.findIndex(
-        (existing) => existing.trim() === text
+      for (const section of parsed.sections) {
+        const index = section.bullets.findIndex(
+          (existing) => existing.trim() === text
+        );
+        if (index !== -1) {
+          section.bullets.splice(index, 1);
+        }
+      }
+
+      parsed.pinned.push(text);
+      await this.commitMemory(
+        orgId,
+        rebuildOrgMemoryContent(parsed),
+        change ?? {
+          action: "pin",
+          label: `Pinned fact: ${truncateLabel(text)}`,
+        }
       );
-      if (index !== -1) {
-        section.bullets.splice(index, 1);
-      }
-    }
-
-    parsed.pinned.push(text);
-    await this.commitMemory(
-      orgId,
-      rebuildOrgMemoryContent(parsed),
-      change ?? {
-        action: "pin",
-        label: `Pinned fact: ${truncateLabel(text)}`,
-      }
-    );
+    });
   }
 
   /** Remove a bullet from the pinned section. 404 if it is not pinned. */
@@ -366,24 +381,26 @@ export class OrgMemoryService {
     change?: OrgMemoryChangeContext
   ): Promise<void> {
     const text = this.normalizeBullet(bullet);
-    const content = await this.getMemory(orgId);
-    const parsed = parseOrgMemoryContent(content);
+    await this.locked(orgId, async () => {
+      const content = await this.getMemory(orgId);
+      const parsed = parseOrgMemoryContent(content);
 
-    const index = parsed.pinned.findIndex(
-      (existing) => existing.trim() === text
-    );
-    if (index === -1) {
-      throw new NakamaApiError("Pinned fact not found.", 404);
-    }
-    parsed.pinned.splice(index, 1);
-    await this.commitMemory(
-      orgId,
-      rebuildOrgMemoryContent(parsed),
-      change ?? {
-        action: "unpin",
-        label: `Unpinned fact: ${truncateLabel(text)}`,
+      const index = parsed.pinned.findIndex(
+        (existing) => existing.trim() === text
+      );
+      if (index === -1) {
+        throw new NakamaApiError("Pinned fact not found.", 404);
       }
-    );
+      parsed.pinned.splice(index, 1);
+      await this.commitMemory(
+        orgId,
+        rebuildOrgMemoryContent(parsed),
+        change ?? {
+          action: "unpin",
+          label: `Unpinned fact: ${truncateLabel(text)}`,
+        }
+      );
+    });
   }
 
   async archiveEntries(
@@ -403,81 +420,83 @@ export class OrgMemoryService {
       throw new NakamaApiError("No memory entries provided.", 400);
     }
 
-    const content = await this.getMemory(orgId);
-    const parsed = parseOrgMemoryContent(content);
-    const kept: string[] = [];
-    const archived: string[] = [];
-    const unmatched: string[] = [];
+    return this.locked(orgId, async () => {
+      const content = await this.getMemory(orgId);
+      const parsed = parseOrgMemoryContent(content);
+      const kept: string[] = [];
+      const archived: string[] = [];
+      const unmatched: string[] = [];
 
-    for (const bullet of parsed.pinned) {
-      if (targets.has(bullet.trim())) {
-        archived.push(bullet);
-      } else {
-        kept.push(bullet);
+      for (const bullet of parsed.pinned) {
+        if (targets.has(bullet.trim())) {
+          archived.push(bullet);
+        } else {
+          kept.push(bullet);
+        }
       }
-    }
-    for (const target of targets) {
-      if (!archived.some((b) => b.trim() === target)) {
-        unmatched.push(target);
+      for (const target of targets) {
+        if (!archived.some((b) => b.trim() === target)) {
+          unmatched.push(target);
+        }
       }
-    }
-    if (unmatched.length > 0) {
-      throw new NakamaApiError(
-        `Memory entries not found: ${unmatched.join(", ")}`,
-        404
+      if (unmatched.length > 0) {
+        throw new NakamaApiError(
+          `Memory entries not found: ${unmatched.join(", ")}`,
+          404
+        );
+      }
+      if (archived.length === 0) {
+        throw new NakamaApiError("No matching memory entries found.", 404);
+      }
+
+      const archivedAt = options.archivedAt ?? new Date();
+      const yearMonth = `${archivedAt.getFullYear()}-${String(archivedAt.getMonth() + 1).padStart(2, "0")}`;
+      const archiveDir = getOrgMemoryArchiveDir(orgId, this.options.configDir);
+      const archivePath = getOrgMemoryArchiveFilePath(
+        orgId,
+        yearMonth,
+        this.options.configDir
       );
-    }
-    if (archived.length === 0) {
-      throw new NakamaApiError("No matching memory entries found.", 404);
-    }
-
-    const archivedAt = options.archivedAt ?? new Date();
-    const yearMonth = `${archivedAt.getFullYear()}-${String(archivedAt.getMonth() + 1).padStart(2, "0")}`;
-    const archiveDir = getOrgMemoryArchiveDir(orgId, this.options.configDir);
-    const archivePath = getOrgMemoryArchiveFilePath(
-      orgId,
-      yearMonth,
-      this.options.configDir
-    );
-    const appendLines = [`<!-- archived: ${archivedAt.toISOString()} -->`];
-    if (options.reason?.trim()) {
-      appendLines.push(
-        `<!-- reason: ${options.reason.trim().replace(/-->/g, "")} -->`
-      );
-    }
-    appendLines.push("", "## Pinned", "");
-    for (const bullet of archived) {
-      appendLines.push(`- ${bullet}`);
-    }
-    const append = `${appendLines.join("\n")}\n`;
-
-    const archiveExists = await pathExists(archivePath);
-    const archiveContent = archiveExists
-      ? `${(await readText(archivePath)).replace(/\n+$/, "")}\n\n${append}`
-      : `# Archived Org Memory\n\n---\n\n${append}`;
-
-    const activeContent = rebuildOrgMemoryContent({
-      pinned: kept,
-      preamble: parsed.preamble,
-      sections: parsed.sections,
-    });
-    await writeTextFile(archivePath, archiveContent, {
-      ensureDir: archiveDir,
-    });
-    await this.commitMemory(
-      orgId,
-      activeContent,
-      options.change ?? {
-        action: "archive",
-        label: `Archived ${archived.length} pinned ${archived.length === 1 ? "fact" : "facts"}`,
+      const appendLines = [`<!-- archived: ${archivedAt.toISOString()} -->`];
+      if (options.reason?.trim()) {
+        appendLines.push(
+          `<!-- reason: ${options.reason.trim().replace(/-->/g, "")} -->`
+        );
       }
-    );
+      appendLines.push("", "## Pinned", "");
+      for (const bullet of archived) {
+        appendLines.push(`- ${bullet}`);
+      }
+      const append = `${appendLines.join("\n")}\n`;
 
-    return {
-      activeBytes: Buffer.byteLength(activeContent, "utf8"),
-      archived: archived.length,
-      archivePath,
-    };
+      const archiveExists = await pathExists(archivePath);
+      const archiveContent = archiveExists
+        ? `${(await readText(archivePath)).replace(/\n+$/, "")}\n\n${append}`
+        : `# Archived Org Memory\n\n---\n\n${append}`;
+
+      const activeContent = rebuildOrgMemoryContent({
+        pinned: kept,
+        preamble: parsed.preamble,
+        sections: parsed.sections,
+      });
+      await writeTextFile(archivePath, archiveContent, {
+        ensureDir: archiveDir,
+      });
+      await this.commitMemory(
+        orgId,
+        activeContent,
+        options.change ?? {
+          action: "archive",
+          label: `Archived ${archived.length} pinned ${archived.length === 1 ? "fact" : "facts"}`,
+        }
+      );
+
+      return {
+        activeBytes: Buffer.byteLength(activeContent, "utf8"),
+        archived: archived.length,
+        archivePath,
+      };
+    });
   }
 
   async listProposals(
@@ -582,55 +601,60 @@ export class OrgMemoryService {
     options: { pin?: boolean } = {}
   ): Promise<StoredOrgMemoryProposal> {
     const db = this.requireDatabase();
-    const proposal = await this.getProposal(orgId, proposalId);
+    return this.locked(orgId, async () => {
+      const proposal = await this.getProposal(orgId, proposalId);
 
-    if (proposal.status === "approved") {
-      return proposal;
-    }
+      if (proposal.status === "approved") {
+        return proposal;
+      }
 
-    if (proposal.status !== "pending") {
-      throw new NakamaApiError("Only pending proposals can be approved.", 400);
-    }
+      if (proposal.status !== "pending") {
+        throw new NakamaApiError(
+          "Only pending proposals can be approved.",
+          400
+        );
+      }
 
-    // A proposal created before propose_org_memory started rejecting these can
-    // still be sitting in the queue, and approving is the write that matters.
-    // An admin who wants the text anyway can reject this and add the fact
-    // through POST /memory/facts, which is the path meant for a person.
-    assertNoOrgMemoryInjection(
-      proposal.bullet,
-      normalizeOrgMemoryBullet(proposal.bullet)
-    );
+      // A proposal created before propose_org_memory started rejecting these can
+      // still be sitting in the queue, and approving is the write that matters.
+      // An admin who wants the text anyway can reject this and add the fact
+      // through POST /memory/facts, which is the path meant for a person.
+      assertNoOrgMemoryInjection(
+        proposal.bullet,
+        normalizeOrgMemoryBullet(proposal.bullet)
+      );
 
-    const pin = options.pin ?? false;
-    const dateUtc = utcDateString();
-    const content = await this.getMemory(orgId);
+      const pin = options.pin ?? false;
+      const dateUtc = utcDateString();
+      const content = await this.getMemory(orgId);
 
-    const next = applyApprovedOrgMemoryBullet(content, proposal.bullet, {
-      dateUtc,
-      pin,
+      const next = applyApprovedOrgMemoryBullet(content, proposal.bullet, {
+        dateUtc,
+        pin,
+      });
+
+      await this.commitMemory(orgId, next, {
+        action: "approve",
+        actorUserId: reviewerUserId,
+        label: `Approved proposal: ${truncateLabel(proposal.bullet)}`,
+      });
+
+      const reviewedAt = new Date().toISOString();
+      await db.updateOrgMemoryProposalStatus(orgId, proposalId, {
+        pinned: pin,
+        reviewedAt,
+        reviewerUserId,
+        status: "approved",
+      });
+
+      return {
+        ...proposal,
+        pinned: pin,
+        reviewedAt,
+        reviewerUserId,
+        status: "approved",
+      };
     });
-
-    await this.commitMemory(orgId, next, {
-      action: "approve",
-      actorUserId: reviewerUserId,
-      label: `Approved proposal: ${truncateLabel(proposal.bullet)}`,
-    });
-
-    const reviewedAt = new Date().toISOString();
-    await db.updateOrgMemoryProposalStatus(orgId, proposalId, {
-      pinned: pin,
-      reviewedAt,
-      reviewerUserId,
-      status: "approved",
-    });
-
-    return {
-      ...proposal,
-      pinned: pin,
-      reviewedAt,
-      reviewerUserId,
-      status: "approved",
-    };
   }
 
   async rejectProposal(
@@ -780,6 +804,13 @@ export class OrgMemoryService {
     // POST /memory/facts is a person who meant it, and still gets through.
     assertNoOrgMemoryInjection(bullet, text);
     return text;
+  }
+
+  private locked<T>(orgId: string, work: () => Promise<T>): Promise<T> {
+    return memoryLock.withLock(
+      getOrgMemoryFilePath(orgId, this.options.configDir),
+      work
+    );
   }
 
   private requireDatabase(): DatabaseAdapter {
