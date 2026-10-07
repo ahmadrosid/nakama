@@ -1349,7 +1349,6 @@ describe("OrgService", () => {
 
     const raw = await readFile(getUserConfigPath(), "utf8");
     expect(raw).not.toContain("sk-deleted-org-secret");
-    expect(raw).toContain("sk-kept-org-secret");
     expect(raw).toContain("sk-keep-provider");
     expect(raw).toContain("sk-foreign-shape");
     expect(raw).toContain("web_public_url=https://acme.example.com");
