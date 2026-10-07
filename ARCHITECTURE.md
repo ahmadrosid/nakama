@@ -225,13 +225,13 @@ The internal `sessions.app_user_id` column marks retired sessions from the remov
 
 | Area | Tables |
 |---|---|
-| Tenant / auth | `organizations`, `users`, `org_members`, `org_invites`, `browser_sessions`, `channel_org_mappings`, `password_reset_tokens` |
+| Tenant / auth | `organizations`, `users`, `org_members`, `org_invites`, `browser_sessions`, `channel_org_mappings`, `password_reset_tokens`, `user_mfa_backup_codes`, `user_passkeys`, `user_passkey_challenges` |
 | Agent config | `profiles`, `tools`, `profile_tools`, `skills`, `profile_skills`, `profile_skill_usage`, `mcp_servers`, `profile_mcp_servers` |
 | Runtime | `sessions`, `session_messages`, `attachments`, `artifact_shares` |
-| Execution | `automations`, `automation_runs`, `automation_run_read_state`, `workflows`, `workflow_runs`, `workflow_run_steps` |
+| Execution | `automations`, `automation_runs`, `automation_run_read_state`, `automation_run_steps`, `workflows`, `workflow_runs`, `workflow_run_steps` |
 | Approvals | `org_memory_proposals`, `skill_proposals`, `skill_suggestions` |
 | Composio | `composio_toolkits`, `profile_composio_toolkits`, `composio_user_connections` |
-| Notifications | `notification_destinations` |
+| Notifications | `notification_destinations`, `notification_webhook_deliveries` |
 | Plugins | `plugin_releases`, `org_plugins` |
 | Audit / files | `audit_events`, `profile_change_events`, `file_pins` |
 | Analytics / config | `llm_usage_stats`, `llm_usage_model_stats`, `workspace_settings` |
