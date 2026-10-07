@@ -75,38 +75,42 @@ export function OrgLlmQuotaCard() {
             </p>
           ) : null}
           {quota ? (
-            <>
-              {[
-                { label: "Month", value: quota.month },
-                { label: "Status", value: quota.status },
-                {
-                  label: "Turns",
-                  value: `${quota.turns.toLocaleString()} / ${quota.turnLimit ? quota.turnLimit.toLocaleString() : "∞"}`,
-                },
-                {
-                  label: "Tokens",
-                  value: `${quota.tokens.toLocaleString()} / ${quota.tokenLimit ? quota.tokenLimit.toLocaleString() : "∞"}`,
-                },
-              ].map(({ label, value }) => (
-                <div
-                  className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-                  key={label}
-                >
-                  <span>{label}</span>
-                  <span className="text-muted-foreground tabular-nums">
-                    {value}
-                  </span>
-                </div>
-              ))}
-              <p className="px-4 py-3 text-muted-foreground text-xs">
-                Warning at {quota.warningPercent}% · month resets at 00:00 UTC
-              </p>
-            </>
+            <QuotaRows quota={quota} />
           ) : error ? null : (
             <p className="px-4 py-3 text-muted-foreground">Loading usage…</p>
           )}
         </CardContent>
       </Card>
     </section>
+  );
+}
+
+function QuotaRows({ quota }: { quota: OrgLlmQuotaStatusResponse }) {
+  return (
+    <>
+      {[
+        { label: "Month", value: quota.month },
+        { label: "Status", value: quota.status },
+        {
+          label: "Turns",
+          value: `${quota.turns.toLocaleString()} / ${quota.turnLimit ? quota.turnLimit.toLocaleString() : "∞"}`,
+        },
+        {
+          label: "Tokens",
+          value: `${quota.tokens.toLocaleString()} / ${quota.tokenLimit ? quota.tokenLimit.toLocaleString() : "∞"}`,
+        },
+      ].map(({ label, value }) => (
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+          key={label}
+        >
+          <span>{label}</span>
+          <span className="text-muted-foreground tabular-nums">{value}</span>
+        </div>
+      ))}
+      <p className="px-4 py-3 text-muted-foreground text-xs">
+        Warning at {quota.warningPercent}% · month resets at 00:00 UTC
+      </p>
+    </>
   );
 }
