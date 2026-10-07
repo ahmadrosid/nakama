@@ -25,3 +25,44 @@ export function getInitialPinnedCollapsed(): boolean {
     return false;
   }
 }
+
+const PINNED_PLUGINS_KEY = "nakama-sidebar-pinned-plugins";
+const pinnedPluginListeners = new Set<() => void>();
+
+/** Pins belong to one person in one organization, on this browser. */
+export function pinnedPluginsStorageKey(userId: string, orgId: string): string {
+  return `${PINNED_PLUGINS_KEY}:${userId}:${orgId}`;
+}
+
+export function readPinnedPluginIds(key: string | null): string[] {
+  try {
+    const parsed: unknown = JSON.parse(
+      (key && localStorage.getItem(key)) || "[]"
+    );
+    return Array.isArray(parsed)
+      ? parsed.filter((id): id is string => typeof id === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function togglePinnedPlugin(key: string, pluginId: string): void {
+  const pinned = readPinnedPluginIds(key);
+  const next = pinned.includes(pluginId)
+    ? pinned.filter((id) => id !== pluginId)
+    : [...pinned, pluginId];
+  try {
+    localStorage.setItem(key, JSON.stringify(next));
+  } catch {
+    // Ignore storage failures (private browsing, etc.)
+  }
+  for (const listener of pinnedPluginListeners) {
+    listener();
+  }
+}
+
+export function subscribePinnedPlugins(listener: () => void): () => void {
+  pinnedPluginListeners.add(listener);
+  return () => pinnedPluginListeners.delete(listener);
+}
