@@ -507,6 +507,54 @@ Original body.
     expect(detail.skill.body).toBe("Updated body.");
   });
 
+  test("patchSkill records SKILL.md versions", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new SkillsService(db);
+    const profileDir = join(
+      configDir,
+      "orgs",
+      ORG_ID,
+      "profiles",
+      PROFILE_ID,
+      "skills",
+      "notes"
+    );
+    await mkdir(profileDir, { recursive: true });
+    await writeFile(
+      join(profileDir, "SKILL.md"),
+      `---
+name: notes
+description: Capture notes for the user.
+---
+
+Original body.
+`
+    );
+    await service.syncProfileSkills(ORG_ID, PROFILE_ID);
+    const notes = (await service.listSkills()).skills.find(
+      (skill) => skill.name === "notes"
+    );
+    const meta = { actorUserId: "user_1", source: "dashboard" as const };
+
+    await service.patchSkill(ORG_ID, notes!.id, { body: "First." }, { meta });
+    await service.patchSkill(ORG_ID, notes!.id, { body: "Second." }, { meta });
+    await service.patchSkill(ORG_ID, notes!.id, { body: "Second." }, { meta });
+
+    const { versions } = await service.listSkillVersions(ORG_ID, notes!.id);
+    expect(
+      versions.map(({ kind, source, version }) => ({ kind, source, version }))
+    ).toEqual([
+      { kind: "updated", source: "dashboard", version: 3 },
+      { kind: "updated", source: "dashboard", version: 2 },
+      { kind: "original", source: null, version: 1 },
+    ]);
+    expect(versions[2]?.content).toContain("Original body.");
+    expect(versions[0]?.content).toContain("Second.");
+    await expect(
+      service.listSkillVersions("org_other", notes!.id)
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
   test("patchSkill keeps the scripts the skill ships", async () => {
     // A patch edits prose. Rewriting the frontmatter without `scripts:` left
     // the skill installed and every one of its scripts unreachable, with

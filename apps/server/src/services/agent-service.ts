@@ -3645,6 +3645,10 @@ export class AgentService {
     return this.requireSkillsService().listSkillFiles(orgId, skillId);
   }
 
+  async listSkillVersions(orgId: string, skillId: string) {
+    return this.requireSkillsService().listSkillVersions(orgId, skillId);
+  }
+
   async readSkillFile(orgId: string, skillId: string, filePath: string) {
     return this.requireSkillsService().readSkillFile(orgId, skillId, filePath);
   }
@@ -3659,9 +3663,10 @@ export class AgentService {
 
   async createSkill(
     orgId: string,
-    request: CreateSkillRequest
+    request: CreateSkillRequest,
+    options?: { meta?: ProfileChangeMeta }
   ): Promise<SkillResponse> {
-    return this.requireSkillsService().createSkill(orgId, request);
+    return this.requireSkillsService().createSkill(orgId, request, options);
   }
 
   async installSkillFromGitHub(
@@ -3675,7 +3680,7 @@ export class AgentService {
     orgId: string,
     skillId: string,
     request: PatchSkillRequest,
-    options?: { profileId?: string }
+    options?: { meta?: ProfileChangeMeta; profileId?: string }
   ): Promise<SkillResponse> {
     return this.requireSkillsService().patchSkill(
       orgId,

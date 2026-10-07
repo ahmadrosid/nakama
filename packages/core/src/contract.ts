@@ -2351,6 +2351,22 @@ export interface ProfileChangeEvent {
   source: ProfileChangeSource;
 }
 
+export interface SkillVersion {
+  actorName: string | null;
+  content: string;
+  createdAt: string;
+  id: string;
+  /** "original" is the content saved before the first tracked change. */
+  kind: "created" | "original" | "updated";
+  source: ProfileChangeSource | null;
+  version: number;
+}
+
+export interface ListSkillVersionsResponse {
+  /** Newest first. */
+  versions: SkillVersion[];
+}
+
 export interface ListProfileChangeHistoryResponse {
   events: ProfileChangeEvent[];
 }

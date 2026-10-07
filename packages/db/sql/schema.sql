@@ -270,6 +270,22 @@ CREATE TABLE IF NOT EXISTS profile_skills (
   FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE
 );
 
+-- SKILL.md snapshots, one row per saved change.
+CREATE TABLE IF NOT EXISTS skill_versions (
+  id TEXT PRIMARY KEY NOT NULL,
+  skill_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  content TEXT NOT NULL,
+  actor_user_id TEXT,
+  source TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_version
+  ON skill_versions (skill_id, version);
+
 CREATE TABLE IF NOT EXISTS llm_usage_stats (
   org_id TEXT NOT NULL,
   id TEXT NOT NULL,

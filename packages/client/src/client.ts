@@ -111,6 +111,7 @@ import type {
   ListSkillProposalsResponse,
   ListSkillSuggestionsResponse,
   ListSkillsResponse,
+  ListSkillVersionsResponse,
   ListTimezonesResponse,
   ListToolsResponse,
   ListUserOrgsResponse,
@@ -1215,6 +1216,16 @@ export class NakamaClient {
   ): Promise<SkillFilesResponse> {
     return this.request<SkillFilesResponse>(
       `/v1/skills/${encodeURIComponent(skillId)}/files`,
+      { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
+  async listSkillVersions(
+    skillId: string,
+    orgId: string
+  ): Promise<ListSkillVersionsResponse> {
+    return this.request<ListSkillVersionsResponse>(
+      `/v1/skills/${encodeURIComponent(skillId)}/versions`,
       { headers: { "X-Org-Id": orgId } }
     );
   }

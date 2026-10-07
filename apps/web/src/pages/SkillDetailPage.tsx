@@ -239,20 +239,23 @@ function SkillDetailPageContent({
         </aside>
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-5">
           {selectedFile === "SKILL.md" ? (
-            <SkillDetailContent
-              createdBy={createdBy}
-              editBody={editBody}
-              editing={editing}
-              onCancelEdit={handleCancelEdit}
-              onEditBodyChange={setEditBody}
-              onSaveEdit={() => void handleSaveEdit()}
-              onStartEdit={handleStartEdit}
-              saveBusy={patchSkillMutation.isPending}
-              saveError={saveError}
-              showTitle={false}
-              skill={skill}
-              usageSummary={usageSummary}
-            />
+            <div className="space-y-6">
+              <SkillDetailContent
+                createdBy={createdBy}
+                editBody={editBody}
+                editing={editing}
+                onCancelEdit={handleCancelEdit}
+                onEditBodyChange={setEditBody}
+                onSaveEdit={() => void handleSaveEdit()}
+                onStartEdit={handleStartEdit}
+                saveBusy={patchSkillMutation.isPending}
+                saveError={saveError}
+                showTitle={false}
+                skill={skill}
+                usageSummary={usageSummary}
+              />
+              <SkillVersionHistory orgId={orgId} skillId={skill.id} />
+            </div>
           ) : (
             <SkillFilePreview
               orgId={orgId}
@@ -384,8 +387,160 @@ function PageState({ message }: { message: string }) {
   );
 }
 
-import type { SkillFilesResponse } from "@nakama/core/contract";
+import type { SkillFilesResponse, SkillVersion } from "@nakama/core/contract";
 import { useQuery } from "@tanstack/react-query";
+import { buildFileDiffRows, FileDiff } from "@/components/file-diff";
+import {
+  formatSessionRelativeTime,
+  formatSessionTimestamp,
+} from "@/lib/chat-history";
+
+const versionKindLabels: Record<SkillVersion["kind"], string> = {
+  created: "Created",
+  original: "Original",
+  updated: "Updated",
+};
+
+const versionSourceLabels: Record<
+  NonNullable<SkillVersion["source"]>,
+  string
+> = {
+  dashboard: "Dashboard",
+  pack_import: "Pack import",
+  skill_manage: "Agent",
+  super_bot: "Super Bot",
+};
+
+function versionAuthor(version: SkillVersion): string {
+  if (version.actorName) {
+    return version.actorName;
+  }
+  if (version.kind === "original") {
+    return "Before history";
+  }
+  return version.source ? versionSourceLabels[version.source] : "System";
+}
+
+function SkillVersionHistory({
+  orgId,
+  skillId,
+}: {
+  orgId: string;
+  skillId: string;
+}) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const versionsQuery = useQuery({
+    enabled: Boolean(orgId),
+    queryFn: () => client.listSkillVersions(skillId, orgId),
+    queryKey: [...queryKeys.skills.detail(skillId), "versions", orgId],
+  });
+  const versions = versionsQuery.data?.versions ?? [];
+
+  return (
+    <section
+      aria-labelledby="skill-version-history"
+      className="overflow-hidden rounded-lg border border-border bg-card"
+    >
+      <h2
+        className="border-border border-b px-4 py-3 font-medium text-sm"
+        id="skill-version-history"
+      >
+        Version history
+      </h2>
+      {versionsQuery.isLoading && (
+        <p className="px-4 py-3 text-muted-foreground text-sm" role="status">
+          Loading versions…
+        </p>
+      )}
+      {versionsQuery.error && (
+        <p className="px-4 py-3 text-destructive text-sm" role="alert">
+          {formatError(versionsQuery.error)}{" "}
+          <Button
+            className="h-auto p-0"
+            onClick={() => void versionsQuery.refetch()}
+            type="button"
+            variant="link"
+          >
+            Retry
+          </Button>
+        </p>
+      )}
+      {versionsQuery.isSuccess && versions.length === 0 && (
+        <p className="px-4 py-3 text-muted-foreground text-sm">
+          No changes yet.
+        </p>
+      )}
+      {versions.length > 0 && (
+        <ol className="px-4 py-2">
+          {versions.map((version, index) => {
+            const current = index === 0;
+            const open = openId === version.id;
+            const previous = versions[index + 1];
+            return (
+              <li className="relative pl-11" key={version.id}>
+                {index < versions.length - 1 && (
+                  <span
+                    aria-hidden
+                    className="absolute top-10 bottom-0 left-4 w-px bg-border"
+                  />
+                )}
+                <span
+                  aria-hidden
+                  className={cn(
+                    "absolute top-3 left-0 flex size-8 items-center justify-center rounded-full border text-xs tabular-nums",
+                    current
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-border bg-background text-muted-foreground"
+                  )}
+                >
+                  v{version.version}
+                </span>
+                <button
+                  aria-expanded={open}
+                  className="w-full rounded-md px-2 py-3 text-left hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                  onClick={() => setOpenId(open ? null : version.id)}
+                  type="button"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+                      {versionKindLabels[version.kind]}
+                    </span>
+                    {current && (
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
+                        Current
+                      </span>
+                    )}
+                    <span className="sr-only">v{version.version}</span>
+                  </span>
+                  <span className="mt-1 block text-muted-foreground text-sm">
+                    {versionAuthor(version)}
+                    {" · "}
+                    <time
+                      dateTime={version.createdAt}
+                      title={formatSessionTimestamp(version.createdAt)}
+                    >
+                      {formatSessionRelativeTime(version.createdAt)}
+                    </time>
+                  </span>
+                </button>
+                {open && (
+                  <FileDiff
+                    className="mb-3 overflow-hidden rounded-md border border-border"
+                    rows={buildFileDiffRows(
+                      previous?.content ?? null,
+                      version.content
+                    )}
+                    wrap
+                  />
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </section>
+  );
+}
 
 function SkillFilePreview({
   orgId,

@@ -50,6 +50,7 @@ import type {
   StoredSkillRecord,
   StoredSkillSuggestion,
   StoredSkillUsageRecord,
+  StoredSkillVersion,
   StoredToolRecord,
   StoredUserOrganizationRecord,
   StoredUserRecord,
@@ -474,6 +475,17 @@ interface ProfileChangeEventRow {
   org_id: string;
   profile_id: string;
   source: string;
+}
+
+interface SkillVersionRow {
+  actor_user_id: string | null;
+  content: string;
+  created_at: string;
+  id: string;
+  kind: string;
+  skill_id: string;
+  source: string | null;
+  version: number;
 }
 
 interface SkillProposalRow {
@@ -1381,6 +1393,28 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       updated_at = excluded.updated_at
   `);
   const deleteSkillStmt = db.prepare("DELETE FROM skills WHERE id = ?");
+  const deleteSkillVersionsStmt = db.prepare(
+    "DELETE FROM skill_versions WHERE skill_id = ?"
+  );
+  const createSkillVersionStmt = db.prepare(`
+    INSERT INTO skill_versions (
+      id, skill_id, version, kind, content, actor_user_id, source, created_at
+    )
+    SELECT ?, ?, COALESCE(MAX(version), 0) + 1, ?, ?, ?, ?, ?
+    FROM skill_versions WHERE skill_id = ?
+    RETURNING version
+  `);
+  const listSkillVersionsStmt = db.prepare(`
+    SELECT
+      id, skill_id, version, kind, content, actor_user_id, source, created_at
+    FROM skill_versions
+    WHERE skill_id = ?
+    ORDER BY version DESC
+    LIMIT ?
+  `);
+  const clearErasedUserSkillVersionsStmt = db.prepare(
+    "UPDATE skill_versions SET actor_user_id = NULL WHERE actor_user_id = ?"
+  );
   const getPluginReleaseStmt = db.prepare(
     "SELECT * FROM plugin_releases WHERE plugin_id = ? AND version = ?"
   );
@@ -2068,6 +2102,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
       clearErasedUserSkillSuggestionsStmt.run(input.id);
       clearErasedUserProfileEventsStmt.run(input.id);
+      clearErasedUserSkillVersionsStmt.run(input.id);
       deleteErasedUserAutomationReadsStmt.run(input.id);
       deleteErasedUserMembershipsStmt.run(input.id);
       deleteErasedUserChannelMappingsStmt.run(input.id);
@@ -3269,6 +3304,20 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
+    async createSkillVersion(record) {
+      const row = createSkillVersionStmt.get(
+        record.id,
+        record.skillId,
+        record.kind,
+        record.content,
+        record.actorUserId,
+        record.source,
+        record.createdAt,
+        record.skillId
+      ) as { version: number };
+      return { ...record, version: row.version };
+    },
+
     async createUser(record) {
       runCreateUserStmt(record);
     },
@@ -3361,6 +3410,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async deleteSkill(id) {
+      // FK cascade is off (PRAGMA foreign_keys = OFF), so versions go too.
+      deleteSkillVersionsStmt.run(id);
       const result = deleteSkillStmt.run(id);
       return result.changes > 0;
     },
@@ -4333,6 +4384,25 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return listSkillUsageForProfileStmt
         .all(profileId)
         .map((row) => toSkillUsageRecord(row as SkillUsageRow));
+    },
+
+    async listSkillVersions(skillId, options = {}) {
+      const rows = listSkillVersionsStmt.all(
+        skillId,
+        options.limit ?? 50
+      ) as SkillVersionRow[];
+      return rows.map(
+        (row): StoredSkillVersion => ({
+          actorUserId: row.actor_user_id,
+          content: row.content,
+          createdAt: row.created_at,
+          id: row.id,
+          kind: row.kind as StoredSkillVersion["kind"],
+          skillId: row.skill_id,
+          source: row.source as StoredSkillVersion["source"],
+          version: row.version,
+        })
+      );
     },
 
     async listToolOutputSavings(orgId) {
