@@ -19,6 +19,7 @@ const SEED_ENV_KEYS = [
   "NAKAMA_SEED_ADMIN_EMAIL",
   "NAKAMA_SEED_ADMIN_NAME",
   "NAKAMA_SEED_ADMIN_PASSWORD",
+  "NAKAMA_SEED_ADMIN_PASSWORD_HASH",
   "NAKAMA_SEED_ORG_NAME",
   "NAKAMA_CONFIG_DIR",
 ] as const;
@@ -90,6 +91,59 @@ describe("runFirstBootSeed", () => {
       })
     ).rejects.toThrow(/NAKAMA_SEED_ADMIN_NAME/);
 
+    expect(await services.databaseAdapter.countHumanUsers()).toBe(0);
+  });
+
+  test("accepts a Cloud bcrypt hash and keeps the admin on restart", async () => {
+    await withFreshConfigDir();
+    const services = createServices();
+    // Produced by bcryptjs 3.0.3 in the Node control plane.
+    const hash = "$2b$10$49ViSXq0L/bAGSSHXZ5iu.UCyS12mUXKXn.dy7SGmsl8nV8bGJSli";
+    const env = {
+      NAKAMA_SEED_ADMIN_EMAIL: "owner@example.com",
+      NAKAMA_SEED_ADMIN_NAME: "Owner",
+      NAKAMA_SEED_ADMIN_PASSWORD_HASH: hash,
+    };
+
+    expect(await runFirstBootSeed({ ...services, env })).toEqual({
+      seeded: true,
+    });
+    const user =
+      await services.databaseAdapter.getUserByEmail("owner@example.com");
+    expect(user?.passwordHash).toBe(hash);
+    expect(
+      await services.authService.verifyPassword("a-secure-password-123", hash)
+    ).toBe(true);
+    expect(
+      (await services.databaseAdapter.getOrganizationBySlug("personal"))?.name
+    ).toBe("Personal");
+    expect(await runFirstBootSeed({ ...services, env })).toEqual({
+      seeded: false,
+    });
+    expect(await services.databaseAdapter.countHumanUsers()).toBe(1);
+  });
+
+  test("rejects both password inputs and a malformed hash", async () => {
+    await withFreshConfigDir();
+    const services = createServices();
+    const env = {
+      NAKAMA_SEED_ADMIN_EMAIL: "owner@example.com",
+      NAKAMA_SEED_ADMIN_NAME: "Owner",
+      NAKAMA_SEED_ADMIN_PASSWORD_HASH: "bad-hash",
+    };
+
+    await expect(runFirstBootSeed({ ...services, env })).rejects.toThrow(
+      /bcrypt/
+    );
+    await expect(
+      runFirstBootSeed({
+        ...services,
+        env: {
+          ...env,
+          NAKAMA_SEED_ADMIN_PASSWORD: "password123",
+        },
+      })
+    ).rejects.toThrow(/exactly one/);
     expect(await services.databaseAdapter.countHumanUsers()).toBe(0);
   });
 
