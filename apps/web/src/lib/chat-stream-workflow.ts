@@ -166,7 +166,7 @@ export function buildWorkflowRunCard({
   };
 }
 
-export function formatWorkflowRunStatusLabel(
+function formatWorkflowRunStatusLabel(
   status: "running" | "completed" | "failed" | "off",
   isRunning: boolean,
   activeIndex: number,
@@ -272,7 +272,7 @@ export function activeWorkflowStepIndex(views: WorkflowStepView[]): number {
   return Math.max(0, views.length - 1);
 }
 
-export function describeWorkflowStep(step: WorkflowStep): string {
+function describeWorkflowStep(step: WorkflowStep): string {
   if (step.kind === "tool") {
     return step.tool === "web_fetch"
       ? "Web Fetch"
@@ -296,7 +296,7 @@ export function describeWorkflowStep(step: WorkflowStep): string {
   return truncateDisplay(step.prompt, 72);
 }
 
-export function humanizeWorkflowStepId(id: string): string {
+function humanizeWorkflowStepId(id: string): string {
   return id
     .replaceAll(/[_-]+/g, " ")
     .replaceAll(/\b\w/g, (letter) => letter.toUpperCase());

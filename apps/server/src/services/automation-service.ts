@@ -33,6 +33,10 @@ export interface AutomationServiceOptions {
 }
 
 export class AutomationService {
+  private readonly runProgress = new Map<
+    string,
+    Pick<AutomationRunRecord, "output" | "progress">
+  >();
   private readonly store: DatabaseAutomationStore;
   private readonly db: DatabaseAdapter;
   private readonly getUserTimezone: () => Promise<string>;
@@ -123,6 +127,10 @@ export class AutomationService {
     await this.assertProfileAutomationEnabled(profileId);
     const delivery = normalizeAutomationDelivery(input.delivery);
     await validateAutomationDelivery(delivery, {
+      access: {
+        isPlatformAdmin: access?.isPlatformAdmin,
+        orgRole: access?.orgRole,
+      },
       isEmailConfigured: this.canSendEmail
         ? () => this.canSendEmail!(profileId, orgId)
         : undefined,
@@ -193,10 +201,15 @@ export class AutomationService {
     }
 
     await validateAutomationDelivery(delivery, {
+      access: {
+        isPlatformAdmin: access?.isPlatformAdmin,
+        orgRole: access?.orgRole,
+      },
       isEmailConfigured: this.canSendEmail
         ? () => this.canSendEmail!(profileId, orgId)
         : undefined,
       orgId,
+      previousDelivery: existing.delivery,
       profileId,
     });
 
@@ -253,7 +266,21 @@ export class AutomationService {
         ? await this.db.getAutomationRunReadThrough(userId, orgId, automationId)
         : null;
 
-    return runs.map((run) => toRunRecord(run, readThroughAt));
+    return runs.map((run) => ({
+      ...toRunRecord(run, readThroughAt),
+      ...(run.status === "running" ? this.runProgress.get(run.id) : {}),
+    }));
+  }
+
+  setRunProgress(
+    runId: string,
+    progress?: Pick<AutomationRunRecord, "output" | "progress">
+  ): void {
+    if (progress === undefined) {
+      this.runProgress.delete(runId);
+    } else {
+      this.runProgress.set(runId, progress);
+    }
   }
 
   async deleteRun(
@@ -326,18 +353,38 @@ export class AutomationService {
     automationId: string,
     result: { output?: string; error?: string }
   ): Promise<AutomationRunRecord> {
-    const active = await this.db.getActiveAutomationRun(automationId);
-    const run = active?.id === runId ? active : null;
+    const run = await this.db.getAutomationRun(automationId, runId);
 
-    if (!run) {
+    if (!run || run.status !== "running") {
       throw new Error("Automation run not found.");
     }
 
+    const completedAt = new Date().toISOString();
+    const progress = this.runProgress.get(runId)?.progress?.map((message) =>
+      message.role === "tool" && !message.toolCompletedAt
+        ? {
+            ...message,
+            content: JSON.stringify({
+              error: "Run ended before this tool completed.",
+            }),
+            toolCompletedAt: Date.parse(completedAt),
+          }
+        : { ...message }
+    );
+    if (progress && result.output && !result.error) {
+      const last = progress.at(-1);
+      if (last?.role === "assistant" && !last.toolCalls) {
+        last.content = result.output;
+      } else {
+        progress.push({ content: result.output, role: "assistant" });
+      }
+    }
     const updated = {
       ...run,
-      completedAt: new Date().toISOString(),
+      completedAt,
       error: result.error ?? null,
       output: result.output ?? null,
+      progress,
       status: result.error ? ("failed" as const) : ("completed" as const),
     };
 
@@ -459,6 +506,7 @@ function toRunRecord(
     startedAt: string;
     completedAt: string | null;
     output: string | null;
+    progress?: AutomationRunRecord["progress"];
     error: string | null;
     deliveryStatus?: string | null;
     deliveryError?: string | null;
@@ -474,6 +522,7 @@ function toRunRecord(
     error: run.error,
     id: run.id,
     output: run.output,
+    progress: run.progress,
     startedAt: run.startedAt,
     status: run.status,
   };

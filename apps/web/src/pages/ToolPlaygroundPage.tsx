@@ -101,17 +101,20 @@ function ToolPlaygroundPageContent({
     <div className="flex min-h-0 flex-1 flex-col space-y-4 p-6">
       <BackLink />
 
-      <section
-        className={cn(sectionClass, "flex min-h-0 flex-1 overflow-hidden")}
-      >
-        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <section className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
           {isCustomTool ? (
-            <aside className="order-2 shrink-0 overflow-y-auto border-border border-t lg:order-1 lg:w-80 lg:border-t-0 lg:border-r xl:w-96">
+            <aside className="order-2 shrink-0 overflow-y-auto lg:order-1 lg:w-80 xl:w-96">
               <ToolPlaygroundRunForm run={run} tool={tool} />
             </aside>
           ) : null}
 
-          <main className="order-1 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:order-2">
+          <main
+            className={cn(
+              sectionClass,
+              "order-1 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:order-2"
+            )}
+          >
             {isCustomTool ? (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <div

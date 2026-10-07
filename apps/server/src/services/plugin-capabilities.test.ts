@@ -187,7 +187,7 @@ describe("plugin capabilities", () => {
     const copyRoot = join(workspaceRoot, "skills", ".plugins");
     const [copy] = await readdir(copyRoot);
     const instructionPath = join(copyRoot, copy!, "SKILL.md");
-    expect(catalog).toContain(instructionPath);
+    expect(catalog).toContain(JSON.stringify(instructionPath));
     const context = { orgId: ORG_ID, profileId: profile.id, workspaceRoot };
     expect(
       (await runReadFile({ path: instructionPath }, context)).content

@@ -11,7 +11,7 @@ import {
   resolveCodingAgentSpawnBundle,
 } from "./coding-agent-spawn-env";
 
-export async function resolveProfileModelId(
+async function resolveProfileModelId(
   db: DatabaseAdapter,
   profileId: string
 ): Promise<string | null> {

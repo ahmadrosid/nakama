@@ -2,6 +2,7 @@ import { mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { isDocxFile, isLegacyDocFile } from "../artifact-mime";
+import { listArtifactsTool } from "../artifacts";
 import type { ImageAttachment, ToolContext, ToolDefinition } from "../contract";
 import { convertDocxToMarkdown } from "../docx-text";
 import { markdownToDocx } from "../docx-write";
@@ -14,6 +15,7 @@ import { emailTool } from "./email";
 import { extractDocumentTextTool } from "./extract-document-text";
 import { knowledgeBaseSearchTool } from "./knowledge-base-search";
 import {
+  comparablePath,
   getCustomToolsDir,
   guardFilePath,
   PathGuardError,
@@ -244,8 +246,15 @@ export function refuseMemoryFileWrite(
   const name = path
     .relative(resolveWithRealpath(workspaceRoot), resolvedPath)
     .replace(/\\/g, "/");
+  // NTFS opens `memory.md` as MEMORY.md, and a file that does not exist yet
+  // keeps the caller's casing through the path guard. The archive pattern is
+  // all lowercase, so the folded name matches it case-insensitively too.
+  const comparableName = comparablePath(name);
 
-  if (name !== "MEMORY.md" && !MEMORY_ARCHIVE_NAME.test(name)) {
+  if (
+    comparableName !== comparablePath("MEMORY.md") &&
+    !MEMORY_ARCHIVE_NAME.test(comparableName)
+  ) {
     return;
   }
 
@@ -303,40 +312,11 @@ function buildFileGuardOptions(
   options: FileToolRunOptions = {}
 ): PathGuardOptions {
   const workspaceRoot = fileToolWorkspaceRoot(context, options);
-
   return {
     ...defaultGuardOptions,
     allowedDirs: [workspaceRoot, getCustomToolsDir()],
     cwd: workspaceRoot,
   };
-}
-
-/**
- * Where `artifacts/...` resolves to. A session created for an app user runs with
- * that user's soul dir as its workspace root, and the artifact read side looks
- * for the file under `users/<hash>/artifacts`. Resolving the write against the
- * profile root instead put every generated document where the read never looks.
- *
- * Only artifact paths follow the app user. The rest of the soul stack, the
- * knowledge base and the skills live on the profile, and an app-user session
- * still has to read them.
- */
-function artifactWriteRoot(
-  context: ToolContext,
-  options: FileToolRunOptions,
-  targetPath: string
-): string {
-  const profileRoot = fileToolWorkspaceRoot(context, options);
-
-  if (options.workspaceRoot || !isArtifactPath(targetPath)) {
-    return profileRoot;
-  }
-
-  const sessionRoot = context.workspaceRoot?.trim();
-
-  return sessionRoot && path.isAbsolute(sessionRoot)
-    ? sessionRoot
-    : profileRoot;
 }
 
 function assertAbsoluteWorkspaceRoot(workspaceRoot: string): void {
@@ -387,7 +367,7 @@ export async function runWriteFile(
   refuseWordExtension(parsed.path);
   const contentBytes = Buffer.byteLength(parsed.content, "utf8");
   const guardOptions = buildFileGuardOptions(context, options);
-  const artifactRoot = artifactWriteRoot(context, options, parsed.path);
+  const artifactRoot = fileToolWorkspaceRoot(context, options);
 
   const guarded = await guardFilePath(
     parsed.path,
@@ -469,7 +449,7 @@ export async function runWriteDocx(
     bytes.length,
     {
       ...guardOptions,
-      cwd: artifactWriteRoot(context, options, parsed.path),
+      cwd: fileToolWorkspaceRoot(context, options),
     }
   );
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
@@ -940,6 +920,7 @@ export const builtinTools: ToolDefinition[] = [
   deleteFileTool,
   editFileTool,
   readFileTool,
+  listArtifactsTool,
   searchFilesTool,
   knowledgeBaseSearchTool,
   sqliteTool,

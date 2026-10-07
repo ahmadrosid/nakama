@@ -1,19 +1,19 @@
 import { randomBytes } from "node:crypto";
-import { rename, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
 import {
   assertChannelPath,
+  ChannelConfigBusyError,
   type ChannelConfigScope,
   claimChannelIdentity,
-  generateHandshakeCode,
+  createPairingCodeSecret,
   getChannelConfigDir,
   isChannelOwner,
-  normalizeHandshakeInput,
   releaseChannelClaims,
   resetChannelConversationState,
+  withPairingConfigLock,
 } from "./channel-config-shared";
 import {
-  ensureDir,
   parseIni,
   pathExists,
   readDirectoryOrEmpty,
@@ -21,25 +21,61 @@ import {
   removeFile,
   writeTextFile,
 } from "./fs";
+import {
+  generatePairingCode,
+  getPairingAttemptBudget,
+  isPairingAttemptBlocked,
+  isPairingCodeActive,
+  looksLikePairingCode,
+  normalizePairingCode,
+  pairingCodesMatch,
+  pairingFailureMessage,
+  recordPairingFailure,
+} from "./pairing-code";
 import { getUserConfigDir } from "./user-config";
 import { parseAllowedWhatsAppPhones } from "./whatsapp-phones";
 
 export { parseAllowedWhatsAppPhones } from "./whatsapp-phones";
 
-/** WhatsApp name for shared handshake helpers. */
-export const generatePairingCode = generateHandshakeCode;
-export const normalizePairingCode = normalizeHandshakeInput;
+export {
+  generatePairingCode,
+  isPairingCodeActive,
+  looksLikePairingCode,
+  normalizePairingCode,
+};
+
+/** A stored code is only usable while its own expiry is still in the future. */
+export function hasActivePairingCode(
+  config: Pick<
+    WhatsAppConfigFile,
+    "pairingCode" | "pairingCodeExpiresAt"
+  > | null,
+  now = Date.now()
+): boolean {
+  return isPairingCodeActive(
+    config?.pairingCode ?? null,
+    config?.pairingCodeExpiresAt ?? null,
+    now
+  );
+}
 
 export const DEFAULT_WHATSAPP_PROFILE_ID = "default";
+
+const SPENT_PAIRING_SECRET = {
+  pairingCode: null,
+  pairingCodeExpiresAt: null,
+};
 export const DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION = true;
 
 export interface WhatsAppConfigFile {
   allowedPhones: string[];
+  allowUnpairedGroupMembers: boolean;
   outboundPort?: string | null;
   outboundToken?: string | null;
   pairedJid: string | null;
   pairedLid: string | null;
   pairingCode: string | null;
+  pairingCodeExpiresAt: string | null;
   phoneNumber: string;
   profileId: string;
   requireGroupMention: boolean;
@@ -47,6 +83,7 @@ export interface WhatsAppConfigFile {
 
 export interface WhatsAppSettingsPublic {
   allowedPhones: string[];
+  allowUnpairedGroupMembers: boolean;
   configured: boolean;
   pairedJid: string | null;
   pairingCode: string | null;
@@ -57,6 +94,7 @@ export interface WhatsAppSettingsPublic {
 
 export interface UpdateWhatsAppSettingsInput {
   allowedPhones?: string;
+  allowUnpairedGroupMembers?: boolean;
   phoneNumber?: string;
   profileId?: string;
   requireGroupMention?: boolean;
@@ -242,24 +280,33 @@ export async function loadWhatsAppConfigFile(
   const phoneNumber = values.phone_number?.trim() ?? "";
   const profileId = values.profile_id?.trim() || DEFAULT_WHATSAPP_PROFILE_ID;
   const pairingCode = values.pairing_code?.trim() || null;
+  const pairingCodeExpiresAt = values.pairing_code_expires_at?.trim() || null;
   const pairedJid = values.paired_jid?.trim() || null;
   const pairedLid = values.paired_lid?.trim() || null;
   const outboundPort = values.outbound_port?.trim() || null;
   const outboundToken = values.outbound_token?.trim() || null;
+  const requireGroupMention = parseIniBoolean(
+    values.require_group_mention,
+    DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION
+  );
 
   return {
     allowedPhones: parseAllowedWhatsAppPhones(values.allowed_phones ?? ""),
+    // Files written before this setting existed opened the group to everyone
+    // exactly when the mention requirement was off, so a missing value keeps that.
+    allowUnpairedGroupMembers: parseIniBoolean(
+      values.allow_unpaired_group_members,
+      !requireGroupMention
+    ),
     outboundPort,
     outboundToken,
     pairedJid,
     pairedLid,
     pairingCode,
+    pairingCodeExpiresAt,
     phoneNumber,
     profileId,
-    requireGroupMention: parseIniBoolean(
-      values.require_group_mention,
-      DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION
-    ),
+    requireGroupMention,
   };
 }
 
@@ -293,6 +340,7 @@ export function toWhatsAppSettingsPublic(
   if (!file) {
     return {
       allowedPhones: [],
+      allowUnpairedGroupMembers: false,
       configured: false,
       pairedJid: null,
       pairingCode: null,
@@ -304,9 +352,12 @@ export function toWhatsAppSettingsPublic(
 
   return {
     allowedPhones: file.allowedPhones,
+    allowUnpairedGroupMembers: file.allowUnpairedGroupMembers,
     configured: true,
     pairedJid: file.pairedJid,
-    pairingCode: file.pairingCode,
+    // An expired code is worse than none: the dashboard would offer a secret
+    // that no longer works.
+    pairingCode: hasActivePairingCode(file) ? file.pairingCode : null,
     phoneNumberMasked:
       maskPhoneNumber(file.phoneNumber) ??
       maskPhoneNumberFromJid(file.pairedJid),
@@ -331,7 +382,14 @@ async function writeWhatsAppConfigFile(
     ...(config.phoneNumber.trim()
       ? [`phone_number=${config.phoneNumber}`]
       : []),
-    ...(config.pairingCode ? [`pairing_code=${config.pairingCode}`] : []),
+    ...(config.pairingCode
+      ? [
+          `pairing_code=${config.pairingCode}`,
+          ...(config.pairingCodeExpiresAt
+            ? [`pairing_code_expires_at=${config.pairingCodeExpiresAt}`]
+            : []),
+        ]
+      : []),
     ...(config.pairedJid ? [`paired_jid=${config.pairedJid}`] : []),
     ...(config.pairedLid ? [`paired_lid=${config.pairedLid}`] : []),
     ...(config.allowedPhones.length > 0
@@ -340,6 +398,7 @@ async function writeWhatsAppConfigFile(
     ...(config.outboundPort ? [`outbound_port=${config.outboundPort}`] : []),
     ...(config.outboundToken ? [`outbound_token=${config.outboundToken}`] : []),
     `require_group_mention=${config.requireGroupMention ? "true" : "false"}`,
+    `allow_unpaired_group_members=${config.allowUnpairedGroupMembers ? "true" : "false"}`,
     "",
   ];
 
@@ -368,15 +427,23 @@ function resolveProfileId(
   );
 }
 
-function resolvePairingCode(
+function resolvePairingSecret(
   existing: WhatsAppConfigFile | null,
   pairedJid: string | null
-): string | null {
+): { pairingCode: string | null; pairingCodeExpiresAt: string | null } {
   if (pairedJid) {
-    return null;
+    return SPENT_PAIRING_SECRET;
   }
 
-  return existing?.pairingCode ?? null;
+  if (hasActivePairingCode(existing)) {
+    return {
+      pairingCode: existing?.pairingCode ?? null,
+      pairingCodeExpiresAt: existing?.pairingCodeExpiresAt ?? null,
+    };
+  }
+
+  const { code, expiresAt } = createPairingCodeSecret();
+  return { pairingCode: code, pairingCodeExpiresAt: expiresAt };
 }
 
 function buildSavedWhatsAppConfig(
@@ -388,11 +455,15 @@ function buildSavedWhatsAppConfig(
 
   return {
     allowedPhones: resolveAllowedPhones(input, existing),
+    allowUnpairedGroupMembers:
+      input.allowUnpairedGroupMembers ??
+      existing?.allowUnpairedGroupMembers ??
+      false,
     outboundPort: existing?.outboundPort ?? null,
     outboundToken: existing?.outboundToken ?? null,
     pairedJid,
     pairedLid: existing?.pairedLid ?? null,
-    pairingCode: resolvePairingCode(existing, pairedJid),
+    ...resolvePairingSecret(existing, pairedJid),
     phoneNumber,
     profileId: resolveProfileId(input, existing),
     requireGroupMention: resolveRequireGroupMention(input, existing),
@@ -469,7 +540,7 @@ export async function resetWhatsAppSessionForReconnect(
     outboundToken: null,
     pairedJid: null,
     pairedLid: null,
-    pairingCode: null,
+    ...SPENT_PAIRING_SECRET,
   };
 
   await writeWhatsAppConfigFile(next, orgId);
@@ -487,76 +558,94 @@ export async function regenerateWhatsAppPairingCode(
     );
   }
 
+  const { code, expiresAt } = createPairingCodeSecret();
   const next: WhatsAppConfigFile = {
     ...existing,
-    pairingCode: generatePairingCode(),
+    pairingCode: code,
+    pairingCodeExpiresAt: expiresAt,
   };
 
   await writeWhatsAppConfigFile(next, orgId);
   return toWhatsAppSettingsPublic(next);
 }
 
+/**
+ * One pairing transaction: check the budget, compare in constant time, then
+ * consume the code under an exclusive lock. Every rejection returns the same
+ * message, so an attacker cannot tell an expired code from a wrong one.
+ */
 export async function verifyAndPairWhatsAppUser(
   pairingCodeInput: string,
   jid: string,
   orgId: WhatsAppConfigScope = null
 ): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
-  const config = await loadWhatsAppConfigFile(orgId);
+  const configDir = getWhatsAppConfigDir(orgId);
+  const failure = {
+    message: pairingFailureMessage("WhatsApp"),
+    ok: false,
+  } as const;
 
-  if (!config) {
-    return {
-      message: "WhatsApp is not configured on the server yet.",
-      ok: false,
-    };
+  try {
+    return await withPairingConfigLock(configDir, async () => {
+      const config = await loadWhatsAppConfigFile(orgId);
+
+      if (!(config && hasActivePairingCode(config))) {
+        return failure;
+      }
+
+      if (isWhatsAppUserAuthorized(jid, config)) {
+        return { message: "This number is already linked.", ok: true };
+      }
+
+      const expected = config.pairingCode as string;
+      const budget = getPairingAttemptBudget(configDir, expected);
+
+      if (isPairingAttemptBlocked(budget)) {
+        return failure;
+      }
+
+      if (!pairingCodesMatch(pairingCodeInput, expected)) {
+        // Exhausting the per-code budget retires the code, so a guessing run
+        // cannot keep at the same secret.
+        if (recordPairingFailure(budget)) {
+          await writeWhatsAppConfigFile(
+            { ...config, ...SPENT_PAIRING_SECRET },
+            orgId
+          );
+        }
+        return failure;
+      }
+
+      const isLid = jid.endsWith("@lid");
+      const phoneFromJid = isLid ? "" : whatsAppUserDigits(jid);
+      const pairedLid = isLid ? jid : config.pairedLid;
+      const pairedJid = isLid
+        ? (config.pairedJid ??
+          (config.phoneNumber ? phoneToWhatsAppJid(config.phoneNumber) : null))
+        : jid;
+
+      await writeWhatsAppConfigFile(
+        {
+          ...config,
+          pairedJid,
+          pairedLid,
+          ...SPENT_PAIRING_SECRET,
+          phoneNumber: phoneFromJid || config.phoneNumber,
+        },
+        orgId
+      );
+
+      return {
+        message: "Linked successfully. You can chat with Nakama now.",
+        ok: true,
+      };
+    });
+  } catch (error) {
+    if (error instanceof ChannelConfigBusyError) {
+      return failure;
+    }
+    throw error;
   }
-
-  if (isWhatsAppUserAuthorized(jid, config)) {
-    return { message: "This number is already linked.", ok: true };
-  }
-
-  const expected = config.pairingCode;
-
-  if (!expected) {
-    return {
-      message:
-        "No pairing code is active. Open this agent’s Connections \u2192 WhatsApp and generate a new code.",
-      ok: false,
-    };
-  }
-
-  if (
-    normalizePairingCode(pairingCodeInput) !== normalizePairingCode(expected)
-  ) {
-    return {
-      message:
-        "Invalid pairing code. Copy it from this agent’s Connections \u2192 WhatsApp and try again.",
-      ok: false,
-    };
-  }
-
-  const isLid = jid.endsWith("@lid");
-  const phoneFromJid = isLid ? "" : whatsAppUserDigits(jid);
-  const pairedLid = isLid ? jid : config.pairedLid;
-  const pairedJid = isLid
-    ? (config.pairedJid ??
-      (config.phoneNumber ? phoneToWhatsAppJid(config.phoneNumber) : null))
-    : jid;
-
-  await writeWhatsAppConfigFile(
-    {
-      ...config,
-      pairedJid,
-      pairedLid,
-      pairingCode: null,
-      phoneNumber: phoneFromJid || config.phoneNumber,
-    },
-    orgId
-  );
-
-  return {
-    message: "Linked successfully. You can chat with Nakama now.",
-    ok: true,
-  };
 }
 
 /** After QR link, pair the owner and store their LID for inbound routing. */
@@ -589,14 +678,15 @@ export async function syncWhatsAppOwnerPairing(
     // Preserve an existing chat LID. `me.lid` can be a device/account LID, which
     // does not always match the private self-chat JID used for inbound messages.
     pairedLid: config.pairedLid ?? ownerLid,
-    pairingCode: null,
+    ...SPENT_PAIRING_SECRET,
     phoneNumber: ownerPhone || config.phoneNumber,
   };
 
   if (
     next.pairedJid === config.pairedJid &&
     next.pairedLid === config.pairedLid &&
-    next.pairingCode === config.pairingCode
+    next.pairingCode === config.pairingCode &&
+    next.pairingCodeExpiresAt === config.pairingCodeExpiresAt
   ) {
     return;
   }
@@ -617,9 +707,11 @@ export function resolveWhatsAppConfigFromSources(options: {
 
   return {
     allowedPhones: file?.allowedPhones ?? [],
+    allowUnpairedGroupMembers: file?.allowUnpairedGroupMembers ?? false,
     pairedJid: file?.pairedJid ?? null,
     pairedLid: file?.pairedLid ?? null,
     pairingCode: file?.pairingCode ?? null,
+    pairingCodeExpiresAt: file?.pairingCodeExpiresAt ?? null,
     phoneNumber:
       env.WHATSAPP_PHONE_NUMBER?.trim() || file?.phoneNumber?.trim() || "",
     profileId:
@@ -673,23 +765,6 @@ export async function listWhatsAppConfigOrgIds(): Promise<string[]> {
     }
   }
   return configured;
-}
-
-/** Called with the oldest organization, after stopping the legacy worker. */
-export async function claimLegacyWhatsAppConfig(
-  orgId: string
-): Promise<boolean> {
-  const legacyDir = getWhatsAppConfigDir();
-  const targetDir = getWhatsAppConfigDir(orgId);
-  if (
-    !(await pathExists(getWhatsAppConfigPath())) ||
-    (await pathExists(targetDir))
-  ) {
-    return false;
-  }
-  await ensureDir(dirname(targetDir));
-  await rename(legacyDir, targetDir);
-  return true;
 }
 
 /** Persist the ephemeral loopback port allocated to this account's worker. */

@@ -34,7 +34,9 @@ const AUTH_PATHS = new Set([
   "/v1/auth/password-reset/request",
   "/v1/auth/password-reset/complete",
   "/v1/auth/setup",
-  "/v1/auth/mfa/totp/verify", // verify totp when user scan qr code
+  "/v1/auth/passkey/login/options",
+  "/v1/auth/mfa/totp/verify",
+  "/v1/auth/mfa/passkey/verify",
 ]);
 
 export interface RateLimitOptions {

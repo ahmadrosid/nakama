@@ -4,6 +4,7 @@ export const BUILTIN_TOOL_IDS = {
   email: "tool_email",
   extract_document_text: "tool_extract_document_text",
   knowledge_base_search: "tool_knowledge_base_search",
+  list_artifacts: "tool_list_artifacts",
   read_file: "tool_read_file",
   search_files: "tool_search_files",
   sqlite: "tool_sqlite",

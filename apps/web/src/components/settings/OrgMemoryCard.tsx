@@ -19,6 +19,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { OrgMemoryHistoryPanel } from "@/components/settings/OrgMemoryHistoryPanel";
 import { OrgMemoryProposalsPanel } from "@/components/settings/OrgMemoryProposalsPanel";
+import type { AuthContextValue } from "@/context/auth-context-shared";
 import { useAuth } from "@/context/use-auth";
 import { useOrgMemory, useUpdateOrgMemory } from "@/hooks/use-org-memory";
 import { useOrgMemoryProposals } from "@/hooks/use-org-memory-proposals";
@@ -169,11 +170,10 @@ function orgMemoryStatusLine(
   return null;
 }
 
-function useOrgMemoryCard() {
-  const { activeOrg } = useAuth();
+function useOrgMemoryCard(org: AuthContextValue["activeOrg"]) {
   const [searchParams] = useSearchParams();
-  const orgId = activeOrg?.id ?? null;
-  const isAdmin = activeOrg?.role === "admin";
+  const orgId = org?.id ?? null;
+  const isAdmin = org?.role === "admin";
 
   const {
     data,
@@ -374,8 +374,12 @@ function OrgMemoryEditDialog({
 }
 
 export function OrgMemoryCard() {
-  const card = useOrgMemoryCard();
+  const { activeOrg } = useAuth();
+  return <OrgMemoryCardForOrg key={activeOrg?.id} org={activeOrg} />;
+}
 
+function OrgMemoryCardForOrg({ org }: { org: AuthContextValue["activeOrg"] }) {
+  const card = useOrgMemoryCard(org);
   if (!card.isAdmin) {
     return null;
   }

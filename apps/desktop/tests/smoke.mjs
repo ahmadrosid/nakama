@@ -6,12 +6,13 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { app, Menu, nativeTheme } from "electron";
+import { app, Menu, nativeImage, nativeTheme } from "electron";
 import {
   configureUpdates,
   createWindow,
   serverUrl,
   startLocalServer,
+  windowIcon,
 } from "../main.mjs";
 
 app.on("window-all-closed", () => {});
@@ -123,6 +124,7 @@ async function run() {
   await new Promise((done) => server.listen(0, "127.0.0.1", done));
   await app.whenReady();
   const url = `http://127.0.0.1:${server.address().port}/chat`;
+  assert.equal(nativeImage.createFromPath(windowIcon).isEmpty(), false);
   const window = await createWindow(url, { show: false });
   assert.equal(window.webContents.getURL(), url);
   assert.equal(

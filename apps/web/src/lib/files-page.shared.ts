@@ -4,7 +4,7 @@ import {
   resolveDefaultProfileId,
 } from "@/lib/chat-history";
 
-export const FILES_VIEW_MODE_STORAGE_KEY = "files-view-mode";
+const FILES_VIEW_MODE_STORAGE_KEY = "files-view-mode";
 
 export type FilesViewMode = "list" | "grid";
 

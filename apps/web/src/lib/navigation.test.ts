@@ -34,6 +34,7 @@ describe("visibleNavGroups", () => {
       "chat",
       "customize",
       "files",
+      "google-meet",
       "mcp",
       "organization",
       "plugin-management",

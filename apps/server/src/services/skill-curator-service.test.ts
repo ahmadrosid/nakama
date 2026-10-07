@@ -221,7 +221,7 @@ describe("SkillCuratorService", () => {
     );
     const stored = await db.getSkill(skillId);
     expect(stored?.sourcePath).toContain(
-      `${SKILL_ARCHIVE_DIR_NAME}/old-playbook`
+      join(SKILL_ARCHIVE_DIR_NAME, "old-playbook")
     );
     const report = await readFile(
       join(getOrgCuratorLogDir(ORG_ID), "run.json"),
@@ -445,7 +445,7 @@ describe("SkillCuratorService", () => {
     expect(result.restoreMisses).toHaveLength(1);
     expect(result.restoreMisses[0]?.skillId).toBe(skillId);
     expect(result.restoreMisses[0]?.archivedDirectory).toContain(
-      `${SKILL_ARCHIVE_DIR_NAME}/stuck-playbook`
+      join(SKILL_ARCHIVE_DIR_NAME, "stuck-playbook")
     );
     expect(await pathExists(archivedSkillMd)).toBe(true);
 

@@ -35,7 +35,7 @@ const DONE = [
   'event: message_delta\r\ndata:{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}\r\n\r\n',
 ];
 
-type CapturedBody = { messages: { content: unknown }[] };
+type CapturedBody = { messages: { content: unknown }[]; thinking?: unknown };
 
 function eventStream(chunks: string[]): Response {
   const encoder = new TextEncoder();
@@ -54,7 +54,10 @@ function eventStream(chunks: string[]): Response {
   });
 }
 
-function providerCapturingBodies(streams: string[][]) {
+function providerCapturingBodies(
+  streams: string[][],
+  model = "claude-sonnet-4-6"
+) {
   const responses = streams.map(eventStream);
   const bodies: CapturedBody[] = [];
   let call = 0;
@@ -71,7 +74,7 @@ function providerCapturingBodies(streams: string[][]) {
   const provider = createAnthropicProvider({
     apiKey: "sk-ant-test",
     fetch: fetchMock as unknown as typeof fetch,
-    model: "claude-sonnet-4-6",
+    model,
   });
 
   return { bodies, provider };
@@ -86,6 +89,86 @@ function replayedBlocks(body: CapturedBody | undefined) {
 }
 
 describe("Anthropic tool input replay", () => {
+  test.each([false, true])(
+    "preserves signed blocks through multiple pauses (stream=%s)",
+    async (stream) => {
+      const signed = {
+        signature: "signed-pause",
+        thinking: "Progress",
+        type: "thinking",
+      };
+      const serverTool = {
+        id: "srv-1",
+        input: { query: "nakama" },
+        name: "web_search",
+        type: "server_tool_use",
+      };
+      const result = {
+        content: [],
+        tool_use_id: "srv-1",
+        type: "web_search_tool_result",
+      };
+      const text = { text: "Done", type: "text" };
+      const responses = [[signed, serverTool], [result], [text], [text]];
+      const bodies: CapturedBody[] = [];
+      const provider = createAnthropicProvider({
+        apiKey: "test-key",
+        fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+          expect(String(init?.body)).not.toContain("_nakamaPrefixHash");
+          bodies.push(JSON.parse(String(init?.body)));
+          const blocks = responses[bodies.length - 1] ?? [];
+          const stopReason = bodies.length < 3 ? "pause_turn" : "end_turn";
+          if (stream && bodies.length < 4) {
+            return eventStream([
+              START,
+              ...blocks.flatMap((block, index) => [
+                `event: content_block_start\ndata: ${JSON.stringify({ content_block: block, index, type: "content_block_start" })}\n\n`,
+                `event: content_block_stop\ndata: ${JSON.stringify({ index, type: "content_block_stop" })}\n\n`,
+              ]),
+              `event: message_delta\ndata: ${JSON.stringify({ delta: { stop_reason: stopReason }, type: "message_delta", usage: { output_tokens: 2 } })}\n\n`,
+            ]);
+          }
+          return Response.json({
+            content: blocks,
+            stop_reason: stopReason,
+            usage: { input_tokens: 10, output_tokens: 2 },
+          });
+        }) as typeof fetch,
+        model: "claude-sonnet-5-5",
+      });
+      const input = {
+        messages: [{ content: "Search", role: "user" as const }],
+        providerOptions: { webSearch: true },
+        system: "s",
+      };
+      const first = stream
+        ? await provider.streamChat(input, { onChunk: () => undefined })
+        : await provider.generateChat(input);
+      expect(bodies[1]?.messages[1]?.content).toEqual([signed, serverTool]);
+      expect(bodies[2]?.messages).toHaveLength(2);
+      expect(bodies[2]?.messages[1]?.content).toEqual([
+        signed,
+        serverTool,
+        result,
+      ]);
+      expect(first.content).toBe("Done");
+      await provider.generateChat({
+        ...input,
+        messages: [
+          ...input.messages,
+          first.assistantMessage,
+          { content: "Next", role: "user" },
+        ],
+      });
+      expect(bodies[3]?.messages[1]?.content).toEqual([
+        signed,
+        serverTool,
+        result,
+        text,
+      ]);
+    }
+  );
+
   test("replays streamed tool input on the next request", async () => {
     const { bodies, provider } = providerCapturingBodies([TOOL_USE, DONE]);
 
@@ -121,7 +204,10 @@ describe("Anthropic tool input replay", () => {
   });
 
   test("replays streamed server tool input on a pause_turn continuation", async () => {
-    const { bodies, provider } = providerCapturingBodies([PAUSE_TURN, DONE]);
+    const { bodies, provider } = providerCapturingBodies(
+      [PAUSE_TURN, DONE],
+      "claude-sonnet-5-5"
+    );
 
     await provider.streamChat(
       { messages: [{ content: "search the web", role: "user" }], system: "s" },
@@ -133,6 +219,9 @@ describe("Anthropic tool input replay", () => {
     );
 
     expect(serverToolUse?.input).toEqual({ query: "nakama" });
+    expect(bodies[1]).toMatchObject({
+      thinking: { type: "between_tools" },
+    });
   });
 
   test("leaves a tool block alone when no input was streamed", async () => {

@@ -51,7 +51,7 @@ export function CustomizePage() {
   }).flatMap((group) => group.items);
   const sections = [
     {
-      pages: ["organization", "usage", "workers", "settings"],
+      pages: ["organization", "usage", "workers", "google-meet", "settings"],
       title: "Workspace",
     },
     {

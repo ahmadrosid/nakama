@@ -62,6 +62,14 @@ export function describeAuditEvent(
     return event("provider.create", "provider");
   }
 
+  match = pathname.match(/^\/v1\/platform\/orgs\/([^/]+)\/permanent$/);
+  if (match && method === "DELETE") {
+    return {
+      ...event("organization.delete", "organization", match[1]),
+      orgId: decodePathPart(match[1]),
+    };
+  }
+
   match = pathname.match(/^\/v1\/settings\/([^/]+)$/);
   if (match && method === "PUT") {
     return event("settings.update", "setting", match[1]);
@@ -80,6 +88,14 @@ export function describeAuditEvent(
   }
   if (pathname === "/v1/platform/orgs" && method === "POST") {
     return event("organization.create", "organization");
+  }
+
+  match = pathname.match(/^\/v1\/platform\/users\/([^/]+)$/);
+  if (match && method === "DELETE") {
+    return {
+      ...event("user.erase", "user", match[1]),
+      orgId: null,
+    };
   }
 
   match = pathname.match(
@@ -204,8 +220,9 @@ export function createAuditLogMiddleware(
       responseIdentity.userId ??
       responseUserId ??
       attemptedUserId;
-    const orgId =
-      descriptor.orgId ?? auth?.activeOrgId ?? responseIdentity.orgId ?? null;
+    const orgId = Object.hasOwn(descriptor, "orgId")
+      ? (descriptor.orgId ?? null)
+      : (auth?.activeOrgId ?? responseIdentity.orgId ?? null);
 
     try {
       await databaseAdapter.createAuditEvent({

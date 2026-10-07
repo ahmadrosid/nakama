@@ -580,7 +580,7 @@ export function SlackSettingsCard({
   }, [settings, applySaved]);
 
   // Pairing happens in Slack, so poll while a code is out and the tab is in
-  // view, for at most ten minutes per code. A code never expires on its own.
+  // view, for at most the code's own ten minute lifetime.
   const pairingCodeValue = settings?.handshakeCode ?? null;
   useEffect(() => {
     if (!pairingCodeValue) {

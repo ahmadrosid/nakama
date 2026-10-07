@@ -162,8 +162,8 @@ export function SkillDetailContent({
         >
           <h2 className="font-medium text-destructive">Script issues</h2>
           <ul className="mt-2 list-disc space-y-1 pl-5">
-            {skill.scriptIssues.map((issue, index) => (
-              <li key={`${issue.path}-${index}`}>
+            {skill.scriptIssues.map((issue) => (
+              <li key={issue.path}>
                 <code className="break-all">{issue.path}</code>: {issue.reason}
               </li>
             ))}

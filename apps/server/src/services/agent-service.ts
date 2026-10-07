@@ -45,6 +45,7 @@ import type {
   ImageAttachment,
   ImageGenerationSettings,
   ImageGenerationSettingsResponse,
+  ImportKnowledgeBaseZipResponse,
   InitSoulResponse,
   InitUserContextResponse,
   InstallSkillRequest,
@@ -65,6 +66,7 @@ import type {
   ProfileResponse,
   ProviderChatOptions,
   ProviderClient,
+  ProviderInstance,
   RunToolResponse,
   SaveInlineAttachment,
   SendEmailTestResponse,
@@ -135,7 +137,6 @@ import {
   defaultOllamaBaseUrl,
   deleteArtifactFile,
   deleteAttachmentBytes,
-  ensureAppUserSoulDir,
   extractImageParts,
   findProviderInstance,
   getActiveProviderInstance,
@@ -205,11 +206,16 @@ import {
   type ChannelConfigScope,
   isChannelOwner,
 } from "@nakama/core/channel-config-shared";
+import {
+  defaultDiscoveryBaseUrl,
+  NETRA_AGENT_MODEL_ID,
+} from "@nakama/core/discovery-providers";
 import { readTextIfExists } from "@nakama/core/fs";
 import { canAccessSuperBotProfile } from "@nakama/core/profiles";
 import {
   type DatabaseAdapter,
   mergeWorkspaceSettings,
+  type StoredAutomationRunStepRecord,
   type StoredProfileRecord,
   type StoredSessionRecord,
   type StoredSessionSummaryRecord,
@@ -221,6 +227,7 @@ import {
   createProviderForInstance,
   createProviderFromActiveConfig,
   fetchFireworksGatewayModels,
+  fetchNetraModels,
   fetchOllamaModels,
   fetchRemoteOpenAIModels,
   getModelsForProviderInstance,
@@ -231,7 +238,6 @@ import {
   fetchChatgptCodexModels,
   refreshChatgptOAuthToken,
 } from "../providers/chatgpt/oauth";
-import { isAllowedImageGenerationSelection } from "../providers/models";
 import { wrapProviderForNonVision } from "../providers/non-vision-wrap";
 import { wrapProviderWithUsageTracking } from "../providers/usage-tracking";
 import {
@@ -239,11 +245,15 @@ import {
   resolveXaiOAuthCredentials,
 } from "../providers/xai-oauth/oauth";
 import { createAskUserQuestionTools } from "../tools/ask-user-question-tool";
+import { formatImageMentionContext } from "../tools/generate-image-tool";
 import {
   createOrgMemoryTools,
   PROPOSE_ORG_MEMORY_TOOL_NAME,
 } from "../tools/org-memory-tools";
-import { createSendDiscordArtifactTools } from "../tools/send-discord-artifact-tool";
+import {
+  createSendDiscordArtifactTools,
+  sendWhatsAppArtifactTool,
+} from "../tools/send-discord-artifact-tool";
 import {
   createSkillManageTools,
   SKILL_MANAGE_CHANNELS,
@@ -371,7 +381,6 @@ interface CognitoSessionOptions {
 }
 
 export interface CreateSessionOptions {
-  appUserId?: string | null;
   codingWorkspaceRoot?: string;
   cognito?: boolean;
   excludeSuperBot?: boolean;
@@ -386,7 +395,6 @@ type ChatProfileAccess = Pick<
 >;
 
 export class AgentService {
-  private harness: AgentDependencies;
   private userConfig: UserConfig | null;
   private readonly db: DatabaseAdapter;
   private readonly profileService: ProfileService;
@@ -483,15 +491,6 @@ export class AgentService {
     this.orgMemoryTools = createOrgMemoryTools(this.getOrgMemoryService());
     this._providerConfigured =
       isProviderConfigured(userConfig) && provider !== null;
-    const activeInstance = getActiveProviderInstance(userConfig);
-    this.harness = this.createHarness({
-      modelId: activeInstance
-        ? resolveDefaultModelForInstance(activeInstance)
-        : null,
-      provider,
-      providerInstance: activeInstance,
-      thinking: this.resolveWorkspaceThinkingDefaults(),
-    });
   }
 
   /**
@@ -742,15 +741,6 @@ export class AgentService {
       };
     }
 
-    this.harness = this.createHarness({
-      modelId: (() => {
-        const active = getActiveProviderInstance(this.userConfig);
-        return active ? resolveDefaultModelForInstance(active) : null;
-      })(),
-      provider: createProviderFromActiveConfig(this.userConfig, process.env),
-      providerInstance: getActiveProviderInstance(this.userConfig),
-      thinking: this.resolveWorkspaceThinkingDefaults(),
-    });
     this.sessions.clear();
 
     return { thinking };
@@ -964,11 +954,13 @@ export class AgentService {
     await this.ensureImageGenerationSettingsLoaded();
     const model = input.model?.trim() || null;
 
-    if (model && !isAllowedImageGenerationSelection(model)) {
-      throw new NakamaApiError(
-        "Only openai::gpt-image-2 is supported for image generation.",
-        400
-      );
+    if (model) {
+      // Same check a generate call runs, so a bad pick fails here, unsaved.
+      resolveImageGenerationSelection({
+        defaultProviderId: this.userConfig?.defaultProviderId ?? null,
+        imageModel: model,
+        providers: this.userConfig?.providers ?? [],
+      });
     }
 
     const imageGeneration: ImageGenerationSettings = { model };
@@ -997,7 +989,8 @@ export class AgentService {
   }
 
   async generateImage(
-    input: GenerateImageRequest
+    input: GenerateImageRequest,
+    orgId: string | null
   ): Promise<GenerateImageResponse> {
     await this.ensureImageGenerationSettingsLoaded();
 
@@ -1014,6 +1007,7 @@ export class AgentService {
 
     const result = await generateImageWithOpenAI({
       apiKey: selection.apiKey,
+      baseUrl: selection.baseUrl,
       model: selection.model,
       prompt,
       size: input.size,
@@ -1023,11 +1017,14 @@ export class AgentService {
       inputTokens: 0,
       outputTokens: 0,
     };
-    this.llmUsageTracker?.record(
-      result.model,
-      usage.inputTokens,
-      usage.outputTokens
-    );
+    if (orgId) {
+      this.llmUsageTracker?.record(
+        result.model,
+        usage.inputTokens,
+        usage.outputTokens,
+        { orgId, pricingContext: { providerInstance: selection.instance } }
+      );
+    }
 
     return {
       data: Buffer.from(result.data).toString("base64"),
@@ -1528,6 +1525,9 @@ export class AgentService {
           ...(input.allowedPhones === undefined
             ? {}
             : { allowedPhones: input.allowedPhones }),
+          ...(input.allowUnpairedGroupMembers === undefined
+            ? {}
+            : { allowUnpairedGroupMembers: input.allowUnpairedGroupMembers }),
           ...(input.phoneNumber === undefined
             ? {}
             : { phoneNumber: input.phoneNumber.trim() }),
@@ -1560,7 +1560,9 @@ export class AgentService {
     profileId: string,
     prompt: string,
     automationId?: string,
-    automationRunId?: string
+    automationRunId?: string,
+    handlers?: Parameters<AgentChatSession["sendStream"]>[1],
+    resume = false
   ): Promise<string> {
     if (!this._providerConfigured) {
       throw new Error("Provider is not configured.");
@@ -1583,29 +1585,152 @@ export class AgentService {
     const userTimezone = await this.getUserTimezone();
     const userContext = await this.loadUserContextForUser(orgId, undefined);
     const harness = this.createHarnessForProfile(profile);
+    const toolContext = buildToolExecutionContext({
+      assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
+      automationId,
+      ...this.memoryBackend.toolContext(orgId, profileId),
+      automationRunId,
+      orgId,
+      orgRole: "member",
+      profileId,
+      recordToolOutputSavings: this.savingsRecorderFor(orgId),
+      recordTurnUsage: this.turnUsageRecorderFor(orgId),
+    });
+
+    const savedSteps = automationRunId
+      ? await this.db.listAutomationRunSteps(automationRunId)
+      : [];
+    const replay =
+      resume && savedSteps.length > 0
+        ? await this.replayAutomationSteps(savedSteps, tools, toolContext)
+        : [];
+    let stepPosition = savedSteps.length;
+    // Each call is saved as it starts and again with its result, so a restart
+    // can continue from the last saved step. The insert runs synchronously up
+    // to the SQLite write, so it lands before the tool does.
+    const stepHandlers: typeof handlers = automationRunId
+      ? {
+          onChunk() {},
+          ...handlers,
+          onToolEnd: (event) => {
+            this.db
+              .completeAutomationRunStep(
+                automationRunId,
+                event.toolCallId,
+                JSON.stringify(event.result) ?? "null",
+                new Date().toISOString()
+              )
+              .catch(warnStepWrite);
+            handlers?.onToolEnd?.(event);
+          },
+          onToolStart: (event) => {
+            this.db
+              .insertAutomationRunStep({
+                args: JSON.stringify(event.input ?? {}),
+                completedAt: null,
+                position: stepPosition++,
+                result: null,
+                runId: automationRunId,
+                startedAt: new Date().toISOString(),
+                status: "running",
+                toolCallId: event.toolCallId,
+                toolGroupId: event.toolGroupId ?? null,
+                toolName: event.tool,
+              })
+              .catch(warnStepWrite);
+            handlers?.onToolStart?.(event);
+          },
+        }
+      : handlers;
 
     const session = createAgentChatSession(harness, {
       channel: "automation",
       enableToolLoop: true,
+      initialHistory: replay.length
+        ? [{ content: prompt, role: "user" }, ...replay]
+        : undefined,
       soul: soulActive,
       systemPrompt,
-      toolContext: buildToolExecutionContext({
-        assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
-        automationId,
-        ...this.memoryBackend.toolContext(orgId, profileId),
-        automationRunId,
-        orgId,
-        orgRole: "member",
-        profileId,
-        recordToolOutputSavings: this.savingsRecorderFor(orgId),
-        recordTurnUsage: this.turnUsageRecorderFor(orgId),
-      }),
+      toolContext,
       tools,
       userContext,
       userTimezone,
     });
 
-    return session.send(prompt);
+    return session.sendStream(
+      replay.length ? RESUME_AUTOMATION_PROMPT : prompt,
+      stepHandlers ?? { onChunk() {} }
+    );
+  }
+
+  /**
+   * Rebuilds the tool calls an interrupted run already made. A call cut in the
+   * middle runs again only for known read-only tools; any other tool is never
+   * repeated, and the model is told it was interrupted.
+   */
+  private async replayAutomationSteps(
+    steps: StoredAutomationRunStepRecord[],
+    tools: ToolDefinition[],
+    toolContext: ToolContext
+  ): Promise<ChatMessage[]> {
+    const messages: ChatMessage[] = [];
+    const groups = new Map<string, StoredAutomationRunStepRecord[]>();
+    for (const step of steps) {
+      const key = step.toolGroupId ?? step.toolCallId;
+      groups.set(key, [...(groups.get(key) ?? []), step]);
+    }
+
+    for (const [toolGroupId, group] of groups) {
+      const results: ChatMessage[] = [];
+      for (const step of group) {
+        let result = step.result;
+        if (step.status !== "completed" || result === null) {
+          const value =
+            REPLAYABLE_AUTOMATION_TOOLS.has(step.toolName) &&
+            tools.some((item) => item.name === step.toolName)
+              ? await executeToolCall(
+                  tools,
+                  {
+                    arguments: JSON.parse(step.args) as Record<string, unknown>,
+                    id: step.toolCallId,
+                    name: step.toolName,
+                  },
+                  toolContext
+                )
+              : {
+                  error:
+                    "Interrupted: the server restarted while this tool was running. It was not run again; check whether it took effect before repeating it.",
+                };
+          result = JSON.stringify(value) ?? "null";
+          await this.db.completeAutomationRunStep(
+            step.runId,
+            step.toolCallId,
+            result,
+            new Date().toISOString()
+          );
+        }
+        results.push({
+          content: result,
+          name: step.toolName,
+          role: "tool",
+          toolCallId: step.toolCallId,
+          toolGroupId,
+        });
+      }
+      messages.push(
+        {
+          content: "",
+          role: "assistant",
+          toolCalls: group.map((step) => ({
+            arguments: JSON.parse(step.args) as Record<string, unknown>,
+            id: step.toolCallId,
+            name: step.toolName,
+          })),
+        },
+        ...results
+      );
+    }
+    return messages;
   }
 
   async resolvePluginExecutionTools(
@@ -1858,7 +1983,6 @@ export class AgentService {
     const record: StoredSessionRecord = {
       agentQuestionnaire: null,
       agentTodos: [],
-      appUserId: options?.appUserId ?? null,
       channel,
       createdAt: new Date().toISOString(),
       id: sessionId,
@@ -1885,8 +2009,7 @@ export class AgentService {
       options?.orgRole,
       options?.isPlatformAdmin,
       options?.codingWorkspaceRoot,
-      cognito ? {} : undefined,
-      options?.appUserId
+      cognito ? {} : undefined
     );
 
     if (cognito) {
@@ -1913,18 +2036,9 @@ export class AgentService {
   async assertSessionProfileAccess(
     sessionId: string,
     orgId: string,
-    access: ChatProfileAccess,
-    appUserId?: string,
-    requireAppUser = false
+    access: ChatProfileAccess
   ): Promise<void> {
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
-    if (
-      record &&
-      requireAppUser &&
-      (!appUserId || record.appUserId !== appUserId)
-    ) {
-      throw new NakamaApiError("Session not found", 404);
-    }
     // A missing session is left to the route, which still answers 404.
     if (record) {
       this.assertChatProfileAccess(
@@ -2026,8 +2140,7 @@ export class AgentService {
       orgRole,
       isPlatformAdmin,
       undefined,
-      { initialHistory: [...entry.session.getHistory()] },
-      entry.record.appUserId
+      { initialHistory: [...entry.session.getHistory()] }
     );
 
     entry.record.model = model;
@@ -2190,7 +2303,6 @@ export class AgentService {
     await this.db.upsertSession({
       agentQuestionnaire: null,
       agentTodos: [],
-      appUserId: record.appUserId ?? null,
       channel: record.channel,
       createdAt: new Date().toISOString(),
       id: nextSessionId,
@@ -2230,8 +2342,7 @@ export class AgentService {
       branchOrgRole,
       branchIsPlatformAdmin,
       undefined,
-      undefined,
-      record.appUserId
+      undefined
     );
     this.sessions.set(nextSessionId, {
       channel,
@@ -2248,7 +2359,6 @@ export class AgentService {
     profileId: string,
     channels: AgentChannel | readonly AgentChannel[],
     access: ChatProfileAccess,
-    appUserId?: string,
     page?: { cursor?: string; limit: number },
     query?: string
   ): Promise<ListSessionsResponse> {
@@ -2263,7 +2373,6 @@ export class AgentService {
       typeof channels === "string" ? [channels] : channels,
       {
         after: cursor,
-        appUserId,
         // One row past the page tells whether another page follows.
         limit: page ? page.limit + 1 : undefined,
         query,
@@ -2405,8 +2514,7 @@ export class AgentService {
       resumeOrgRole,
       resumeIsPlatformAdmin,
       undefined,
-      undefined,
-      record.appUserId
+      undefined
     );
 
     this.sessions.set(sessionId, {
@@ -2552,12 +2660,19 @@ export class AgentService {
     return session.compact(options);
   }
 
-  async draftAutomation(prompt: string, channel: AgentChannel) {
+  async draftAutomation(
+    prompt: string,
+    channel: AgentChannel,
+    orgId: string | null
+  ) {
     if (!this._providerConfigured) {
       throw new Error("Provider is not configured.");
     }
 
-    return createAutomationFromPrompt(this.harness, { channel, prompt });
+    return createAutomationFromPrompt(this.createWorkspaceHarness(orgId), {
+      channel,
+      prompt,
+    });
   }
 
   async discoverModels(
@@ -2613,25 +2728,42 @@ export class AgentService {
       };
     }
 
-    const baseUrl = request.baseUrl?.trim();
+    const isNetra = request.provider === "netra";
+    const baseUrl = isNetra
+      ? defaultDiscoveryBaseUrl("netra")
+      : request.baseUrl?.trim();
+    const apiKey = request.apiKey?.trim() ?? "";
+    if (isNetra && !apiKey) {
+      throw new NakamaApiError(
+        "API key is required to discover Netra models.",
+        400
+      );
+    }
     if (!baseUrl) {
       throw new NakamaApiError("baseUrl or providerId is required.", 400);
     }
 
-    const entries =
-      request.provider === "ollama"
+    const entries = isNetra
+      ? await fetchNetraModels(apiKey)
+      : request.provider === "ollama"
         ? await fetchOllamaModels(baseUrl, request.apiKey ?? "")
         : await fetchRemoteOpenAIModels(baseUrl, request.apiKey ?? "");
 
-    const probeType =
-      request.provider === "ollama"
+    const probeType = isNetra
+      ? ("netra" as const)
+      : request.provider === "ollama"
         ? ("ollama" as const)
         : ("openai_compatible" as const);
     const probeInstance = {
       apiKey: request.apiKey ?? "",
       baseUrl,
       id: "discover",
-      label: probeType === "ollama" ? "Ollama" : "Discover",
+      label:
+        probeType === "netra"
+          ? "Netra Runtime"
+          : probeType === "ollama"
+            ? "Ollama"
+            : "Discover",
       type: probeType,
       ...(request.hostMode ? { hostMode: request.hostMode } : {}),
       createdAt: new Date(0).toISOString(),
@@ -2667,7 +2799,11 @@ export class AgentService {
       throw new NakamaApiError("Provider not found.", 404);
     }
 
-    if (instance.type === "ollama" || instance.type === "openai_compatible") {
+    if (
+      instance.type === "ollama" ||
+      instance.type === "openai_compatible" ||
+      instance.type === "netra"
+    ) {
       const hostMode =
         instance.type === "ollama"
           ? (overrides?.hostMode ?? resolveOllamaHostMode(instance))
@@ -2675,10 +2811,10 @@ export class AgentService {
       const apiKey =
         overrides?.apiKey?.trim() ||
         instance.apiKey.trim() ||
-        (instance.type === "ollama"
+        (instance.type === "ollama" || instance.type === "netra"
           ? readEnvValue(
               process.env,
-              apiKeyEnvVarForProvider("ollama") ?? ""
+              apiKeyEnvVarForProvider(instance.type) ?? ""
             ) || ""
           : "");
 
@@ -2697,7 +2833,11 @@ export class AgentService {
       const baseUrl =
         overrides?.baseUrl ||
         instance.baseUrl?.trim() ||
-        (instance.type === "ollama" ? defaultOllamaBaseUrl(hostMode!) : "");
+        (instance.type === "ollama"
+          ? defaultOllamaBaseUrl(hostMode!)
+          : instance.type === "netra"
+            ? defaultDiscoveryBaseUrl("netra")
+            : "");
 
       if (!baseUrl) {
         throw new NakamaApiError(
@@ -2709,7 +2849,15 @@ export class AgentService {
       const entries =
         instance.type === "ollama"
           ? await fetchOllamaModels(baseUrl, apiKey)
-          : await fetchRemoteOpenAIModels(baseUrl, apiKey);
+          : instance.type === "netra"
+            ? (await fetchNetraModels(apiKey)).map((entry) => ({
+                ...entry,
+                ...instance.customModels?.find(
+                  (saved) => saved.id === entry.id
+                ),
+                name: entry.name,
+              }))
+            : await fetchRemoteOpenAIModels(baseUrl, apiKey);
       const remoteInstance = { ...instance, baseUrl, customModels: entries };
       const models = getModelsForProviderInstance(remoteInstance);
 
@@ -2858,6 +3006,41 @@ export class AgentService {
     const existing = this.userConfig?.providers ?? [];
     const instance = buildProviderInstanceFromCreateRequest(request, existing);
     const model = resolveInitialModel(instance, request.model);
+    if (instance.type === "netra") {
+      if (model !== NETRA_AGENT_MODEL_ID) {
+        throw new NakamaApiError(
+          "This Netra model needs a verified tool-turn test.",
+          400
+        );
+      }
+      let discovered: Awaited<ReturnType<typeof fetchNetraModels>> | null =
+        null;
+      try {
+        discovered = await fetchNetraModels(instance.apiKey);
+      } catch (error) {
+        if (error instanceof NakamaApiError && error.status === 400) {
+          throw error;
+        }
+        // The exact ID can still work when model discovery is unavailable.
+        const provider = createProviderForInstance(instance, model);
+        if (!provider) {
+          throw new NakamaApiError(
+            "Netra provider could not be initialized.",
+            400
+          );
+        }
+        await provider.generateChat({
+          messages: [{ content: "Reply OK.", role: "user" }],
+          system: "Reply OK.",
+        });
+      }
+      if (discovered && !discovered.some((entry) => entry.id === model)) {
+        throw new NakamaApiError(
+          "The selected Netra model is not available to this API key.",
+          400
+        );
+      }
+    }
     if (instance.type === "gemini") {
       const provider = createProviderForInstance(instance, model);
       if (!provider) {
@@ -2889,7 +3072,7 @@ export class AgentService {
     };
 
     await saveUserConfig(this.userConfig);
-    this.refreshHarness();
+    this.refreshProviderConfig();
 
     if (isFirst) {
       await this.ensureSoulScaffolded();
@@ -2926,7 +3109,7 @@ export class AgentService {
 
     this.userConfig = { ...this.userConfig, providers };
     await saveUserConfig(this.userConfig);
-    this.refreshHarness();
+    this.refreshProviderConfig();
 
     return {
       provider: toProviderInstanceSummary(
@@ -2962,7 +3145,7 @@ export class AgentService {
     };
 
     await saveUserConfig(this.userConfig);
-    this.refreshHarness();
+    this.refreshProviderConfig();
 
     return { defaultProviderId };
   }
@@ -2989,7 +3172,7 @@ export class AgentService {
       ),
     };
     await saveUserConfig(this.userConfig);
-    this.refreshHarness();
+    this.refreshProviderConfig();
   }
   async persistChatgptOAuth(
     providerId: string,
@@ -3013,7 +3196,7 @@ export class AgentService {
       ),
     };
     await saveUserConfig(this.userConfig);
-    this.refreshHarness();
+    this.refreshProviderConfig();
   }
 
   async getModels(
@@ -3098,9 +3281,15 @@ export class AgentService {
     };
   }
 
-  getLlmUsageStats() {
+  /**
+   * The requester's own ledger only. Usage is tenant data, so a status
+   * response must never be able to answer with another org's totals (#1306).
+   */
+  async getLlmUsageStats(orgId: string | null) {
+    const stored = orgId ? await this.llmUsageTracker?.getStats(orgId) : null;
+
     return (
-      this.llmUsageTracker?.getStats() ?? {
+      stored ?? {
         estimatedCostUsd: 0,
         inputTokens: 0,
         outputTokens: 0,
@@ -3111,8 +3300,10 @@ export class AgentService {
     );
   }
 
-  getLlmUsageStatsByModel() {
-    return this.llmUsageTracker?.getStatsByModel() ?? [];
+  async getLlmUsageStatsByModel(orgId: string | null) {
+    return orgId
+      ? ((await this.llmUsageTracker?.getStatsByModel(orgId)) ?? [])
+      : [];
   }
 
   async configureProvider(
@@ -3143,26 +3334,19 @@ export class AgentService {
     };
   }
 
-  private refreshHarness(): void {
+  private refreshProviderConfig(): void {
     const provider = createProviderFromActiveConfig(this.userConfig);
-    const active = getActiveProviderInstance(this.userConfig);
     this._providerConfigured =
       isProviderConfigured(this.userConfig) && provider !== null;
-    this.harness = this.createHarness({
-      modelId: active ? resolveDefaultModelForInstance(active) : null,
-      provider,
-      providerInstance: active,
-      thinking: this.resolveWorkspaceThinkingDefaults(),
-    });
     this.sessions.clear();
   }
 
   /** After a data-root restore, reload provider config and clear in-memory session state. */
   async reloadAfterDataRestore(): Promise<void> {
     this.userConfig = await loadUserConfig();
-    this.refreshHarness();
+    this.refreshProviderConfig();
+    this.ephemeralSessions.clear();
     this.composioService?.reloadConfiguration();
-    await this.llmUsageTracker?.reloadFromDatabase();
     this.visionSettingsPromise = null;
     this.transcriptionSettingsPromise = null;
     await this.ensureVisionSettingsLoaded();
@@ -3534,6 +3718,18 @@ export class AgentService {
     );
   }
 
+  async importKnowledgeBaseZip(
+    orgId: string,
+    profileId: string,
+    zipBase64: string
+  ): Promise<ImportKnowledgeBaseZipResponse> {
+    return this.profileService.importKnowledgeBaseZip(
+      orgId,
+      profileId,
+      zipBase64
+    );
+  }
+
   async deleteKnowledgeBaseDocument(
     orgId: string,
     profileId: string,
@@ -3720,12 +3916,15 @@ export class AgentService {
     orgId: string,
     profileId: string,
     filename: string,
-    options: { appUserId?: string | null; render?: "markdown" } = {}
+    options: {
+      headOnly?: boolean;
+      render?: "markdown";
+    } = {}
   ) {
     await this.requireProfile(orgId, profileId);
     return readArtifactFile({
-      appUserId: options.appUserId,
       filename,
+      headOnly: options.headOnly,
       orgId,
       profileId,
       render: options.render,
@@ -3806,20 +4005,28 @@ export class AgentService {
     );
   }
 
+  /**
+   * `orgId` is the tenant the calls made through this harness are billed to.
+   * Without one the provider is left unwrapped: the ledger has no unattributed
+   * bucket, so an org-less harness must not be allowed to add to any org's.
+   */
   private createHarness(options: {
     provider: ProviderClient | null;
-    providerInstance?: ReturnType<typeof getActiveProviderInstance>;
+    providerInstance?: ProviderInstance | null;
     modelId?: string | null;
+    orgId?: string | null;
     thinking: ThinkingSettings;
   }): AgentDependencies {
     const providerInstance = options.providerInstance ?? null;
+    const usageOrgId = options.orgId?.trim() ?? "";
 
     const trackedProvider =
-      options.provider && this.llmUsageTracker && options.modelId
+      options.provider && this.llmUsageTracker && options.modelId && usageOrgId
         ? wrapProviderWithUsageTracking(
             options.provider,
             this.llmUsageTracker,
             options.modelId,
+            usageOrgId,
             {
               provider: providerInstance?.type ?? options.provider.name,
               providerInstance,
@@ -3834,6 +4041,24 @@ export class AgentService {
       ),
       provider: trackedProvider ?? undefined,
     };
+  }
+
+  /**
+   * The workspace provider has no profile to inherit a tenant from, so the
+   * org-scoped callers (the automation drafter) pass their own.
+   */
+  private createWorkspaceHarness(orgId: string | null): AgentDependencies {
+    const activeInstance = getActiveProviderInstance(this.userConfig);
+
+    return this.createHarness({
+      modelId: activeInstance
+        ? resolveDefaultModelForInstance(activeInstance)
+        : null,
+      orgId,
+      provider: createProviderFromActiveConfig(this.userConfig, process.env),
+      providerInstance: activeInstance,
+      thinking: this.resolveWorkspaceThinkingDefaults(),
+    });
   }
 
   getUsageStatusFields(): {
@@ -3916,15 +4141,8 @@ export class AgentService {
     orgId: string,
     profileId?: string
   ): Promise<string> {
-    if (profileId?.trim()) {
-      const requestedProfile = await this.db.getProfileForOrg(
-        profileId.trim(),
-        orgId
-      );
-
-      if (requestedProfile) {
-        return profileId.trim();
-      }
+    if (profileId !== undefined) {
+      return (await this.requireProfile(orgId, profileId.trim())).id;
     }
 
     const defaultProfile = await this.db.getDefaultProfileForOrg(orgId);
@@ -3982,6 +4200,7 @@ export class AgentService {
         ...buildMcpToolDefinitions(
           mcpServers,
           this.mcpClientManager,
+          this.db,
           orgId,
           profile.id
         ),
@@ -4103,18 +4322,13 @@ export class AgentService {
     orgRole?: OrgRole | null,
     isPlatformAdmin?: boolean,
     codingWorkspaceRoot?: string,
-    cognito?: CognitoSessionOptions,
-    appUserId?: string | null
+    cognito?: CognitoSessionOptions
   ): Promise<AgentChatSession> {
     await this.ensureVisionSettingsLoaded();
     const profile = await this.requireProfile(orgId, profileId);
-    const workspaceRoot = appUserId
-      ? await ensureAppUserSoulDir(orgId, profileId, appUserId)
-      : undefined;
     // skill_manage writes skills and expands /learn, both of which outlive the
     // chat, so a cognito session never gets it whatever the channel allows.
-    const includeSkillManageTools =
-      !(cognito || appUserId) && SKILL_MANAGE_CHANNELS[channel];
+    const includeSkillManageTools = !cognito && SKILL_MANAGE_CHANNELS[channel];
     const pluginOrgRole =
       channel === "telegram" ||
       channel === "whatsapp" ||
@@ -4136,6 +4350,9 @@ export class AgentService {
     if (channel === "discord" && tools.length > 0) {
       tools = [...tools, ...createSendDiscordArtifactTools()];
     }
+    if (channel === "whatsapp" && tools.length > 0) {
+      tools = [...tools, sendWhatsAppArtifactTool];
+    }
     // Same table as the tools above on purpose: a channel that can manage
     // skills is a channel that needs the catalog to track what it has seen.
     // Splitting them later means splitting the table, which is a visible edit.
@@ -4148,8 +4365,7 @@ export class AgentService {
       profile.systemPrompt,
       orgRole,
       skillUsageContext,
-      !cognito,
-      workspaceRoot
+      !cognito
     );
     // Per-org override for the tool-output optimiser. Undefined leaves the
     // decision to the server's env var, so an operator who never opened the UI
@@ -4166,9 +4382,7 @@ export class AgentService {
       ? (cognito.initialHistory ?? [])
       : await loadSessionHistory(this.db, sessionId);
     const userTimezone = await this.getUserTimezone();
-    const userContext = appUserId
-      ? undefined
-      : await this.loadUserContextForUser(orgId, userId);
+    const userContext = await this.loadUserContextForUser(orgId, userId);
     const selectedModel = modelOverride
       ? this.normalizeSessionModelOverride(modelOverride)
       : profile.model;
@@ -4178,7 +4392,10 @@ export class AgentService {
     // helpers are also platform groups, so a profile that resolved to zero
     // tools must not receive them either.
     if (tools.length > 0) {
-      tools = [...tools, createReadSessionHistoryTool(orgId, sessionId)];
+      tools = [
+        ...tools,
+        createReadSessionHistoryTool(this.db, orgId, sessionId),
+      ];
     }
     const persistAttachment = createAttachmentSaver(this.db, {
       channel,
@@ -4266,6 +4483,7 @@ export class AgentService {
             visionProvider,
             this.llmUsageTracker,
             visionSelection.model,
+            orgId,
             {
               provider: visionSelection.instance.type,
               providerInstance: visionSelection.instance,
@@ -4316,6 +4534,15 @@ export class AgentService {
           }
         }
 
+        const imageMentionContext = formatImageMentionContext(
+          context?.userMessage ?? "",
+          tools.map((tool) => tool.name)
+        );
+
+        if (imageMentionContext) {
+          parts.push(imageMentionContext);
+        }
+
         if (this.skillsService && context?.userMessage?.trim()) {
           const skillContext =
             await this.skillsService.formatMatchedSkillsForPrompt(
@@ -4364,7 +4591,7 @@ export class AgentService {
       toolContext: buildToolExecutionContext({
         assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
         channel,
-        ...this.memoryBackend.toolContext(orgId, profileId, workspaceRoot),
+        ...this.memoryBackend.toolContext(orgId, profileId),
         codingWorkspaceRoot,
         forbidMemoryWrites: cognito ? true : undefined,
         forbidProfileSkillMarkdownWrites: hasSkillManage,
@@ -4382,7 +4609,6 @@ export class AgentService {
         tokenOptimizerEnabled: tokenOptimizerEnabled ?? undefined,
         trackEphemeralAttachment,
         userId: userId ?? undefined,
-        workspaceRoot,
       }),
       tools,
       userContext,
@@ -4525,20 +4751,12 @@ export class AgentService {
     profilePrompt: string,
     orgRole?: OrgRole | null,
     usageContext?: import("./skills-service").SkillUsageRecordingContext,
-    recordSkillUsage = true,
-    workspaceRoot?: string
+    recordSkillUsage = true
   ): Promise<{ systemPrompt: string; soulActive: boolean }> {
     const stack = await loadSoulStack(
-      workspaceRoot ?? getProfileSoulDir(orgId, profileId),
+      getProfileSoulDir(orgId, profileId),
       (content) =>
-        this.memoryBackend.readMemory(
-          orgId,
-          profileId,
-          "MEMORY.md",
-          content,
-          workspaceRoot
-        ),
-      workspaceRoot ? getProfileSoulDir(orgId, profileId) : undefined
+        this.memoryBackend.readMemory(orgId, profileId, "MEMORY.md", content)
     );
     let systemPrompt = stack
       ? composeSoulSystemPrompt(stack, { profilePrompt })
@@ -4610,6 +4828,7 @@ export class AgentService {
     if (!resolved) {
       return this.createHarness({
         modelId: null,
+        orgId: profile.orgId,
         provider: null,
         providerInstance: null,
         thinking: this.resolveWorkspaceThinkingDefaults(),
@@ -4640,6 +4859,7 @@ export class AgentService {
 
     return this.createHarness({
       modelId: resolved.model,
+      orgId: profile.orgId,
       provider: resolvedProvider,
       providerInstance: resolved.instance,
       thinking: this.resolveWorkspaceThinkingDefaults(),
@@ -4726,6 +4946,30 @@ export class AgentService {
       enabled: this.userConfig?.thinkingEnabled ?? DEFAULT_THINKING_ENABLED,
     };
   }
+}
+
+const RESUME_AUTOMATION_PROMPT =
+  "The server restarted while you were working on this task. Continue from the tool results above and finish it. Do not repeat work that already succeeded.";
+
+// parallelSafe means concurrent calls are allowed. It does not mean a tool has no side effects.
+const REPLAYABLE_AUTOMATION_TOOLS = new Set([
+  "knowledge_base_search",
+  "list_artifacts",
+  "list_profile_sessions",
+  "omni_retrieve",
+  "read_file",
+  "read_profile_session",
+  "read_session_history",
+  "search_files",
+  "web_fetch",
+  "web_search",
+]);
+
+function warnStepWrite(error: unknown): void {
+  console.warn(
+    "Could not save automation run step:",
+    error instanceof Error ? error.message : error
+  );
 }
 
 function clampSubAgentTimeout(timeoutMs: number | undefined): number {

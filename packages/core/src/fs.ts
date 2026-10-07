@@ -8,6 +8,7 @@ import {
   readdir,
   readFile,
   rename,
+  rm,
   stat,
   unlink,
   writeFile,
@@ -16,6 +17,41 @@ import { dirname } from "node:path";
 
 export const PRIVATE_DIR_MODE = 0o700;
 export const PRIVATE_FILE_MODE = 0o600;
+
+const WINDOWS_RENAME_ATTEMPTS = 10;
+const WINDOWS_RENAME_RETRY_CODES = new Set(["EACCES", "EBUSY", "EPERM"]);
+
+/**
+ * Windows refuses to replace a file while another handle has it open, which
+ * includes a concurrent writer's rename onto the same path, so it fails with
+ * EPERM where POSIX rename(2) would just win the race.
+ */
+async function replaceWithTempFile(
+  tempPath: string,
+  path: string
+): Promise<void> {
+  if (process.platform !== "win32") {
+    await rename(tempPath, path);
+    return;
+  }
+
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await rename(tempPath, path);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (
+        attempt >= WINDOWS_RENAME_ATTEMPTS ||
+        !(code && WINDOWS_RENAME_RETRY_CODES.has(code))
+      ) {
+        await rm(tempPath, { force: true }).catch(() => undefined);
+        throw error;
+      }
+    }
+    await Bun.sleep(Math.min(attempt * 10, 50));
+  }
+}
 
 export async function pathExists(path: string): Promise<boolean> {
   try {
@@ -86,6 +122,12 @@ export async function writeTextFile(
     mode: preserveMode ?? mode,
   });
 
+  if (options.chmod ?? true) {
+    await chmod(tempPath, mode);
+  } else if (preserveMode !== undefined) {
+    await chmod(tempPath, preserveMode);
+  }
+
   const handle = await open(tempPath, "r+");
   try {
     await handle.sync();
@@ -93,13 +135,7 @@ export async function writeTextFile(
     await handle.close();
   }
 
-  await rename(tempPath, path);
-
-  if (options.chmod ?? true) {
-    await chmod(path, mode);
-  } else if (preserveMode !== undefined) {
-    await chmod(path, preserveMode);
-  }
+  await replaceWithTempFile(tempPath, path);
 }
 
 export async function writePrivateTextFileIfMissing(

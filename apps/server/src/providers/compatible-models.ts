@@ -2,8 +2,13 @@ import type { ProviderInstance, ProviderName } from "@nakama/core";
 import {
   type CustomModelEntry,
   findCustomModel,
+  NakamaApiError,
   normalizeBaseUrl,
 } from "@nakama/core";
+import {
+  defaultDiscoveryBaseUrl,
+  NETRA_AGENT_MODEL_ID,
+} from "@nakama/core/discovery-providers";
 import OpenAI from "openai";
 import type { ProviderModelOption } from "./models";
 import { AVAILABLE_MODELS } from "./models";
@@ -20,7 +25,7 @@ function resolveOpenRouterCatalogThinking(entry: CustomModelEntry): boolean {
   return openRouterSlugSupportsThinking(entry.id);
 }
 
-export function openRouterCustomModelsToCatalog(
+function openRouterCustomModelsToCatalog(
   entries: CustomModelEntry[]
 ): ProviderModelOption[] {
   return entries.map((entry) => ({
@@ -51,7 +56,7 @@ function resolveCerebrasCatalogThinking(entry: CustomModelEntry): boolean {
   return false;
 }
 
-export function cerebrasCustomModelsToCatalog(
+function cerebrasCustomModelsToCatalog(
   entries: CustomModelEntry[]
 ): ProviderModelOption[] {
   return entries.map((entry) => ({
@@ -82,7 +87,7 @@ function resolveFireworksCatalogThinking(entry: CustomModelEntry): boolean {
   return false;
 }
 
-export function fireworksCustomModelsToCatalog(
+function fireworksCustomModelsToCatalog(
   entries: CustomModelEntry[]
 ): ProviderModelOption[] {
   const staticModels = AVAILABLE_MODELS.filter(
@@ -157,7 +162,7 @@ export function catalogCustomModelsToCatalog(
   });
 }
 
-export function customModelsToCatalog(
+function customModelsToCatalog(
   entries: CustomModelEntry[],
   provider: ProviderName = "openai_compatible"
 ): ProviderModelOption[] {
@@ -190,7 +195,7 @@ export function customModelsToCatalog(
   });
 }
 
-export function ensureCurrentModelInCatalog(
+function ensureCurrentModelInCatalog(
   catalog: ProviderModelOption[],
   currentModel: string | null | undefined,
   provider: ProviderName = "openai_compatible"
@@ -227,13 +232,24 @@ export function getModelsForProviderInstance(
       providerLabel: instance.label,
     }));
 
+  if (instance.type === "netra") {
+    return annotate(
+      customModelsToCatalog(
+        (instance.customModels ?? []).filter(
+          (entry) => entry.id === NETRA_AGENT_MODEL_ID
+        ),
+        "netra"
+      )
+    );
+  }
+
   if (instance.type === "openai_compatible") {
     const entries = instance.customModels ?? [];
     return annotate(
       ensureCurrentModelInCatalog(
-        customModelsToCatalog(entries),
+        customModelsToCatalog(entries, instance.type),
         currentModel,
-        "openai_compatible"
+        instance.type
       )
     );
   }
@@ -512,16 +528,38 @@ export async function fetchRemoteOpenAIModels(
   return fetchRemoteOpenAIModelsRaw(normalized, apiKey);
 }
 
+export async function fetchNetraModels(
+  apiKey: string
+): Promise<CustomModelEntry[]> {
+  const entries = await fetchRemoteOpenAIModels(
+    defaultDiscoveryBaseUrl("netra")!,
+    apiKey
+  );
+  return entries
+    .filter((entry) => entry.id === NETRA_AGENT_MODEL_ID)
+    .map((entry) => ({
+      ...entry,
+      name: "DeepSeek V4 Flash 0731",
+      supportsThinking: true,
+      supportsVision: false,
+    }));
+}
+
 async function fetchRemoteOpenAIModelsRaw(
   baseUrl: string,
   apiKey: string
 ): Promise<CustomModelEntry[]> {
-  const response = await fetch(`${baseUrl}/models`, {
-    headers: {
-      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      Accept: "application/json",
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/models`, {
+      headers: {
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        Accept: "application/json",
+      },
+    });
+  } catch {
+    throw new NakamaApiError("Could not reach the model endpoint.", 502);
+  }
 
   if (!response.ok) {
     const body = await response.text();
@@ -531,12 +569,16 @@ async function fetchRemoteOpenAIModelsRaw(
     );
 
     if (response.status === 401 || response.status === 403) {
-      throw new Error(
-        "Add an API key before discovering models from this endpoint."
+      throw new NakamaApiError(
+        "The model endpoint rejected this API key. Check the key and try again.",
+        400
       );
     }
 
-    throw new Error(`Could not fetch models (${response.status}): ${body}`);
+    throw new NakamaApiError(
+      `Could not load models from this endpoint (${response.status}). Try again.`,
+      502
+    );
   }
 
   const payload = (await response.json()) as {

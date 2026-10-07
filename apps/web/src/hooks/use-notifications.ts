@@ -5,7 +5,7 @@ import { useOrgMemoryProposals } from "@/hooks/use-org-memory-proposals";
 import { useSkillProposals } from "@/hooks/use-skill-proposals";
 import { orgSkillProposalsPath, PAGE_PATHS } from "@/lib/navigation";
 
-export type NotificationKind =
+type NotificationKind =
   | "automation-run"
   | "org-memory-proposal"
   | "skill-proposal";
@@ -18,6 +18,7 @@ export interface NotificationItem {
   id: string;
   kind: NotificationKind;
   kindLabel: string;
+  profileId?: string;
   title: string;
 }
 
@@ -72,6 +73,7 @@ export function useNotifications(): {
           id: `automation-${automation.id}`,
           kind: "automation-run",
           kindLabel: "Automation",
+          profileId: automation.profileId,
           title: automation.name,
         });
       }

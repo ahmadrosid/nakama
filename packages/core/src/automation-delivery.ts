@@ -1,3 +1,11 @@
+import {
+  type AutomationDeliveryAccess,
+  assertDiscordBotCanPostToChannel,
+  assertTelegramBotCanPostToChat,
+  automationDeliveryDestinationForbidden,
+  canApproveAutomationDeliveryDestination,
+  isTelegramDeliveryChatAuthorized,
+} from "./automation-delivery-destination";
 import type {
   AutomationDelivery,
   AutomationDeliveryNotifyOn,
@@ -139,9 +147,28 @@ export function shouldDeliverForRun(
 }
 
 export interface ValidateAutomationDeliveryOptions {
+  access?: AutomationDeliveryAccess;
+  fetchImpl?: typeof fetch;
   isEmailConfigured?: () => Promise<boolean> | boolean;
   orgId: string;
+  /** Destination already stored for this automation, if any. */
+  previousDelivery?: AutomationDelivery;
   profileId?: string;
+}
+
+/**
+ * A destination an admin already approved stays approved, so a member editing
+ * an automation's name cannot be blocked by an override they never set.
+ */
+function hasSameDeliveryDestination(
+  delivery: AutomationDelivery,
+  previous: AutomationDelivery | undefined
+): boolean {
+  return (
+    previous?.channel === delivery.channel &&
+    previous.chatId === delivery.chatId &&
+    previous.channelId === delivery.channelId
+  );
 }
 
 export async function validateAutomationDelivery(
@@ -156,19 +183,44 @@ export async function validateAutomationDelivery(
     throw new Error("Choose an agent connection for delivery.");
   }
   const owner = { orgId: options.orgId, profileId: options.profileId! };
+  const isApprover = canApproveAutomationDeliveryDestination(options.access);
+  const mayOverrideDestination =
+    isApprover ||
+    hasSameDeliveryDestination(delivery, options.previousDelivery);
   if (delivery.channel === "telegram") {
     const config = await loadTelegramConfigFile(owner);
+    const botToken = config?.botToken.trim();
 
-    if (!config?.botToken.trim()) {
+    if (!(config && botToken)) {
       throw new Error(
         "Telegram is not configured. Set up Integrations → Telegram first."
       );
     }
 
-    if (config.pairedUserIds.length === 0 && delivery.chatId === undefined) {
-      throw new Error(
-        "Telegram is not paired. Link your account in Integrations → Telegram first."
-      );
+    if (delivery.chatId === undefined) {
+      if (config.pairedUserIds.length === 0) {
+        throw new Error(
+          "Telegram is not paired. Link your account in Integrations → Telegram first."
+        );
+      }
+
+      return;
+    }
+
+    // A member may only pin delivery to a chat the org already paired or
+    // allowlisted; anything else needs an admin plus a provider-side check.
+    if (!isTelegramDeliveryChatAuthorized(delivery.chatId, config)) {
+      if (!mayOverrideDestination) {
+        throw automationDeliveryDestinationForbidden("Telegram");
+      }
+
+      if (isApprover) {
+        await assertTelegramBotCanPostToChat({
+          botToken,
+          chatId: delivery.chatId,
+          fetchImpl: options.fetchImpl,
+        });
+      }
     }
 
     return;
@@ -194,17 +246,36 @@ export async function validateAutomationDelivery(
 
   if (delivery.channel === "discord") {
     const config = await loadDiscordConfigFile(owner);
+    const botToken = config?.botToken.trim();
 
-    if (!config?.botToken.trim()) {
+    if (!(config && botToken)) {
       throw new Error(
         "Discord is not configured. Set up Integrations → Discord first."
       );
     }
 
-    if (delivery.channelId === undefined && config.pairedUserIds.length === 0) {
-      throw new Error(
-        "Discord is not paired. Link your account in Integrations → Discord first."
-      );
+    if (delivery.channelId === undefined) {
+      if (config.pairedUserIds.length === 0) {
+        throw new Error(
+          "Discord is not paired. Link your account in Integrations → Discord first."
+        );
+      }
+
+      return;
+    }
+
+    // Discord keeps no per-channel allowlist, so any caller-chosen channel is
+    // an override: admins only, and only once the bot can post there.
+    if (!mayOverrideDestination) {
+      throw automationDeliveryDestinationForbidden("Discord");
+    }
+
+    if (isApprover) {
+      await assertDiscordBotCanPostToChannel({
+        botToken,
+        channelId: delivery.channelId,
+        fetchImpl: options.fetchImpl,
+      });
     }
 
     return;

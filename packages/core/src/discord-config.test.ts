@@ -1,18 +1,19 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   buildDiscordInviteUrl,
-  generateHandshakeCode,
+  generatePairingCode,
   isDiscordUserAuthorized,
   loadDiscordConfigFile,
   loadDiscordSettingsPublic,
   maskBotToken,
-  normalizeHandshakeInput,
   parseAllowedUserIds,
+  regenerateDiscordHandshake,
   resolveDiscordApplicationId,
   resolveDiscordConfigFromSources,
   saveDiscordConfig,
   verifyAndPairDiscordUser,
 } from "./discord-config";
+import { normalizePairingCode } from "./pairing-code";
 import {
   describeSharedChannelConfigTests,
   withTempHomedir,
@@ -176,12 +177,13 @@ describeSharedChannelConfigTests({
     allowlistValue: "123456789012345678, 987654321098765432",
     botTokenKey: "DISCORD_BOT_TOKEN",
   },
-  generateHandshakeCode,
+  generatePairingCode,
   isUserAuthorized: isDiscordUserAuthorized,
   loadConfigFile: loadDiscordConfigFile,
   mask: maskBotToken,
   name: "discord",
-  normalize: normalizeHandshakeInput,
+  normalize: normalizePairingCode,
+  regenerate: () => regenerateDiscordHandshake(null),
   resolveConfigFromSources: resolveDiscordConfigFromSources,
   resolveFile: {
     allowedUserIds: ["999999999999999999"],
@@ -190,4 +192,40 @@ describeSharedChannelConfigTests({
   sampleId: "900100000000000001",
   saveConfig: saveDiscordConfig,
   verifyAndPair: verifyAndPairDiscordUser,
+});
+
+describe("per-owner Discord config", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("claims one application ID across concurrent owners", async () => {
+    await withTempHomedir("nakama-discord-claim-race-", async () => {
+      globalThis.fetch = (async () =>
+        new Response(JSON.stringify({ id: "1525937133096013954" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        })) as typeof fetch;
+
+      const results = await Promise.allSettled([
+        saveDiscordConfig(
+          { botToken: "discord-token-a" },
+          { orgId: "org_a", profileId: "a" }
+        ),
+        saveDiscordConfig(
+          { botToken: "discord-token-b" },
+          { orgId: "org_b", profileId: "b" }
+        ),
+      ]);
+
+      expect(
+        results.filter((result) => result.status === "fulfilled")
+      ).toHaveLength(1);
+      expect(
+        results.filter((result) => result.status === "rejected")
+      ).toHaveLength(1);
+    });
+  });
 });

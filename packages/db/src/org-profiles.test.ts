@@ -256,3 +256,36 @@ describe("ensureOrgSuperBotProfiles", () => {
     expect(profiles.some((profile) => profile.isSuper)).toBe(true);
   });
 });
+
+test("shared listing is seeded and assigned to fresh profiles, without restoring upgrade removals", async () => {
+  const db = createInMemoryDatabaseAdapter();
+  await ensureBuiltinToolDefinitions(db);
+  expect((await db.getTool(BUILTIN_TOOL_IDS.list_artifacts))?.handlerType).toBe(
+    "builtin"
+  );
+  for (const seed of [seedOrgDefaultProfile, seedOrgSuperBotProfile]) {
+    const profile = await seed(db, "org_listing");
+    expect(
+      (await db.listToolsForProfile(profile.id)).some(
+        (tool) => tool.name === "list_artifacts"
+      )
+    ).toBe(true);
+    await db.unassignToolFromProfile(
+      profile.id,
+      BUILTIN_TOOL_IDS.list_artifacts
+    );
+    await seed(db, "org_listing");
+    expect(
+      (await db.listToolsForProfile(profile.id)).some(
+        (tool) => tool.name === "list_artifacts"
+      )
+    ).toBe(false);
+    await db.assignToolToProfile(profile.id, BUILTIN_TOOL_IDS.list_artifacts);
+    await seed(db, "org_listing");
+    expect(
+      (await db.listToolsForProfile(profile.id)).some(
+        (tool) => tool.name === "list_artifacts"
+      )
+    ).toBe(true);
+  }
+});

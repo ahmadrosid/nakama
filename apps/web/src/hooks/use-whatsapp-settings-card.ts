@@ -202,10 +202,13 @@ export function useWhatsAppSettingsCard({
   const [allowedPhones, setAllowedPhones] = useState<string[]>([]);
   const [allowedPhonesOpen, setAllowedPhonesOpen] = useState(false);
   const [requireGroupMention, setRequireGroupMention] = useState(true);
+  const [allowUnpairedGroupMembers, setAllowUnpairedGroupMembers] =
+    useState(false);
 
   const settingsProfileId = ownerProfileId ?? settings?.profileId;
   const settingsAllowedPhones = settings?.allowedPhones;
   const settingsRequireGroupMention = settings?.requireGroupMention;
+  const settingsAllowUnpairedGroupMembers = settings?.allowUnpairedGroupMembers;
 
   useEffect(() => {
     if (settingsProfileId !== undefined) {
@@ -224,6 +227,12 @@ export function useWhatsAppSettingsCard({
       setRequireGroupMention(settingsRequireGroupMention);
     }
   }, [settingsRequireGroupMention]);
+
+  useEffect(() => {
+    if (settingsAllowUnpairedGroupMembers !== undefined) {
+      setAllowUnpairedGroupMembers(settingsAllowUnpairedGroupMembers);
+    }
+  }, [settingsAllowUnpairedGroupMembers]);
 
   const configured = settings?.configured === true;
   const worker = status?.whatsappWorker;
@@ -321,6 +330,7 @@ export function useWhatsAppSettingsCard({
     setHint(null);
     saveMutation.mutate(
       {
+        allowUnpairedGroupMembers,
         profileId: profileId.trim() || "default",
         requireGroupMention,
       },
@@ -400,12 +410,36 @@ export function useWhatsAppSettingsCard({
     );
   }
 
+  function handleAllowUnpairedGroupMembersChange(next: boolean) {
+    setAllowUnpairedGroupMembers(next);
+    setHint(null);
+    setFormError(null);
+
+    if (!configured) {
+      return;
+    }
+
+    saveMutation.mutate(
+      { allowUnpairedGroupMembers: next },
+      {
+        onError: (error) => {
+          setAllowUnpairedGroupMembers(!next);
+          setFormError(formatError(error));
+        },
+        onSuccess: () => {
+          setHint("Group access setting saved.");
+        },
+      }
+    );
+  }
+
   return {
     actionLabel:
       submitLabel ?? (configured ? "Save changes" : "Connect WhatsApp"),
     allowedPhoneSummary: formatAllowedPhoneSummary(allowedPhones.length),
     allowedPhones,
     allowedPhonesOpen,
+    allowUnpairedGroupMembers,
     awaitingQr: linking.awaitingQr,
     bridgeStarting: linking.bridgeStarting,
     canSave: linking.canSave,
@@ -419,6 +453,7 @@ export function useWhatsAppSettingsCard({
     loadError,
     onAllowedPhonesChange: setAllowedPhones,
     onAllowedPhonesOpenChange: setAllowedPhonesOpen,
+    onAllowUnpairedGroupMembersChange: handleAllowUnpairedGroupMembersChange,
     onCopyPairingCode: () => {
       void copyPairingCode();
     },

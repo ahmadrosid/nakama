@@ -96,6 +96,15 @@ describe("validateImageAttachments", () => {
       validateImageAttachments([{ data: huge, mediaType: "image/png" }])
     ).toThrow(NakamaApiError);
   });
+
+  test.each(["!!!!", "YQ", "====", "data:image/png;base64,!!!!"])(
+    "rejects invalid base64: %s",
+    (data) => {
+      expect(() =>
+        validateImageAttachments([{ data, mediaType: "image/png" }])
+      ).toThrow(NakamaApiError);
+    }
+  );
 });
 
 describe("validateDocumentAttachments", () => {
@@ -153,6 +162,18 @@ describe("validateDocumentAttachments", () => {
     expect(() =>
       validateDocumentAttachments([
         { data: huge, filename: "big.pdf", mediaType: "application/pdf" },
+      ])
+    ).toThrow(NakamaApiError);
+  });
+
+  test("rejects invalid document base64", () => {
+    expect(() =>
+      validateDocumentAttachments([
+        {
+          data: "!!!!",
+          filename: "notes.txt",
+          mediaType: "text/plain",
+        },
       ])
     ).toThrow(NakamaApiError);
   });

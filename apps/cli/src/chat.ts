@@ -20,8 +20,8 @@ import { loadSavedCliOrgId, saveCliProfileId } from "./cli-config";
 import {
   effectiveModelState,
   formatSlashCommands,
-  isActiveModelOption,
   resolveModelSwitchTarget,
+  resolveSlashCommand,
   resolveSuggestions,
 } from "./commands";
 import { formatCliDisplayPath } from "./display-path";
@@ -1072,8 +1072,7 @@ async function runStickyChat(
       if (!(line || hasImages)) {
         return;
       }
-
-      if (line.startsWith("/") || isExitCommand(line)) {
+      if (resolveSlashCommand(line) || isExitCommand(line)) {
         let outcome: "handled" | "exit" | "unhandled";
         activeCommands += 1;
         try {
@@ -1246,6 +1245,27 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
         continue;
       }
 
+      const registeredCommand = resolveSlashCommand(line);
+
+      if (line === "/clear") {
+        try {
+          await session.clear();
+          printLine("Chat history cleared.");
+        } catch (error) {
+          printError(error);
+        }
+
+        continue;
+      }
+
+      if (line === "/help") {
+        for (const helpLine of HELP_TEXT.split("\n")) {
+          printLine(helpLine);
+        }
+
+        continue;
+      }
+
       if (line === "/status") {
         const currentProfile =
           profilesCache.find((entry) => entry.id === currentProfileId) ?? null;
@@ -1288,6 +1308,13 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
         } catch (error) {
           printError(error);
         }
+        continue;
+      }
+
+      if (registeredCommand && registeredCommand.name !== "/learn") {
+        printLine(
+          `${registeredCommand.name} requires an interactive terminal.`
+        );
         continue;
       }
 
@@ -1391,42 +1418,6 @@ async function printStatus(
   for (const line of formatStatusLines(health, models, profile)) {
     write(line);
   }
-}
-
-async function printModels(
-  client: NakamaClient,
-  write: (text: string) => void = printLine,
-  profile: ProfileSummary | null = null,
-  cachedModels: ModelsResponse | null = null
-): Promise<void> {
-  const models = cachedModels ?? (await client.getModels());
-
-  if (!models.provider || models.models.length === 0) {
-    write("No models available.");
-    return;
-  }
-
-  const active = profile
-    ? effectiveModelState(profile, models)
-    : { modelId: null, providerId: models.currentProviderId };
-
-  write(`Provider: ${models.provider}`);
-  write(`Current: ${active.modelId ?? "none"}`);
-
-  for (const model of models.models) {
-    const markers = [
-      isActiveModelOption(model, active) ? "*" : " ",
-      model.default ? "(default)" : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
-
-    write(
-      `${markers} ${model.name} [${model.providerLabel ?? model.provider}] (${model.id})`
-    );
-  }
-
-  write("Use /model <id> or /model <provider-id>::<id> to switch.");
 }
 
 function formatError(error: unknown): string {

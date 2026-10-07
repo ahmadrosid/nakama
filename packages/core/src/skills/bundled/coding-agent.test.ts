@@ -111,7 +111,9 @@ describe("ensureBundledSkillFiles for coding agent", () => {
     expect(cursor).toContain("Commits and pull requests");
     expect(cursor).toContain("open a PR with gh");
     expect(cursor).not.toContain("description: stale");
-    expect(codex).toContain("codex --ask-for-approval never exec");
+    expect(codex).toContain(
+      "codex exec --dangerously-bypass-approvals-and-sandbox"
+    );
     expect(codex).not.toContain("description: stale");
   });
 });

@@ -98,10 +98,7 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
   }
 
   function requestDelete(server: McpServerSummary) {
-    if (
-      isPreinstalledMcpServerId(server.id) ||
-      (server.assignedProfileCount ?? 0) > 0
-    ) {
+    if (isPreinstalledMcpServerId(server.id)) {
       return;
     }
 
@@ -116,7 +113,10 @@ export function McpTab({ embedded = false }: { embedded?: boolean } = {}) {
     setActionError(null);
 
     try {
-      await deleteMutation.mutateAsync(deleteTarget.id);
+      await deleteMutation.mutateAsync({
+        force: true,
+        serverId: deleteTarget.id,
+      });
       setExpandedServerId((current) =>
         current === deleteTarget.id ? null : current
       );
@@ -332,6 +332,9 @@ function DeleteMcpServerDialog({
           <DialogDescription>
             Remove {target?.name ? `"${target.name}"` : "this MCP server"}. This
             cannot be undone.
+            {(target?.assignedProfileCount ?? 0) > 0
+              ? ` It will also unassign this server from ${target?.assignedProfileCount} profile${target?.assignedProfileCount === 1 ? "" : "s"}.`
+              : null}
           </DialogDescription>
         </DialogHeader>
 
@@ -350,7 +353,13 @@ function DeleteMcpServerDialog({
             type="button"
             variant="destructive"
           >
-            {busy ? <Spinner className="size-4" /> : "Delete"}
+            {busy ? (
+              <Spinner className="size-4" />
+            ) : (target?.assignedProfileCount ?? 0) > 0 ? (
+              "Force delete"
+            ) : (
+              "Delete"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

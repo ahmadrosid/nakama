@@ -66,5 +66,26 @@ export function resolveWebPublicUrl(
     return normalizeBaseUrl(configured);
   }
 
-  return readUserWebPublicUrlSync() ?? undefined;
+  const saved = readUserWebPublicUrlSync() ?? undefined;
+  // The desktop app serves its UI on loopback only, on a new port each launch.
+  // A public URL in its config came from another install's restored backup,
+  // and honouring it would refuse the desktop UI's own origin.
+  if (saved && env.NAKAMA_DESKTOP === "1" && !isLoopbackUrl(saved)) {
+    return;
+  }
+  return saved;
+}
+
+function isLoopbackUrl(value: string): boolean {
+  try {
+    const { hostname } = new URL(value);
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "[::1]" ||
+      hostname.endsWith(".localhost")
+    );
+  } catch {
+    return false;
+  }
 }

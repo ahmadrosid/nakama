@@ -105,7 +105,7 @@ export function effectiveModelState(
   };
 }
 
-export function isActiveModelOption(
+function isActiveModelOption(
   model: ProviderModelOption,
   active: { modelId: string | null; providerId: string | null }
 ): boolean {
@@ -120,7 +120,7 @@ export function isActiveModelOption(
   return (model.providerId ?? model.provider) === active.providerId;
 }
 
-export function formatModelCommandArg(model: ProviderModelOption): string {
+function formatModelCommandArg(model: ProviderModelOption): string {
   return model.providerId ? `${model.providerId}::${model.id}` : model.id;
 }
 
@@ -136,7 +136,7 @@ export interface PromptSuggestion {
   submitOnEnter?: boolean;
 }
 
-export const SLASH_COMMANDS: SlashCommand[] = [
+const SLASH_COMMANDS: SlashCommand[] = [
   { description: "show commands", name: "/help" },
   { description: "attach image from clipboard", name: "/paste" },
   { description: "clear history", name: "/clear" },
@@ -164,6 +164,16 @@ const COMMANDS_WITH_ARGS = new Set([
   "/soul",
   "/user",
 ]);
+
+export function resolveSlashCommand(line: string): SlashCommand | null {
+  return (
+    SLASH_COMMANDS.find(
+      ({ name }) =>
+        line === name ||
+        (COMMANDS_WITH_ARGS.has(name) && line.startsWith(`${name} `))
+    ) ?? null
+  );
+}
 
 const commandSearch = new uFuzzy({
   compare: () => 0,

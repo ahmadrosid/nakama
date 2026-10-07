@@ -1,5 +1,44 @@
 import type { ChatListItem } from "@/lib/chat-history";
 
+export interface LocalFileCitation {
+  href: string;
+  label: string;
+  number: number;
+  path: string;
+}
+
+export function formatLocalCitations(
+  markdown: string,
+  profileId?: string | null
+): { markdown: string; citations: LocalFileCitation[] } {
+  const citations: LocalFileCitation[] = [];
+  const formatted = markdown.replace(
+    /(?<!!)\[([^\]]+)\]\(([^\s)]+)\)/g,
+    (link, label: string, path: string) => {
+      if (/^[a-z][a-z\d+.-]*:/i.test(path) || /^[/.#]/.test(path)) {
+        return link;
+      }
+      if (!profileId) {
+        return `${label} (\`${path}\`)`;
+      }
+      const existing = citations.find((citation) => citation.path === path);
+      if (existing) {
+        return `[${existing.number}](${existing.href})`;
+      }
+      const number = citations.length + 1;
+      const query = new URLSearchParams({
+        citation: String(number),
+        file: path,
+        profile: profileId,
+      });
+      const href = `#file-citation?${query}`;
+      citations.push({ href, label, number, path });
+      return `[${number}](${href})`;
+    }
+  );
+  return { citations, markdown: formatted };
+}
+
 export function toolGroupElapsedSeconds(
   tools: ChatListItem[],
   now: number,

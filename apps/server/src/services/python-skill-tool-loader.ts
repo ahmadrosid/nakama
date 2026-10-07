@@ -4,9 +4,20 @@ import type { DiscoveredSkill, ToolDefinition } from "@nakama/core";
 import { spawnJsonTool } from "./custom-tool-subprocess";
 import { resolvePythonBin } from "./python-tool-loader";
 
+export interface PythonSkillToolOptions {
+  /**
+   * Whether the child may be told where the deployment keeps its configuration
+   * and secret store. Only server-shipped skills get that: a profile's own
+   * skills are member-authored, and handing one the config dir hands it every
+   * org's API keys and workspace on the host. The default is the safe one.
+   */
+  exposeConfigDir?: boolean;
+}
+
 export async function loadPythonSkillTool(
   skill: DiscoveredSkill,
-  script?: { description: string; name: string; path: string }
+  script?: { description: string; name: string; path: string },
+  options: PythonSkillToolOptions = {}
 ): Promise<ToolDefinition | null> {
   const modulePath = script?.path ?? skill.toolPath;
   const toolName = script?.name ?? skill.name;
@@ -48,6 +59,7 @@ export async function loadPythonSkillTool(
           cwd: path.dirname(modulePath),
           input,
           label: "Python skill tool",
+          transport: { includeConfigDir: options.exposeConfigDir === true },
           workspaceRoot:
             typeof context.workspaceRoot === "string"
               ? context.workspaceRoot

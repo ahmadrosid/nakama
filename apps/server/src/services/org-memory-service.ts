@@ -61,13 +61,9 @@ function normalizeSourceDocumentIds(
   return ids;
 }
 
-export interface OrgMemoryContent {
-  content: string;
-}
+type OrgMemorySearchTier = "pinned" | "recent-log" | "archive";
 
-export type OrgMemorySearchTier = "pinned" | "recent-log" | "archive";
-
-export interface OrgMemorySearchMatch {
+interface OrgMemorySearchMatch {
   bullet: string;
   date?: string;
   source: "live" | string;
@@ -79,7 +75,7 @@ export interface OrgMemorySearchResult {
   query: string;
 }
 
-export type ProposeOrgMemoryOutcome =
+type ProposeOrgMemoryOutcome =
   | "created"
   | "already_pending"
   | "already_pinned"

@@ -45,7 +45,7 @@ export function ModelCostFilterSelect({
 const MODEL_ROW_HEIGHT = 73;
 const MODEL_ROW_OVERSCAN = 6;
 
-export type BrowseModelBadgeTone = "emerald" | "amber";
+type BrowseModelBadgeTone = "emerald" | "amber";
 
 export interface BrowseModelRowDisplay {
   badges?: Array<{ label: string; tone: BrowseModelBadgeTone }>;

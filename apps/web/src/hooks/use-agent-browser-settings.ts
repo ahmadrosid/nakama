@@ -8,7 +8,7 @@ import {
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 
-export const agentBrowserSettingsQueryOptions = queryOptions({
+const agentBrowserSettingsQueryOptions = queryOptions({
   queryFn: () => client.getAgentBrowserStatus(),
   queryKey: queryKeys.agentBrowser.settings,
 });

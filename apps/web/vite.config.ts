@@ -14,6 +14,9 @@ export default defineConfig({
     manifest: true,
   },
   optimizeDeps: {
+    // Workspace exports can change without a lockfile change. Refresh the
+    // optimizer cache on startup so browsers don't reuse obsolete dep chunks.
+    force: true,
     // Chat is lazy-loaded. Without this, first /chat visit discovers streamdown
     // mid-session, Vite rewrites dep chunks, and the browser 404s the old ones.
     include: [

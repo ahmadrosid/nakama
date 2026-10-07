@@ -127,10 +127,6 @@ function isJsonSchema(value: unknown): value is JsonSchema {
   return typeof value === "object" && value !== null;
 }
 
-export function clearSkillToolModuleCache(): void {
-  moduleCache.clear();
-}
-
 function isPluginSkillToolPath(filePath: string): boolean {
   try {
     const root = resolve(getPluginsRootDir());

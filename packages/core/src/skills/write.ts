@@ -8,7 +8,11 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { pathExists } from "../fs";
-import { resolveWithRealpath } from "../tools/paths";
+import {
+  comparablePath,
+  namesAlternateDataStream,
+  resolveWithRealpath,
+} from "../tools/paths";
 import { getUserConfigDir } from "../user-config";
 import { BUNDLED_SKILL_NAMES } from "./bundled-names";
 import { isGlobalSkillSourcePath } from "./dedupe";
@@ -27,10 +31,9 @@ function isResolvedWithinRoot(
   resolvedRoot: string,
   resolvedTarget: string
 ): boolean {
-  return (
-    resolvedTarget === resolvedRoot ||
-    resolvedTarget.startsWith(`${resolvedRoot}${path.sep}`)
-  );
+  const root = comparablePath(resolvedRoot);
+  const target = comparablePath(resolvedTarget);
+  return target === root || target.startsWith(`${root}${path.sep}`);
 }
 
 export interface CreateSkillFileOptions {
@@ -227,7 +230,8 @@ export function resolveProfileSkillSupportingFilePath(
   orgId: string,
   profileId: string,
   name: string,
-  relativePath: string
+  relativePath: string,
+  allowSkillTool = false
 ): { absolutePath: string; relativePath: string } {
   const directory = resolveProfileSkillDirectory(orgId, profileId, name);
   const trimmed = relativePath.trim();
@@ -249,6 +253,11 @@ export function resolveProfileSkillSupportingFilePath(
   }
 
   const target = path.join(directory, ...segments);
+  if (namesAlternateDataStream(target)) {
+    throw new Error(
+      "path cannot contain ':' on Windows, where it names an NTFS alternate data stream."
+    );
+  }
   // resolveProfileSkillDirectory already locked `directory` inside the profile
   // skills root; realpath containment under that skill dir is the remaining check.
   const skillRoot = resolveWithRealpath(directory);
@@ -258,7 +267,9 @@ export function resolveProfileSkillSupportingFilePath(
     throw new Error("Path escapes the skill directory.");
   }
 
-  assertSupportingFileAllowed(absolutePath);
+  if (!allowSkillTool) {
+    assertSupportingFileAllowed(absolutePath);
+  }
   return { absolutePath, relativePath: segments.join("/") };
 }
 

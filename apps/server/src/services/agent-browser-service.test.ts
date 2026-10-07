@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
@@ -8,10 +9,19 @@ import { setupFreshInstallSession } from "../http/test-session-helpers";
 import {
   getAgentBrowserInstallCommand,
   getAgentBrowserStatus,
+  installAgentBrowser,
 } from "../services/agent-browser-service";
 import { AgentService } from "../services/agent-service";
 import { AuthService } from "../services/auth-service";
 import { OrgService } from "../services/org-service";
+import * as cliPackageInstall from "./cli-package-install";
+import {
+  waitForExit,
+  waitForPidFile,
+  withFastCliProbes,
+} from "./coding-agent-test-fixtures";
+
+const testPosix = test.skipIf(process.platform === "win32");
 
 describe("agent-browser service", () => {
   const originalPath = process.env.PATH ?? "";
@@ -58,22 +68,71 @@ describe("agent-browser service", () => {
     expect(status.nextStep).toBeNull();
   });
 
-  test("a CLI that traps SIGTERM is killed once the version probe times out", async () => {
-    await withFastCliProbes(async () => {
-      await installFakeBinary(tempBinDir, "agent-browser", "stubborn");
-      const pidFile = join(tempBinDir, "pid");
+  // Windows terminates processes directly; it cannot exercise a SIGTERM trap.
+  testPosix(
+    "a CLI that traps SIGTERM is killed once the version probe times out",
+    async () => {
+      await withFastCliProbes(async () => {
+        await installFakeBinary(tempBinDir, "agent-browser", "stubborn");
+        const pidFile = join(tempBinDir, "pid");
 
-      const started = Date.now();
-      const statusPromise = getAgentBrowserStatus();
-      const pid = await waitForPidFile(pidFile, 2000);
-      const status = await statusPromise;
+        const started = Date.now();
+        const statusPromise = getAgentBrowserStatus();
+        const pid = await waitForPidFile(pidFile, 2000);
+        const status = await statusPromise;
 
-      expect(status.installed).toBe(false);
-      expect(status.ready).toBe(false);
-      expect(Date.now() - started).toBeLessThan(2000);
-      expect(await waitForExit(pid, 2000)).toBe(true);
+        expect(status.installed).toBe(false);
+        expect(status.ready).toBe(false);
+        expect(Date.now() - started).toBeLessThan(2000);
+        expect(await waitForExit(pid, 2000)).toBe(true);
+      });
+    },
+    5000
+  );
+
+  test("tells admins to install an exact version, not a floating name", () => {
+    expect(getAgentBrowserInstallCommand()).toMatch(
+      /^(?:npm install -g|bun install -g --trust) agent-browser@\d+\.\d+\.\d+ && agent-browser install$/
+    );
+  });
+
+  test("never runs the package manager when the registry hash is not the pinned one", async () => {
+    const npmRan = join(tempBinDir, "npm-ran");
+    await writeFile(join(tempBinDir, "npm"), `#!/bin/sh\ntouch ${npmRan}\n`);
+    await chmod(join(tempBinDir, "npm"), 0o755);
+    process.env.PATH = `${tempBinDir}:${originalPath}`;
+
+    // A registry that answers for the right version with someone else's
+    // tarball, which is what a hijacked or mirrored registry looks like.
+    const server = Bun.serve({
+      fetch(request) {
+        const url = new URL(request.url);
+        const version = url.pathname.split("/").pop() ?? "";
+
+        return Response.json({
+          dist: {
+            integrity:
+              "sha512-3a81oZNherrMQXNJriBBMRLm+k6JqX6iCp7u5ktV05ohkpkqJ0/BqDa6PCOj/uu9RU1EI2Q86A4qmslPpUyknw==",
+            tarball: `${url.origin}/tarball.tgz`,
+          },
+          name: "agent-browser",
+          version,
+        });
+      },
+      port: 0,
     });
-  }, 5000);
+
+    try {
+      await expect(
+        installAgentBrowser(undefined, {
+          registry: `http://localhost:${server.port}`,
+        })
+      ).rejects.toThrow("install refused");
+      expect(existsSync(npmRan)).toBe(false);
+    } finally {
+      server.stop(true);
+    }
+  }, 20_000);
 });
 
 describe("agent-browser settings routes", () => {
@@ -190,6 +249,15 @@ describe("agent-browser settings routes", () => {
   test("install stream emits progress events", async () => {
     await installFakeBinary(tempBinDir, "npm", "noop");
     await installFakeBinary(tempBinDir, "agent-browser", "installable");
+    // The pinned hash only matches the real 53 MB tarball, so the download is
+    // stubbed here; the hash check has its own tests against a local registry.
+    using _download = spyOn(
+      cliPackageInstall,
+      "downloadPinnedPackageTarball"
+    ).mockResolvedValue({
+      cleanup: async () => undefined,
+      path: join(tempBinDir, "agent-browser.tgz"),
+    });
 
     const databaseAdapter = createInMemoryDatabaseAdapter();
     const authService = new AuthService();
@@ -235,6 +303,16 @@ async function installFakeBinary(
     | "hangs"
     | "stubborn"
 ): Promise<void> {
+  if (
+    process.platform === "win32" &&
+    (mode === "ready" || mode === "noop" || mode === "installable")
+  ) {
+    await writeFile(
+      join(binDir, `${name}.cmd`),
+      "@echo off\r\necho agent-browser 1.0.0\r\nexit /b 0\r\n"
+    );
+    return;
+  }
   const scriptPath = join(binDir, name);
   let script = "";
 
@@ -291,65 +369,4 @@ setInterval(() => {}, 1000);
 
   await writeFile(scriptPath, script, "utf8");
   await chmod(scriptPath, 0o755);
-}
-
-async function withFastCliProbes<T>(run: () => Promise<T>): Promise<T> {
-  const previous = {
-    grace: process.env.NAKAMA_CLI_SIGTERM_GRACE_MS,
-    timeout: process.env.NAKAMA_CLI_PROBE_TIMEOUT_MS,
-  };
-  process.env.NAKAMA_CLI_PROBE_TIMEOUT_MS = "1000";
-  process.env.NAKAMA_CLI_SIGTERM_GRACE_MS = "100";
-  try {
-    return await run();
-  } finally {
-    if (previous.timeout === undefined) {
-      delete process.env.NAKAMA_CLI_PROBE_TIMEOUT_MS;
-    } else {
-      process.env.NAKAMA_CLI_PROBE_TIMEOUT_MS = previous.timeout;
-    }
-    if (previous.grace === undefined) {
-      delete process.env.NAKAMA_CLI_SIGTERM_GRACE_MS;
-    } else {
-      process.env.NAKAMA_CLI_SIGTERM_GRACE_MS = previous.grace;
-    }
-  }
-}
-
-async function waitForPidFile(
-  pidFile: string,
-  timeoutMs: number
-): Promise<number> {
-  const deadline = Date.now() + timeoutMs;
-
-  while (Date.now() < deadline) {
-    try {
-      const pid = Number.parseInt(await readFile(pidFile, "utf8"), 10);
-      if (Number.isInteger(pid)) {
-        return pid;
-      }
-    } catch {
-      // Child has not written the pid yet.
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-
-  throw new Error(`pid file was not written: ${pidFile}`);
-}
-
-async function waitForExit(pid: number, timeoutMs: number): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-
-  while (Date.now() < deadline) {
-    try {
-      process.kill(pid, 0);
-    } catch {
-      return true;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-
-  return false;
 }

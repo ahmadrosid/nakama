@@ -1,5 +1,12 @@
 version: 2
 updates:
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    allow:
+      - dependency-name: "oven/bun"
+
   - package-ecosystem: "bun"
     directory: "/"
     schedule:

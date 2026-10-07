@@ -602,6 +602,8 @@ export async function writeDiscordConfigIni(
     pairedUserIds?: string[];
     allowedUserIds?: string[];
     handshakeCode?: string | null;
+    /** Defaults to a live window so a fixture code can actually be used. */
+    handshakeExpiresAt?: string | null;
   }
 ): Promise<void> {
   const dir = path.join(homeDir, ".nakama", "discord");
@@ -625,11 +627,13 @@ export async function writeDiscordConfigIni(
     lines.push(`handshake_code=${config.handshakeCode}`);
   }
 
+  if (config.handshakeExpiresAt) {
+    lines.push(`handshake_expires_at=${config.handshakeExpiresAt}`);
+  }
+
   lines.push("");
   await writeFile(path.join(dir, "config.ini"), lines.join("\n"), "utf8");
 }
-
-export { createDefaultTestOrgs };
 
 export function createTestOrgStore(homeDir: string): ChannelOrgStore {
   return createSharedTestOrgStore(homeDir, "discord");

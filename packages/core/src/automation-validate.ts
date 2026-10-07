@@ -5,6 +5,9 @@ import { DEFAULT_TIMEZONE, validateTimezone } from "./user-config";
 const CRON_FIELD_PATTERN =
   /^(\*|[0-9]+(-[0-9]+)?(\/[0-9]+)?|\*\/[0-9]+|[0-9]+(,[0-9]+)*)$/;
 
+// A short response or reload may cross a one-shot's due time after it was listed.
+export const AUTOMATION_RUN_AT_GRACE_MS = 60_000;
+
 export function isValidCronExpression(cron: string): boolean {
   const fields = cron.trim().split(/\s+/);
 
@@ -24,10 +27,13 @@ export function isValidRunAt(at: string): boolean {
   return Number.isFinite(Date.parse(trimmed));
 }
 
-export function isWorkerSchedulable(automation: {
-  enabled: boolean;
-  trigger: AutomationTrigger;
-}): boolean {
+export function isWorkerSchedulable(
+  automation: {
+    enabled: boolean;
+    trigger: AutomationTrigger;
+  },
+  now = Date.now()
+): boolean {
   if (!automation.enabled) {
     return false;
   }
@@ -37,7 +43,9 @@ export function isWorkerSchedulable(automation: {
   }
 
   if (automation.trigger.type === "runAt") {
-    return Date.parse(automation.trigger.at) > Date.now();
+    return (
+      Date.parse(automation.trigger.at) >= now - AUTOMATION_RUN_AT_GRACE_MS
+    );
   }
 
   return false;

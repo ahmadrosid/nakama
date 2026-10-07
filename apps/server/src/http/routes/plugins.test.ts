@@ -181,6 +181,7 @@ async function installRelease(
 }
 
 describe("plugin HTTP API", () => {
+  // Fresh setup plus seven role logins can exceed 5s on Windows runners.
   test("AE6 authority matrix for platform, org roles, nonmember, and archived org", async () => {
     const { app, authService, databaseAdapter } = createApp();
     const installer = await setupFreshInstallSession(app, databaseAdapter);
@@ -358,7 +359,7 @@ describe("plugin HTTP API", () => {
         })
       ).status
     ).toBe(403);
-  });
+  }, 30_000);
 
   test("crafted UI paths cannot leave the enabled UI directory and require auth", async () => {
     const { app, authService, databaseAdapter, pluginService } = createApp();

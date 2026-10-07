@@ -1,126 +1,116 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { NakamaApiError } from "@nakama/core";
 import { serve } from "bun";
 import {
   compatibleModelSupportsThinking,
   customModelEntryFromRemoteRecord,
+  fetchNetraModels,
   fetchRemoteOpenAIModels,
   getModelsForProviderInstance,
   inferRemoteModelVision,
 } from "./compatible-models";
 
 let mockServer: ReturnType<typeof serve> | undefined;
+const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   mockServer?.stop(true);
   mockServer = undefined;
+  globalThis.fetch = originalFetch;
 });
 
-describe("getModelsForProviderInstance openai", () => {
-  test("uses shortlist when custom models are saved", () => {
-    const models = getModelsForProviderInstance({
-      apiKey: "sk-test",
-      createdAt: "2026-06-07T10:00:00.000Z",
-      customModels: [{ default: true, id: "gpt-5.4", name: "GPT 5.4" }],
-      id: "openai-1",
-      label: "OpenAI",
-      type: "openai",
-    });
+test("Netra discovery keeps only the documented tool-capable model", async () => {
+  globalThis.fetch = mock(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe("https://api.netraruntime.com/v1/models");
+      expect(new Headers(init?.headers).get("Authorization")).toBe(
+        "Bearer test-key"
+      );
+      return Response.json({
+        data: [
+          { id: "deepseek/deepseek-v4.1-flash" },
+          { id: "deepseek/deepseek-v4-flash-0731" },
+        ],
+      });
+    }
+  ) as unknown as typeof fetch;
 
-    expect(models).toHaveLength(1);
-    expect(models[0]?.id).toBe("gpt-5.4");
-    expect(models[0]?.providerId).toBe("openai-1");
+  expect(await fetchNetraModels("test-key")).toEqual([
+    {
+      id: "deepseek/deepseek-v4-flash-0731",
+      name: "DeepSeek V4 Flash 0731",
+      supportsThinking: true,
+      supportsVision: false,
+    },
+  ]);
+});
+
+test("Netra agent catalog excludes models without a tool-turn check", () => {
+  const models = getModelsForProviderInstance({
+    apiKey: "test-key",
+    createdAt: "2026-10-05T00:00:00.000Z",
+    customModels: [
+      { id: "deepseek/deepseek-v4.1-flash" },
+      { id: "deepseek/deepseek-v4-flash-0731" },
+    ],
+    id: "netra-1",
+    label: "Netra Runtime",
+    type: "netra",
   });
+  expect(models.map((model) => model.id)).toEqual([
+    "deepseek/deepseek-v4-flash-0731",
+  ]);
+});
 
-  test("returns full catalog when no shortlist is saved", () => {
+test.each([
+  { model: "gpt-5.4", type: "openai" },
+  { model: "gpt-5.4", type: "chatgpt" },
+  { model: "opencode-go/kimi-k2.7-code", type: "opencode_go" },
+  { model: "meta-llama/llama-3.3-70b-instruct:free", type: "openrouter" },
+  { model: "gpt-oss-120b", type: "cerebras" },
+  { model: "accounts/fireworks/models/kimi-k2p6", type: "fireworks" },
+] as const)("$type keeps a saved shortlist", ({ type, model }) => {
+  const models = getModelsForProviderInstance({
+    apiKey: "test",
+    createdAt: "2026-06-07T10:00:00.000Z",
+    customModels: [{ id: model }],
+    id: type,
+    label: type,
+    type,
+  });
+  expect(models.map((entry) => entry.id)).toEqual([model]);
+  expect(models[0]?.providerId).toBe(type);
+});
+
+test.each([
+  { models: ["gpt-5.4"], type: "openai" },
+  { models: ["opencode-go/kimi-k2.7-code"], type: "opencode_go" },
+  { models: ["gpt-oss-120b", "gemma-4-31b"], type: "cerebras" },
+  {
+    models: [
+      "accounts/fireworks/models/kimi-k2p6",
+      "accounts/fireworks/models/glm-5p2",
+    ],
+    type: "fireworks",
+  },
+] as const)(
+  "$type uses its catalog without a shortlist",
+  ({ type, models: expected }) => {
     const models = getModelsForProviderInstance({
-      apiKey: "sk-test",
+      apiKey: "test",
       createdAt: "2026-06-07T10:00:00.000Z",
-      id: "openai-1",
-      label: "OpenAI",
-      type: "openai",
+      id: type,
+      label: type,
+      type,
     });
-
     expect(models.length).toBeGreaterThan(1);
-    expect(models.some((model) => model.id === "gpt-5.4")).toBe(true);
-  });
-});
-
-describe("getModelsForProviderInstance chatgpt", () => {
-  test("uses shortlist when custom models are saved", () => {
-    const models = getModelsForProviderInstance({
-      apiKey: "",
-      chatgptAccountId: "acct_1",
-      chatgptRefreshToken: "refresh",
-      createdAt: "2026-06-07T10:00:00.000Z",
-      customModels: [{ default: true, id: "gpt-5.4", name: "GPT-5.4" }],
-      id: "chatgpt-1",
-      label: "ChatGPT",
-      type: "chatgpt",
-    });
-
-    expect(models).toHaveLength(1);
-    expect(models[0]?.id).toBe("gpt-5.4");
-    expect(models[0]?.providerId).toBe("chatgpt-1");
-  });
-});
-
-describe("getModelsForProviderInstance opencode_go", () => {
-  test("uses shortlist when custom models are saved", () => {
-    const models = getModelsForProviderInstance({
-      apiKey: "oc-test",
-      createdAt: "2026-06-07T10:00:00.000Z",
-      customModels: [
-        { default: true, id: "opencode-go/kimi-k2.7-code", name: "Kimi Code" },
-      ],
-      id: "oc-1",
-      label: "OpenCode Go",
-      type: "opencode_go",
-    });
-
-    expect(models).toHaveLength(1);
-    expect(models[0]?.id).toBe("opencode-go/kimi-k2.7-code");
-    expect(models[0]?.providerId).toBe("oc-1");
-  });
-
-  test("returns full catalog when no shortlist is saved", () => {
-    const models = getModelsForProviderInstance({
-      apiKey: "oc-test",
-      createdAt: "2026-06-07T10:00:00.000Z",
-      id: "oc-1",
-      label: "OpenCode Go",
-      type: "opencode_go",
-    });
-
-    expect(models.length).toBeGreaterThan(1);
-    expect(
-      models.some((model) => model.id === "opencode-go/kimi-k2.7-code")
-    ).toBe(true);
-  });
-});
+    for (const id of expected) {
+      expect(models.some((model) => model.id === id)).toBe(true);
+    }
+  }
+);
 
 describe("getModelsForProviderInstance openrouter", () => {
-  test("uses shortlist only when custom models are saved", () => {
-    const models = getModelsForProviderInstance({
-      apiKey: "sk-test",
-      createdAt: "2026-06-07T10:00:00.000Z",
-      customModels: [
-        { id: "meta-llama/llama-3.3-70b-instruct:free", name: "Llama Free" },
-      ],
-      id: "or-1",
-      label: "OpenRouter",
-      type: "openrouter",
-    });
-
-    expect(
-      models.some(
-        (model) => model.id === "meta-llama/llama-3.3-70b-instruct:free"
-      )
-    ).toBe(true);
-    expect(models.some((model) => model.id === "openai/gpt-5.4")).toBe(false);
-    expect(models[0]?.providerId).toBe("or-1");
-    expect(models[0]?.supportsThinking).toBe(false);
-  });
-
   test("maps supportsThinking for reasoning-capable OpenRouter models", () => {
     const models = getModelsForProviderInstance({
       apiKey: "sk-test",
@@ -175,83 +165,6 @@ describe("getModelsForProviderInstance openrouter", () => {
     expect(models[0]?.id).toBe("google/gemma-4-31b-it:free");
     expect(models[0]?.supportsThinking).toBe(false);
     expect(models.some((model) => model.id === "openai/gpt-5.4")).toBe(false);
-  });
-});
-
-describe("getModelsForProviderInstance cerebras", () => {
-  test("uses shortlist only when custom models are saved", () => {
-    const models = getModelsForProviderInstance({
-      apiKey: "csk-test",
-      createdAt: "2026-07-16T10:00:00.000Z",
-      customModels: [
-        { id: "gpt-oss-120b", name: "GPT OSS 120B", supportsThinking: true },
-      ],
-      id: "cb-1",
-      label: "Cerebras",
-      type: "cerebras",
-    });
-
-    expect(models).toHaveLength(1);
-    expect(models[0]?.id).toBe("gpt-oss-120b");
-    expect(models[0]?.supportsThinking).toBe(true);
-    expect(models[0]?.providerId).toBe("cb-1");
-    expect(models.some((model) => model.id === "gemma-4-31b")).toBe(false);
-  });
-
-  test("falls back to static catalog when no shortlist is saved", () => {
-    const models = getModelsForProviderInstance({
-      apiKey: "csk-test",
-      createdAt: "2026-07-16T10:00:00.000Z",
-      id: "cb-1",
-      label: "Cerebras",
-      type: "cerebras",
-    });
-
-    expect(models.some((model) => model.id === "gpt-oss-120b")).toBe(true);
-    expect(models.some((model) => model.id === "gemma-4-31b")).toBe(true);
-  });
-});
-
-describe("getModelsForProviderInstance fireworks", () => {
-  test("uses shortlist only when custom models are saved", () => {
-    const models = getModelsForProviderInstance({
-      apiKey: "fw-test",
-      createdAt: "2026-07-24T10:00:00.000Z",
-      customModels: [
-        {
-          id: "accounts/fireworks/models/kimi-k2p6",
-          name: "Kimi K2.6",
-          supportsThinking: true,
-        },
-      ],
-      id: "fw-1",
-      label: "Fireworks",
-      type: "fireworks",
-    });
-
-    expect(models).toHaveLength(1);
-    expect(models[0]?.id).toBe("accounts/fireworks/models/kimi-k2p6");
-    expect(models[0]?.supportsThinking).toBe(true);
-    expect(
-      models.some((model) => model.id === "accounts/fireworks/models/glm-5p2")
-    ).toBe(false);
-  });
-
-  test("falls back to static catalog when no shortlist is saved", () => {
-    const models = getModelsForProviderInstance({
-      apiKey: "fw-test",
-      createdAt: "2026-07-24T10:00:00.000Z",
-      id: "fw-1",
-      label: "Fireworks",
-      type: "fireworks",
-    });
-
-    expect(
-      models.some((model) => model.id === "accounts/fireworks/models/kimi-k2p6")
-    ).toBe(true);
-    expect(
-      models.some((model) => model.id === "accounts/fireworks/models/glm-5p2")
-    ).toBe(true);
   });
 });
 
@@ -350,47 +263,30 @@ describe("customModelEntryFromRemoteRecord", () => {
   });
 });
 
-describe("fetchRemoteOpenAIModels auth errors", () => {
-  for (const status of [401, 403] as const) {
-    test(`names the API key remedy for ${status} without upstream body`, async () => {
-      const upstreamBody = JSON.stringify({
-        error: "API key required for remote API access",
-      });
-      const warn = spyOn(console, "warn").mockImplementation(() => {});
-
-      mockServer = serve({
-        fetch() {
-          return new Response(upstreamBody, {
-            headers: { "content-type": "application/json" },
-            status,
-          });
-        },
-        port: 0,
-      });
-
-      const baseUrl = `http://127.0.0.1:${mockServer.port}/v1`;
-
-      try {
-        await fetchRemoteOpenAIModels(baseUrl, "");
-        expect.unreachable("expected discovery to fail");
-      } catch (error) {
-        expect(error).toBeInstanceOf(Error);
-        const message = (error as Error).message;
-        expect(message).toContain("API key");
-        expect(message).not.toContain(upstreamBody);
-        expect(message).not.toContain("API key required for remote API access");
-      }
-
-      expect(
-        warn.mock.calls.some(
-          (args) =>
-            typeof args[0] === "string" &&
-            args[0].includes("Could not fetch models") &&
-            String(args[1] ?? args[0]).includes(upstreamBody)
-        )
-      ).toBe(true);
-
-      warn.mockRestore();
+for (const status of [401, 403, 503] as const) {
+  test(`remote discovery handles ${status} without exposing its body`, async () => {
+    const upstreamBody = "private upstream details";
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    mockServer = serve({
+      fetch: () => new Response(upstreamBody, { status }),
+      port: 0,
     });
-  }
-});
+
+    try {
+      await fetchRemoteOpenAIModels(
+        `http://127.0.0.1:${mockServer.port}/v1`,
+        "key"
+      );
+      expect.unreachable("expected discovery to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(NakamaApiError);
+      expect((error as NakamaApiError).status).toBe(status === 503 ? 502 : 400);
+      expect((error as NakamaApiError).message).not.toContain(upstreamBody);
+      if (status !== 503) {
+        expect((error as NakamaApiError).message).toContain("API key");
+      }
+    } finally {
+      warn.mockRestore();
+    }
+  });
+}

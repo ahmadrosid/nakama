@@ -12,17 +12,27 @@ import type {
 import { MAX_IMAGE_BYTES } from "@nakama/core/message-content";
 import { Button } from "@nakama/ui/button";
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@nakama/ui/command";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@nakama/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
 import { toast } from "@nakama/ui/toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
 import {
   Add01Icon,
   Alert02Icon,
+  ArrowDown01Icon,
   ArrowUp02Icon,
   Cancel01Icon,
   File01Icon,
@@ -42,11 +52,6 @@ import {
   PromptInputBody,
   PromptInputFooter,
   PromptInputHeader,
-  PromptInputSelect,
-  PromptInputSelectContent,
-  PromptInputSelectItem,
-  PromptInputSelectTrigger,
-  PromptInputSelectValue,
   PromptInputSubmit,
   PromptInputTextarea,
   usePromptInputAttachments,
@@ -70,7 +75,8 @@ import { useAuth } from "@/context/use-auth";
 import type { ChatStatus, FileUIPart } from "@/lib/ai-ui-types";
 import {
   type ComposerAddCommandAction,
-  type ComposerSlashSuggestion,
+  type ComposerSuggestion,
+  filterComposerMentionSuggestions,
   filterComposerSlashSuggestions,
   findActiveSkillSlashRange,
   matchComposerAddCommand,
@@ -722,15 +728,19 @@ function ChatComposerTextarea({
   const [slashRange, setSlashRange] = useState<SkillSlashRange | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const suggestions = useMemo(
-    () =>
-      slashRange
-        ? filterComposerSlashSuggestions(availableSkills, slashRange.query, {
-            enableAddCommands: onAddCommand != null,
-          })
-        : [],
-    [availableSkills, onAddCommand, slashRange]
-  );
+  const mentionOpen =
+    slashRange !== null && controller.textInput.value[slashRange.start] === "@";
+  const suggestions = useMemo(() => {
+    if (!slashRange) {
+      return [];
+    }
+
+    return mentionOpen
+      ? filterComposerMentionSuggestions(slashRange.query)
+      : filterComposerSlashSuggestions(availableSkills, slashRange.query, {
+          enableAddCommands: onAddCommand != null,
+        });
+  }, [availableSkills, mentionOpen, onAddCommand, slashRange]);
   const pickerOpen = Boolean(slashRange && !disabled && suggestions.length > 0);
   const safeActiveIndex =
     suggestions.length === 0
@@ -738,17 +748,25 @@ function ChatComposerTextarea({
       : Math.min(activeIndex, suggestions.length - 1);
 
   const updateSlashRange = useCallback((value: string, cursorIndex: number) => {
-    setSlashRange(findActiveSkillSlashRange(value, cursorIndex));
+    setSlashRange(
+      findActiveSkillSlashRange(value, cursorIndex) ??
+        findActiveSkillSlashRange(value, cursorIndex, "@")
+    );
     setActiveIndex(0);
   }, []);
 
   const selectSuggestion = useCallback(
-    (suggestion: ComposerSlashSuggestion) => {
+    (suggestion: ComposerSuggestion) => {
       const textarea = textareaRef.current;
       const value = controller.textInput.value;
       const cursorIndex = textarea?.selectionStart ?? value.length;
       const activeRange =
-        slashRange ?? findActiveSkillSlashRange(value, cursorIndex);
+        slashRange ??
+        findActiveSkillSlashRange(
+          value,
+          cursorIndex,
+          suggestion.kind === "mention" ? "@" : "/"
+        );
 
       if (!activeRange) {
         return;
@@ -773,17 +791,24 @@ function ChatComposerTextarea({
       }
 
       const next =
-        suggestion.kind === "command"
-          ? replaceSlashRangeWithReservedCommand(
-              value,
-              activeRange,
-              suggestion.command
-            )
-          : replaceSlashRangeWithSkillInvocation(
+        suggestion.kind === "skill"
+          ? replaceSlashRangeWithSkillInvocation(
               value,
               activeRange,
               suggestion.skill
-            );
+            )
+          : suggestion.kind === "mention"
+            ? replaceSlashRangeWithReservedCommand(
+                value,
+                activeRange,
+                suggestion.mention,
+                "@"
+              )
+            : replaceSlashRangeWithReservedCommand(
+                value,
+                activeRange,
+                suggestion.command
+              );
       controller.textInput.setInput(next.value);
       setSlashRange(null);
       setActiveIndex(0);
@@ -871,6 +896,155 @@ function ChatComposerTextarea({
   );
 }
 
+function ChatModelPicker({
+  props,
+  busy,
+  disabled,
+}: {
+  props: ChatComposerFullProps;
+  busy: boolean;
+  disabled: boolean;
+}) {
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [modelSearch, setModelSearch] = useState("");
+  const [showModelSearch, setShowModelSearch] = useState(false);
+  const [modelList, setModelList] = useState<HTMLDivElement | null>(null);
+
+  const closeModelPicker = () => {
+    setModelPickerOpen(false);
+    setModelSearch("");
+    setShowModelSearch(false);
+  };
+  const selectModel = (value: string) => {
+    void props.onModelChange(value);
+    closeModelPicker();
+  };
+
+  useEffect(() => {
+    if (!(modelPickerOpen && modelList)) {
+      return;
+    }
+
+    const showSearchForOverflow = () => {
+      if (modelList.scrollHeight > modelList.clientHeight + 1) {
+        setShowModelSearch(true);
+      }
+    };
+    const observer = new ResizeObserver(showSearchForOverflow);
+    observer.observe(modelList);
+    if (modelList.firstElementChild) {
+      observer.observe(modelList.firstElementChild);
+    }
+    showSearchForOverflow();
+    return () => observer.disconnect();
+  }, [modelPickerOpen, modelList]);
+
+  return (
+    <div className="min-w-[4.5rem] shrink overflow-hidden">
+      <Popover
+        onOpenChange={(open) => {
+          if (open) {
+            setModelPickerOpen(true);
+          } else {
+            closeModelPicker();
+          }
+        }}
+        open={modelPickerOpen}
+      >
+        <PopoverTrigger
+          aria-label="Select model"
+          className={cn(
+            composerSelectTriggerClass,
+            "flex max-w-full items-center justify-start overflow-hidden",
+            props.contextUsage && "pl-1"
+          )}
+          disabled={
+            busy ||
+            disabled ||
+            !props.providerModelGroups.some((group) => group.models.length > 0)
+          }
+          title={
+            props.currentModelSelection
+              ? (props.renderModelLabel(props.currentModelSelection) ??
+                undefined)
+              : undefined
+          }
+          type="button"
+        >
+          <span className="min-w-0 truncate">
+            {props.currentModelSelection
+              ? (props.renderModelLabel(props.currentModelSelection) ?? "Model")
+              : "Model"}
+          </span>
+          <ArrowDown01Icon aria-hidden className="size-3.5 shrink-0" />
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          className="max-w-[min(24rem,92vw)] overflow-hidden p-0"
+        >
+          <Command className="rounded-lg bg-transparent p-0">
+            {showModelSearch ? (
+              <div className="border-border/60 border-b p-2 [&_[data-slot=command-input-wrapper]]:p-0">
+                <CommandInput
+                  aria-label="Search models"
+                  autoFocus
+                  onValueChange={setModelSearch}
+                  placeholder="Search models…"
+                  value={modelSearch}
+                />
+              </div>
+            ) : null}
+            <CommandList className="max-h-72 p-1" ref={setModelList}>
+              <CommandEmpty>No model found.</CommandEmpty>
+              {props.profileModelId &&
+              !props.providerModelGroups.some((group) =>
+                group.models.some((model) => model.id === props.profileModelId)
+              ) ? (
+                <CommandItem
+                  data-checked={
+                    props.currentModelSelection ===
+                    encodeModelSelection("__unknown__", props.profileModelId)
+                  }
+                  onSelect={() =>
+                    selectModel(
+                      encodeModelSelection("__unknown__", props.profileModelId!)
+                    )
+                  }
+                  value={props.profileModelId}
+                >
+                  {props.profileModelId}
+                </CommandItem>
+              ) : null}
+              {props.providerModelGroups.map((group) => (
+                <CommandGroup
+                  heading={group.providerLabel}
+                  key={group.providerId}
+                >
+                  {group.models.map((model) => {
+                    const providerId = model.providerId ?? group.providerId;
+                    const value = encodeModelSelection(providerId, model.id);
+
+                    return (
+                      <CommandItem
+                        data-checked={props.currentModelSelection === value}
+                        key={`${providerId}:${model.id}`}
+                        onSelect={() => selectModel(value)}
+                        value={`${group.providerLabel} ${model.name} ${model.id}`}
+                      >
+                        {model.name}
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              ))}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 function ChatComposerFullFooter({
   props,
   chatStatus,
@@ -901,82 +1075,7 @@ function ChatComposerFullFooter({
         ) : null}
 
         {props.providerConfigured ? (
-          <div className="min-w-[4.5rem] shrink overflow-hidden">
-            <PromptInputSelect
-              disabled={
-                busy ||
-                disabled ||
-                !props.providerModelGroups.some(
-                  (group) => group.models.length > 0
-                )
-              }
-              onValueChange={(value) =>
-                void props.onModelChange(value == null ? "" : String(value))
-              }
-              value={props.currentModelSelection ?? ""}
-            >
-              <PromptInputSelectTrigger
-                className={cn(
-                  composerSelectTriggerClass,
-                  "max-w-full justify-start overflow-hidden",
-                  props.contextUsage && "pl-1"
-                )}
-                size="sm"
-                title={
-                  props.currentModelSelection
-                    ? (props.renderModelLabel(props.currentModelSelection) ??
-                      undefined)
-                    : undefined
-                }
-              >
-                <PromptInputSelectValue placeholder="Model">
-                  {props.renderModelLabel}
-                </PromptInputSelectValue>
-              </PromptInputSelectTrigger>
-              <PromptInputSelectContent
-                align="start"
-                alignItemWithTrigger={false}
-                className="w-max max-w-[min(24rem,92vw)] text-xs"
-              >
-                {props.profileModelId &&
-                !props.providerModelGroups.some((group) =>
-                  group.models.some(
-                    (model) => model.id === props.profileModelId
-                  )
-                ) ? (
-                  <PromptInputSelectItem
-                    label={props.profileModelId}
-                    value={encodeModelSelection(
-                      "__unknown__",
-                      props.profileModelId
-                    )}
-                  >
-                    {props.profileModelId}
-                  </PromptInputSelectItem>
-                ) : null}
-                {props.providerModelGroups.map((group) => (
-                  <div key={group.providerId}>
-                    <div className="px-2 py-1.5 font-medium text-2xs text-muted-foreground">
-                      {group.providerLabel}
-                    </div>
-                    {group.models.map((model) => {
-                      const providerId = model.providerId ?? group.providerId;
-
-                      return (
-                        <PromptInputSelectItem
-                          key={`${providerId}:${model.id}`}
-                          label={model.name}
-                          value={`${providerId}::${model.id}`}
-                        >
-                          {model.name}
-                        </PromptInputSelectItem>
-                      );
-                    })}
-                  </div>
-                ))}
-              </PromptInputSelectContent>
-            </PromptInputSelect>
-          </div>
+          <ChatModelPicker busy={busy} disabled={disabled} props={props} />
         ) : (
           <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/10 px-2.5 font-medium text-amber-800 text-xs dark:text-amber-200">
             <WifiOff01Icon aria-hidden className="size-3.5 shrink-0" />

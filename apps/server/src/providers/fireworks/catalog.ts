@@ -1,8 +1,8 @@
 import type { CustomModelEntry } from "@nakama/core";
 import { formatHttpErrorBody } from "../shared";
 
-export const FIREWORKS_GATEWAY_BASE_URL = "https://api.fireworks.ai/v1";
-export const FIREWORKS_GATEWAY_ACCOUNT = "fireworks";
+const FIREWORKS_GATEWAY_BASE_URL = "https://api.fireworks.ai/v1";
+const FIREWORKS_GATEWAY_ACCOUNT = "fireworks";
 
 interface MoneyAmount {
   currencyCode?: string;

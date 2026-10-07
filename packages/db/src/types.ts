@@ -1,6 +1,7 @@
 import type {
   AgentQuestionnaire,
   AgentTodo,
+  ChatMessage,
   OrgPluginLifecycleState,
   OrgPluginSummary,
   OrgRole,
@@ -33,6 +34,7 @@ export interface StoredAutomationRunRecord {
   error: string | null;
   id: string;
   output: string | null;
+  progress?: ChatMessage[];
   startedAt: string;
   status: AutomationRunStatus;
 }
@@ -63,6 +65,19 @@ export interface StoredWorkflowRunRecord {
   startedAt: string;
   status: AutomationRunStatus;
   workflowId: string;
+}
+
+export interface StoredAutomationRunStepRecord {
+  args: string;
+  completedAt: string | null;
+  position: number;
+  result: string | null;
+  runId: string;
+  startedAt: string;
+  status: "running" | "completed";
+  toolCallId: string;
+  toolGroupId: string | null;
+  toolName: string;
 }
 
 export interface StoredWorkflowRunStepRecord {
@@ -117,7 +132,6 @@ export interface StoredToolRecord {
 export interface StoredSessionRecord {
   agentQuestionnaire: AgentQuestionnaire | null;
   agentTodos: AgentTodo[];
-  appUserId?: string | null;
   channel: string;
   createdAt: string;
   id: string;
@@ -160,7 +174,6 @@ export interface StoredAttachmentRecord {
 }
 
 export interface StoredSessionSummaryRecord {
-  appUserId?: string | null;
   channel: string;
   createdAt: string;
   id: string;
@@ -179,7 +192,7 @@ export interface StoredLlmUsageStatsRecord {
   estimatedCostUsd: number;
   id: string;
   inputTokens: number;
-  orgId?: string | null;
+  orgId: string;
   outputTokens: number;
   requestCount: number;
   trackedSince: string;
@@ -190,7 +203,7 @@ export interface StoredLlmUsageModelStatsRecord {
   estimatedCostUsd: number;
   inputTokens: number;
   modelId: string;
-  orgId?: string | null;
+  orgId: string;
   outputTokens: number;
   requestCount: number;
   trackedSince: string;
@@ -241,20 +254,21 @@ export interface StoredCodingAgentHarnessRecord {
   probeCache?: StoredCodingAgentHarnessProbeCache | null;
 }
 
-export interface StoredNotificationDestinationRecord {
-  channel: "telegram";
-  config: {
-    profileId?: string;
-    chatId: number;
-    topicId?: number | null;
-  };
+export type StoredNotificationDestinationRecord = {
   createdAt: string;
   id: string;
   name: string;
   orgId: string;
   secretHash: string;
   updatedAt: string;
-}
+} & (
+  | {
+      channel: "telegram";
+      config: { profileId?: string; chatId: number; topicId?: number | null };
+    }
+  | { channel: "discord"; config: { profileId: string; channelId: string } }
+  | { channel: "whatsapp"; config: { profileId: string } }
+);
 
 export type StoredOrgComposioToolkitStatus = "disabled" | "enabled";
 
@@ -427,7 +441,26 @@ export interface StoredMfaBackupCode {
   userId: string;
 }
 
-export type { OrgPluginLifecycleState } from "@nakama/core";
+export interface StoredPasskeyRecord {
+  counter: number;
+  createdAt: string;
+  credentialId: string;
+  id: string;
+  name: string;
+  publicKey: string;
+  transports: string[];
+  userId: string;
+}
+
+export type PasskeyChallengeType = "authentication" | "registration";
+
+export interface StoredPasskeyChallenge {
+  challenge: string;
+  createdAt: string;
+  expiresAt: string;
+  type: PasskeyChallengeType;
+  userId: string | null;
+}
 
 export type StoredPluginReleaseRecord = PluginReleaseSummary;
 
@@ -478,6 +511,7 @@ export interface PublishOrgPluginReleaseInput {
 }
 
 export interface StoredOrganizationRecord {
+  allowedInviteDomains?: string[];
   archivedAt?: string | null;
   createdAt: string;
   id: string;
@@ -502,20 +536,6 @@ export interface StoredOrgMemberRecord {
   role: OrgRole;
   userContext?: string | null;
   userId: string;
-}
-
-export interface StoredApiKeyRecord {
-  createdAt: string;
-  createdByUserId: string;
-  environment: string;
-  expiresAt: string | null;
-  id: string;
-  keyPrefix: string;
-  lastUsedAt: string | null;
-  name: string;
-  orgId: string;
-  revokedAt: string | null;
-  secretHash: string;
 }
 
 export interface StoredUserOrganizationRecord {
@@ -600,7 +620,8 @@ export type SkillProposalAction =
   | "delete"
   | "edit"
   | "write_file"
-  | "remove_file";
+  | "remove_file"
+  | "approve_code";
 
 export interface StoredSkillProposal {
   action: SkillProposalAction;
@@ -658,14 +679,6 @@ export interface StoredArtifactShareRecord {
   tokenHash: string;
 }
 
-export interface StoredChannelOrgMappingRecord {
-  channel: ChannelType;
-  channelUserId: string;
-  createdAt: string;
-  orgId: string;
-  userId: string;
-}
-
 export interface StoredBrowserSessionRecord {
   activeOrgId?: string | null;
   createdAt: string;
@@ -716,15 +729,45 @@ export interface DatabaseAdapter {
   }): Promise<boolean>;
   /** Verify the live connection can read the migrated schema. */
   checkHealth(): Promise<void>;
+  /**
+   * Automation runs left `running` by a dead process: those already resumed
+   * `maxResumes` times are failed, the rest have their resume count raised and
+   * are returned for the caller to continue.
+   */
+  claimInterruptedAutomationRuns(
+    maxResumes: number
+  ): Promise<Array<{ automationId: string; id: string }>>;
+  /**
+   * Atomically claims an idempotency key for a notification webhook delivery.
+   * Prunes rows older than the replay window, then returns true on first claim
+   * and false on replay within that window.
+   */
+  claimNotificationWebhookDelivery(
+    destinationId: string,
+    eventId: string,
+    createdAt: string
+  ): Promise<boolean>;
   compareAndSetOrgPluginState(
     input: CompareAndSetOrgPluginStateInput
   ): Promise<PluginPublishResult>;
+  completeAutomationRunStep(
+    runId: string,
+    toolCallId: string,
+    result: string,
+    completedAt: string
+  ): Promise<void>;
   consumeMfaBackupCode(
     userId: string,
     codeHash: string,
     usedAt: string
   ): Promise<boolean>;
   consumeMfaTotpStep(userId: string, step: number): Promise<boolean>;
+  consumePasskeyChallenge(
+    challenge: string,
+    userId: string | null,
+    type: PasskeyChallengeType,
+    consumedAt: string
+  ): Promise<boolean>;
   consumePasswordResetToken(
     tokenHash: string,
     passwordHash: string,
@@ -745,8 +788,8 @@ export interface DatabaseAdapter {
     userId: string,
     orgId: string
   ): Promise<AutomationUnreadCountRecord[]>;
+  countUnusedMfaBackupCodes(userId: string): Promise<number>;
   countUsers(): Promise<number>;
-  createApiKey(record: StoredApiKeyRecord): Promise<void>;
 
   createArtifactShare(record: StoredArtifactShareRecord): Promise<void>;
   /** Append-only insert. Adapters must not expose update/delete for this table. */
@@ -758,6 +801,8 @@ export interface DatabaseAdapter {
   createOrgInvite(record: StoredOrgInviteRecord): Promise<void>;
 
   createOrgMemoryProposal(record: StoredOrgMemoryProposal): Promise<void>;
+  createPasskey(record: StoredPasskeyRecord): Promise<void>;
+  createPasskeyChallenge(record: StoredPasskeyChallenge): Promise<void>;
 
   createPasswordResetToken(
     record: StoredPasswordResetTokenRecord
@@ -770,7 +815,6 @@ export interface DatabaseAdapter {
 
   createSkillSuggestion(record: StoredSkillSuggestion): Promise<void>;
   createUser(record: StoredUserRecord): Promise<void>;
-  deleteApiKey(id: string): Promise<boolean>;
   deleteAttachment(id: string): Promise<boolean>;
   deleteAutomation(id: string): Promise<boolean>;
   deleteAutomationRun(automationId: string, runId: string): Promise<boolean>;
@@ -787,6 +831,7 @@ export interface DatabaseAdapter {
     pluginId: string,
     expectedRevision: number
   ): Promise<boolean>;
+  deletePasskeys(userId: string): Promise<void>;
   deletePluginRelease(pluginId: string, version: string): Promise<boolean>;
   deleteProfile(id: string): Promise<boolean>;
   deleteSession(id: string): Promise<boolean>;
@@ -809,6 +854,7 @@ export interface DatabaseAdapter {
    *
    * Returns the number of automation and workflow runs settled.
    */
+  /** Settles workflow runs a dead process left `running`. Automation runs are handled by `claimInterruptedAutomationRuns`. */
   failInterruptedRuns(): Promise<number>;
   getActiveArtifactShareByPath(
     orgId: string,
@@ -818,7 +864,6 @@ export interface DatabaseAdapter {
   getActiveAutomationRun(
     automationId: string
   ): Promise<StoredAutomationRunRecord | null>;
-  getApiKeyByPrefix(keyPrefix: string): Promise<StoredApiKeyRecord | null>;
   getArtifactShareById(
     orgId: string,
     profileId: string,
@@ -829,6 +874,10 @@ export interface DatabaseAdapter {
   ): Promise<StoredArtifactShareRecord | null>;
   getAttachment(id: string): Promise<StoredAttachmentRecord | null>;
   getAutomation(id: string): Promise<StoredAutomationRecord | null>;
+  getAutomationRun(
+    automationId: string,
+    runId: string
+  ): Promise<StoredAutomationRunRecord | null>;
 
   getAutomationRunReadThrough(
     userId: string,
@@ -852,7 +901,7 @@ export interface DatabaseAdapter {
   ): Promise<StoredComposioUserConnectionRecord | null>;
   getDefaultProfileForOrg(orgId: string): Promise<StoredProfileRecord | null>;
 
-  getLlmUsageStats(): Promise<StoredLlmUsageStatsRecord | null>;
+  getLlmUsageStats(orgId: string): Promise<StoredLlmUsageStatsRecord | null>;
   getMcpServer(id: string): Promise<StoredMcpServerRecord | null>;
   getMcpServerByName(name: string): Promise<StoredMcpServerRecord | null>;
   getNotificationDestination(
@@ -875,6 +924,13 @@ export interface DatabaseAdapter {
     orgId: string,
     pluginId: string
   ): Promise<StoredOrgPluginRecord | null>;
+  getPasskey(
+    userId: string,
+    credentialId: string
+  ): Promise<StoredPasskeyRecord | null>;
+  getPasskeyByCredentialId(
+    credentialId: string
+  ): Promise<StoredPasskeyRecord | null>;
   getPendingOrgInvite(
     orgId: string,
     email: string
@@ -950,10 +1006,12 @@ export interface DatabaseAdapter {
   getWorkspaceSettings(): Promise<StoredWorkspaceSettingsRecord | null>;
   incrementLlmTurnUsage(orgId: string, delta: LlmTurnUsageDelta): Promise<void>;
   incrementLlmUsageStats(
+    orgId: string,
     delta: LlmUsageStatsDelta,
     trackedSince: string
   ): Promise<void>;
   incrementLlmUsageStatsByModel(
+    orgId: string,
     modelId: string,
     delta: LlmUsageStatsDelta,
     trackedSince: string
@@ -977,9 +1035,9 @@ export interface DatabaseAdapter {
 
   insertAttachment(record: StoredAttachmentRecord): Promise<void>;
   insertAutomationRun(record: StoredAutomationRunRecord): Promise<void>;
+  insertAutomationRunStep(step: StoredAutomationRunStepRecord): Promise<void>;
   insertWorkflowRun(record: StoredWorkflowRunRecord): Promise<void>;
   insertWorkflowRunStep(record: StoredWorkflowRunStepRecord): Promise<void>;
-  listApiKeysForOrg(orgId: string): Promise<StoredApiKeyRecord[]>;
 
   listArtifactSharesForProfile(
     orgId: string,
@@ -996,6 +1054,9 @@ export interface DatabaseAdapter {
     offset?: number;
     orgId?: string;
   }): Promise<StoredAuditEvent[]>;
+  listAutomationRunSteps(
+    runId: string
+  ): Promise<StoredAutomationRunStepRecord[]>;
 
   listAutomationRuns(
     automationId: string,
@@ -1025,7 +1086,9 @@ export interface DatabaseAdapter {
     profileId: string
   ): Promise<string[]>;
   listLlmTurnUsage(orgId: string): Promise<StoredLlmTurnUsageRecord[]>;
-  listLlmUsageStatsByModel(): Promise<StoredLlmUsageModelStatsRecord[]>;
+  listLlmUsageStatsByModel(
+    orgId: string
+  ): Promise<StoredLlmUsageModelStatsRecord[]>;
   listMcpServerProfileCounts(): Promise<Record<string, number>>;
 
   listMcpServers(): Promise<StoredMcpServerRecord[]>;
@@ -1046,6 +1109,7 @@ export interface DatabaseAdapter {
     status?: OrgMemoryProposalStatus
   ): Promise<StoredOrgMemoryProposal[]>;
   listOrgPlugins(orgId?: string): Promise<StoredOrgPluginRecord[]>;
+  listPasskeys(userId: string): Promise<StoredPasskeyRecord[]>;
 
   listPlatformAdminUsers(): Promise<StoredUserRecord[]>;
 
@@ -1075,7 +1139,6 @@ export interface DatabaseAdapter {
         StoredSessionSummaryRecord,
         "createdAt" | "id" | "pinned" | "updatedAt"
       >;
-      appUserId?: string;
       limit?: number;
       /** Keeps the sessions whose title or user/assistant text contains it. */
       query?: string;
@@ -1157,7 +1220,6 @@ export interface DatabaseAdapter {
     profileId: string,
     assignments: StoredProfileComposioToolkitRecord[]
   ): Promise<void>;
-  revokeApiKey(id: string, revokedAt: string): Promise<boolean>;
   revokeArtifactShare(id: string, revokedAt: string): Promise<boolean>;
   revokeBrowserSessionBySessionTokenHash(
     sessionTokenHash: string,
@@ -1175,6 +1237,15 @@ export interface DatabaseAdapter {
   ): Promise<boolean>;
   revokeBrowserSessionsForUser(
     userId: string,
+    revokedAt: string
+  ): Promise<number>;
+  /**
+   * Every active browser session except the caller's current session. A null
+   * session id revokes all of them for non-browser authentication modes.
+   */
+  revokeBrowserSessionsForUserExcept(
+    userId: string,
+    sessionId: string | null,
     revokedAt: string
   ): Promise<number>;
   setFilePinned(
@@ -1217,7 +1288,6 @@ export interface DatabaseAdapter {
     skillId: string
   ): Promise<boolean>;
   unassignToolFromProfile(profileId: string, toolId: string): Promise<boolean>;
-  updateApiKeyLastUsedAt(id: string, lastUsedAt: string): Promise<void>;
   updateArtifactShareSnapshot(
     id: string,
     snapshot: Pick<
@@ -1247,6 +1317,11 @@ export interface DatabaseAdapter {
       pinned?: boolean;
     }
   ): Promise<boolean>;
+  updatePasskeyCounter(
+    userId: string,
+    credentialId: string,
+    counter: number
+  ): Promise<void>;
   updateSessionModel(sessionId: string, model: string | null): Promise<boolean>;
   updateSessionPinned(sessionId: string, pinned: boolean): Promise<boolean>;
   updateSessionQuestionnaire(

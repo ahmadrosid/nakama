@@ -166,8 +166,4 @@ export function createAnthropicProvider(
   };
 }
 
-export {
-  buildAnthropicTools,
-  parseAnthropicContent,
-  toAnthropicMessages,
-} from "./web-search";
+export { parseAnthropicContent, toAnthropicMessages } from "./web-search";

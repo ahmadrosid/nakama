@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { SkillSummary } from "@nakama/core/contract";
 import {
+  filterComposerMentionSuggestions,
   filterComposerSlashSuggestions,
   filterReservedSlashCommands,
   filterSkillsForSlashQuery,
   findActiveSkillSlashRange,
+  getMentionTokenRanges,
   getReservedCommandTokenRanges,
   getSkillTokenRanges,
   matchComposerAddCommand,
@@ -307,5 +309,43 @@ describe("getReservedCommandTokenRanges", () => {
     expect(getReservedCommandTokenRanges("tell me about /learn later")).toEqual(
       []
     );
+  });
+});
+
+describe("@ mentions", () => {
+  test("opens on @ at a word start, never inside an email", () => {
+    expect(findActiveSkillSlashRange("draw @im", 8, "@")).toEqual({
+      end: 8,
+      query: "im",
+      start: 5,
+    });
+    expect(findActiveSkillSlashRange("me@image.dev", 12, "@")).toBeNull();
+  });
+
+  test("offers @image and inserts it with a trailing space", () => {
+    const [suggestion] = filterComposerMentionSuggestions("im");
+    expect(suggestion).toMatchObject({
+      kind: "mention",
+      mention: { name: "image" },
+    });
+    expect(filterComposerMentionSuggestions("john")).toEqual([]);
+
+    const range = findActiveSkillSlashRange("@im", 3, "@");
+    expect(
+      replaceSlashRangeWithReservedCommand(
+        "@im",
+        range!,
+        { name: "image" },
+        "@"
+      )
+    ).toEqual({ cursorIndex: 7, value: "@image " });
+  });
+
+  test("highlights @image tokens only as whole words", () => {
+    expect(getMentionTokenRanges("@image a fox, then @image again")).toEqual([
+      { end: 6, name: "image", start: 0 },
+      { end: 25, name: "image", start: 19 },
+    ]);
+    expect(getMentionTokenRanges("me@image.dev @images")).toEqual([]);
   });
 });

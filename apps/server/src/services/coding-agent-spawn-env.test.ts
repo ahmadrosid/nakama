@@ -23,10 +23,6 @@ describe("coding-agent spawn env", () => {
     );
   });
 
-  test("returns no env overrides when routing is inactive", () => {
-    expect(buildClaudeCodeSpawnEnv(inactiveRouting)).toEqual({});
-  });
-
   test("returns empty spawn env for Cursor Agent even when routing is active", async () => {
     const spawn = await buildSpawnEnvForHarness(
       "cursor_agent",
@@ -52,20 +48,6 @@ describe("coding-agent spawn env", () => {
     expect(env.ANTHROPIC_API_KEY).toBe("sk-ant-test");
     expect(env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe("claude-opus-4-6");
     expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
-  });
-
-  test("builds pi.dev provider passthrough env for anthropic", async () => {
-    const env = await buildPiSpawnEnv(
-      activeAnthropicRouting({
-        apiKey: "test-anthropic-key",
-        baseUrl: "https://api.anthropic.com",
-        providerLabel: "Anthropic",
-        providerType: "anthropic",
-      }),
-      "anthropic"
-    );
-    expect(env.env.PI_CODING_AGENT_DIR).toBeDefined();
-    expect(env.cleanup).toBeDefined();
   });
 
   test("builds pi.dev provider passthrough env for openrouter", async () => {

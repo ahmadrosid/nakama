@@ -9,25 +9,16 @@ import { SidebarUserMenu } from "@/components/SidebarUserMenu";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
-import { useProfilesQuery } from "@/hooks/use-app-queries";
-import {
-  buildChatBasePath,
-  isChatSessionPath,
-  isProfilesPath,
-  resolveActiveProfileIdFromLocation,
-} from "@/lib/chat-history";
-import { PAGE_PATHS, pathForPage, profilePath } from "@/lib/navigation";
+import { useSelectProfile } from "@/hooks/use-select-profile";
+import { PAGE_PATHS, pathForPage } from "@/lib/navigation";
 import { ditherLogoSrc } from "@/lib/theme";
 
 export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
-  const { data: profiles = [] } = useProfilesQuery();
+  const { activeProfileId, onProfilesPage, profiles, selectProfile } =
+    useSelectProfile();
   const { user, activeOrg } = useAuth();
   const { resolvedTheme } = useTheme();
-  const {
-    profileId: liveChatProfileId,
-    setProfileId: setLiveChatProfileId,
-    syncForOrg,
-  } = useActiveChatProfile();
+  const { syncForOrg } = useActiveChatProfile();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -43,52 +34,9 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
     (left, right) => Number(right.isSuper) - Number(left.isSuper)
   );
 
-  const onProfilesPage = isProfilesPath(location.pathname);
-  const activeProfileId = resolveActiveProfileIdFromLocation({
-    liveChatProfileId,
-    pathname: location.pathname,
-    profiles,
-    profilesPath: PAGE_PATHS.profiles,
-    search: location.search,
-  });
-
   function handleSelectProfile(profileId: string) {
     onNavigate?.();
-
-    if (profileId === activeProfileId) {
-      return;
-    }
-
-    if (onProfilesPage) {
-      setLiveChatProfileId(profileId);
-      if (location.pathname === PAGE_PATHS.profiles) {
-        const params = new URLSearchParams(location.search);
-        params.set("profile", profileId);
-        navigate(`${PAGE_PATHS.profiles}?${params.toString()}`, {
-          replace: true,
-        });
-        return;
-      }
-
-      navigate(profilePath(profileId));
-      return;
-    }
-
-    if (location.pathname === PAGE_PATHS.files) {
-      setLiveChatProfileId(profileId);
-      return;
-    }
-
-    // Draft /chat: store update; ChatPage enters a new draft for this id.
-    if (location.pathname === buildChatBasePath()) {
-      setLiveChatProfileId(profileId);
-      return;
-    }
-
-    setLiveChatProfileId(profileId);
-    navigate(buildChatBasePath(), {
-      replace: isChatSessionPath(location.pathname),
-    });
+    selectProfile(profileId);
   }
 
   return (
