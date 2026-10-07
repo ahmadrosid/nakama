@@ -555,6 +555,80 @@ Original body.
     ).rejects.toMatchObject({ status: 404 });
   });
 
+  test("skill versions keep notes, restore, and show pending proposals", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new SkillsService(db);
+    const profileDir = join(
+      configDir,
+      "orgs",
+      ORG_ID,
+      "profiles",
+      PROFILE_ID,
+      "skills",
+      "notes"
+    );
+    await mkdir(profileDir, { recursive: true });
+    await writeFile(
+      join(profileDir, "SKILL.md"),
+      `---
+name: notes
+description: Capture notes for the user.
+---
+
+Original body.
+`
+    );
+    await service.syncProfileSkills(ORG_ID, PROFILE_ID);
+    const notes = (await service.listSkills()).skills.find(
+      (skill) => skill.name === "notes"
+    );
+
+    await service.patchSkill(ORG_ID, notes!.id, {
+      body: "First.",
+      note: "Shorter steps",
+    });
+    const before = await service.listSkillVersions(ORG_ID, notes!.id);
+    expect(before.versions[0]?.note).toBe("Shorter steps");
+    const original = before.versions.find(
+      (version) => version.kind === "original"
+    );
+
+    const restored = await service.restoreSkillVersion(
+      ORG_ID,
+      notes!.id,
+      original!.id
+    );
+    expect(restored.skill.body.trim()).toBe("Original body.");
+    const after = await service.listSkillVersions(ORG_ID, notes!.id);
+    expect(after.versions[0]).toMatchObject({ kind: "restored", version: 3 });
+    expect(after.versions[0]?.content).toBe(original!.content);
+    await expect(
+      service.restoreSkillVersion("org_other", notes!.id, original!.id)
+    ).rejects.toMatchObject({ status: 404 });
+
+    await db.createSkillProposal({
+      action: "patch",
+      content: null,
+      createdAt: new Date().toISOString(),
+      id: "skprop_1",
+      orgId: ORG_ID,
+      patchNewString: "Proposed body.",
+      patchOldString: "Original body.",
+      profileId: PROFILE_ID,
+      proposedByUserId: null,
+      relativePath: null,
+      reviewedAt: null,
+      reviewerUserId: null,
+      sessionId: null,
+      skillName: "notes",
+      status: "pending",
+    });
+    const withPending = await service.listSkillVersions(ORG_ID, notes!.id);
+    expect(withPending.pending.map((entry) => entry.id)).toEqual(["skprop_1"]);
+    expect(withPending.pending[0]?.content).toContain("Proposed body.");
+    expect(withPending.pending[0]?.content).not.toContain("Original body.");
+  });
+
   test("patchSkill keeps the scripts the skill ships", async () => {
     // A patch edits prose. Rewriting the frontmatter without `scripts:` left
     // the skill installed and every one of its scripts unreachable, with

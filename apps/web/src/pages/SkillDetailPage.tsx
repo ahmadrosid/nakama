@@ -11,7 +11,7 @@ import {
   Folder01Icon,
   FolderOpenIcon,
 } from "hugeicons-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   Link,
   Navigate,
@@ -121,6 +121,7 @@ function SkillDetailPageContent({
   const [removeOpen, setRemoveOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editBody, setEditBody] = useState(skill.body);
+  const [editNote, setEditNote] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id ?? "";
@@ -152,6 +153,7 @@ function SkillDetailPageContent({
 
   function handleStartEdit() {
     setEditBody(skill.body);
+    setEditNote("");
     setSaveError(null);
     setEditing(true);
   }
@@ -175,7 +177,7 @@ function SkillDetailPageContent({
 
     try {
       await patchSkillMutation.mutateAsync({
-        input: { body: editBody },
+        input: { body: editBody, note: editNote.trim() || undefined },
         profileId: profileId ?? undefined,
         skillId: skill.id,
       });
@@ -244,8 +246,10 @@ function SkillDetailPageContent({
                 createdBy={createdBy}
                 editBody={editBody}
                 editing={editing}
+                editNote={editNote}
                 onCancelEdit={handleCancelEdit}
                 onEditBodyChange={setEditBody}
+                onEditNoteChange={setEditNote}
                 onSaveEdit={() => void handleSaveEdit()}
                 onStartEdit={handleStartEdit}
                 saveBusy={patchSkillMutation.isPending}
@@ -254,7 +258,11 @@ function SkillDetailPageContent({
                 skill={skill}
                 usageSummary={usageSummary}
               />
-              <SkillVersionHistory orgId={orgId} skillId={skill.id} />
+              <SkillVersionHistory
+                disabled={editing || busy}
+                orgId={orgId}
+                skillId={skill.id}
+              />
             </div>
           ) : (
             <SkillFilePreview
@@ -388,7 +396,7 @@ function PageState({ message }: { message: string }) {
 }
 
 import type { SkillFilesResponse, SkillVersion } from "@nakama/core/contract";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { buildFileDiffRows, FileDiff } from "@/components/file-diff";
 import {
   formatSessionRelativeTime,
@@ -398,6 +406,7 @@ import {
 const versionKindLabels: Record<SkillVersion["kind"], string> = {
   created: "Created",
   original: "Original",
+  restored: "Restored",
   updated: "Updated",
 };
 
@@ -421,20 +430,133 @@ function versionAuthor(version: SkillVersion): string {
   return version.source ? versionSourceLabels[version.source] : "System";
 }
 
+function VersionTimelineItem({
+  badge,
+  children,
+  current = false,
+  label,
+  last,
+  onToggle,
+  open,
+  pill,
+  subtitle,
+  suggested = false,
+  title,
+}: {
+  badge: string;
+  children?: ReactNode;
+  current?: boolean;
+  label: string;
+  last: boolean;
+  onToggle: () => void;
+  open: boolean;
+  pill?: string;
+  subtitle: ReactNode;
+  suggested?: boolean;
+  title: string | null;
+}) {
+  return (
+    <li className="relative pl-11">
+      {!last && (
+        <span
+          aria-hidden
+          className="absolute top-10 bottom-0 left-4 w-px bg-border"
+        />
+      )}
+      <span
+        aria-hidden
+        className={cn(
+          "absolute top-3 left-0 flex size-8 items-center justify-center rounded-full border text-xs tabular-nums",
+          current && "border-foreground bg-foreground text-background",
+          suggested &&
+            "border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+          !(current || suggested) &&
+            "border-border bg-background text-muted-foreground"
+        )}
+      >
+        {badge}
+      </span>
+      <button
+        aria-expanded={open}
+        className="w-full rounded-md px-2 py-3 text-left hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        onClick={onToggle}
+        type="button"
+      >
+        <span className="flex items-center gap-2">
+          <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+            {label}
+          </span>
+          {pill && (
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-xs",
+                suggested
+                  ? "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                  : "bg-muted"
+              )}
+            >
+              {pill}
+            </span>
+          )}
+          <span className="sr-only">{badge}</span>
+        </span>
+        {title && (
+          <span className="mt-1 block break-words font-medium text-sm">
+            {title}
+          </span>
+        )}
+        <span className="mt-1 block text-muted-foreground text-sm">
+          {subtitle}
+        </span>
+      </button>
+      {open && children}
+    </li>
+  );
+}
+
+function RelativeTime({ value }: { value: string }) {
+  return (
+    <time dateTime={value} title={formatSessionTimestamp(value)}>
+      {formatSessionRelativeTime(value)}
+    </time>
+  );
+}
+
 function SkillVersionHistory({
+  disabled,
   orgId,
   skillId,
 }: {
+  disabled: boolean;
   orgId: string;
   skillId: string;
 }) {
+  const queryClient = useQueryClient();
   const [openId, setOpenId] = useState<string | null>(null);
   const versionsQuery = useQuery({
     enabled: Boolean(orgId),
     queryFn: () => client.listSkillVersions(skillId, orgId),
     queryKey: [...queryKeys.skills.detail(skillId), "versions", orgId],
   });
+  const restoreMutation = useMutation({
+    mutationFn: (versionId: string) =>
+      client.restoreSkillVersion(skillId, versionId, orgId),
+    onError: (error) => toast(formatError(error)),
+    onSuccess: async () => {
+      setOpenId(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.all }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.skills.detail(skillId),
+        }),
+      ]);
+    },
+  });
   const versions = versionsQuery.data?.versions ?? [];
+  const pending = versionsQuery.data?.pending ?? [];
+  const currentContent = versionsQuery.data?.currentContent ?? null;
+  const nextVersion = (versions[0]?.version ?? 0) + 1;
+  const toggle = (id: string) => setOpenId(openId === id ? null : id);
 
   return (
     <section
@@ -465,75 +587,87 @@ function SkillVersionHistory({
           </Button>
         </p>
       )}
-      {versionsQuery.isSuccess && versions.length === 0 && (
-        <p className="px-4 py-3 text-muted-foreground text-sm">
-          No changes yet.
-        </p>
-      )}
-      {versions.length > 0 && (
+      {versionsQuery.isSuccess &&
+        versions.length === 0 &&
+        pending.length === 0 && (
+          <p className="px-4 py-3 text-muted-foreground text-sm">
+            No changes yet.
+          </p>
+        )}
+      {(versions.length > 0 || pending.length > 0) && (
         <ol className="px-4 py-2">
+          {pending.map((proposal, index) => (
+            <VersionTimelineItem
+              badge={`v${nextVersion + index}`}
+              key={proposal.id}
+              label="Suggested"
+              last={index === pending.length - 1 && versions.length === 0}
+              onToggle={() => toggle(proposal.id)}
+              open={openId === proposal.id}
+              pill="Pending review"
+              subtitle={
+                <>
+                  {proposal.proposedByName ?? "Agent"}
+                  {" · "}
+                  <RelativeTime value={proposal.createdAt} />
+                </>
+              }
+              suggested
+              title={null}
+            >
+              <FileDiff
+                className="mb-3 overflow-hidden rounded-md border border-border"
+                rows={buildFileDiffRows(currentContent, proposal.content)}
+                wrap
+              />
+            </VersionTimelineItem>
+          ))}
           {versions.map((version, index) => {
             const current = index === 0;
-            const open = openId === version.id;
-            const previous = versions[index + 1];
             return (
-              <li className="relative pl-11" key={version.id}>
-                {index < versions.length - 1 && (
-                  <span
-                    aria-hidden
-                    className="absolute top-10 bottom-0 left-4 w-px bg-border"
-                  />
-                )}
-                <span
-                  aria-hidden
-                  className={cn(
-                    "absolute top-3 left-0 flex size-8 items-center justify-center rounded-full border text-xs tabular-nums",
-                    current
-                      ? "border-foreground bg-foreground text-background"
-                      : "border-border bg-background text-muted-foreground"
-                  )}
-                >
-                  v{version.version}
-                </span>
-                <button
-                  aria-expanded={open}
-                  className="w-full rounded-md px-2 py-3 text-left hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                  onClick={() => setOpenId(open ? null : version.id)}
-                  type="button"
-                >
-                  <span className="flex items-center gap-2">
-                    <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-                      {versionKindLabels[version.kind]}
-                    </span>
-                    {current && (
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
-                        Current
-                      </span>
-                    )}
-                    <span className="sr-only">v{version.version}</span>
-                  </span>
-                  <span className="mt-1 block text-muted-foreground text-sm">
+              <VersionTimelineItem
+                badge={`v${version.version}`}
+                current={current}
+                key={version.id}
+                label={versionKindLabels[version.kind]}
+                last={index === versions.length - 1}
+                onToggle={() => toggle(version.id)}
+                open={openId === version.id}
+                pill={current ? "Current" : undefined}
+                subtitle={
+                  <>
                     {versionAuthor(version)}
                     {" · "}
-                    <time
-                      dateTime={version.createdAt}
-                      title={formatSessionTimestamp(version.createdAt)}
-                    >
-                      {formatSessionRelativeTime(version.createdAt)}
-                    </time>
-                  </span>
-                </button>
-                {open && (
-                  <FileDiff
-                    className="mb-3 overflow-hidden rounded-md border border-border"
-                    rows={buildFileDiffRows(
-                      previous?.content ?? null,
-                      version.content
+                    <RelativeTime value={version.createdAt} />
+                  </>
+                }
+                title={version.note}
+              >
+                <FileDiff
+                  className="mb-3 overflow-hidden rounded-md border border-border"
+                  rows={buildFileDiffRows(
+                    versions[index + 1]?.content ?? null,
+                    version.content
+                  )}
+                  wrap
+                />
+                {!current && (
+                  <Button
+                    className="mb-3"
+                    disabled={disabled || restoreMutation.isPending}
+                    onClick={() => restoreMutation.mutate(version.id)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    {restoreMutation.isPending ? (
+                      <Spinner className="size-4" />
+                    ) : (
+                      "Restore this version"
                     )}
-                    wrap
-                  />
+                  </Button>
                 )}
-              </li>
+              </VersionTimelineItem>
             );
           })}
         </ol>

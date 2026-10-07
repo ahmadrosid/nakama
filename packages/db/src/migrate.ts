@@ -1980,6 +1980,7 @@ function migrateSkillVersionsTable(db: Database): void {
       version INTEGER NOT NULL,
       kind TEXT NOT NULL,
       content TEXT NOT NULL,
+      note TEXT,
       actor_user_id TEXT,
       source TEXT,
       created_at TEXT NOT NULL,

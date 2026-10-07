@@ -97,6 +97,15 @@ function isPluginOwnedSkill(record: StoredSkillRecord): boolean {
   return Boolean(record.pluginId && record.pluginKey);
 }
 
+function assertEditableSkill(record: StoredSkillRecord): void {
+  if (isPluginOwnedSkill(record)) {
+    throw new Error("Plugin-owned skills cannot be edited.");
+  }
+  if (bundledSkillNames.has(record.name)) {
+    throw new Error("Bundled system skills cannot be edited.");
+  }
+}
+
 function parseSkillsAddCommand(command: string): string {
   const tokens = command
     .match(/"[^"]*"|'[^']*'|\S+/g)
@@ -287,14 +296,7 @@ export class SkillsService {
     }
 
     const record = await this.requireSkill(skillId);
-
-    if (isPluginOwnedSkill(record)) {
-      throw new Error("Plugin-owned skills cannot be edited.");
-    }
-
-    if (bundledSkillNames.has(record.name)) {
-      throw new Error("Bundled system skills cannot be edited.");
-    }
+    assertEditableSkill(record);
 
     const skillFilePath = path.join(record.sourcePath, SKILL_FILE_NAME);
     const existing = await readFile(skillFilePath, "utf8");
@@ -334,7 +336,9 @@ export class SkillsService {
       "patched"
     );
 
-    await this.recordSkillVersion(synced, existing, content, options?.meta);
+    await this.recordSkillVersion(synced, existing, content, options?.meta, {
+      note: request.note,
+    });
 
     const profileId = options?.profileId?.trim();
     if (profileId) {
@@ -880,7 +884,58 @@ export class SkillsService {
       return name;
     };
     const versions = await this.db.listSkillVersions(skillId);
+    const currentContent = await readFile(
+      path.join(record.sourcePath, SKILL_FILE_NAME),
+      "utf8"
+    ).catch(() => "");
+    const ownerOrgId = record.orgId;
+    const proposals = ownerOrgId
+      ? (
+          await this.db.listSkillProposals(ownerOrgId, { status: "pending" })
+        ).filter(
+          (proposal) =>
+            proposal.skillName === record.name &&
+            isPathWithinProfileSkillsDir(
+              ownerOrgId,
+              proposal.profileId,
+              record.sourcePath
+            )
+        )
+      : [];
+    const pending = await Promise.all(
+      proposals.map(async (proposal) => {
+        let content: string | null = null;
+        if (proposal.action === "edit") {
+          content = proposal.content;
+        } else if (
+          proposal.action === "patch" &&
+          proposal.patchOldString &&
+          proposal.patchNewString !== null &&
+          currentContent.split(proposal.patchOldString).length === 2
+        ) {
+          const newString = proposal.patchNewString;
+          content = currentContent.replace(
+            proposal.patchOldString,
+            () => newString
+          );
+        }
+        return content === null
+          ? null
+          : {
+              content,
+              createdAt: proposal.createdAt,
+              id: proposal.id,
+              proposedByName: proposal.proposedByUserId
+                ? await actorName(proposal.proposedByUserId)
+                : null,
+            };
+      })
+    );
     return {
+      currentContent,
+      pending: pending
+        .filter((entry) => entry !== null)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       versions: await Promise.all(
         versions.map(async (version) => ({
           actorName: version.actorUserId
@@ -890,11 +945,52 @@ export class SkillsService {
           createdAt: version.createdAt,
           id: version.id,
           kind: version.kind,
+          note: version.note,
           source: version.source,
           version: version.version,
         }))
       ),
     };
+  }
+
+  async restoreSkillVersion(
+    orgId: string,
+    skillId: string,
+    versionId: string,
+    meta?: ProfileChangeMeta
+  ): Promise<SkillResponse> {
+    const record = await this.db.getSkill(skillId);
+    if (!record || (record.orgId && record.orgId !== orgId)) {
+      throw new NakamaApiError("Skill not found.", 404);
+    }
+    assertEditableSkill(record);
+    const version = await this.db.getSkillVersion(skillId, versionId);
+    if (!version) {
+      throw new NakamaApiError("Skill version not found.", 404);
+    }
+
+    const skillFilePath = path.join(record.sourcePath, SKILL_FILE_NAME);
+    const existing = await readFile(skillFilePath, "utf8");
+    const currentName = parseSkillMarkdown(existing, skillFilePath).frontmatter
+      .name;
+    if (
+      parseSkillMarkdown(version.content, skillFilePath).frontmatter.name !==
+      currentName
+    ) {
+      throw new NakamaApiError("A restore cannot rename the skill.", 409);
+    }
+
+    await writeFile(skillFilePath, version.content, "utf8");
+    const synced = await this.syncSkillRecordFromDirectory(
+      record.sourcePath,
+      currentName,
+      "patched"
+    );
+    await this.recordSkillVersion(synced, existing, version.content, meta, {
+      kind: "restored",
+      note: `Restored v${version.version}`,
+    });
+    return this.getSkill(synced.id);
   }
 
   private async skillFilesRoot(
@@ -1687,7 +1783,8 @@ export class SkillsService {
     record: StoredSkillRecord,
     beforeContent: string | null,
     afterContent: string,
-    meta?: ProfileChangeMeta
+    meta?: ProfileChangeMeta,
+    options?: { kind?: "restored"; note?: string | null }
   ): Promise<void> {
     if (beforeContent === afterContent) {
       return;
@@ -1702,6 +1799,7 @@ export class SkillsService {
         createdAt: record.createdAt,
         id: createId("skill_version"),
         kind: "original",
+        note: null,
         skillId: record.id,
         source: null,
       });
@@ -1711,7 +1809,8 @@ export class SkillsService {
       content: afterContent,
       createdAt: new Date().toISOString(),
       id: createId("skill_version"),
-      kind: beforeContent === null ? "created" : "updated",
+      kind: options?.kind ?? (beforeContent === null ? "created" : "updated"),
+      note: options?.note?.trim() || null,
       skillId: record.id,
       source: meta?.source ?? null,
     });

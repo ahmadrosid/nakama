@@ -1230,6 +1230,17 @@ export class NakamaClient {
     );
   }
 
+  async restoreSkillVersion(
+    skillId: string,
+    versionId: string,
+    orgId: string
+  ): Promise<SkillResponse> {
+    return this.request<SkillResponse>(
+      `/v1/skills/${encodeURIComponent(skillId)}/versions/${encodeURIComponent(versionId)}/restore`,
+      { headers: { "X-Org-Id": orgId }, method: "POST" }
+    );
+  }
+
   async readSkillFile(
     skillId: string,
     filePath: string,

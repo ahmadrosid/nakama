@@ -3649,6 +3649,20 @@ export class AgentService {
     return this.requireSkillsService().listSkillVersions(orgId, skillId);
   }
 
+  async restoreSkillVersion(
+    orgId: string,
+    skillId: string,
+    versionId: string,
+    meta?: ProfileChangeMeta
+  ): Promise<SkillResponse> {
+    return this.requireSkillsService().restoreSkillVersion(
+      orgId,
+      skillId,
+      versionId,
+      meta
+    );
+  }
+
   async readSkillFile(orgId: string, skillId: string, filePath: string) {
     return this.requireSkillsService().readSkillFile(orgId, skillId, filePath);
   }

@@ -483,6 +483,7 @@ interface SkillVersionRow {
   created_at: string;
   id: string;
   kind: string;
+  note: string | null;
   skill_id: string;
   source: string | null;
   version: number;
@@ -1398,19 +1399,28 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   );
   const createSkillVersionStmt = db.prepare(`
     INSERT INTO skill_versions (
-      id, skill_id, version, kind, content, actor_user_id, source, created_at
+      id, skill_id, version, kind, content, note, actor_user_id, source,
+      created_at
     )
-    SELECT ?, ?, COALESCE(MAX(version), 0) + 1, ?, ?, ?, ?, ?
+    SELECT ?, ?, COALESCE(MAX(version), 0) + 1, ?, ?, ?, ?, ?, ?
     FROM skill_versions WHERE skill_id = ?
     RETURNING version
   `);
   const listSkillVersionsStmt = db.prepare(`
     SELECT
-      id, skill_id, version, kind, content, actor_user_id, source, created_at
+      id, skill_id, version, kind, content, note, actor_user_id, source,
+      created_at
     FROM skill_versions
     WHERE skill_id = ?
     ORDER BY version DESC
     LIMIT ?
+  `);
+  const getSkillVersionStmt = db.prepare(`
+    SELECT
+      id, skill_id, version, kind, content, note, actor_user_id, source,
+      created_at
+    FROM skill_versions
+    WHERE skill_id = ? AND id = ?
   `);
   const clearErasedUserSkillVersionsStmt = db.prepare(
     "UPDATE skill_versions SET actor_user_id = NULL WHERE actor_user_id = ?"
@@ -3310,6 +3320,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.skillId,
         record.kind,
         record.content,
+        record.note,
         record.actorUserId,
         record.source,
         record.createdAt,
@@ -3774,6 +3785,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         skillId
       ) as SkillUsageRow | null;
       return row ? toSkillUsageRecord(row) : null;
+    },
+
+    async getSkillVersion(skillId, versionId) {
+      const row = getSkillVersionStmt.get(skillId, versionId) as
+        | SkillVersionRow
+        | undefined;
+      return row ? toSkillVersionRecord(row) : null;
     },
 
     async getTool(id) {
@@ -4391,18 +4409,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         skillId,
         options.limit ?? 50
       ) as SkillVersionRow[];
-      return rows.map(
-        (row): StoredSkillVersion => ({
-          actorUserId: row.actor_user_id,
-          content: row.content,
-          createdAt: row.created_at,
-          id: row.id,
-          kind: row.kind as StoredSkillVersion["kind"],
-          skillId: row.skill_id,
-          source: row.source as StoredSkillVersion["source"],
-          version: row.version,
-        })
-      );
+      return rows.map(toSkillVersionRecord);
     },
 
     async listToolOutputSavings(orgId) {
@@ -5811,6 +5818,20 @@ function toProfileChangeEventRecord(
     orgId: row.org_id,
     profileId: row.profile_id,
     source: row.source as StoredProfileChangeEvent["source"],
+  };
+}
+
+function toSkillVersionRecord(row: SkillVersionRow): StoredSkillVersion {
+  return {
+    actorUserId: row.actor_user_id,
+    content: row.content,
+    createdAt: row.created_at,
+    id: row.id,
+    kind: row.kind as StoredSkillVersion["kind"],
+    note: row.note,
+    skillId: row.skill_id,
+    source: row.source as StoredSkillVersion["source"],
+    version: row.version,
   };
 }
 

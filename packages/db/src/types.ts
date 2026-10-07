@@ -634,7 +634,7 @@ export interface StoredProfileChangeEvent {
   source: ProfileChangeSource;
 }
 
-export type SkillVersionKind = "created" | "original" | "updated";
+export type SkillVersionKind = "created" | "original" | "restored" | "updated";
 
 export interface StoredSkillVersion {
   actorUserId: string | null;
@@ -642,6 +642,7 @@ export interface StoredSkillVersion {
   createdAt: string;
   id: string;
   kind: SkillVersionKind;
+  note: string | null;
   skillId: string;
   source: ProfileChangeSource | null;
   version: number;
@@ -1047,6 +1048,10 @@ export interface DatabaseAdapter {
     profileId: string,
     skillId: string
   ): Promise<StoredSkillUsageRecord | null>;
+  getSkillVersion(
+    skillId: string,
+    versionId: string
+  ): Promise<StoredSkillVersion | null>;
   getTool(id: string): Promise<StoredToolRecord | null>;
   getToolByName(name: string): Promise<StoredToolRecord | null>;
   getToolByNameForOrg(
@@ -1251,6 +1256,7 @@ export interface DatabaseAdapter {
   listSkillUsageForProfile(
     profileId: string
   ): Promise<StoredSkillUsageRecord[]>;
+
   /** Newest first. */
   listSkillVersions(
     skillId: string,

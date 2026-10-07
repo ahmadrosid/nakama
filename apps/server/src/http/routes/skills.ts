@@ -328,6 +328,48 @@ export function registerSkillRoutes(
     );
   });
 
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "restoreSkillVersion",
+      path: "/v1/skills/{skillId}/versions/{versionId}/restore",
+      request: {
+        params: z.object({
+          skillId: z
+            .string()
+            .openapi({ param: { in: "path", name: "skillId" } }),
+          versionId: z
+            .string()
+            .openapi({ param: { in: "path", name: "versionId" } }),
+        }),
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: skillSchema } },
+          description: "Skill detail",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Restore a SKILL.md version",
+      tags: ["Skills"],
+    })
+  );
+
+  app.post("/v1/skills/:skillId/versions/:versionId/restore", async (c) => {
+    const auth = requirePlatformAdminFromContext(c);
+    return json<SkillResponse>(
+      await agent.restoreSkillVersion(
+        requireActiveOrgIdFromContext(c),
+        decodeURIComponent(c.req.param("skillId")),
+        decodeURIComponent(c.req.param("versionId")),
+        { actorUserId: auth.user.id, source: "dashboard" }
+      )
+    );
+  });
+
   app.post("/v1/skills", async (c) => {
     const auth = requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
