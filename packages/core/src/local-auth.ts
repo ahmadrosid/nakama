@@ -4,9 +4,10 @@ import { readTextOrNull, writeTextFile } from "./fs";
 import { nanoid } from "./ids";
 import {
   getUserConfigDir,
+  getUserConfigPath,
   loadUserConfig,
-  saveUserConfig,
-  type UserConfig,
+  parseIniWithSections,
+  writeParsedConfigIni,
 } from "./user-config";
 
 export const LOCAL_CLIENT_EMAIL = "local-client@nakama.internal";
@@ -35,26 +36,14 @@ export function getLocalAuthTokenPath(): string {
   return join(getUserConfigDir(), LOCAL_AUTH_TOKEN_FILENAME);
 }
 
-function toPersistedUserConfig(
-  config: Awaited<ReturnType<typeof loadUserConfig>>
-): UserConfig {
-  return {
-    defaultProviderId: config?.defaultProviderId ?? null,
-    providers: config?.providers ?? [],
-    ...(config?.timezone ? { timezone: config.timezone } : {}),
-    ...(config?.thinkingEnabled === undefined
-      ? {}
-      : { thinkingEnabled: config.thinkingEnabled }),
-    ...(config?.thinkingEffort
-      ? { thinkingEffort: config.thinkingEffort }
-      : {}),
-    ...(config?.localAuthTokenHash
-      ? { localAuthTokenHash: config.localAuthTokenHash }
-      : {}),
-    ...(config?.localAuthToken
-      ? { localAuthToken: config.localAuthToken }
-      : {}),
-  };
+async function persistLocalAuthTokenHash(token: string): Promise<void> {
+  const raw = await readTextOrNull(getUserConfigPath());
+  const parsed =
+    raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
+
+  await writeParsedConfigIni(parsed.global, parsed.sections, {
+    local_auth_token_hash: hashLocalAuthToken(token),
+  });
 }
 
 async function loadStoredLocalAuthToken(): Promise<string | null> {
@@ -98,20 +87,13 @@ export async function resolveLocalAuthToken(): Promise<string> {
   const legacyToken = config?.localAuthToken?.trim();
   if (legacyToken) {
     await persistLocalAuthToken(legacyToken);
-    await saveUserConfig({
-      ...toPersistedUserConfig(config),
-      localAuthTokenHash: hashLocalAuthToken(legacyToken),
-    });
+    await persistLocalAuthTokenHash(legacyToken);
     return legacyToken;
   }
 
   const generated = generateLocalAuthToken();
-  const newConfig = toPersistedUserConfig(config);
   await persistLocalAuthToken(generated);
-  await saveUserConfig({
-    ...newConfig,
-    localAuthTokenHash: hashLocalAuthToken(generated),
-  });
+  await persistLocalAuthTokenHash(generated);
   return generated;
 }
 
@@ -126,14 +108,10 @@ export async function rotateLocalAuthToken(): Promise<string> {
     throw new LocalAuthTokenManagedExternallyError();
   }
 
-  const config = await loadUserConfig();
   const token = generateLocalAuthToken();
 
   await persistLocalAuthToken(token);
-  await saveUserConfig({
-    ...toPersistedUserConfig(config),
-    localAuthTokenHash: hashLocalAuthToken(token),
-  });
+  await persistLocalAuthTokenHash(token);
 
   return token;
 }
