@@ -773,6 +773,15 @@ export interface DatabaseAdapter {
   assignMcpServerToProfile(profileId: string, serverId: string): Promise<void>;
   assignSkillToProfile(profileId: string, skillId: string): Promise<void>;
   assignToolToProfile(profileId: string, toolId: string): Promise<void>;
+  beginCodeModeChildCall(input: {
+    id: string;
+    orgId: string;
+    sessionId: string;
+    parentToolCallId: string;
+    toolName: string;
+    input: string;
+    startedAt: string;
+  }): Promise<void>;
   /**
    * First-admin claim. Writes the org, the admin and the membership in one
    * transaction, and returns false without writing anything when a human user
@@ -812,6 +821,14 @@ export interface DatabaseAdapter {
     result: string,
     completedAt: string
   ): Promise<void>;
+  completeCodeModeChildCall(input: {
+    id: string;
+    orgId: string;
+    sessionId: string;
+    status: "completed" | "failed" | "unknown" | "media";
+    result: string;
+    completedAt: string;
+  }): Promise<void>;
   consumeMfaBackupCode(
     userId: string,
     codeHash: string,
@@ -1156,6 +1173,21 @@ export interface DatabaseAdapter {
     userId: string,
     now: string
   ): Promise<StoredBrowserSessionRecord[]>;
+  listCodeModeChildCalls(
+    orgId: string,
+    sessionId: string
+  ): Promise<
+    Array<{
+      id: string;
+      parentToolCallId: string;
+      toolName: string;
+      input: string;
+      result: string | null;
+      status: string;
+      startedAt: string;
+      completedAt: string | null;
+    }>
+  >;
 
   listComposioToolkitsForOrg(
     orgId: string

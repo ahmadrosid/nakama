@@ -31,7 +31,8 @@ export function canRunToolCallsInParallel(
 export async function executeToolCall(
   tools: ToolDefinition[],
   call: ToolCall,
-  context: ToolContext = {}
+  context: ToolContext = {},
+  options: { raw?: boolean } = {}
 ): Promise<ToolResult> {
   const tool = tools.find((item) => item.name === call.name);
 
@@ -41,6 +42,10 @@ export async function executeToolCall(
 
   try {
     const result = await tool.run(call.arguments, context);
+
+    if (options.raw) {
+      return ToolResultSchema.parse(result);
+    }
 
     // The single place every tool result passes through, so the optimiser is
     // wired once rather than per tool. It returns `result` untouched unless it

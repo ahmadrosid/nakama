@@ -44,6 +44,7 @@ import {
   buildWebSearchUnavailableGuidance,
   UNTRUSTED_DOCUMENT_GUIDANCE,
 } from "./chat-prompt";
+import { createCodeModeTool } from "./code-mode";
 import {
   type CompactionConfig,
   compactHistory,
@@ -195,7 +196,9 @@ export function createAgentChatSession(
   const channel = options.channel ?? "cli";
   const tools = options.tools ?? dependencies.tools ?? [];
   const enableToolLoop = options.enableToolLoop ?? tools.length > 0;
-  let activeTools = createTurnTools(tools);
+  const codeModeTool = createCodeModeTool(tools, options.toolContext ?? {});
+  const sessionTools = codeModeTool ? [...tools, codeModeTool] : tools;
+  let activeTools = createTurnTools(sessionTools);
 
   const systemPrompt = buildChatSystemPrompt(activeTools, {
     basePrompt: options.systemPrompt,
@@ -431,7 +434,7 @@ export function createAgentChatSession(
   return {
     clear() {
       history.length = 0;
-      activeTools = createTurnTools(tools);
+      activeTools = createTurnTools(sessionTools);
       lastContextUsage = null;
       turnUsageCalls = [];
       bumpHistoryRevision();
@@ -459,7 +462,7 @@ export function createAgentChatSession(
       return aggregateTurnUsage();
     },
     async send(input, sendOptions) {
-      activeTools = createTurnTools(tools);
+      activeTools = createTurnTools(sessionTools);
       turnUsageCalls = [];
 
       return sendMessage(
@@ -485,7 +488,7 @@ export function createAgentChatSession(
       );
     },
     async sendStream(input, handlers, streamOptions) {
-      activeTools = createTurnTools(tools);
+      activeTools = createTurnTools(sessionTools);
       turnUsageCalls = [];
 
       return sendMessage(

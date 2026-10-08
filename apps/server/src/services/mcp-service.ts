@@ -497,12 +497,15 @@ export class McpService {
     toolName: string,
     input: McpToolArguments,
     orgId: string | undefined,
-    profileId: string
+    profileId: string,
+    options: { signal?: AbortSignal; codeModeChild?: boolean } = {}
   ): Promise<JsonValue> {
     const stdio = server.transport === "stdio";
 
     for (let attempt = 1; ; attempt++) {
+      options.signal?.throwIfAborted();
       await this.ensureConnected(server, orgId, profileId);
+      options.signal?.throwIfAborted();
 
       try {
         return await this.manager.callTool(
@@ -511,7 +514,8 @@ export class McpService {
           toolName,
           input,
           stdio ? profileId : undefined,
-          stdio ? orgId : undefined
+          stdio ? orgId : undefined,
+          options
         );
       } catch (error) {
         if (attempt > 1 || !isMcpReconnectableError(error)) {

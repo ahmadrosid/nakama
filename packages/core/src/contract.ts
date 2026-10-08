@@ -2912,6 +2912,24 @@ export interface ToolContext {
   channel?: AgentChannel;
   /** Browser origin for OAuth callbacks during this tool run. */
   clientOrigin?: string;
+  /** Host-owned record of each tool call made from code mode. */
+  codeModeAudit?: {
+    begin(input: {
+      id: string;
+      parentToolCallId: string;
+      toolName: string;
+      input: string;
+      startedAt: string;
+    }): Promise<void>;
+    complete(input: {
+      id: string;
+      status: "completed" | "failed" | "unknown" | "media";
+      result: string;
+      completedAt: string;
+    }): Promise<void>;
+  };
+  /** Set only by the agent loop for a code-mode child. */
+  codeModeChild?: boolean;
   /** Local CLI launch directory for shell commands, including coding agents. */
   codingWorkspaceRoot?: string;
   /** Images attached to the current user message, as scoped stored references. */
@@ -2949,6 +2967,7 @@ export interface ToolContext {
   orgId?: string;
   /** Org role of the invoking user. Org-memory tools gate on this; undefined means deny-by-default. */
   orgRole?: OrgRole;
+  parentToolCallId?: string;
   profileId?: string;
   /**
    * Records bytes an optimiser removed from a tool result before insertion.
@@ -3012,6 +3031,8 @@ export interface ToolContext {
 }
 
 export interface ToolDefinition<Input = unknown, Output = unknown> {
+  /** An assigned MCP tool may enter the code-mode catalog. */
+  codeModeEligible?: boolean;
   description: string;
   /** Assigned plugin tools in this group are discovered per user turn. */
   discoveryGroup?: string;

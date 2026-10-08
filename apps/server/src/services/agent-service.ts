@@ -4864,6 +4864,23 @@ export class AgentService {
         assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
         channel,
         ...this.memoryBackend.toolContext(orgId, profileId),
+        codeModeAudit:
+          process.env.NAKAMA_CODE_MODE === "1" && !cognito
+            ? {
+                begin: (input) =>
+                  this.db.beginCodeModeChildCall({
+                    ...input,
+                    orgId,
+                    sessionId,
+                  }),
+                complete: (input) =>
+                  this.db.completeCodeModeChildCall({
+                    ...input,
+                    orgId,
+                    sessionId,
+                  }),
+              }
+            : undefined,
         codingWorkspaceRoot,
         forbidMemoryWrites: cognito ? true : undefined,
         forbidProfileSkillMarkdownWrites: hasSkillManage,

@@ -35,6 +35,7 @@ export function buildMcpToolDefinitions(
       const hasCurrentChatContext = isCurrentChatContext(inputSchema);
 
       tools.push({
+        codeModeEligible: true,
         description: cachedTool.description,
         name,
         parameters: hasCurrentChatContext
@@ -61,7 +62,8 @@ export function buildMcpToolDefinitions(
               cachedTool.name,
               arguments_,
               orgId,
-              profileId
+              profileId,
+              { codeModeChild: context.codeModeChild, signal: context.signal }
             );
           } catch (error) {
             return {

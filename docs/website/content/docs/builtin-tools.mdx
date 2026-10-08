@@ -40,6 +40,12 @@ Custom JavaScript tools under `~/.nakama/tools/` default to sequential. Set `"pa
 
 Parallel execution speeds up multi-file research and lets a parent agent delegate several independent `sub_agent` tasks at once. See [`sub_agent`](#sub_agent) below.
 
+## Code mode (opt-in)
+
+Code mode lets a profile use one `execute` call to search assigned MCP tools and `search_files`, filter their results, and return a small answer. Intermediate results stay out of the chat history.
+
+Set `NAKAMA_CODE_MODE=1` on the server. Open **Agent**, select a profile, and assign `search_files` or an MCP server. Nakama adds `execute` to stored chat sessions when an eligible tool is assigned. Direct tool calls stay available. Automations and Cognito chats do not use code mode.
+
 ## Default assignments
 
 Nakama includes these builtins:

@@ -1224,6 +1224,31 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const deleteSessionStmt = db.prepare(
     "DELETE FROM sessions WHERE id = ? AND app_user_id IS NULL"
   );
+  const deleteCodeModeChildCallsStmt = db.prepare(
+    "DELETE FROM code_mode_child_calls WHERE session_id = ?"
+  );
+  const deleteSessionWithCodeModeCalls = db.transaction((id: string) => {
+    deleteCodeModeChildCallsStmt.run(id);
+    return deleteSessionStmt.run(id);
+  });
+  const beginCodeModeChildCallStmt =
+    db.prepare(`INSERT INTO code_mode_child_calls
+    (id, org_id, session_id, parent_tool_call_id, tool_name, input, status, started_at)
+    SELECT ?, ?, s.id, ?, ?, ?, 'running', ?
+    FROM sessions s JOIN profiles p ON p.id = s.profile_id
+    WHERE s.id = ? AND p.org_id = ? AND s.app_user_id IS NULL`);
+  const completeCodeModeChildCallStmt = db.prepare(`UPDATE code_mode_child_calls
+    SET result = ?, status = ?, completed_at = ?
+    WHERE id = ? AND org_id = ? AND session_id = ?
+      AND EXISTS (SELECT 1 FROM sessions s JOIN profiles p ON p.id = s.profile_id
+                  WHERE s.id = ? AND p.org_id = ? AND s.app_user_id IS NULL)`);
+  const listCodeModeChildCallsStmt =
+    db.prepare(`SELECT c.id, c.parent_tool_call_id, c.tool_name, c.input, c.result, c.status, c.started_at, c.completed_at
+    FROM code_mode_child_calls c
+    JOIN sessions s ON s.id = c.session_id
+    JOIN profiles p ON p.id = s.profile_id
+    WHERE c.org_id = ? AND c.session_id = ? AND p.org_id = ? AND s.app_user_id IS NULL
+    ORDER BY c.started_at, c.id`);
 
   const updateSessionModelStmt = db.prepare(
     "UPDATE sessions SET model = ? WHERE id = ? AND app_user_id IS NULL"
@@ -3627,6 +3652,25 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       appendMessagesTransaction(sessionId, messages);
     },
 
+    async beginCodeModeChildCall(input) {
+      if (Buffer.byteLength(input.input) > 16_384) {
+        throw new Error("Code mode input is too large.");
+      }
+      const result = beginCodeModeChildCallStmt.run(
+        input.id,
+        input.orgId,
+        input.parentToolCallId,
+        input.toolName,
+        input.input,
+        input.startedAt,
+        input.sessionId,
+        input.orgId
+      );
+      if (result.changes !== 1) {
+        throw new Error("Code mode session is unavailable.");
+      }
+    },
+
     async assignMcpServerToProfile(profileId, serverId) {
       assignMcpServerStmt.run(profileId, serverId);
     },
@@ -3682,6 +3726,25 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async completeAutomationRunStep(runId, toolCallId, result, completedAt) {
       completeAutomationRunStepStmt.run(result, completedAt, runId, toolCallId);
+    },
+
+    async completeCodeModeChildCall(input) {
+      if (Buffer.byteLength(input.result) > 65_536) {
+        throw new Error("Code mode result is too large.");
+      }
+      const result = completeCodeModeChildCallStmt.run(
+        input.result,
+        input.status,
+        input.completedAt,
+        input.id,
+        input.orgId,
+        input.sessionId,
+        input.sessionId,
+        input.orgId
+      );
+      if (result.changes !== 1) {
+        throw new Error("Code mode audit update failed.");
+      }
     },
     async consumeMfaBackupCode(userId, codeHash, usedAt) {
       return consumeMfaBackupCodeStmt.run(usedAt, userId, codeHash).changes > 0;
@@ -4047,7 +4110,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async deleteSession(id) {
-      const result = deleteSessionStmt.run(id);
+      const result = deleteSessionWithCodeModeCalls(id);
 
       return result.changes > 0;
     },
@@ -4715,6 +4778,33 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const rows = listBrowserSessionsForUserStmt.all(userId, now);
 
       return rows.map(toBrowserSessionRecord);
+    },
+
+    async listCodeModeChildCalls(orgId, sessionId) {
+      const rows = listCodeModeChildCallsStmt.all(
+        orgId,
+        sessionId,
+        orgId
+      ) as Array<{
+        id: string;
+        parent_tool_call_id: string;
+        tool_name: string;
+        input: string;
+        result: string | null;
+        status: string;
+        started_at: string;
+        completed_at: string | null;
+      }>;
+      return rows.map((row) => ({
+        completedAt: row.completed_at,
+        id: row.id,
+        input: row.input,
+        parentToolCallId: row.parent_tool_call_id,
+        result: row.result,
+        startedAt: row.started_at,
+        status: row.status,
+        toolName: row.tool_name,
+      }));
     },
 
     async listComposioToolkitsForOrg(orgId) {

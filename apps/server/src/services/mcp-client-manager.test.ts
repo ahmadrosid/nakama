@@ -20,6 +20,49 @@ function fakeStdioServer(id = "stdio-server"): StoredMcpServerRecord {
 }
 
 describe("McpClientManager", () => {
+  test("keeps media out of code-mode results and passes the abort signal", async () => {
+    using _connect = spyOn(Client.prototype, "connect").mockResolvedValue(
+      undefined
+    );
+    using _listTools = spyOn(Client.prototype, "listTools").mockResolvedValue({
+      tools: [],
+    });
+    using _close = spyOn(
+      StdioClientTransport.prototype,
+      "close"
+    ).mockResolvedValue(undefined);
+    const call = spyOn(Client.prototype, "callTool").mockResolvedValue({
+      content: [{ data: "secret", mimeType: "image/png", type: "image" }],
+      structuredContent: { text: "metadata" },
+    } as never);
+    const manager = new McpClientManager();
+    const server = fakeStdioServer();
+    await manager.ensureConnected(server, "org_1", "profile_1");
+    const controller = new AbortController();
+    expect(
+      await manager.callTool(
+        server.id,
+        "stdio",
+        "get",
+        {},
+        "profile_1",
+        "org_1",
+        { codeModeChild: true, signal: controller.signal }
+      )
+    ).toEqual({ hasMedia: true, value: null });
+    expect(call.mock.calls[0]?.[2]?.signal).toBe(controller.signal);
+    expect(
+      await manager.callTool(
+        server.id,
+        "stdio",
+        "get",
+        {},
+        "profile_1",
+        "org_1"
+      )
+    ).toEqual({ text: "metadata" });
+    await manager.disconnectAll();
+  });
   test("forgets a connection when its transport closes", async () => {
     const clients: Client[] = [];
 

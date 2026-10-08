@@ -70,6 +70,25 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateRemoveGoogleMeetPlugin);
   atomic(migrateFilePinsTable);
   atomic(migrateNotificationWebhookDeliveriesTable);
+  atomic(migrateCodeModeChildCallsTable);
+}
+
+function migrateCodeModeChildCallsTable(db: Database): void {
+  db.exec(`CREATE TABLE IF NOT EXISTS code_mode_child_calls (
+    id TEXT PRIMARY KEY NOT NULL,
+    org_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    parent_tool_call_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    input TEXT NOT NULL,
+    result TEXT,
+    status TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS code_mode_child_calls_session
+    ON code_mode_child_calls (org_id, session_id, started_at);`);
 }
 
 function migrateSessionAppUserId(db: Database): void {

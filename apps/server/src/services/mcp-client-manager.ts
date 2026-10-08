@@ -16,6 +16,7 @@ import type {
 } from "@nakama/core";
 import { getProfileSoulDir } from "@nakama/core";
 import type { CachedMcpTool, StoredMcpServerRecord } from "@nakama/db";
+import { z } from "zod";
 
 /** A server that does not answer `initialize` must not hold a connect open. */
 const CONNECT_TIMEOUT_MS = 30_000;
@@ -241,7 +242,8 @@ export class McpClientManager {
     toolName: string,
     input: McpToolArguments,
     profileId?: string,
-    orgId?: string
+    orgId?: string,
+    options: { signal?: AbortSignal; codeModeChild?: boolean } = {}
   ): Promise<JsonValue> {
     const client = this.requireClient(serverId, transport, profileId, orgId);
 
@@ -251,8 +253,38 @@ export class McpClientManager {
         name: toolName,
       },
       undefined,
-      CALL_TOOL_OPTIONS
+      { ...CALL_TOOL_OPTIONS, signal: options.signal }
     );
+
+    if (options.codeModeChild) {
+      const legacyResult = z
+        .object({
+          content: z.array(z.object({ type: z.string() }).passthrough()),
+        })
+        .passthrough()
+        .safeParse("toolResult" in result ? result.toolResult : null);
+      const legacyContent = legacyResult.success
+        ? legacyResult.data.content
+        : undefined;
+      const hasMedia =
+        result.content.some((item) => item.type !== "text") ||
+        (legacyContent?.some((item) => item.type !== "text") ?? false);
+      if (hasMedia) {
+        return { hasMedia: true, value: null };
+      }
+      const value =
+        "toolResult" in result
+          ? parseJsonValue(result.toolResult)
+          : result.isError
+            ? { error: formatToolContent(result.content) }
+            : result.structuredContent === undefined
+              ? {
+                  content: parseJsonValue(result.content),
+                  text: formatToolContent(result.content),
+                }
+              : parseJsonValue(result.structuredContent);
+      return { hasMedia: false, value };
+    }
 
     if ("toolResult" in result) {
       return parseJsonValue(result.toolResult);

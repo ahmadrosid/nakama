@@ -2,6 +2,112 @@ import { describe, expect, test } from "bun:test";
 import { createSqliteDatabase } from "./adapters/sqlite";
 
 describe("SQLite session model persistence", () => {
+  test("stores code-mode child calls only in the session organization and deletes them with the session", async () => {
+    const database = await createSqliteDatabase(":memory:");
+    const now = new Date().toISOString();
+    try {
+      await database.adapter.upsertOrganization({
+        createdAt: now,
+        id: "org_test",
+        name: "Test",
+        slug: "test",
+        updatedAt: now,
+      });
+      await database.adapter.upsertProfile({
+        createdAt: now,
+        id: "profile_test",
+        isDefault: true,
+        isSuper: false,
+        model: "model",
+        name: "Test",
+        orgId: "org_test",
+        systemPrompt: "Test",
+        updatedAt: now,
+      });
+      await database.adapter.upsertSession({
+        agentQuestionnaire: null,
+        agentTodos: [],
+        channel: "web",
+        createdAt: now,
+        id: "session_test",
+        model: null,
+        profileId: "profile_test",
+        title: null,
+        userId: null,
+      });
+      const begin = {
+        id: "child_1",
+        input: '{"query":"a"}',
+        orgId: "org_test",
+        parentToolCallId: "parent_1",
+        sessionId: "session_test",
+        startedAt: now,
+        toolName: "search_files",
+      };
+      await expect(
+        database.adapter.beginCodeModeChildCall({ ...begin, orgId: "wrong" })
+      ).rejects.toThrow();
+      await database.adapter.beginCodeModeChildCall(begin);
+      await expect(
+        database.adapter.completeCodeModeChildCall({
+          completedAt: now,
+          id: "child_1",
+          orgId: "wrong",
+          result: "{}",
+          sessionId: "session_test",
+          status: "completed",
+        })
+      ).rejects.toThrow();
+      await database.adapter.completeCodeModeChildCall({
+        completedAt: now,
+        id: "child_1",
+        orgId: "org_test",
+        result: "{}",
+        sessionId: "session_test",
+        status: "completed",
+      });
+      expect(
+        await database.adapter.listCodeModeChildCalls("wrong", "session_test")
+      ).toEqual([]);
+      expect(
+        await database.adapter.listCodeModeChildCalls(
+          "org_test",
+          "session_test"
+        )
+      ).toEqual([
+        {
+          completedAt: now,
+          id: "child_1",
+          input: '{"query":"a"}',
+          parentToolCallId: "parent_1",
+          result: "{}",
+          startedAt: now,
+          status: "completed",
+          toolName: "search_files",
+        },
+      ]);
+      await database.adapter.deleteSession("session_test");
+      await database.adapter.upsertSession({
+        agentQuestionnaire: null,
+        agentTodos: [],
+        channel: "web",
+        createdAt: now,
+        id: "session_test",
+        model: null,
+        profileId: "profile_test",
+        title: null,
+        userId: null,
+      });
+      expect(
+        await database.adapter.listCodeModeChildCalls(
+          "org_test",
+          "session_test"
+        )
+      ).toEqual([]);
+    } finally {
+      database.close();
+    }
+  });
   test("stores, updates, and clears a session model override", async () => {
     const database = await createSqliteDatabase(":memory:");
     const now = new Date().toISOString();
