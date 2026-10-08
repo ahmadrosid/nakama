@@ -35,12 +35,10 @@ describe("chat-stream-workflow", () => {
           name: "Morning Brief",
           steps: [
             // SAFETY: Persisted workflow input may omit or null this field before parsing.
-            JSON.parse(
-              JSON.stringify(
-                input === undefined
-                  ? { id: "fetch", kind: "tool", tool: "web_fetch" }
-                  : { id: "fetch", input, kind: "tool", tool: "web_fetch" }
-              )
+            structuredClone(
+              input === undefined
+                ? { id: "fetch", kind: "tool", tool: "web_fetch" }
+                : { id: "fetch", input, kind: "tool", tool: "web_fetch" }
             ) as WorkflowStep,
           ],
         },
