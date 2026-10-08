@@ -14,6 +14,7 @@ setupTestConfigDir("nakama-profiles-skills-usage-test-");
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const profileService = new ProfileService(databaseAdapter);
+
   return {
     ...createMinimalHonoApp({
       agent: {
@@ -32,11 +33,13 @@ const BASE = "http://localhost:4310";
 describe("profile skills usage API", () => {
   test("GET profile returns usage and createdBy on assigned skills", async () => {
     const { app, databaseAdapter, skillsService } = createApp();
+
     const session = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin@org.com"
     );
+
     const orgId = session.orgId!;
     const profileId = (await databaseAdapter.listProfilesForOrg(orgId))[0]!.id;
     const now = new Date().toISOString();
@@ -63,8 +66,10 @@ describe("profile skills usage API", () => {
         headers: session.headers({}, orgId),
       })
     );
+
     expect(resp.status).toBe(200);
 
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await resp.json()) as {
       profile: {
         skills: Array<{
@@ -74,6 +79,7 @@ describe("profile skills usage API", () => {
         }>;
       };
     };
+
     const skill = body.profile.skills.find((entry) => entry.id === skillId);
     expect(skill).toBeDefined();
     expect(skill!.createdBy).toBe("agent");
@@ -83,11 +89,13 @@ describe("profile skills usage API", () => {
 
   test("skill without usage row omits usage object", async () => {
     const { app, databaseAdapter } = createApp();
+
     const session = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin2@org.com"
     );
+
     const orgId = session.orgId!;
     const profileId = (await databaseAdapter.listProfilesForOrg(orgId))[0]!.id;
     const now = new Date().toISOString();
@@ -112,13 +120,16 @@ describe("profile skills usage API", () => {
         headers: session.headers({}, orgId),
       })
     );
+
     expect(resp.status).toBe(200);
 
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await resp.json()) as {
       profile: {
         skills: Array<{ id: string; createdBy: string; usage?: unknown }>;
       };
     };
+
     const skill = body.profile.skills.find((entry) => entry.id === skillId);
     expect(skill?.createdBy).toBe("human");
     expect(skill?.usage).toEqual({
@@ -133,11 +144,13 @@ describe("profile skills usage API", () => {
 
   test("cross-org profile access returns 404", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const orgASession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "org-a@org.com"
     );
+
     const orgAId = orgASession.orgId!;
     const profileId = (await databaseAdapter.listProfilesForOrg(orgAId))[0]!.id;
 
@@ -146,6 +159,7 @@ describe("profile skills usage API", () => {
       authService,
       databaseAdapter
     );
+
     const createResp = await app.fetch(
       new Request(`${BASE}/v1/platform/orgs`, {
         body: JSON.stringify({
@@ -164,10 +178,14 @@ describe("profile skills usage API", () => {
         method: "POST",
       })
     );
+
     expect(createResp.status).toBe(201);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const created = (await createResp.json()) as {
       organization: { id: string };
     };
+
     const orgBId = created.organization.id;
 
     const resp = await app.fetch(
@@ -175,6 +193,7 @@ describe("profile skills usage API", () => {
         headers: orgASession.headers({}, orgBId),
       })
     );
+
     expect(resp.status).toBe(404);
   });
 });

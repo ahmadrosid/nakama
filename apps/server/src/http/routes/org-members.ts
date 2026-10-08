@@ -1,13 +1,10 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type {
-  AddOrgMemberRequest,
   AddOrgMemberResponse,
-  InviteOrgMemberRequest,
   ListOrgMembersResponse,
   OrgInviteCreatedResponse,
   OrgLlmQuotaStatusResponse,
   OrgMemberResponse,
-  UpdateOrgMemberRequest,
 } from "@nakama/core/contract";
 import { OrgUsageQuotaService } from "../../services/org-usage-quota-service";
 import type { ServerOptions } from "../context";
@@ -20,12 +17,15 @@ export function registerOrgMemberRoutes(
   options: ServerOptions
 ): void {
   const { orgService } = options;
+
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
+
   const orgIdParam = z.object({
     orgId: z.string().openapi({ param: { in: "path", name: "orgId" } }),
   });
+
   const addOrgMemberSchema = z
     .object({
       email: z.string(),
@@ -34,28 +34,34 @@ export function registerOrgMemberRoutes(
       role: z.enum(["admin", "member", "viewer"]),
     })
     .openapi("AddOrgMemberRequest");
+
   const inviteOrgMemberSchema = z
     .object({
       email: z.string(),
       role: z.enum(["admin", "member", "viewer"]),
     })
     .openapi("InviteOrgMemberRequest");
+
   const addOrgMemberResponseSchema = z
     .object({})
     .passthrough()
     .openapi("AddOrgMemberResponse");
+
   const orgInviteCreatedSchema = z
     .object({})
     .passthrough()
     .openapi("OrgInviteCreatedResponse");
+
   const listOrgMembersResponseSchema = z
     .object({})
     .passthrough()
     .openapi("ListOrgMembersResponse");
+
   const orgMemberResponseSchema = z
     .object({})
     .passthrough()
     .openapi("OrgMemberResponse");
+
   const updateOrgMemberSchema = z
     .object({
       name: z.string().nullable().optional(),
@@ -63,9 +69,27 @@ export function registerOrgMemberRoutes(
       role: z.enum(["admin", "member", "viewer"]).optional(),
     })
     .openapi("UpdateOrgMemberRequest");
+
+  const updateOrganizationSchema = z
+    .object({
+      allowedInviteDomains: z.array(z.string()).optional(),
+      monthlyLlmTokenLimit: z.number().optional(),
+      monthlyLlmTurnLimit: z.number().optional(),
+      monthlyLlmWarningPercent: z.number().optional(),
+      name: z.string().optional(),
+      skillsCuratorArchiveAfterDays: z.number().optional(),
+      skillsCuratorConsolidateEnabled: z.boolean().optional(),
+      skillsCuratorEnabled: z.boolean().optional(),
+      skillsCuratorStaleAfterDays: z.number().optional(),
+      skillsPostTurnReview: z.boolean().optional(),
+      skillsWriteApproval: z.boolean().optional(),
+    })
+    .strict();
+
   const orgMemberParams = orgIdParam.extend({
     userId: z.string().openapi({ param: { in: "path", name: "userId" } }),
   });
+
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
@@ -123,7 +147,8 @@ export function registerOrgMemberRoutes(
       return errorResponse("Organization service not configured", 500);
     }
 
-    const body = await readJson<AddOrgMemberRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, addOrgMemberSchema);
+
     const member = await orgService.addMember({
       email: body.email,
       name: body.name,
@@ -190,7 +215,8 @@ export function registerOrgMemberRoutes(
       return errorResponse("Organization service not configured", 500);
     }
 
-    const body = await readJson<InviteOrgMemberRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, inviteOrgMemberSchema);
+
     const invite = await orgService.createInvite({
       email: body.email,
       invitedByUserId: auth.user.id,
@@ -303,8 +329,9 @@ export function registerOrgMemberRoutes(
       return errorResponse("Organization service not configured", 500);
     }
 
-    const body = await readJson<UpdateOrgMemberRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateOrgMemberSchema);
     const member = await orgService.updateMember(orgId, userId, body);
+
     return json<OrgMemberResponse>(member);
   });
 
@@ -356,12 +383,14 @@ export function registerOrgMemberRoutes(
     }
 
     await orgService.removeMember(orgId, userId);
+
     return new Response(null, { status: 204 });
   });
 
   app.get("/v1/orgs/:orgId/llm-quota", async (c) => {
     const auth = requireOrgAdminFromContext(c);
     const orgId = decodeURIComponent(c.req.param("orgId"));
+
     if (auth.activeOrgId !== orgId) {
       return errorResponse("Not found", 404);
     }
@@ -369,6 +398,7 @@ export function registerOrgMemberRoutes(
     const quota = await new OrgUsageQuotaService(
       options.databaseAdapter
     ).getStatus(orgId);
+
     return json<OrgLlmQuotaStatusResponse>(quota);
   });
 
@@ -447,8 +477,9 @@ export function registerOrgMemberRoutes(
       return errorResponse("Organization service not configured", 500);
     }
 
-    const body = await readJson<UpdateOrganizationRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateOrganizationSchema);
     const organization = await orgService.updateOrganization(orgId, body);
+
     return json<OrganizationResponse>({ organization });
   });
 }

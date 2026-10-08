@@ -16,7 +16,7 @@ describe("route error formatting", () => {
 
   beforeEach(() => {
     reported = [];
-    console.error = (first: unknown) => {
+    console.error = (first: string) => {
       reported.push(String(first));
     };
   });
@@ -35,6 +35,7 @@ describe("route error formatting", () => {
 
     const { app, databaseAdapter } = createMinimalHonoApp();
     const session = await setupFreshInstallSession(app, databaseAdapter);
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/model-catalogs/openrouter", {
         headers: session.headers(),
@@ -52,14 +53,17 @@ describe("route error formatting", () => {
 
   test("a worker action that fails answers 500 and is reported", async () => {
     const { app, databaseAdapter } = createMinimalHonoApp({
+      // SAFETY: This test controls the fixture shape at this boundary.
       workerManager: {
         isValidWorker: () => true,
         startWorker: async () => {
           throw new Error("pm2 daemon is not reachable");
         },
-      } as unknown as ServerOptions["workerManager"],
+      } as ServerOptions["workerManager"],
     });
+
     const session = await setupFreshInstallSession(app, databaseAdapter);
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/workers/automation/start", {
         headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
@@ -84,7 +88,9 @@ describe("route error formatting", () => {
         },
       },
     });
+
     const session = await setupFreshInstallSession(app, databaseAdapter);
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/audio/transcribe", {
         body: JSON.stringify({ data: "AAAA", mimeType: "audio/webm" }),
@@ -116,7 +122,9 @@ describe("route error formatting", () => {
         }),
       },
     });
+
     const session = await setupFreshInstallSession(app, databaseAdapter);
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/sessions/session_1/messages", {
         body: JSON.stringify({ message: "hi" }),
@@ -140,6 +148,7 @@ describe("route error formatting", () => {
   test("a NakamaApiError is reported only when it is a 5xx", async () => {
     const send = async (error: NakamaApiError) => {
       reported = [];
+
       const { app, databaseAdapter } = createMinimalHonoApp({
         agent: {
           assertSessionProfileAccess: async () => undefined,
@@ -149,7 +158,9 @@ describe("route error formatting", () => {
           },
         },
       });
+
       const session = await setupFreshInstallSession(app, databaseAdapter);
+
       const response = await app.fetch(
         new Request("http://localhost:4310/v1/sessions/session_1/messages", {
           body: JSON.stringify({ message: "hi" }),
@@ -160,6 +171,7 @@ describe("route error formatting", () => {
           method: "POST",
         })
       );
+
       return { reported: [...reported], status: response.status };
     };
 
@@ -172,6 +184,7 @@ describe("route error formatting", () => {
     const broken = await send(
       new NakamaApiError("Database not configured.", 500)
     );
+
     expect(broken.status).toBe(500);
     expect(
       broken.reported.some((line) => line.startsWith("[nakama:http] server"))
@@ -188,7 +201,9 @@ describe("route error formatting", () => {
         },
       },
     });
+
     const session = await setupFreshInstallSession(app, databaseAdapter);
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/sessions/session_1/messages", {
         body: JSON.stringify({ message: "hi" }),
@@ -223,7 +238,9 @@ describe("route error formatting", () => {
           ),
       },
     });
+
     const session = await setupFreshInstallSession(app, databaseAdapter);
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/settings/provider", {
         body: JSON.stringify({

@@ -1,15 +1,13 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type {
   AutomationResponse,
-  CreateAutomationRequest,
-  DraftAutomationRequest,
   DraftAutomationResponse,
   ListAutomationRunsResponse,
   ListAutomationsResponse,
   MarkAutomationRunsReadResponse,
   RunAutomationResponse,
-  UpdateAutomationRequest,
 } from "@nakama/core";
+import { AGENT_CHANNELS } from "@nakama/core";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
@@ -29,49 +27,120 @@ export function registerAutomationRoutes(
   options: ServerOptions
 ): void {
   const { agent, automationService } = options;
+
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
+
   const automationIdParam = z.object({
     automationId: z
       .string()
       .openapi({ param: { in: "path", name: "automationId" } }),
   });
+
   const automationRunParam = automationIdParam.extend({
     runId: z.string().openapi({ param: { in: "path", name: "runId" } }),
   });
+
   const draftAutomationSchema = z
-    .object({})
+    .object({ channel: z.enum(AGENT_CHANNELS), prompt: z.string() })
     .passthrough()
     .openapi("DraftAutomationRequest");
+
   const draftAutomationResponseSchema = z
     .object({})
     .passthrough()
     .openapi("DraftAutomationResponse");
+
   const listAutomationsSchema = z
     .object({})
     .passthrough()
     .openapi("ListAutomationsResponse");
+
   const createAutomationSchema = z
-    .object({})
+    .object({
+      delivery: z
+        .object({
+          channel: z.enum(["telegram", "whatsapp", "email", "discord"]),
+          channelId: z.string().optional(),
+          chatId: z.number().optional(),
+          notifyOn: z.enum(["success", "failure", "both"]).optional(),
+          to: z.string().optional(),
+        })
+        .optional(),
+      description: z.string(),
+      enabled: z.boolean().optional(),
+      name: z.string(),
+      profileId: z.string().optional(),
+      prompt: z.string(),
+      trigger: z.discriminatedUnion("type", [
+        z.object({ type: z.literal("manual") }),
+        z.object({
+          cron: z.string(),
+          timezone: z.string().optional(),
+          type: z.literal("schedule"),
+        }),
+        z.object({
+          at: z.string(),
+          timezone: z.string().optional(),
+          type: z.literal("runAt"),
+        }),
+      ]),
+    })
     .passthrough()
     .openapi("CreateAutomationRequest");
+
   const automationSchema = z
     .object({})
     .passthrough()
     .openapi("AutomationResponse");
+
   const updateAutomationSchema = z
-    .object({})
+    .object({
+      delivery: z
+        .object({
+          channel: z.enum(["telegram", "whatsapp", "email", "discord"]),
+          channelId: z.string().optional(),
+          chatId: z.number().optional(),
+          notifyOn: z.enum(["success", "failure", "both"]).optional(),
+          to: z.string().optional(),
+        })
+        .nullable()
+        .optional(),
+      description: z.string().optional(),
+      enabled: z.boolean().optional(),
+      name: z.string().optional(),
+      profileId: z.string().optional(),
+      prompt: z.string().optional(),
+      trigger: z
+        .discriminatedUnion("type", [
+          z.object({ type: z.literal("manual") }),
+          z.object({
+            cron: z.string(),
+            timezone: z.string().optional(),
+            type: z.literal("schedule"),
+          }),
+          z.object({
+            at: z.string(),
+            timezone: z.string().optional(),
+            type: z.literal("runAt"),
+          }),
+        ])
+        .optional(),
+    })
     .passthrough()
     .openapi("UpdateAutomationRequest");
+
   const runAutomationSchema = z
     .object({})
     .passthrough()
     .openapi("RunAutomationResponse");
+
   const listAutomationRunsSchema = z
     .object({})
     .passthrough()
     .openapi("ListAutomationRunsResponse");
+
   const markAutomationRunsReadSchema = z
     .object({})
     .passthrough()
@@ -325,12 +394,14 @@ export function registerAutomationRoutes(
 
   app.post("/v1/automations/draft", async (c) => {
     requireNotViewerFromContext(c);
-    const body = await readJson<DraftAutomationRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, draftAutomationSchema);
+
     const automation = await agent.draftAutomation(
       body.prompt,
       parseChannel(body.channel),
       getRequestAuth(c).activeOrgId ?? null
     );
+
     return json<DraftAutomationResponse>({ automation });
   });
 
@@ -338,13 +409,15 @@ export function registerAutomationRoutes(
     const orgId = requireActiveOrgIdFromContext(c);
     const auth = getRequestAuth(c);
     const result = await automationService.listForOrg(orgId, auth.user.id);
+
     return json<ListAutomationsResponse>(result);
   });
 
   app.post("/v1/automations", async (c) => {
     const auth = requireNotViewerFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
-    const body = await readJson<CreateAutomationRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, createAutomationSchema);
+
     const automation = await automationService.create(
       orgId,
       body,
@@ -354,18 +427,22 @@ export function registerAutomationRoutes(
         orgRole: auth.orgRole,
       }
     );
+
     return json<AutomationResponse>({ automation }, 201);
   });
 
   app.get("/v1/automations/:automationId", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
+
     const automation = await automationService.get(
       decodeURIComponent(c.req.param("automationId")),
       orgId
     );
+
     if (!automation) {
       return errorResponse("Automation not found", 404);
     }
+
     return json<AutomationResponse>({ automation });
   });
 
@@ -373,7 +450,7 @@ export function registerAutomationRoutes(
     const auth = requireNotViewerFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const automationId = decodeURIComponent(c.req.param("automationId"));
-    const body = await readJson<UpdateAutomationRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateAutomationSchema);
 
     try {
       const automation = await automationService.update(
@@ -385,6 +462,7 @@ export function registerAutomationRoutes(
           orgRole: auth.orgRole,
         }
       );
+
       return json<AutomationResponse>({ automation });
     } catch (error) {
       if (error instanceof Error) {
@@ -397,6 +475,7 @@ export function registerAutomationRoutes(
           "Profile id is required.",
           "No default profile exists for this organization.",
         ]);
+
         if (
           badRequestMessages.has(error.message) ||
           /^(Telegram|WhatsApp|Discord|Email) is not/.test(error.message) ||
@@ -405,6 +484,7 @@ export function registerAutomationRoutes(
           return errorResponse(error.message, 400);
         }
       }
+
       throw error;
     }
   });
@@ -412,13 +492,16 @@ export function registerAutomationRoutes(
   app.delete("/v1/automations/:automationId", async (c) => {
     requireNotViewerFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
+
     const deleted = await automationService.delete(
       decodeURIComponent(c.req.param("automationId")),
       orgId
     );
+
     if (!deleted) {
       return errorResponse("Automation not found", 404);
     }
+
     return new Response(null, { status: 204 });
   });
 
@@ -445,7 +528,9 @@ export function registerAutomationRoutes(
       1,
       auth.user.id
     );
+
     const run = runs[0];
+
     if (!run) {
       return errorResponse("Automation run record not found.", 500);
     }
@@ -465,11 +550,13 @@ export function registerAutomationRoutes(
         20,
         auth.user.id
       );
+
       return json<ListAutomationRunsResponse>({ runs });
     } catch (error) {
       if (error instanceof Error && error.message === "Automation not found.") {
         return errorResponse(error.message, 404);
       }
+
       throw error;
     }
   });
@@ -486,14 +573,17 @@ export function registerAutomationRoutes(
         runId,
         orgId
       );
+
       if (!deleted) {
         return errorResponse("Automation run not found.", 404);
       }
+
       return new Response(null, { status: 204 });
     } catch (error) {
       if (error instanceof Error && error.message === "Automation not found.") {
         return errorResponse(error.message, 404);
       }
+
       throw error;
     }
   });
@@ -509,11 +599,13 @@ export function registerAutomationRoutes(
         orgId,
         auth.user.id
       );
+
       return json<MarkAutomationRunsReadResponse>(result);
     } catch (error) {
       if (error instanceof Error && error.message === "Automation not found.") {
         return errorResponse(error.message, 404);
       }
+
       throw error;
     }
   });

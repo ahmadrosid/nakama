@@ -25,7 +25,9 @@ import {
 } from "../test-session-helpers";
 
 const PROFILE_ID = "profile_default";
+
 const MEMBER_EMAIL = "member@example.com";
+
 const MEMBER_PASSWORD = "password123";
 
 interface RouteTestFixture {
@@ -39,11 +41,14 @@ function createFixture(): RouteTestFixture {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const authService = new AuthService();
   const orgService = new OrgService(databaseAdapter, authService);
+
   const automationService = new AutomationService(databaseAdapter, {
     getUserTimezone: async () => "UTC",
   });
+
   // Only the automation surface is exercised; the remaining collaborators are
   // unreachable stubs, so they are cast once instead of fully constructed.
+  // SAFETY: This test controls the fixture shape at this boundary.
   const options = {
     agent: { providerConfigured: true, runAutomation: async () => ({}) },
     authService,
@@ -54,7 +59,7 @@ function createFixture(): RouteTestFixture {
     systemStatus: {},
     webDistDir: null,
     workerManager: {},
-  } as unknown as ServerOptions;
+  } as ServerOptions;
 
   return {
     app: createHonoApp(options),
@@ -86,7 +91,9 @@ async function seedProfile(
 async function loginMember(fixture: RouteTestFixture) {
   // Hono's `fetch` is structurally narrower than the DOM `fetch` the shared
   // session helper declares; the runtime shape is identical.
-  const app = fixture.app as unknown as AppFetch;
+  // SAFETY: This test controls the fixture shape at this boundary.
+  const app = fixture.app as AppFetch;
+
   const install = await setupFreshInstallSession(
     app,
     fixture.databaseAdapter,
@@ -144,7 +151,7 @@ async function writeChannelConfigs(orgId: string): Promise<string> {
   return configDir;
 }
 
-function automationBody(delivery: unknown): string {
+function automationBody<T>(delivery: T): string {
   return JSON.stringify({
     delivery,
     description: "Report",
@@ -181,6 +188,7 @@ describe("automation destination authorization over HTTP", () => {
         );
 
         expect(response.status).toBe(403);
+        // SAFETY: This test controls the fixture shape at this boundary.
         expect(((await response.json()) as { error: string }).error).toContain(
           "organization admin"
         );
@@ -205,6 +213,7 @@ describe("automation destination authorization over HTTP", () => {
       } else {
         process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
       }
+
       await rm(configDir, { force: true, recursive: true });
     }
   });
@@ -251,6 +260,7 @@ describe("automation destination authorization over HTTP", () => {
       } else {
         process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
       }
+
       await rm(configDir, { force: true, recursive: true });
     }
   });

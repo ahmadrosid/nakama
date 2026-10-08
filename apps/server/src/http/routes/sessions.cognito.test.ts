@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { GenerateChatInput } from "@nakama/core";
+import type { CreateSessionRequest, GenerateChatInput } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentService } from "../../services/agent-service";
 import { createDefaultProfile } from "../../services/agent-service-test-fixtures";
@@ -10,16 +10,19 @@ import { loginUserSession, seedOrgAdmin } from "../test-session-helpers";
 setupTestConfigDir("nakama-sessions-cognito-test-");
 
 const PASSWORD = "password123";
+
 const ORG_ID = "org_cognito";
 
 async function createScenario() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const agent = new AgentService(null, null, databaseAdapter);
+
   const answer = {
     assistantMessage: { content: "ok", role: "assistant", toolCalls: [] },
     content: "ok",
     toolCalls: [],
   };
+
   Object.assign(agent, {
     _providerConfigured: true,
     createHarnessForProfile: () => ({
@@ -53,7 +56,7 @@ async function createScenario() {
 async function createSessionOverHttp(
   app: Awaited<ReturnType<typeof createScenario>>["app"],
   session: Awaited<ReturnType<typeof createScenario>>["session"],
-  body: Record<string, unknown>
+  body: CreateSessionRequest
 ): Promise<string> {
   const response = await app.fetch(
     new Request("http://localhost:4310/v1/sessions", {
@@ -71,6 +74,8 @@ async function createSessionOverHttp(
   );
 
   expect(response.status).toBe(201);
+
+  // SAFETY: This test controls the fixture shape at this boundary.
   return ((await response.json()) as { sessionId: string }).sessionId;
 }
 
@@ -98,6 +103,7 @@ describe("POST /v1/sessions with cognito", () => {
     const sessionId = await createSessionOverHttp(app, session, {
       cognito: true,
     });
+
     expect((await sendOverHttp(app, session, sessionId)).status).toBe(200);
 
     // Readable over HTTP for the rest of the session,
@@ -106,9 +112,12 @@ describe("POST /v1/sessions with cognito", () => {
         headers: session.headers(),
       })
     );
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const { messages } = (await read.json()) as {
       messages: Array<{ role: string }>;
     };
+
     expect(messages.map((message) => message.role)).toEqual([
       "user",
       "assistant",
@@ -126,6 +135,7 @@ describe("POST /v1/sessions with cognito", () => {
     const cognitoId = await createSessionOverHttp(app, session, {
       cognito: true,
     });
+
     const normalId = await createSessionOverHttp(app, session, {});
     await sendOverHttp(app, session, cognitoId);
     await sendOverHttp(app, session, normalId);
@@ -136,10 +146,14 @@ describe("POST /v1/sessions with cognito", () => {
         { headers: session.headers() }
       )
     );
+
     expect(response.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const { sessions } = (await response.json()) as {
       sessions: Array<{ id: string }>;
     };
+
     const ids = sessions.map((entry) => entry.id);
 
     expect(ids).toContain(normalId);
@@ -152,6 +166,7 @@ describe("POST /v1/sessions with cognito", () => {
     const sessionId = await createSessionOverHttp(app, session, {
       cognito: true,
     });
+
     await sendOverHttp(app, session, sessionId);
 
     // There was never a row, so the delete has only the map to work with.
@@ -163,6 +178,7 @@ describe("POST /v1/sessions with cognito", () => {
         method: "DELETE",
       })
     );
+
     expect(deleted.status).toBe(204);
 
     const after = await app.fetch(
@@ -170,6 +186,7 @@ describe("POST /v1/sessions with cognito", () => {
         headers: session.headers(),
       })
     );
+
     expect(after.status).toBe(404);
   });
 
@@ -212,8 +229,10 @@ describe("POST /v1/sessions with cognito", () => {
           method: "POST",
         })
       );
+
       expect(response.status).toBe(404);
     }
+
     expect(await databaseAdapter.listSessions()).toEqual([]);
 
     // Omitting the profile still selects the organization's default bot.
@@ -221,6 +240,7 @@ describe("POST /v1/sessions with cognito", () => {
       cognito: true,
       profileId: undefined,
     });
+
     expect(defaultId).toBeTruthy();
   });
 });

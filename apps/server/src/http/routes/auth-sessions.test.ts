@@ -39,7 +39,10 @@ async function listSessions(
       headers: session.headers(),
     })
   );
+
   expect(response.status).toBe(200);
+
+  // SAFETY: This test controls the fixture shape at this boundary.
   return (await response.json()) as ListBrowserSessionsResponse;
 }
 
@@ -82,11 +85,13 @@ describe("browser session governance", () => {
       systemPrompt: "",
       updatedAt: now,
     });
+
     const admin = await loginPlatformAdminSession(
       app,
       new AuthService(),
       databaseAdapter
     );
+
     const switched = await app.fetch(
       new Request("http://localhost:4310/v1/auth/active-org", {
         body: JSON.stringify({ orgId: "org_remote" }),
@@ -97,6 +102,7 @@ describe("browser session governance", () => {
         method: "POST",
       })
     );
+
     expect(switched.status).toBe(200);
     expect((await switched.json()).activeOrgId).toBe("org_remote");
 
@@ -105,6 +111,7 @@ describe("browser session governance", () => {
         headers: admin.headers(),
       })
     );
+
     expect((await me.json()).activeOrgId).toBe("org_remote");
 
     const remoteProfiles = await app.fetch(
@@ -112,6 +119,7 @@ describe("browser session governance", () => {
         headers: admin.headers({}, "org_remote"),
       })
     );
+
     expect(remoteProfiles.status).toBe(200);
     expect((await remoteProfiles.json()).profiles).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: "agent_remote" })])
@@ -123,6 +131,7 @@ describe("browser session governance", () => {
       userId: "user_member",
     });
     const member = await loginUserSession(app, "member@example.com", PASSWORD);
+
     const denied = await app.fetch(
       new Request("http://localhost:4310/v1/auth/active-org", {
         body: JSON.stringify({ orgId: "org_remote" }),
@@ -133,12 +142,14 @@ describe("browser session governance", () => {
         method: "POST",
       })
     );
+
     expect(denied.status).toBe(404);
 
     await databaseAdapter.upsertOrganization({
       ...(await databaseAdapter.getOrganizationById("org_remote"))!,
       archivedAt: new Date().toISOString(),
     });
+
     const archived = await app.fetch(
       new Request("http://localhost:4310/v1/auth/active-org", {
         body: JSON.stringify({ orgId: "org_remote" }),
@@ -149,6 +160,7 @@ describe("browser session governance", () => {
         method: "POST",
       })
     );
+
     expect(archived.status).toBe(404);
   });
 
@@ -177,8 +189,10 @@ describe("browser session governance", () => {
     // Ask the doomed session which row is its own, so the revoke targets it
     // rather than whichever session happens to sort first.
     const doomedOwn = await listSessions(app, doomed);
+
     const doomedId =
       doomedOwn.sessions.find((entry) => entry.current)?.id ?? "";
+
     expect(doomedId).not.toBe("");
 
     const response = await revoke(app, keep, doomedId);
@@ -190,6 +204,7 @@ describe("browser session governance", () => {
         headers: doomed.headers(),
       })
     );
+
     expect(afterRevoke.status).toBe(401);
 
     // The caller's own session is untouched, and the revoked row is gone.
@@ -241,6 +256,7 @@ describe("browser session governance", () => {
     );
 
     expect(response.status).toBe(200);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await response.json()) as { revoked: number };
     expect(body.revoked).toBeGreaterThanOrEqual(2);
   });
@@ -254,6 +270,7 @@ describe("browser session governance", () => {
       orgId: "org_other",
       userId: "user_orgadmin",
     });
+
     const orgAdmin = await loginUserSession(
       app,
       "orgadmin@example.com",

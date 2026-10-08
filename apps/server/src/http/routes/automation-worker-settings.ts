@@ -1,3 +1,4 @@
+import { z } from "@hono/zod-openapi";
 import { NakamaApiError } from "@nakama/core";
 import { mergeWorkspaceSettings } from "@nakama/db";
 import type { ServerOptions } from "../context";
@@ -9,7 +10,9 @@ import { json, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
 const DEFAULT_POLL_INTERVAL_MINUTES = 5;
+
 const MAX_POLL_INTERVAL_MINUTES = 24 * 60;
+
 const MINUTE_MS = 60 * 1000;
 
 export function registerAutomationWorkerSettingsRoutes(
@@ -29,7 +32,11 @@ export function registerAutomationWorkerSettingsRoutes(
 
   app.put("/v1/settings/automation-worker", async (c) => {
     requirePlatformAdminFromContext(c);
-    const body = await readJson<{ pollIntervalMinutes?: number }>(c.req.raw);
+
+    const body = await readJson(
+      c.req.raw,
+      z.object({ pollIntervalMinutes: z.number().optional() }).strict()
+    );
 
     if (
       !Number.isInteger(body.pollIntervalMinutes) ||
@@ -58,6 +65,7 @@ export function registerAutomationWorkerSettingsRoutes(
 function toPollIntervalMinutes(intervalMs: number | undefined): number {
   const minutes =
     (intervalMs ?? DEFAULT_POLL_INTERVAL_MINUTES * MINUTE_MS) / MINUTE_MS;
+
   return Number.isInteger(minutes) && minutes > 0
     ? minutes
     : DEFAULT_POLL_INTERVAL_MINUTES;

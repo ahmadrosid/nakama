@@ -39,10 +39,13 @@ describe("error tracking routes", () => {
     );
 
     expect(saved.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await saved.json()) as {
       configured: boolean;
       dsnMasked: string | null;
     };
+
     expect(body.configured).toBe(true);
     // The whole point of the masked field: the response must not carry the key.
     expect(body.dsnMasked).not.toContain("publickey");

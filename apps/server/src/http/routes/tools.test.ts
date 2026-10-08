@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { NakamaApiError } from "@nakama/core";
+import type { AgentService } from "../../services/agent-service";
 import {
   loadToolApiKey,
   loadToolSetup,
@@ -15,7 +16,7 @@ import {
 
 setupTestConfigDir("nakama-tools-route-test-");
 
-function createApp(agentOverrides: Record<string, unknown> = {}) {
+function createApp(agentOverrides: Partial<AgentService> = {}) {
   return createMinimalHonoApp({
     agent: {
       getTool: async (toolId: string) => ({
@@ -47,14 +48,17 @@ function createApp(agentOverrides: Record<string, unknown> = {}) {
 describe("tool playground routes", () => {
   test("setup approval validates org and target, keeps keys private, and is idempotent", async () => {
     let visibleOrg = "";
+
     const { app, authService, databaseAdapter } = createApp({
       getProfile: async (orgId: string, profileId: string) => {
         if (orgId !== visibleOrg || profileId !== "target") {
           throw new NakamaApiError("Profile not found.", 404);
         }
+
         return { profile: { id: profileId } };
       },
     });
+
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
       authService,
@@ -62,6 +66,7 @@ describe("tool playground routes", () => {
       "setup-org",
       "setup-admin@acme.com"
     );
+
     visibleOrg = orgId;
     const setupId = crypto.randomUUID();
     await saveToolSetup(orgId, {
@@ -74,6 +79,7 @@ describe("tool playground routes", () => {
       status: "pending",
     });
     const url = `http://localhost:4310/v1/tool-setups/${setupId}`;
+
     const headers = adminSession.headers(
       {
         "Content-Type": "application/json",
@@ -81,7 +87,8 @@ describe("tool playground routes", () => {
       },
       orgId
     );
-    const approve = (body: unknown) =>
+
+    const approve = (body: { apiKey?: string; profileId?: string }) =>
       app.fetch(
         new Request(url, {
           method: "POST",
@@ -89,6 +96,7 @@ describe("tool playground routes", () => {
           body: JSON.stringify(body),
         })
       );
+
     expect(
       (await approve({ profileId: "foreign", apiKey: "secret" })).status
     ).toBe(404);
@@ -97,10 +105,12 @@ describe("tool playground routes", () => {
     expect(
       (await approve({ profileId: "target", apiKey: "bad\nkey" })).status
     ).toBe(400);
+
     const approved = await approve({
       profileId: "target",
       apiKey: "private-key",
     });
+
     expect(approved.status).toBe(200);
     expect(await approved.json()).toMatchObject({
       status: "approved",
@@ -116,6 +126,7 @@ describe("tool playground routes", () => {
   });
   test("credential endpoint saves only for an admin's organization and never returns the key", async () => {
     let visibleOrg = "";
+
     const { app, authService, databaseAdapter } = createApp({
       listTools: async (orgId: string) => ({
         tools:
@@ -148,6 +159,7 @@ describe("tool playground routes", () => {
             : [],
       }),
     });
+
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
       authService,
@@ -155,8 +167,10 @@ describe("tool playground routes", () => {
       "credential-org",
       "credential-admin@acme.com"
     );
+
     visibleOrg = orgId;
     const url = "http://localhost:4310/v1/tools/tool_key/credentials";
+
     const headers = adminSession.headers(
       {
         "Content-Type": "application/json",
@@ -164,8 +178,10 @@ describe("tool playground routes", () => {
       },
       orgId
     );
+
     const status = await app.fetch(new Request(url, { headers }));
     expect(await status.json()).toEqual({ configured: false });
+
     const saved = await app.fetch(
       new Request(url, {
         method: "PUT",
@@ -173,6 +189,7 @@ describe("tool playground routes", () => {
         body: JSON.stringify({ apiKey: "private-tool-key" }),
       })
     );
+
     expect(saved.status).toBe(200);
     expect(await saved.json()).toEqual({ configured: true });
     expect(await loadToolApiKey(orgId, "tool_key")).toBe("private-tool-key");
@@ -180,6 +197,7 @@ describe("tool playground routes", () => {
     expect(
       await (await app.fetch(new Request(url, { headers }))).json()
     ).toEqual({ configured: true });
+
     const invalid = await app.fetch(
       new Request(url, {
         method: "PUT",
@@ -187,8 +205,10 @@ describe("tool playground routes", () => {
         body: JSON.stringify({ apiKey: "key\n[evil]" }),
       })
     );
+
     expect(invalid.status).toBe(400);
     expect(await loadToolApiKey(orgId, "tool_key")).toBe("private-tool-key");
+
     const builtin = await app.fetch(
       new Request(url.replace("tool_key", "tool_builtin"), {
         method: "PUT",
@@ -196,9 +216,11 @@ describe("tool playground routes", () => {
         body: JSON.stringify({ apiKey: "builtin-key" }),
       })
     );
+
     expect(builtin.status).toBe(400);
     expect(await loadToolApiKey(orgId, "tool_builtin")).toBeUndefined();
     const envUrl = url.replace("tool_key", "tool_env");
+
     const envSaved = await app.fetch(
       new Request(envUrl, {
         method: "PUT",
@@ -208,10 +230,13 @@ describe("tool playground routes", () => {
         }),
       })
     );
+
     expect(envSaved.status).toBe(200);
+
     const envStatus = await (
       await app.fetch(new Request(envUrl, { headers }))
     ).text();
+
     expect(JSON.parse(envStatus)).toEqual({
       configured: false,
       env: [
@@ -225,6 +250,7 @@ describe("tool playground routes", () => {
       ],
     });
     expect(envStatus).not.toContain("env-secret");
+
     const undeclared = await app.fetch(
       new Request(envUrl, {
         method: "PUT",
@@ -232,6 +258,7 @@ describe("tool playground routes", () => {
         body: JSON.stringify({ env: { PATH: "/tmp/evil" } }),
       })
     );
+
     expect(undeclared.status).toBe(400);
     visibleOrg = "other_org";
     expect(
@@ -268,6 +295,7 @@ describe("tool playground routes", () => {
         path: "plugins/notes/write",
       }),
     });
+
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
       authService,
@@ -281,6 +309,7 @@ describe("tool playground routes", () => {
         headers: adminSession.headers({}, orgId),
       })
     );
+
     expect(source.status).toBe(200);
     await expect(source.json()).resolves.toMatchObject({
       path: "plugins/notes/write",
@@ -289,6 +318,7 @@ describe("tool playground routes", () => {
 
   test("org admin can read tool detail", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
       authService,
@@ -308,6 +338,7 @@ describe("tool playground routes", () => {
 
   test("org member cannot read tool detail", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
       authService,
@@ -336,9 +367,12 @@ describe("tool playground routes", () => {
     );
 
     expect(addMemberResponse.status).toBe(201);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const memberProvisioned = (await addMemberResponse.json()) as {
       temporaryPassword: string;
     };
+
     const memberSession = await loginUserSession(
       app,
       "member@acme.com",
@@ -353,6 +387,7 @@ describe("tool playground routes", () => {
     );
 
     expect(response.status).toBe(403);
+
     for (const method of ["GET", "PUT"]) {
       const credentialResponse = await app.fetch(
         new Request("http://localhost:4310/v1/tools/tool_echo/credentials", {
@@ -364,13 +399,16 @@ describe("tool playground routes", () => {
             },
             orgId
           ),
-          ...(method === "PUT"
-            ? { body: JSON.stringify({ apiKey: "not-allowed" }) }
-            : {}),
+          body:
+            method === "PUT"
+              ? JSON.stringify({ apiKey: "not-allowed" })
+              : undefined,
         })
       );
+
       expect(credentialResponse.status).toBe(403);
     }
+
     for (const method of ["GET", "POST"]) {
       const response = await app.fetch(
         new Request(
@@ -384,18 +422,21 @@ describe("tool playground routes", () => {
               },
               orgId
             ),
-            ...(method === "POST"
-              ? { body: JSON.stringify({ apiKey: "secret" }) }
-              : {}),
+            body:
+              method === "POST"
+                ? JSON.stringify({ apiKey: "secret" })
+                : undefined,
           }
         )
       );
+
       expect(response.status).toBe(403);
     }
   });
 
   test("org admin can run a javascript tool", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
@@ -421,6 +462,7 @@ describe("tool playground routes", () => {
       })
     );
 
+    // SAFETY: This test controls the fixture shape at this boundary.
     const created = (await createResponse.json()) as {
       organization: { id: string };
       adminMember: { temporaryPassword: string };
@@ -448,6 +490,7 @@ describe("tool playground routes", () => {
     );
 
     expect(response.status).toBe(200);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await response.json()) as { ok: boolean; result: unknown };
     expect(body.ok).toBe(true);
     expect(body.result).toEqual({ echo: "hello" });
@@ -455,6 +498,7 @@ describe("tool playground routes", () => {
 
   test("org member cannot run a tool in the playground", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
       authService,
@@ -483,9 +527,12 @@ describe("tool playground routes", () => {
     );
 
     expect(addMemberResponse.status).toBe(201);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const memberProvisioned = (await addMemberResponse.json()) as {
       temporaryPassword: string;
     };
+
     const memberSession = await loginUserSession(
       app,
       "member-run@acme.com",
@@ -518,6 +565,7 @@ describe("tool playground routes", () => {
         );
       },
     });
+
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
@@ -543,6 +591,7 @@ describe("tool playground routes", () => {
       })
     );
 
+    // SAFETY: This test controls the fixture shape at this boundary.
     const created = (await createResponse.json()) as {
       organization: { id: string };
       adminMember: { temporaryPassword: string };
@@ -580,6 +629,7 @@ describe("tool playground routes", () => {
         );
       },
     });
+
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
       authService,
@@ -614,6 +664,7 @@ describe("tool playground routes", () => {
         throw new NakamaApiError("Tool not found.", 404);
       },
     });
+
     const { orgId, adminSession } = await createOrgAdminSession(
       app,
       authService,

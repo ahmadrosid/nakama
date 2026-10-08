@@ -15,14 +15,18 @@ import {
 setupTestConfigDir("nakama-rbac-mutations-test-");
 
 const ORG_ID = "org_test";
+
 const PASSWORD = "password123";
 
 function createApp() {
   const calls: string[] = [];
+
   const record =
     (name: string) =>
     async (..._args: unknown[]) => {
       calls.push(name);
+
+      // SAFETY: This test controls the fixture shape at this boundary.
       return { id: "x", name: "x", prompt: "x" } as any;
     };
 
@@ -38,6 +42,7 @@ function createApp() {
       purgeSession: record("agent.purgeSession"),
       runAutomation: async () => {
         calls.push("agent.runAutomation");
+
         return { skipped: false };
       },
       transcribeAudio: record("agent.transcribeAudio"),
@@ -109,6 +114,7 @@ describe("RBAC: viewer cannot reach state-changing automation/session routes", (
         role: "viewer",
         userId: "user_viewer",
       });
+
       const viewer = await loginUserSession(
         app,
         "viewer@example.com",
@@ -137,10 +143,12 @@ describe("RBAC: admin can still reach the same routes (not a 403)", () => {
     async (role) => {
       const databaseAdapter = createInMemoryDatabaseAdapter();
       const agent = new AgentService(null, null, databaseAdapter);
+
       const { app, authService } = createMinimalHonoApp({
         agent,
         databaseAdapter,
       });
+
       const email = `${role}@example.com`;
       await seedOrgAdmin(databaseAdapter, {
         authService,
@@ -162,8 +170,11 @@ describe("RBAC: admin can still reach the same routes (not a 403)", () => {
             method: "POST",
           })
         );
+
         expect(response.status).toBe(role === "admin" ? 201 : 403);
+
         if (role === "admin") {
+          // SAFETY: This test controls the fixture shape at this boundary.
           const body = (await response.json()) as { sessionId: string };
           expect(
             await databaseAdapter.getSession(body.sessionId)
@@ -187,6 +198,7 @@ describe("RBAC: admin can still reach the same routes (not a 403)", () => {
       role: "admin",
       userId: "user_admin",
     });
+
     const admin = await loginUserSession(
       app,
       "admin@example.com",
@@ -208,6 +220,7 @@ describe("RBAC: admin can still reach the same routes (not a 403)", () => {
 
 test("force deleting an MCP server requires a platform admin", async () => {
   const calls: Array<[string, boolean]> = [];
+
   const { app, authService, databaseAdapter } = createMinimalHonoApp({
     mcpService: {
       deleteServer: async (serverId: string, force: boolean) => {
@@ -215,6 +228,7 @@ test("force deleting an MCP server requires a platform admin", async () => {
       },
     },
   });
+
   const platformAdmin = await setupFreshInstallSession(app, databaseAdapter);
   const orgId = platformAdmin.orgId!;
   await seedOrgAdmin(databaseAdapter, {
@@ -225,12 +239,14 @@ test("force deleting an MCP server requires a platform admin", async () => {
     role: "admin",
     userId: "user_org_admin",
   });
+
   const orgAdmin = await loginUserSession(
     app,
     "org-admin@example.com",
     PASSWORD,
     orgId
   );
+
   const url = "http://localhost:4310/v1/mcp/servers/mcp_test?force=true";
 
   const denied = await app.fetch(
@@ -239,6 +255,7 @@ test("force deleting an MCP server requires a platform admin", async () => {
       method: "DELETE",
     })
   );
+
   expect(denied.status).toBe(403);
   expect(calls).toEqual([]);
 
@@ -250,6 +267,7 @@ test("force deleting an MCP server requires a platform admin", async () => {
       method: "DELETE",
     })
   );
+
   expect(allowed.status).toBe(204);
   expect(calls).toEqual([["mcp_test", true]]);
 });
