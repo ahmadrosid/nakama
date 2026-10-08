@@ -10,10 +10,15 @@ import type { OrgRole } from "@nakama/core/contract";
 import { ORG_ROLES } from "@nakama/db";
 
 const MFA_SECTION = "security";
+
 const ENABLED_KEY = "mfa_enabled";
+
 const REQUIRED_KEY = "mfa_required";
+
 const ENFORCED_ROLES_KEY = "mfa_enforced_roles";
+
 const ENCRYPTION_KEY = "mfa_encryption_key";
+
 type CachedMfaEncryptionKey = {
   ino: number;
   mtimeMs: number;
@@ -21,6 +26,7 @@ type CachedMfaEncryptionKey = {
   size: number;
   value: string;
 };
+
 let cachedMfaEncryptionKey: CachedMfaEncryptionKey | null = null;
 
 export interface MfaPolicy {
@@ -32,24 +38,26 @@ export interface MfaPolicy {
 
 async function readConfig() {
   let raw = "";
+
   try {
     raw = await readFile(getUserConfigPath(), "utf8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+    if (getNodeErrorCode(error) !== "ENOENT") {
       throw error;
     }
   }
+
   return parseIniWithSections(raw);
 }
 
 export async function loadMfaPolicy(): Promise<MfaPolicy> {
   const parsed = await readConfig();
   const security = parsed.sections[MFA_SECTION] ?? {};
+
   const enforcedRoles = security[ENFORCED_ROLES_KEY]
     ?.split(",")
-    .filter((role): role is OrgRole =>
-      ORG_ROLES.includes(role as (typeof ORG_ROLES)[number])
-    ) ?? [...ORG_ROLES];
+    .filter(isOrgRole) ?? [...ORG_ROLES];
+
   return {
     enabled: security[ENABLED_KEY] === "true",
     enforcedRoles,
@@ -65,31 +73,32 @@ export async function updateMfaPolicy(input: {
 }): Promise<MfaPolicy> {
   const parsed = await readConfig();
   const existingRoles = parsed.sections[MFA_SECTION]?.[ENFORCED_ROLES_KEY];
+
   const enforcedRoles =
-    input.enforcedRoles ??
-    existingRoles
-      ?.split(",")
-      .filter((role): role is OrgRole =>
-        ORG_ROLES.includes(role as (typeof ORG_ROLES)[number])
-      );
+    input.enforcedRoles ?? existingRoles?.split(",").filter(isOrgRole);
+
   const initializeRoles =
     input.required === true && !existingRoles ? [...ORG_ROLES] : enforcedRoles;
-  const security = {
-    ...parsed.sections[MFA_SECTION],
-    ...(initializeRoles
-      ? { [ENFORCED_ROLES_KEY]: initializeRoles.join(",") }
-      : {}),
-    ...(input.enabled === undefined
-      ? {}
-      : { [ENABLED_KEY]: String(input.enabled) }),
-    ...(input.required === undefined
-      ? {}
-      : { [REQUIRED_KEY]: String(input.required) }),
-  };
+
+  const security = { ...parsed.sections[MFA_SECTION] };
+
+  if (initializeRoles) {
+    security[ENFORCED_ROLES_KEY] = initializeRoles.join(",");
+  }
+
+  if (input.enabled !== undefined) {
+    security[ENABLED_KEY] = String(input.enabled);
+  }
+
+  if (input.required !== undefined) {
+    security[REQUIRED_KEY] = String(input.required);
+  }
+
   await writeParsedConfigIni(parsed.global, {
     ...parsed.sections,
     [MFA_SECTION]: security,
   });
+
   return loadMfaPolicy();
 }
 
@@ -101,12 +110,14 @@ type MfaConfigMetadata = Pick<
 function readMfaConfigMetadata(configPath: string): MfaConfigMetadata {
   try {
     const { ino, mtimeMs, size } = statSync(configPath);
+
     return { ino, mtimeMs, size };
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (getNodeErrorCode(error) === "ENOENT") {
       cachedMfaEncryptionKey = null;
       throw new Error("MFA encryption key is not configured.");
     }
+
     throw error;
   }
 }
@@ -123,10 +134,13 @@ export async function ensureMfaEncryptionKey(): Promise<string> {
   const configPath = getUserConfigPath();
   const parsed = await readConfig();
   const existing = parsed.sections[MFA_SECTION]?.[ENCRYPTION_KEY];
+
   if (existing) {
     cacheMfaEncryptionKey(configPath, existing);
+
     return existing;
   }
+
   const key = randomBytes(32).toString("base64url");
   await writeParsedConfigIni(parsed.global, {
     ...parsed.sections,
@@ -136,12 +150,14 @@ export async function ensureMfaEncryptionKey(): Promise<string> {
     },
   });
   cacheMfaEncryptionKey(configPath, key);
+
   return key;
 }
 
 export function getMfaEncryptionKey(): string {
   const configPath = getUserConfigPath();
   const metadata = readMfaConfigMetadata(configPath);
+
   if (
     cachedMfaEncryptionKey &&
     cachedMfaEncryptionKey.path === configPath &&
@@ -151,12 +167,34 @@ export function getMfaEncryptionKey(): string {
   ) {
     return cachedMfaEncryptionKey.value;
   }
+
   const value = parseIniWithSections(readFileSync(configPath, "utf8")).sections[
     MFA_SECTION
   ]?.[ENCRYPTION_KEY];
+
   if (!value) {
     throw new Error("MFA encryption key is not configured.");
   }
+
   cachedMfaEncryptionKey = { path: configPath, ...metadata, value };
+
   return value;
+}
+
+function isOrgRole(role: string): role is OrgRole {
+  return ORG_ROLES.some((knownRole) => knownRole === role);
+}
+
+function getNodeErrorCode<T>(error: T): string | undefined {
+  if (!(error instanceof Error && "code" in error)) {
+    return;
+  }
+
+  const code = error.code;
+
+  return isString(code) ? code : undefined;
+}
+
+function isString<T>(value: T): value is T & string {
+  return Object.prototype.toString.call(value) === "[object String]";
 }

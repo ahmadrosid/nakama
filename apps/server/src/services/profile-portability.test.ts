@@ -26,8 +26,11 @@ import {
 import { ProfileService } from "./profile-service";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
+
 const ORG = "org_test";
+
 const DEST = "org_dest";
+
 const VICTIM = "org_victim";
 
 describe("profile portability", () => {
@@ -39,6 +42,7 @@ describe("profile portability", () => {
     } else {
       process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     }
+
     if (root) {
       await rm(root, { force: true, recursive: true });
       root = "";
@@ -49,6 +53,7 @@ describe("profile portability", () => {
     root = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-pack-"));
     process.env.NAKAMA_CONFIG_DIR = root;
     const db = createInMemoryDatabaseAdapter();
+
     return { db, service: new ProfileService(db) };
   }
 
@@ -108,10 +113,12 @@ describe("profile portability", () => {
 
   test("export packs soul content and skips secrets, artifacts, and archives", async () => {
     const { db, service } = await setup();
+
     const { profile } = await service.createProfile(ORG, {
       name: "Research Bot",
       systemPrompt: "research",
     });
+
     const dir = soul(ORG, profile.id);
     await writeFile(path.join(dir, "MEMORY.md"), "- fact\n", "utf8");
     await mkdir(path.join(dir, "knowledge-base"), { recursive: true });
@@ -166,6 +173,7 @@ describe("profile portability", () => {
     const imported = await importProfilePack(db, DEST, exported.data, {
       confirm: true,
     });
+
     const dest = soul(DEST, imported.profileId);
     await expect(
       readFile(path.join(dest, "MEMORY.md"), "utf8")
@@ -180,11 +188,13 @@ describe("profile portability", () => {
 
   test("import creates a new profile and resolves tools by name", async () => {
     const { db, service } = await setup();
+
     const { profile } = await service.createProfile(ORG, {
       model: "anthropic:claude-sonnet-4-6",
       name: "Support Bot",
       systemPrompt: "help",
     });
+
     await db.upsertTool({
       createdAt: now(),
       description: "Custom",
@@ -215,9 +225,11 @@ describe("profile portability", () => {
     ).toBe(false);
 
     const before = (await db.listProfilesForOrg(DEST)).length;
+
     const imported = await importProfilePack(db, DEST, exported.data, {
       confirm: true,
     });
+
     expect(imported.profileId).not.toBe(profile.id);
     expect(await db.listProfilesForOrg(DEST)).toHaveLength(before + 1);
     expect((await db.getProfileForOrg(imported.profileId, DEST))?.model).toBe(
@@ -230,9 +242,11 @@ describe("profile portability", () => {
 
   test("import never assigns a tool owned by another organization", async () => {
     const { db, service } = await setup();
+
     const { profile } = await service.createProfile(ORG, {
       name: "Scoped Tool Bot",
     });
+
     await db.upsertTool({
       createdAt: now(),
       description: "Source tool",
@@ -269,6 +283,7 @@ describe("profile portability", () => {
     const imported = await importProfilePack(db, DEST, exported.data, {
       confirm: true,
     });
+
     expect(
       imported.skippedAssignments.some(
         (item) => item.path === "tool:victim_tool"
@@ -287,9 +302,11 @@ describe("profile portability", () => {
       orgId: DEST,
       updatedAt: now(),
     });
+
     const local = await importProfilePack(db, DEST, exported.data, {
       confirm: true,
     });
+
     expect(
       (await db.listToolsForProfile(local.profileId)).map((tool) => tool.id)
     ).toEqual(["tool_dest"]);
@@ -297,15 +314,19 @@ describe("profile portability", () => {
 
   test("export packs assigned custom tool source and import restores it", async () => {
     const { db, service } = await setup();
+
     const { profile } = await service.createProfile(ORG, {
       name: "Tool Bot",
     });
+
     const toolsDir = getCustomToolsDir();
     const modulePath = "portable-echo.js";
+
     const source = `export async function run(input, context) {
   return input;
 }
 `;
+
     await mkdir(toolsDir, { recursive: true });
     await writeFile(path.join(toolsDir, modulePath), source, "utf8");
     await db.upsertTool({
@@ -322,6 +343,7 @@ describe("profile portability", () => {
     const exported = await createProfilePackExport(db, ORG, profile.id, {
       includeCustomTools: true,
     });
+
     expect(exported.manifest.meta.customTools).toEqual([
       expect.objectContaining({
         handlerType: "javascript",
@@ -335,22 +357,26 @@ describe("profile portability", () => {
 
     await rm(path.join(toolsDir, modulePath));
     const unprivilegedDb = createInMemoryDatabaseAdapter();
+
     const unprivilegedPreview = await previewProfilePackImport(
       unprivilegedDb,
       DEST,
       exported.data
     );
+
     expect(
       unprivilegedPreview.skippedAssignments.some((item) =>
         item.reason.includes("platform admin")
       )
     ).toBe(true);
+
     const unprivilegedImport = await importProfilePack(
       unprivilegedDb,
       DEST,
       exported.data,
       { confirm: true }
     );
+
     expect(await unprivilegedDb.getToolByName("portable_echo")).toBeNull();
     expect(
       await unprivilegedDb.listToolsForProfile(unprivilegedImport.profileId)
@@ -366,12 +392,14 @@ describe("profile portability", () => {
       name: "portable_echo",
       updatedAt: now(),
     });
+
     const conflictingPreview = await previewProfilePackImport(
       conflictingDb,
       DEST,
       exported.data,
       { restoreCustomTools: true }
     );
+
     expect(
       conflictingPreview.skippedAssignments.some((item) =>
         item.reason.includes("conflicts")
@@ -379,12 +407,14 @@ describe("profile portability", () => {
     ).toBe(true);
 
     const destinationDb = createInMemoryDatabaseAdapter();
+
     const preview = await previewProfilePackImport(
       destinationDb,
       DEST,
       exported.data,
       { restoreCustomTools: true }
     );
+
     expect(
       preview.skippedAssignments.some((item) =>
         item.path.includes("portable_echo")
@@ -397,10 +427,13 @@ describe("profile portability", () => {
       exported.data,
       { confirm: true, restoreCustomTools: true }
     );
+
     const restored = await destinationDb.getToolByName("portable_echo");
+
     if (!restored) {
       throw new Error("Expected imported custom tool");
     }
+
     expect(restored).toMatchObject({
       description: "Echo input",
       handlerConfig: { modulePath },
@@ -419,6 +452,7 @@ describe("profile portability", () => {
       confirm: true,
       restoreCustomTools: true,
     });
+
     expect(
       (await destinationDb.listToolsForProfile(reused.profileId)).map(
         (tool) => tool.id
@@ -430,12 +464,14 @@ describe("profile portability", () => {
       "export async function run() { return 'changed'; }\n",
       "utf8"
     );
+
     const changedPreview = await previewProfilePackImport(
       destinationDb,
       DEST,
       exported.data,
       { restoreCustomTools: true }
     );
+
     expect(
       changedPreview.skippedAssignments.some((item) =>
         item.reason.includes("conflicts")
@@ -445,9 +481,11 @@ describe("profile portability", () => {
 
   test("custom tool source is omitted when export is not privileged", async () => {
     const { db, service } = await setup();
+
     const { profile } = await service.createProfile(ORG, {
       name: "Restricted Tool Bot",
     });
+
     const toolsDir = getCustomToolsDir();
     await mkdir(toolsDir, { recursive: true });
     await writeFile(
@@ -469,6 +507,7 @@ describe("profile portability", () => {
     const exported = await createProfilePackExport(db, ORG, profile.id, {
       includeCustomTools: false,
     });
+
     expect(exported.manifest.meta.customTools).toBeUndefined();
     expect(
       Object.keys(unzipSync(new Uint8Array(exported.data))).some((name) =>
@@ -499,9 +538,11 @@ describe("profile portability", () => {
     const exported = await createProfilePackExport(db, ORG, profile.id);
 
     const destDb = createInMemoryDatabaseAdapter();
+
     const skippedImport = await importProfilePack(destDb, DEST, exported.data, {
       confirm: true,
     });
+
     expect(
       skippedImport.skippedAssignments.some((item) =>
         item.path.includes("MissingServer")
@@ -514,12 +555,15 @@ describe("profile portability", () => {
     const first = await importProfilePack(db, DEST, exported.data, {
       confirm: true,
     });
+
     expect(
       (await db.listSkillsForProfile(first.profileId)).map((s) => s.name)
     ).toContain("my-skill");
+
     const second = await importProfilePack(db, DEST, exported.data, {
       confirm: true,
     });
+
     expect(
       second.skippedAssignments.some((item) => item.reason.includes("my-skill"))
     ).toBe(true);
@@ -527,9 +571,11 @@ describe("profile portability", () => {
 
   test("pack import only attaches MCP servers granted to the importing org", async () => {
     const { db, service } = await setup();
+
     const { profile } = await service.createProfile(ORG, {
       name: "Privileged Bot",
     });
+
     await db.upsertMcpServer({
       cachedTools: [{ description: "drop db", inputSchema: {}, name: "drop" }],
       config: {
@@ -564,6 +610,7 @@ describe("profile portability", () => {
     const imported = await importProfilePack(db, DEST, exported.data, {
       confirm: true,
     });
+
     expect(
       (await db.listMcpServersForProfile(imported.profileId)).map(
         (server) => server.id
@@ -575,6 +622,7 @@ describe("profile portability", () => {
       isPlatformAdmin: true,
       name: "Platform Restored Bot",
     });
+
     expect(
       (await db.listMcpServersForProfile(adminImported.profileId)).map(
         (server) => server.id
@@ -583,10 +631,12 @@ describe("profile portability", () => {
 
     const granted = await service.createProfile(DEST, { name: "Granted Host" });
     await db.assignMcpServerToProfile(granted.profile.id, "mcp_prod");
+
     const grantedImport = await importProfilePack(db, DEST, exported.data, {
       confirm: true,
       name: "Granted Bot",
     });
+
     expect(
       (await db.listMcpServersForProfile(grantedImport.profileId)).map(
         (server) => server.id
@@ -597,10 +647,12 @@ describe("profile portability", () => {
   test("guards: Super Bot, confirm, preview-only, and kind mismatch", async () => {
     const { db, service } = await setup();
     const normal = await service.createProfile(ORG, { name: "Bot" });
+
     const superBot = await service.createProfile(ORG, {
       isSuper: true,
       name: "Super Bot",
     });
+
     const exported = await createProfilePackExport(db, ORG, normal.profile.id);
 
     await expect(
@@ -625,9 +677,11 @@ describe("profile portability", () => {
 
   test("failed import rolls back created skills and the profile", async () => {
     const { db, service } = await setup();
+
     const { profile } = await service.createProfile(ORG, {
       name: "Rollback Bot",
     });
+
     await writeSkill(db, ORG, profile.id, "rollback-skill");
     await db.upsertTool({
       createdAt: now(),
@@ -665,6 +719,7 @@ describe("profile portability", () => {
     await writeSkill(db, ORG, profile.id, "my-skill");
     const exported = await createProfilePackExport(db, ORG, profile.id);
     const marker = path.join(root, "pwned.txt");
+
     const crafted = repack(exported.data, {
       "skills/my-skill/tool.js": exfiltratingTool(marker),
     });
@@ -681,6 +736,7 @@ describe("profile portability", () => {
     expect(await db.listProfilesForOrg(DEST)).toEqual([]);
     expect(
       await readdir(path.join(root, "orgs", DEST, "profiles")).catch(
+        // SAFETY: The test fixture matches the contract used by this test.
         () => [] as string[]
       )
     ).toEqual([]);
@@ -740,6 +796,7 @@ describe("profile portability", () => {
     const imported = await importProfilePack(db, DEST, exported.data, {
       confirm: true,
     });
+
     const [importedSkill] = await db.listSkillsForProfile(imported.profileId);
     expect(importedSkill?.name).toBe("my-skill");
     expect(importedSkill?.hasTool).toBe(false);

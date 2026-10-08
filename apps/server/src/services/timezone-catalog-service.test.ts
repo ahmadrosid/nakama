@@ -11,10 +11,13 @@ afterEach(() => {
 
 test("groups IANA zones by tzdata country", async () => {
   const catalog = await getTimezoneCatalog();
+
   const unitedStates = catalog.groups.find(
     (group) => group.countryCode === "US"
   );
+
   const ids = new Set(unitedStates?.timezones.map((zone) => zone.id));
+
   const newYork = unitedStates?.timezones.find(
     (zone) => zone.id === "America/New_York"
   );

@@ -17,6 +17,7 @@ function assistantWithTools(count: number, names?: string[]): ChatMessage {
   const toolCalls = Array.from({ length: count }, (_, index) =>
     toolCall(`call_${index}`, names?.[index] ?? "read_file")
   );
+
   return { content: "working", role: "assistant", toolCalls };
 }
 
@@ -76,6 +77,7 @@ async function seedEligibleTurn(db: DatabaseAdapter, channel: string) {
       toolCallId: `call_${index}`,
     })),
   ];
+
   await db.appendMessagesForSession(
     "session_1",
     turn.map((message, index) => ({
@@ -94,6 +96,7 @@ describe("evaluatePostTurnReviewTurnEligibility", () => {
       { content: "do the thing", role: "user" },
       assistantWithTools(5),
     ]);
+
     expect(result.eligible).toBe(true);
     expect(result.toolCallCount).toBe(5);
   });
@@ -103,6 +106,7 @@ describe("evaluatePostTurnReviewTurnEligibility", () => {
       { content: "simple", role: "user" },
       assistantWithTools(4),
     ]);
+
     expect(result.eligible).toBe(false);
     expect(result.reason).toBe("turn_not_complex");
   });
@@ -118,6 +122,7 @@ describe("evaluatePostTurnReviewTurnEligibility", () => {
         toolCallId: "call_0",
       },
     ]);
+
     expect(result.eligible).toBe(true);
     expect(result.hasToolError).toBe(true);
   });
@@ -133,6 +138,7 @@ describe("evaluatePostTurnReviewTurnEligibility", () => {
         "skill_manage",
       ]),
     ]);
+
     expect(result.eligible).toBe(false);
     expect(result.reason).toBe("skill_manage_already_used");
   });
@@ -292,9 +298,11 @@ describe("SkillPostTurnReviewService", () => {
     await seedEligibleTurn(db, "cli");
 
     let release!: () => void;
+
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
+
     let ran = 0;
     const service = new SkillPostTurnReviewService(db, () => null);
     service.setRunner(async () => {

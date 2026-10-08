@@ -22,7 +22,9 @@ import type {
 } from "@nakama/db";
 import {
   isMcpReconnectableError,
+  type JsonValue,
   type McpClientManager,
+  type McpToolArguments,
   toCachedMcpToolSummaries,
 } from "./mcp-client-manager";
 import {
@@ -79,12 +81,16 @@ function buildOAuthProvider(
   return provider;
 }
 
-function withOAuthGrant(config: unknown, grant?: McpOAuthGrant): unknown {
+function withOAuthGrant(config: McpServerConfig, grant?: McpOAuthGrant) {
   if (!grant) {
     return config;
   }
 
-  return { ...(config as StoredMcpHttpConfig), oauth: grant };
+  if (!("url" in config)) {
+    throw new Error("OAuth grants require an HTTP MCP server config.");
+  }
+
+  return { ...config, oauth: grant };
 }
 
 export class McpService {
@@ -139,6 +145,7 @@ export class McpService {
     }
 
     const now = new Date().toISOString();
+
     let record: StoredMcpServerRecord = {
       cachedTools: [],
       config: request.config,
@@ -158,19 +165,23 @@ export class McpService {
       // A grant started here has no row to write to yet, so it is captured and
       // stored with the record below.
       let grant: McpOAuthGrant | undefined;
+
       const provider = buildOAuthProvider(record, options, async (next) => {
         grant = next;
       });
 
       try {
-        const cachedTools = await this.manager.connect(record, {
-          ...(provider ? { authProvider: provider } : {}),
-        });
+        const cachedTools = await this.manager.connect(
+          record,
+          provider ? { authProvider: provider } : undefined
+        );
+
         record = { ...record, cachedTools, status: "connected" };
       } catch (error) {
         if (!provider?.authorizationUrl) {
           const message =
             error instanceof Error ? error.message : String(error);
+
           throw new NakamaApiError(
             `Could not connect MCP server "${name}": ${message}`,
             422
@@ -221,7 +232,9 @@ export class McpService {
 
     const transportChanged =
       request.transport !== undefined && request.transport !== server.transport;
+
     const transport = request.transport ?? server.transport;
+
     const config = request.config
       ? transportChanged
         ? request.config
@@ -250,6 +263,7 @@ export class McpService {
     const configChanged =
       JSON.stringify(server.config) !== JSON.stringify(config) ||
       server.transport !== transport;
+
     const enabledChanged = updated.enabled !== server.enabled;
 
     if (configChanged || enabledChanged) {
@@ -308,9 +322,11 @@ export class McpService {
     );
 
     try {
-      const cachedTools = await this.manager.connect(server, {
-        ...(provider ? { authProvider: provider } : {}),
-      });
+      const cachedTools = await this.manager.connect(
+        server,
+        provider ? { authProvider: provider } : undefined
+      );
+
       const updated: StoredMcpServerRecord = {
         ...server,
         cachedTools,
@@ -328,6 +344,7 @@ export class McpService {
       // Re-read: the provider persisted the pending grant during the attempt,
       // and the record this method started from predates it.
       const stored = (await this.db.getMcpServer(serverId)) ?? server;
+
       const updated: StoredMcpServerRecord = {
         ...stored,
         lastError: authorizationUrl ? null : message,
@@ -366,6 +383,7 @@ export class McpService {
     // repeat that redirect_uri verbatim.
     const pending = readMcpOAuthGrant(server.config);
     const callbackBaseUrl = pending?.callbackBaseUrl ?? options.callbackBaseUrl;
+
     const provider = buildOAuthProvider(server, { callbackBaseUrl }, (grant) =>
       this.saveOAuthGrant(serverId, grant)
     );
@@ -374,9 +392,11 @@ export class McpService {
       throw new NakamaApiError(INVALID_OAUTH_CALLBACK_MESSAGE, 400);
     }
 
+    const config = resolveMcpConfig("http", server.config);
+
     const result = await auth(provider, {
       authorizationCode: options.code,
-      serverUrl: (server.config as StoredMcpHttpConfig).url,
+      serverUrl: config.url,
     });
 
     if (result !== "AUTHORIZED") {
@@ -409,6 +429,7 @@ export class McpService {
   ): Promise<McpServerResponse> {
     await this.requireServer(serverId);
     await this.manager.disconnect(serverId);
+
     return this.connectServer(serverId, options);
   }
 
@@ -418,6 +439,7 @@ export class McpService {
     serverId?: string
   ): Promise<TestMcpServerResponse> {
     const normalizedTransport = normalizeTransport(transport);
+
     const resolvedConfig = serverId
       ? mergeMcpConfig(
           normalizedTransport,
@@ -444,17 +466,24 @@ export class McpService {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+
       const requiresAuthorization =
         normalizedTransport === "http" &&
-        (await serverAdvertisesOAuth((resolvedConfig as McpHttpConfig).url));
+        "url" in resolvedConfig &&
+        (await serverAdvertisesOAuth(resolvedConfig.url));
 
-      return {
+      const response: TestMcpServerResponse = {
         error: requiresAuthorization ? AUTHORIZATION_REQUIRED_MESSAGE : message,
         ok: false,
-        ...(requiresAuthorization ? { requiresAuthorization } : {}),
         toolCount: 0,
         tools: [],
       };
+
+      if (requiresAuthorization) {
+        response.requiresAuthorization = true;
+      }
+
+      return response;
     }
   }
 
@@ -466,10 +495,10 @@ export class McpService {
   async callTool(
     server: StoredMcpServerRecord,
     toolName: string,
-    input: unknown,
+    input: McpToolArguments,
     orgId: string | undefined,
     profileId: string
-  ): Promise<unknown> {
+  ): Promise<JsonValue> {
     const stdio = server.transport === "stdio";
 
     for (let attempt = 1; ; attempt++) {
@@ -510,6 +539,7 @@ export class McpService {
       }
 
       await this.manager.ensureConnected(server, orgId, profileId);
+
       return;
     }
 
@@ -670,15 +700,32 @@ function formatMcpServerInUseMessage(profiles: ProfileRef[]): string {
 
 const REDACTED_SECRET_VALUE = "••••••••";
 
-function resolveMcpConfig(
+function resolveMcpConfig<T>(
   transport: McpTransport,
-  config: unknown
+  config: T
 ): McpServerConfig {
-  if (typeof config !== "object" || config === null) {
-    return transport === "http" ? { url: "" } : { command: "" };
+  const record = readUnknownRecord(config);
+
+  if (transport === "http") {
+    const resolved: StoredMcpHttpConfig = {
+      headers: readStringRecord(record?.get("headers")),
+      url: readString(record?.get("url")) ?? "",
+    };
+
+    const grant = readMcpOAuthGrant(config);
+
+    if (grant) {
+      resolved.oauth = grant;
+    }
+
+    return resolved;
   }
 
-  return config as McpServerConfig;
+  return {
+    args: readStringArray(record?.get("args")),
+    command: readString(record?.get("command")) ?? "",
+    env: readStringRecord(record?.get("env")),
+  };
 }
 
 function mergeMcpConfig(
@@ -686,14 +733,15 @@ function mergeMcpConfig(
   previous: McpServerConfig,
   next: McpServerConfig
 ): McpServerConfig {
-  if (transport === "http") {
-    return mergeMcpHttpConfig(previous as McpHttpConfig, next as McpHttpConfig);
+  if (transport === "http" && "url" in previous && "url" in next) {
+    return mergeMcpHttpConfig(previous, next);
   }
 
-  return mergeMcpStdioConfig(
-    previous as McpStdioConfig,
-    next as McpStdioConfig
-  );
+  if ("command" in previous && "command" in next) {
+    return mergeMcpStdioConfig(previous, next);
+  }
+
+  throw invalidMcpServerRequest("MCP server config does not match transport.");
 }
 
 function mergeMcpHttpConfig(
@@ -705,11 +753,16 @@ function mergeMcpHttpConfig(
   // moving the server somewhere else.
   const grant = url === previous.url ? readMcpOAuthGrant(previous) : undefined;
 
-  return {
+  const merged: StoredMcpHttpConfig = {
     headers: mergeRedactedStringRecord(previous.headers, next.headers),
     url,
-    ...(grant ? { oauth: grant } : {}),
   };
+
+  if (grant) {
+    merged.oauth = grant;
+  }
+
+  return merged;
 }
 
 function mergeMcpStdioConfig(
@@ -776,34 +829,31 @@ function normalizeStringArray(
   }
 
   const items = value.map((entry) => entry.trim()).filter(Boolean);
+
   return items.length > 0 ? items : undefined;
 }
 
-function redactMcpConfig(
+function redactMcpConfig<T>(
   transport: McpTransport,
-  config: unknown
+  config: T
 ): McpServerConfig {
-  if (transport === "stdio") {
-    const stdio =
-      typeof config === "object" && config !== null
-        ? (config as McpStdioConfig)
-        : { command: "" };
+  const parsed = resolveMcpConfig(transport, config);
 
+  if (transport === "stdio" && "command" in parsed) {
     return {
-      args: stdio.args,
-      command: stdio.command,
-      env: redactStringRecord(stdio.env),
+      args: parsed.args,
+      command: parsed.command,
+      env: redactStringRecord(parsed.env),
     };
   }
 
-  const http =
-    typeof config === "object" && config !== null
-      ? (config as McpHttpConfig)
-      : { url: "" };
+  if (!("url" in parsed)) {
+    return { command: "" };
+  }
 
   return {
-    headers: redactStringRecord(http.headers),
-    url: http.url,
+    headers: redactStringRecord(parsed.headers),
+    url: parsed.url,
   };
 }
 
@@ -847,17 +897,14 @@ function validateTransport(
   normalizeTransport(transport);
 }
 
-function validateConfig(transport: McpTransport, config: unknown): void {
-  if (typeof config !== "object" || config === null) {
-    throw invalidMcpServerRequest("MCP server config is required.");
-  }
-
-  const record = config as Record<string, unknown>;
-
+function validateConfig(
+  transport: McpTransport,
+  config: McpServerConfig
+): void {
   if (transport === "http") {
-    const url = record.url;
+    const url = "url" in config ? config.url : undefined;
 
-    if (typeof url !== "string" || !url.trim()) {
+    if (!(isString(url) && url.trim())) {
       throw invalidMcpServerRequest("HTTP MCP servers require config.url.");
     }
 
@@ -870,15 +917,66 @@ function validateConfig(transport: McpTransport, config: unknown): void {
     return;
   }
 
-  const command = record.command;
+  const command = "command" in config ? config.command : undefined;
 
-  if (typeof command !== "string" || !command.trim()) {
+  if (!(isString(command) && command.trim())) {
     throw invalidMcpServerRequest("stdio MCP servers require config.command.");
   }
+}
+
+function readUnknownRecord<T>(value: T): Map<string, unknown> | undefined {
+  if (!(value instanceof Object)) {
+    return;
+  }
+
+  return new Map(Object.entries(value));
+}
+
+function readString<T>(value: T): (T & string) | undefined {
+  // SAFETY: The object tag check confirms the input uses the string representation.
+  return Object.prototype.toString.call(value) === "[object String]"
+    ? (value as T & string)
+    : undefined;
+}
+
+function readStringRecord<T>(value: T): Record<string, string> | undefined {
+  const record = readUnknownRecord(value);
+
+  if (!record) {
+    return;
+  }
+
+  const result: Record<string, string> = {};
+
+  for (const [key, entry] of record) {
+    const parsed = readString(entry);
+
+    if (parsed !== undefined) {
+      result[key] = parsed;
+    }
+  }
+
+  return result;
+}
+
+function readStringArray<T>(value: T): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return;
+  }
+
+  return value.flatMap((entry) => {
+    const parsed = readString(entry);
+
+    return parsed === undefined ? [] : [parsed];
+  });
 }
 
 export function toMcpServerSummaries(
   servers: StoredMcpServerRecord[]
 ): McpServerSummary[] {
   return servers.map((server) => toMcpServerSummary(server));
+}
+
+function isString<T>(value: T): value is T & string {
+  return Object.prototype.toString.call(value) === "[object String]";
 }

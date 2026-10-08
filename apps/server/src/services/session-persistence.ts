@@ -22,6 +22,7 @@ async function withArchiveLock<T>(
   const previous = archiveOperations.get(path) ?? Promise.resolve();
   const current = previous.catch(() => undefined).then(operation);
   archiveOperations.set(path, current);
+
   try {
     return await current;
   } finally {
@@ -51,14 +52,18 @@ export async function archiveSessionHistory(
   history: readonly ChatMessage[]
 ): Promise<string> {
   const path = sessionHistoryArchivePath(orgId, sessionId);
+
   return withArchiveLock(dirname(path), async () => {
     if (!(await db.getSession(sessionId))) {
       throw new Error("Session not found.");
     }
+
     await mkdir(dirname(path), { recursive: true });
     const file = await open(path, "a+", 0o600);
+
     try {
       const { size } = await file.stat();
+
       try {
         await file.writeFile(
           `${JSON.stringify({ archivedAt: new Date().toISOString(), messages: history })}\n`
@@ -68,6 +73,7 @@ export async function archiveSessionHistory(
         await file.truncate(size);
         throw error;
       }
+
       return `Original messages are archived. Use read_session_history with offset ${size} to recover details.`;
     } finally {
       await file.close();
@@ -80,6 +86,7 @@ export function deleteSessionHistoryArchive(
   sessionId: string
 ): Promise<void> {
   const path = sessionHistoryArchivePath(orgId, sessionId);
+
   return withArchiveLock(dirname(path), () => rm(path, { force: true }));
 }
 
@@ -95,11 +102,13 @@ export function deleteProfileWithHistoryArchives(
         orgId,
         profileId
       );
+
       for (const share of artifactShares) {
         await deleteArtifactShareSnapshot(orgId, share.storagePath);
       }
 
       const sessions = await db.listSessions();
+
       for (const session of sessions) {
         if (session.profileId === profileId) {
           await rm(sessionHistoryArchivePath(orgId, session.id), {
@@ -107,6 +116,7 @@ export function deleteProfileWithHistoryArchives(
           });
         }
       }
+
       // Keep the profile and session IDs available for retry when filesystem
       // cleanup fails instead of leaving unreachable files after the cascade.
       await rm(getProfileSoulDir(orgId, profileId), {
@@ -120,6 +130,7 @@ export function deleteProfileWithHistoryArchives(
           recursive: true,
         }
       );
+
       return db.deleteProfile(profileId);
     }
   );
@@ -132,13 +143,16 @@ export function copySessionHistoryArchive(
   targetId: string
 ): Promise<void> {
   const source = sessionHistoryArchivePath(orgId, sourceId);
+
   return withArchiveLock(dirname(source), async () => {
     if (!((await db.getSession(sourceId)) && (await db.getSession(targetId)))) {
       throw new Error("Session not found.");
     }
+
     try {
       await copyFile(source, sessionHistoryArchivePath(orgId, targetId));
     } catch (error) {
+      // SAFETY: copyFile throws NodeJS filesystem errors with a code field.
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         throw error;
       }
@@ -168,17 +182,22 @@ export function createReadSessionHistoryTool(
       if (!(await db.getSession(sessionId))) {
         throw new Error("Session not found.");
       }
+
       const { offset, limit } = readHistorySchema.parse(input);
       const file = await open(sessionHistoryArchivePath(orgId, sessionId), "r");
+
       try {
         const buffer = Buffer.alloc(limit);
         const { bytesRead } = await file.read(buffer, 0, limit, offset);
+
         // Leave any incomplete UTF-8 character for the next read.
         const content = new TextDecoder("utf-8", { ignoreBOM: true }).decode(
           buffer.subarray(0, bytesRead),
           { stream: true }
         );
+
         const nextOffset = offset + Buffer.byteLength(content);
+
         return {
           content,
           done: nextOffset >= (await file.stat()).size,
@@ -220,6 +239,7 @@ export function wrapPersistedSession(
     if (turnEpoch !== currentEpoch()) {
       return;
     }
+
     if (session.getHistoryRevision() > lastPersistedRevision) {
       await replaceSessionHistory(db, sessionId, session.getHistory());
     } else {
@@ -230,6 +250,7 @@ export function wrapPersistedSession(
         lastPersistedLength
       );
     }
+
     lastPersistedRevision = session.getHistoryRevision();
     lastPersistedLength = session.getHistory().length;
   }
@@ -243,11 +264,13 @@ export function wrapPersistedSession(
     async compact(options) {
       const revisionBefore = session.getHistoryRevision();
       const result = await session.compact(options);
+
       if (session.getHistoryRevision() > revisionBefore) {
         await replaceSessionHistory(db, sessionId, session.getHistory());
         lastPersistedRevision = session.getHistoryRevision();
         lastPersistedLength = session.getHistory().length;
       }
+
       return result;
     },
     createAutomation: (prompt) => session.createAutomation(prompt),
@@ -258,6 +281,7 @@ export function wrapPersistedSession(
     async send(message, sendOptions) {
       options.onBeginTurn?.(sessionId);
       const turnEpoch = currentEpoch();
+
       try {
         return await session.send(message, {
           ...sendOptions,
@@ -273,6 +297,7 @@ export function wrapPersistedSession(
     async sendStream(message, handlers, streamOptions) {
       options.onBeginTurn?.(sessionId);
       const turnEpoch = currentEpoch();
+
       try {
         return await session.sendStream(message, handlers, {
           ...streamOptions,
@@ -294,7 +319,10 @@ export async function loadSessionHistory(
 ): Promise<ChatMessage[]> {
   const storedMessages = await db.listMessagesForSession(sessionId);
 
-  return storedMessages.map((record) => record.payload as ChatMessage);
+  return storedMessages.map((record) => {
+    // SAFETY: The database stores canonical ChatMessage payloads for each session.
+    return record.payload as ChatMessage;
+  });
 }
 
 export async function replaceSessionHistory(
@@ -303,6 +331,7 @@ export async function replaceSessionHistory(
   history: readonly ChatMessage[]
 ): Promise<void> {
   const now = new Date().toISOString();
+
   const messages = history.map((payload, index) => ({
     createdAt: now,
     id: createId("msg"),
@@ -325,11 +354,14 @@ async function persistHistoryDelta(
   }
 
   const existing = await db.listMessagesForSession(sessionId);
+
   const nextSeq =
     existing.length > 0
       ? Math.max(...existing.map((record) => record.seq)) + 1
       : 0;
+
   const now = new Date().toISOString();
+
   const newMessages = history.slice(previousLength).map((payload, index) => ({
     createdAt: now,
     id: createId("msg"),

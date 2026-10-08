@@ -14,7 +14,7 @@ const REGION_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 type LocaleWithTimeZones = Intl.Locale & { getTimeZones?: () => string[] };
 
 /** ICU / CLDR names that differ from the current zone.tab id. */
-const ZONE_ALIASES: Readonly<Record<string, string>> = {
+const ZONE_ALIASES = {
   "Africa/Asmera": "Africa/Asmara",
   "America/Buenos_Aires": "America/Argentina/Buenos_Aires",
   "America/Catamarca": "America/Argentina/Catamarca",
@@ -34,7 +34,7 @@ const ZONE_ALIASES: Readonly<Record<string, string>> = {
   "Pacific/Enderbury": "Pacific/Kanton",
   "Pacific/Ponape": "Pacific/Pohnpei",
   "Pacific/Truk": "Pacific/Chuuk",
-};
+} as const satisfies Readonly<Record<string, string>>;
 
 /** Static zone metadata. Seasonal display fields are not stored here. */
 interface CachedCatalogEntry {
@@ -52,6 +52,7 @@ interface CachedCatalogGroup {
 }
 
 let cachedCatalog: CachedCatalogGroup[] | null = null;
+
 let cachedCountryByZone: Map<string, string> | null = null;
 
 function cityFromZoneName(zoneName: string): string {
@@ -73,12 +74,14 @@ function formatPart(
 
 function gmtOffsetName(timeZone: string, instant: Date): string {
   const offset = formatPart(timeZone, "longOffset", instant) ?? "GMT";
+
   return offset.replace(/^GMT/, "UTC");
 }
 
 function isSupportedTimeZone(zoneName: string): boolean {
   try {
     Intl.DateTimeFormat(undefined, { timeZone: zoneName });
+
     return true;
   } catch {
     return false;
@@ -94,8 +97,11 @@ function addCountriesFromIcu(map: Map<string, string>): void {
   for (const first of REGION_LETTERS) {
     for (const second of REGION_LETTERS) {
       const region = `${first}${second}`;
-      const locale = new Intl.Locale("und", { region }) as LocaleWithTimeZones;
-      for (const zoneName of locale.getTimeZones?.() ?? []) {
+      const locale = new Intl.Locale("und", { region });
+      // SAFETY: This runtime supports Locale.getTimeZones when it is present.
+      const localeWithTimeZones = locale as LocaleWithTimeZones;
+
+      for (const zoneName of localeWithTimeZones.getTimeZones?.() ?? []) {
         map.set(zoneName, region);
       }
     }
@@ -115,13 +121,16 @@ function loadCountryByZone(): Map<string, string> {
         if (!line || line.startsWith("#")) {
           continue;
         }
+
         const columns = line.split("\t");
         const countryCode = columns[0]?.split(",")[0]?.trim();
         const zoneName = columns[2]?.trim();
+
         if (countryCode && zoneName) {
           map.set(zoneName, countryCode);
         }
       }
+
       break;
     } catch {
       // try the next tzdata path
@@ -134,6 +143,7 @@ function loadCountryByZone(): Map<string, string> {
 
   for (const [alias, canonical] of Object.entries(ZONE_ALIASES)) {
     const countryCode = map.get(alias) ?? map.get(canonical);
+
     if (countryCode) {
       map.set(alias, countryCode);
       map.set(canonical, countryCode);
@@ -141,6 +151,7 @@ function loadCountryByZone(): Map<string, string> {
   }
 
   cachedCountryByZone = map;
+
   return map;
 }
 
@@ -150,19 +161,26 @@ function toCatalogEntry(
 ): CachedCatalogEntry {
   const countryCode = countryByZone.get(zoneName) ?? "ZZ";
   const city = cityFromZoneName(zoneName);
+
   const countryName =
     countryCode === "ZZ"
       ? (zoneName.split("/")[0] ?? zoneName)
       : (countryNames.of(countryCode) ?? countryCode);
+
   const aliases = getTimezoneCityAliases(zoneName);
 
-  return {
+  const entry: CachedCatalogEntry = {
     city,
     countryCode,
     countryName,
     id: zoneName,
-    ...(aliases.length > 0 ? { aliases } : {}),
   };
+
+  if (aliases.length > 0) {
+    entry.aliases = aliases;
+  }
+
+  return entry;
 }
 
 function withSeasonalFields(
@@ -171,7 +189,7 @@ function withSeasonalFields(
 ): TimezoneCatalogEntry {
   const offset = gmtOffsetName(entry.id, instant);
 
-  return {
+  const result: TimezoneCatalogEntry = {
     abbreviation: formatPart(entry.id, "short", instant) ?? offset,
     city: entry.city,
     countryCode: entry.countryCode,
@@ -180,8 +198,13 @@ function withSeasonalFields(
     label: `${entry.city} · ${offset}`,
     offset,
     tzName: formatPart(entry.id, "long", instant) ?? entry.id,
-    ...(entry.aliases ? { aliases: [...entry.aliases] } : {}),
   };
+
+  if (entry.aliases) {
+    result.aliases = [...entry.aliases];
+  }
+
+  return result;
 }
 
 export async function getTimezoneCatalog(): Promise<ListTimezonesResponse> {
@@ -190,6 +213,7 @@ export async function getTimezoneCatalog(): Promise<ListTimezonesResponse> {
   if (!cachedCatalog) {
     const countryByZone = loadCountryByZone();
     const groups = new Map<string, CachedCatalogGroup>();
+
     const zoneNames = new Set([
       ...Intl.supportedValuesOf("timeZone"),
       ...countryByZone.keys(),

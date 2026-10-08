@@ -35,7 +35,9 @@ import { resolveProfileStoredTools } from "./tool-resolver";
 afterEach(closePluginPackageRegistry);
 
 const ORG_ID = "org_u5";
+
 const OTHER_PROFILE = "profile_unassigned";
+
 const ACTOR = { id: "user_1", role: "member" as const };
 
 const ACTION_JS = `
@@ -66,10 +68,31 @@ writeFileSync("/tmp/nakama-plugin-skill-imported", "imported");
 export async function run() { return { leaked: true }; }
 `;
 
+type TestManifest = {
+  actions: Array<{
+    access: string;
+    description: string;
+    effect: string;
+    entry: string;
+    exposeAsTool: boolean;
+    inputSchema: { type: string };
+    key: string;
+  }>;
+  apiVersion: number;
+  author: string;
+  description: string;
+  id: string;
+  license: string;
+  minNakamaVersion: string;
+  name: string;
+  skills: Array<{ directory: string; key: string }>;
+  version: string;
+};
+
 function manifest(
   version: string,
-  extras: Record<string, unknown> = {}
-): Record<string, unknown> {
+  extras: Pick<Partial<TestManifest>, "actions" | "skills"> = {}
+) {
   return {
     actions: [
       {
@@ -92,7 +115,7 @@ function manifest(
     skills: [{ directory: "skills/notes", key: "notes" }],
     version,
     ...extras,
-  };
+  } satisfies TestManifest;
 }
 
 function v1Bundle(): ReturnType<typeof pluginPackage> {
@@ -144,6 +167,7 @@ describe("plugin capabilities", () => {
     } else {
       process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     }
+
     await rm(configDir, { force: true, recursive: true });
   });
 
@@ -173,6 +197,7 @@ describe("plugin capabilities", () => {
     const skill = (await db.listSkills()).find(
       (row) => row.pluginId === "notes"
     );
+
     const tool = (await db.listTools()).find((row) => row.pluginId === "notes");
     expect(skill).toBeDefined();
     expect(tool).toBeDefined();
@@ -223,6 +248,7 @@ describe("plugin capabilities", () => {
       profile.id,
       "/skill notes"
     );
+
     expect(matched).toContain("notes");
 
     const resolved = await resolveProfileStoredTools(
@@ -231,11 +257,14 @@ describe("plugin capabilities", () => {
       [],
       { pluginService: plugins }
     );
+
     const pluginTool = resolved.find(
       (item) => item.name === derivePluginToolName("notes", "write")
     );
+
     expect(pluginTool).toBeDefined();
 
+    // SAFETY: The test fixture matches the contract used by this test.
     const result = (await pluginTool!.run(
       {},
       {
@@ -246,6 +275,7 @@ describe("plugin capabilities", () => {
         userId: "user_1",
       }
     )) as { actor: { role: string }; orgId: string };
+
     expect(result.orgId).toBe(ORG_ID);
     expect(result.actor.role).toBe("member");
 
@@ -253,13 +283,16 @@ describe("plugin capabilities", () => {
       ORG_ID,
       OTHER_PROFILE
     );
+
     expect(otherCatalog).not.toContain("**notes**");
+
     const otherTools = await resolveProfileStoredTools(
       await db.listToolsForProfile(OTHER_PROFILE),
       db,
       [],
       { pluginService: plugins }
     );
+
     expect(
       otherTools.some(
         (item) => item.name === derivePluginToolName("notes", "write")
@@ -268,11 +301,13 @@ describe("plugin capabilities", () => {
 
     await db.assignSkillToProfile(OTHER_PROFILE, skill!.id);
     await skills.materializeAssignedPluginSkills(ORG_ID, OTHER_PROFILE);
+
     const otherCopyRoot = join(
       getProfileSoulDir(ORG_ID, OTHER_PROFILE),
       "skills",
       ".plugins"
     );
+
     await db.unassignSkillFromProfile(profile.id, skill!.id);
     await skills.materializeAssignedPluginSkills(ORG_ID, profile.id);
     expect(await readdir(copyRoot)).toEqual([]);
@@ -280,11 +315,13 @@ describe("plugin capabilities", () => {
     await db.assignSkillToProfile(profile.id, skill!.id);
     await skills.materializeAssignedPluginSkills(ORG_ID, profile.id);
     const install = await db.getOrgPlugin(ORG_ID, "notes");
+
     const disabled = await plugins.disableOrgPlugin(
       ORG_ID,
       "notes",
       install!.revision
     );
+
     expect(await readdir(copyRoot)).toEqual([]);
     expect(await readdir(otherCopyRoot)).toEqual([]);
 
@@ -304,9 +341,11 @@ describe("plugin capabilities", () => {
     await plugins.installPluginPackage(v1Bundle());
     const added = await plugins.addOrgPlugin(ORG_ID, "notes");
     await plugins.enableOrgPlugin(ORG_ID, "notes", added.revision);
+
     const skill = (await db.listSkills()).find(
       (row) => row.pluginId === "notes"
     )!;
+
     await db.assignSkillToProfile(profile.id, skill.id);
     const workspace = getProfileSoulDir(ORG_ID, profile.id);
     const outside = join(configDir, "outside");
@@ -360,9 +399,11 @@ describe("plugin capabilities", () => {
     );
     const added = await plugins.addOrgPlugin(ORG_ID, "notes");
     await plugins.enableOrgPlugin(ORG_ID, "notes", added.revision);
+
     const tools = (await db.listTools()).filter(
       (row) => row.pluginId === "notes"
     );
+
     for (const tool of tools) {
       await db.assignToolToProfile(profile.id, tool.id);
     }
@@ -373,6 +414,7 @@ describe("plugin capabilities", () => {
       [],
       { actorRole: "member", pluginService: plugins }
     );
+
     expect(
       memberResolved.some(
         (item) => item.name === derivePluginToolName("notes", "write")
@@ -390,6 +432,7 @@ describe("plugin capabilities", () => {
       [],
       { actorRole: "admin", pluginService: plugins }
     );
+
     expect(
       adminResolved.some(
         (item) => item.name === derivePluginToolName("notes", "wipe")
@@ -406,14 +449,17 @@ describe("plugin capabilities", () => {
 
     await plugins.installPluginPackage(v1Bundle());
     const added = await plugins.addOrgPlugin(ORG_ID, "notes");
+
     const enabled = await plugins.enableOrgPlugin(
       ORG_ID,
       "notes",
       added.revision
     );
+
     const skill = (await db.listSkills()).find(
       (row) => row.pluginId === "notes"
     );
+
     const tool = (await db.listTools()).find((row) => row.pluginId === "notes");
     await db.assignSkillToProfile(profile.id, skill!.id);
     await db.assignToolToProfile(profile.id, tool!.id);
@@ -424,9 +470,11 @@ describe("plugin capabilities", () => {
       [],
       { pluginService: plugins }
     );
+
     const pluginTool = resolved.find(
       (item) => item.name === derivePluginToolName("notes", "write")
     );
+
     expect(pluginTool).toBeDefined();
 
     await plugins.disableOrgPlugin(ORG_ID, "notes", enabled.revision);
@@ -454,6 +502,7 @@ describe("plugin capabilities", () => {
       [],
       { pluginService: plugins }
     );
+
     expect(
       afterDisable.some(
         (item) => item.name === derivePluginToolName("notes", "write")
@@ -483,14 +532,17 @@ describe("plugin capabilities", () => {
 
     await plugins.installPluginPackage(v1Bundle());
     const added = await plugins.addOrgPlugin(ORG_ID, "notes");
+
     const enabled = await plugins.enableOrgPlugin(
       ORG_ID,
       "notes",
       added.revision
     );
+
     const skill = (await db.listSkills()).find(
       (row) => row.pluginId === "notes"
     );
+
     const tool = (await db.listTools()).find((row) => row.pluginId === "notes");
     await db.assignSkillToProfile(profile.id, skill!.id);
     await db.assignToolToProfile(profile.id, tool!.id);
@@ -499,11 +551,13 @@ describe("plugin capabilities", () => {
       ORG_ID,
       profile.id
     );
+
     const copyRoot = join(
       getProfileSoulDir(ORG_ID, profile.id),
       "skills",
       ".plugins"
     );
+
     const [oldCopy] = await readdir(copyRoot);
 
     const disabled = await plugins.disableOrgPlugin(
@@ -511,11 +565,13 @@ describe("plugin capabilities", () => {
       "notes",
       enabled.revision
     );
+
     const reenabled = await plugins.enableOrgPlugin(
       ORG_ID,
       "notes",
       disabled.revision
     );
+
     expect(
       (await db.listSkills()).find((row) => row.pluginId === "notes")?.id
     ).toBe(skill!.id);
@@ -529,11 +585,13 @@ describe("plugin capabilities", () => {
     ).toBe(true);
 
     await plugins.installPluginPackage(v2BundleWithoutWrite());
+
     const preview = await plugins.previewPluginContributionChanges(
       ORG_ID,
       "notes",
       "1.1.0"
     );
+
     expect(preview.removedActionKeys).toEqual(["write"]);
     expect(preview.retainedSkillIds).toEqual([skill!.id]);
 
@@ -542,6 +600,7 @@ describe("plugin capabilities", () => {
       "notes",
       reenabled.revision
     );
+
     await plugins.updateOrgPlugin(
       ORG_ID,
       "notes",
@@ -555,11 +614,14 @@ describe("plugin capabilities", () => {
       ORG_ID,
       profile.id
     );
+
     expect(newCatalog).not.toBe(oldCatalog);
     expect(newCatalog).not.toContain(join(copyRoot, oldCopy!));
+
     const newCopy = (await readdir(copyRoot)).find(
       (entry) => entry !== oldCopy
     )!;
+
     expect(existsSync(join(copyRoot, oldCopy!))).toBe(false);
     expect(existsSync(join(copyRoot, newCopy, "SKILL.md"))).toBe(true);
     expect(existsSync(join(copyRoot, newCopy, "references/usage.md"))).toBe(
@@ -596,9 +658,11 @@ describe("plugin capabilities", () => {
     await plugins.installPluginPackage(v1Bundle());
     const added = await plugins.addOrgPlugin(ORG_ID, "notes");
     await plugins.enableOrgPlugin(ORG_ID, "notes", added.revision);
+
     const skill = (await db.listSkills()).find(
       (row) => row.pluginId === "notes"
     );
+
     const tool = (await db.listTools()).find((row) => row.pluginId === "notes");
     await db.assignSkillToProfile(profile.id, skill!.id);
     await db.assignToolToProfile(profile.id, tool!.id);
@@ -612,6 +676,7 @@ describe("plugin capabilities", () => {
       "skills",
       "notes"
     );
+
     await mkdir(standaloneDir, { recursive: true });
     await writeFile(
       join(standaloneDir, "SKILL.md"),
@@ -647,6 +712,7 @@ Standalone body.
       generateMarkdown: async () =>
         "---\nname: notes\ndescription: rewritten\n---\n",
     });
+
     await db.upsertOrganization({
       createdAt: new Date().toISOString(),
       id: ORG_ID,
@@ -680,9 +746,11 @@ Standalone body.
     await plugins.installPluginPackage(v1Bundle());
     const added = await plugins.addOrgPlugin(ORG_ID, "notes");
     await plugins.enableOrgPlugin(ORG_ID, "notes", added.revision);
+
     const pluginSkill = (await db.listSkills()).find(
       (row) => row.pluginId === "notes"
     );
+
     await db.assignSkillToProfile(profile.id, pluginSkill!.id);
 
     const standaloneDir = join(
@@ -694,6 +762,7 @@ Standalone body.
       "skills",
       "notes"
     );
+
     await mkdir(standaloneDir, { recursive: true });
     await writeFile(
       join(standaloneDir, "SKILL.md"),
@@ -706,9 +775,11 @@ Standalone body.
 `
     );
     await skills.syncProfileSkills(ORG_ID, profile.id);
+
     const standalone = (await db.listSkills()).find(
       (row) => row.name === "notes" && !row.pluginId
     );
+
     expect(standalone).toBeDefined();
     await db.assignSkillToProfile(profile.id, standalone!.id);
 
@@ -721,6 +792,7 @@ Standalone body.
       profile.id,
       "/skill notes"
     );
+
     expect(matched).toContain("Store notes in the plugin database");
 
     const pluginDir = await plugins.resolveEnabledSkillDirectory(
@@ -728,7 +800,9 @@ Standalone body.
       "notes",
       "notes"
     );
+
     expect(pluginDir).toContain(join("notes", "1.0.0", "skills", "notes"));
+
     const loaded = await loadSkillTool({
       body: "",
       description: "plugin",
@@ -742,6 +816,7 @@ Standalone body.
       skillFilePath: join(pluginDir!, "SKILL.md"),
       toolPath: join(pluginDir!, "tool.js"),
     });
+
     const loadedResult = await loaded!.run({}, {});
     expect(loadedResult).toEqual({
       error: "Plugin skill entrypoints cannot be loaded in-process.",
@@ -766,10 +841,12 @@ Standalone body.
       [],
       { pluginService: plugins }
     );
+
     const pluginTool = resolved.find(
       (item) => item.name === derivePluginToolName("notes", "write")
     );
 
+    // SAFETY: The test fixture matches the contract used by this test.
     const result = (await pluginTool!.run(
       { actor: { id: "root", role: "admin" }, orgId: "spoof-org" },
       {

@@ -56,6 +56,7 @@ export class ArtifactShareService {
     await this.requireProfile(input.orgId, input.profileId);
 
     const sourcePath = input.sourcePath.trim();
+
     if (!sourcePath) {
       throw new NakamaApiError("path is required.", 400);
     }
@@ -68,6 +69,7 @@ export class ArtifactShareService {
 
     const filename = sourcePath.split("/").pop() ?? "artifact";
     const mimeType = resolveArtifactMimeType(artifact.contentType, filename);
+
     const existing = await this.db.getActiveArtifactShareByPath(
       input.orgId,
       input.profileId,
@@ -90,6 +92,7 @@ export class ArtifactShareService {
     } else {
       token = generateArtifactShareToken();
       const shareId = `share_${crypto.randomUUID().replace(/-/g, "")}`;
+
       const storagePath = await writeArtifactShareSnapshot({
         bytes: artifact.bytes,
         filename,
@@ -119,9 +122,11 @@ export class ArtifactShareService {
       clientOrigin: input.clientOrigin,
       request: input.request,
     });
+
     const webPublicUrlConfigured = Boolean(
       baseUrl && !isLoopbackComposioCallbackBaseUrl(baseUrl)
     );
+
     const shareUrl = token
       ? `${baseUrl}${buildArtifactSharePath(token)}`
       : null;
@@ -148,6 +153,7 @@ export class ArtifactShareService {
     // Write a unique path + DB first so a failed replacement never clobbers the
     // live public file (same display filename would otherwise overwrite in place).
     const previousStoragePath = existing.storagePath;
+
     const storagePath = await writeArtifactShareSnapshot({
       bytes: input.bytes,
       filename: `${crypto.randomUUID()}-${input.filename}`,
@@ -205,6 +211,7 @@ export class ArtifactShareService {
         orgId: input.orgId,
         profileId: input.profileId,
       });
+
       const filename = sourcePath.split("/").pop() ?? "artifact";
 
       await this.replaceSnapshot(existing, {
@@ -242,6 +249,7 @@ export class ArtifactShareService {
       clientOrigin: input.clientOrigin,
       request: input.request,
     });
+
     const webPublicUrlConfigured = Boolean(
       baseUrl && !isLoopbackComposioCallbackBaseUrl(baseUrl)
     );
@@ -277,6 +285,7 @@ export class ArtifactShareService {
       share.id,
       new Date().toISOString()
     );
+
     if (revoked) {
       await deleteArtifactShareSnapshot(input.orgId, share.storagePath);
     }
@@ -289,6 +298,7 @@ export class ArtifactShareService {
     metadata: PublicArtifactShareResponse;
   }> {
     const trimmed = token.trim();
+
     if (!trimmed) {
       throw new NakamaApiError("Not found", 404);
     }
@@ -305,6 +315,7 @@ export class ArtifactShareService {
       share.orgId,
       share.storagePath
     );
+
     // Sidecars sometimes store application/octet-stream; resolve from the filename
     // so <video>/<img> can play with X-Content-Type-Options: nosniff.
     const mimeType = resolveArtifactMimeType(share.mimeType, share.filename);
@@ -326,6 +337,7 @@ export class ArtifactShareService {
     profileId: string
   ): Promise<void> {
     const profile = await this.profileService.getProfile(orgId, profileId);
+
     if (!profile) {
       throw new NakamaApiError("Not found", 404);
     }

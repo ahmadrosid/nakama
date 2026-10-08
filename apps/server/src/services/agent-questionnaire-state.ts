@@ -2,6 +2,7 @@ import type { AgentQuestionnaire } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
 
 const MAX_QUESTIONS = 5;
+
 const MAX_CHOICES = 5;
 
 export class AgentQuestionnaireState {
@@ -16,6 +17,7 @@ export class AgentQuestionnaireState {
 
     const questionnaire = await this.db.getSessionQuestionnaire(sessionId);
     this.cache.set(sessionId, questionnaire);
+
     return questionnaire;
   }
 
@@ -86,6 +88,7 @@ export class AgentQuestionnaireState {
 
     this.cache.set(sessionId, normalized);
     await this.db.updateSessionQuestionnaire(sessionId, normalized);
+
     return normalized;
   }
 

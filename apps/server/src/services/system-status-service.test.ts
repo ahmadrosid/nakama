@@ -43,6 +43,7 @@ function createService(
   return new SystemStatusService(
     // The service only reads these members; the rest of AgentService is not
     // part of what a status response depends on.
+    // SAFETY: The test fixture matches the contract used by this test.
     {
       getLlmUsageDailyStats: async (orgId: string | null) =>
         (orgId ? await usageTracker?.getDailyStats(orgId) : null) ?? [],
@@ -64,8 +65,10 @@ function createService(
         displayName: "OpenAI",
       }),
       providerConfigured: true,
-    } as unknown as AgentService,
+    } as AgentService,
+    // SAFETY: The test fixture matches the contract used by this test.
     { getActiveRunCount: () => 2 } as any,
+    // SAFETY: The test fixture matches the contract used by this test.
     {
       getAllWorkerStatuses: async () => ({
         automation: automationProcess,
@@ -74,6 +77,7 @@ function createService(
       }),
     } as any,
     null,
+    // SAFETY: The test fixture matches the contract used by this test.
     extras?.composioService as any
   );
 }
@@ -116,11 +120,14 @@ describe("SystemStatusService", () => {
     });
     tracker.record("gpt-4o", 50, 5, { orgId: "org_a" });
     const agent = new AgentService(null, null, db, tracker);
+
     const service = new SystemStatusService(
       Object.assign(agent, {
         getModels: async () => ({ models: [], provider: "openai" }),
       }),
+      // SAFETY: The test fixture matches the contract used by this test.
       { getActiveRunCount: () => 0 } as any,
+      // SAFETY: The test fixture matches the contract used by this test.
       { getAllWorkerStatuses: async () => ({}) } as any
     );
 
@@ -131,6 +138,7 @@ describe("SystemStatusService", () => {
     const { llmUsage } = await service.getStatus("org_a", {
       includeUsageByActor: true,
     });
+
     expect(llmUsage.agents).toMatchObject([
       { id: "agent_1", name: "Researcher", requestCount: 1 },
       { id: null, name: null, requestCount: 1 },
@@ -217,10 +225,12 @@ describe("SystemStatusService", () => {
     await saveComposioConfig({ apiKey: "test-key" });
 
     let reachabilityCalls = 0;
+
     const service = createService(null, {
       composioService: {
         isReachable: async () => {
           reachabilityCalls += 1;
+
           return true;
         },
       },

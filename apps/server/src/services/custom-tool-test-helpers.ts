@@ -11,6 +11,7 @@ export async function setupCustomToolsDir(): Promise<{
   process.env.NAKAMA_CONFIG_DIR = configDir;
   const toolsDir = path.join(configDir, "tools");
   await mkdir(toolsDir, { recursive: true });
+
   return { configDir, toolsDir };
 }
 

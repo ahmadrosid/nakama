@@ -22,22 +22,27 @@ export class OrgUsageQuotaService {
     turns: number;
     warningPercent: number;
   }> {
+    // SAFETY: The organization row includes the optional quota columns in the database schema.
     const organization = (await this.db.getOrganizationById(
       orgId
     )) as OrganizationWithLlmTurnLimit | null;
+
     const month = this.now().toISOString().slice(0, 7);
     const usage = await this.db.listLlmTurnUsage(orgId);
     const current = usage.filter((entry) => entry.bucket.startsWith(month));
     const turns = current.reduce((total, entry) => total + entry.turns, 0);
+
     const tokens = current.reduce(
       (total, entry) => total + entry.inputTokens + entry.outputTokens,
       0
     );
+
     const turnLimit = organization?.monthlyLlmTurnLimit ?? 0;
     const tokenLimit = organization?.monthlyLlmTokenLimit ?? 0;
     const warningPercent = organization?.monthlyLlmWarningPercent ?? 80;
     const turnRatio = turnLimit > 0 ? turns / turnLimit : 0;
     const tokenRatio = tokenLimit > 0 ? tokens / tokenLimit : 0;
+
     const status =
       (turnLimit > 0 && turns >= turnLimit) ||
       (tokenLimit > 0 && tokens >= tokenLimit)
@@ -62,6 +67,7 @@ export class OrgUsageQuotaService {
     orgId: string,
     reservedTokens = 0
   ): Promise<() => Promise<void>> {
+    // SAFETY: The organization row includes the optional quota columns in the database schema.
     const organization = (await this.db.getOrganizationById(
       orgId
     )) as OrganizationWithLlmTurnLimit | null;
@@ -78,6 +84,7 @@ export class OrgUsageQuotaService {
     }
 
     const status = await this.getStatus(orgId);
+
     if (
       (organization?.monthlyLlmTurnLimit &&
         organization.monthlyLlmTurnLimit > 0 &&
@@ -88,7 +95,9 @@ export class OrgUsageQuotaService {
     ) {
       throw new NakamaApiError("Monthly LLM quota reached.", 429);
     }
+
     const reservationId = crypto.randomUUID();
+
     const reserved = await this.db.tryReserveMonthlyLlmQuota({
       createdAt: this.now().toISOString(),
       existingTokens: status.tokens,
@@ -97,9 +106,11 @@ export class OrgUsageQuotaService {
       reservationId,
       reservedTokens: Math.max(0, Math.ceil(reservedTokens)),
     });
+
     if (!reserved) {
       throw new NakamaApiError("Monthly LLM quota reached.", 429);
     }
+
     return () => this.db.releaseMonthlyLlmQuota(orgId, reservationId);
   }
 }
