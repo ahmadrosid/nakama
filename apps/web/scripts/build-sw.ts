@@ -32,7 +32,7 @@ if (!(await manifestFile.exists())) {
   process.exit(1);
 }
 
-// SAFETY: Vite generates this manifest with the ViteManifest shape during the build.
+// SAFETY: `vite build` writes this file from the configured manifest schema.
 const manifest = (await manifestFile.json()) as ViteManifest;
 
 const precache = precacheUrls(manifest, EXTRA_PRECACHE_URLS);
