@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatMessage } from "@nakama/core";
+import type { ChatMessage, ToolCall } from "@nakama/core";
 import {
   extractOpenAITokenUsage,
   finalizePendingToolCalls,
@@ -98,22 +98,31 @@ describe("provider shared helpers", () => {
   });
 
   const user = (content: string): ChatMessage => ({ content, role: "user" });
+
   const toolResult = (toolCallId: string, content = "ok"): ChatMessage => ({
     content,
     name: "lookup",
     role: "tool",
     toolCallId,
   });
+
   const assistantTools = (
     id: string,
-    args: Record<string, unknown> = {},
+    args: ToolCall["arguments"] = {},
     thinking?: string
-  ): ChatMessage => ({
-    content: "",
-    role: "assistant",
-    ...(thinking ? { thinking } : {}),
-    toolCalls: [{ arguments: args, id, name: "lookup" }],
-  });
+  ): ChatMessage => {
+    const message: Extract<ChatMessage, { role: "assistant" }> = {
+      content: "",
+      role: "assistant",
+      toolCalls: [{ arguments: args, id, name: "lookup" }],
+    };
+
+    if (thinking) {
+      message.thinking = thinking;
+    }
+
+    return message;
+  };
 
   test("sanitizeToolCallHistory drops orphaned tool_calls assistants", () => {
     expect(
@@ -138,6 +147,7 @@ describe("provider shared helpers", () => {
       toolResult("call_1"),
       { content: "Done", role: "assistant" },
     ];
+
     expect(sanitizeToolCallHistory(messages)).toEqual(messages);
   });
 });

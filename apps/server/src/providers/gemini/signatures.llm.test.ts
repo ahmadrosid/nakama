@@ -9,6 +9,7 @@ test("Gemini resumes a signed tool turn after history serialization", async () =
     apiKey: process.env.GEMINI_API_KEY ?? "cassette-replay-key",
     model: "gemini-3.8-flash",
   });
+
   await withMswCassette(
     "gemini-signed-tool-continuation",
     async () => {
@@ -27,6 +28,7 @@ test("Gemini resumes a signed tool turn after history serialization", async () =
           },
         ],
       };
+
       const first = await provider.generateChat(input);
       expect(first.toolCalls).toHaveLength(1);
       expect(first.assistantMessage.providerContent).toEqual(
@@ -39,6 +41,7 @@ test("Gemini resumes a signed tool turn after history serialization", async () =
         first.assistantMessage.providerContent
       );
       const call = first.toolCalls[0]!;
+
       const second = await provider.generateChat({
         ...input,
         messages: [
@@ -53,6 +56,7 @@ test("Gemini resumes a signed tool turn after history serialization", async () =
         ],
         signal: AbortSignal.timeout(45_000),
       });
+
       expect(second.content).toBe("PROBE-7319");
       expect(second.toolCalls).toEqual([]);
     },

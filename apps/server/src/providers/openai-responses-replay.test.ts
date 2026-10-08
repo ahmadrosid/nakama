@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { ChatMessage } from "@nakama/core";
 import { generateOpenAIResponsesChat, toResponsesInput } from "./openai";
+import { asTestFetch } from "./test-helpers";
 
 const originalFetch = globalThis.fetch;
 
@@ -9,6 +10,8 @@ afterEach(() => {
 });
 
 const ASSISTANT_TEXT = "Let me look up the invoices from last quarter.";
+
+type ResponsesRequestBody = { store?: boolean };
 
 // The shape the Responses API returns for a turn that says something and then
 // calls a tool: one message item, one function_call item.
@@ -39,13 +42,15 @@ function itemsCarrying(items: unknown[], text: string): unknown[] {
 
 describe("OpenAI Responses assistant replay", () => {
   test("sends the assistant text once", async () => {
-    globalThis.fetch = mock(
-      async () =>
-        new Response(JSON.stringify(RESPONSE_PAYLOAD), {
-          headers: { "Content-Type": "application/json" },
-          status: 200,
-        })
-    ) as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(JSON.stringify(RESPONSE_PAYLOAD), {
+            headers: { "Content-Type": "application/json" },
+            status: 200,
+          })
+      )
+    );
 
     const result = await generateOpenAIResponsesChat({
       apiKey: "sk-test",
@@ -90,16 +95,18 @@ describe("OpenAI Responses assistant replay", () => {
   });
 
   test("sends store false", async () => {
-    let body: { store?: boolean } = {};
-    globalThis.fetch = mock(
-      async (_input: RequestInfo | URL, init?: RequestInit) => {
-        body = JSON.parse(String(init?.body)) as { store?: boolean };
+    let body: ResponsesRequestBody = {};
+    globalThis.fetch = asTestFetch(
+      mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
+        body = JSON.parse(String(init?.body)) as ResponsesRequestBody;
+
         return new Response(JSON.stringify(RESPONSE_PAYLOAD), {
           headers: { "Content-Type": "application/json" },
           status: 200,
         });
-      }
-    ) as unknown as typeof fetch;
+      })
+    );
 
     await generateOpenAIResponsesChat({
       apiKey: "sk-test",

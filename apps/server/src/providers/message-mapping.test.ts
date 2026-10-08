@@ -48,6 +48,7 @@ test("switching from Gemini rebuilds native assistant text and tool calls", asyn
       toolCalls: [{ arguments: { code: 7 }, id: "call-1", name: "read_probe" }],
     },
   ];
+
   expect(await toAnthropicMessages(messages)).toEqual([
     { content: [{ text: "Hello", type: "text" }], role: "assistant" },
     {
@@ -91,7 +92,7 @@ describe("provider user content mapping", () => {
     expect(user?.role).toBe("user");
     expect(Array.isArray(user?.content)).toBe(true);
 
-    const blocks = user?.content as Array<Record<string, unknown>>;
+    const blocks = Array.isArray(user?.content) ? user.content : [];
     expect(blocks[0]).toEqual({ text: "What is this?", type: "text" });
     expect(blocks[1]).toEqual({
       source: {
@@ -106,7 +107,7 @@ describe("provider user content mapping", () => {
   test("toAnthropicMessages maps document parts", async () => {
     const result = await toAnthropicMessages([documentUserMessage]);
     const user = result[0];
-    const blocks = user?.content as Array<Record<string, unknown>>;
+    const blocks = Array.isArray(user?.content) ? user.content : [];
 
     expect(blocks[1]).toEqual({
       source: {
@@ -121,6 +122,7 @@ describe("provider user content mapping", () => {
   test("toAnthropicMessages inlines text/plain documents for opencode_go", async () => {
     const text = "alpha beta gamma";
     const data = Buffer.from(text, "utf8").toString("base64");
+
     const message: ChatMessage = {
       content: [
         { text: "Summarize", type: "text" },
@@ -136,7 +138,7 @@ describe("provider user content mapping", () => {
 
     const result = await toAnthropicMessages([message], "opencode_go");
     const user = result[0];
-    const blocks = user?.content as Array<Record<string, unknown>>;
+    const blocks = Array.isArray(user?.content) ? user.content : [];
 
     expect(blocks[0]).toEqual({ text: "Summarize", type: "text" });
     expect(blocks[1]).toEqual({
@@ -166,37 +168,37 @@ describe("provider user content mapping", () => {
 
     expect(Array.isArray(user?.content)).toBe(true);
 
-    const parts = user?.content as Array<Record<string, unknown>>;
+    const parts = Array.isArray(user?.content) ? user.content : [];
     const imagePart = parts[1];
     expect(parts[0]).toEqual({ text: "What is this?", type: "text" });
     expect(imagePart?.type).toBe("image_url");
     expect(
-      (imagePart?.image_url as { url: string } | undefined)?.url
+      imagePart?.type === "image_url" ? imagePart.image_url.url : undefined
     ).toStartWith("data:image/png;base64,");
   });
 
   test("toResponsesInput maps image parts", async () => {
     const result = await toResponsesInput([multimodalUserMessage]);
-    const user = result[0] as {
-      type?: string;
-      role: string;
-      content: Array<Record<string, unknown>>;
-    };
+
+    const user = result[0];
 
     expect(user.type).toBe("message");
     expect(user.role).toBe("user");
-    expect(user.content[0]).toEqual({
+    expect(user?.type === "message" ? user.content[0] : undefined).toEqual({
       text: "What is this?",
       type: "input_text",
     });
-    expect(user.content[1]?.type).toBe("input_image");
-    expect(user.content[1]?.image_url).toStartWith("data:image/png;base64,");
+    const image = user?.type === "message" ? user.content[1] : undefined;
+    expect(image?.type).toBe("input_image");
+    expect(
+      image?.type === "input_image" ? image.image_url : undefined
+    ).toStartWith("data:image/png;base64,");
   });
 
   test("toOpenAIMessages maps document parts", async () => {
     const result = await toOpenAIMessages("system", [documentUserMessage]);
     const user = result.find((message) => message.role === "user");
-    const parts = user?.content as Array<Record<string, unknown>>;
+    const parts = Array.isArray(user?.content) ? user.content : [];
 
     expect(parts[1]).toEqual({
       file_data: "data:application/pdf;base64,JVBERi0=",
@@ -208,6 +210,7 @@ describe("provider user content mapping", () => {
   test("toOpenAIMessages inlines text/plain documents for opencode_go", async () => {
     const text = "alpha beta gamma";
     const data = Buffer.from(text, "utf8").toString("base64");
+
     const message: ChatMessage = {
       content: [
         { text: "Summarize", type: "text" },
@@ -223,7 +226,7 @@ describe("provider user content mapping", () => {
 
     const result = await toOpenAIMessages("system", [message], "opencode_go");
     const user = result.find((entry) => entry.role === "user");
-    const parts = user?.content as Array<Record<string, unknown>>;
+    const parts = Array.isArray(user?.content) ? user.content : [];
 
     expect(parts[0]).toEqual({ text: "Summarize", type: "text" });
     expect(parts[1]).toEqual({
@@ -234,13 +237,10 @@ describe("provider user content mapping", () => {
 
   test("toResponsesInput maps document parts", async () => {
     const result = await toResponsesInput([documentUserMessage]);
-    const user = result[0] as {
-      type?: string;
-      role: string;
-      content: Array<Record<string, unknown>>;
-    };
 
-    expect(user.content[1]).toEqual({
+    const user = result[0];
+
+    expect(user?.type === "message" ? user.content[1] : undefined).toEqual({
       file_data: "data:application/pdf;base64,JVBERi0=",
       filename: "report.pdf",
       type: "input_file",
@@ -248,7 +248,7 @@ describe("provider user content mapping", () => {
   });
 
   test("toResponsesInput aligns function_call ids with tool outputs", async () => {
-    const result = (await toResponsesInput([
+    const result = await toResponsesInput([
       { content: "run my digest", role: "user" },
       {
         content: "",
@@ -276,7 +276,7 @@ describe("provider user content mapping", () => {
         role: "tool",
         toolCallId: "call_tool_id",
       },
-    ])) as Array<Record<string, unknown>>;
+    ]);
 
     expect(result).toEqual([
       { content: "run my digest", role: "user" },

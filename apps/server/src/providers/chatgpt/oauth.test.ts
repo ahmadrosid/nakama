@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import type { ProviderJsonRecord } from "../shared";
 import {
   CHATGPT_JWT_CLAIM_PATH,
   fetchChatgptCodexModels,
@@ -6,11 +7,13 @@ import {
   readChatgptAccountIdFromAccessToken,
 } from "./oauth";
 
-function buildJwt(payload: Record<string, unknown>): string {
+function buildJwt(payload: ProviderJsonRecord): string {
   const header = Buffer.from(
     JSON.stringify({ alg: "none", typ: "JWT" })
   ).toString("base64url");
+
   const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+
   return `${header}.${body}.signature`;
 }
 
@@ -25,29 +28,36 @@ describe("fetchChatgptCodexModels", () => {
     const accessToken = buildJwt({
       [CHATGPT_JWT_CLAIM_PATH]: { chatgpt_account_id: "acct_1" },
     });
+
     let saved = false;
     let modelRequests = 0;
     let refreshRequests = 0;
+    // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
     globalThis.fetch = (async (input, init) => {
       if (String(input).includes("/oauth/token")) {
         refreshRequests++;
         expect(
           new URLSearchParams(String(init?.body)).get("refresh_token")
         ).toBe("refresh");
+
         return Response.json({
           access_token: accessToken,
           expires_in: 3600,
           refresh_token: "replacement",
         });
       }
+
       modelRequests++;
+
       if (modelRequests === 1) {
         return new Response(null, { status: 401 });
       }
+
       expect(saved).toBe(true);
       expect(new Headers(init?.headers).get("Authorization")).toBe(
         `Bearer ${accessToken}`
       );
+
       return Response.json({ models: [{ slug: "gpt-5.4" }] });
     }) as typeof fetch;
 
@@ -62,15 +72,18 @@ describe("fetchChatgptCodexModels", () => {
         expect(oauth.accessToken).toBe(accessToken);
         expect(oauth.refreshToken).toBe("replacement");
         saved = true;
+
         return Promise.resolve();
       }
     );
+
     expect(models.map((model) => model.id)).toEqual(["gpt-5.4"]);
     expect(modelRequests).toBe(2);
     expect(refreshRequests).toBe(1);
   });
 
   test("throws when Codex returns an error status", async () => {
+    // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
     globalThis.fetch = (async () =>
       new Response("nope", { status: 403 })) as typeof fetch;
 
@@ -92,12 +105,15 @@ describe("fetchChatgptCodexModels", () => {
       let modelRequests = 0;
       let refreshRequests = 0;
       let saved = 0;
+      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
       globalThis.fetch = (async (input) => {
         if (String(input).includes("/oauth/token")) {
           refreshRequests++;
+
           if (failure === "refresh rejected") {
             return new Response(null, { status: 400 });
           }
+
           return Response.json({
             access_token: buildJwt({
               [CHATGPT_JWT_CLAIM_PATH]: { chatgpt_account_id: "acct_1" },
@@ -106,7 +122,9 @@ describe("fetchChatgptCodexModels", () => {
             refresh_token: "replacement",
           });
         }
+
         modelRequests++;
+
         return new Response(null, { status: 401 });
       }) as typeof fetch;
       await expect(
@@ -119,6 +137,7 @@ describe("fetchChatgptCodexModels", () => {
           },
           () => {
             saved++;
+
             return Promise.resolve();
           }
         )
@@ -177,6 +196,7 @@ describe("completeChatgptDeviceAuth", () => {
       },
     });
 
+    // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
     globalThis.fetch = (async (input, init) => {
       const url = String(input);
 
@@ -192,6 +212,7 @@ describe("completeChatgptDeviceAuth", () => {
 
       if (url.includes("/oauth/token")) {
         expect(init?.method).toBe("POST");
+
         return new Response(
           JSON.stringify({
             access_token: token,
@@ -206,6 +227,7 @@ describe("completeChatgptDeviceAuth", () => {
     }) as typeof fetch;
 
     const { completeChatgptDeviceAuth } = await import("./oauth");
+
     const result = await completeChatgptDeviceAuth(
       {
         deviceAuthId: "device-auth-id",

@@ -44,6 +44,7 @@ describe("sanitizeGeminiToolParameters", () => {
   });
 
   test("drops $schema and recurses into properties and items", () => {
+    // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
     const sanitized = sanitizeGeminiToolParameters({
       $schema: "https://json-schema.org/draft/2020-12/schema",
       additionalProperties: false,
@@ -97,6 +98,7 @@ describe("buildGeminiChatConfig tool sanitization", () => {
           {
             description: "Read a file",
             name: "read_file",
+            // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
             parameters: {
               properties: {
                 offset: {

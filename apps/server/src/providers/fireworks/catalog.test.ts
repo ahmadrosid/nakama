@@ -63,12 +63,14 @@ describe("fetchFireworksGatewayModels", () => {
     const originalFetch = globalThis.fetch;
     let callCount = 0;
 
+    // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       callCount += 1;
       const url = String(input);
 
       if (callCount === 1) {
         expect(url).toContain("filter=supports_serverless%3Dtrue");
+
         return new Response(
           JSON.stringify({
             models: [
@@ -86,6 +88,7 @@ describe("fetchFireworksGatewayModels", () => {
       }
 
       expect(url).toContain("pageToken=page-2");
+
       return new Response(
         JSON.stringify({
           models: [

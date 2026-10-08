@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import type { ProviderJsonRecord, ProviderJsonValue } from "../shared";
+import { asTestFetch } from "../test-helpers";
 import { createGeminiProvider } from "./index";
 
 const originalFetch = globalThis.fetch;
@@ -9,6 +11,7 @@ afterEach(() => {
 
 function withMockFetch(fetchMock: typeof fetch, run: () => Promise<void>) {
   globalThis.fetch = fetchMock;
+
   return run().finally(() => {
     globalThis.fetch = originalFetch;
   });
@@ -17,10 +20,10 @@ function withMockFetch(fetchMock: typeof fetch, run: () => Promise<void>) {
 function generateContentResponse(options: {
   text?: string;
   thinking?: string;
-  functionCalls?: unknown[];
-  usageMetadata?: Record<string, unknown>;
+  functionCalls?: ProviderJsonValue[];
+  usageMetadata?: ProviderJsonRecord;
 }) {
-  const parts: Array<Record<string, unknown>> = [];
+  const parts: ProviderJsonRecord[] = [];
 
   if (options.thinking) {
     parts.push({ text: options.thinking, thought: true });
@@ -34,15 +37,20 @@ function generateContentResponse(options: {
     parts.push({ functionCall: call });
   }
 
-  return JSON.stringify({
-    ...(options.usageMetadata ? { usageMetadata: options.usageMetadata } : {}),
+  const response = {
     candidates: [
       {
         content: { parts, role: "model" },
         finishReason: "STOP",
       },
     ],
-  });
+  };
+
+  if (options.usageMetadata) {
+    Object.assign(response, { usageMetadata: options.usageMetadata });
+  }
+
+  return JSON.stringify(response);
 }
 
 function streamFromEvents(events: string[]): ReadableStream<Uint8Array> {
@@ -58,14 +66,13 @@ function streamFromEvents(events: string[]): ReadableStream<Uint8Array> {
 }
 
 function emptyCandidate(finishReason?: string): string {
-  return JSON.stringify({
-    candidates: [
-      {
-        content: { parts: [], role: "model" },
-        ...(finishReason ? { finishReason } : {}),
-      },
-    ],
-  });
+  const candidate = { content: { parts: [], role: "model" } };
+
+  if (finishReason) {
+    Object.assign(candidate, { finishReason });
+  }
+
+  return JSON.stringify({ candidates: [candidate] });
 }
 
 describe("Gemini empty responses", () => {
@@ -73,21 +80,23 @@ describe("Gemini empty responses", () => {
 
   function countingFetch(bodies: string[]) {
     let calls = 0;
-    const fetchMock = ((_url: string, _init?: RequestInit) => {
+
+    const fetchMock = async (_url: RequestInfo | URL, _init?: RequestInit) => {
       const body = bodies[Math.min(calls, bodies.length - 1)] ?? "";
       calls += 1;
-      return Promise.resolve(
-        new Response(body, {
-          headers: { "content-type": "application/json" },
-          status: 200,
-        })
-      );
-    }) as unknown as typeof fetch;
+
+      return new Response(body, {
+        headers: { "content-type": "application/json" },
+        status: 200,
+      });
+    };
+
     return { calls: () => calls, fetchMock };
   }
 
   test("retries once when no finishReason came back", async () => {
     const provider = createGeminiProvider({ apiKey: "k", model: "m" });
+
     const { fetchMock, calls } = countingFetch([
       emptyCandidate(),
       generateContentResponse({ text: "second time" }),
@@ -137,11 +146,13 @@ describe("Gemini empty responses", () => {
       const failure = await provider
         .generateChat(input)
         .then(() => null)
-        .catch((error: unknown) => error);
+        .catch((error) => error);
 
       // The request reached the model and the model said no. Serving that as a
       // server fault sends the operator looking for a bug that is not there.
+      // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
       expect((failure as { status?: number }).status).toBe(422);
+      // SAFETY: The test reaches this branch with the named error type from the provider contract.
       expect((failure as Error).message).toContain("SAFETY");
     });
 
@@ -165,6 +176,7 @@ describe("createGeminiProvider", () => {
         functionCall: { args: { city: "B" }, id: "call-2", name: "read_probe" },
       },
     ];
+
     const fetchMock = spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(
         Response.json({ candidates: [{ content: { parts, role: "model" } }] })
@@ -172,21 +184,26 @@ describe("createGeminiProvider", () => {
       .mockImplementationOnce(async (_url, init) => {
         const body = JSON.parse(String(init?.body));
         expect(body.contents[1]).toEqual({ parts, role: "model" });
+
         return Response.json({
           candidates: [
             { content: { parts: [{ text: "Done" }], role: "model" } },
           ],
         });
       });
+
     const provider = createGeminiProvider({
       apiKey: "test-key",
       model: "gemini-3.8-flash",
     });
+
     const first = await provider.generateChat({
       messages: [{ content: "Check both places", role: "user" }],
       system: "Use the tools.",
     });
+
     expect(first.toolCalls).toHaveLength(2);
+
     const second = await provider.generateChat({
       messages: [
         { content: "Check both places", role: "user" },
@@ -200,6 +217,7 @@ describe("createGeminiProvider", () => {
       ],
       system: "Use the tools.",
     });
+
     expect(second.content).toBe("Done");
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
@@ -214,6 +232,7 @@ describe("createGeminiProvider", () => {
       },
       { text: "", thoughtSignature: "final-signature" },
     ];
+
     spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(
         new Response(
@@ -232,23 +251,29 @@ describe("createGeminiProvider", () => {
           parts,
           role: "model",
         });
+
         return new Response(generateContentResponse({ text: "Done" }), {
           headers: { "Content-Type": "application/json" },
         });
       });
+
     const provider = createGeminiProvider({
       apiKey: "test-key",
       model: "gemini-3.8-flash",
     });
+
     const user = { content: "Get the code", role: "user" as const };
+
     const first = await provider.streamChat(
       { messages: [user], system: "Use the tool." },
       { onChunk() {} }
     );
+
     expect(first.content).toBe("Looking up the code.");
     expect(first.toolCalls).toEqual([
       { arguments: {}, id: "call-1", name: "read_probe" },
     ]);
+
     const second = await provider.generateChat({
       messages: [
         user,
@@ -262,6 +287,7 @@ describe("createGeminiProvider", () => {
       ],
       system: "Use the tool.",
     });
+
     expect(second.content).toBe("Done");
   });
 
@@ -280,7 +306,7 @@ describe("createGeminiProvider", () => {
       );
     });
 
-    await withMockFetch(fetchMock as typeof fetch, async () => {
+    await withMockFetch(asTestFetch(fetchMock), async () => {
       const provider = createGeminiProvider({
         apiKey: "AIzaTest",
         model: "gemini-2.5-flash",
@@ -310,7 +336,7 @@ describe("createGeminiProvider", () => {
         )
     );
 
-    await withMockFetch(fetchMock as typeof fetch, async () => {
+    await withMockFetch(asTestFetch(fetchMock), async () => {
       const provider = createGeminiProvider({ apiKey: "AIzaTest" });
 
       const result = await provider.generateChat({
@@ -348,8 +374,9 @@ describe("createGeminiProvider", () => {
         )
     );
 
-    await withMockFetch(fetchMock as typeof fetch, async () => {
+    await withMockFetch(asTestFetch(fetchMock), async () => {
       const provider = createGeminiProvider({ apiKey: "AIzaTest" });
+
       const result = await provider.generateChat({
         messages: [{ content: "hi", role: "user" }],
         system: "system",
@@ -383,7 +410,7 @@ describe("createGeminiProvider", () => {
       );
     });
 
-    await withMockFetch(fetchMock as typeof fetch, async () => {
+    await withMockFetch(asTestFetch(fetchMock), async () => {
       const provider = createGeminiProvider({ apiKey: "AIzaTest" });
 
       const chunks: string[] = [];

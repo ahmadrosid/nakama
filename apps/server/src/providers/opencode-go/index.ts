@@ -8,6 +8,7 @@ import { createAnthropicProvider } from "../anthropic";
 import { createOpenAIProvider } from "../openai";
 
 const OPENCODE_GO_CHAT_BASE_URL = "https://opencode.ai/zen/go/v1";
+
 const OPENCODE_GO_MESSAGES_BASE_URL = "https://opencode.ai/zen/go";
 
 const MESSAGES_MODELS = new Set([

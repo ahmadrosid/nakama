@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { asTestFetch } from "../test-helpers";
 import {
   CLOUDFLARE_API_ROOT,
   createCloudflareProvider,
@@ -21,15 +22,19 @@ describe("Cloudflare provider", () => {
         expect(new Headers(init?.headers).get("Authorization")).toBe(
           "Bearer test-key"
         );
+
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
         const body = JSON.parse(String(init?.body ?? "{}")) as {
           messages?: Array<{ content: string; role: string }>;
           model?: string;
         };
+
         expect(body.model).toBe("@cf/meta/llama-3.3-70b-instruct-fp8-fast");
         expect(body.messages?.[0]).toEqual({
           content: "You are helpful.",
           role: "system",
         });
+
         return Response.json({
           choices: [{ message: { content: "Hello from Workers AI" } }],
           usage: { completion_tokens: 3, prompt_tokens: 5 },
@@ -37,7 +42,7 @@ describe("Cloudflare provider", () => {
       }
     );
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createCloudflareProvider({
       accountId: "abc123",
@@ -57,17 +62,20 @@ describe("Cloudflare provider", () => {
   test("generateText requests JSON by default", async () => {
     const fetchMock = mock(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
         const body = JSON.parse(String(init?.body ?? "{}")) as {
           response_format?: { type: string };
         };
+
         expect(body.response_format).toEqual({ type: "json_object" });
+
         return Response.json({
           choices: [{ message: { content: '{"ok":true}' } }],
         });
       }
     );
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createCloudflareProvider({
       accountId: "abc123",
@@ -84,9 +92,9 @@ describe("Cloudflare provider", () => {
   });
 
   test("throws a labeled error on non-OK responses", async () => {
-    globalThis.fetch = mock(async () =>
-      Response.json({ error: "bad request" }, { status: 400 })
-    ) as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      mock(async () => Response.json({ error: "bad request" }, { status: 400 }))
+    );
 
     const provider = createCloudflareProvider({
       accountId: "abc123",
