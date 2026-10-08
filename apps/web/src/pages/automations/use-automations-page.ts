@@ -26,7 +26,9 @@ import { findSuperBotProfile } from "@/lib/profiles";
 import { formatTrigger } from "@/pages/automations/automations-page.shared";
 
 const EMPTY_AUTOMATIONS: StoredAutomation[] = [];
+
 const EMPTY_UNREAD_BY_AUTOMATION_ID: Record<string, number> = {};
+
 const automationSearch = new uFuzzy({
   compare: () => 0,
   intraIns: Number.POSITIVE_INFINITY,
@@ -35,6 +37,7 @@ const automationSearch = new uFuzzy({
 export function useAutomationsPage() {
   const { navigateToNewChat } = useAppNavigation();
   const { profileId } = useActiveChatProfile();
+
   const {
     data: automationsData,
     isLoading: initialLoading,
@@ -42,25 +45,33 @@ export function useAutomationsPage() {
     error: automationsError,
     refetch: refetchAutomations,
   } = useAutomationsQuery(5000);
+
   const unreadByAutomationId =
     automationsData?.unread?.byAutomationId ?? EMPTY_UNREAD_BY_AUTOMATION_ID;
+
   const { data: profiles = [], isLoading: profilesLoading } =
     useProfilesQuery();
+
   const superBotProfile = findSuperBotProfile(profiles);
+
   const automations = useMemo(() => {
     const all = automationsData?.automations ?? EMPTY_AUTOMATIONS;
+
     return profileId && profileId === superBotProfile?.id
       ? all
       : all.filter((automation) => automation.profileId === profileId);
   }, [automationsData?.automations, profileId, superBotProfile?.id]);
+
   const [searchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
   const {
     data: runs = [],
     isLoading: runsLoading,
     isSuccess: runsLoaded,
     refetch: refetchRuns,
   } = useAutomationRunsQuery(selectedId);
+
   const updateMutation = useUpdateAutomationMutation();
   const deleteMutation = useDeleteAutomationMutation();
   const deleteRunMutation = useDeleteAutomationRunMutation();
@@ -69,20 +80,25 @@ export function useAutomationsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [runningId, setRunningId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
   const [deleteTarget, setDeleteTarget] = useState<StoredAutomation | null>(
     null
   );
+
   const [deleteRunTarget, setDeleteRunTarget] =
     useState<AutomationRunRecord | null>(null);
+
   const [editDraft, setEditDraft] = useState<StoredAutomation | null>(null);
 
   const busy =
     updateMutation.isPending ||
     deleteMutation.isPending ||
     deleteRunMutation.isPending;
+
   const trimmedSearch = searchQuery.trim();
   const isSearching = trimmedSearch.length > 0;
   const loading = initialLoading && automations.length === 0;
+
   const refreshing =
     automationsRefreshing || (runsLoading && Boolean(selectedId));
 
@@ -91,6 +107,7 @@ export function useAutomationsPage() {
 
   const filteredAutomations = useMemo(() => {
     const query = trimmedSearch.trim().toLowerCase();
+
     if (!query) {
       return automations;
     }
@@ -104,6 +121,7 @@ export function useAutomationsPage() {
 
     const matches =
       info && order ? order.map((index) => info.idx[index]) : indices;
+
     return (matches ?? []).map((index) => automations[index]!);
   }, [automations, trimmedSearch]);
 
@@ -112,6 +130,7 @@ export function useAutomationsPage() {
     const failed = runs.filter((run) => run.status === "failed").length;
     const running = runs.filter((run) => run.status === "running").length;
     const unread = runs.filter((run) => run.read === false).length;
+
     return { completed, failed, running, unread };
   }, [runs]);
 
@@ -124,15 +143,18 @@ export function useAutomationsPage() {
   useEffect(() => {
     if (automations.length === 0) {
       setSelectedId(null);
+
       return;
     }
 
     const automationFromUrl = searchParams.get("automation");
+
     if (
       automationFromUrl &&
       automations.some((automation) => automation.id === automationFromUrl)
     ) {
       setSelectedId(automationFromUrl);
+
       return;
     }
 
@@ -153,6 +175,7 @@ export function useAutomationsPage() {
 
     const hasUnreadRuns = runs.some((run) => run.read === false);
     const hasListUnread = (unreadByAutomationId[selectedId] ?? 0) > 0;
+
     if (!(hasUnreadRuns || hasListUnread)) {
       return;
     }
@@ -202,6 +225,7 @@ export function useAutomationsPage() {
     try {
       await deleteMutation.mutateAsync(deleteTarget.id);
       setDeleteTarget(null);
+
       if (editDraft?.id === deleteTarget.id) {
         setEditDraft(null);
       }
@@ -268,6 +292,7 @@ export function useAutomationsPage() {
   function goToCreateAutomation() {
     if (!superBotProfile) {
       setError("No super bot profile exists in this organization.");
+
       return;
     }
 

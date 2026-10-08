@@ -71,6 +71,7 @@ function PluginWorkersSection() {
   const { data = [], error } = usePluginWorkers();
   const { user, activeOrg } = useAuth();
   const canManage = user?.isPlatformAdmin || activeOrg?.role === "admin";
+
   if (error) {
     return (
       <p className="text-destructive text-sm" role="alert">
@@ -78,9 +79,11 @@ function PluginWorkersSection() {
       </p>
     );
   }
+
   if (!data.length) {
     return null;
   }
+
   return (
     <section aria-label="Plugin workers" className="space-y-3">
       <h2 className="type-section-title">Plugin workers</h2>
@@ -88,11 +91,13 @@ function PluginWorkersSection() {
         <CardContent className="divide-y divide-border p-0">
           {data.map((worker) => {
             const running = worker.process.status === "online";
+
             const labels = {
               errored: "Errored",
               online: "Online",
               stopped: "Offline",
             };
+
             return (
               <WorkerServiceRow
                 canManage={Boolean(canManage)}
@@ -125,6 +130,7 @@ function StatusDashboard({
   canManageWorkers: boolean;
 }) {
   const services = useMemo(() => buildServiceColumns(status), [status]);
+
   const {
     automationWorker,
     telegramWorker,
@@ -133,37 +139,41 @@ function StatusDashboard({
     slackWorker,
   } = status;
 
-  const workerByTitle: Record<
+  const workerByTitle = new Map<
     string,
     {
+      footerLink?: { label: string; to: string };
       worker: Pick<
         SystemStatusResponse["automationWorker"],
         "running" | "process"
       >;
       workerName: string;
-      footerLink?: { label: string; to: string };
     }
-  > = {
-    Automation: { worker: automationWorker, workerName: "automation" },
-    Discord: { worker: discordWorker, workerName: "discord" },
-    Slack: { worker: slackWorker, workerName: "slack" },
-    Telegram: { worker: telegramWorker, workerName: "telegram" },
-    WhatsApp: {
-      footerLink:
-        whatsappWorker.configured &&
-        whatsappWorker.running &&
-        !whatsappWorker.paired
-          ? { label: "Scan QR in Settings", to: PAGE_PATHS.settings }
-          : undefined,
-      worker: whatsappWorker,
-      workerName: "whatsapp",
-    },
-  };
+  >([
+    ["Automation", { worker: automationWorker, workerName: "automation" }],
+    ["Discord", { worker: discordWorker, workerName: "discord" }],
+    ["Slack", { worker: slackWorker, workerName: "slack" }],
+    ["Telegram", { worker: telegramWorker, workerName: "telegram" }],
+    [
+      "WhatsApp",
+      {
+        footerLink:
+          whatsappWorker.configured &&
+          whatsappWorker.running &&
+          !whatsappWorker.paired
+            ? { label: "Scan QR in Settings", to: PAGE_PATHS.settings }
+            : undefined,
+        worker: whatsappWorker,
+        workerName: "whatsapp",
+      },
+    ],
+  ]);
 
-  const workerRows = services.map((service) => ({
-    ...service,
-    ...workerByTitle[service.title],
-  }));
+  const workerRows = services.flatMap((service) => {
+    const worker = workerByTitle.get(service.title);
+
+    return worker ? [{ ...service, ...worker }] : [];
+  });
 
   return (
     <div className="space-y-8">
@@ -332,6 +342,7 @@ function initialsOf(label: string): string {
     .replace(/@.*/, "")
     .split(/[\s._-]+/)
     .filter(Boolean);
+
   return (
     words
       .slice(0, 2)
@@ -352,13 +363,16 @@ function UsageDashboard({ usage }: { usage: LlmUsageStatus }) {
   const daily = usage.daily ?? [];
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const selected = activeIndex ?? daily.length - 1;
+
   // Money only when every model has published rates; tokens otherwise.
   const metric = (entry: { estimatedCostUsd: number; totalTokens: number }) =>
     usage.costEstimated ? entry.estimatedCostUsd : entry.totalTokens;
+
   const formatMetric = (value: number) =>
     usage.costEstimated
       ? formatUsd(value)
       : `${compactNumber.format(value)} tokens`;
+
   const users = usage.users ?? [];
 
   return (
@@ -412,10 +426,13 @@ function UsageDashboard({ usage }: { usage: LlmUsageStatus }) {
 
 function providerAside(day: LlmUsageDayStats | undefined): string | null {
   const top = day?.providers[0];
+
   if (!(day && top) || day.totalTokens === 0) {
     return null;
   }
+
   const percent = Math.round((top.totalTokens / day.totalTokens) * 100);
+
   return `${formatUsageDay(day.day)} · ${formatProviderLabel(top.provider)} ${percent}%`;
 }
 
@@ -449,8 +466,10 @@ function DayAxis({ daily }: { daily: LlmUsageDayStats[] }) {
   if (daily.length === 0) {
     return null;
   }
+
   const middle = daily[Math.floor((daily.length - 1) / 2)];
   const last = daily.at(-1);
+
   return (
     <div className="flex justify-between text-2xs text-muted-foreground tabular-nums">
       <span>{formatUsageDay(daily[0].day)}</span>
@@ -461,6 +480,7 @@ function DayAxis({ daily }: { daily: LlmUsageDayStats[] }) {
 }
 
 const CHART_WIDTH = 300;
+
 const CHART_HEIGHT = 120;
 
 function SpendChart({
@@ -477,6 +497,7 @@ function SpendChart({
   const values = daily.map(metric);
   const max = Math.max(...values, 0);
   const step = daily.length > 1 ? CHART_WIDTH / (daily.length - 1) : 0;
+
   const points = values.map((value, index) => ({
     x: index * step,
     y:
@@ -484,6 +505,7 @@ function SpendChart({
         ? CHART_HEIGHT - (value / max) * (CHART_HEIGHT - 8) - 4
         : CHART_HEIGHT - 4,
   }));
+
   const line = points.map((point) => `${point.x},${point.y}`).join(" ");
   const active = points[selected];
 
@@ -553,6 +575,7 @@ function ProviderBars({
 }) {
   const ranked = useMemo(() => {
     const totals = new Map<string | null, number>();
+
     for (const day of daily) {
       for (const share of day.providers) {
         totals.set(
@@ -561,10 +584,12 @@ function ProviderBars({
         );
       }
     }
+
     return [...totals.entries()]
       .sort((left, right) => right[1] - left[1])
       .map(([provider]) => provider);
   }, [daily]);
+
   const shadeOf = (provider: string | null) =>
     PROVIDER_SHADES[
       Math.min(ranked.indexOf(provider), PROVIDER_SHADES.length - 1)
@@ -615,6 +640,7 @@ function ProviderBars({
 function ShareRing({ share }: { share: number }) {
   const radius = 7;
   const circumference = 2 * Math.PI * radius;
+
   return (
     <svg
       aria-label={`${Math.round(share * 100)} percent`}
@@ -655,6 +681,7 @@ function ModelShareList({
   formatMetric: (value: number) => string;
 }) {
   const total = models.reduce((sum, model) => sum + metric(model), 0);
+
   return (
     <ul className="space-y-3">
       {models.map((model) => (
@@ -677,6 +704,7 @@ function AdoptionGrid({ users }: { users: LlmUsageGroupStats[] }) {
     <ul className="grid grid-cols-3 gap-x-2 gap-y-4 sm:grid-cols-4">
       {users.map((user) => {
         const label = user.id ? (user.name ?? user.id) : "Unattributed";
+
         return (
           <li
             className="flex min-w-0 flex-col items-center gap-1 text-center"

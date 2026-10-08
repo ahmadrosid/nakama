@@ -327,16 +327,20 @@ function LoginFormActions({
 export function LoginPage() {
   const demoLogin = isDemoLoginHost();
   const [email, setEmail] = useState(demoLogin ? DEMO_LOGIN_EMAIL : "");
+
   const [password, setPassword] = useState(
     demoLogin ? DEMO_LOGIN_PASSWORD : ""
   );
+
   const [mfaCode, setMfaCode] = useState("");
   const [backupCode, setBackupCode] = useState("");
   const [useBackupCode, setUseBackupCode] = useState(false);
   const [passkeyRequired, setPasskeyRequired] = useState(false);
   const [passkeyTotpEnabled, setPasskeyTotpEnabled] = useState(false);
+
   const [passkeyFallbackAvailable, setPasskeyFallbackAvailable] =
     useState(false);
+
   const [mfaRequired, setMfaRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -345,17 +349,25 @@ export function LoginPage() {
   const { resolvedTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: string } | null)?.from;
+
+  const from =
+    location.state instanceof Object && "from" in location.state
+      ? String(location.state.from)
+      : undefined;
+
   async function beginPasskeyLogin(passwordFlow = false) {
     setError(null);
+
     try {
       const result = await client.getPasskeyLoginOptions();
       setPasskeyFallbackAvailable(passwordFlow);
       const credential = await getPasskey(result.options);
+
       const response = await login("", "", {
         passkey: credential,
         passkeyChallenge: result.challenge,
       });
+
       if (response.mfaRequired && !response.mfaEnrolled) {
         navigate("/settings?mfa=required", { replace: true });
       } else {
@@ -372,12 +384,14 @@ export function LoginPage() {
     setPasskeyRequired(true);
     setPasskeyFallbackAvailable(false);
     setIsSubmitting(true);
+
     try {
       await beginPasskeyLogin();
     } finally {
       setIsSubmitting(false);
     }
   }
+
   if (isAuthenticated && !isSubmitting) {
     return <Navigate replace to={resolvePostAuthPath(from)} />;
   }
@@ -396,6 +410,7 @@ export function LoginPage() {
         backupCode: useBackupCode ? backupCode.trim() || undefined : undefined,
         mfaCode: useBackupCode ? undefined : mfaCode.trim() || undefined,
       });
+
       if (response.mfaRequired && !response.mfaEnrolled) {
         navigate("/settings?mfa=required", { replace: true });
       } else {
@@ -403,6 +418,7 @@ export function LoginPage() {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed";
+
       if (
         err instanceof NakamaApiError &&
         err.message === "Passkey verification required."
@@ -410,14 +426,17 @@ export function LoginPage() {
         setPasskeyTotpEnabled(err.totpEnabled === true);
         setPasskeyRequired(true);
         await beginPasskeyLogin(true);
+
         return;
       }
+
       if (
         err instanceof NakamaApiError &&
         err.message === "MFA verification required."
       ) {
         setMfaRequired(true);
       }
+
       setError(
         message === "MFA verification required."
           ? "Authentication code required."

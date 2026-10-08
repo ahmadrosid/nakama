@@ -5,20 +5,25 @@ import { AuthService } from "../../services/auth-service";
 import { AutomationService } from "../../services/automation-service";
 import { OrgService } from "../../services/org-service";
 import { createHonoApp } from "../app";
+import type { ServerOptions } from "../context";
 import { seedLocalClientUser } from "../test-org-helpers";
 import { setupFreshInstallSession } from "../test-session-helpers";
 
 const PROFILE_ID = "profile_default";
+
 const ORG_ID = "org_default";
 
-function createServerOptions(overrides: Record<string, unknown> = {}) {
+function createServerOptions(overrides: Partial<ServerOptions> = {}) {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const authService = new AuthService();
   const orgService = new OrgService(databaseAdapter, authService);
+
+  // SAFETY: This test controls the fixture shape at this boundary.
   const agent = {
     providerConfigured: true,
     runAutomation: async (_automationId: string) => ({ skipped: false }),
   } as any;
+
   const automationService = new AutomationService(databaseAdapter, {
     getUserTimezone: async () => "UTC",
   });
@@ -28,10 +33,13 @@ function createServerOptions(overrides: Record<string, unknown> = {}) {
     authService,
     automationService,
     databaseAdapter,
+    // SAFETY: This test controls the fixture shape at this boundary.
     mcpService: {} as any,
     orgService,
+    // SAFETY: This test controls the fixture shape at this boundary.
     systemStatus: {} as any,
     webDistDir: null,
+    // SAFETY: This test controls the fixture shape at this boundary.
     workerManager: {} as any,
     ...overrides,
   };
@@ -103,6 +111,7 @@ describe("internal automation routes", () => {
   test("keeps a browser session out of the internal automation endpoints", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
+
     const session = await setupFreshInstallSession(
       app,
       options.databaseAdapter
@@ -113,6 +122,7 @@ describe("internal automation routes", () => {
         headers: session.headers(),
       })
     );
+
     expect(schedules.status).toBe(401);
 
     const run = await app.fetch(
@@ -124,6 +134,7 @@ describe("internal automation routes", () => {
         }
       )
     );
+
     expect(run.status).toBe(401);
   });
 
@@ -193,15 +204,19 @@ describe("internal automation routes", () => {
 
   test("refuses to run an automation under another org's id", async () => {
     const runCalls: string[] = [];
+
     const options = createServerOptions({
+      // SAFETY: This test controls the fixture shape at this boundary.
       agent: {
         providerConfigured: true,
         runAutomation: async (automationId: string) => {
           runCalls.push(automationId);
+
           return { skipped: false };
         },
       } as any,
     });
+
     await seedOrgAndProfile(options.databaseAdapter);
     await seedLocalClientUser(options.databaseAdapter);
 
@@ -224,6 +239,7 @@ describe("internal automation routes", () => {
       systemPrompt: "",
       updatedAt: now,
     });
+
     const otherAutomation = await options.automationService.create(
       "org_other",
       {
@@ -275,6 +291,7 @@ describe("internal automation routes", () => {
 
   test("returns 409 when run is skipped", async () => {
     const options = createServerOptions({
+      // SAFETY: This test controls the fixture shape at this boundary.
       agent: {
         providerConfigured: true,
         runAutomation: async () => ({
@@ -283,6 +300,7 @@ describe("internal automation routes", () => {
         }),
       } as any,
     });
+
     await seedOrgAndProfile(options.databaseAdapter);
     await seedLocalClientUser(options.databaseAdapter);
 
@@ -340,6 +358,7 @@ describe("internal automation routes", () => {
 
     const app = createHonoApp(options);
     const token = await loadLocalAuthToken();
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/internal/automations/schedules", {
         headers: { Authorization: `Bearer ${token}` },
@@ -375,6 +394,7 @@ describe("internal automation routes", () => {
 
     const app = createHonoApp(options);
     const token = await loadLocalAuthToken();
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/internal/automations/schedules", {
         headers: { Authorization: `Bearer ${token}` },
@@ -391,6 +411,7 @@ describe("internal automation routes", () => {
     const options = createServerOptions();
     await seedOrgAndProfile(options.databaseAdapter);
     await seedLocalClientUser(options.databaseAdapter);
+
     const automation = await options.automationService.create(
       ORG_ID,
       {
@@ -401,6 +422,7 @@ describe("internal automation routes", () => {
       },
       PROFILE_ID
     );
+
     const now = new Date().toISOString();
     await options.databaseAdapter.upsertOrganization({
       archivedAt: now,
@@ -413,6 +435,7 @@ describe("internal automation routes", () => {
 
     const app = createHonoApp(options);
     const token = await loadLocalAuthToken();
+
     const response = await app.fetch(
       new Request(
         `http://localhost:4310/v1/internal/automations/${encodeURIComponent(automation.id)}/run?orgId=${ORG_ID}`,

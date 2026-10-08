@@ -34,24 +34,33 @@ export function registerGoogleMeetRoutes(app: HonoApp, options: ServerOptions) {
       })
     );
   }
+
   app.post("/v1/meet/actions/:actionKey", async (c) => {
     const auth = requireNotViewerFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
+
     if (!options.googleMeetService) {
       throw new NakamaApiError("Google Meet is unavailable", 503);
     }
+
+    // SAFETY: The validated value satisfies the contract checked by this assertion.
     const action = c.req.param("actionKey") as MeetAction;
     const schema = meetingActionSchemas[action];
+
     if (!Object.hasOwn(meetingActionSchemas, action)) {
       throw new NakamaApiError("Unknown meeting action", 404);
     }
-    const parsed = schema.safeParse(await readJson(c.req.raw));
+
+    const parsed = schema.safeParse(await readJson(c.req.raw, z.unknown()));
+
     if (!parsed.success) {
       throw new NakamaApiError("Invalid meeting input", 400);
     }
+
     if (action === "configure" && auth.orgRole !== "admin") {
       throw new NakamaApiError("Forbidden", 403);
     }
+
     try {
       return json(
         await options.googleMeetService.invoke(
@@ -69,6 +78,7 @@ export function registerGoogleMeetRoutes(app: HonoApp, options: ServerOptions) {
       if (error instanceof NakamaApiError) {
         throw error;
       }
+
       throw new NakamaApiError(
         error instanceof Error ? error.message : "Meeting action failed",
         400

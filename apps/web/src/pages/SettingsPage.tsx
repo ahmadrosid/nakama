@@ -42,9 +42,11 @@ export function SettingsPage() {
   const isDemo = isDemoLoginHost();
   const isPlatformAdmin = user?.isPlatformAdmin === true;
   const isOrgAdmin = activeOrg?.role === "admin";
+
   const [mfaRequiredNotice, setMfaRequiredNotice] = useState(
     () => new URLSearchParams(location.search).get("mfa") === "required"
   );
+
   const [formError, setFormError] = useState<string | null>(null);
   const [timezone, setTimezone] = useState(() => getBrowserTimezone());
   const [timezoneHint, setTimezoneHint] = useState<string | null>(null);
@@ -229,6 +231,7 @@ export function SettingsPage() {
 
 export function LlmProvidersPage() {
   const [formError, setFormError] = useState<string | null>(null);
+
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <ProviderSettingsCard formError={formError} onFormError={setFormError} />

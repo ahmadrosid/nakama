@@ -226,6 +226,7 @@ function RemoveAssignmentDialog({
 
 export function ProfilesDialogs(state: ProfilesPageState) {
   const { activeOrg } = useAuth();
+
   const {
     allSkills,
     skillsLoading,
@@ -278,8 +279,10 @@ export function ProfilesDialogs(state: ProfilesPageState) {
     handleRemoveAssignmentConfirm,
     profiles,
   } = state;
+
   const { navigateToNewChat } = useAppNavigation();
   const superBotProfileId = resolveSuperBotChatProfileId(profiles);
+
   const onAskSuperBot = superBotProfileId
     ? () => navigateToNewChat(superBotProfileId)
     : undefined;

@@ -21,15 +21,20 @@ function requireWorkerAuthorization(
 ): void {
   if (["telegram", "discord", "whatsapp", "slack"].includes(name)) {
     requireOrgAdminOrPlatformAdminFromContext(c);
+
     return;
   }
+
   if (name.startsWith("plugin-")) {
     requireOrgAdminOrPlatformAdminFromContext(c);
+
     if (!manager.isPluginWorkerForOrg(name, requireActiveOrgIdFromContext(c))) {
       throw new NakamaApiError("Worker not found", 404);
     }
+
     return;
   }
+
   requireNotViewerFromContext(c);
 }
 
@@ -38,21 +43,28 @@ export function registerWorkerRoutes(
   options: ServerOptions
 ): void {
   const { workerManager } = options;
+
   async function workerScope(c: Context<AppEnv>, name: string) {
     if (!["telegram", "discord", "whatsapp", "slack"].includes(name)) {
       return null;
     }
+
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = c.req.query("profileId")?.trim();
+
     if (!profileId) {
       throw new NakamaApiError("Choose an agent to manage this worker.", 400);
     }
+
     await options.agent.getProfile(orgId, profileId);
+
     return { orgId, profileId };
   }
+
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
+
   const workerLogsSchema = z
     .object({
       lines: z.array(z.string()),
@@ -60,21 +72,26 @@ export function registerWorkerRoutes(
     })
     .passthrough()
     .openapi("WorkerLogsResponse");
+
   const okSchema = z.object({ ok: z.boolean() });
+
   const workerParam = z.object({
     name: z.string().openapi({ param: { in: "path", name: "name" } }),
   });
+
   const workerActionParam = z.object({
     action: z
       .enum(["start", "stop", "restart", "disconnect"])
       .openapi({ param: { in: "path", name: "action" } }),
     name: z.string().openapi({ param: { in: "path", name: "name" } }),
   });
+
   const workerScopeQuery = z.object({
     profileId: z.string().optional().openapi({
       description: "Required for Telegram, Discord, and WhatsApp workers",
     }),
   });
+
   const workerLogsQuery = workerScopeQuery.extend({
     lines: z.string().optional(),
   });
@@ -185,6 +202,7 @@ export function registerWorkerRoutes(
     }),
     async (c) => {
       requireNotViewerFromContext(c);
+
       return c.json(
         await workerManager.listPluginWorkers(requireActiveOrgIdFromContext(c)),
         200
@@ -206,13 +224,16 @@ export function registerWorkerRoutes(
       try {
         if (action === "disconnect") {
           const owner = await workerScope(c, name);
+
           if (!owner) {
             throw new NakamaApiError(
               "Only agent channels can be disconnected",
               400
             );
           }
+
           await workerManager.disconnectChannel(
+            // SAFETY: The validated value satisfies the contract checked by this assertion.
             name as "telegram" | "discord" | "whatsapp" | "slack",
             owner
           );
@@ -229,8 +250,10 @@ export function registerWorkerRoutes(
         if (err instanceof NakamaApiError) {
           return errorResponse(err.message, err.status);
         }
+
         void reportError(err, { kind: "http", source: "server" });
         const message = err instanceof Error ? err.message : String(err);
+
         return errorResponse(message, 500);
       }
     }
@@ -246,6 +269,7 @@ export function registerWorkerRoutes(
 
     const linesParam = c.req.query("lines");
     const parsed = linesParam ? Number.parseInt(linesParam, 10) : 200;
+
     const lines = Math.min(
       Math.max(1, Number.isFinite(parsed) ? parsed : 200),
       2000
@@ -257,13 +281,16 @@ export function registerWorkerRoutes(
         lines,
         await workerScope(c, name)
       );
+
       return json<WorkerLogsResponse>(logs);
     } catch (err) {
       if (err instanceof NakamaApiError) {
         return errorResponse(err.message, err.status);
       }
+
       void reportError(err, { kind: "http", source: "server" });
       const message = err instanceof Error ? err.message : String(err);
+
       return errorResponse(message, 500);
     }
   });
@@ -278,13 +305,16 @@ export function registerWorkerRoutes(
 
     try {
       await workerManager.clearWorkerLogs(name, await workerScope(c, name));
+
       return json({ ok: true });
     } catch (err) {
       if (err instanceof NakamaApiError) {
         return errorResponse(err.message, err.status);
       }
+
       void reportError(err, { kind: "http", source: "server" });
       const message = err instanceof Error ? err.message : String(err);
+
       return errorResponse(message, 500);
     }
   });

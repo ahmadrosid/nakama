@@ -27,10 +27,12 @@ export function ProfileToolsSection({
 }) {
   const { user, activeOrg } = useAuth();
   const canConfigureEmail = user?.isPlatformAdmin === true;
+
   const canOpenPlayground = canUseToolPlayground(
     user?.isPlatformAdmin === true,
     activeOrg?.role
   );
+
   const [emailConfigOpen, setEmailConfigOpen] = useState(false);
 
   const groups = groupPluginTools(detail.tools);
@@ -73,6 +75,7 @@ export function ProfileToolsSection({
                 ) : null}
               </div>
             );
+
             const onConfigure =
               canConfigureEmail && tool.id === BUILTIN_TOOL_IDS.email
                 ? () => setEmailConfigOpen(true)

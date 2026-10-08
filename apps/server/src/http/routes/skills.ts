@@ -1,12 +1,8 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import {
-  type AssignSkillRequest,
-  type CreateSkillRequest,
-  type InstallSkillRequest,
   type ListSkillsResponse,
   type ListSkillVersionsResponse,
   NakamaApiError,
-  type PatchSkillRequest,
   type ProfileResponse,
   type SkillResponse,
   type SyncSkillsResponse,
@@ -24,44 +20,73 @@ export function registerSkillRoutes(
   options: ServerOptions
 ): void {
   const { agent } = options;
+
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
+
   const skillIdParam = z.object({
     skillId: z.string().openapi({ param: { in: "path", name: "skillId" } }),
   });
+
   const profileIdParam = z.object({
     profileId: z.string().openapi({ param: { in: "path", name: "profileId" } }),
   });
+
   const profileSkillParams = z.object({
     profileId: z.string().openapi({ param: { in: "path", name: "profileId" } }),
     skillId: z.string().openapi({ param: { in: "path", name: "skillId" } }),
   });
+
   const listSkillsSchema = z
     .object({})
     .passthrough()
     .openapi("ListSkillsResponse");
+
   const skillSchema = z.object({}).passthrough().openapi("SkillResponse");
+
   const syncSkillsSchema = z
     .object({})
     .passthrough()
     .openapi("SyncSkillsResponse");
+
   const createSkillSchema = z
-    .object({})
+    .object({
+      body: z.string().optional(),
+      description: z.string(),
+      disableModelInvocation: z.boolean().optional(),
+      name: z.string(),
+      profileId: z.string().optional(),
+      scripts: z.array(z.string()).optional(),
+    })
     .passthrough()
     .openapi("CreateSkillRequest");
+
   const installSkillSchema = z
-    .object({})
+    .object({
+      command: z.string().optional(),
+      profileId: z.string(),
+      url: z.string().optional(),
+      zipBase64: z.string().optional(),
+    })
     .passthrough()
     .openapi("InstallSkillRequest");
+
   const patchSkillSchema = z
-    .object({})
+    .object({
+      body: z.string().optional(),
+      description: z.string().optional(),
+      disableModelInvocation: z.boolean().optional(),
+      note: z.string().optional(),
+    })
     .passthrough()
     .openapi("PatchSkillRequest");
+
   const assignSkillSchema = z
-    .object({})
+    .object({ skillId: z.string() })
     .passthrough()
     .openapi("AssignSkillRequest");
+
   const profileSchema = z.object({}).passthrough().openapi("ProfileResponse");
 
   app.openAPIRegistry.registerPath(
@@ -262,6 +287,7 @@ export function registerSkillRoutes(
 
   app.get("/v1/skills", async (c) => {
     requirePlatformAdminFromContext(c);
+
     return json<ListSkillsResponse>(
       await agent.listSkills(requireActiveOrgIdFromContext(c))
     );
@@ -279,9 +305,7 @@ export function registerSkillRoutes(
         path: `/v1/skills/{skillId}/${suffix}`,
         request: {
           params: skillIdParam,
-          ...(suffix === "file"
-            ? { query: z.object({ path: z.string() }) }
-            : {}),
+          query: suffix === "file" ? z.object({ path: z.string() }) : undefined,
         },
         responses: {
           200: {
@@ -299,6 +323,7 @@ export function registerSkillRoutes(
 
   app.get("/v1/skills/:skillId/files", async (c) => {
     requirePlatformAdminFromContext(c);
+
     return json(
       await agent.listSkillFiles(
         requireActiveOrgIdFromContext(c),
@@ -309,6 +334,7 @@ export function registerSkillRoutes(
 
   app.get("/v1/skills/:skillId/file", async (c) => {
     requirePlatformAdminFromContext(c);
+
     return json(
       await agent.readSkillFile(
         requireActiveOrgIdFromContext(c),
@@ -320,6 +346,7 @@ export function registerSkillRoutes(
 
   app.get("/v1/skills/:skillId/versions", async (c) => {
     requirePlatformAdminFromContext(c);
+
     return json<ListSkillVersionsResponse>(
       await agent.listSkillVersions(
         requireActiveOrgIdFromContext(c),
@@ -360,6 +387,7 @@ export function registerSkillRoutes(
 
   app.post("/v1/skills/:skillId/versions/:versionId/restore", async (c) => {
     const auth = requirePlatformAdminFromContext(c);
+
     return json<SkillResponse>(
       await agent.restoreSkillVersion(
         requireActiveOrgIdFromContext(c),
@@ -373,7 +401,8 @@ export function registerSkillRoutes(
   app.post("/v1/skills", async (c) => {
     const auth = requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
-    const body = await readJson<CreateSkillRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, createSkillSchema);
+
     return json<SkillResponse>(
       await agent.createSkill(orgId, body, {
         meta: { actorUserId: auth.user.id, source: "dashboard" },
@@ -384,7 +413,8 @@ export function registerSkillRoutes(
   app.post("/v1/skills/install", async (c) => {
     requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
-    const body = await readJson<InstallSkillRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, installSkillSchema);
+
     return json<SkillResponse>(
       await agent.installSkillFromGitHub(orgId, body),
       201
@@ -393,11 +423,13 @@ export function registerSkillRoutes(
 
   app.post("/v1/skills/sync", async (c) => {
     requirePlatformAdminFromContext(c);
+
     return json<SyncSkillsResponse>(await agent.syncSkills());
   });
 
   app.get("/v1/skills/:skillId", async (c) => {
     requirePlatformAdminFromContext(c);
+
     return json<SkillResponse>(
       await agent.getSkill(
         decodeURIComponent(c.req.param("skillId")),
@@ -411,11 +443,14 @@ export function registerSkillRoutes(
     const orgId = requireActiveOrgIdFromContext(c);
     const skillId = decodeURIComponent(c.req.param("skillId"));
     const existing = await agent.getSkill(skillId);
+
     if (existing.skill.pluginId) {
       throw new NakamaApiError("Plugin-owned skills cannot be edited.", 409);
     }
-    const body = await readJson<PatchSkillRequest>(c.req.raw);
+
+    const body = await readJson(c.req.raw, patchSkillSchema);
     const profileId = c.req.query("profileId")?.trim() || undefined;
+
     return json<SkillResponse>(
       await agent.patchSkill(orgId, skillId, body, {
         meta: { actorUserId: auth.user.id, source: "dashboard" },
@@ -428,17 +463,21 @@ export function registerSkillRoutes(
     requirePlatformAdminFromContext(c);
     const skillId = decodeURIComponent(c.req.param("skillId"));
     const existing = await agent.getSkill(skillId);
+
     if (existing.skill.pluginId) {
       throw new NakamaApiError("Plugin-owned skills cannot be deleted.", 409);
     }
+
     await agent.deleteSkill(skillId);
+
     return new Response(null, { status: 204 });
   });
 
   app.post("/v1/profiles/:profileId/skills", async (c) => {
     const auth = requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
-    const body = await readJson<AssignSkillRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, assignSkillSchema);
+
     return json<ProfileResponse>(
       await agent.assignSkill(
         orgId,
@@ -452,6 +491,7 @@ export function registerSkillRoutes(
   app.delete("/v1/profiles/:profileId/skills/:skillId", async (c) => {
     const auth = requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
+
     return json<ProfileResponse>(
       await agent.unassignSkill(
         orgId,

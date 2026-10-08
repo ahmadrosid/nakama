@@ -71,10 +71,12 @@ describe("markStreamingTurnFailed", () => {
 describe("appendFailedTurnIfNeeded", () => {
   test("reuses the saved user message after a failed turn", () => {
     const saved = user("retry me", { historyIndex: 0 });
+
     const next = appendFailedTurnIfNeeded([saved], {
       error: "429",
       text: "retry me",
     });
+
     expect(next).toHaveLength(2);
     expect(next[0]).toBe(saved);
     expect(next[1]).toMatchObject({ failed: true, role: "assistant" });
@@ -114,6 +116,7 @@ describe("appendFailedTurnIfNeeded", () => {
 describe("failed turn retry helpers", () => {
   test("finds the prompt and strips the optimistic failed turn", () => {
     const failed = assistant("429", { failed: true, id: "failed" });
+
     const messages = [
       user("kept", { historyIndex: 0 }),
       user("retry me"),
@@ -271,6 +274,7 @@ describe("the edit flow", () => {
       user("unsent follow-up"),
       assistant("failed", { failed: true }),
     ];
+
     const edited = messages[2]!;
 
     const plan = planPromptBranch(messages, edited);

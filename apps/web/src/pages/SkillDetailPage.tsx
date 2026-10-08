@@ -48,6 +48,7 @@ export function SkillDetailPage() {
     isLoading: skillLoading,
     error: skillError,
   } = useSkillQuery(skillId ?? null);
+
   const { data: profile } = useProfileQuery(profileId);
 
   if (authLoading) {
@@ -127,11 +128,13 @@ function SkillDetailPageContent({
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id ?? "";
   const [selectedFile, setSelectedFile] = useState("SKILL.md");
+
   const filesQuery = useQuery({
     enabled: Boolean(orgId),
     queryFn: () => client.listSkillFiles(skill.id, orgId),
     queryKey: [...queryKeys.skills.detail(skill.id), "files", orgId],
   });
+
   const busy = unassignSkillMutation.isPending || patchSkillMutation.isPending;
 
   function handleRemoveOpenChange(open: boolean) {
@@ -301,12 +304,15 @@ function SkillFileTree({
 }) {
   const children = files.filter((file) => {
     const separator = file.path.lastIndexOf("/");
+
     return (separator < 0 ? "" : file.path.slice(0, separator)) === parent;
   });
+
   return (
     <ul className="space-y-0.5">
       {children.map((file) => {
         const name = file.path.split("/").at(-1);
+
         return (
           <li key={file.path}>
             {file.type === "directory" ? (
@@ -425,9 +431,11 @@ function versionAuthor(version: SkillVersion): string {
   if (version.actorName) {
     return version.actorName;
   }
+
   if (version.kind === "original") {
     return "Before history";
   }
+
   return version.source ? versionSourceLabels[version.source] : "System";
 }
 
@@ -534,11 +542,13 @@ function SkillVersionHistory({
 }) {
   const queryClient = useQueryClient();
   const [openId, setOpenId] = useState<string | null>(null);
+
   const versionsQuery = useQuery({
     enabled: Boolean(orgId),
     queryFn: () => client.listSkillVersions(skillId, orgId),
     queryKey: [...queryKeys.skills.detail(skillId), "versions", orgId],
   });
+
   const restoreMutation = useMutation({
     mutationFn: (versionId: string) =>
       client.restoreSkillVersion(skillId, versionId, orgId),
@@ -552,6 +562,7 @@ function SkillVersionHistory({
       );
     },
   });
+
   const versions = versionsQuery.data?.versions ?? [];
   const pending = versionsQuery.data?.pending ?? [];
   const currentContent = versionsQuery.data?.currentContent ?? null;
@@ -624,6 +635,7 @@ function SkillVersionHistory({
           ))}
           {versions.map((version, index) => {
             const current = index === 0;
+
             return (
               <VersionTimelineItem
                 badge={`v${version.version}`}
@@ -695,6 +707,7 @@ function SkillFilePreview({
       selectedFile,
     ],
   });
+
   return (
     <div className="space-y-4">
       <h2 className="break-all font-medium text-sm">{selectedFile}</h2>

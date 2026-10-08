@@ -29,10 +29,12 @@ export function ToolPlaygroundPage() {
   const { user, activeOrg, isLoading: authLoading } = useAuth();
   const isPlatformAdmin = user?.isPlatformAdmin === true;
   const canAccess = canAccessSystemPage(isPlatformAdmin, activeOrg?.role);
+
   const canUsePlayground = canUseToolPlayground(
     isPlatformAdmin,
     activeOrg?.role
   );
+
   const backHref = toolPlaygroundBackTarget(searchParams).href;
 
   const {
@@ -40,6 +42,7 @@ export function ToolPlaygroundPage() {
     isLoading: toolLoading,
     error: toolError,
   } = useToolQuery(toolId ?? null);
+
   const { data: profiles = [] } = useProfilesQuery();
   const superBotProfileId = findSuperBotProfile(profiles)?.id ?? null;
 
@@ -92,8 +95,10 @@ function ToolPlaygroundPageContent({
 }) {
   const [searchParams] = useSearchParams();
   const back = toolPlaygroundBackTarget(searchParams);
+
   const isCustomTool =
     tool.handlerType === "javascript" || tool.handlerType === "python";
+
   const run = useToolPlaygroundRun(tool, superBotProfileId);
   const [mainTab, setMainTab] = useState<"output" | "detail">("output");
 

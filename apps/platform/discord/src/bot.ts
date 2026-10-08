@@ -14,6 +14,7 @@ import { type ChatHandlerDeps, createChatHandler } from "./chat-handler";
 import type { DiscordBridgeConfig } from "./config";
 import {
   deferSlashInteraction,
+  discordErrorSchema,
   getDiscordErrorCode,
   isIgnorableInteractionError,
 } from "./interaction-errors";
@@ -23,7 +24,7 @@ export async function createBot(
   config: DiscordBridgeConfig,
   deps: Omit<ChatHandlerDeps, "config" | "getBotInfo">
 ): Promise<Client<true>> {
-  const client = new Client({
+  const client = new Client<true>({
     intents: [
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,
@@ -31,7 +32,7 @@ export async function createBot(
       GatewayIntentBits.MessageContent,
     ],
     partials: [Partials.Channel, Partials.Message],
-  }) as Client<true>;
+  });
 
   const handler = createChatHandler({
     ...deps,
@@ -54,6 +55,7 @@ export async function createBot(
     if (isChannelDebugEnabled()) {
       console.log(formatDiscordInboundMessageLog(message));
     }
+
     try {
       await handler.handleMessage(message);
     } catch (error) {
@@ -79,12 +81,19 @@ export async function createBot(
             content: "Open your own /org, /profile or /sessions picker.",
             flags: MessageFlags.Ephemeral,
           });
+
           return;
         }
+
         await interaction.deferUpdate();
         await handler.handleSelectionInteraction(interaction);
       } catch (error) {
-        if (!isIgnorableInteractionError(error)) {
+        const discordError =
+          error instanceof Error
+            ? error
+            : (discordErrorSchema.safeParse(error).data ?? null);
+
+        if (!isIgnorableInteractionError(discordError)) {
           console.error("Selection interaction error:", error);
           await interaction
             .editReply({
@@ -94,8 +103,10 @@ export async function createBot(
             .catch(() => {});
         }
       }
+
       return;
     }
+
     if (!interaction.isChatInputCommand()) {
       return;
     }
@@ -117,10 +128,16 @@ export async function createBot(
     try {
       await handler.handleSlashCommand(interaction);
     } catch (error) {
-      if (isIgnorableInteractionError(error)) {
+      const discordError =
+        error instanceof Error
+          ? error
+          : (discordErrorSchema.safeParse(error).data ?? null);
+
+      if (isIgnorableInteractionError(discordError)) {
         console.warn(
-          `Slash command /${interaction.commandName} interaction expired (${getDiscordErrorCode(error)}).`
+          `Slash command /${interaction.commandName} interaction expired (${getDiscordErrorCode(discordError)}).`
         );
+
         return;
       }
 

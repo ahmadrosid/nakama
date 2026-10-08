@@ -26,11 +26,14 @@ test("automation notification opens the automation under its agent", async () =>
   const container = document.createElement("div");
   const root = createRoot(container);
   let location = "";
+
   function LocationProbe() {
     const current = useLocation();
     location = current.pathname + current.search;
+
     return null;
   }
+
   try {
     await act(async () =>
       root.render(
@@ -68,6 +71,7 @@ test("automations follow the selected agent and Super Bot shows all", async () =
       queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
     },
   });
+
   const automations = ["agent-a", "agent-b", "super"].map(
     (profileId): StoredAutomation => ({
       createdAt: "2026-10-01T00:00:00Z",
@@ -83,24 +87,31 @@ test("automations follow the selected agent and Super Bot shows all", async () =
       version: 1,
     })
   );
+
   queryClient.setQueryData(queryKeys.automations.all, { automations });
   queryClient.setQueryData(queryKeys.profiles.all, [
     { id: "agent-a" },
     { id: "agent-b" },
     { id: "super", isSuper: true },
   ]);
+
   for (const automation of automations) {
     queryClient.setQueryData(queryKeys.automations.runs(automation.id), []);
   }
+
   const previousState = useActiveChatProfileStore.getState();
   useActiveChatProfileStore.setState({ profileId: "agent-a" });
   let page!: AutomationsPageState;
+
   function Probe() {
     page = useAutomationsPage();
+
     return null;
   }
+
   const container = document.createElement("div");
   const root = createRoot(container);
+
   try {
     await act(async () =>
       root.render(
@@ -108,6 +119,7 @@ test("automations follow the selected agent and Super Bot shows all", async () =
           <QueryClientProvider client={queryClient}>
             <AuthContext.Provider
               value={
+                /* SAFETY: The unauthenticated view reads only these auth flags. */
                 { isAuthenticated: false, isLoading: false } as AuthContextValue
               }
             >
@@ -156,19 +168,23 @@ test("keeps the run conversation mounted until the drawer finishes closing", asy
     startedAt: "2026-10-01T00:00:00Z",
     status: "completed",
   };
+
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
+
   const original = Object.getOwnPropertyDescriptor(
     Element.prototype,
     "getAnimations"
   );
+
   const closing = Promise.withResolvers<void>();
   let animating = false;
   Object.defineProperty(Element.prototype, "getAnimations", {
     configurable: true,
     value: () => (animating ? [{ finished: closing.promise }] : []),
   });
+
   try {
     await act(async () => {
       root.render(
@@ -182,9 +198,11 @@ test("keeps the run conversation mounted until the drawer finishes closing", asy
         />
       );
     });
+
     const trigger = container.querySelector<HTMLButtonElement>(
       'button[aria-haspopup="dialog"]'
     )!;
+
     await act(async () => {
       trigger.click();
       await new Promise((resolve) => setTimeout(resolve, 30));
@@ -219,6 +237,7 @@ test("keeps the run conversation mounted until the drawer finishes closing", asy
     closing.resolve();
     await act(async () => root.unmount());
     container.remove();
+
     if (original) {
       Object.defineProperty(Element.prototype, "getAnimations", original);
     } else {

@@ -20,16 +20,21 @@ export function ChatPage() {
       ) {
         return;
       }
+
       const composer = document.querySelector<HTMLTextAreaElement>(
         'textarea[name="message"]:not(:disabled):not([readonly])'
       );
+
       if (composer) {
         event.preventDefault();
         composer.focus();
       }
     };
+
     document.addEventListener("keydown", focusComposer);
+
     return () => document.removeEventListener("keydown", focusComposer);
   }, []);
+
   return <ChatPageContent {...state} />;
 }
