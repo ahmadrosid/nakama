@@ -640,19 +640,22 @@ async function sendMessage(
       : input.clientOrigin?.trim()
         ? { clientOrigin: input.clientOrigin.trim() }
         : options.toolContext;
-  const effectiveToolContext = {
+
+  const effectiveToolContext: ToolContext = {
     ...baseToolContext,
-    currentChatImages:
-      typeof userContent === "string"
-        ? []
-        : userContent.flatMap((part) =>
-            part.type === "image_ref"
-              ? [{ attachmentId: part.attachmentId, mediaType: part.mediaType }]
-              : []
-          ),
-    ...(options.signal ? { signal: options.signal } : {}),
+    currentChatImages: Array.isArray(userContent)
+      ? userContent.flatMap((part) =>
+          part.type === "image_ref"
+            ? [{ attachmentId: part.attachmentId, mediaType: part.mediaType }]
+            : []
+        )
+      : [],
     whatsappMessage: options.whatsappMessage,
   };
+
+  if (options.signal) {
+    effectiveToolContext.signal = options.signal;
+  }
 
   try {
     const reply = await runConversation(

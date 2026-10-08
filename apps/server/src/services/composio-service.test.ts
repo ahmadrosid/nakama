@@ -10,7 +10,9 @@ import type { ComposioApiClient } from "./composio-api-client";
 import { ComposioService } from "./composio-service";
 
 const TEST_API_KEY = "ck_test";
+
 const USER_ID = "user_admin";
+
 const ORG_ID = "org_1";
 
 function createMockClient(): ComposioApiClient {
@@ -23,6 +25,7 @@ function createMockClient(): ComposioApiClient {
     ) {
       expect(userId).toBe("nakama:user:user_admin");
       expect(connectedAccounts).toEqual({});
+
       return {
         headers: { Authorization: "Bearer test" },
         sessionId: "sess_1",
@@ -63,14 +66,12 @@ function injectMockComposioClient(
   service: ComposioService,
   client: ComposioApiClient
 ): void {
-  (
-    service as unknown as {
-      apiClientCache: { key: string; client: ComposioApiClient } | null;
-    }
-  ).apiClientCache = {
-    client,
-    key: TEST_API_KEY,
-  };
+  Object.assign(service, {
+    apiClientCache: {
+      client,
+      key: TEST_API_KEY,
+    },
+  });
 }
 
 async function seedOrgWithAdmin(
@@ -143,6 +144,7 @@ describe("ComposioService", () => {
       const toolkit = await service.enableToolkit(ORG_ID, {
         toolkitSlug: "gmail",
       });
+
       expect(toolkit.toolkitSlug).toBe("gmail");
       expect(toolkit.status).toBe("enabled");
 
@@ -211,6 +213,7 @@ describe("ComposioService", () => {
       const toolkit = await service.enableToolkit(ORG_ID, {
         toolkitSlug: "gmail",
       });
+
       expect(
         await db.listProfileComposioToolkits("profile_default")
       ).toHaveLength(1);
@@ -231,6 +234,7 @@ describe("ComposioService", () => {
 
     try {
       await service.enableToolkit(ORG_ID, { toolkitSlug: "gmail" });
+
       const response = await service.connectToolkit(
         ORG_ID,
         USER_ID,
@@ -281,6 +285,7 @@ describe("ComposioService", () => {
       async listCatalogToolkits(options) {
         calls += 1;
         lastLimit = options?.limit;
+
         return [
           { description: null, logoUrl: null, name: "Gmail", slug: "gmail" },
         ];
@@ -293,18 +298,20 @@ describe("ComposioService", () => {
       expect(calls).toBe(1);
       expect(lastLimit).toBe(1);
 
-      (
-        service as unknown as {
-          reachabilityCache: { value: boolean; expiresAt: number } | null;
-        }
-      ).reachabilityCache = { expiresAt: Date.now() - 1, value: true };
+      Object.assign(service, {
+        reachabilityCache: { expiresAt: Date.now() - 1, value: true },
+      });
 
       // Stale cache returns immediately and refreshes in the background.
       expect(await service.isReachable()).toBe(true);
       expect(calls).toBe(1);
-      const inflight = (
-        service as unknown as { reachabilityInflight: Promise<boolean> | null }
-      ).reachabilityInflight;
+
+      // SAFETY: This field is set by isReachable before its deferred refresh.
+      const inflight = Object.getOwnPropertyDescriptor(
+        service,
+        "reachabilityInflight"
+      )?.value as Promise<boolean> | null;
+
       expect(inflight).not.toBeNull();
       await inflight;
       expect(calls).toBe(2);
@@ -315,6 +322,7 @@ describe("ComposioService", () => {
         async listCatalogToolkits(options) {
           calls += 1;
           lastLimit = options?.limit;
+
           return [];
         },
       });
@@ -330,6 +338,7 @@ describe("ComposioService", () => {
     const { service, restore } = await createConfiguredService();
     let calls = 0;
     let release!: () => void;
+
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
@@ -339,6 +348,7 @@ describe("ComposioService", () => {
       async listCatalogToolkits() {
         calls += 1;
         await gate;
+
         return [];
       },
     });
@@ -349,6 +359,7 @@ describe("ComposioService", () => {
         service.isReachable(),
         service.isReachable(),
       ]);
+
       release();
       expect(await pending).toEqual([true, true, true]);
       expect(calls).toBe(1);
@@ -379,9 +390,11 @@ describe("ComposioService", () => {
 
     try {
       await seedOrgWithAdmin(db);
+
       const toolkit = await service.enableToolkit(ORG_ID, {
         toolkitSlug: "gmail",
       });
+
       await db.upsertComposioUserConnection({
         connectedAccountId: "ca_admin",
         createdAt: now,
@@ -430,9 +443,11 @@ describe("ComposioService", () => {
 
     try {
       await seedOrgWithAdmin(db);
+
       const toolkit = await service.enableToolkit(ORG_ID, {
         toolkitSlug: "gmail",
       });
+
       await db.upsertComposioUserConnection({
         connectedAccountId: "ca_admin",
         createdAt: now,
@@ -486,9 +501,11 @@ describe("ComposioService", () => {
 
     try {
       await seedOrgWithAdmin(db);
+
       const toolkit = await service.enableToolkit(ORG_ID, {
         toolkitSlug: "gmail",
       });
+
       await db.upsertProfile({
         createdAt: now,
         id: "profile_unconnected",

@@ -44,6 +44,15 @@ export type MeetAction =
   | "delete"
   | "configure";
 
+export interface MeetActionInput {
+  after?: number;
+  apiKey?: string;
+  content?: string;
+  enabled?: boolean;
+  filename?: string;
+  meetingId?: string;
+}
+
 export interface MeetOverview {
   canConfigure: boolean;
   captureProtocol: number;

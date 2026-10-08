@@ -1,7 +1,9 @@
 /* global chrome */
 
 const chrome = globalThis.chrome;
+
 const SESSION_KEY = "captureSession";
+
 let starting = false;
 
 async function getSession() {
@@ -10,6 +12,7 @@ async function getSession() {
 
 async function setBadge(text, color) {
   await chrome.action.setBadgeText({ text });
+
   if (color) {
     await chrome.action.setBadgeBackgroundColor({ color });
   }
@@ -19,6 +22,7 @@ async function ensureOffscreen() {
   const contexts = await chrome.runtime.getContexts({
     contextTypes: ["OFFSCREEN_DOCUMENT"],
   });
+
   if (!contexts.length) {
     await chrome.offscreen.createDocument({
       justification: "Capture Google Meet audio for live transcription",
@@ -34,37 +38,45 @@ async function callNakama(connection, action, input = {}) {
     nakamaTabId: connection?.tabId,
     nakamaUrl: connection?.url,
   });
+
   if (!connection) {
     throw new Error(
       "Open Google Meet in Nakama and connect this extension first."
     );
   }
+
   const tab = await chrome.tabs.get(connection.tabId).catch(() => null);
+
   if (tab?.url !== connection.url) {
     throw new Error("Keep the connected Nakama Google Meet tab open.");
   }
+
   const response = await chrome.tabs.sendMessage(connection.tabId, {
     action,
     input,
     type: "NAKAMA_MEET_ACTION",
   });
+
   console.log("[Nakama Meet] response", {
     action,
     captureProtocol: response?.result?.captureProtocol,
     error: response?.error,
     resultKeys: response?.result ? Object.keys(response.result) : [],
   });
+
   if (!response || response.error) {
     throw new Error(
       response?.error || "Nakama did not respond. Refresh its Google Meet page."
     );
   }
+
   return response.result;
 }
 
 async function meetingSessionForTab(tabId) {
   const session = await getSession();
   const { connection } = await chrome.storage.session.get("connection");
+
   if (
     !(session && ["starting", "recording"].includes(session.status)) ||
     session.tabId !== tabId ||
@@ -73,6 +85,7 @@ async function meetingSessionForTab(tabId) {
   ) {
     return null;
   }
+
   return { connection, session };
 }
 
@@ -80,10 +93,13 @@ async function transcriptForTab(tabId, after) {
   if (!Number.isSafeInteger(after) || after < 0) {
     throw new Error("Invalid transcript cursor");
   }
+
   const active = await meetingSessionForTab(tabId);
+
   if (!active) {
     return null;
   }
+
   return callNakama(active.connection, "transcript", {
     after,
     meetingId: active.session.meetingId,
@@ -92,9 +108,11 @@ async function transcriptForTab(tabId, after) {
 
 async function captionForTab(tabId, caption) {
   const active = await meetingSessionForTab(tabId);
+
   if (!active) {
     return null;
   }
+
   return callNakama(active.connection, "caption", {
     meetingId: active.session.meetingId,
     ...caption,
@@ -103,17 +121,21 @@ async function captionForTab(tabId, caption) {
 
 async function connect() {
   const session = await getSession();
+
   if (starting || ["starting", "recording"].includes(session?.status)) {
     throw new Error("Stop the current recording before reconnecting.");
   }
+
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const url = new URL(tab?.url || "about:blank");
+
   if (
     !(tab?.id && ["http:", "https:"].includes(url.protocol)) ||
     url.pathname !== "/plugins/google-meet"
   ) {
     throw new Error("Open the Google Meet page in Nakama, then click Connect.");
   }
+
   const connection = { tabId: tab.id, url: tab.url };
   const setup = await callNakama(connection, "meetings");
   console.log("[Nakama Meet] connect protocol", {
@@ -121,11 +143,14 @@ async function connect() {
     nakamaUrl: connection.url,
     received: setup?.captureProtocol,
   });
+
   if (setup.captureProtocol !== 2) {
     throw new Error("Update Nakama first.");
   }
+
   await chrome.storage.session.remove(SESSION_KEY);
   await chrome.storage.session.set({ connection });
+
   return { ok: true };
 }
 
@@ -133,19 +158,25 @@ async function start() {
   if (starting) {
     throw new Error("Transcription is already starting.");
   }
+
   starting = true;
   let meeting;
   let connection;
+
   try {
     const session = await getSession();
+
     if (["starting", "recording"].includes(session?.status)) {
       throw new Error("Stop the current transcription first.");
     }
+
     const [tab] = await chrome.tabs.query({
       active: true,
       currentWindow: true,
     });
+
     const url = new URL(tab?.url || "about:blank");
+
     if (
       !tab?.id ||
       url.origin !== "https://meet.google.com" ||
@@ -153,31 +184,40 @@ async function start() {
     ) {
       throw new Error("Join a Google Meet meeting in this tab first.");
     }
+
     ({ connection } = await chrome.storage.session.get("connection"));
+
     // Obtain tab access while handling the user's extension click.
     const streamId = await chrome.tabCapture.getMediaStreamId({
       targetTabId: tab.id,
     });
+
     const setup = await callNakama(connection, "meetings");
     console.log("[Nakama Meet] start protocol", {
       expected: 2,
       nakamaUrl: connection?.url,
       received: setup?.captureProtocol,
     });
+
     if (setup.captureProtocol !== 2) {
       throw new Error("Update Nakama first.");
     }
+
     await ensureOffscreen();
     meeting = await callNakama(connection, "start-capture", {
       url: url.origin + url.pathname,
     });
+
     if (!meeting?.capture?.url) {
       throw new Error("The transcription service is not ready.");
     }
+
     const captureUrl = new URL(meeting.capture.url);
+
     if (!["ws:", "wss:"].includes(captureUrl.protocol)) {
       throw new Error("Invalid capture connection.");
     }
+
     await chrome.storage.session.set({
       [SESSION_KEY]: {
         captureUrl: captureUrl.href,
@@ -189,19 +229,23 @@ async function start() {
         tabUrl: tab.url,
       },
     });
+
     const result = await chrome.runtime.sendMessage({
       captureUrl: captureUrl.href,
       streamId,
       type: "START_CAPTURE",
     });
+
     if (!result?.ok) {
       if (result?.needsMicrophone) {
         await chrome.tabs.create({
           url: chrome.runtime.getURL("microphone.html"),
         });
       }
+
       throw new Error(result?.error || "Could not capture meeting audio.");
     }
+
     return { ok: true };
   } catch (error) {
     if (meeting?.id) {
@@ -217,6 +261,7 @@ async function start() {
       });
       await setBadge("!", "#dc2626");
     }
+
     throw error;
   } finally {
     starting = false;
@@ -227,6 +272,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id) {
     return;
   }
+
   if (message.type === "BRIDGE_STATE" && sender.tab) {
     chrome.storage.session.get("connection").then(({ connection }) => {
       sendResponse({
@@ -234,20 +280,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           connection?.tabId === sender.tab.id && connection?.url === sender.url,
       });
     });
+
     return true;
   }
+
   const fromExtensionPage =
     !sender.tab &&
     ["popup.html", "sidepanel.html"].some((file) =>
       sender.url?.startsWith(chrome.runtime.getURL(file))
     );
+
   const fromMeetTab =
     Boolean(sender.tab?.id) &&
     ["MEET_STATE", "MEET_TRANSCRIPT", "MEET_CAPTION"].includes(message.type);
+
   if (!(fromExtensionPage || fromMeetTab)) {
     return;
   }
+
   let work;
+
   if (message.type === "CONNECT") {
     work = connect();
   } else if (message.type === "START") {
@@ -271,6 +323,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     work = (async () => {
       const session = await getSession();
       const { connection } = await chrome.storage.session.get("connection");
+
       if (
         !session ||
         connection?.tabId !== session.connection?.tabId ||
@@ -278,21 +331,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       ) {
         return null;
       }
+
       const after = message.after ?? 0;
+
       if (!Number.isSafeInteger(after) || after < 0) {
         throw new Error("Invalid transcript cursor");
       }
+
       const result = await callNakama(
         connection,
         message.type === "OPEN_TRANSCRIPT" ? "show-transcript" : "transcript",
         { after, meetingId: session.meetingId }
       );
+
       if (message.type === "OPEN_TRANSCRIPT") {
         await chrome.tabs.update(connection.tabId, { active: true });
       }
+
       const current = await getSession();
+
       const latest = (await chrome.storage.session.get("connection"))
         .connection;
+
       if (
         current?.meetingId !== session.meetingId ||
         latest?.tabId !== connection.tabId ||
@@ -300,6 +360,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       ) {
         return null;
       }
+
       return result;
     })();
   } else if (message.type === "STATE") {
@@ -308,29 +369,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .then(async (state) => {
         if (state.connection) {
           let tab;
+
           try {
             tab = await chrome.tabs.get(state.connection.tabId);
           } catch {
             // Chrome rejects get() when the connected tab has been closed.
           }
+
           if (tab?.url !== state.connection.url) {
             await chrome.storage.session.remove("connection");
             delete state.connection;
           }
         }
+
         const session = state[SESSION_KEY];
         await setBadge(
           session?.error ? "!" : session?.status === "recording" ? "REC" : "",
           "#dc2626"
         );
+
         return state;
       });
   } else {
     return;
   }
+
   work
     .then(sendResponse)
     .catch((error) => sendResponse({ error: error.message }));
+
   return true;
 });
 
@@ -341,6 +408,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   ) {
     return;
   }
+
   if (
     !["CAPTURE_STARTED", "CAPTURE_STOPPED", "CAPTURE_ERROR"].includes(
       message.type
@@ -348,14 +416,17 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   ) {
     return;
   }
+
   void updateCaptureState(message);
 });
 
 async function updateCaptureState(message) {
   const session = await getSession();
+
   if (!session) {
     return;
   }
+
   const recording = message.type === "CAPTURE_STARTED";
   await chrome.storage.session.set({
     [SESSION_KEY]: {
@@ -377,6 +448,7 @@ async function updateCaptureState(message) {
       type: recording ? "CAPTURE_STARTED" : "CAPTURE_STOPPED",
     })
     .catch(() => undefined);
+
   if (!recording) {
     await callNakama(session.connection, "leave", {
       meetingId: session.meetingId,
@@ -386,6 +458,7 @@ async function updateCaptureState(message) {
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   const session = await getSession();
+
   if (
     session?.tabId === tabId &&
     ["starting", "recording"].includes(session.status)

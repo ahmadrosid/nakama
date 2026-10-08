@@ -16,12 +16,15 @@ import {
 const EXTRA_PRECACHE_URLS = ["/manifest.webmanifest", "/icons/icon-192.png"];
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+
 const distDir = join(webRoot, "dist");
+
 const viteManifestPath = join(distDir, ".vite/manifest.json");
 
 await typeCheckWorker();
 
 const manifestFile = Bun.file(viteManifestPath);
+
 if (!(await manifestFile.exists())) {
   console.error(
     `build-sw: ${viteManifestPath} is missing. Run \`vite build\` with \`build.manifest\` enabled first.`
@@ -29,8 +32,11 @@ if (!(await manifestFile.exists())) {
   process.exit(1);
 }
 
+// SAFETY: Vite generates this manifest with the ViteManifest shape during the build.
 const manifest = (await manifestFile.json()) as ViteManifest;
+
 const precache = precacheUrls(manifest, EXTRA_PRECACHE_URLS);
+
 const version = buildVersion(precache);
 
 const result = await Bun.build({
@@ -48,16 +54,19 @@ if (!result.success) {
   for (const log of result.logs) {
     console.error(log);
   }
+
   process.exit(1);
 }
 
 const [bundle] = result.outputs;
+
 if (!bundle) {
   console.error("build-sw: the bundler produced no output.");
   process.exit(1);
 }
 
 await Bun.write(join(distDir, "sw.js"), await bundle.text());
+
 // Vite only writes the manifest so this script can read it; serving it would
 // publish the chunk graph for no reason.
 await rm(join(distDir, ".vite"), { force: true, recursive: true });
@@ -69,7 +78,9 @@ async function typeCheckWorker(): Promise<void> {
     ["bun", "x", "tsc", "-p", join(webRoot, "tsconfig.sw.json"), "--noEmit"],
     { cwd: webRoot, stderr: "inherit", stdout: "inherit" }
   );
+
   const exitCode = await check.exited;
+
   if (exitCode !== 0) {
     process.exit(exitCode);
   }
@@ -77,7 +88,9 @@ async function typeCheckWorker(): Promise<void> {
 
 // Ship the unpacked Chrome extension independently of the retired plugin workspace.
 const extensionDir = join(webRoot, "public/google-meet-extension");
+
 const extensionFiles: Record<string, Uint8Array> = {};
+
 await Promise.all(
   (await readdir(extensionDir)).map(async (file) => {
     extensionFiles[`google-meet-extension/${file}`] = await readFile(
@@ -85,6 +98,7 @@ await Promise.all(
     );
   })
 );
+
 await writeFile(
   join(distDir, "google-meet-extension.zip"),
   zipSync(extensionFiles)

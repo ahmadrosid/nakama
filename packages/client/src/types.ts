@@ -22,6 +22,14 @@ export interface NakamaClientOptions {
 
 export type StreamHandler = (delta: string) => void;
 
+export type JsonValue =
+  | boolean
+  | null
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
 export interface StreamHandlers {
   onChunk: StreamHandler;
   onContextUsage?: (usage: ChatContextUsage) => void;
@@ -51,7 +59,7 @@ export interface StreamHandlers {
     toolCallId: string;
     toolGroupId?: string;
     tool: string;
-    input: Record<string, unknown>;
+    input: Record<string, JsonValue>;
   }) => void;
   onUsage?: (usage: ChatUsage) => void;
 }

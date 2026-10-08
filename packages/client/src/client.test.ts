@@ -10,19 +10,23 @@ test.each(["http://localhost:4310", "https://nakama.example.com"])(
   "CLI images are uploaded in the request body to %s",
   async (baseUrl) => {
     const requests: Request[] = [];
+
     const client = new NakamaClient({
       authToken: "test-token",
       baseUrl,
       fetch: async (input, init) => {
         requests.push(new Request(input, init));
+
         return new Response('data: {"type":"done","reply":"ok"}\n\n', {
           headers: { "Content-Type": "text/event-stream" },
         });
       },
       orgId: "org-a",
     });
+
     const images = [{ data: "aW1hZ2U=", mediaType: "image/png" }];
     const session = client.createChatSession("session-1", "cli");
+
     const whatsappMessage = {
       chatJid: "chat@g.us",
       fromMe: false,
@@ -30,6 +34,7 @@ test.each(["http://localhost:4310", "https://nakama.example.com"])(
       senderJid: "sender@s.whatsapp.net",
       senderJids: ["sender@s.whatsapp.net"],
     };
+
     await session.sendStream({ images, message: "Describe this" }, () => {}, {
       whatsappContextToken: "internal-worker-token",
       whatsappMessage,
@@ -55,14 +60,17 @@ test.each(["http://localhost:4310", "https://nakama.example.com"])(
 
 test("scoped clients keep session requests in their original organization", async () => {
   const requests: Request[] = [];
+
   const client = new NakamaClient({
     authToken: "test-token",
     baseUrl: "http://localhost:4310",
-    fetch: (async (input, init) => {
+    fetch: async (input, init) => {
       requests.push(new Request(input, init));
+
       return Response.json({ messages: [] });
-    }) as typeof fetch,
+    },
   });
+
   const first = client.forOrg("org_a").createChatSession("first", "discord");
   const second = client.forOrg("org_b").createChatSession("second", "discord");
   client.setOrgId("org_c");
@@ -80,14 +88,17 @@ test("scoped clients keep session requests in their original organization", asyn
 
 test("plugin access requests retain their explicit organization", async () => {
   const requests: Request[] = [];
+
   const client = new NakamaClient({
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       requests.push(new Request(input, init));
+
       return Response.json({});
     },
     orgId: "org-other",
   });
+
   await client.getProfile("agent-a", "org-a");
   await client.listTools("org-a");
   await client.listSkills("org-a");
@@ -112,13 +123,16 @@ test("plugin access requests retain their explicit organization", async () => {
 
 test("official plugin reinstall sends revision and explicit organization", async () => {
   let request!: Request;
+
   const client = new NakamaClient({
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       request = new Request(input, init);
+
       return Response.json({ install: { lifecycleState: "enabled" } });
     },
   });
+
   await client.reinstallOfficialPlugin("workflows", 7, "org-a");
   expect(new URL(request.url).pathname).toBe(
     "/v1/plugins/official/workflows/reinstall"
@@ -129,9 +143,12 @@ test("official plugin reinstall sends revision and explicit organization", async
 });
 
 test("chat stream request includes cookie CSRF protection", async () => {
-  const originalDocument = (
-    globalThis as typeof globalThis & { document?: { cookie: string } }
-  ).document;
+  const originalDocument =
+    // SAFETY: These tests read only the cookie field from a minimal browser fixture.
+    (globalThis as typeof globalThis & { document?: { cookie: string } })
+      .document;
+
+  // SAFETY: These tests read only the cookie field from a minimal browser fixture.
   (
     globalThis as typeof globalThis & { document?: { cookie: string } }
   ).document = {
@@ -140,10 +157,12 @@ test("chat stream request includes cookie CSRF protection", async () => {
 
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return new Response('data: {"type":"done","reply":"ok"}\n\n', {
         headers: { "Content-Type": "text/event-stream" },
       });
@@ -162,10 +181,12 @@ test("chat stream request includes cookie CSRF protection", async () => {
     expect(headers.get("Content-Type")).toBe("application/json");
     expect(fetchCalls[0]!.init?.credentials).toBe("include");
     expect(
+      // SAFETY: The client adds Bun's idleTimeout option to this captured request.
       (fetchCalls[0]!.init as RequestInit & { idleTimeout?: number })
         .idleTimeout
     ).toBe(0);
   } finally {
+    // SAFETY: These tests read only the cookie field from a minimal browser fixture.
     (
       globalThis as typeof globalThis & { document?: { cookie: string } }
     ).document = originalDocument;
@@ -173,11 +194,15 @@ test("chat stream request includes cookie CSRF protection", async () => {
 });
 
 test("CSRF header prefers the host-bound cookie a sibling host cannot set", async () => {
-  const originalDocument = (
-    globalThis as typeof globalThis & { document?: { cookie: string } }
-  ).document;
+  const originalDocument =
+    // SAFETY: These tests read only the cookie field from a minimal browser fixture.
+    (globalThis as typeof globalThis & { document?: { cookie: string } })
+      .document;
+
   // An attacker-planted parent-domain cookie is still readable from JS, so the
   // client must send the host-bound one the server actually trusts.
+
+  // SAFETY: These tests read only the cookie field from a minimal browser fixture.
   (
     globalThis as typeof globalThis & { document?: { cookie: string } }
   ).document = {
@@ -186,10 +211,12 @@ test("CSRF header prefers the host-bound cookie a sibling host cannot set", asyn
 
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     baseUrl: "https://nakama.example.com",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return new Response('data: {"type":"done","reply":"ok"}\n\n', {
         headers: { "Content-Type": "text/event-stream" },
       });
@@ -205,6 +232,7 @@ test("CSRF header prefers the host-bound cookie a sibling host cannot set", asyn
       "host-bound"
     );
   } finally {
+    // SAFETY: These tests read only the cookie field from a minimal browser fixture.
     (
       globalThis as typeof globalThis & { document?: { cookie: string } }
     ).document = originalDocument;
@@ -214,11 +242,13 @@ test("CSRF header prefers the host-bound cookie a sibling host cannot set", asyn
 test("automation run requests disable Bun fetch idle timeout", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return new Response(null, { status: 204 });
     },
   });
@@ -229,6 +259,7 @@ test("automation run requests disable Bun fetch idle timeout", async () => {
     "http://localhost:4310/v1/internal/automations/auto_1/run?orgId=org_1"
   );
   expect(
+    // SAFETY: The client adds Bun's idleTimeout option to this captured request.
     (fetchCalls[0]!.init as RequestInit & { idleTimeout?: number }).idleTimeout
   ).toBe(0);
 });
@@ -236,11 +267,13 @@ test("automation run requests disable Bun fetch idle timeout", async () => {
 test("clients send org context on authenticated requests", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return Response.json({ profiles: [] });
     },
     orgId: "org_test",
@@ -256,11 +289,13 @@ test("clients send org context on authenticated requests", async () => {
 test("listProfiles takes an org id per call, overriding the client's", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return Response.json({ profiles: [] });
     },
     orgId: "org_test",
@@ -275,11 +310,13 @@ test("listProfiles takes an org id per call, overriding the client's", async () 
 test("non-browser clients send local auth as a bearer token", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return Response.json({ ok: true });
     },
   });
@@ -294,11 +331,13 @@ test("non-browser clients send local auth as a bearer token", async () => {
 test("data export downloads zip bytes with filename metadata", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return new Response(new Uint8Array([1, 2, 3]), {
         headers: {
           "Content-Disposition":
@@ -324,11 +363,13 @@ test("data export downloads zip bytes with filename metadata", async () => {
 test("user data export scopes the download path to the requested user", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return new Response(new Uint8Array([4, 5, 6]), {
         headers: {
           "Content-Disposition":
@@ -351,12 +392,14 @@ test("user data export scopes the download path to the requested user", async ()
 test("profile pack helpers export zip and upload base64 preview/import bodies", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
       const url = input.toString();
+
       if (url.includes("/pack/export")) {
         return new Response(new Uint8Array([9, 8, 7]), {
           headers: {
@@ -366,6 +409,7 @@ test("profile pack helpers export zip and upload base64 preview/import bodies", 
           },
         });
       }
+
       if (url.endsWith("/pack/import/preview")) {
         return Response.json({
           manifest: { kind: "nakama-profile-export" },
@@ -374,6 +418,7 @@ test("profile pack helpers export zip and upload base64 preview/import bodies", 
           topLevelPaths: ["SOUL.md"],
         });
       }
+
       return Response.json({
         manifest: { kind: "nakama-profile-export" },
         profileId: "profile_new",
@@ -399,10 +444,10 @@ test("profile pack helpers export zip and upload base64 preview/import bodies", 
     })
   ).resolves.toMatchObject({ profileId: "profile_new" });
 
-  expect(JSON.parse(fetchCalls[1]!.init?.body as string)).toEqual({
+  expect(JSON.parse(String(fetchCalls[1]!.init?.body))).toEqual({
     data: Buffer.from([1, 2, 3]).toString("base64"),
   });
-  expect(JSON.parse(fetchCalls[2]!.init?.body as string)).toEqual({
+  expect(JSON.parse(String(fetchCalls[2]!.init?.body))).toEqual({
     confirm: true,
     data: Buffer.from([4, 5, 6]).toString("base64"),
     name: "Bot Copy",
@@ -412,11 +457,13 @@ test("profile pack helpers export zip and upload base64 preview/import bodies", 
 test("readProfileArtifactContent fetches artifact bytes with inline query", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return new Response("# Report", {
         headers: {
           "Content-Disposition": 'inline; filename="report.md"',
@@ -448,11 +495,13 @@ test("readProfileArtifactContent fetches artifact bytes with inline query", asyn
 test("hasProfileArtifact reads a 404 as deleted and rethrows other failures", async () => {
   const methods: Array<string | undefined> = [];
   let status = 200;
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (_input, init) => {
       methods.push(init?.method);
+
       return new Response(null, { status });
     },
     orgId: "org_test",
@@ -471,11 +520,13 @@ test("hasProfileArtifact reads a 404 as deleted and rethrows other failures", as
 test("data import helpers upload base64 archive data", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       if (input.toString().endsWith("/preview")) {
         return Response.json({
           archiveFileCount: 1,
@@ -503,10 +554,10 @@ test("data import helpers upload base64 archive data", async () => {
     client.restoreDataImport(new Uint8Array([4, 5, 6]), { confirm: true })
   ).resolves.toMatchObject({ restoredFileCount: 1 });
 
-  expect(JSON.parse(fetchCalls[0]!.init?.body as string)).toEqual({
+  expect(JSON.parse(String(fetchCalls[0]!.init?.body))).toEqual({
     data: "AQID",
   });
-  expect(JSON.parse(fetchCalls[1]!.init?.body as string)).toEqual({
+  expect(JSON.parse(String(fetchCalls[1]!.init?.body))).toEqual({
     confirm: true,
     data: "BAUG",
   });
@@ -539,11 +590,13 @@ test("non-browser clients reload the local auth token once after a 401", async (
     );
 
     let attempts = 0;
+
     const client = new NakamaClient({
       authToken: "tc_local_stale",
       baseUrl: "http://localhost:4310",
       fetch: async () => {
         attempts += 1;
+
         if (attempts === 1) {
           return new Response(
             JSON.stringify({ error: "Authentication required" }),
@@ -570,6 +623,7 @@ test("non-browser clients throw NakamaAuthExpiredError when 401 token is unchang
   const configDir = await mkdtemp(
     join(tmpdir(), "nakama-client-auth-expired-")
   );
+
   process.env.NAKAMA_CONFIG_DIR = configDir;
 
   try {
@@ -608,6 +662,7 @@ test("non-browser clients throw NakamaAuthExpiredError when 401 token is unchang
 test("notification destination client methods hit the expected routes", async () => {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
@@ -673,22 +728,23 @@ test("notification destination client methods hit the expected routes", async ()
 
 function createPublishShareClient(options: {
   clientOrigin?: string;
-  response: Record<string, unknown>;
+  response: Record<string, string | boolean | null>;
 }) {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://127.0.0.1:4310",
-    ...(options.clientOrigin === undefined
-      ? {}
-      : { clientOrigin: options.clientOrigin }),
+    clientOrigin: options.clientOrigin,
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return Response.json(options.response);
     },
     orgId: "org_test",
   });
+
   return { client, fetchCalls };
 }
 
@@ -711,7 +767,7 @@ test("publishProfileArtifactShare includes clientOrigin when configured", async 
   expect(fetchCalls[0]!.input.toString()).toBe(
     "http://127.0.0.1:4310/v1/profiles/profile_1/artifacts/shares"
   );
-  expect(JSON.parse(fetchCalls[0]!.init?.body as string)).toEqual({
+  expect(JSON.parse(String(fetchCalls[0]!.init?.body))).toEqual({
     clientOrigin: "https://nakama.example.com",
     path: "report.md",
   });
@@ -731,20 +787,23 @@ test("publishProfileArtifactShare omits clientOrigin when unset", async () => {
 
   await client.publishProfileArtifactShare("profile_1", "report.md");
 
-  expect(JSON.parse(fetchCalls[0]!.init?.body as string)).toEqual({
+  expect(JSON.parse(String(fetchCalls[0]!.init?.body))).toEqual({
     path: "report.md",
   });
 });
 
 test("listSessions asks for several channels and a page in one request", async () => {
   const urls: string[] = [];
+
   const client = new NakamaClient({
     baseUrl: "http://localhost:4310",
-    fetch: (async (input, init) => {
+    fetch: async (input, init) => {
       urls.push(new Request(input, init).url);
+
       return Response.json({ sessions: [] });
-    }) as typeof fetch,
+    },
   });
+
   await client.listSessions("agent-a");
   await client.listSessions("agent-a", ["web", "telegram"], {
     cursor: null,
@@ -766,6 +825,7 @@ test("listSessions asks for several channels and a page in one request", async (
 test("artifact download budget stops declared and chunked oversize bodies", async () => {
   for (const declared of [undefined, "100", "1"]) {
     let cancelled = false;
+
     const body = new ReadableStream<Uint8Array>({
       cancel() {
         cancelled = true;
@@ -774,12 +834,14 @@ test("artifact download budget stops declared and chunked oversize bodies", asyn
         controller.enqueue(new Uint8Array(5));
       },
     });
+
     const client = new NakamaClient({
-      fetch: (async () =>
+      fetch: async () =>
         new Response(body, {
           headers: declared ? { "Content-Length": declared } : {},
-        })) as unknown as typeof fetch,
+        }),
     });
+
     await expect(
       client.readProfileArtifactContent("profile", "report.csv", {
         maxBytes: 4,
@@ -787,9 +849,11 @@ test("artifact download budget stops declared and chunked oversize bodies", asyn
     ).rejects.toThrow();
     expect(cancelled).toBe(true);
   }
+
   const client = new NakamaClient({
-    fetch: (async () => new Response("1234")) as unknown as typeof fetch,
+    fetch: async () => new Response("1234"),
   });
+
   expect(
     new TextDecoder().decode(
       (
@@ -805,9 +869,11 @@ test("artifact download cancellation aborts a pending body read and forwards the
   const controller = new AbortController();
   let cancelled = false;
   let requestSignal: AbortSignal | null | undefined;
+
   const client = new NakamaClient({
-    fetch: (async (_input, init) => {
+    fetch: async (_input, init) => {
       requestSignal = init?.signal;
+
       return new Response(
         new ReadableStream({
           cancel() {
@@ -815,12 +881,14 @@ test("artifact download cancellation aborts a pending body read and forwards the
           },
         })
       );
-    }) as typeof fetch,
+    },
   });
+
   const download = client.readProfileArtifactContent("profile", "report.csv", {
     maxBytes: 10,
     signal: controller.signal,
   });
+
   await new Promise((resolve) => setTimeout(resolve, 5));
   controller.abort();
   await expect(download).rejects.toThrow();
