@@ -178,7 +178,7 @@ export async function resolveUserContentForProvider(
 
 export function toAnthropicDocumentBlock(
   part: Extract<MessageContentPart, { type: "document" }>
-){
+) {
   return {
     source: {
       data: part.data,
@@ -192,7 +192,7 @@ export function toAnthropicDocumentBlock(
 export function toOpenAIResponsesDocumentBlock(
   part: Extract<MessageContentPart, { type: "document" }>,
   toDataUrl: (mediaType: string, base64: string) => string
-){
+) {
   return {
     file_data: toDataUrl(part.mediaType, part.data),
     filename: part.filename,

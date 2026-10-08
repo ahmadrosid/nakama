@@ -1,11 +1,13 @@
-import type { ChatMessage, JsonValue } from "./contract";
 import { z } from "zod";
+import type { ChatMessage, JsonValue } from "./contract";
 
 type JsonObject = Record<string, JsonValue>;
 
 const JsonObjectSchema = z.record(z.string(), z.json());
 
-const ReasoningSummarySchema = z.array(z.object({ text: z.string().optional() }));
+const ReasoningSummarySchema = z.array(
+  z.object({ text: z.string().optional() })
+);
 
 function asRecord(value: JsonValue): JsonObject | null {
   const parsed = JsonObjectSchema.safeParse(value);
@@ -16,31 +18,31 @@ function asRecord(value: JsonValue): JsonObject | null {
 function readTrimmedText(value: JsonValue | undefined): string | undefined {
   const parsed = z.string().safeParse(value);
 
-  if (!parsed.success) return;
+  if (!parsed.success) {
+    return;
+  }
 
   const text = parsed.data.trim();
 
   return text || undefined;
 }
 
-function extractThinkingBlockText(
-  block: JsonObject
-): string | undefined {
+function extractThinkingBlockText(block: JsonObject): string | undefined {
   return block.type === "thinking"
     ? readTrimmedText(block.thinking)
     : undefined;
 }
 
-function extractReasoningSummaryTexts(
-  block: JsonObject
-): string[] {
+function extractReasoningSummaryTexts(block: JsonObject): string[] {
   if (block.type !== "reasoning") {
     return [];
   }
 
   const summary = ReasoningSummarySchema.safeParse(block.summary);
 
-  if (!summary.success) return [];
+  if (!summary.success) {
+    return [];
+  }
 
   return summary.data.flatMap(({ text }) => {
     const parsedText = z.string().safeParse(text);

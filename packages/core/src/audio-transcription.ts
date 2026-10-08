@@ -1,7 +1,7 @@
+import { z } from "zod";
 import { NakamaApiError } from "./api-error";
 import { normalizeBaseUrl } from "./compatible-provider-config";
 import type { ProviderInstance } from "./user-config";
-import { z } from "zod";
 
 const TranscriptionResponseSchema = z.object({ text: z.string() });
 
@@ -55,7 +55,7 @@ export async function transcribeAudio(options: {
 
   const payload = TranscriptionResponseSchema.safeParse(await response.json());
 
-  if (!payload.success || !payload.data.text.trim()) {
+  if (!(payload.success && payload.data.text.trim())) {
     throw new NakamaApiError("Audio transcription returned empty text.", 502);
   }
 

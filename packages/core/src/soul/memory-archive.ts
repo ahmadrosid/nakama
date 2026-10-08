@@ -92,8 +92,8 @@ export function rebuildMemoryContent(parsed: ParsedMemory): string {
 
 export interface PartitionedMemoryEntries {
   active: ParsedMemory;
-  archivedSections: MemorySection[];
   archivedCount: number;
+  archivedSections: MemorySection[];
   unmatched: string[];
 }
 

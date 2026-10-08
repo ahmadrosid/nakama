@@ -896,9 +896,7 @@ function buildConfigIniLines(
 
   lines.push(`thinking=${thinkingEnabled ? "on" : "off"}`);
 
-  const effort = validateThinkingEffort(
-    mergedGlobal.thinking_effort?.trim()
-  );
+  const effort = validateThinkingEffort(mergedGlobal.thinking_effort?.trim());
 
   lines.push(`thinking_effort=${effort}`);
 
@@ -929,9 +927,7 @@ function readThinkingSettings(
   const raw = values.thinking?.trim().toLowerCase();
 
   return {
-    effort: validateThinkingEffort(
-      values.thinking_effort?.trim()
-    ),
+    effort: validateThinkingEffort(values.thinking_effort?.trim()),
     enabled: raw === undefined ? DEFAULT_THINKING_ENABLED : raw !== "off",
   };
 }

@@ -2,7 +2,6 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { NakamaApiError } from "./api-error";
 import {
   normalizeAutomationDelivery,
   shouldDeliverForRun,
@@ -249,13 +248,15 @@ describe("validateAutomationDelivery", () => {
       "utf8"
     );
 
-    await expect(validateAutomationDelivery(
-      {
-        channel: "discord",
-        channelId: "123456789012345679",
-      },
-      { ...owner, access: { orgRole: "member" } }
-    )).rejects.toMatchObject({ status: 403 });
+    await expect(
+      validateAutomationDelivery(
+        {
+          channel: "discord",
+          channelId: "123456789012345679",
+        },
+        { ...owner, access: { orgRole: "member" } }
+      )
+    ).rejects.toMatchObject({ status: 403 });
 
     await rm(configDir, { force: true, recursive: true });
   });

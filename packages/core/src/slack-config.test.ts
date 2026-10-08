@@ -3,8 +3,8 @@ import { writeFile } from "node:fs/promises";
 import { withTempHome } from "./channel-test-helpers";
 import { parseSlackMemberIdInput } from "./contract";
 import {
-  isSlackWorkspaceMember,
   getSlackConfigPath,
+  isSlackWorkspaceMember,
   loadSlackSettingsPublic,
   parseSlackUserIds,
   saveSlackConfig,

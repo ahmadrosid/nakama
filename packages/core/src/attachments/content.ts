@@ -48,8 +48,7 @@ export async function persistInlineAttachmentsInContent(
   save: SaveInlineAttachment
 ): Promise<string | MessageContentPart[]> {
   if (
-    !Array.isArray(content) ||
-    !messageContentHasInlineAttachments(content)
+    !(Array.isArray(content) && messageContentHasInlineAttachments(content))
   ) {
     return content;
   }

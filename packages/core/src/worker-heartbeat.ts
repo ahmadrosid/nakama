@@ -1,8 +1,8 @@
 import { Database } from "bun:sqlite";
 import { chmod } from "node:fs/promises";
 import { join } from "node:path";
-import type { JsonValue } from "./contract";
 import { z } from "zod";
+import type { JsonValue } from "./contract";
 import {
   ensureDir,
   pathExists,
@@ -15,10 +15,12 @@ const DEFAULT_WORKER_HEARTBEAT_MAX_AGE_MS = 45_000;
 
 const HEARTBEAT_FILENAME = "worker-heartbeat.json";
 
-const WorkerHeartbeatSchema = z.object({
-  pid: z.number().int(),
-  updatedAt: z.string(),
-}).catchall(z.json());
+const WorkerHeartbeatSchema = z
+  .object({
+    pid: z.number().int(),
+    updatedAt: z.string(),
+  })
+  .catchall(z.json());
 
 export type WorkerHeartbeatBase = {
   pid: number;
@@ -164,7 +166,7 @@ export function createWorkerHeartbeatStore<
     heartbeat: T | null,
     maxAgeMs = DEFAULT_WORKER_HEARTBEAT_MAX_AGE_MS
   ): boolean => {
-    if (!heartbeat || !isHeartbeatAlive(heartbeat, maxAgeMs)) {
+    if (!(heartbeat && isHeartbeatAlive(heartbeat, maxAgeMs))) {
       return false;
     }
 

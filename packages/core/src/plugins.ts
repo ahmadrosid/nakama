@@ -724,8 +724,7 @@ function parseActions(
     const inputSchema = JsonValueSchema.safeParse(item.inputSchema);
 
     if (
-      !inputSchema.success ||
-      !validatePluginJsonSchema(inputSchema.data).ok
+      !(inputSchema.success && validatePluginJsonSchema(inputSchema.data).ok)
     ) {
       return fail("unsupported_schema");
     }

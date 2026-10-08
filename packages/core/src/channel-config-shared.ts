@@ -105,7 +105,9 @@ export function assertChannelPath(path: string): void {
         throw new Error("Channel paths cannot contain symbolic links");
       }
     } catch (error) {
-      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
+      if (
+        !(error instanceof Error && "code" in error && error.code === "ENOENT")
+      ) {
         throw error;
       }
     }
@@ -162,7 +164,9 @@ export async function claimChannelIdentity(
   try {
     await writeFile(path, value, { flag: "wx", mode: 0o600 });
   } catch (error) {
-    if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) {
+    if (
+      !(error instanceof Error && "code" in error && error.code === "EEXIST")
+    ) {
       throw error;
     }
 
@@ -259,7 +263,9 @@ export async function withPairingConfigLock<T>(
       await writeFile(path, `${process.pid}\n`, { flag: "wx", mode: 0o600 });
       break;
     } catch (error) {
-      if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) {
+      if (
+        !(error instanceof Error && "code" in error && error.code === "EEXIST")
+      ) {
         throw error;
       }
 

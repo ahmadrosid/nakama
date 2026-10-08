@@ -218,7 +218,10 @@ function artifactNotFound(filename: string): NakamaApiError {
 
 // A stale chat link, or a profile that never wrote an artifact, is a missing
 // resource. Left as a raw fs error it answers 500 and logs a stack per click.
-function artifactNotFoundOr(error: Error, filename: string): Error | NakamaApiError {
+function artifactNotFoundOr(
+  error: Error,
+  filename: string
+): Error | NakamaApiError {
   const code = "code" in error ? error.code : undefined;
 
   return code === "ENOENT" || code === "ENOTDIR"
@@ -472,7 +475,12 @@ export async function listWorkspaceFiles(
   try {
     children = await readdir(directory, { withFileTypes: true });
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT" && !folder) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "ENOENT" &&
+      !folder
+    ) {
       return { entries: [] };
     }
 
@@ -753,7 +761,11 @@ export async function renameWorkspaceEntry(input: {
           await moveWorkspacePath(after, before);
         }
 
-        if (error instanceof Error && "code" in error && error.code === "EEXIST") {
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "EEXIST"
+        ) {
           throw new NakamaApiError(
             "A file or folder with that name already exists.",
             409

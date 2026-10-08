@@ -132,8 +132,8 @@ export function fingerprintError(
 }
 
 interface ErrorParts {
-  name: string;
   message: string;
+  name: string;
   stack?: string;
 }
 
@@ -184,12 +184,12 @@ export function buildErrorReport(
   const stack = parts.stack ? scrubText(parts.stack) : undefined;
 
   const report: ErrorReport = {
+    at: new Date().toISOString(),
     fingerprint: fingerprintError(parts.name, parts.message, parts.stack),
     id: randomUUID(),
     kind: options.kind ?? "crash",
     message: scrubText(parts.message),
     name: parts.name,
-    at: new Date().toISOString(),
     runtime: {
       apiVersion: NAKAMA_API_VERSION,
       arch: process.arch,

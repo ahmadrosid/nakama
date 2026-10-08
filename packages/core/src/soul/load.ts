@@ -64,7 +64,13 @@ export async function loadSoulStack(
       try {
         raw = await readText(join(directory, filename));
       } catch (error) {
-        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
+        if (
+          !(
+            error instanceof Error &&
+            "code" in error &&
+            error.code === "ENOENT"
+          )
+        ) {
           throw error;
         }
       }

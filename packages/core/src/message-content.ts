@@ -467,9 +467,7 @@ async function mapResolvedUserContent(
       return mapImage(part);
     }
 
-    throw new Error(
-      `Unsupported content part type: ${part.type}`
-    );
+    throw new Error(`Unsupported content part type: ${part.type}`);
   });
 }
 

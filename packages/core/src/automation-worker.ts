@@ -27,10 +27,12 @@ const store = createWorkerHeartbeatStore<AutomationWorkerHeartbeat>({
   getDir: getAutomationConfigDir,
   isAliveExtra: (heartbeat) => heartbeat.running,
   parse: (value, base) => {
-    const parsed = z.object({
-      running: z.boolean(),
-      scheduledJobs: z.number(),
-    }).safeParse(value);
+    const parsed = z
+      .object({
+        running: z.boolean(),
+        scheduledJobs: z.number(),
+      })
+      .safeParse(value);
 
     if (!parsed.success) {
       return null;

@@ -3,12 +3,12 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NakamaApiError } from "./api-error";
-import type { JsonValue } from "./contract";
 import { validateAutomationDelivery } from "./automation-delivery";
 import {
   canApproveAutomationDeliveryDestination,
   isTelegramDeliveryChatAuthorized,
 } from "./automation-delivery-destination";
+import type { JsonValue } from "./contract";
 import { getDiscordConfigDir, getDiscordConfigPath } from "./discord-config";
 import { getTelegramConfigDir, getTelegramConfigPath } from "./telegram-config";
 
@@ -64,7 +64,9 @@ function jsonResponse(body: Record<string, JsonValue>, status = 200): Response {
   });
 }
 
-async function captureRejection(run: () => Promise<void>): Promise<NakamaApiError> {
+async function captureRejection(
+  run: () => Promise<void>
+): Promise<NakamaApiError> {
   try {
     await run();
   } catch (error) {

@@ -196,13 +196,22 @@ export async function promptForProviderConfig(
     if ((provider === "fireworks" || provider === "cerebras") && catalogModel) {
       const model: CustomModelEntry = { default: true, id: selectedModel };
 
-      if (catalogModel.supportsThinking !== undefined) model.supportsThinking = catalogModel.supportsThinking;
+      if (catalogModel.supportsThinking !== undefined) {
+        model.supportsThinking = catalogModel.supportsThinking;
+      }
 
-      if (catalogModel.supportsVision !== undefined) model.supportsVision = catalogModel.supportsVision;
+      if (catalogModel.supportsVision !== undefined) {
+        model.supportsVision = catalogModel.supportsVision;
+      }
 
-      if (catalogModel.inputPerMillionUsd !== undefined) model.inputPerMillionUsd = catalogModel.inputPerMillionUsd;
+      if (catalogModel.inputPerMillionUsd !== undefined) {
+        model.inputPerMillionUsd = catalogModel.inputPerMillionUsd;
+      }
 
-      if (catalogModel.outputPerMillionUsd !== undefined) model.outputPerMillionUsd = catalogModel.outputPerMillionUsd;
+      if (catalogModel.outputPerMillionUsd !== undefined) {
+        model.outputPerMillionUsd = catalogModel.outputPerMillionUsd;
+      }
+
       customModels = [model];
     }
 
@@ -214,9 +223,13 @@ export async function promptForProviderConfig(
       type: getModelById(selectedModel)?.provider ?? provider,
     };
 
-    if (cloudflareBaseUrl) instance.baseUrl = cloudflareBaseUrl;
+    if (cloudflareBaseUrl) {
+      instance.baseUrl = cloudflareBaseUrl;
+    }
 
-    if (customModels) instance.customModels = customModels;
+    if (customModels) {
+      instance.customModels = customModels;
+    }
 
     return buildUserConfigFromInstance(instance);
   }
@@ -365,13 +378,17 @@ async function promptForOllamaProviderInstance(
       apiKey,
       baseUrl,
       createdAt: new Date().toISOString(),
-      customModels: validateCustomModels(modelIds.map((id, index) => {
-        const model: CustomModelEntry = { id };
+      customModels: validateCustomModels(
+        modelIds.map((id, index) => {
+          const model: CustomModelEntry = { id };
 
-        if (index === 0) model.default = true;
+          if (index === 0) {
+            model.default = true;
+          }
 
-        return model;
-      })),
+          return model;
+        })
+      ),
       hostMode,
       id: createProviderInstanceId(),
       label: defaultOllamaLabel(hostMode),
@@ -410,13 +427,17 @@ async function promptForCompatibleProviderInstance(
       continue;
     }
 
-    const customModels = validateCustomModels(modelIds.map((id, index) => {
-      const model: CustomModelEntry = { id };
+    const customModels = validateCustomModels(
+      modelIds.map((id, index) => {
+        const model: CustomModelEntry = { id };
 
-      if (index === 0) model.default = true;
+        if (index === 0) {
+          model.default = true;
+        }
 
-      return model;
-    }));
+        return model;
+      })
+    );
 
     const instance: ProviderInstance = {
       apiKey,
@@ -428,7 +449,9 @@ async function promptForCompatibleProviderInstance(
       type: "openai_compatible",
     };
 
-    if (wireApi) instance.wireApi = wireApi;
+    if (wireApi) {
+      instance.wireApi = wireApi;
+    }
 
     return instance;
   }

@@ -15,6 +15,7 @@ interface KnowledgeBaseManifestFixture {
   documents: Array<{ contentHash?: string }>;
   sharedDocumentIds?: string[] | string;
 }
+
 import {
   getKnowledgeBaseDir,
   getKnowledgeBaseExtractedPath,
@@ -69,15 +70,19 @@ describe("knowledge base store", () => {
   test("bounds the catalog and searches documents without listing their names", async () => {
     const profileId = "profile_kb_catalog";
     await setupProfile(profileId);
+
     const uploaded = await uploadKnowledgeBaseDocument(ORG_ID, profileId, {
       data: Buffer.from("invoice due date").toString("base64"),
       filename: "catalog-source.txt",
       mediaType: "text/plain",
     });
+
     const before = await composeKnowledgeBaseCatalog(ORG_ID, profileId);
+
     const manifestPath = getKnowledgeBaseManifestPath(
       getKnowledgeBaseDir(ORG_ID, profileId)
     );
+
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
     manifest.documents.push(
       ...Array.from({ length: 199 }, (_, index) => ({
@@ -92,13 +97,16 @@ describe("knowledge base store", () => {
     expect(after.match(/\b(\d+) ready documents\b/)?.[1]).toBe("200");
     expect(Buffer.byteLength(after) - Buffer.byteLength(before)).toBe(2);
     expect(after).not.toContain(uploaded.document.filename);
+
     const { runKnowledgeBaseSearch } = await import(
       "../tools/knowledge-base-search"
     );
+
     const result = await runKnowledgeBaseSearch(
       { query: "date invoice" },
       { orgId: ORG_ID, profileId }
     );
+
     expect(result.matchCount).toBe(1);
     expect(result.matches[0]?.text).toContain("invoice due date");
   });
@@ -106,21 +114,26 @@ describe("knowledge base store", () => {
   test("counts only current ready documents in the profile's scope", async () => {
     const profileId = "profile_kb_catalog_scope";
     await setupProfile(profileId);
+
     const source = {
       data: Buffer.from("scope check").toString("base64"),
       filename: "scope.txt",
       mediaType: "text/plain",
     };
+
     const profile = await uploadKnowledgeBaseDocument(
       ORG_ID,
       profileId,
       source
     );
+
     await uploadKnowledgeBaseDocument(ORG_ID, "other_profile", source);
+
     const shared = await uploadOrganizationKnowledgeBaseDocument(
       ORG_ID,
       source
     );
+
     await uploadOrganizationKnowledgeBaseDocument(ORG_ID, {
       ...source,
       data: Buffer.from("unattached content").toString("base64"),

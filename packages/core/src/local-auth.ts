@@ -46,19 +46,25 @@ function toPersistedUserConfig(
     providers: config?.providers ?? [],
   };
 
-  if (config?.timezone) persisted.timezone = config.timezone;
+  if (config?.timezone) {
+    persisted.timezone = config.timezone;
+  }
 
   if (config?.thinkingEnabled !== undefined) {
     persisted.thinkingEnabled = config.thinkingEnabled;
   }
 
-  if (config?.thinkingEffort) persisted.thinkingEffort = config.thinkingEffort;
+  if (config?.thinkingEffort) {
+    persisted.thinkingEffort = config.thinkingEffort;
+  }
 
   if (config?.localAuthTokenHash) {
     persisted.localAuthTokenHash = config.localAuthTokenHash;
   }
 
-  if (config?.localAuthToken) persisted.localAuthToken = config.localAuthToken;
+  if (config?.localAuthToken) {
+    persisted.localAuthToken = config.localAuthToken;
+  }
 
   return persisted;
 }

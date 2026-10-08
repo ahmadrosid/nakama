@@ -210,9 +210,7 @@ export function assertSupportingFileAllowed(filePath: string): void {
     );
   }
 
-  if (
-    SKILL_TOOL_FILES.some((name) => name.toLowerCase() === lower)
-  ) {
+  if (SKILL_TOOL_FILES.some((name) => name.toLowerCase() === lower)) {
     throw new Error(
       `Skill-local tools (${SKILL_TOOL_FILES.join(", ")}) cannot be written by agents.`
     );

@@ -1,5 +1,5 @@
-import type { JsonValue } from "./contract";
 import { z } from "zod";
+import type { JsonValue } from "./contract";
 
 export type Connection = { url: string; token: string };
 

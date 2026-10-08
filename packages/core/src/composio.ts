@@ -1,12 +1,15 @@
+import { z } from "zod";
+import type { JsonValue } from "./contract";
 import {
   COMPOSIO_TOOLKIT_SLUG_PATTERN,
   type EnableComposioToolkitRequest,
   type UpdateProfileComposioToolkitsRequest,
 } from "./contract";
-import type { JsonValue } from "./contract";
-import { z } from "zod";
 
-function normalizeToolkitSlug(value: JsonValue | undefined, fieldName: string): string {
+function normalizeToolkitSlug(
+  value: JsonValue | undefined,
+  fieldName: string
+): string {
   const parsed = z.string().trim().min(1).safeParse(value);
 
   if (!parsed.success) {
@@ -58,7 +61,9 @@ function normalizeActionSlugList(
 export function normalizeEnableComposioToolkitRequest(
   value: JsonValue
 ): EnableComposioToolkitRequest {
-  const parsed = z.object({ toolkitSlug: z.json().optional() }).safeParse(value);
+  const parsed = z
+    .object({ toolkitSlug: z.json().optional() })
+    .safeParse(value);
 
   if (!parsed.success) {
     throw new Error("toolkit request must be an object.");
@@ -80,10 +85,12 @@ export function normalizeUpdateProfileComposioToolkitsRequest(
 
   return {
     assignments: parsed.data.assignments.map((entry, index) => {
-      const assignmentResult = z.object({
-        allowedActions: z.json().optional(),
-        toolkitId: z.string().trim().min(1),
-      }).safeParse(entry);
+      const assignmentResult = z
+        .object({
+          allowedActions: z.json().optional(),
+          toolkitId: z.string().trim().min(1),
+        })
+        .safeParse(entry);
 
       if (!assignmentResult.success) {
         throw new Error(`assignments[${index}] must be an object.`);

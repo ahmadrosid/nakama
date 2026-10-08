@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { z } from "zod";
 import {
   assertChannelPath,
   type BotChannelConfigFile,
@@ -14,10 +15,9 @@ import {
   resolveHandshakeOnSave,
   verifyAndPairBotChannelUser,
 } from "./channel-config-shared";
-import { parseSlackMemberIdInput } from "./contract";
 import type { JsonValue } from "./contract";
+import { parseSlackMemberIdInput } from "./contract";
 import { parseIni, readTextOrNull, writeTextFile } from "./fs";
-import { z } from "zod";
 
 export {
   hasActiveHandshakeCode,
@@ -31,10 +31,12 @@ export const DEFAULT_SLACK_PROFILE_ID = "default";
 
 export const SLACK_API_BASE_URL = "https://slack.com/api";
 
-const SlackApiResponseSchema = z.object({
-  error: z.string().optional(),
-  ok: z.boolean().optional(),
-}).passthrough();
+const SlackApiResponseSchema = z
+  .object({
+    error: z.string().optional(),
+    ok: z.boolean().optional(),
+  })
+  .passthrough();
 
 export interface SlackConfigFile extends BotChannelConfigFile<string> {
   /** Any full member of the bot's own workspace may chat, without pairing. */
@@ -90,7 +92,9 @@ export async function callSlackApi<T extends object = object>(
     Authorization: `Bearer ${token}`,
   });
 
-  if (!flat) headers.set("Content-Type", "application/json; charset=utf-8");
+  if (!flat) {
+    headers.set("Content-Type", "application/json; charset=utf-8");
+  }
 
   const response = await fetch(`${SLACK_API_BASE_URL}/${method}`, {
     body: flat
@@ -107,7 +111,10 @@ export async function callSlackApi<T extends object = object>(
 
   const parsed = SlackApiResponseSchema.safeParse(await response.json());
 
-  if (!parsed.success) throw new Error(`Slack ${method} returned invalid JSON.`);
+  if (!parsed.success) {
+    throw new Error(`Slack ${method} returned invalid JSON.`);
+  }
+
   const payload = parsed.data;
 
   if (!payload.ok) {

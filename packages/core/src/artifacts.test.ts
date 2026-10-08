@@ -757,15 +757,19 @@ test("list_artifacts projects relative keys, and pages results", async () => {
 
   const context = { orgId: ORG_ID, profileId: PROFILE_ID, workspaceRoot: root };
 
-  const first = z.object({
-    artifacts: z.array(z.object({ path: z.string(), filename: z.string() })),
-    total: z.number(),
-  }).parse(await listArtifactsTool.run({}, context));
+  const first = z
+    .object({
+      artifacts: z.array(z.object({ filename: z.string(), path: z.string() })),
+      total: z.number(),
+    })
+    .parse(await listArtifactsTool.run({}, context));
 
-  const next = z.object({
-    artifacts: z.array(z.object({ path: z.string(), filename: z.string() })),
-    total: z.number(),
-  }).parse(await listArtifactsTool.run({ offset: 20 }, context));
+  const next = z
+    .object({
+      artifacts: z.array(z.object({ filename: z.string(), path: z.string() })),
+      total: z.number(),
+    })
+    .parse(await listArtifactsTool.run({ offset: 20 }, context));
 
   expect(first.total).toBe(22);
   expect(first.artifacts).toHaveLength(20);
@@ -819,9 +823,9 @@ test("list_artifacts rejects an artifacts-root symlink and skips symlink entries
       workspaceRoot: root,
     };
 
-    const listing = z.object({ total: z.number() }).parse(
-      await listArtifactsTool.run({}, context)
-    );
+    const listing = z
+      .object({ total: z.number() })
+      .parse(await listArtifactsTool.run({}, context));
 
     expect(listing.total).toBe(1);
     await rm(path.join(root, "artifacts"), { recursive: true });

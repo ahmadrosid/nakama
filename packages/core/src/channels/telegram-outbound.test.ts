@@ -2,10 +2,10 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
+import { z } from "zod";
 import type { JsonValue } from "../contract";
 import { saveTelegramConfig } from "../telegram-config";
 import { createTelegramOutboundAdapter } from "./telegram-outbound";
-import { z } from "zod";
 
 const owner = { orgId: "org_test", profileId: "agent_test" };
 

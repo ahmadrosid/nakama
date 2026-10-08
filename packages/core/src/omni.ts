@@ -17,7 +17,12 @@ import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import type { JsonSchema, JsonValue, ToolContext, ToolDefinition } from "./contract";
+import type {
+  JsonSchema,
+  JsonValue,
+  ToolContext,
+  ToolDefinition,
+} from "./contract";
 import {
   installOmni,
   type OmniInstallResult,
@@ -328,10 +333,7 @@ export async function distillToolResult(
 
   // Never accept a "shorter" version that is longer, and never accept an empty
   // one: both mean the contract changed under us.
-  if (
-    !replacement ||
-    replacement.length >= text.length
-  ) {
+  if (!replacement || replacement.length >= text.length) {
     report(CONTROL_ID, text.length);
 
     return result;

@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   type AutomationDeliveryAccess,
   assertDiscordBotCanPostToChannel,
@@ -16,7 +17,6 @@ import { isDiscordSnowflake, loadDiscordConfigFile } from "./discord-config";
 import { isEmailConfigComplete, loadEmailConfig } from "./email-config";
 import { loadTelegramConfigFile } from "./telegram-config";
 import { loadWhatsAppConfigFile } from "./whatsapp-config";
-import { z } from "zod";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

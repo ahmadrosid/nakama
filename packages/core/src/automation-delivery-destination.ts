@@ -1,13 +1,17 @@
+import { z } from "zod";
 import { NakamaApiError } from "./api-error";
 import type { OrgRole } from "./contract";
 import { DISCORD_API_BASE_URL, DISCORD_USER_AGENT } from "./discord-config";
 import { isTelegramUserAuthorized } from "./telegram-config";
-import { z } from "zod";
 
 const TelegramChatResponseSchema = z.object({
-  result: z.object({
-    permissions: z.object({ can_send_messages: z.boolean().optional() }).nullish(),
-  }).nullish(),
+  result: z
+    .object({
+      permissions: z
+        .object({ can_send_messages: z.boolean().optional() })
+        .nullish(),
+    })
+    .nullish(),
 });
 
 const DiscordUserResponseSchema = z.object({ id: z.string().min(1) });
@@ -16,10 +20,9 @@ const DiscordPermissionsResponseSchema = z.object({
   permissions: z.union([z.string(), z.number()]).optional(),
 });
 
-const PermissionBitsSchema = z.union([
-  z.string().regex(/^\d+$/).transform(Number),
-  z.number(),
-]).refine((bits) => Number.isSafeInteger(bits) && bits >= 0);
+const PermissionBitsSchema = z
+  .union([z.string().regex(/^\d+$/).transform(Number), z.number()])
+  .refine((bits) => Number.isSafeInteger(bits) && bits >= 0);
 
 /**
  * Caller identity used to decide who may pin automation output to a concrete
@@ -103,7 +106,10 @@ export async function assertTelegramBotCanPostToChat(options: {
   const json = await response.json().catch(() => null);
   const payload = TelegramChatResponseSchema.safeParse(json);
 
-  if (payload.success && payload.data.result?.permissions?.can_send_messages === false) {
+  if (
+    payload.success &&
+    payload.data.result?.permissions?.can_send_messages === false
+  ) {
     throw new NakamaApiError(
       `The configured Telegram bot cannot post in chat ${options.chatId}.`,
       400

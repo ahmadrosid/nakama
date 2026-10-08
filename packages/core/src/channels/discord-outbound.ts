@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   DISCORD_API_BASE_URL,
   DISCORD_USER_AGENT,
@@ -5,7 +6,6 @@ import {
 } from "../discord-config";
 import { splitTelegramChunks } from "./message-format";
 import type { ChannelSendResult, DiscordOutboundAdapter } from "./types";
-import { z } from "zod";
 
 const DISCORD_MESSAGE_MAX_LENGTH = 2000;
 
@@ -125,7 +125,9 @@ async function openDmChannel(
     };
   }
 
-  const payload = DiscordDmChannelResponseSchema.safeParse(await response.json());
+  const payload = DiscordDmChannelResponseSchema.safeParse(
+    await response.json()
+  );
 
   if (!payload.success) {
     return {

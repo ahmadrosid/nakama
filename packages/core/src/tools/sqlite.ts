@@ -45,7 +45,9 @@ const SqliteRowSchema = z.record(
 
 const JsonValueSchema = z.json();
 
-function toJsonSqliteValue(value: SqliteValue): z.infer<typeof JsonValueSchema> {
+function toJsonSqliteValue(
+  value: SqliteValue
+): z.infer<typeof JsonValueSchema> {
   const integer = z.bigint().safeParse(value);
 
   if (integer.success) {

@@ -163,7 +163,9 @@ export function buildUserContextStatus(
     active: content !== undefined,
   };
 
-  if (content !== undefined) status.content = content;
+  if (content !== undefined) {
+    status.content = content;
+  }
 
   return status;
 }

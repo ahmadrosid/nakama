@@ -18,15 +18,19 @@ type ChatSessionMap = Record<string, ChatSessionRecord>;
 
 const ChatSessionRecordSchema = z.object({
   artifactShareUrls: z.record(z.string(), z.string()).optional(),
-  deliverableArtifacts: z.array(z.object({
-    filename: z.string(),
-    mimeType: z.string(),
-    path: z.string(),
-    savedAt: z.string(),
-    sharePath: z.string().nullable(),
-    shareUrl: z.string().nullable(),
-    sizeBytes: z.number(),
-  })).optional(),
+  deliverableArtifacts: z
+    .array(
+      z.object({
+        filename: z.string(),
+        mimeType: z.string(),
+        path: z.string(),
+        savedAt: z.string(),
+        sharePath: z.string().nullable(),
+        shareUrl: z.string().nullable(),
+        sizeBytes: z.number(),
+      })
+    )
+    .optional(),
   profileId: z.string(),
   sessionId: z.string(),
   sessionIds: z.array(z.string()).optional(),

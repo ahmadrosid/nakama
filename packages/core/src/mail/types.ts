@@ -1,5 +1,5 @@
-import type { toMailboxConfig } from "../email-config";
 import { z } from "zod";
+import type { toMailboxConfig } from "../email-config";
 
 const MailAddressSchema = z.union([
   z.string(),

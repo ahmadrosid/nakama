@@ -1,8 +1,8 @@
 import { dirname } from "node:path";
+import { z } from "zod";
 import { createChatLock } from "./channel-chat-lock";
 import type { ListUserOrgsResponse, UserOrgSummary } from "./contract";
 import { readTextOrNull, writeTextFile } from "./fs";
-import { z } from "zod";
 
 export type ChannelOrgSelectionChannel = "telegram" | "whatsapp" | "discord";
 

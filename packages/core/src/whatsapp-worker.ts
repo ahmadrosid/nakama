@@ -25,7 +25,9 @@ export function createWhatsAppWorkerHeartbeat(
   return createWorkerHeartbeatStore<WhatsAppWorkerHeartbeat>({
     getDir: () => getWhatsAppConfigDir(orgId),
     parse: (value, base) => {
-      const parsed = z.object({ connected: z.boolean().optional() }).safeParse(value);
+      const parsed = z
+        .object({ connected: z.boolean().optional() })
+        .safeParse(value);
 
       return parsed.success ? { ...base, ...parsed.data } : null;
     },

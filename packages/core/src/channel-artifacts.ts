@@ -375,7 +375,11 @@ export function extractPairedTurnArtifacts(
     contentWrites.set(resolvedPath, { relativePath });
     const sizeBytes = getWriteFileResult(message)?.bytesWritten;
 
-    if (sizeBytes !== undefined && Number.isInteger(sizeBytes) && sizeBytes >= 0) {
+    if (
+      sizeBytes !== undefined &&
+      Number.isInteger(sizeBytes) &&
+      sizeBytes >= 0
+    ) {
       artifactsByPath.set(
         relativePath,
         buildArtifactRef(relativePath, {

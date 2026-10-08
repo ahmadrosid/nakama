@@ -2,10 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import type { JsonValue } from "../contract";
 import { getDiscordConfigDir, getDiscordConfigPath } from "../discord-config";
 import { createDiscordOutboundAdapter } from "./discord-outbound";
-import { z } from "zod";
 
 const owner = { orgId: "org_test", profileId: "agent_test" };
 
@@ -135,9 +135,9 @@ describe("createDiscordOutboundAdapter", () => {
 
       const adapter = createDiscordOutboundAdapter({
         fetchImpl: async (_input, init) => {
-          const body = z.object({ content: z.string() }).parse(
-            parseJsonObject(String(init?.body))
-          );
+          const body = z
+            .object({ content: z.string() })
+            .parse(parseJsonObject(String(init?.body)));
 
           contents.push(body.content);
 

@@ -134,8 +134,8 @@ test("a non-Error rejection still produces a report", () => {
 
 test("a circular rejection reports rather than throwing, at a shared fingerprint", () => {
   interface CircularFailure {
-    self?: unknown;
     kind?: string;
+    self?: unknown;
   }
 
   const circular: CircularFailure = {};
