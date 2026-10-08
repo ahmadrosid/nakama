@@ -16,7 +16,12 @@ import type { DatabaseAdapter } from "@nakama/db";
 import type { Server, ServerWebSocket } from "bun";
 import { z } from "zod";
 import { pluginActorFromContext } from "../tool-resolver";
-import { meetEnabled, meetingActionSchemas, run } from "./actions";
+import {
+  type MeetActionInput,
+  meetEnabled,
+  meetingActionSchemas,
+  run,
+} from "./actions";
 import { MeetingStore } from "./store";
 import { createStreamMeeting, generateNextMeetingTitle } from "./worker";
 
@@ -27,6 +32,7 @@ type Capture = {
   expiresAt: number;
   timer: ReturnType<typeof setTimeout>;
 };
+
 type SocketData = Capture & {
   abort?: AbortController;
   store?: MeetingStore;
@@ -46,6 +52,8 @@ const descriptions = {
   upload:
     "Import a Markdown transcript (1 MiB) or audio recording (7 MiB) into meeting history. Pass file bytes as base64.",
 };
+
+// SAFETY: Object.keys returns the exact keys of this local action map.
 const exposedActions = Object.keys(
   descriptions
 ) as (keyof typeof descriptions)[];
@@ -99,19 +107,24 @@ export class GoogleMeetService {
         new NakamaApiError("Google Meet is temporarily unavailable", 503)
       );
     }
+
     const current = this.initialized.get(orgId);
+
     if (current) {
       return current;
     }
+
     const initialization = this.initializeOrganization(orgId).catch((error) => {
       this.initialized.delete(orgId);
       throw error;
     });
+
     this.initialized.set(orgId, initialization);
     this.tasks.set(initialization, orgId);
     void initialization
       .finally(() => this.tasks.delete(initialization))
       .catch(() => undefined);
+
     return initialization;
   }
 
@@ -119,21 +132,27 @@ export class GoogleMeetService {
     if (!(await this.db.getOrganizationById(orgId))) {
       throw new NakamaApiError("Organization unavailable", 404);
     }
+
     const directory = this.directory(orgId);
     const store = new MeetingStore(directory, orgId);
+
     try {
       store.recover();
     } finally {
       store.close();
     }
+
     rmSync(join(directory, "audio"), { force: true, recursive: true });
     const tools = await this.db.listTools();
     const now = new Date().toISOString();
+
     for (const action of exposedActions) {
       const name = `google_meet_${action}`;
+
       if (tools.some((tool) => tool.orgId === orgId && tool.name === name)) {
         continue;
       }
+
       await this.db.upsertTool({
         createdAt: now,
         description: descriptions[action],
@@ -148,19 +167,21 @@ export class GoogleMeetService {
   }
 
   tools(): ToolDefinition[] {
-    return exposedActions.map((action) => ({
-      description: descriptions[action],
-      discoveryGroup: "google-meet",
-      name: `google_meet_${action}`,
-      parameters: z.toJSONSchema(meetingActionSchemas[action]) as JsonSchema,
-      run: async (input: unknown, context: ToolContext) => {
+    return exposedActions.map((action) => {
+      const runAction = async (
+        input: MeetActionInput,
+        context: ToolContext
+      ) => {
         const actor = pluginActorFromContext(context);
         const orgId = context.orgId?.trim();
         const profileId = context.profileId?.trim();
+
         if (!(orgId && profileId && actor.id) || actor.role === "viewer") {
           throw new NakamaApiError("Forbidden", 403);
         }
+
         const member = await this.db.getOrgMember(orgId, actor.id);
+
         if (
           !member ||
           member.role === "viewer" ||
@@ -168,7 +189,9 @@ export class GoogleMeetService {
         ) {
           throw new NakamaApiError("Forbidden", 403);
         }
+
         const assigned = await this.db.listToolsForProfile(profileId);
+
         if (
           !assigned.some(
             (tool) =>
@@ -179,10 +202,13 @@ export class GoogleMeetService {
         ) {
           throw new NakamaApiError("Forbidden", 403);
         }
+
+        const parsedInput = meetingActionSchemas[action].parse(input);
+
         return this.invoke(
           orgId,
           action,
-          meetingActionSchemas[action].parse(input),
+          parsedInput,
           {
             id: actor.id,
             role:
@@ -193,14 +219,24 @@ export class GoogleMeetService {
           context.signal,
           profileId
         );
-      },
-    }));
+      };
+
+      return {
+        description: descriptions[action],
+        discoveryGroup: "google-meet",
+        name: `google_meet_${action}`,
+        // SAFETY: Zod emits a JSON Schema for the validated action schema.
+        parameters: z.toJSONSchema(meetingActionSchemas[action]) as JsonSchema,
+        // SAFETY: runAction validates input with the selected action schema before use.
+        run: runAction as ToolDefinition["run"],
+      };
+    });
   }
 
   invoke<Action extends MeetAction>(
     orgId: string,
     action: Action,
-    input: Record<string, unknown>,
+    input: MeetActionInput,
     actor: { id: string; role: "admin" | "member" | "viewer" },
     signal?: AbortSignal,
     profileId?: string
@@ -208,6 +244,7 @@ export class GoogleMeetService {
     if (!actor.id || actor.role === "viewer") {
       return Promise.reject(new NakamaApiError("Forbidden", 403));
     }
+
     if (
       this.paused ||
       this.abort.signal.aborted ||
@@ -217,23 +254,30 @@ export class GoogleMeetService {
         new NakamaApiError("Google Meet is temporarily unavailable", 503)
       );
     }
+
     const count = this.activeActions.get(orgId) ?? 0;
+
     if (count >= 4) {
       return Promise.reject(new NakamaApiError("Google Meet is busy", 429));
     }
+
     this.activeActions.set(orgId, count + 1);
+
     const combined = AbortSignal.any([
       this.abort.signal,
       ...(signal ? [signal] : []),
       AbortSignal.timeout(action === "upload" ? 120_000 : 30_000),
     ]);
+
     const task = (async () => {
       await this.ensureOrganization(orgId);
       combined.throwIfAborted();
       const organization = await this.db.getOrganizationById(orgId);
+
       if (!organization || organization.archivedAt) {
         throw new NakamaApiError("Organization unavailable", 404);
       }
+
       const result = await run(input, {
         actionKey: action,
         actor,
@@ -249,27 +293,37 @@ export class GoogleMeetService {
               once: true,
             });
           });
+
           return Promise.race([
             this.transcribeAudio(request, signal),
             cancelled,
           ]);
         },
       });
+
       if (action === "upload") {
+        // SAFETY: upload returns the imported meeting record.
         this.title(orgId, (result as Meeting).id);
       }
+
       if (action === "leave") {
         this.cancelQueuedCapture(orgId, String(input.meetingId));
       }
+
       if (action === "configure" && input.enabled === false) {
         await this.stopOrganization(orgId);
       }
+
+      // SAFETY: run returns the result schema selected by this action.
       return result as MeetActionResults[Action];
     })();
+
     this.tasks.set(task, orgId);
+
     return task.finally(() => {
       this.tasks.delete(task);
       const remaining = (this.activeActions.get(orgId) ?? 1) - 1;
+
       if (remaining) {
         this.activeActions.set(orgId, remaining);
       } else {
@@ -286,7 +340,9 @@ export class GoogleMeetService {
     ) {
       return;
     }
+
     const store = new MeetingStore(this.directory(orgId), orgId);
+
     const task = generateNextMeetingTitle(
       store,
       this.directory(orgId),
@@ -298,6 +354,7 @@ export class GoogleMeetService {
         store.close();
         this.tasks.delete(task);
       });
+
     this.tasks.set(task, orgId);
   }
 
@@ -305,11 +362,15 @@ export class GoogleMeetService {
     if (!this.listener) {
       this.startListener();
     }
+
     const hostname = process.env.NAKAMA_MEET_CAPTURE_HOST ?? "127.0.0.1";
+
     const address =
       process.env.NAKAMA_MEET_CAPTURE_ORIGIN ??
       `ws://${hostname}:${this.listener!.port}/capture`;
+
     const url = new URL(address);
+
     if (
       !["ws:", "wss:"].includes(url.protocol) ||
       url.pathname !== "/capture" ||
@@ -320,12 +381,14 @@ export class GoogleMeetService {
     ) {
       throw new Error("Invalid capture address");
     }
+
     return address;
   }
 
   private createCapture(orgId: string, meeting: Meeting) {
     const token = crypto.randomUUID();
     const expiresAt = Date.now() + meeting.durationMinutes * 60_000;
+
     const session: Capture = {
       directory: this.directory(orgId),
       expiresAt,
@@ -334,6 +397,7 @@ export class GoogleMeetService {
       timer: setTimeout(() => {
         this.sessions.delete(token);
         const store = new MeetingStore(this.directory(orgId), orgId);
+
         try {
           if (store.get(meeting.id)?.state === "queued") {
             store.update(meeting.id, "failed", "Capture session expired");
@@ -343,8 +407,10 @@ export class GoogleMeetService {
         }
       }, expiresAt - Date.now()),
     };
+
     session.timer.unref();
     this.sessions.set(token, session);
+
     return {
       token,
       url: `${this.captureUrl()}?meetingId=${meeting.id}&token=${token}`,
@@ -364,11 +430,14 @@ export class GoogleMeetService {
     this.listener = Bun.serve<SocketData>({
       fetch: (request, server) => {
         const url = new URL(request.url);
+
         if (request.method !== "GET" || url.pathname !== "/capture") {
           return new Response(null, { status: 404 });
         }
+
         const token = url.searchParams.get("token") ?? "";
         const session = this.sessions.get(token);
+
         if (
           this.paused ||
           !session ||
@@ -378,15 +447,19 @@ export class GoogleMeetService {
         ) {
           return new Response(null, { status: 401 });
         }
+
         const store = new MeetingStore(session.directory, session.orgId);
         const meeting = store.get(session.meetingId);
         store.close();
+
         if (meeting?.state !== "queued" || meeting.stopRequested) {
           return new Response(null, { status: 401 });
         }
+
         if (!server.upgrade(request, { data: { ...session } })) {
           return new Response(null, { status: 426 });
         }
+
         clearTimeout(session.timer);
         this.sessions.delete(token);
       },
@@ -399,11 +472,16 @@ export class GoogleMeetService {
         maxPayloadLength: 48_000,
         message: async (ws, message) => {
           try {
-            if (typeof message === "string") {
-              const event = JSON.parse(message) as {
-                type?: string;
-                protocol?: number;
-              };
+            const text = z.string().safeParse(message);
+
+            if (text.success) {
+              const event = z
+                .object({
+                  protocol: z.number().optional(),
+                  type: z.string().optional(),
+                })
+                .parse(JSON.parse(text.data));
+
               if (event.type === "stop") {
                 const done = this.finishSocket(ws, event.protocol === 2);
                 await ws.data.stream?.captured();
@@ -412,7 +490,11 @@ export class GoogleMeetService {
                 ws.close();
               }
             } else {
-              await ws.data.stream?.push(new Uint8Array(message));
+              const frame = z
+                .union([z.instanceof(ArrayBuffer), z.instanceof(Uint8Array)])
+                .parse(message);
+
+              await ws.data.stream?.push(new Uint8Array(frame));
             }
           } catch {
             ws.close(1011, "Audio stream failed");
@@ -424,25 +506,33 @@ export class GoogleMeetService {
           const store = new MeetingStore(directory, orgId);
           ws.data.store = store;
           const meeting = store.get(meetingId);
+
           if (!meeting) {
             ws.close(1008);
+
             return;
           }
+
           ws.data.abort = new AbortController();
+
           const stream = createStreamMeeting(
             meeting,
             store,
             directory,
             AbortSignal.any([this.abort.signal, ws.data.abort.signal])
           );
+
           ws.data.stream = stream;
           let stopSent = 0;
           ws.data.stopTimer = setInterval(() => {
             const current = store.get(meetingId);
+
             if (!current || this.abort.signal.aborted) {
               ws.close();
+
               return;
             }
+
             if (current.stopRequested || Date.now() >= sessionEnd(meeting)) {
               if (!stopSent) {
                 stopSent = Date.now();
@@ -466,6 +556,7 @@ export class GoogleMeetService {
   ): Promise<void> {
     ws.data.done ??= (async () => {
       clearInterval(ws.data.stopTimer);
+
       try {
         await ws.data.stream?.close(requestedStop);
       } catch {
@@ -478,10 +569,12 @@ export class GoogleMeetService {
         ws.data.store?.close();
         this.sockets.delete(ws);
       }
+
       if (!this.abort.signal.aborted) {
         this.title(ws.data.orgId, ws.data.meetingId);
       }
     })();
+
     return ws.data.done;
   }
 
@@ -491,15 +584,20 @@ export class GoogleMeetService {
         this.cancelQueuedCapture(orgId, session.meetingId);
       }
     }
+
     const active = [...this.sockets].filter((ws) => ws.data.orgId === orgId);
+
     for (const ws of active) {
       ws.data.abort?.abort();
       ws.close();
     }
+
     await Promise.all(active.map((ws) => this.finishSocket(ws, false)));
     const directory = this.directory(orgId);
+
     if (existsSync(directory)) {
       const store = new MeetingStore(directory, orgId);
+
       try {
         store.recover();
       } finally {
@@ -515,7 +613,9 @@ export class GoogleMeetService {
         409
       );
     }
+
     this.blockedOrganizations.add(orgId);
+
     return () => this.blockedOrganizations.delete(orgId);
   }
 
@@ -530,7 +630,9 @@ export class GoogleMeetService {
         "Stop Google Meet capture and wait for imports/transcription before backing up or restoring"
       );
     }
+
     this.paused = true;
+
     try {
       return await operation();
     } finally {
@@ -540,18 +642,24 @@ export class GoogleMeetService {
 
   async close() {
     this.paused = true;
+
     for (const ws of this.sockets) {
       ws.send(JSON.stringify({ type: "stop-requested" }));
     }
+
     await Bun.sleep(this.sockets.size ? 500 : 0);
     this.abort.abort();
+
     for (const session of this.sessions.values()) {
       clearTimeout(session.timer);
     }
+
     this.sessions.clear();
+
     for (const ws of this.sockets) {
       ws.close();
     }
+
     await Promise.allSettled([
       ...this.tasks.keys(),
       ...[...this.sockets].map((ws) => this.finishSocket(ws, false)),
