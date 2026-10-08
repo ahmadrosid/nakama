@@ -8,9 +8,11 @@ import { queryClient } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 const ORG_A = { id: "org-a", name: "Org A", role: "admin", slug: "org-a" };
+
 const ORG_B = { id: "org-b", name: "Org B", role: "admin", slug: "org-b" };
 
 test("a tenant's cached data does not survive logout or an org switch", async () => {
+  // SAFETY: The test controls this fixture or mock and asserts the resulting behavior.
   const getMe = spyOn(client, "getMe").mockResolvedValue({
     activeOrgId: ORG_A.id,
     email: "admin@org-a.test",
@@ -18,10 +20,16 @@ test("a tenant's cached data does not survive logout or an org switch", async ()
     isPlatformAdmin: false,
     orgId: ORG_A.id,
   } as never);
+
+  // SAFETY: The test controls this fixture or mock and asserts the resulting behavior.
   const listUserOrgs = spyOn(client, "listUserOrgs").mockResolvedValue({
     orgs: [ORG_A, ORG_B],
   } as never);
+
+  // SAFETY: The test controls this fixture or mock and asserts the resulting behavior.
   const logout = spyOn(client, "logout").mockResolvedValue(undefined as never);
+
+  // SAFETY: The test controls this fixture or mock and asserts the resulting behavior.
   const setActiveOrg = spyOn(client, "setActiveOrg").mockResolvedValue({
     activeOrgId: ORG_B.id,
     email: "admin@org-a.test",
@@ -31,10 +39,13 @@ test("a tenant's cached data does not survive logout or an org switch", async ()
   } as never);
 
   let auth: ReturnType<typeof useAuth> | null = null;
+
   function Probe() {
     auth = useAuth();
+
     return null;
   }
+
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -73,14 +84,17 @@ test("a tenant's cached data does not survive logout or an org switch", async ()
   } finally {
     await act(async () => root.unmount());
     container.remove();
+
     for (const spy of [getMe, listUserOrgs, logout, setActiveOrg]) {
       spy.mockRestore();
     }
+
     queryClient.clear();
   }
 });
 
 test("a platform admin resolves an active organization without membership", async () => {
+  // SAFETY: The test controls this fixture or mock and asserts the resulting behavior.
   const getMe = spyOn(client, "getMe").mockResolvedValue({
     activeOrgId: ORG_B.id,
     email: "platform@example.com",
@@ -88,23 +102,32 @@ test("a platform admin resolves an active organization without membership", asyn
     isPlatformAdmin: true,
     orgId: ORG_B.id,
   } as never);
+
+  // SAFETY: The test controls this fixture or mock and asserts the resulting behavior.
   const listUserOrgs = spyOn(client, "listUserOrgs").mockResolvedValue({
     orgs: [],
   } as never);
+
+  // SAFETY: The test mock returns the organization fields used by this hook.
   const listPlatformOrganizations = spyOn(
     client,
     "listPlatformOrganizations"
   ).mockResolvedValue({
     organizations: [{ id: ORG_B.id, name: ORG_B.name, slug: ORG_B.slug }],
   } as never);
+
   let auth: ReturnType<typeof useAuth> | null = null;
+
   function Probe() {
     auth = useAuth();
+
     return null;
   }
+
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
+
   try {
     await act(async () =>
       root.render(
@@ -113,18 +136,22 @@ test("a platform admin resolves an active organization without membership", asyn
         </AuthProvider>
       )
     );
+
     const currentAuth = (): ReturnType<typeof useAuth> => {
       if (!auth) {
         throw new Error("Auth state did not load");
       }
+
       return auth;
     };
+
     expect(currentAuth().activeOrg?.id).toBe(ORG_B.id);
     expect(currentAuth().activeOrg?.role).toBeUndefined();
     expect(currentAuth().orgs).toEqual([]);
   } finally {
     await act(async () => root.unmount());
     container.remove();
+
     for (const spy of [getMe, listUserOrgs, listPlatformOrganizations]) {
       spy.mockRestore();
     }
@@ -132,6 +159,7 @@ test("a platform admin resolves an active organization without membership", asyn
 });
 
 test("required MFA does not request the protected platform list", async () => {
+  // SAFETY: The test controls this fixture or mock and asserts the resulting behavior.
   const getMe = spyOn(client, "getMe").mockResolvedValue({
     activeOrgId: ORG_A.id,
     email: "platform@example.com",
@@ -140,17 +168,23 @@ test("required MFA does not request the protected platform list", async () => {
     mfaEnrolled: false,
     mfaRequired: true,
   } as never);
+
+  // SAFETY: The test controls this fixture or mock and asserts the resulting behavior.
   const listUserOrgs = spyOn(client, "listUserOrgs").mockResolvedValue({
     orgs: [ORG_A],
   } as never);
+
   const listPlatformOrganizations = spyOn(client, "listPlatformOrganizations");
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
+
   function Probe() {
     const auth = useAuth();
+
     return <span>{auth.user?.id}</span>;
   }
+
   try {
     await act(async () =>
       root.render(
@@ -164,6 +198,7 @@ test("required MFA does not request the protected platform list", async () => {
   } finally {
     await act(async () => root.unmount());
     container.remove();
+
     for (const spy of [getMe, listUserOrgs, listPlatformOrganizations]) {
       spy.mockRestore();
     }

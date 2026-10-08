@@ -114,6 +114,7 @@ function cerebrasPricingPerMillion(
 
 function truncateDescription(value: string): string {
   const trimmed = value.trim();
+
   if (trimmed.length <= 160) {
     return trimmed;
   }
@@ -146,6 +147,7 @@ export function normalizeCerebrasModels(
   apiJson: CerebrasModelsApiResponse
 ): CerebrasModelRow[] {
   const data = apiJson.data ?? [];
+
   return data.map(normalizeCerebrasModel).sort(compareCerebrasModelRows);
 }
 

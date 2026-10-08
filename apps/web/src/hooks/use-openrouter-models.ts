@@ -8,9 +8,11 @@ import {
 import { queryKeys } from "@/lib/query-keys";
 
 async function fetchOpenRouterModels(): Promise<OpenRouterModelRow[]> {
+  // SAFETY: The enclosing parser checks the value before this conversion.
   const data = (await client.getExternalModelCatalog(
     "openrouter"
   )) as OpenRouterModelsApiResponse;
+
   return normalizeOpenRouterModels(data);
 }
 

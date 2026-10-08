@@ -12,6 +12,7 @@ export type MarkdownHeading = {
 export const MARKDOWN_TOC_MIN_HEADINGS = 2;
 
 const FENCE_PATTERN = /^ {0,3}(`{3,}|~{3,})/;
+
 /** 4+ leading spaces is an indented code block, so the hash is not a heading. */
 const HEADING_PATTERN = /^ {0,3}(#{1,3}) +(.*)$/;
 
@@ -35,11 +36,13 @@ export function extractMarkdownHeadings(markdown: string): MarkdownHeading[] {
 
     if (fence) {
       const marker = fence[1][0];
+
       if (openFence === null) {
         openFence = marker;
       } else if (openFence === marker) {
         openFence = null;
       }
+
       continue;
     }
 
@@ -48,11 +51,13 @@ export function extractMarkdownHeadings(markdown: string): MarkdownHeading[] {
     }
 
     const heading = HEADING_PATTERN.exec(line);
+
     if (!heading) {
       continue;
     }
 
     const text = plainMarkdownText(heading[2]);
+
     if (!text) {
       continue;
     }

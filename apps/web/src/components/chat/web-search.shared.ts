@@ -20,13 +20,7 @@ export interface WebFetchToolState {
   status: "running" | "done";
 }
 
-type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonValue[]
-  | JsonRecord;
+type JsonValue = string | number | boolean | null | JsonValue[] | JsonRecord;
 
 export type JsonRecord = { [key: string]: JsonValue };
 

@@ -6,6 +6,7 @@ import {
 import type { InfiniteData } from "@tanstack/react-query";
 
 const POLL_MS = 2000;
+
 /**
  * How long after its last update an untitled session is still expected to get a
  * title. The title is generated after the turn returns, so the list has to look
@@ -32,6 +33,7 @@ export function sessionListPollInterval(
   }
 
   const now = options.now ?? Date.now();
+
   const waiting = sessions?.some(
     (session) =>
       session.active ||
@@ -54,6 +56,7 @@ export function withFirstPage(
   if (data.pages.length > 1 && data.pageParams[1] !== head.nextCursor) {
     return null;
   }
+
   return { ...data, pages: [head, ...data.pages.slice(1)] };
 }
 

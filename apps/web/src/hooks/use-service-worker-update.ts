@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const SERVICE_WORKER_URL = "/sw.js";
+
 /** A standalone install can stay open for days, so re-check on each return. */
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -20,19 +21,23 @@ export function useServiceWorkerUpdate(): ServiceWorkerUpdate {
 
   const [registration, setRegistration] =
     useState<ServiceWorkerRegistration | null>(null);
+
   const [installing, setInstalling] = useState<ServiceWorker | null>(null);
 
   useEffect(() => {
     if (!(import.meta.env.PROD && "serviceWorker" in navigator)) {
       return;
     }
+
     const container = navigator.serviceWorker;
     let disposed = false;
+
     const handleControllerChange = () => {
       if (reloadingRef.current) {
         window.location.reload();
       }
     };
+
     container.addEventListener("controllerchange", handleControllerChange);
     container
       .register(SERVICE_WORKER_URL, { scope: "/" })
@@ -41,9 +46,11 @@ export function useServiceWorkerUpdate(): ServiceWorkerUpdate {
           setRegistration(current);
         }
       })
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Error causes may come from browser or network code and are narrowed by this handler.
       .catch((error: unknown) => {
         console.warn("Service worker registration failed:", error);
       });
+
     return () => {
       disposed = true;
       container.removeEventListener("controllerchange", handleControllerChange);
@@ -54,8 +61,10 @@ export function useServiceWorkerUpdate(): ServiceWorkerUpdate {
     if (!registration) {
       return;
     }
+
     let lastCheck = Date.now();
     const handleUpdateFound = () => setInstalling(registration.installing);
+
     const handleVisibilityChange = () => {
       if (
         document.visibilityState !== "visible" ||
@@ -63,15 +72,20 @@ export function useServiceWorkerUpdate(): ServiceWorkerUpdate {
       ) {
         return;
       }
+
       lastCheck = Date.now();
       void registration.update().catch(() => undefined);
     };
+
     registration.addEventListener("updatefound", handleUpdateFound);
     document.addEventListener("visibilitychange", handleVisibilityChange);
+
     if (registration.waiting && navigator.serviceWorker.controller) {
       setWaiting(registration.waiting);
     }
+
     handleUpdateFound();
+
     return () => {
       registration.removeEventListener("updatefound", handleUpdateFound);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
@@ -82,6 +96,7 @@ export function useServiceWorkerUpdate(): ServiceWorkerUpdate {
     if (!installing) {
       return;
     }
+
     const handleStateChange = () => {
       // First installation has no existing controller and needs no reload prompt.
       if (
@@ -91,8 +106,10 @@ export function useServiceWorkerUpdate(): ServiceWorkerUpdate {
         setWaiting(installing);
       }
     };
+
     installing.addEventListener("statechange", handleStateChange);
     handleStateChange();
+
     return () =>
       installing.removeEventListener("statechange", handleStateChange);
   }, [installing]);
@@ -101,6 +118,7 @@ export function useServiceWorkerUpdate(): ServiceWorkerUpdate {
     if (!waiting) {
       return;
     }
+
     reloadingRef.current = true;
     waiting.postMessage({ type: "SKIP_WAITING" });
   }, [waiting]);

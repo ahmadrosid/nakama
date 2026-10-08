@@ -48,6 +48,7 @@ export function legacyArtifactProfileId(
   profiles: ReadonlyArray<Pick<ProfileSummary, "id">>
 ): string | null {
   const requested = new URLSearchParams(search).get("profile");
+
   return pickKnownProfileId(profiles, requested);
 }
 

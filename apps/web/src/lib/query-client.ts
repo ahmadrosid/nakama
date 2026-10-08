@@ -25,6 +25,7 @@ export async function invalidateQueries(
 
 export function onGlobalQueryError(event: QueryCacheNotifyEvent) {
   const error = event.query?.state?.error;
+
   if (error instanceof NakamaApiError && error.status === 401) {
     window.location.href = "/login";
   }

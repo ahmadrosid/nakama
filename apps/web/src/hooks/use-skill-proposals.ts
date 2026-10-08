@@ -14,6 +14,7 @@ export function useSkillProposals(
   } = {}
 ) {
   const status = options.status ?? "pending";
+
   return useQuery({
     enabled: Boolean(orgId) && (options.enabled ?? true),
     queryFn: () =>
@@ -39,6 +40,7 @@ function invalidateSkillProposalQueries(
 
 export function useApproveSkillProposal(orgId: string) {
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (proposalId: string) =>
       client.approveSkillProposal(orgId, proposalId),
@@ -48,6 +50,7 @@ export function useApproveSkillProposal(orgId: string) {
 
 export function useRejectSkillProposal(orgId: string) {
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (proposalId: string) =>
       client.rejectSkillProposal(orgId, proposalId),

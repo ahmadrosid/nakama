@@ -30,6 +30,7 @@ export function useElapsedSeconds(active: boolean, startedAt?: string): number {
     if (!active) {
       anchorRef.current = null;
       setElapsed(0);
+
       return;
     }
 
@@ -44,6 +45,7 @@ export function useElapsedSeconds(active: boolean, startedAt?: string): number {
 
     update();
     const intervalId = window.setInterval(update, 1000);
+
     return () => window.clearInterval(intervalId);
   }, [active, startedAt]);
 

@@ -34,12 +34,12 @@ describe("chat-stream-workflow", () => {
           enabled: true,
           name: "Morning Brief",
           steps: [
-            {
-              id: "fetch",
-              input,
-              kind: "tool",
-              tool: "web_fetch",
-            } as unknown as WorkflowStep,
+            // SAFETY: Persisted workflow input may omit or null this field before parsing.
+            structuredClone(
+              input === undefined
+                ? { id: "fetch", kind: "tool", tool: "web_fetch" }
+                : { id: "fetch", input, kind: "tool", tool: "web_fetch" }
+            ) as unknown as WorkflowStep,
           ],
         },
       });

@@ -18,9 +18,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const authReady = isAuthenticated && !authLoading;
   const healthQuery = useHealthQuery();
   const providerConfigured = healthQuery.data?.providerConfigured === true;
+
   const modelsQuery = useModelsQuery({
     enabled: providerConfigured && authReady,
   });
+
   const configureProviderMutation = useConfigureProviderMutation();
   const createProviderMutation = useCreateProviderMutation();
 

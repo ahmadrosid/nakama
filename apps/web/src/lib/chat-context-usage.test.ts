@@ -81,6 +81,7 @@ describe("contextUsageSegments", () => {
         usedTokens: 20_000,
       })
     );
+
     expect(segments.at(-1)).toMatchObject({ id: "other", tokens: 7000 });
   });
 });

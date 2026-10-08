@@ -53,6 +53,7 @@ describe("resolveProfileSwitch", () => {
     for (const pathname of ["/chat", "/chat/beta/session-1", "/files"]) {
       expect(pick(pathname, "", "beta")).toEqual({ kind: "stay" });
     }
+
     expect(pick("/profiles", "?profile=beta", "beta")).toEqual({
       kind: "stay",
     });

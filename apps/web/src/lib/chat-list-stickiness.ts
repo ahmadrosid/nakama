@@ -18,5 +18,6 @@ export function listOverflowsViewport(
   if (viewportHeight <= 0) {
     return false;
   }
+
   return listHeight > viewportHeight + 1;
 }

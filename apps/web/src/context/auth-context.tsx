@@ -43,11 +43,14 @@ async function loadSessionState(): Promise<{
     client.getMe(),
     client.listUserOrgs(),
   ]);
+
   if (!user.isPlatformAdmin || (user.mfaRequired && !user.mfaEnrolled)) {
     return { orgs, platformOrgs: [], platformOrgsError: false, user };
   }
+
   try {
     const { organizations } = await client.listPlatformOrganizations();
+
     return {
       orgs,
       platformOrgs: organizations,
@@ -108,6 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const activeOrg = useMemo(() => {
     const activeOrgId = user?.activeOrgId ?? user?.orgId ?? null;
+
     if (!activeOrgId) {
       return null;
     }
@@ -129,6 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       await client.setupUser({
         ...request,
+        // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
         ...(webPublicUrl ? { webPublicUrl } : {}),
       });
       await refreshSession();
@@ -149,6 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ) => {
       const response = await client.login(email, password, mfa);
       await refreshSession();
+
       return response;
     },
     [refreshSession]
@@ -161,6 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Session may already be revoked (e.g. after password change clears
       // cookies and revokes every browser session server-side).
     }
+
     client.setOrgId(null);
     setUser(null);
     setOrgs([]);
@@ -182,21 +189,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       await client.archivePlatformOrganization(orgId);
+
       const [{ orgs: nextOrgs }, { organizations }] = await Promise.all([
         client.listUserOrgs(),
         client.listPlatformOrganizations(),
       ]);
+
       const nextOrgId =
         nextOrgIdAfterArchive(nextOrgs, orgId) ??
         organizations.find((org) => !org.archivedAt && org.id !== orgId)?.id;
+
       setOrgs(nextOrgs);
       setPlatformOrgs(organizations);
+
       if (nextOrgId) {
         setUser(await client.setActiveOrg(nextOrgId));
       } else {
         client.setOrgId(null);
         setUser(await client.getMe());
       }
+
       resetQueryCache();
     },
     [user?.isPlatformAdmin]
@@ -209,10 +221,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const created = await client.createUserOrganization(input);
+
       const [{ orgs: nextOrgs }, nextUser] = await Promise.all([
         client.listUserOrgs(),
         client.setActiveOrg(created.organization.id),
       ]);
+
       setOrgs(nextOrgs);
       setPlatformOrgs((current) => [...current, created.organization]);
       setUser(nextUser);
@@ -226,6 +240,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const org =
         orgs.find((entry) => entry.id === orgId) ??
         platformOrgs.find((entry) => entry.id === orgId && !entry.archivedAt);
+
       if (!org) {
         throw new Error("Organization not found.");
       }
@@ -245,9 +260,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const { orgs: nextOrgs } = await client.listUserOrgs();
       setOrgs(nextOrgs);
+
       if (user?.isPlatformAdmin) {
         await refreshPlatformOrgs();
       }
+
       resetQueryCache();
     },
     [orgs, platformOrgs, refreshPlatformOrgs, user?.isPlatformAdmin]

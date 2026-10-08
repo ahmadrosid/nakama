@@ -76,6 +76,7 @@ describe("normalizeOpenRouterModels", () => {
 
   test("detects vision and capability chips", () => {
     const rows = normalizeOpenRouterModels(fixture);
+
     const paid = rows.find(
       (row) => row.id === "nvidia/nemotron-3-ultra-550b-a55b"
     );

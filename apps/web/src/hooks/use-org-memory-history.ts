@@ -35,6 +35,7 @@ export function useOrgMemoryHistoryRevision(
 
 export function useRestoreOrgMemoryHistory(orgId: string) {
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (revisionId: string) =>
       client.restoreOrgMemoryHistory(orgId, revisionId),
@@ -44,6 +45,7 @@ export function useRestoreOrgMemoryHistory(orgId: string) {
 
 export function useUndoOrgMemoryChange(orgId: string) {
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: () => client.undoOrgMemoryChange(orgId),
     onSuccess: () => invalidateOrgMemoryQueries(queryClient, orgId),

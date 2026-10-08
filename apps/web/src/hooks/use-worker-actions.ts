@@ -5,7 +5,9 @@ import { client } from "@/lib/client";
 import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
-function useWorkerMutation(mutationFn: (name: string) => Promise<unknown>) {
+function useWorkerMutation(
+  mutationFn: (name: string) => Promise<{ ok: boolean }>
+) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -21,6 +23,7 @@ export function useStartWorker() {
   const profileId = useChannelProfileId();
   const { activeOrg } = useAuth();
   const api = client.forOrg(activeOrg?.id ?? null);
+
   return useWorkerMutation((name) => api.startWorker(name, profileId));
 }
 
@@ -28,6 +31,7 @@ export function useStopWorker() {
   const profileId = useChannelProfileId();
   const { activeOrg } = useAuth();
   const api = client.forOrg(activeOrg?.id ?? null);
+
   return useWorkerMutation((name) => api.stopWorker(name, profileId));
 }
 
@@ -35,12 +39,14 @@ export function useRestartWorker() {
   const profileId = useChannelProfileId();
   const { activeOrg } = useAuth();
   const api = client.forOrg(activeOrg?.id ?? null);
+
   return useWorkerMutation((name) => api.restartWorker(name, profileId));
 }
 
 export function usePluginWorkers() {
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id;
+
   return useQuery({
     enabled: Boolean(orgId) && activeOrg?.role !== "viewer",
     queryFn: () => client.listPluginWorkers(orgId),
@@ -54,11 +60,13 @@ export function useDisconnectChannel() {
   const { activeOrg } = useAuth();
   const api = client.forOrg(activeOrg?.id ?? null);
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (name: string) => {
       if (!profileId) {
         throw new Error("Choose an agent connection");
       }
+
       return api.disconnectChannel(name, profileId);
     },
     onSuccess: () => queryClient.invalidateQueries(),

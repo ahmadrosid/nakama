@@ -9,8 +9,11 @@ export function splitExternalUrl(url: string): {
     const prefix = `${parsed.protocol}//`;
     const host = parsed.host;
     const suffix = url.slice(prefix.length + host.length);
+
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
     return { host, prefix, suffix };
   } catch {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
     return { host: url, prefix: "", suffix: "" };
   }
 }

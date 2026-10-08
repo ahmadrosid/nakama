@@ -14,6 +14,7 @@ export function useSkillSuggestions(
   } = {}
 ) {
   const status = options.status ?? "pending";
+
   return useQuery({
     enabled: Boolean(orgId) && (options.enabled ?? true),
     queryFn: () =>
@@ -40,6 +41,7 @@ function invalidateSkillSuggestionQueries(
 
 export function useApplySkillSuggestion(orgId: string) {
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (suggestionId: string) =>
       client.applySkillSuggestion(orgId, suggestionId),

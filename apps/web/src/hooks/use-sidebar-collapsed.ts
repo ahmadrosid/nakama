@@ -32,8 +32,10 @@ export function useSidebarCollapsed() {
 
 export function usePinnedPlugins() {
   const { user, activeOrg } = useAuth();
+
   const key =
     user && activeOrg ? pinnedPluginsStorageKey(user.id, activeOrg.id) : null;
+
   // The snapshot is a string so it stays equal between renders.
   const pinned = useSyncExternalStore(subscribePinnedPlugins, () =>
     readPinnedPluginIds(key).join("\n")

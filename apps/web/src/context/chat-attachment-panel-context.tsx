@@ -17,6 +17,7 @@ import {
 } from "@/context/chat-attachment-panel-context-shared";
 
 const DEFAULT_PANEL_WIDTH = 448;
+
 const ENTER_SLIDE_MS = 200;
 
 export function ChatAttachmentPanelProvider({
@@ -41,14 +42,17 @@ export function ChatAttachmentPanelProvider({
   useEffect(() => {
     if (!openId || presentation !== "overlay") {
       setEnterSlide(false);
+
       return;
     }
 
     setEnterSlide(true);
+
     const timeout = window.setTimeout(
       () => setEnterSlide(false),
       ENTER_SLIDE_MS
     );
+
     return () => window.clearTimeout(timeout);
   }, [openId, presentation]);
 
@@ -57,9 +61,11 @@ export function ChatAttachmentPanelProvider({
       if (!current) {
         return null;
       }
+
       if (id && current.id !== id) {
         return current;
       }
+
       return null;
     });
   }, []);
@@ -74,19 +80,24 @@ export function ChatAttachmentPanelProvider({
       if (generation !== showGenerationRef.current) {
         return;
       }
+
       setConfig(nextConfig);
+
       if (nextConfig.defaultWidth != null) {
         setWidth(clampAttachmentPanelWidth(nextConfig.defaultWidth));
       }
     };
 
     const current = configRef.current;
+
     const priorClose =
       current && current.id !== nextConfig.id
         ? beginAttachmentPanelClose(current, closeInFlightRef)
         : null;
+
     if (priorClose) {
       void priorClose.finally(apply);
+
       return;
     }
 
@@ -103,6 +114,7 @@ export function ChatAttachmentPanelProvider({
         if (!current || current.id !== id) {
           return current;
         }
+
         return { ...current, ...patch };
       });
     },
@@ -112,16 +124,20 @@ export function ChatAttachmentPanelProvider({
   const handlePanelClose = useCallback(() => {
     // Drop any pending show() apply so a late prior-close cannot remount.
     showGenerationRef.current += 1;
+
     const priorClose = beginAttachmentPanelClose(
       configRef.current,
       closeInFlightRef
     );
+
     if (priorClose) {
       void priorClose.finally(() => {
         setConfig(null);
       });
+
       return;
     }
+
     setConfig(null);
   }, []);
 

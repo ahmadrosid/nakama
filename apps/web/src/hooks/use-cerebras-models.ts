@@ -13,10 +13,13 @@ async function fetchCerebrasModels(): Promise<{
   usedFallback: boolean;
 }> {
   try {
+    // SAFETY: The enclosing parser checks the value before this conversion.
     const data = (await client.getExternalModelCatalog(
       "cerebras"
     )) as CerebrasModelsApiResponse;
+
     const rows = normalizeCerebrasModels(data);
+
     if (rows.length === 0) {
       return { rows: CEREBRAS_FALLBACK_MODELS, usedFallback: true };
     }

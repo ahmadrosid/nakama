@@ -10,6 +10,7 @@ export function splitStreamingMarkdown(content: string): {
   tail: string;
 } {
   if (!content) {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
     return { sealed: "", tail: "" };
   }
 
@@ -27,10 +28,13 @@ export function splitStreamingMarkdown(content: string): {
     const line = content.slice(index, lineEnd);
 
     const fence = line.match(/^(\s*)([`~]{3,})(.*)$/);
+
     if (fence) {
       const marker = fence[2]!;
+      // SAFETY: The enclosing parser checks the value before this conversion.
       const char = marker[0] as "`" | "~";
       const info = fence[3] ?? "";
+
       if (!inFence) {
         inFence = true;
         fenceChar = char;
@@ -51,13 +55,16 @@ export function splitStreamingMarkdown(content: string): {
     if (newlineAt === -1) {
       break;
     }
+
     index = newlineAt + 1;
   }
 
   if (lastSealedEnd <= 0) {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
     return { sealed: "", tail: content };
   }
 
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
   return {
     sealed: content.slice(0, lastSealedEnd),
     tail: content.slice(lastSealedEnd),

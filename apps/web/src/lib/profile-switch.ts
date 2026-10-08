@@ -23,6 +23,7 @@ export function resolveProfileSwitch(input: {
 }): ProfileSwitch {
   const { activeProfileId, pathname, profileId, search } = input;
   const onProfilesPage = isProfilesPath(pathname, PAGE_PATHS.profiles);
+
   // Draft /chat included: ChatPage enters a new draft for the live id itself.
   const swapsInPlace =
     pathname === PAGE_PATHS.files ||
@@ -42,8 +43,10 @@ export function resolveProfileSwitch(input: {
     if (pathname !== PAGE_PATHS.profiles) {
       return { kind: "navigate", replace: false, to: profilePath(profileId) };
     }
+
     const params = new URLSearchParams(search);
     params.set("profile", profileId);
+
     return {
       kind: "navigate",
       replace: true,

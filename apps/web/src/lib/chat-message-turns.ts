@@ -41,5 +41,6 @@ export function turnKey(turn: MessageTurn): string {
 
   // Stable for the life of the turn so tool/assistant appends do not remount Virtuoso rows.
   const first = turn.messages[0]?.message.id;
+
   return first ? `assistant:${first}` : "assistant:empty";
 }

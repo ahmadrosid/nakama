@@ -25,6 +25,7 @@ function invalidateOrgMemory(
 
 export function useUpdateOrgMemory(orgId: string) {
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (request: UpdateOrgMemoryRequest) =>
       client.updateOrgMemory(orgId, request),

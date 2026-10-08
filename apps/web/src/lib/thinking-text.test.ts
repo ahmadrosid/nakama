@@ -16,6 +16,7 @@ describe("splitThinkingLines", () => {
   test("splits long prose into sentences", () => {
     const text =
       "First sentence here. Second sentence follows. Third sentence closes the thought.";
+
     expect(splitThinkingLines(text)).toEqual([
       "First sentence here.",
       "Second sentence follows.",

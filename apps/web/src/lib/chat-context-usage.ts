@@ -29,6 +29,7 @@ export function formatTokenCount(tokens: number): string {
 /** One decimal for thousands so the popover header can show ~60.5k, not 61k. */
 export function formatTokenCountDetailed(tokens: number): string {
   const value = Math.max(0, tokens);
+
   if (value < 1000) {
     return String(Math.round(value));
   }
@@ -86,10 +87,12 @@ export function contextUsageSegments(
 
   const parts: ContextUsageSegment[] = SEGMENT_META.flatMap((meta) => {
     const tokens = breakdown[meta.id];
+
     return tokens > 0 ? [{ ...meta, tokens }] : [];
   });
 
   const estimated = parts.reduce((sum, part) => sum + part.tokens, 0);
+
   if (used > estimated && used - estimated >= 1) {
     parts.push({
       colorClass: "bg-sky-600",
@@ -106,15 +109,18 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024) {
     return `${bytes} B`;
   }
+
   if (bytes < 1024 * 1024) {
     return `${(bytes / 1024).toFixed(1)} KB`;
   }
+
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function formatContextUsageLabel(usage: ChatContextUsage): string {
   const percent = Math.round(contextUsageRatio(usage) * 100);
   const sourceNote = usage.source === "estimate" ? " · estimated" : "";
+
   // "less context" rather than "saved", and always with a byte unit: this sits
   // beside two token counts, and a bare number there reads as tokens.
   // The percentage is what was asked for; the byte figure rides along because
@@ -127,5 +133,6 @@ export function formatContextUsageLabel(usage: ChatContextUsage): string {
     usage.bytesKeptOut && usage.bytesProduced
       ? ` · ${formatBytes(usage.bytesKeptOut)} of tool output saved (${Math.round((100 * usage.bytesKeptOut) / usage.bytesProduced)}%)`
       : "";
+
   return `Context ${percent}% · ~${formatTokenCount(usage.usedTokens)} / ${formatTokenCount(usage.usableContextTokens)}${sourceNote}${optimizedNote}`;
 }

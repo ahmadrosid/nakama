@@ -11,6 +11,7 @@ export function normalizePastedText(text: string): string {
 
 export function countWords(text: string): number {
   const normalized = normalizePastedText(text).trim();
+
   if (!normalized) {
     return 0;
   }
@@ -25,6 +26,7 @@ export function pastedTextFilename(wordCount: number): string {
 export function createPastedTextFile(text: string): File {
   const normalized = normalizePastedText(text);
   const wordCount = countWords(normalized);
+
   return new File([normalized], pastedTextFilename(wordCount), {
     type: "text/plain",
   });
@@ -41,6 +43,7 @@ export function isPastedTextDocument(
 
 export function wordCountFromPastedFilename(filename: string): number | null {
   const match = filename.match(PASTED_TEXT_FILENAME_RE);
+
   if (!match) {
     return null;
   }

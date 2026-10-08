@@ -33,6 +33,7 @@ describe("precacheUrls", () => {
       "/manifest.webmanifest",
       "/assets/index-js111.js",
     ]);
+
     expect(urls.filter((url) => url === "/assets/index-js111.js")).toHaveLength(
       1
     );
@@ -48,6 +49,7 @@ describe("precacheUrls", () => {
         isEntry: true,
       },
     };
+
     expect(precacheUrls(cyclic, [])).toEqual([
       "/",
       "/assets/a.js",

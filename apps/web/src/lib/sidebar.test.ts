@@ -23,6 +23,7 @@ test.each([false, true])(
       globalThis,
       "localStorage"
     );
+
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
       value: {
@@ -32,6 +33,7 @@ test.each([false, true])(
           ),
       },
     });
+
     try {
       expect(getInitialRecentsCollapsed()).toBe(collapsed);
       expect(getInitialSidebarCollapsed()).toBe(!collapsed);
@@ -57,9 +59,11 @@ test("a pin is kept per person and organization, and toggles off again", () => {
   });
   const mine = pinnedPluginsStorageKey("user-a", "org-1");
   let notified = 0;
+
   const unsubscribe = subscribePinnedPlugins(() => {
     notified += 1;
   });
+
   try {
     togglePinnedPlugin(mine, "workflows");
     togglePinnedPlugin(mine, "notes");
@@ -80,6 +84,7 @@ test("a pin is kept per person and organization, and toggles off again", () => {
     expect(readPinnedPluginIds(null)).toEqual([]);
   } finally {
     unsubscribe();
+
     if (original) {
       Object.defineProperty(globalThis, "localStorage", original);
     } else {
