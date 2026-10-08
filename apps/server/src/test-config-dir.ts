@@ -10,6 +10,7 @@ export async function withTestEnv<T>(
   const previous = new Map(
     Object.keys(vars).map((key) => [key, process.env[key]] as const)
   );
+
   for (const [key, value] of Object.entries(vars)) {
     if (value === undefined) {
       delete process.env[key];
@@ -17,6 +18,7 @@ export async function withTestEnv<T>(
       process.env[key] = value;
     }
   }
+
   try {
     return await run();
   } finally {

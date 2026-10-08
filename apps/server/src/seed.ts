@@ -4,9 +4,13 @@ import type { AuthService } from "./services/auth-service";
 import type { OrgService } from "./services/org-service";
 
 const SEED_ADMIN_EMAIL = "NAKAMA_SEED_ADMIN_EMAIL";
+
 const SEED_ADMIN_NAME = "NAKAMA_SEED_ADMIN_NAME";
+
 const SEED_ADMIN_PASSWORD = "NAKAMA_SEED_ADMIN_PASSWORD";
+
 const SEED_ADMIN_PASSWORD_HASH = "NAKAMA_SEED_ADMIN_PASSWORD_HASH";
+
 const SEED_ORG_NAME = "NAKAMA_SEED_ORG_NAME";
 
 const SEED_ENV_KEYS = [
@@ -34,8 +38,10 @@ export async function runFirstBootSeed(
   deps: FirstBootSeedDeps
 ): Promise<FirstBootSeedResult> {
   const env = deps.env ?? process.env;
+
   const present = SEED_ENV_KEYS.filter((key) => {
     const value = env[key]?.trim();
+
     return Boolean(value);
   });
 
@@ -46,8 +52,10 @@ export async function runFirstBootSeed(
   const missing = [SEED_ADMIN_EMAIL, SEED_ADMIN_NAME].filter(
     (key) => !env[key]?.trim()
   );
+
   const hasPassword = Boolean(env[SEED_ADMIN_PASSWORD]?.trim());
   const hasHash = Boolean(env[SEED_ADMIN_PASSWORD_HASH]?.trim());
+
   if (missing.length > 0 || hasPassword === hasHash) {
     throw new Error(
       `First-boot seed requires ${SEED_ADMIN_EMAIL}, ${SEED_ADMIN_NAME}, and exactly one of ${SEED_ADMIN_PASSWORD} or ${SEED_ADMIN_PASSWORD_HASH}. Missing: ${missing.join(", ")}.`
@@ -70,6 +78,7 @@ export async function runFirstBootSeed(
       `First-boot seed failed: ${SEED_ADMIN_PASSWORD} must be at least ${MIN_PASSWORD_LENGTH} characters.`
     );
   }
+
   if (
     suppliedHash &&
     !/^\$2[aby]\$(?:0[4-9]|[12]\d|3[01])\$[./A-Za-z0-9]{53}$/.test(suppliedHash)
@@ -97,6 +106,7 @@ export async function runFirstBootSeed(
     if (error instanceof NakamaApiError) {
       throw new Error(`First-boot seed failed: ${error.message}`);
     }
+
     throw error;
   }
 
