@@ -99,8 +99,10 @@ describe("host Bash discovery", () => {
   });
 });
 
+// A login shell on a busy Windows runner can take over a second to get here.
+// This returns as soon as the file holds a PID, so the longer wait is free.
 async function waitForPositivePid(pidPath: string): Promise<number> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  for (let attempt = 0; attempt < 500; attempt += 1) {
     try {
       const pid = Number((await readFile(pidPath, "utf8")).trim());
       if (Number.isInteger(pid) && pid > 0) {
@@ -124,8 +126,11 @@ function isProcessAlive(pid: number): boolean {
 }
 
 // Git Bash's POSIX PIDs differ from the Windows PIDs used by process.kill.
+// The /proc entry can lag the fork, so read it until it is there.
 const childPidCommand =
-  process.platform === "win32" ? "cat /proc/$!/winpid" : "echo $!";
+  process.platform === "win32"
+    ? "(until cat /proc/$!/winpid 2>/dev/null; do sleep 0.05; done)"
+    : "echo $!";
 
 describe("bash tool", () => {
   let workspaceRoot = "";
@@ -183,7 +188,14 @@ describe("bash tool", () => {
         {
           command: '"$NAKAMA_TEST_BUN" child.cjs & wait',
           env: { NAKAMA_TEST_BUN: process.execPath },
-          timeoutMs: mode === "timeout" ? 500 : 30_000,
+          // The clock starts at spawn. On Windows the shell and the child can
+          // need more than 500 ms to start, and then no PID is ever written.
+          timeoutMs:
+            mode === "timeout"
+              ? process.platform === "win32"
+                ? 3000
+                : 500
+              : 30_000,
         },
         {
           orgId: "org_test",
@@ -262,7 +274,7 @@ describe("bash tool", () => {
       }
       await pending;
     }
-  });
+  }, 10_000);
 
   test("drains active descendant output after the shell exits", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
