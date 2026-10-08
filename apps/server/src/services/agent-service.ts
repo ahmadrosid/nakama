@@ -131,6 +131,7 @@ import {
   composeKnowledgeBaseCatalog,
   composeSoulSystemPrompt,
   createErrorTrackingSink,
+  createId,
   createSmtpSender,
   DEFAULT_THINKING_EFFORT,
   DEFAULT_THINKING_ENABLED,
@@ -349,7 +350,6 @@ import {
   createReadSessionHistoryTool,
   deleteSessionHistoryArchive,
   loadSessionHistory,
-  replaceSessionHistory,
   wrapPersistedSession,
 } from "./session-persistence";
 import { SessionTitleService } from "./session-title-service";
@@ -2297,7 +2297,7 @@ export class AgentService {
       );
     }
 
-    const sourceMessages = await loadSessionHistory(this.db, sessionId);
+    const sourceMessages = await this.db.listMessagesForSession(sessionId);
 
     if (messageIndex >= sourceMessages.length) {
       throw new NakamaApiError("messageIndex is out of bounds.", 400);
@@ -2322,10 +2322,14 @@ export class AgentService {
     });
 
     await copySessionHistoryArchive(this.db, orgId, sessionId, nextSessionId);
-    await replaceSessionHistory(
-      this.db,
+    await this.db.replaceMessagesForSession(
       nextSessionId,
-      sourceMessages.slice(0, messageIndex + 1)
+      sourceMessages.slice(0, messageIndex + 1).map((message, index) => ({
+        ...message,
+        id: createId("msg"),
+        seq: index,
+        sessionId: nextSessionId,
+      }))
     );
     await this.db.updateSessionTitle(nextSessionId, branchTitle);
 

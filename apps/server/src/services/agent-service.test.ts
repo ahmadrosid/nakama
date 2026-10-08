@@ -363,6 +363,9 @@ describe("AgentService branching", () => {
       { content: "Hi there", role: "assistant" },
     ]);
     expect(branchMessages?.messageMeta).toHaveLength(2);
+    expect(
+      branchMessages?.messageMeta.map((message) => message.createdAt)
+    ).toEqual(["2026-06-14T10:00:00.000Z", "2026-06-14T10:00:01.000Z"]);
 
     const branchTodos = await service.getSessionTodos(branchSessionId, ORG_ID);
     expect(branchTodos).toEqual([]);
