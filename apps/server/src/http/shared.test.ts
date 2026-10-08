@@ -5,18 +5,35 @@ import { parseOptionalQueryEnum, readJson, readOptionalJson } from "./shared";
 const URL = "http://localhost:4310/test";
 
 describe("readOptionalJson", () => {
+  const schema = z.object({ enabled: z.boolean() });
+
   test("returns the fallback for an empty optional body", async () => {
     const request = new Request(URL, { body: " \n", method: "POST" });
 
     await expect(
-      readOptionalJson(request, { enabled: false })
+      readOptionalJson(request, { enabled: false }, schema)
     ).resolves.toEqual({ enabled: false });
   });
 
   test("rejects malformed non-empty JSON", async () => {
     const request = new Request(URL, { body: "{", method: "POST" });
 
-    await expect(readOptionalJson(request, {})).rejects.toMatchObject({
+    await expect(
+      readOptionalJson(request, { enabled: false }, schema)
+    ).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+
+  test("rejects JSON that does not match the schema", async () => {
+    const request = new Request(URL, {
+      body: JSON.stringify({ enabled: "yes" }),
+      method: "POST",
+    });
+
+    await expect(
+      readOptionalJson(request, { enabled: false }, schema)
+    ).rejects.toMatchObject({
       status: 400,
     });
   });

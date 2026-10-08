@@ -26,6 +26,7 @@ export function requireOrgAdminFromContext(
 ): RequestAuthContext {
   const auth = getRequestAuth(c);
   requireOrgAdmin(auth);
+
   return auth;
 }
 
@@ -42,6 +43,7 @@ export function requireOrgAdminOrPlatformAdminFromContext(
 ): RequestAuthContext {
   const auth = getRequestAuth(c);
   requireOrgAdminOrPlatformAdmin(auth);
+
   return auth;
 }
 
@@ -50,6 +52,7 @@ export function requireNotViewerFromContext(
 ): RequestAuthContext {
   const auth = getRequestAuth(c);
   requireNotViewer(auth);
+
   return auth;
 }
 
@@ -58,6 +61,7 @@ export function requirePlatformAdminFromContext(
 ): RequestAuthContext {
   const auth = getRequestAuth(c);
   requirePlatformAdmin(auth);
+
   return auth;
 }
 
