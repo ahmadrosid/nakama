@@ -51,9 +51,7 @@ export function isTelegramTopicMessage(ctx: Context): boolean {
 function getTelegramTopicId(ctx: Context): number | undefined {
   const value = ctx.message?.message_thread_id;
 
-  return value !== undefined && Number.isFinite(value)
-    ? value
-    : undefined;
+  return value !== undefined && Number.isFinite(value) ? value : undefined;
 }
 
 export function resolveBotInfo(

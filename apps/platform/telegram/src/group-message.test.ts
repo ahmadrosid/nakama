@@ -183,12 +183,8 @@ describe("group-message helpers", () => {
 
     // SAFETY: This test covers a group chat without a message.
     const chatContext = chatOnly as Context;
-    expect(
-      resolveConversationKey(
-        chatContext,
-        "-100123",
-        true
-      )
-    ).toBe("-100123");
+    expect(resolveConversationKey(chatContext, "-100123", true)).toBe(
+      "-100123"
+    );
   });
 });

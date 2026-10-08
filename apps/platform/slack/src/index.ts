@@ -107,7 +107,7 @@ function createSlackApi(botToken: string): SlackApi {
           ...message,
           blocks: [{ text: chunk, type: "markdown" }],
         }).catch((error) => {
-          if (!(error instanceof Error) || !isSlackBlockRejection(error)) {
+          if (!(error instanceof Error && isSlackBlockRejection(error))) {
             throw error;
           }
 
