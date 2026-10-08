@@ -7,20 +7,43 @@ import {
   normalizeAutomationDelivery,
   type ToolDefinition,
 } from "@nakama/core";
+import { z } from "zod";
 
-interface GeneratedAutomationPayload {
-  delivery?: unknown;
-  description?: unknown;
-  name?: unknown;
-  steps?: unknown;
-  trigger?: unknown;
-}
+const GeneratedTriggerSchema = z.discriminatedUnion("type", [
+  z.object({
+    cron: z.string(),
+    timezone: z.string().optional().catch(undefined),
+    type: z.literal("schedule"),
+  }),
+  z.object({
+    at: z.string(),
+    timezone: z.string().optional().catch(undefined),
+    type: z.literal("runAt"),
+  }),
+]);
+
+const GeneratedStepSchema = z.object({
+  input: z.record(z.string(), z.json()).optional().catch(undefined),
+  tool: z.string().optional().catch(undefined),
+});
+
+const GeneratedAutomationPayloadSchema = z.object({
+  delivery: z.json().optional(),
+  description: z.string().optional().catch(undefined),
+  name: z.string().optional().catch(undefined),
+  steps: z.array(z.json()).optional().catch(undefined),
+  trigger: GeneratedTriggerSchema.optional().catch(undefined),
+});
+
+type GeneratedAutomationPayload = z.infer<
+  typeof GeneratedAutomationPayloadSchema
+>;
 
 export function parseAutomationResponse(
   raw: string,
   request: { prompt: string; tools: ToolDefinition[] }
 ): AutomationDefinition {
-  const payload = extractJsonObject(raw) as GeneratedAutomationPayload;
+  const payload = extractJsonObject(raw);
   const allowedTools = new Set(request.tools.map((tool) => tool.name));
 
   const name = sanitizeName(payload.name, request.prompt);
@@ -29,7 +52,7 @@ export function parseAutomationResponse(
   const steps = parseSteps(payload.steps, allowedTools);
   const delivery = parseDelivery(payload.delivery);
 
-  return {
+  const automation: AutomationDefinition = {
     description,
     id: createId("automation"),
     name,
@@ -37,95 +60,103 @@ export function parseAutomationResponse(
     steps,
     trigger,
     version: 1,
-    ...(delivery ? { delivery } : {}),
   };
+
+  if (delivery) {
+    automation.delivery = delivery;
+  }
+
+  return automation;
 }
 
-function extractJsonObject(raw: string): unknown {
+function extractJsonObject(raw: string): GeneratedAutomationPayload {
   const trimmed = raw.trim();
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
 
   const candidate = fenced ?? trimmed;
 
   try {
-    return JSON.parse(candidate);
+    const payload = GeneratedAutomationPayloadSchema.safeParse(
+      JSON.parse(candidate)
+    );
+
+    return payload.success ? payload.data : {};
   } catch {
     const start = candidate.indexOf("{");
     const end = candidate.lastIndexOf("}");
 
     if (start >= 0 && end > start) {
-      return JSON.parse(candidate.slice(start, end + 1));
+      const payload = GeneratedAutomationPayloadSchema.safeParse(
+        JSON.parse(candidate.slice(start, end + 1))
+      );
+
+      return payload.success ? payload.data : {};
     }
 
     throw new Error("Agent response did not contain valid JSON.");
   }
 }
 
-function sanitizeName(value: unknown, prompt: string): string {
-  if (typeof value === "string" && value.trim()) {
+function sanitizeName(value: string | undefined, prompt: string): string {
+  if (value?.trim()) {
     return value.trim().slice(0, 60);
   }
 
   return deriveName(prompt);
 }
 
-function sanitizeDescription(value: unknown, prompt: string): string {
-  if (typeof value === "string" && value.trim()) {
+function sanitizeDescription(
+  value: string | undefined,
+  prompt: string
+): string {
+  if (value?.trim()) {
     return value.trim();
   }
 
   return prompt.trim();
 }
 
-function parseTrigger(value: unknown): AutomationTrigger {
-  if (!value || typeof value !== "object") {
+function parseTrigger(
+  value: GeneratedAutomationPayload["trigger"]
+): AutomationTrigger {
+  if (!value) {
     return { type: "manual" };
   }
 
-  const trigger = value as Record<string, unknown>;
-
-  if (trigger.type === "schedule" && typeof trigger.cron === "string") {
+  if (value.type === "schedule") {
     return {
-      cron: trigger.cron.trim(),
-      timezone:
-        typeof trigger.timezone === "string"
-          ? trigger.timezone.trim()
-          : undefined,
+      cron: value.cron.trim(),
+      timezone: value.timezone?.trim(),
       type: "schedule",
     };
   }
 
-  if (trigger.type === "runAt" && typeof trigger.at === "string") {
-    return {
-      at: trigger.at.trim(),
-      timezone:
-        typeof trigger.timezone === "string"
-          ? trigger.timezone.trim()
-          : undefined,
-      type: "runAt",
-    };
-  }
-
-  return { type: "manual" };
+  return {
+    at: value.at.trim(),
+    timezone: value.timezone?.trim(),
+    type: "runAt",
+  };
 }
 
 function parseSteps(
-  value: unknown,
+  value: GeneratedAutomationPayload["steps"],
   allowedTools: Set<string>
 ): AutomationStep[] {
-  if (!Array.isArray(value)) {
+  if (!value) {
     return [];
   }
 
   const steps: AutomationStep[] = [];
 
   for (const item of value) {
-    if (!item || typeof item !== "object") {
+    const parsedStep = GeneratedStepSchema.safeParse(item);
+
+    if (!parsedStep.success) {
       continue;
     }
 
-    const step = item as Record<string, unknown>;
-    const tool = typeof step.tool === "string" ? step.tool.trim() : "";
+    const step = parsedStep.data;
+    const tool = step.tool?.trim() ?? "";
 
     if (!(tool && allowedTools.has(tool))) {
       continue;
@@ -133,12 +164,7 @@ function parseSteps(
 
     steps.push({
       id: createId("step"),
-      input:
-        step.input &&
-        typeof step.input === "object" &&
-        !Array.isArray(step.input)
-          ? (step.input as Record<string, unknown>)
-          : {},
+      input: step.input ?? {},
       tool,
     });
   }
@@ -146,7 +172,9 @@ function parseSteps(
   return steps;
 }
 
-function parseDelivery(value: unknown): AutomationDelivery | undefined {
+function parseDelivery(
+  value: GeneratedAutomationPayload["delivery"]
+): AutomationDelivery | undefined {
   return normalizeAutomationDelivery(value);
 }
 

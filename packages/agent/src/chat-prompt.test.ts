@@ -75,6 +75,7 @@ test("buildChatSystemPrompt gives messaging style to the four chat channels only
   const styled = AGENT_CHANNELS.filter((channel) =>
     prompt([], { channel }).includes("Write like texting a friend")
   );
+
   expect(styled).toEqual(["telegram", "whatsapp", "discord", "slack"]);
 
   const telegram = prompt([], { channel: "telegram" });

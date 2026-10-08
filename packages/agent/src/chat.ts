@@ -16,6 +16,7 @@ import type {
   ToolDefinition,
 } from "@nakama/core";
 import { createId } from "@nakama/core";
+import { z } from "zod";
 
 export interface AgentRequest {
   channel: AgentChannel;
@@ -61,12 +62,23 @@ import {
   canRunToolCallsInParallel,
   createTurnTools,
   executeToolCall,
+  type ToolResult,
 } from "./tool-loop";
 
+const ImageAttachmentSchema = z.object({
+  data: z.string(),
+  mediaType: z.string(),
+});
+
+const VisualToolResultSchema = z.record(z.string(), z.json());
+
 const MAX_TOOL_ITERATIONS = 100;
+
 const MAX_TURN_OUTPUT_TOKENS = 200_000;
+
 const EMPTY_REPLY_NUDGE =
   "Reply to the user now with a final answer based on the work so far.";
+
 const EMPTY_REPLY_NOTICE =
   "The model finished without writing a reply. Send another message to continue.";
 
@@ -94,7 +106,7 @@ interface StreamHandlers {
     toolGroupId?: string;
     toolCallId: string;
     tool: string;
-    input: Record<string, unknown>;
+    input: ToolCall["arguments"];
   }) => void;
   /** Fired once per LLM call in the turn, after the provider reports usage. */
   onUsage?: (usage: ChatUsage) => void;
@@ -183,6 +195,7 @@ export function createAgentChatSession(
   const tools = options.tools ?? dependencies.tools ?? [];
   const enableToolLoop = options.enableToolLoop ?? tools.length > 0;
   let activeTools = createTurnTools(tools);
+
   const systemPrompt = buildChatSystemPrompt(activeTools, {
     basePrompt: options.systemPrompt,
     channel,
@@ -194,6 +207,7 @@ export function createAgentChatSession(
     userContext: options.userContext,
     userTimezone: options.userTimezone,
   });
+
   // Bytes this session's optimiser kept out of the context. Session scope on
   // purpose: the chip beside it reports this conversation, not the org, and
   // showing an org total there would be read as this chat's saving.
@@ -204,6 +218,7 @@ export function createAgentChatSession(
   let bytesProduced = 0;
   const callerRecord = options.toolContext?.recordToolOutputSavings;
   const callerTurnUsage = options.toolContext?.recordTurnUsage;
+
   const toolContext: ToolContext = {
     ...options.toolContext,
     recordToolOutputSavings: (saving) => {
@@ -217,9 +232,11 @@ export function createAgentChatSession(
     recordTurnUsage: (turn) =>
       callerTurnUsage?.({ ...turn, optimized: bytesKeptOut > 0 }),
   };
+
   const history: ChatMessage[] = options.initialHistory
     ? [...options.initialHistory]
     : [];
+
   let historyRevision = 0;
   let lastContextUsage: ChatContextUsage | null = null;
   // Filled as each provider call returns, not at the end, so a turn that fails
@@ -232,6 +249,7 @@ export function createAgentChatSession(
 
   function llmToolsForEstimate() {
     const { localTools } = partitionTools(activeTools);
+
     return enableToolLoop && localTools.length > 0
       ? toLlmToolDefinitions(localTools)
       : undefined;
@@ -239,6 +257,7 @@ export function createAgentChatSession(
 
   function currentTokenBreakdown(): HistoryTokenBreakdown {
     const dateLine = `Today is ${formatCurrentDate()}.`;
+
     return estimateHistoryTokenBreakdown(
       history,
       `${systemPrompt}\n\n${dateLine}`,
@@ -297,6 +316,7 @@ export function createAgentChatSession(
       }),
       {
         cachedInputTokens: 0,
+        // SAFETY: The total becomes undefined when any call omits its cost.
         costUsd: 0 as number | undefined,
         estimated: false,
         inputTokens: 0,
@@ -304,17 +324,22 @@ export function createAgentChatSession(
       }
     );
 
-    return {
+    const usage: ChatUsage = {
       cachedInputTokens: totals.cachedInputTokens,
       calls: [...turnUsageCalls],
       estimated: totals.estimated,
       inputTokens: totals.inputTokens,
       outputTokens: totals.outputTokens,
       totalTokens: totals.inputTokens + totals.outputTokens,
-      // One unpriced call makes the turn total a lie, so it is dropped rather
-      // than reported short.
-      ...(totals.costUsd == null ? {} : { costUsd: totals.costUsd }),
     };
+
+    // One unpriced call makes the turn total a lie, so it is dropped rather
+    // than reported short.
+    if (totals.costUsd != null) {
+      usage.costUsd = totals.costUsd;
+    }
+
+    return usage;
   }
 
   function estimateCurrentContextUsage(): ChatContextUsage | null {
@@ -323,6 +348,7 @@ export function createAgentChatSession(
     }
 
     const breakdown = currentTokenBreakdown();
+
     return buildContextUsage(
       breakdown.systemPrompt +
         breakdown.conversation +
@@ -342,14 +368,17 @@ export function createAgentChatSession(
     }
 
     const { localTools } = partitionTools(activeTools);
+
     const llmTools =
       options.enableToolLoop !== false && localTools.length > 0
         ? toLlmToolDefinitions(localTools)
         : undefined;
+
     // Compaction is copy-on-write; do not discard anything until archival succeeds.
     const original = [...history];
     const revision = historyRevision;
     const compacted = [...original];
+
     function assertUnchanged() {
       if (
         historyRevision !== revision ||
@@ -359,6 +388,7 @@ export function createAgentChatSession(
         throw new Error("History changed during compaction. Try again.");
       }
     }
+
     const result = await compactHistory({
       compaction: options.compaction,
       force,
@@ -372,6 +402,7 @@ export function createAgentChatSession(
       assertUnchanged();
       const recovery = await options.archiveHistory?.(original);
       assertUnchanged();
+
       const index =
         result.action === "summarized"
           ? 0
@@ -379,13 +410,16 @@ export function createAgentChatSession(
               (message, position) =>
                 message.role === "tool" && message !== original[position]
             );
+
       const first = compacted[index];
+
       if (recovery && first) {
         compacted[index] = {
           ...first,
           content: `${first.content}\n\n${recovery}`,
         };
       }
+
       history.splice(0, history.length, ...compacted);
       bumpHistoryRevision();
     }
@@ -426,6 +460,7 @@ export function createAgentChatSession(
     async send(input, sendOptions) {
       activeTools = createTurnTools(tools);
       turnUsageCalls = [];
+
       return sendMessage(
         dependencies,
         activeTools,
@@ -450,6 +485,7 @@ export function createAgentChatSession(
     async sendStream(input, handlers, streamOptions) {
       activeTools = createTurnTools(tools);
       turnUsageCalls = [];
+
       return sendMessage(
         dependencies,
         activeTools,
@@ -476,7 +512,7 @@ export function createAgentChatSession(
 }
 
 function resolveSendInput(input: SendMessageArg): SendMessageInput {
-  return typeof input === "string" ? { message: input } : input;
+  return input instanceof Object ? input : { message: input };
 }
 
 async function sendMessage(
@@ -522,6 +558,7 @@ async function sendMessage(
   const userMessage = getUserMessageText(userContent);
   history.push({ content: userContent, role: "user" });
   await options.onUserMessage?.();
+
   const multimodalTurn =
     messageContentHasImages(userContent) ||
     messageContentHasDocuments(userContent) ||
@@ -530,6 +567,7 @@ async function sendMessage(
 
   if (!dependencies.provider) {
     const hasAttachments = multimodalTurn;
+
     const reply = hasAttachments
       ? "Attachments require a configured provider. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, OPENROUTER_API_KEY, or GEMINI_API_KEY in Settings."
       : "I'm running in offline mode. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, OPENROUTER_API_KEY, or GEMINI_API_KEY to chat with me. You can still use /create to draft automations locally.";
@@ -539,12 +577,15 @@ async function sendMessage(
     }
 
     history.push({ content: reply, role: "assistant" });
+
     return reply;
   }
 
   const { localTools, hasWebSearch } = partitionTools(tools);
+
   const enableTools =
     options.enableToolLoop && (localTools.length > 0 || hasWebSearch);
+
   // Hosted search is dropped wherever the provider cannot serve it: OpenRouter
   // has no hosted-search path, Gemini rejects googleSearch grounding beside
   // function declarations, and no provider accepts it beside attachments. The
@@ -556,6 +597,7 @@ async function sendMessage(
     dependencies.provider.name !== "openrouter" &&
     !(dependencies.provider.name === "gemini" && localTools.length > 0) &&
     !multimodalTurn;
+
   const providerOptions = buildProviderOptions(dependencies, {
     multimodalTurn,
     webSearch: hostedWebSearch,
@@ -568,27 +610,33 @@ async function sendMessage(
   const promptContext = options.resolvePromptContext
     ? await options.resolvePromptContext({ userMessage })
     : "";
+
   let effectiveSystemPrompt = promptContext.trim()
     ? `${systemPrompt}\n\n${promptContext.trim()}`
     : systemPrompt;
+
   const hasDocumentAttachments =
     messageContentHasDocuments(userContent) ||
     messagesIncludeUserDocuments(history);
+
   if (
     hasDocumentAttachments &&
     !effectiveSystemPrompt.includes("untrusted document data")
   ) {
     effectiveSystemPrompt = `${effectiveSystemPrompt}\n\n${UNTRUSTED_DOCUMENT_GUIDANCE}`;
   }
+
   if (enableTools && hasWebSearch && !hostedWebSearch) {
     effectiveSystemPrompt = `${effectiveSystemPrompt}\n\n${buildWebSearchUnavailableGuidance(localTools)}`;
   }
+
   const baseToolContext =
     input.clientOrigin?.trim() && options.toolContext
       ? { ...options.toolContext, clientOrigin: input.clientOrigin.trim() }
       : input.clientOrigin?.trim()
         ? { clientOrigin: input.clientOrigin.trim() }
         : options.toolContext;
+
   const effectiveToolContext = options.signal
     ? { ...baseToolContext, signal: options.signal }
     : baseToolContext;
@@ -619,7 +667,9 @@ async function sendMessage(
       const assistantIndex = history.findLastIndex(
         (message) => message.role === "assistant"
       );
+
       const assistant = history[assistantIndex];
+
       const completed = new Set(
         history
           .slice(assistantIndex + 1)
@@ -627,6 +677,7 @@ async function sendMessage(
             message.role === "tool" ? [message.toolCallId] : []
           )
       );
+
       if (assistant?.role === "assistant") {
         for (const call of assistant.toolCalls ?? []) {
           if (!completed.has(call.id)) {
@@ -644,6 +695,7 @@ async function sendMessage(
     } else {
       rollbackFailedSend(history);
     }
+
     throw error;
   }
 }
@@ -690,19 +742,25 @@ async function runConversation(
   let producedTokens = 0;
   let stoppedReply = "";
   let finalReplyOnly = false;
+
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
     signal?.throwIfAborted();
+
     if (producedTokens >= MAX_TURN_OUTPUT_TOKENS) {
       break;
     }
+
     const { localTools: iterationTools } = partitionTools(tools);
+
     const llmTools =
       enableToolLoop && !finalReplyOnly && iterationTools.length
         ? toLlmToolDefinitions(iterationTools)
         : undefined;
+
     const iterationPrompt = finalReplyOnly
       ? `${systemPrompt}\n\n${EMPTY_REPLY_NUDGE}`
       : systemPrompt;
+
     const reservedTokens =
       estimateHistoryTokens(
         history,
@@ -710,11 +768,13 @@ async function runConversation(
         llmTools,
         providerReplaysThinking(provider.name)
       ) + Math.max(0, MAX_TURN_OUTPUT_TOKENS - producedTokens);
+
     const releaseReservation =
       await toolContext?.assertCanStartLlmTurn?.(reservedTokens);
 
     const toolGroupId = createId("toolgroup");
     let result: Awaited<ReturnType<typeof generateReply>>;
+
     try {
       result = await generateReply(
         provider,
@@ -739,6 +799,7 @@ async function runConversation(
           llmTools,
           providerReplaysThinking(provider.name)
         );
+
       onContextUsage?.(
         usedTokens,
         result.usage && !result.usage.estimated ? "provider" : "estimate"
@@ -774,10 +835,12 @@ async function runConversation(
       handlers?.onUsage?.(result.usage);
       onTurnUsage?.(result.usage);
     }
+
     producedTokens += Math.max(
       result.usage?.outputTokens ?? 0,
       estimateHistoryTokens([result.assistantMessage], "")
     );
+
     if (
       enableToolLoop &&
       producedTokens >= MAX_TURN_OUTPUT_TOKENS &&
@@ -787,6 +850,7 @@ async function runConversation(
       stoppedReply = result.content;
       break;
     }
+
     if (
       enableToolLoop &&
       result.toolCalls.length === 0 &&
@@ -796,12 +860,16 @@ async function runConversation(
         finalReplyOnly = true;
         continue;
       }
+
       history.push({ content: EMPTY_REPLY_NOTICE, role: "assistant" });
+
       if (mode === "stream") {
         handlers?.onChunk(EMPTY_REPLY_NOTICE);
       }
+
       return EMPTY_REPLY_NOTICE;
     }
+
     history.push(
       result.usage
         ? { ...result.assistantMessage, usage: result.usage }
@@ -833,12 +901,15 @@ async function runConversation(
     producedTokens >= MAX_TURN_OUTPUT_TOKENS
       ? "its output budget"
       : `its limit of ${MAX_TOOL_ITERATIONS} tool rounds`;
+
   const notice = `${stoppedReply ? "\n\n" : ""}Stopped because this turn reached ${reason}. Send another message to continue.`;
   const content = stoppedReply + notice;
   history.push({ content, role: "assistant" });
+
   if (mode === "stream") {
     handlers?.onChunk(notice);
   }
+
   return content;
 }
 
@@ -881,6 +952,7 @@ async function executeToolCalls(
           await executeToolCall(tools, call, contextForCall(call)),
           preprocessUserContent
         );
+
         const toolCompletedAt = Date.now();
 
         handlers?.onToolEnd?.({
@@ -898,20 +970,28 @@ async function executeToolCalls(
       if (result.status === "rejected") {
         continue;
       }
+
       const entry = result.value;
-      history.push({
+
+      const message: ChatMessage = {
         content: JSON.stringify(entry.result),
-        ...(entry.attachments ? { attachments: entry.attachments } : {}),
         name: entry.call.name,
         role: "tool",
         toolCallId: entry.call.id,
         toolCompletedAt: entry.toolCompletedAt,
         toolGroupId,
         toolStartedAt: entry.toolStartedAt,
-      });
+      };
+
+      if (entry.attachments) {
+        message.attachments = entry.attachments;
+      }
+
+      history.push(message);
     }
 
     const failed = results.find((result) => result.status === "rejected");
+
     if (failed?.status === "rejected") {
       throw failed.reason;
     }
@@ -933,6 +1013,7 @@ async function executeToolCalls(
       await executeToolCall(tools, call, contextForCall(call)),
       preprocessUserContent
     );
+
     const toolCompletedAt = Date.now();
 
     handlers?.onToolEnd?.({
@@ -942,36 +1023,40 @@ async function executeToolCalls(
       toolGroupId,
     });
 
-    history.push({
+    const message: ChatMessage = {
       content: JSON.stringify(result),
-      ...(attachments ? { attachments } : {}),
       name: call.name,
       role: "tool",
       toolCallId: call.id,
       toolCompletedAt,
       toolGroupId,
       toolStartedAt,
-    });
+    };
+
+    if (attachments) {
+      message.attachments = attachments;
+    }
+
+    history.push(message);
   }
 }
 
 function isImageAttachment(value: unknown): value is ImageAttachment {
-  return (
-    Boolean(value) &&
-    typeof value === "object" &&
-    typeof (value as ImageAttachment).data === "string" &&
-    typeof (value as ImageAttachment).mediaType === "string"
-  );
+  return ImageAttachmentSchema.safeParse(value).success;
 }
 
 async function prepareVisualToolResult(
-  result: unknown,
+  result: ToolResult,
   preprocess?: AgentChatSessionOptions["preprocessUserContent"]
-): Promise<{ result: unknown; attachments?: MessageContentPart[] }> {
-  if (!result || typeof result !== "object") {
+): Promise<{ result: ToolResult; attachments?: MessageContentPart[] }> {
+  const parsed = VisualToolResultSchema.safeParse(result);
+
+  if (!parsed.success) {
     return { result };
   }
-  const images = (result as { images?: unknown }).images;
+
+  const images = parsed.data.images;
+
   if (
     !Array.isArray(images) ||
     images.length === 0 ||
@@ -979,16 +1064,19 @@ async function prepareVisualToolResult(
   ) {
     return { result };
   }
-  const metadata = { ...(result as Record<string, unknown>) };
+
+  const metadata = { ...parsed.data };
   delete metadata.images;
+
   try {
     const content = normalizeUserContent("", images);
     const prepared = preprocess ? await preprocess(content) : content;
+    const preparedText = z.string().safeParse(prepared);
+
     return {
-      attachments:
-        typeof prepared === "string"
-          ? [{ text: prepared, type: "text" }]
-          : prepared,
+      attachments: preparedText.success
+        ? [{ text: preparedText.data, type: "text" }]
+        : prepared,
       result: metadata,
     };
   } catch (error) {
@@ -1032,14 +1120,18 @@ async function generateReply(
   // All tool replies must precede the visual content, including parallel calls.
   // Expand only for the provider so these don't become fabricated user turns.
   const expanded: ChatMessage[] = [];
+
   const lastUserIndex = history.findLastIndex(
     (message) => message.role === "user"
   );
+
   let attachments: MessageContentPart[] = [];
+
   for (const [index, message] of history.entries()) {
     if (message.role === "tool" && message.attachments?.length) {
       const { attachments: parts, ...toolMessage } = message;
       expanded.push(toolMessage);
+
       // Page images are turn-local evidence. Keep their source metadata and
       // stored attachments; a later turn can fetch the page again to inspect it.
       if (message.name !== "web_fetch" || index > lastUserIndex) {
@@ -1054,15 +1146,18 @@ async function generateReply(
     } else {
       expanded.push(message);
     }
+
     if (attachments.length && history[index + 1]?.role !== "tool") {
       expanded.push({ content: attachments, role: "user" });
       attachments = [];
     }
   }
+
   const messages =
     rehydrateMessagesForProvider === undefined
       ? expanded
       : await rehydrateMessagesForProvider(expanded);
+
   const input = {
     messages,
     providerOptions: messagesIncludeUserImages(messages)
@@ -1078,6 +1173,7 @@ async function generateReply(
     let thinking = "";
     let thinkingStartedAt: number | undefined;
     let thinkingDurationMs: number | undefined;
+
     const finishThinking = () => {
       if (thinkingStartedAt !== undefined) {
         thinkingDurationMs =
@@ -1086,26 +1182,33 @@ async function generateReply(
         thinkingStartedAt = undefined;
       }
     };
+
     try {
       const result = await provider.streamChat(input, {
         onChunk: (delta) => {
           if (signal?.aborted) {
             return;
           }
+
           content += delta;
+
           if (delta) {
             finishThinking();
           }
+
           handlers.onChunk(delta);
         },
         onThinking: (delta) => {
           if (signal?.aborted) {
             return;
           }
+
           thinking += delta;
+
           if (delta) {
             thinkingStartedAt ??= Date.now();
           }
+
           handlers.onThinking?.(delta);
         },
         onToolEnd: (event) => handlers.onToolEnd?.({ ...event, toolGroupId }),
@@ -1118,8 +1221,10 @@ async function generateReply(
           handlers.onToolStart?.({ ...event, toolGroupId });
         },
       });
+
       signal?.throwIfAborted();
       finishThinking();
+
       return thinkingDurationMs === undefined
         ? result
         : {
@@ -1132,13 +1237,23 @@ async function generateReply(
     } catch (error) {
       if (signal?.aborted && (content || thinking)) {
         finishThinking();
-        history.push({
+
+        const message: ChatMessage = {
           content,
           role: "assistant",
-          ...(thinking ? { thinking } : {}),
-          ...(thinkingDurationMs === undefined ? {} : { thinkingDurationMs }),
-        });
+        };
+
+        if (thinking) {
+          message.thinking = thinking;
+        }
+
+        if (thinkingDurationMs !== undefined) {
+          message.thinkingDurationMs = thinkingDurationMs;
+        }
+
+        history.push(message);
       }
+
       throw error;
     }
   }
@@ -1151,18 +1266,27 @@ function buildProviderOptions(
   options: { webSearch: boolean; multimodalTurn: boolean }
 ): ProviderChatOptions | undefined {
   const base = dependencies.chatOptions;
+
   const thinking =
     options.multimodalTurn || !base?.thinking?.enabled
       ? undefined
       : base.thinking;
+
   const webSearch = options.webSearch ? true : undefined;
 
   if (!(webSearch || thinking)) {
     return;
   }
 
-  return {
-    ...(webSearch ? { webSearch: true } : {}),
-    ...(thinking ? { thinking } : {}),
-  };
+  const providerOptions: ProviderChatOptions = {};
+
+  if (webSearch) {
+    providerOptions.webSearch = true;
+  }
+
+  if (thinking) {
+    providerOptions.thinking = thinking;
+  }
+
+  return providerOptions;
 }

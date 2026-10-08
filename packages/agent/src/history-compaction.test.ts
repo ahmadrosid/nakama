@@ -28,12 +28,14 @@ test("tool attachments count as images rather than base64 text", () => {
     role: "tool",
     toolCallId: "image",
   };
+
   const withImage: ChatMessage = {
     ...message,
     attachments: [
       { data: "x".repeat(100_000), mediaType: "image/png", type: "image" },
     ],
   };
+
   expect(
     estimateHistoryTokens([withImage], "") -
       estimateHistoryTokens([message], "")
@@ -48,12 +50,14 @@ test("pruning releases tool attachments without changing the original message", 
     role: "tool",
     toolCallId: "image",
   };
+
   const history: ChatMessage[] = [
     { content: "old", role: "user" },
     message,
     { content: "recent", role: "user" },
     { content: "current", role: "user" },
   ];
+
   expect(
     pruneToolOutputs(history, { contextWindow: 1000, maxOutputTokens: 0 })
       .prunedTokens
@@ -161,6 +165,7 @@ describe("history compaction", () => {
       { content: "turn 4", role: "user" },
       { content: "done 4", role: "assistant" },
     ];
+
     const window: CompactionConfig = {
       contextWindow: 208_192,
       maxOutputTokens: 8192,
@@ -194,6 +199,7 @@ describe("history compaction", () => {
 
   test("does not mutate shared tool message objects in place (#589)", () => {
     const original = createToolMessage("a".repeat(200_000));
+
     const messages: ChatMessage[] = [
       { content: "turn 1", role: "user" },
       original,
@@ -270,6 +276,7 @@ describe("history compaction", () => {
       name: "openai",
       streamChat(_input, handlers) {
         handlers.onChunk("## Goal\n- Implement compaction");
+
         return this.generateChat(_input);
       },
     };
@@ -327,6 +334,7 @@ describe("history compaction", () => {
     const messages: ChatMessage[] = [
       { content: "x".repeat(400), role: "user" },
     ];
+
     const estimate = estimateHistoryTokens(messages, "system prompt");
 
     expect(estimate).toBeGreaterThan(100);
@@ -336,6 +344,7 @@ describe("history compaction", () => {
     const messages: ChatMessage[] = [
       { content: "x".repeat(400), role: "user" },
     ];
+
     const tools = [
       {
         description: "search",
@@ -343,6 +352,7 @@ describe("history compaction", () => {
         parameters: { type: "object" },
       },
     ];
+
     const breakdown = estimateHistoryTokenBreakdown(
       messages,
       "system prompt",
@@ -362,6 +372,7 @@ describe("history compaction", () => {
   test("counts providerContent once and keeps thinking (#340)", () => {
     const thinking = "t".repeat(800);
     const text = "Let me look that up.";
+
     const toolCalls = [
       {
         arguments: { query: "invoice" },
@@ -369,6 +380,7 @@ describe("history compaction", () => {
         name: "search_invoices",
       },
     ];
+
     const providerContent = [
       { thinking, type: "thinking" },
       { text, type: "text" },
@@ -379,6 +391,7 @@ describe("history compaction", () => {
         type: "tool_use",
       },
     ];
+
     const withProvider: ChatMessage[] = [
       {
         content: text,
@@ -387,6 +400,7 @@ describe("history compaction", () => {
         toolCalls,
       },
     ];
+
     const withoutProvider: ChatMessage[] = [
       {
         content: text,
@@ -394,15 +408,19 @@ describe("history compaction", () => {
         toolCalls,
       },
     ];
+
     const empty: ChatMessage[] = [];
 
     const withEstimate =
       estimateHistoryTokens(withProvider, "") -
       estimateHistoryTokens(empty, "");
+
     const withoutEstimate =
       estimateHistoryTokens(withoutProvider, "") -
       estimateHistoryTokens(empty, "");
+
     const providerOnly = Math.ceil(JSON.stringify(providerContent).length / 4);
+
     const contentAndTools =
       Math.ceil(text.length / 4) +
       Math.ceil(JSON.stringify(toolCalls).length / 4);

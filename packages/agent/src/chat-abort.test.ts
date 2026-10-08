@@ -3,15 +3,13 @@ import type {
   ChatCompletionResult,
   GenerateChatInput,
   ProviderClient,
+  ToolCall,
   ToolContext,
   ToolDefinition,
 } from "@nakama/core";
 import { createAgentChatSession } from "./index";
 
-function createCountingProvider(responses: ChatCompletionResult[]): {
-  provider: ProviderClient;
-  getCallCount: () => number;
-} {
+function createCountingProvider(responses: ChatCompletionResult[]) {
   let callIndex = 0;
 
   const take = (): ChatCompletionResult => {
@@ -67,6 +65,7 @@ describe("agent chat cancellation", () => {
   for (const parallelSafe of [false, true]) {
     test(`preserves completed tools and closes interrupted calls (parallel: ${parallelSafe})`, async () => {
       const controller = new AbortController();
+
       const tools: ToolDefinition[] = [
         {
           description: "Completes",
@@ -82,15 +81,18 @@ describe("agent chat cancellation", () => {
           parameters: { properties: {}, type: "object" },
           run() {
             controller.abort();
+
             return Promise.reject(controller.signal.reason);
           },
         },
       ];
+
       const calls = tools.map((tool) => ({
         arguments: {},
         id: tool.name,
         name: tool.name,
       }));
+
       const { provider, getCallCount } = createCountingProvider([
         {
           assistantMessage: {
@@ -102,6 +104,7 @@ describe("agent chat cancellation", () => {
           toolCalls: calls,
         },
       ]);
+
       const session = createAgentChatSession({ provider, tools }, { tools });
       await expect(
         session.sendStream(
@@ -132,14 +135,16 @@ describe("agent chat cancellation", () => {
       description: "Cancels the turn while it runs",
       name: "slow",
       parameters: { properties: {}, type: "object" },
-      run(_input: unknown, context: ToolContext) {
+      run(_input: ToolCall["arguments"], context: ToolContext) {
         seenSignal = context.signal;
         controller.abort();
+
         return Promise.resolve({ ok: true });
       },
     };
 
     const { provider, getCallCount } = createCountingProvider(callThenReply);
+
     const session = createAgentChatSession(
       { provider, tools: [slowTool] },
       { tools: [slowTool] }
@@ -152,8 +157,8 @@ describe("agent chat cancellation", () => {
     );
 
     expect(promise).rejects.toThrow();
-    await promise.catch((error: unknown) => {
-      expect((error as Error).name).toBe("AbortError");
+    await promise.catch((cause: Error) => {
+      expect(cause.name).toBe("AbortError");
     });
 
     expect(seenSignal?.aborted).toBe(true);
@@ -169,12 +174,16 @@ describe("agent chat cancellation", () => {
     const provider: ProviderClient = {
       generateChat: (input: GenerateChatInput) => {
         providerSignal = input.signal;
+
+        // SAFETY: The test has exactly two prepared provider responses.
         return Promise.resolve(callThenReply[1] as ChatCompletionResult);
       },
       generateText: () => Promise.resolve({ content: "{}" }),
       name: "openai",
       streamChat: (input: GenerateChatInput) => {
         providerSignal = input.signal;
+
+        // SAFETY: The test has exactly two prepared provider responses.
         return Promise.resolve(callThenReply[1] as ChatCompletionResult);
       },
     };
