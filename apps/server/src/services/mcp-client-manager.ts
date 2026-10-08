@@ -263,15 +263,19 @@ export class McpClientManager {
         })
         .passthrough()
         .safeParse("toolResult" in result ? result.toolResult : null);
+
       const legacyContent = legacyResult.success
         ? legacyResult.data.content
         : undefined;
+
       const hasMedia =
         result.content.some((item) => item.type !== "text") ||
         (legacyContent?.some((item) => item.type !== "text") ?? false);
+
       if (hasMedia) {
         return { hasMedia: true, value: null };
       }
+
       const value =
         "toolResult" in result
           ? parseJsonValue(result.toolResult)
@@ -283,6 +287,7 @@ export class McpClientManager {
                   text: formatToolContent(result.content),
                 }
               : parseJsonValue(result.structuredContent);
+
       return { hasMedia: false, value };
     }
 

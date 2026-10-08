@@ -24,19 +24,25 @@ describe("McpClientManager", () => {
     using _connect = spyOn(Client.prototype, "connect").mockResolvedValue(
       undefined
     );
+
     using _listTools = spyOn(Client.prototype, "listTools").mockResolvedValue({
       tools: [],
     });
+
     using _close = spyOn(
       StdioClientTransport.prototype,
       "close"
     ).mockResolvedValue(undefined);
+
+    // SAFETY: This mock supplies a legacy MCP result accepted by the SDK client.
     const call = spyOn(Client.prototype, "callTool").mockResolvedValue({
       content: [{ data: "secret", mimeType: "image/png", type: "image" }],
       structuredContent: { text: "metadata" },
     } as never);
+
     const manager = new McpClientManager();
     const server = fakeStdioServer();
+
     await manager.ensureConnected(server, "org_1", "profile_1");
     const controller = new AbortController();
     expect(
