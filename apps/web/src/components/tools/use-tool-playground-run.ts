@@ -1,11 +1,15 @@
-import type { JsonValue, ToolDetail } from "@nakama/core/contract";
+import type { ToolDetail } from "@nakama/core/contract";
 import { useState } from "react";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { client, formatError } from "@/lib/client";
 import { buildSuperBotFixDraft } from "@/lib/tool-playground-draft";
 import { buildExampleParametersJson } from "@/lib/tool-playground-params";
 
-type JsonRecord = Record<string, JsonValue>;
+type JsonValue = boolean | null | number | string | JsonValue[] | JsonRecord;
+
+interface JsonRecord {
+  [key: string]: JsonValue;
+}
 
 type ToolPlaygroundRunState =
   | { status: "idle" }
