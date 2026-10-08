@@ -26,6 +26,7 @@ const SEED_ENV_KEYS = [
 
 describe("runFirstBootSeed", () => {
   let configDir = "";
+
   const previousEnv: Partial<
     Record<(typeof SEED_ENV_KEYS)[number], string | undefined>
   > = {};
@@ -62,6 +63,7 @@ describe("runFirstBootSeed", () => {
     const databaseAdapter = createInMemoryDatabaseAdapter();
     const authService = new AuthService();
     const orgService = new OrgService(databaseAdapter, authService);
+
     return { authService, databaseAdapter, orgService };
   }
 
@@ -99,6 +101,7 @@ describe("runFirstBootSeed", () => {
     const services = createServices();
     // Produced by bcryptjs 3.0.3 in the Node control plane.
     const hash = "$2b$10$49ViSXq0L/bAGSSHXZ5iu.UCyS12mUXKXn.dy7SGmsl8nV8bGJSli";
+
     const env = {
       NAKAMA_SEED_ADMIN_EMAIL: "owner@example.com",
       NAKAMA_SEED_ADMIN_NAME: "Owner",
@@ -108,8 +111,10 @@ describe("runFirstBootSeed", () => {
     expect(await runFirstBootSeed({ ...services, env })).toEqual({
       seeded: true,
     });
+
     const user =
       await services.databaseAdapter.getUserByEmail("owner@example.com");
+
     expect(user?.passwordHash).toBe(hash);
     expect(
       await services.authService.verifyPassword("a-secure-password-123", hash)
@@ -126,6 +131,7 @@ describe("runFirstBootSeed", () => {
   test("rejects both password inputs and a malformed hash", async () => {
     await withFreshConfigDir();
     const services = createServices();
+
     const env = {
       NAKAMA_SEED_ADMIN_EMAIL: "owner@example.com",
       NAKAMA_SEED_ADMIN_NAME: "Owner",
@@ -220,14 +226,17 @@ describe("runFirstBootSeed", () => {
         NAKAMA_SEED_ADMIN_PASSWORD: "seedpass123",
       },
     });
+
     expect(result.seeded).toBe(true);
 
     const org =
       await services.databaseAdapter.getOrganizationBySlug("personal");
+
     expect(org?.name).toBe("Personal");
 
     const userConfig = await loadUserConfig();
     const provider = createProviderFromActiveConfig(userConfig, process.env);
+
     const { app } = createMinimalHonoApp({
       agent: {
         listProfiles: async () => ({ profiles: [{ id: "default" }] }),
@@ -242,6 +251,7 @@ describe("runFirstBootSeed", () => {
     const response = await app.fetch(
       new Request("http://localhost:4310/health")
     );
+
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       providerConfigured: false,
