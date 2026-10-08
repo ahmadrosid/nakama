@@ -60,6 +60,108 @@ describe("knowledge base store", () => {
     );
   }
 
+  test.each(["profile", "organization"] as const)(
+    "preserves every concurrent %s upload",
+    async (scope) => {
+      const profileId = "profile_concurrent_uploads";
+      await setupProfile(profileId);
+      const uploads = await Promise.allSettled(
+        Array.from({ length: 8 }, (_, index) => {
+          const attachment = {
+            data: Buffer.from(`document ${index}`).toString("base64"),
+            filename: `document-${index}.txt`,
+            mediaType: "text/plain",
+          };
+          return scope === "profile"
+            ? uploadKnowledgeBaseDocument(ORG_ID, profileId, attachment)
+            : uploadOrganizationKnowledgeBaseDocument(ORG_ID, attachment);
+        })
+      );
+      expect(uploads.every((upload) => upload.status === "fulfilled")).toBe(
+        true
+      );
+      const documents =
+        scope === "profile"
+          ? await listKnowledgeBaseDocuments(ORG_ID, profileId)
+          : await listOrganizationKnowledgeBaseDocuments(ORG_ID);
+      expect(documents.map((document) => document.filename).sort()).toEqual(
+        Array.from({ length: 8 }, (_, index) => `document-${index}.txt`)
+      );
+    }
+  );
+
+  test("preserves concurrent uploads, deletes, attaches, and detaches", async () => {
+    const profileId = "profile_concurrent_changes";
+    await setupProfile(profileId);
+    const source = {
+      data: Buffer.from("old content").toString("base64"),
+      filename: "old.txt",
+      mediaType: "text/plain",
+    };
+    const old = await uploadKnowledgeBaseDocument(ORG_ID, profileId, source);
+    const first = await uploadOrganizationKnowledgeBaseDocument(ORG_ID, source);
+    const second = await uploadOrganizationKnowledgeBaseDocument(ORG_ID, {
+      ...source,
+      data: Buffer.from("second shared content").toString("base64"),
+      filename: "second.txt",
+    });
+    await attachSharedKnowledgeBaseDocument(
+      ORG_ID,
+      profileId,
+      first.document.id
+    );
+    const changes = await Promise.allSettled([
+      uploadKnowledgeBaseDocument(ORG_ID, profileId, {
+        ...source,
+        data: Buffer.from("new content").toString("base64"),
+        filename: "new.txt",
+      }),
+      deleteKnowledgeBaseDocument(ORG_ID, profileId, old.document.id),
+      attachSharedKnowledgeBaseDocument(ORG_ID, profileId, second.document.id),
+      detachSharedKnowledgeBaseDocument(ORG_ID, profileId, first.document.id),
+    ]);
+    expect(changes.every((change) => change.status === "fulfilled")).toBe(true);
+    expect(
+      (await listKnowledgeBaseDocuments(ORG_ID, profileId)).map(
+        (document) => document.filename
+      )
+    ).toEqual(["new.txt"]);
+    expect(await getProfileSharedDocumentIds(ORG_ID, profileId)).toEqual([
+      second.document.id,
+    ]);
+  });
+
+  test("enforces duplicate handling and releases the lock after a rejected upload", async () => {
+    const profileId = "profile_concurrent_duplicates";
+    await setupProfile(profileId);
+    const source = {
+      data: Buffer.from("same content").toString("base64"),
+      filename: "same.txt",
+      mediaType: "text/plain",
+    };
+    const uploads = await Promise.allSettled([
+      uploadKnowledgeBaseDocument(ORG_ID, profileId, source),
+      uploadKnowledgeBaseDocument(ORG_ID, profileId, source),
+      uploadKnowledgeBaseDocument(ORG_ID, profileId, source, "skip"),
+    ]);
+    expect(uploads[0]?.status).toBe("fulfilled");
+    expect(uploads[1]?.status).toBe("rejected");
+    if (uploads[1]?.status === "rejected") {
+      expect(uploads[1].reason).toBeInstanceOf(KnowledgeBaseDuplicateError);
+    }
+    expect(uploads[2]?.status).toBe("fulfilled");
+    if (uploads[2]?.status === "fulfilled") {
+      expect(uploads[2].value.outcome).toBe("skipped");
+    }
+    expect(await listKnowledgeBaseDocuments(ORG_ID, profileId)).toHaveLength(1);
+    await uploadKnowledgeBaseDocument(ORG_ID, profileId, {
+      ...source,
+      data: Buffer.from("next content").toString("base64"),
+      filename: "next.txt",
+    });
+    expect(await listKnowledgeBaseDocuments(ORG_ID, profileId)).toHaveLength(2);
+  });
+
   test("uploads, lists, and deletes text documents", async () => {
     const profileId = "profile_kb_test";
     await setupProfile(profileId);

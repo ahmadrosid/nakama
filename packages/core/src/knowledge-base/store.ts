@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { createChatLock } from "../channel-chat-lock";
 import type {
   DocumentAttachment,
   KnowledgeBaseDocument,
@@ -39,6 +40,9 @@ interface KnowledgeBaseManifest {
   /** Additive references to organization-owned documents. */
   sharedDocumentIds?: string[];
 }
+
+// ponytail: One process only; use a shared lock if servers share a data directory.
+const knowledgeBaseMutationLock = createChatLock();
 
 export type KnowledgeBaseDuplicateMatch = "content_hash" | "name_size";
 
@@ -463,10 +467,12 @@ export async function uploadKnowledgeBaseDocument(
   attachment: DocumentAttachment,
   onDuplicate: KnowledgeBaseDuplicateAction = "error"
 ): Promise<UploadKnowledgeBaseDocumentResult> {
-  return uploadDocumentTo(
-    await profileKnowledgeBaseDir(orgId, profileId),
-    attachment,
-    onDuplicate
+  return knowledgeBaseMutationLock.withLock(getOrgConfigDir(orgId), async () =>
+    uploadDocumentTo(
+      await profileKnowledgeBaseDir(orgId, profileId),
+      attachment,
+      onDuplicate
+    )
   );
 }
 
@@ -476,12 +482,14 @@ export async function uploadOrganizationKnowledgeBaseDocument(
   onDuplicate: KnowledgeBaseDuplicateAction = "error",
   knownProfileIds?: readonly string[]
 ): Promise<UploadKnowledgeBaseDocumentResult> {
-  return await uploadDocumentTo(
-    await orgKnowledgeBaseDir(orgId),
-    attachment,
-    onDuplicate,
-    (documentId) =>
-      guardSharedDocumentRemoval(orgId, documentId, knownProfileIds)
+  return knowledgeBaseMutationLock.withLock(getOrgConfigDir(orgId), async () =>
+    uploadDocumentTo(
+      await orgKnowledgeBaseDir(orgId),
+      attachment,
+      onDuplicate,
+      (documentId) =>
+        guardSharedDocumentRemoval(orgId, documentId, knownProfileIds)
+    )
   );
 }
 
@@ -565,8 +573,13 @@ export async function deleteKnowledgeBaseDocument(
   profileId: string,
   documentId: string
 ): Promise<boolean> {
-  const dir = await profileKnowledgeBaseDir(orgId, profileId);
-  return deleteDocumentFrom(dir, documentId);
+  return knowledgeBaseMutationLock.withLock(
+    getOrgConfigDir(orgId),
+    async () => {
+      const dir = await profileKnowledgeBaseDir(orgId, profileId);
+      return deleteDocumentFrom(dir, documentId);
+    }
+  );
 }
 
 export async function deleteOrganizationKnowledgeBaseDocument(
@@ -574,9 +587,14 @@ export async function deleteOrganizationKnowledgeBaseDocument(
   documentId: string,
   knownProfileIds?: readonly string[]
 ): Promise<boolean> {
-  const dir = await orgKnowledgeBaseDir(orgId);
-  return await deleteDocumentFrom(dir, documentId, (candidate) =>
-    guardSharedDocumentRemoval(orgId, candidate, knownProfileIds)
+  return knowledgeBaseMutationLock.withLock(
+    getOrgConfigDir(orgId),
+    async () => {
+      const dir = await orgKnowledgeBaseDir(orgId);
+      return deleteDocumentFrom(dir, documentId, (candidate) =>
+        guardSharedDocumentRemoval(orgId, candidate, knownProfileIds)
+      );
+    }
   );
 }
 
@@ -594,16 +612,21 @@ export async function attachSharedKnowledgeBaseDocument(
   profileId: string,
   documentId: string
 ): Promise<void> {
-  const shared = await readManifestFrom(await orgKnowledgeBaseDir(orgId));
-  if (!shared.documents.some((document) => document.id === documentId)) {
-    throw new Error("Shared knowledge base document not found.");
-  }
-  const dir = await profileKnowledgeBaseDir(orgId, profileId);
-  const manifest = await readManifestFrom(dir);
-  manifest.sharedDocumentIds = [
-    ...new Set([...(manifest.sharedDocumentIds ?? []), documentId]),
-  ];
-  await writeManifestTo(dir, manifest);
+  return knowledgeBaseMutationLock.withLock(
+    getOrgConfigDir(orgId),
+    async () => {
+      const shared = await readManifestFrom(await orgKnowledgeBaseDir(orgId));
+      if (!shared.documents.some((document) => document.id === documentId)) {
+        throw new Error("Shared knowledge base document not found.");
+      }
+      const dir = await profileKnowledgeBaseDir(orgId, profileId);
+      const manifest = await readManifestFrom(dir);
+      manifest.sharedDocumentIds = [
+        ...new Set([...(manifest.sharedDocumentIds ?? []), documentId]),
+      ];
+      await writeManifestTo(dir, manifest);
+    }
+  );
 }
 
 export async function detachSharedKnowledgeBaseDocument(
@@ -611,15 +634,20 @@ export async function detachSharedKnowledgeBaseDocument(
   profileId: string,
   documentId: string
 ): Promise<boolean> {
-  const dir = await profileKnowledgeBaseDir(orgId, profileId);
-  const manifest = await readManifestFrom(dir);
-  const ids = manifest.sharedDocumentIds ?? [];
-  if (!ids.includes(documentId)) {
-    return false;
-  }
-  manifest.sharedDocumentIds = ids.filter((id) => id !== documentId);
-  await writeManifestTo(dir, manifest);
-  return true;
+  return knowledgeBaseMutationLock.withLock(
+    getOrgConfigDir(orgId),
+    async () => {
+      const dir = await profileKnowledgeBaseDir(orgId, profileId);
+      const manifest = await readManifestFrom(dir);
+      const ids = manifest.sharedDocumentIds ?? [];
+      if (!ids.includes(documentId)) {
+        return false;
+      }
+      manifest.sharedDocumentIds = ids.filter((id) => id !== documentId);
+      await writeManifestTo(dir, manifest);
+      return true;
+    }
+  );
 }
 
 /**
