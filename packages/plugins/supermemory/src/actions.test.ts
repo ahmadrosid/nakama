@@ -10,23 +10,52 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { PluginExecutionContext } from "@nakama/core";
-import { run } from "./actions";
+import { type JsonRecord, type JsonValue, run } from "./actions";
 
 let dir: string;
+
 const originalFetch = globalThis.fetch;
+
 let calls: {
   path: string;
   method: string;
-  body: Record<string, unknown>;
+  body: JsonRecord;
   auth: string | null;
 }[];
-let reply: (path: string, body: Record<string, unknown>) => Response;
-let context: PluginExecutionContext & {
-  host: (input: unknown) => Promise<unknown>;
-};
-const invoke = (actionKey: string, input: Record<string, unknown> = {}) =>
+
+let reply: (path: string, body: JsonRecord) => Response;
+
+let context: Parameters<typeof run>[1];
+
+const invoke = (actionKey: string, input: JsonRecord = {}) =>
   run(input, { ...context, actionKey });
+
+function asJsonRecord(value: JsonValue | undefined): JsonRecord {
+  if (!(value instanceof Object) || Array.isArray(value)) {
+    throw new Error("Expected a JSON object");
+  }
+
+  return value;
+}
+
+function asJsonRecords(value: JsonValue | undefined): JsonRecord[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Expected a JSON array");
+  }
+
+  return value.map((entry) => asJsonRecord(entry));
+}
+
+function stringField(record: JsonRecord, key: string): string {
+  const value = record[key];
+
+  if (value !== String(value)) {
+    throw new Error(`Expected string field: ${key}`);
+  }
+
+  return value;
+}
+
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "nakama-supermemory-"));
   const databasePath = join(dir, "plugin.sqlite");
@@ -39,6 +68,7 @@ beforeEach(() => {
   );
   db.close();
   context = {
+    actionKey: "remember",
     actor: { id: "admin", role: "admin" },
     apiVersion: 1,
     databasePath,
@@ -54,11 +84,8 @@ beforeEach(() => {
   };
   calls = [];
   reply = () => Response.json({});
-  globalThis.fetch = (async (
-    url: string | URL | Request,
-    init?: RequestInit
-  ) => {
-    const body = JSON.parse(String(init?.body ?? "{}"));
+  globalThis.fetch = async (url, init) => {
+    const body: JsonRecord = JSON.parse(String(init?.body ?? "{}"));
     const path = new URL(String(url)).pathname;
     calls.push({
       auth: new Headers(init?.headers).get("Authorization"),
@@ -66,13 +93,16 @@ beforeEach(() => {
       method: String(init?.method),
       path,
     });
+
     return reply(path, body);
-  }) as unknown as typeof fetch;
+  };
 });
+
 afterEach(() => {
   globalThis.fetch = originalFetch;
   rmSync(dir, { force: true, recursive: true });
 });
+
 const configure = () =>
   invoke("save_settings", { token: "secret", url: "http://localhost:3000" });
 
@@ -108,16 +138,16 @@ test("ambiguous memory writes cannot be replayed and key reuse is rejected", asy
   reply = () => {
     throw new Error("connection lost secret");
   };
+
   const input = {
     agentId: "alice",
     content: "Prefers tea",
     submissionKey: "one",
   };
-  const first = (await invoke("remember", input)) as {
-    id: string;
-    state: string;
-  };
-  expect(first.state).toBe("unknown");
+
+  const first = asJsonRecord(await invoke("remember", input));
+
+  expect(stringField(first, "state")).toBe("unknown");
   await expect(invoke("remember", input)).rejects.toThrow();
   expect(calls.filter((c) => c.path === "/v4/memories")).toHaveLength(1);
   await expect(
@@ -138,9 +168,11 @@ test("documents reconcile by customId and foreign IDs cannot be deleted", async 
       customId = String(body.customId);
       throw new Error("lost");
     }
+
     if (path === "/v3/documents/list") {
       return Response.json({ memories: [{ id: "remote-doc" }] });
     }
+
     return Response.json({
       containerTags: [tag],
       content: "Knowledge",
@@ -149,15 +181,17 @@ test("documents reconcile by customId and foreign IDs cannot be deleted", async 
       status: "done",
     });
   };
+
   const input = {
     agentId: "alice",
     content: "Knowledge",
     submissionKey: "doc-one",
     title: "Guide",
   };
-  const first = (await invoke("add_document", input)) as { id: string };
-  const recovered = (await invoke("add_document", input)) as { state: string };
-  expect(recovered.state).toBe("ready");
+
+  const first = asJsonRecord(await invoke("add_document", input));
+  const recovered = asJsonRecord(await invoke("add_document", input));
+  expect(stringField(recovered, "state")).toBe("ready");
   expect(calls.filter((c) => c.path === "/v3/documents")).toHaveLength(1);
   const count = calls.length;
   await expect(
@@ -168,6 +202,7 @@ test("documents reconcile by customId and foreign IDs cannot be deleted", async 
 
 test("invalid text is rejected before ingestion", async () => {
   await configure();
+
   for (const content of [
     "",
     "https://example.com",
@@ -183,23 +218,32 @@ test("invalid text is rejected before ingestion", async () => {
       })
     ).rejects.toThrow();
   }
+
   expect(calls).toHaveLength(0);
 });
 
 test("search and forget require owned metadata and filter the selected fact only", async () => {
   await configure();
-  let meta: Record<string, unknown> = {};
+  let meta: JsonRecord = {};
   reply = (path, body) => {
     if (path === "/v4/memories" && body.memories) {
-      meta = (body.memories as { metadata: Record<string, unknown> }[])[0]!
-        .metadata;
+      const memory = asJsonRecords(body.memories)[0];
+
+      if (!memory) {
+        throw new Error("Expected a memory request");
+      }
+
+      meta = asJsonRecord(memory.metadata);
+
       return Response.json({ memories: [{ id: "mem-1" }] });
     }
+
     if (path === "/v4/memories/list") {
       return Response.json({
         memoryEntries: [{ id: "mem-1", isForgotten: false, metadata: meta }],
       });
     }
+
     if (path === "/v4/search") {
       return Response.json({
         results: [
@@ -208,21 +252,26 @@ test("search and forget require owned metadata and filter the selected fact only
         ],
       });
     }
+
     return Response.json({});
   };
-  const saved = (await invoke("remember", {
+
+  const saved = await invoke("remember", {
     agentId: "alice",
     content: "Prefers tea",
     submissionKey: "tea",
-  })) as { id: string };
+  });
+
+  const savedRecord = asJsonRecord(saved);
+
   expect(
     await invoke("search_memory", { agentId: "alice", query: "drink" })
-  ).toMatchObject({ items: [{ excerpt: "Prefers tea", id: saved.id }] });
+  ).toMatchObject({ items: [{ excerpt: "Prefers tea", id: savedRecord.id }] });
   expect(
     await invoke("search_memory", { agentId: "bob", query: "drink" })
   ).toEqual({ items: [] });
   expect(
-    await invoke("forget_memory", { agentId: "alice", id: saved.id })
+    await invoke("forget_memory", { agentId: "alice", id: savedRecord.id })
   ).toMatchObject({ state: "forgotten" });
   expect(
     await invoke("search_memory", { agentId: "alice", query: "drink" })
@@ -232,9 +281,11 @@ test("search and forget require owned metadata and filter the selected fact only
     include: { forgottenMemories: false },
     searchMode: "memories",
   });
+
   const forgotten = calls
     .filter((call) => call.path === "/v4/memories")
     .at(-1)!;
+
   expect(forgotten.body).toEqual({
     containerTag: meta.nakamaContainer,
     id: "mem-1",
@@ -243,15 +294,17 @@ test("search and forget require owned metadata and filter the selected fact only
 
 test("failed document removal excludes search immediately and retries safely", async () => {
   await configure();
-  let meta: Record<string, unknown> = {};
+  let meta: JsonRecord = {};
   let customId = "";
   let failDelete = true;
   reply = (path, body) => {
     if (path === "/v3/documents") {
-      meta = body.metadata as Record<string, unknown>;
+      meta = asJsonRecord(body.metadata);
       customId = String(body.customId);
+
       return Response.json({ id: "doc-1" });
     }
+
     if (path === "/v3/search") {
       return Response.json({
         results: [
@@ -263,6 +316,7 @@ test("failed document removal excludes search immediately and retries safely", a
         ],
       });
     }
+
     if (
       calls.at(-1)?.body &&
       Object.keys(body).length === 0 &&
@@ -276,57 +330,65 @@ test("failed document removal excludes search immediately and retries safely", a
         status: "done",
       });
     }
+
     return Response.json({});
   };
+
   const transport = globalThis.fetch;
-  globalThis.fetch = (async (
-    url: string | URL | Request,
-    init?: RequestInit
-  ) => {
+  globalThis.fetch = async (url: RequestInfo | URL, init?: RequestInit) => {
     if (init?.method === "DELETE" && failDelete) {
       return new Response("outage", { status: 503 });
     }
+
     return transport(url, init);
-  }) as unknown as typeof fetch;
-  const saved = (await invoke("add_document", {
-    agentId: "alice",
-    content: "Some knowledge",
-    submissionKey: "guide",
-    title: "Guide",
-  })) as { id: string };
+  };
+
+  const saved = asJsonRecord(
+    await invoke("add_document", {
+      agentId: "alice",
+      content: "Some knowledge",
+      submissionKey: "guide",
+      title: "Guide",
+    })
+  );
+
+  const savedId = stringField(saved, "id");
+
   expect(
-    await invoke("get_document", { agentId: "alice", id: saved.id })
+    await invoke("get_document", { agentId: "alice", id: savedId })
   ).toMatchObject({ content: "Full document content", state: "ready" });
   expect(
     await invoke("search_knowledge", { agentId: "alice", query: "guide" })
-  ).toMatchObject({ items: [{ excerpt: "Guide excerpt", id: saved.id }] });
+  ).toMatchObject({ items: [{ excerpt: "Guide excerpt", id: savedId }] });
   expect(
-    await invoke("delete_document", { agentId: "alice", id: saved.id })
+    await invoke("delete_document", { agentId: "alice", id: savedId })
   ).toMatchObject({ state: "deleting" });
   expect(
     await invoke("search_knowledge", { agentId: "alice", query: "guide" })
   ).toEqual({ items: [] });
   expect(
-    await invoke("get_document", { agentId: "alice", id: saved.id })
+    await invoke("get_document", { agentId: "alice", id: savedId })
   ).toMatchObject({ state: "deleting" });
   failDelete = false;
   expect(
-    await invoke("delete_document", { agentId: "alice", id: saved.id })
+    await invoke("delete_document", { agentId: "alice", id: savedId })
   ).toMatchObject({ state: "deleted" });
 });
 
 test("concurrent saves reserve once, preserve URL/token pairing, and rotate same-server tokens", async () => {
   await configure();
   let complete: ((response: Response) => void) | undefined;
-  globalThis.fetch = (async () =>
+  globalThis.fetch = async () =>
     new Promise<Response>((resolve) => {
       complete = resolve;
-    })) as unknown as typeof fetch;
+    });
+
   const input = {
     agentId: "alice",
     content: "Same save",
     submissionKey: "concurrent",
   };
+
   const first = invoke("remember", input);
   await new Promise((resolve) => setTimeout(resolve, 0));
   const duplicate = await invoke("remember", input);
@@ -354,52 +416,68 @@ test("concurrent saves reserve once, preserve URL/token pairing, and rotate same
 
 test("a late reconciliation cannot resurrect a forgotten memory", async () => {
   await configure();
-  let meta: Record<string, unknown> = {};
+  let meta: JsonRecord = {};
   reply = (path, body) => {
     if (path === "/v4/memories" && body.memories) {
-      meta = (body.memories as { metadata: Record<string, unknown> }[])[0]!
-        .metadata;
+      const memory = asJsonRecords(body.memories)[0];
+
+      if (!memory) {
+        throw new Error("Expected a memory request");
+      }
+
+      meta = asJsonRecord(memory.metadata);
+
       return Response.json({ memories: [{ id: "mem-race" }] });
     }
+
     if (path === "/v4/memories/list") {
       return Response.json({
         memoryEntries: [{ id: "mem-race", isForgotten: false, metadata: meta }],
       });
     }
+
     return Response.json({});
   };
-  const saved = (await invoke("remember", {
-    agentId: "alice",
-    content: "Secret fact",
-    submissionKey: "race",
-  })) as { id: string };
+
+  const saved = asJsonRecord(
+    await invoke("remember", {
+      agentId: "alice",
+      content: "Secret fact",
+      submissionKey: "race",
+    })
+  );
+
+  const savedId = stringField(saved, "id");
+
   const db = new Database(context.databasePath!);
-  db.query("UPDATE receipts SET state='unknown' WHERE id=?").run(saved.id);
+  db.query("UPDATE receipts SET state='unknown' WHERE id=?").run(savedId);
   db.close();
   const transport = globalThis.fetch;
   let release: ((response: Response) => void) | undefined;
   let listingStarted: () => void = () => {};
+
   const started = new Promise<void>((resolve) => {
     listingStarted = resolve;
   });
+
   let first = true;
-  globalThis.fetch = (async (
-    url: string | URL | Request,
-    init?: RequestInit
-  ) => {
+  globalThis.fetch = async (url: RequestInfo | URL, init?: RequestInit) => {
     if (String(url).endsWith("/v4/memories/list") && first) {
       first = false;
       listingStarted();
+
       return new Promise<Response>((resolve) => {
         release = resolve;
       });
     }
+
     return transport(url, init);
-  }) as unknown as typeof fetch;
-  const reconcile = invoke("list_memories", { agentId: "alice", id: saved.id });
+  };
+
+  const reconcile = invoke("list_memories", { agentId: "alice", id: savedId });
   await started;
   expect(
-    await invoke("forget_memory", { agentId: "alice", id: saved.id })
+    await invoke("forget_memory", { agentId: "alice", id: savedId })
   ).toMatchObject({ state: "forgotten" });
   release!(
     Response.json({
@@ -411,30 +489,40 @@ test("a late reconciliation cannot resurrect a forgotten memory", async () => {
 
 test("an interrupted submission reconciles without creating again", async () => {
   await configure();
-  let meta: Record<string, unknown> = {};
+  let meta: JsonRecord = {};
   reply = (path, body) => {
     if (path === "/v4/memories") {
-      meta = (body.memories as { metadata: Record<string, unknown> }[])[0]!
-        .metadata;
+      const memory = asJsonRecords(body.memories)[0];
+
+      if (!memory) {
+        throw new Error("Expected a memory request");
+      }
+
+      meta = asJsonRecord(memory.metadata);
+
       return Response.json({ memories: [{ id: "persisted" }] });
     }
+
     return Response.json({
       memoryEntries: [{ id: "persisted", isForgotten: false, metadata: meta }],
     });
   };
+
   const input = {
     agentId: "alice",
     content: "Saya suka teh",
     submissionKey: "restart",
   };
-  const saved = (await invoke("remember", input)) as { id: string };
+
+  const saved = asJsonRecord(await invoke("remember", input));
+  const savedId = stringField(saved, "id");
   const db = new Database(context.databasePath!);
   db.query(
     "UPDATE receipts SET state='submitting',upstream_id=NULL,updated_at=0 WHERE id=?"
-  ).run(saved.id);
+  ).run(savedId);
   db.close();
   expect(await invoke("remember", input)).toMatchObject({
-    id: saved.id,
+    id: savedId,
     state: "ready",
   });
   expect(calls.filter((call) => call.path === "/v4/memories")).toHaveLength(1);
@@ -451,17 +539,23 @@ test("wrong-container documents cannot be returned or remotely deleted", async (
           id: "doc",
           status: "done",
         });
-  const saved = (await invoke("add_document", {
-    agentId: "alice",
-    content: "A guide",
-    submissionKey: "ownership",
-    title: "Guide",
-  })) as { id: string };
+
+  const saved = asJsonRecord(
+    await invoke("add_document", {
+      agentId: "alice",
+      content: "A guide",
+      submissionKey: "ownership",
+      title: "Guide",
+    })
+  );
+
+  const savedId = stringField(saved, "id");
+
   await expect(
-    invoke("get_document", { agentId: "alice", id: saved.id })
+    invoke("get_document", { agentId: "alice", id: savedId })
   ).rejects.toThrow();
   expect(
-    await invoke("delete_document", { agentId: "alice", id: saved.id })
+    await invoke("delete_document", { agentId: "alice", id: savedId })
   ).toMatchObject({ state: "deleting" });
   expect(
     calls.filter((call) => call.path === "/v3/documents/doc")

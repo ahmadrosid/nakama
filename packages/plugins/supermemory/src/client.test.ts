@@ -10,6 +10,7 @@ test("connection endpoints reject token leaks and insecure public HTTP", () => {
   ]) {
     expect(() => normalizeUrl(url)).toThrow();
   }
+
   expect(normalizeUrl("http://127.0.0.1:3000/")).toBe("http://127.0.0.1:3000");
   expect(normalizeUrl("http://192.168.1.2:3000")).toBe(
     "http://192.168.1.2:3000"
@@ -21,6 +22,7 @@ test("HTTP errors never return upstream bodies or credentials", async () => {
     { token: "private-token", url: "http://localhost:3000" },
     async () => new Response("private-token", { status: 401 })
   );
+
   await expect(client.request("POST", "/v4/search", {})).rejects.toThrow(
     "authentication"
   );
@@ -36,6 +38,7 @@ test("rejects redirects, invalid JSON and oversized responses", async () => {
       { token: "secret", url: "http://localhost:3000" },
       async () => response
     );
+
     await expect(client.request("POST", "/v4/search", {})).rejects.toThrow();
   }
 });
@@ -52,6 +55,7 @@ test("aborts a stalled request within the configured timeout", async () => {
         );
       })
   );
+
   await expect(client.request("POST", "/v4/search", {})).rejects.toThrow(
     "timed out"
   );
@@ -59,19 +63,23 @@ test("aborts a stalled request within the configured timeout", async () => {
 
 test("whole-document reads can use an explicitly larger bounded response budget", async () => {
   const content = "a".repeat(2_200_000);
+
   const client = new SupermemoryClient(
     { token: "secret", url: "http://localhost:3000" },
     async () => Response.json({ content }),
     3_000_000
   );
+
   expect((await client.request("GET", "/v3/documents/document")).content).toBe(
     content
   );
+
   const limited = new SupermemoryClient(
     { token: "secret", url: "http://localhost:3000" },
     async () => Response.json({ content }),
     2_000_000
   );
+
   await expect(
     limited.request("GET", "/v3/documents/document")
   ).rejects.toThrow();

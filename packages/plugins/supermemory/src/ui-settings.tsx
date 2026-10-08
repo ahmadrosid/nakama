@@ -2,11 +2,19 @@
 /** @jsx React.createElement */
 /** @jsxFrag React.Fragment */
 import type * as ReactType from "react";
-import { type Context, errorText } from "./ui-context";
+import {
+  asJsonRecord,
+  type Context,
+  errorText,
+  readJsonString,
+} from "./ui-context";
+
 export function createSettings(ctx: Context) {
   const React = ctx.React;
+
   const { Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle } =
     ctx.ui;
+
   function Settings({
     close,
     saved,
@@ -26,28 +34,31 @@ export function createSettings(ctx: Context) {
         .call("get_settings")
         .then((value) => {
           if (alive) {
-            const settings = value as {
-              managed?: boolean;
-              url?: string;
-            };
-            setManaged(!!settings.managed);
-            setUrl(settings.url ?? "");
+            const settings = asJsonRecord(value);
+
+            setManaged(settings?.managed === true);
+            setUrl((settings && readJsonString(settings.url)) ?? "");
             setLoaded(true);
           }
         })
         .catch((error) => {
           if (alive) {
-            setMessage(errorText(error));
+            setMessage(
+              errorText(error instanceof Error ? error : "Request failed")
+            );
           }
         });
+
       return () => {
         alive = false;
       };
     }, []);
+
     async function save(event: ReactType.FormEvent) {
       event.preventDefault();
       setBusy(true);
       setMessage("");
+
       try {
         await ctx.host.call("save_settings", {
           token: token || undefined,
@@ -56,23 +67,30 @@ export function createSettings(ctx: Context) {
         setToken("");
         saved();
       } catch (error) {
-        setMessage(errorText(error));
+        setMessage(
+          errorText(error instanceof Error ? error : "Request failed")
+        );
       } finally {
         setBusy(false);
       }
     }
+
     async function check() {
       setBusy(true);
       setMessage("");
+
       try {
         await ctx.host.call("check_connection");
         setMessage("Connected to saved server");
       } catch (error) {
-        setMessage(errorText(error));
+        setMessage(
+          errorText(error instanceof Error ? error : "Request failed")
+        );
       } finally {
         setBusy(false);
       }
     }
+
     return (
       <Dialog
         onOpenChange={(open) => {
@@ -138,5 +156,6 @@ export function createSettings(ctx: Context) {
       </Dialog>
     );
   }
+
   return Settings;
 }
