@@ -58,13 +58,15 @@ export function OllamaProviderModelFields({
       showPricing={hostMode === "cloud"}
       showThinking
       showVision
-      toModelRow={(row: RemoteModelRow) => ({
-        id: row.id,
-        name: row.name,
-        ...(row.supportsVision === undefined
-          ? {}
-          : { supportsVision: row.supportsVision }),
-      })}
+      toModelRow={(row: RemoteModelRow) => {
+        const model: ModelListRow = { id: row.id, name: row.name };
+
+        if (row.supportsVision !== undefined) {
+          model.supportsVision = row.supportsVision;
+        }
+
+        return model;
+      }}
     />
   );
 }

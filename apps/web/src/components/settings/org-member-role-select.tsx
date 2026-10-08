@@ -13,6 +13,8 @@ const ROLE_LABELS: Record<OrgRole, string> = {
   viewer: "Viewer",
 };
 
+const ROLES: OrgRole[] = ["admin", "member", "viewer"];
+
 export function OrgMemberRoleSelect({
   value,
   disabled,
@@ -26,8 +28,10 @@ export function OrgMemberRoleSelect({
     <Select
       disabled={disabled}
       onValueChange={(next) => {
-        if (next) {
-          onChange(next as OrgRole);
+        const role = ROLES.find((candidate) => candidate === next);
+
+        if (role) {
+          onChange(role);
         }
       }}
       value={value}
@@ -36,7 +40,7 @@ export function OrgMemberRoleSelect({
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {(Object.keys(ROLE_LABELS) as OrgRole[]).map((role) => (
+        {ROLES.map((role) => (
           <SelectItem key={role} value={role}>
             {ROLE_LABELS[role]}
           </SelectItem>

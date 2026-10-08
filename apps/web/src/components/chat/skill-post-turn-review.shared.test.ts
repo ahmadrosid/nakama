@@ -39,6 +39,7 @@ description: Run the deploy checklist.
 `,
       })
     );
+
     expect(preview.title).toContain("deploy-notes");
     expect(preview.description).toBe("Run the deploy checklist.");
     expect(preview.excerpt).toContain("Steps");
@@ -52,6 +53,7 @@ description: Run the deploy checklist.
         patchOldString: "old step",
       })
     );
+
     expect(preview.title).toContain("Update");
     expect(preview.excerpt).toContain("old step");
     expect(preview.excerpt).toContain("new step");

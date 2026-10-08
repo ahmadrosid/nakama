@@ -64,6 +64,7 @@ function syncSoulProfileSelection({
   if (!profileInitializedRef.current) {
     profileInitializedRef.current = true;
     setProfileIdState(nextProfileId);
+
     return;
   }
 
@@ -122,7 +123,7 @@ async function saveSoulFile({
 }
 
 function applySoulQueryError(
-  queryError: unknown,
+  queryError: Error | null,
   setError: (value: string | null) => void
 ) {
   if (queryError) {
@@ -131,7 +132,7 @@ function applySoulQueryError(
 }
 
 function applySoulFileError(
-  fileError: unknown,
+  fileError: Error | null,
   setDialogError: (value: string | null) => void
 ) {
   if (fileError) {
@@ -197,15 +198,18 @@ function renderSoulTabGate({
 function useSoulTab(controlledProfileId?: string | null) {
   const embedded = controlledProfileId !== undefined;
   const [searchParams, setSearchParams] = useSearchParams();
+
   const {
     data: profiles = [],
     error: profilesError,
     isFetching: profilesFetching,
     refetch: refetchProfiles,
   } = useProfilesQuery();
+
   const [internalProfileId, setProfileIdState] = useState<string | null>(null);
   const profileInitializedRef = useRef(false);
   const profileId = embedded ? controlledProfileId : internalProfileId;
+
   const {
     data: status = null,
     isLoading: statusLoading,
@@ -213,12 +217,15 @@ function useSoulTab(controlledProfileId?: string | null) {
     error: statusError,
     refetch: refetchStatus,
   } = useSoulStatusQuery(profileId);
+
   const [openFile, setOpenFile] = useState<keyof SoulStackFiles | null>(null);
+
   const {
     data: fileContent = "",
     isLoading: dialogLoading,
     error: fileError,
   } = useSoulFileQuery(profileId, openFile, openFile !== null);
+
   const writeSoulMutation = useWriteSoulFileMutation();
   const [editContent, setEditContent] = useState("");
   const [savedContent, setSavedContent] = useState("");
@@ -231,9 +238,11 @@ function useSoulTab(controlledProfileId?: string | null) {
 
   const selectedProfile =
     profiles.find((profile) => profile.id === profileId) ?? null;
+
   const openFileMeta = openFile
     ? SOUL_FILES.find((file) => file.key === openFile)
     : null;
+
   const isDirty = editContent !== savedContent;
   const isWritable = openFileMeta?.writable ?? false;
 
@@ -245,11 +254,13 @@ function useSoulTab(controlledProfileId?: string | null) {
         (current) => {
           const next = new URLSearchParams(current);
           const defaultProfileId = findDefaultProfile(profiles)?.id;
+
           if (defaultProfileId && nextProfileId === defaultProfileId) {
             next.delete("profile");
           } else {
             next.set("profile", nextProfileId);
           }
+
           return next;
         },
         { replace: true }
@@ -322,6 +333,7 @@ export function SoulTab({
   profileId?: string | null;
 } = {}) {
   const tab = useSoulTab(controlledProfileId);
+
   const gated = renderSoulTabGate({
     embedded: tab.embedded,
     loading: tab.loading,

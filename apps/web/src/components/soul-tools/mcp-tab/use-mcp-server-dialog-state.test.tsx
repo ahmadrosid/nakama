@@ -32,6 +32,7 @@ test.each(["http", "stdio"] as const)(
       updatedAt: "2026-01-01",
       usesOAuth: false,
     };
+
     const queryClient = new QueryClient();
     queryClient.setQueryData(
       mcpServerDetailQueryOptions(server.id).queryKey,
@@ -42,6 +43,7 @@ test.each(["http", "stdio"] as const)(
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
+
     function Probe({ open, editing }: { open: boolean; editing: boolean }) {
       state = useMcpServerDialogState({
         busy: false,
@@ -51,20 +53,24 @@ test.each(["http", "stdio"] as const)(
         open,
         server: editing ? server : null,
       });
+
       return <form onSubmit={state.handleSubmit} />;
     }
+
     const render = (open: boolean, editing = true) =>
       root.render(
         <QueryClientProvider client={queryClient}>
           <Probe editing={editing} open={open} />
         </QueryClientProvider>
       );
+
     const submit = () =>
       container
         .querySelector("form")!
         .dispatchEvent(
           new window.Event("submit", { bubbles: true, cancelable: true })
         );
+
     try {
       await act(async () => render(false));
       await act(async () => render(true));
@@ -89,6 +95,7 @@ test.each(["http", "stdio"] as const)(
           ? { args: [], command: "demo", env: {} }
           : { headers: {}, url: "https://example.com/mcp" }
       );
+
       if (transport === "http") {
         await act(async () => state.selectKind("signin"));
         await act(async () => {
@@ -98,12 +105,14 @@ test.each(["http", "stdio"] as const)(
           url: "https://example.com/mcp",
         });
       }
+
       // Creation still omits optional empty fields.
       await act(async () => render(false, false));
       await act(async () => render(true, false));
       await act(async () => {
         state.setName("New");
         state.selectKind(transport);
+
         if (transport === "stdio") {
           state.setCommand("new-command");
         } else {
@@ -118,6 +127,7 @@ test.each(["http", "stdio"] as const)(
           ? { command: "new-command" }
           : { url: "https://example.com/new" }
       );
+
       if (transport === "http") {
         await act(async () => {
           state.setHeaders([{ key: "Authorization", value: "unused" }]);
@@ -130,6 +140,7 @@ test.each(["http", "stdio"] as const)(
           url: "https://example.com/new",
         });
       }
+
       expect(requests).toHaveLength(transport === "http" ? 5 : 3);
     } finally {
       await act(async () => root.unmount());

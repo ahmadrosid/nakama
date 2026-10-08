@@ -45,6 +45,7 @@ export function SidebarUserMenu() {
   }
 
   const displayName = user.name?.trim() || user.email;
+
   const initial = (
     user.name?.trim()?.[0] ??
     user.email[0] ??
@@ -205,8 +206,10 @@ export function SidebarUserMenu() {
             // Server revoked all sessions and cleared cookies; drop local auth
             // so AuthGuard sends the user to login with the new password.
             void logout();
+
             return;
           }
+
           void refreshSession();
         }}
         open={profileOpen}
@@ -255,6 +258,7 @@ function UserProfileDialog({
       setConfirmPassword("");
       setError(null);
     }
+
     onOpenChange(nextOpen);
   }
 
@@ -263,37 +267,51 @@ function UserProfileDialog({
     setError(null);
 
     const trimmedEmail = formEmail.trim();
+
     if (!trimmedEmail) {
       setError("Email is required.");
+
       return;
     }
 
     const emailChanged = trimmedEmail.toLowerCase() !== email.toLowerCase();
+
     if (emailChanged && !currentPassword) {
       setError("Enter your current password to change email.");
+
       return;
     }
 
     const wantsPasswordChange = Boolean(newPassword || confirmPassword);
+
     if (wantsPasswordChange) {
       if (!(currentPassword && newPassword)) {
         setError("Enter your current password and a new password.");
+
         return;
       }
+
       if (newPassword !== confirmPassword) {
         setError("New password and confirmation do not match.");
+
         return;
       }
     }
 
     setPending(true);
+
     try {
-      await client.updateAuthProfile({
-        ...(emailChanged ? { currentPassword } : {}),
+      const request: Parameters<typeof client.updateAuthProfile>[0] = {
         email: trimmedEmail,
         name: formName,
         phone: formPhone,
-      });
+      };
+
+      if (emailChanged) {
+        request.currentPassword = currentPassword;
+      }
+
+      await client.updateAuthProfile(request);
 
       if (wantsPasswordChange) {
         await client.changePassword({
@@ -302,6 +320,7 @@ function UserProfileDialog({
         });
         onOpenChange(false);
         onSaved({ passwordChanged: true });
+
         return;
       }
 

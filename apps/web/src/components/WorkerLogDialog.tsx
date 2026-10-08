@@ -43,15 +43,18 @@ function useWorkerLogDialog(
     500,
     open
   );
+
   const clearLogs = useClearWorkerLogs(workerName);
   const [activeTab, setActiveTab] = useState<"stdout" | "stderr">("stdout");
   const [copied, setCopied] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const errorMessage = error ? formatError(error) : null;
+
   const clearErrorMessage = clearLogs.error
     ? formatError(clearLogs.error)
     : null;
+
   const content = tabLogContent(activeTab, data);
   const isEmpty = !(isLoading || errorMessage) && content.length === 0;
 
@@ -69,9 +72,11 @@ function useWorkerLogDialog(
     try {
       await navigator.clipboard.writeText(content);
       setCopied(true);
+
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current);
       }
+
       copyTimeoutRef.current = setTimeout(() => {
         setCopied(false);
         copyTimeoutRef.current = null;
@@ -84,6 +89,7 @@ function useWorkerLogDialog(
   async function handleClearLogs() {
     if (!confirmClear) {
       setConfirmClear(true);
+
       return;
     }
 
@@ -102,6 +108,7 @@ function useWorkerLogDialog(
       setCopied(false);
       setConfirmClear(false);
     }
+
     onOpenChange(nextOpen);
   }
 

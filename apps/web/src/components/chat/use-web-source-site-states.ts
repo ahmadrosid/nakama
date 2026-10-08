@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import type { WebSearchSiteState } from "@/components/chat/web-search.shared";
 
 const STAGGER_LOADING_MS = 150;
+
 const STAGGER_DONE_MS = 400;
+
 const STAGGER_TICK_MS = 50;
 
 function usePrefersReducedMotion(): boolean {
@@ -13,6 +15,7 @@ function usePrefersReducedMotion(): boolean {
     const update = () => setReduced(media.matches);
     update();
     media.addEventListener("change", update);
+
     return () => media.removeEventListener("change", update);
   }, []);
 
@@ -43,12 +46,15 @@ function siteStateAtElapsed(
 ): WebSearchSiteState {
   const loadingAt = STAGGER_LOADING_MS * (index + 1);
   const doneAt = loadingAt + STAGGER_DONE_MS;
+
   if (elapsed >= doneAt) {
     return "done";
   }
+
   if (elapsed >= loadingAt) {
     return "loading";
   }
+
   return "pending";
 }
 
@@ -57,9 +63,11 @@ export function useWebSourceSiteStates(
   status: "running" | "done"
 ): WebSearchSiteState[] {
   const reducedMotion = usePrefersReducedMotion();
+
   const [siteStates, setSiteStates] = useState<WebSearchSiteState[]>(() =>
     buildInitialSiteStates(sourceCount, status, reducedMotion)
   );
+
   const staggerRunRef = useRef(0);
 
   useEffect(() => {
@@ -67,16 +75,19 @@ export function useWebSourceSiteStates(
       setSiteStates(
         buildInitialSiteStates(sourceCount, "running", reducedMotion)
       );
+
       return;
     }
 
     if (sourceCount === 0) {
       setSiteStates([]);
+
       return;
     }
 
     if (reducedMotion) {
       setSiteStates(Array.from({ length: sourceCount }, () => "done"));
+
       return;
     }
 

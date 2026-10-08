@@ -85,6 +85,7 @@ function ImageGenerationCanvasContent({
   if (imageUrl) {
     return <img alt={prompt} className={styles.igImage} src={imageUrl} />;
   }
+
   if (error) {
     return (
       <div className={styles.igFailed}>
@@ -92,9 +93,11 @@ function ImageGenerationCanvasContent({
       </div>
     );
   }
+
   if (done) {
     return <span aria-hidden className={styles.igDots} />;
   }
+
   return (
     <>
       <span aria-hidden className={styles.igDots} />

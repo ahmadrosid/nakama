@@ -216,11 +216,13 @@ export function SharedKnowledgeDocuments({
   onAttach: (documentId: string) => Promise<void>;
 }) {
   const organizationDocuments = availableDocuments ?? [];
+
   const attachedOrganizationDocumentIds = new Set(
     documents
       .filter((document) => document.scope === "organization")
       .map((document) => document.id)
   );
+
   return (
     <section className="mb-4 rounded-md border border-border">
       <div className="border-border border-b px-4 py-3">
@@ -238,6 +240,7 @@ export function SharedKnowledgeDocuments({
         <ul className="divide-y divide-border">
           {organizationDocuments.map((document) => {
             const attached = attachedOrganizationDocumentIds.has(document.id);
+
             return (
               <li
                 className="flex items-center justify-between gap-3 px-4 py-3"

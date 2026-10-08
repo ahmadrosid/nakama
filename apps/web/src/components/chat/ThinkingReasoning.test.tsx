@@ -6,6 +6,7 @@ import { ThinkingReasoning } from "./ThinkingReasoning";
 test("activity opens when tools arrive and keeps the user's later choice", async () => {
   const container = document.createElement("div");
   const root = createRoot(container);
+
   const render = (toolCount: number) => (
     <ThinkingReasoning
       isThinkingStreaming={false}
@@ -19,9 +20,11 @@ test("activity opens when tools arrive and keeps the user's later choice", async
 
   try {
     await act(async () => root.render(render(0)));
+
     const toggle = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Toggle activity"]'
     );
+
     expect(toggle?.getAttribute("aria-expanded")).toBe("false");
 
     await act(async () => toggle?.click());

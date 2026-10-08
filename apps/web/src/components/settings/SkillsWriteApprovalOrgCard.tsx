@@ -50,6 +50,7 @@ export function SkillsWriteApprovalOrgCard() {
   const { data: proposalsData } = useSkillProposals(orgId, {
     status: "pending",
   });
+
   const { data: profiles = [] } = useProfilesQuery();
   const pendingCount = proposalsData?.pendingCount ?? 0;
 
@@ -67,6 +68,7 @@ export function SkillsWriteApprovalOrgCard() {
 
   async function handleToggle(checked: boolean) {
     setBusy(true);
+
     try {
       await updateOrg(activeOrg!.id, { skillsWriteApproval: checked });
       toast(

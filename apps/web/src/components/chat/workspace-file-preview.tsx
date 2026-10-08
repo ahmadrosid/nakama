@@ -46,23 +46,29 @@ export function WorkspaceFilePreview({
   const { show, update, hide } = useChatAttachmentPanel();
   const [fullscreen, setFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
+
   const [previewMode, setPreviewMode] =
     useState<ArtifactPreviewMode>("preview");
+
   // A Word file has no text of its own to show, so the server converts it and
   // it is previewed as the markdown it comes back as.
   const isWordDocument =
     isDocxFile(entry.filename, entry.mimeType) ||
     isLegacyDocFile(entry.filename, entry.mimeType);
+
   const isMarkdown =
     isMarkdownArtifactMimeType(entry.mimeType) || isWordDocument;
+
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const isImage = entry.mimeType.startsWith("image/");
   const isVideo = entry.mimeType.startsWith("video/");
   const isPdf = entry.mimeType === "application/pdf";
+
   const isText =
     isTextArtifactMimeType(entry.mimeType) ||
     isWordDocument ||
     artifactCodeLanguage(entry.filename) !== null;
+
   const canPreview = canPreviewWorkspaceEntry({
     isImage,
     isPdf,
@@ -71,6 +77,7 @@ export function WorkspaceFilePreview({
     isWordDocument,
     sizeBytes: entry.sizeBytes,
   });
+
   const { data, isLoading, error } = useQuery({
     enabled: canPreview,
     queryFn: async () => {
@@ -81,6 +88,7 @@ export function WorkspaceFilePreview({
           render: isWordDocument ? "markdown" : undefined,
         }
       );
+
       return { blob, text: isText ? await blob.text() : null };
     },
     queryKey: [
@@ -91,12 +99,15 @@ export function WorkspaceFilePreview({
       entry.updatedAt,
     ],
   });
+
   useEffect(() => {
     if (!data) {
       return;
     }
+
     const url = URL.createObjectURL(data.blob);
     setObjectUrl(url);
+
     return () => URL.revokeObjectURL(url);
   }, [data]);
   const downloadUrl = `${client.baseUrl}/v1/profiles/${encodeURIComponent(profileId)}/workspace/content?${new URLSearchParams({ path: entry.path })}`;
@@ -108,6 +119,7 @@ export function WorkspaceFilePreview({
       onClose,
       title: entry.filename,
     });
+
     return () => hide(id);
   }, [id, entry.filename, entry.mimeType, show, hide, onClose]);
 
@@ -115,7 +127,9 @@ export function WorkspaceFilePreview({
     if (!copied) {
       return;
     }
+
     const timer = window.setTimeout(() => setCopied(false), 2000);
+
     return () => window.clearTimeout(timer);
   }, [copied]);
 
@@ -125,6 +139,7 @@ export function WorkspaceFilePreview({
       mimeType: entry.mimeType,
       showPreviewToggle: isMarkdown,
     });
+
     update(id, {
       ...header,
       bodyClassName: artifactPanelBodyClassName({
@@ -162,6 +177,7 @@ export function WorkspaceFilePreview({
             if (data?.text == null) {
               return;
             }
+
             try {
               await navigator.clipboard.writeText(data.text);
               setCopied(true);
@@ -197,6 +213,7 @@ export function WorkspaceFilePreview({
     objectUrl,
     canPreview,
   ]);
+
   return null;
 }
 
@@ -257,6 +274,7 @@ function WorkspacePreviewBody({
       </div>
     );
   }
+
   const shared = {
     artifact: toChatArtifactRef(entry),
     canPreview,
@@ -264,6 +282,7 @@ function WorkspacePreviewBody({
     loading,
     previewMode,
   };
+
   if (entry.mimeType.startsWith("image/")) {
     return (
       <ArtifactAttachmentPanelBody
@@ -273,6 +292,7 @@ function WorkspacePreviewBody({
       />
     );
   }
+
   if (entry.mimeType.startsWith("video/")) {
     return (
       <ArtifactAttachmentPanelBody
@@ -282,6 +302,7 @@ function WorkspacePreviewBody({
       />
     );
   }
+
   if (entry.mimeType === "application/pdf") {
     return (
       <ArtifactAttachmentPanelBody
@@ -291,6 +312,7 @@ function WorkspacePreviewBody({
       />
     );
   }
+
   return (
     <ArtifactAttachmentPanelBody
       {...shared}

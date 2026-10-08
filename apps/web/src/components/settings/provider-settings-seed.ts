@@ -11,6 +11,7 @@ export function seedManageModelRows(
   const models: CustomModelEntry[] = customModels?.length
     ? customModels
     : configuredModels;
+
   return models.map((model) => ({
     cachedInputPerMillionUsd: model.cachedInputPerMillionUsd,
     contextWindow: model.contextWindow,

@@ -22,6 +22,7 @@ export function AgentQuestionnaireQuestion({
   const customChoice = question.choices.find((choice) =>
     isCustomChoice(choice)
   );
+
   const showCustomInput = question.allowCustomAnswer || Boolean(customChoice);
 
   return (

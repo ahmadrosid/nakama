@@ -17,6 +17,7 @@ test("platform admin finds and opens an agent in another organization", async ()
     "getContext"
   ).mockImplementation(
     () =>
+      // SAFETY: The command palette reads only these canvas methods in this test.
       ({
         createImageData: (width: number, height: number) => ({
           data: new Uint8ClampedArray(width * height * 4),
@@ -24,8 +25,10 @@ test("platform admin finds and opens an agent in another organization", async ()
         putImageData: () => {},
       }) as never
   );
+
   const listProfiles = spyOn(client, "listProfiles").mockImplementation(
     async (orgId) =>
+      // SAFETY: The test supplies the profile fields consumed by this view.
       ({
         profiles: [
           {
@@ -61,9 +64,12 @@ test("platform admin finds and opens an agent in another organization", async ()
         ],
       }) as never
   );
+
+  // SAFETY: The switcher consumes only activeOrgId from this mocked response.
   const switchOrg = spyOn(client, "setActiveOrg").mockResolvedValue({
     activeOrgId: "org-b",
   } as never);
+
   const auth: AuthContextValue = {
     activeOrg: {
       createdAt: "2026-10-06T00:00:00Z",
@@ -113,18 +119,24 @@ test("platform admin finds and opens an agent in another organization", async ()
     updateOrg: async () => {},
     user: { email: "admin@example.com", id: "admin", isPlatformAdmin: true },
   };
+
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+
   let path = "";
+
   function LocationProbe() {
     const location = useLocation();
     path = `${location.pathname}${location.search}`;
+
     return null;
   }
+
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
+
   try {
     await act(async () => {
       root.render(
@@ -152,9 +164,11 @@ test("platform admin finds and opens an agent in another organization", async ()
     expect(document.body.textContent).toContain("Default Bot");
     expect(listProfiles).toHaveBeenCalledWith("org-b");
     expect(document.body.textContent).not.toContain("Org C");
+
     const remoteAvatar = document.querySelector(
       'img[src*="agent-org-b"][src*="orgId=org-b"]'
     );
+
     expect(remoteAvatar).toBeTruthy();
     await act(async () => {
       remoteAvatar?.dispatchEvent(new window.Event("error"));
@@ -164,13 +178,17 @@ test("platform admin finds and opens an agent in another organization", async ()
     const remoteItems = [...document.querySelectorAll("[cmdk-item]")].filter(
       (item) => item.textContent?.includes("Org B")
     );
+
     expect(remoteItems).toHaveLength(1);
     const remote = remoteItems[0];
     expect(remote?.textContent).toContain("Shared name");
     expect(remote).toBeTruthy();
-    await act(async () => {
-      (remote as HTMLElement).click();
-    });
+
+    if (!(remote instanceof HTMLElement)) {
+      throw new Error("Org row was not found.");
+    }
+
+    await act(async () => remote.click());
     expect(switchOrg).toHaveBeenCalledWith("org-b");
     expect(path).toBe("/chat?new=1&profile=agent-org-b");
     expect(useActiveChatProfileStore.getState()).toMatchObject({

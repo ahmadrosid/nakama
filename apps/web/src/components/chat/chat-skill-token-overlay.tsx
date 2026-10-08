@@ -22,9 +22,11 @@ export function ChatSkillTokenOverlay({
   const skillRanges = getSkillTokenRanges(value).filter((range) =>
     skills.some((skill) => skill.name === range.name)
   );
+
   const commandRanges = getReservedCommandTokenRanges(value, {
     enableLearn: profileCanUseLearnCommand(skills),
   });
+
   const tokenRanges = [
     ...skillRanges,
     ...commandRanges,

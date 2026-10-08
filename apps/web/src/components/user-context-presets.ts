@@ -3,7 +3,9 @@ export function helpSuggestionsForContext(context: string): string[] {
   if (!context.trim()) {
     return [];
   }
+
   const suggestions: string[] = [];
+
   for (const [pattern, suggestion] of [
     [
       /\b(software|developer|engineering|engineer|coding|programmer)\b/i,
@@ -19,6 +21,7 @@ export function helpSuggestionsForContext(context: string): string[] {
       suggestions.push(suggestion);
     }
   }
+
   return [
     ...new Set([
       ...suggestions,

@@ -32,7 +32,7 @@ export function CerebrasModelsBrowseList({
         filterCapabilityBrowseRows(rows, {
           hideDeprecated,
           search,
-        }) as CerebrasModelRow[]
+        })
       }
       isDeprecated={(row) => row.deprecated}
       multiSelect={multiSelect}

@@ -30,6 +30,7 @@ export function ProviderSettingsCard({
 }: ProviderSettingsCardProps) {
   const { data: providersResponse, isLoading: providersLoading } =
     useProvidersQuery();
+
   const {
     data: catalogResponse,
     isLoading: catalogLoading,
@@ -37,6 +38,7 @@ export function ProviderSettingsCard({
   } = useModelsQuery({
     enabled: (providersResponse?.providers.length ?? 0) > 0,
   });
+
   const updateProviderMutation = useUpdateProviderMutation();
   const deleteProviderMutation = useDeleteProviderMutation();
   const [addOpen, setAddOpen] = useState(false);
@@ -44,9 +46,11 @@ export function ProviderSettingsCard({
   const providers = providersResponse?.providers ?? [];
   const catalog = catalogResponse?.models ?? [];
   const isConfigured = providers.length > 0;
+
   const catalogError = catalogQueryError
     ? formatError(catalogQueryError)
     : null;
+
   const displayError = formError ?? catalogError;
 
   if (providersLoading || catalogLoading) {

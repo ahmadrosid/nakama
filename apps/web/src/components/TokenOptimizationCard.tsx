@@ -13,9 +13,9 @@ import { client, formatError } from "@/lib/client";
  * dark). Do not substitute a hue without re-running that check.
  */
 /** Where each optimiser lives, so the card can point at what it is running. */
-const OPTIMIZER_HOMEPAGE: Record<string, string> = {
-  omni: "https://github.com/fajarhide/omni",
-};
+const OPTIMIZER_HOMEPAGE = new Map([
+  ["omni", "https://github.com/fajarhide/omni"],
+]);
 
 const CHART_STYLE = `
 .tokenopt { --out: #2a78d6; --in: #eb6834; --grid: rgb(0 0 0 / 0.08); }
@@ -33,9 +33,11 @@ function formatBytes(value: number): string {
   if (value < 1024) {
     return `${value} B`;
   }
+
   if (value < 1024 * 1024) {
     return `${(value / 1024).toFixed(1)} KB`;
   }
+
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
@@ -48,17 +50,22 @@ function chartLabelIndexes(length: number): number[] {
   if (length <= 0) {
     return [];
   }
+
   const last = length - 1;
   const indexes: number[] = [];
+
   for (let index = 0; index < length; index += 7) {
     if (index !== 0 && last - index < 3) {
       break;
     }
+
     indexes.push(index);
   }
+
   if (indexes.at(-1) !== last) {
     indexes.push(last);
   }
+
   return indexes;
 }
 
@@ -102,10 +109,13 @@ function DailyChart({ days }: { days: Day[] }) {
           />
           {days.map((day, index) => {
             const total = (day.bytesIn / max) * (height - 6);
+
             const sent =
               ((day.bytesIn - day.bytesRemoved) / max) * (height - 6);
+
             const out = Math.max(0, total - sent);
             const x = index * slot + (slot - width) / 2;
+
             return (
               <g
                 key={day.day}
@@ -151,8 +161,10 @@ function DailyChart({ days }: { days: Day[] }) {
             if (!labeled.has(index)) {
               return null;
             }
+
             const isFirst = index === 0;
             const isLast = index === lastIndex;
+
             return (
               <span
                 className={cn(
@@ -198,6 +210,7 @@ function useTokenOptimization() {
       .getTokenOptimization()
       .then((next) => !cancelled && setData(next))
       .catch((cause) => !cancelled && setError(formatError(cause)));
+
     return () => {
       cancelled = true;
     };
@@ -205,6 +218,7 @@ function useTokenOptimization() {
 
   async function toggle(next: boolean) {
     setSaving(true);
+
     try {
       const result = await client.setTokenOptimization(next);
       setData(await client.getTokenOptimization());
@@ -241,11 +255,11 @@ function TokenOptimizationHeader({
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <p className="font-medium text-sm">{omni?.id ?? "omni"}</p>
-          {omni && OPTIMIZER_HOMEPAGE[omni.id] ? (
+          {omni && OPTIMIZER_HOMEPAGE.get(omni.id) ? (
             <a
               aria-label={`${omni.id} on GitHub`}
               className="relative inline-flex items-center gap-1 text-muted-foreground text-xs transition-[color,transform,scale] duration-150 ease-out after:absolute after:top-1/2 after:left-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2 hover:text-foreground active:scale-[0.96]"
-              href={OPTIMIZER_HOMEPAGE[omni.id]}
+              href={OPTIMIZER_HOMEPAGE.get(omni.id)}
               rel="noreferrer noopener"
               target="_blank"
             >
@@ -435,6 +449,7 @@ function TokenOptimizationBody({
 }) {
   const { arms, byTool, days, inputTokens, optimizers, totals, windowDays } =
     data;
+
   const omni = optimizers?.[0];
 
   return (

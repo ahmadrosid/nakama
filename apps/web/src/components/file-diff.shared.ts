@@ -11,29 +11,35 @@ type DiffOp =
   | { cur: number; text: string; type: "add" };
 
 const CONTEXT_LINES = 3;
+
 const LCS_CELL_CAP = 250_000;
 
 function splitLines(value: string | null): string[] {
   if (value == null || value === "") {
     return [];
   }
+
   return value.split(/\r?\n/);
 }
 
 function replaceAll(oldLines: string[], newLines: string[]): DiffOp[] {
   const ops: DiffOp[] = [];
+
   for (const [index, text] of oldLines.entries()) {
     ops.push({ old: index + 1, text, type: "del" });
   }
+
   for (const [index, text] of newLines.entries()) {
     ops.push({ cur: index + 1, text, type: "add" });
   }
+
   return ops;
 }
 
 function diffLines(oldLines: string[], newLines: string[]): DiffOp[] {
   const oldCount = oldLines.length;
   const newCount = newLines.length;
+
   if (oldCount * newCount > LCS_CELL_CAP) {
     return replaceAll(oldLines, newLines);
   }
@@ -41,6 +47,7 @@ function diffLines(oldLines: string[], newLines: string[]): DiffOp[] {
   const lcs: number[][] = Array.from({ length: oldCount + 1 }, () =>
     Array.from({ length: newCount + 1 }, () => 0)
   );
+
   for (let oldIndex = oldCount - 1; oldIndex >= 0; oldIndex--) {
     for (let newIndex = newCount - 1; newIndex >= 0; newIndex--) {
       lcs[oldIndex][newIndex] =
@@ -53,6 +60,7 @@ function diffLines(oldLines: string[], newLines: string[]): DiffOp[] {
   const ops: DiffOp[] = [];
   let oldIndex = 0;
   let newIndex = 0;
+
   while (oldIndex < oldCount && newIndex < newCount) {
     if (oldLines[oldIndex] === newLines[newIndex]) {
       ops.push({
@@ -65,6 +73,7 @@ function diffLines(oldLines: string[], newLines: string[]): DiffOp[] {
       newIndex += 1;
       continue;
     }
+
     if (lcs[oldIndex + 1][newIndex] >= lcs[oldIndex][newIndex + 1]) {
       ops.push({
         old: oldIndex + 1,
@@ -74,6 +83,7 @@ function diffLines(oldLines: string[], newLines: string[]): DiffOp[] {
       oldIndex += 1;
       continue;
     }
+
     ops.push({
       cur: newIndex + 1,
       text: newLines[newIndex],
@@ -81,6 +91,7 @@ function diffLines(oldLines: string[], newLines: string[]): DiffOp[] {
     });
     newIndex += 1;
   }
+
   while (oldIndex < oldCount) {
     ops.push({
       old: oldIndex + 1,
@@ -89,6 +100,7 @@ function diffLines(oldLines: string[], newLines: string[]): DiffOp[] {
     });
     oldIndex += 1;
   }
+
   while (newIndex < newCount) {
     ops.push({
       cur: newIndex + 1,
@@ -97,6 +109,7 @@ function diffLines(oldLines: string[], newLines: string[]): DiffOp[] {
     });
     newIndex += 1;
   }
+
   return ops;
 }
 
@@ -106,12 +119,15 @@ function withContext(ops: DiffOp[], context: number): FileDiffRow[] {
   }
 
   const keep = new Set<number>();
+
   for (const [index, op] of ops.entries()) {
     if (op.type === "ctx") {
       continue;
     }
+
     const from = Math.max(0, index - context);
     const to = Math.min(ops.length - 1, index + context);
+
     for (let nearby = from; nearby <= to; nearby++) {
       keep.add(nearby);
     }
@@ -125,6 +141,7 @@ function withContext(ops: DiffOp[], context: number): FileDiffRow[] {
     if (!keep.has(index)) {
       return [];
     }
+
     return [
       {
         cur: op.type === "del" ? null : op.cur,
@@ -145,6 +162,7 @@ export function buildFileDiffRows(
     before = formatJsonValue(before);
     after = formatJsonValue(after);
   }
+
   return withContext(
     diffLines(splitLines(before), splitLines(after)),
     CONTEXT_LINES
@@ -155,12 +173,17 @@ function formatJsonValue(value: string | null): string | null {
   if (!value) {
     return value;
   }
+
   try {
     const parsed: unknown = JSON.parse(value);
-    return parsed !== null && typeof parsed === "object"
-      ? JSON.stringify(parsed, null, 2)
-      : value;
+
+    return isObject(parsed) ? JSON.stringify(parsed, null, 2) : value;
   } catch {
     return value;
   }
+}
+
+function isObject(value: unknown): value is object {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- JSON.parse returns an unknown value here.
+  return value !== null && typeof value === "object";
 }

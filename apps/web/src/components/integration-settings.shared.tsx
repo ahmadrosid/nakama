@@ -344,6 +344,7 @@ export function ChannelConnectionStep({
   children: ReactNode;
 }) {
   const start = useStartWorker();
+
   return (
     <div className="space-y-4 px-4 py-3">
       <p className="text-muted-foreground text-sm">

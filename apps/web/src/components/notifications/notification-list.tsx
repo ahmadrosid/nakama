@@ -13,6 +13,7 @@ function NotificationIcon({
   size?: "sm" | "md";
 }) {
   const Icon = kind === "automation-run" ? SharedWifiIcon : BrainIcon;
+
   return (
     <span
       className={cn(
@@ -46,6 +47,7 @@ function NotificationListItem({
         if (item.profileId) {
           setProfileId(item.profileId);
         }
+
         onNavigate?.();
       }}
       to={item.href}

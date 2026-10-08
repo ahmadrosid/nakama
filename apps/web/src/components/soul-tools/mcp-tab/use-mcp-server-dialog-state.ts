@@ -77,15 +77,18 @@ function applyImportedServer(
   setters.setKind(mcpServerKind(imported.transport, false));
 
   if (imported.transport === "stdio") {
+    // SAFETY: parseMcpConfigJson validates config for the selected transport.
     const stdioConfig = imported.config as McpStdioConfig;
     setters.setCommand(stdioConfig.command);
     setters.setArgs(stdioConfig.args ?? []);
     setters.setEnv(recordToHeaderRows(stdioConfig.env));
     setters.setUrl("");
     setters.setHeaders([emptyHeaderRow()]);
+
     return;
   }
 
+  // SAFETY: parseMcpConfigJson validates config for the selected transport.
   const httpConfig = imported.config as McpHttpConfig;
   setters.setUrl(httpConfig.url);
   setters.setHeaders(recordToHeaderRows(httpConfig.headers));
@@ -109,6 +112,7 @@ function applyMcpFormReset({
     setters.setImportOpen(false);
     setters.setImportDraft("");
     setters.setImportError(null);
+
     return;
   }
 
@@ -123,6 +127,7 @@ function applyMcpFormReset({
     setters.setSubmitError(null);
     setters.setTestResult(null);
     setters.setTesting(false);
+
     return;
   }
 
@@ -137,15 +142,18 @@ function applyMcpFormReset({
   setters.setTesting(false);
 
   if (detail.transport === "stdio") {
+    // SAFETY: The server detail response pairs config with its transport.
     const stdioConfig = detail.config as McpStdioConfig;
     setters.setCommand(stdioConfig.command);
     setters.setArgs(stdioConfig.args ?? []);
     setters.setEnv(recordToHeaderRows(stdioConfig.env));
     setters.setUrl("");
     setters.setHeaders([emptyHeaderRow()]);
+
     return;
   }
 
+  // SAFETY: The server detail response pairs config with its transport.
   const httpConfig = detail.config as McpHttpConfig;
   setters.setUrl(httpConfig.url);
   setters.setHeaders(recordToHeaderRows(httpConfig.headers));
@@ -180,7 +188,7 @@ function buildMcpServerRequest({
   const activeTransport = resolveFormTransport(transport, command, url);
 
   if (activeTransport === "stdio") {
-    return {
+    const request: CreateMcpServerRequest = {
       config: {
         args: argsToArray(args) ?? (isEdit ? [] : undefined),
         command: command.trim(),
@@ -189,21 +197,34 @@ function buildMcpServerRequest({
       connect: false,
       name: name.trim(),
       transport: "stdio",
-      ...(isEdit && server ? { serverId: server.id } : {}),
     };
+
+    if (isEdit && server) {
+      request.serverId = server.id;
+    }
+
+    return request;
   }
 
-  return {
-    config: {
-      // The provider issues the credential, so there is no header to keep.
-      ...(signIn ? {} : { headers: headersToRecord(headers, isEdit) }),
-      url: url.trim(),
-    },
+  const config: McpHttpConfig = { url: url.trim() };
+
+  // The provider issues the credential, so there is no header to keep.
+  if (!signIn) {
+    config.headers = headersToRecord(headers, isEdit);
+  }
+
+  const request: CreateMcpServerRequest = {
+    config,
     connect: false,
     name: name.trim(),
     transport: "http",
-    ...(isEdit && server ? { serverId: server.id } : {}),
   };
+
+  if (isEdit && server) {
+    request.serverId = server.id;
+  }
+
+  return request;
 }
 
 function mcpConnectionTestResult(result: {
@@ -269,6 +290,7 @@ function tryImportMcpJson(
   applyImportedServer(result.server, setters);
   setters.setSubmitError(null);
   setters.setTestResult(null);
+
   return null;
 }
 
@@ -284,9 +306,11 @@ export function useMcpServerDialogState({
   onSubmit: (request: CreateMcpServerRequest) => Promise<void>;
 }) {
   const isEdit = server != null;
+
   const { data: detail, isLoading: loadingDetail } = useMcpServerDetailQuery(
     open && server ? server.id : null
   );
+
   const [name, setName] = useState("");
   const [kind, setKind] = useState<McpServerKind>("http");
   const [url, setUrl] = useState("");
@@ -306,10 +330,12 @@ export function useMcpServerDialogState({
   const idPrefix = server ? `mcp-edit-${server.id}` : "mcp-create";
   const loadingForm = isEdit && loadingDetail && !detail;
   const formDisabled = busy || testing || loadingForm;
+
   const requiredFields = [
     name,
     resolveFormTransport(transport, command, url) === "http" ? url : command,
   ];
+
   const canSubmit =
     !loadingForm && requiredFields.every((value) => value.trim().length > 0);
 
@@ -320,6 +346,7 @@ export function useMcpServerDialogState({
         : `edit-${server.id}-loading`
       : "create"
     : "closed";
+
   const [prevFormResetKey, setPrevFormResetKey] = useState(formResetKey);
 
   const formSetters: McpFormSetters = {
@@ -368,6 +395,7 @@ export function useMcpServerDialogState({
 
     if (next === "stdio") {
       setUrl("");
+
       return;
     }
 
@@ -427,6 +455,7 @@ export function useMcpServerDialogState({
     if (error) {
       setImportError(error);
       setTestResult(null);
+
       return;
     }
 

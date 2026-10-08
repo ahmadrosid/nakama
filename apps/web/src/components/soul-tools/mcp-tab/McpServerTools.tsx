@@ -47,6 +47,7 @@ function McpServerToolsContent({
 
 export function McpServerTools({ server }: { server: McpServerSummary }) {
   const { data: detail, isLoading, error } = useMcpServerDetailQuery(server.id);
+
   const endpoint =
     detail?.transport === "stdio" && "command" in detail.config
       ? `${detail.config.command}${detail.config.args?.length ? ` ${detail.config.args.join(" ")}` : ""}`

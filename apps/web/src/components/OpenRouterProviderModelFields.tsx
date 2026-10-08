@@ -144,18 +144,24 @@ export function OpenRouterProviderModelFields({
         )}
         showThinking
         showVision
-        toModelRow={(row: OpenRouterModelRow) => ({
-          id: row.id,
-          name: row.name,
-          supportsThinking: row.reasoning,
-          supportsVision: row.vision,
-          ...(row.inputPerMillionUsd === undefined
-            ? {}
-            : { inputPerMillionUsd: row.inputPerMillionUsd }),
-          ...(row.outputPerMillionUsd === undefined
-            ? {}
-            : { outputPerMillionUsd: row.outputPerMillionUsd }),
-        })}
+        toModelRow={(row: OpenRouterModelRow) => {
+          const model: ModelListRow = {
+            id: row.id,
+            name: row.name,
+            supportsThinking: row.reasoning,
+            supportsVision: row.vision,
+          };
+
+          if (row.inputPerMillionUsd !== undefined) {
+            model.inputPerMillionUsd = row.inputPerMillionUsd;
+          }
+
+          if (row.outputPerMillionUsd !== undefined) {
+            model.outputPerMillionUsd = row.outputPerMillionUsd;
+          }
+
+          return model;
+        }}
       />
     </div>
   );

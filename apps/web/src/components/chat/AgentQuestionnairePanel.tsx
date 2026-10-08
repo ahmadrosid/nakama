@@ -37,6 +37,7 @@ export function AgentQuestionnairePanel({
 
   if (questionnaire !== syncedQuestionnaire) {
     setSyncedQuestionnaire(questionnaire);
+
     if (questionnaire) {
       setAnswers(
         Object.fromEntries(
@@ -64,15 +65,19 @@ export function AgentQuestionnairePanel({
 
     return questionnaire.questions.map((question) => {
       const state = answers[question.id];
+
       const customChoice = question.choices.find((choice) =>
         isCustomChoice(choice)
       );
+
       const useCustomAnswer =
         (question.allowCustomAnswer || Boolean(customChoice)) &&
         (state?.customAnswer.trim().length ?? 0) > 0;
+
       const answer = useCustomAnswer
         ? (state?.customAnswer.trim() ?? "")
         : (state?.selectedChoiceLabel ?? "");
+
       return {
         answer,
         prompt: question.prompt,
@@ -100,10 +105,12 @@ export function AgentQuestionnairePanel({
       const input = activeQuestionElement.querySelector<HTMLInputElement>(
         "input:not(:disabled)"
       );
+
       const selectedOption =
         activeQuestionElement.querySelector<HTMLButtonElement>(
           "button[data-question-option='true'][data-selected='true']:not(:disabled)"
         );
+
       const firstOption =
         activeQuestionElement.querySelector<HTMLButtonElement>(
           "button[data-question-option='true']:not(:disabled)"
@@ -121,19 +128,25 @@ export function AgentQuestionnairePanel({
 
   const activeQuestionnaire = questionnaire!;
   const activeQuestion = activeQuestionnaire.questions[currentQuestionIndex]!;
+
   const activeState = answers[activeQuestion.id] ?? {
     customAnswer: "",
     selectedChoiceId: null,
     selectedChoiceLabel: null,
   };
+
   const canGoPrevious = currentQuestionIndex > 0;
+
   const canGoNext =
     currentQuestionIndex < activeQuestionnaire.questions.length - 1;
+
   const activeAnswer =
     resolvedAnswers[currentQuestionIndex]?.answer.trim() ?? "";
+
   const canSubmit = resolvedAnswers.some(
     (answer) => answer.answer.trim().length > 0
   );
+
   const canContinue = canGoNext ? activeAnswer.length > 0 : canSubmit;
 
   function handleContinue(): void {
@@ -143,6 +156,7 @@ export function AgentQuestionnairePanel({
 
     if (canGoNext) {
       setCurrentQuestionIndex((current) => current + 1);
+
       return;
     }
 
@@ -174,6 +188,7 @@ export function AgentQuestionnairePanel({
     const selectedIndex = activeQuestion.choices.findIndex(
       (choice) => choice.id === activeState.selectedChoiceId
     );
+
     const nextIndex =
       selectedIndex === -1
         ? offset > 0
@@ -193,12 +208,14 @@ export function AgentQuestionnairePanel({
     if (event.key === "ArrowDown") {
       event.preventDefault();
       selectChoiceByOffset(1);
+
       return;
     }
 
     if (event.key === "ArrowUp") {
       event.preventDefault();
       selectChoiceByOffset(-1);
+
       return;
     }
 
@@ -211,6 +228,7 @@ export function AgentQuestionnairePanel({
   function handleSkip(): void {
     if (canGoNext) {
       setCurrentQuestionIndex((current) => current + 1);
+
       return;
     }
 

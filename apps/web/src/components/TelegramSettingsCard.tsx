@@ -25,8 +25,10 @@ function hydrateAllowedUsers(
   allowedUserIds: Array<string | number>
 ): AllowedTelegramUser[] {
   const existing = new Map(current.map((user) => [user.id, user]));
+
   return allowedUserIds.map((id) => {
     const stringId = String(id);
+
     return existing.get(stringId) ?? { id: stringId };
   });
 }
@@ -42,7 +44,7 @@ function formatAllowedUserSummary(count: number): string {
 function settingsStatusLine(
   hint: string | null,
   formError: string | null,
-  loadError: unknown
+  loadError: Error | null
 ): string | null {
   if (hint) {
     return hint;
@@ -125,12 +127,14 @@ function TelegramSettingsLoading({ embedded }: { embedded: boolean }) {
 
 function useTelegramSettingsCard(onSaveSuccess?: () => void) {
   const ownerProfileId = useChannelProfileId();
+
   const {
     data: settings,
     isLoading,
     error: loadError,
     refetch,
   } = useTelegramSettings();
+
   const { data: status } = useSystemStatusQuery();
   const saveMutation = useSaveTelegramSettings();
   const startMutation = useStartWorker();
@@ -187,6 +191,7 @@ function useTelegramSettingsCard(onSaveSuccess?: () => void) {
     if (savingRef.current || !token.trim()) {
       return;
     }
+
     savingRef.current = true;
     setFormError(null);
     setHint(null);
@@ -195,10 +200,13 @@ function useTelegramSettingsCard(onSaveSuccess?: () => void) {
       const saved = await saveMutation.mutateAsync(
         buildTelegramSaveRequest(allowedUsers, profileId, token)
       );
+
       setBotToken("");
+
       if (!configured && worker?.process?.managed) {
         await startMutation.mutateAsync("telegram");
       }
+
       setHint(channelSaveHint(saved));
       onSaveSuccess?.();
     } catch (err) {
@@ -279,6 +287,7 @@ function TelegramSettingsCardLoaded({
         onBotTokenChange={(value) => {
           card.setBotToken(value);
           card.setHint(null);
+
           if (card.formError) {
             card.setFormError(null);
           }

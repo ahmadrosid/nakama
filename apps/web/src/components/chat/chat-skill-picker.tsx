@@ -11,6 +11,7 @@ interface ChatSkillPickerProps {
 
 function skillDescription(skill: SkillSummary): string | null {
   const trimmed = skill.description.trim();
+
   if (!trimmed || trimmed.toLowerCase() === skill.name.trim().toLowerCase()) {
     return null;
   }

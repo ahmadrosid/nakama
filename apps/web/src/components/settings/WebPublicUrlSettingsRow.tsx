@@ -27,6 +27,7 @@ export function WebPublicUrlSettingsRow() {
     }
 
     const timeout = window.setTimeout(() => setSavedHint(null), 2500);
+
     return () => window.clearTimeout(timeout);
   }, [savedHint]);
 
@@ -36,8 +37,10 @@ export function WebPublicUrlSettingsRow() {
     saveMutation.reset();
 
     const trimmed = value.trim();
+
     if (!trimmed) {
       setFormError("Public web URL is required.");
+
       return;
     }
 

@@ -75,11 +75,13 @@ export const PromptInputProvider = ({
   const [attachmentFiles, setAttachmentFiles] = useState<
     (FileUIPart & { id: string })[]
   >([]);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const openRef = useRef<() => void>(() => {});
 
   const add = useCallback((files: File[] | FileList) => {
     const incoming = [...files];
+
     if (incoming.length === 0) {
       return;
     }
@@ -162,11 +164,13 @@ export const usePromptInputAttachments = () => {
   const provider = useOptionalProviderAttachments();
   const local = useContext(LocalAttachmentsContext);
   const context = local ?? provider;
+
   if (!context) {
     throw new Error(
       "usePromptInputAttachments must be used within a PromptInput or PromptInputProvider"
     );
   }
+
   return context;
 };
 
@@ -244,11 +248,13 @@ export const PromptInput = ({
       event.preventDefault();
 
       const form = event.currentTarget;
+
       const text = usingProvider
         ? controller!.textInput.value
         : (() => {
             const formData = new FormData(form);
-            return (formData.get("message") as string) || "";
+
+            return String(formData.get("message") ?? "");
           })();
 
       if (!usingProvider) {
@@ -260,11 +266,13 @@ export const PromptInput = ({
           files.map(async ({ id: _id, ...item }) => {
             if (item.url?.startsWith("blob:")) {
               const dataUrl = await convertBlobUrlToDataUrl(item.url);
+
               return {
                 ...item,
                 url: dataUrl ?? item.url,
               };
             }
+
             return item;
           })
         );
@@ -275,6 +283,7 @@ export const PromptInput = ({
           try {
             await result;
             clearAttachments();
+
             if (usingProvider) {
               controller!.textInput.clear();
             }
@@ -283,6 +292,7 @@ export const PromptInput = ({
           }
         } else {
           clearAttachments();
+
           if (usingProvider) {
             controller!.textInput.clear();
           }
@@ -355,16 +365,21 @@ export const PromptInputTextarea = ({
         if (isComposingRef.current || e.nativeEvent.isComposing) {
           return;
         }
+
         if (e.shiftKey) {
           return;
         }
+
         e.preventDefault();
 
         // Check if the submit button is disabled before submitting
         const { form } = e.currentTarget;
-        const submitButton = form?.querySelector(
-          'button[type="submit"]'
-        ) as HTMLButtonElement | null;
+
+        const candidate = form?.querySelector('button[type="submit"]');
+
+        const submitButton =
+          candidate instanceof HTMLButtonElement ? candidate : null;
+
         if (submitButton?.disabled) {
           return;
         }
@@ -380,6 +395,7 @@ export const PromptInputTextarea = ({
       ) {
         e.preventDefault();
         const lastAttachment = attachments.files.at(-1);
+
         if (lastAttachment) {
           attachments.remove(lastAttachment.id);
         }
@@ -401,6 +417,7 @@ export const PromptInputTextarea = ({
       for (const item of items) {
         if (item.kind === "file") {
           const file = item.getAsFile();
+
           if (file) {
             files.push(file);
           }
@@ -410,6 +427,7 @@ export const PromptInputTextarea = ({
       if (files.length > 0) {
         event.preventDefault();
         attachments.add(files);
+
         return;
       }
 
@@ -429,6 +447,7 @@ export const PromptInputTextarea = ({
   const handleCompositionEnd = useCallback(() => {
     isComposingRef.current = false;
   }, []);
+
   const handleCompositionStart = useCallback(() => {
     isComposingRef.current = true;
   }, []);
@@ -529,8 +548,10 @@ export const PromptInputSubmit = ({
       if (isGenerating && onStop) {
         e.preventDefault();
         onStop();
+
         return;
       }
+
       onClick?.(e);
     },
     [isGenerating, onStop, onClick]
@@ -556,8 +577,11 @@ export type PromptInputSelectTriggerProps = ComponentProps<
 >;
 
 export const PromptInputSelect = Select;
+
 export const PromptInputSelectContent = SelectContent;
+
 export const PromptInputSelectItem = SelectItem;
+
 export const PromptInputSelectValue = SelectValue;
 
 export const PromptInputSelectTrigger = ({

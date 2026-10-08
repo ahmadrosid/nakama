@@ -10,6 +10,7 @@ import { client, formatError } from "@/lib/client";
 
 function parseIntegerInput(value: string): number | undefined {
   const parsed = Number(value);
+
   return Number.isInteger(parsed) ? parsed : undefined;
 }
 
@@ -19,6 +20,7 @@ function formatRunTime(value: string | null | undefined): string {
   }
 
   const time = Date.parse(value);
+
   if (Number.isNaN(time)) {
     return "Never";
   }
@@ -33,6 +35,7 @@ async function updateOrgFlag(
   setBusy: (value: boolean) => void
 ): Promise<void> {
   setBusy(true);
+
   try {
     await updateOrg(orgId, patch);
   } catch (error) {
@@ -48,6 +51,7 @@ async function updatePollInterval(
   setPollIntervalMinutes: (value: number | null) => void
 ): Promise<void> {
   setBusy(true);
+
   try {
     const settings = await client.setAutomationWorkerSettings(value);
     setPollIntervalMinutes(settings.pollIntervalMinutes);
@@ -66,9 +70,11 @@ async function runSkillCurator(
   setLastRunAt: (value: string | null) => void
 ): Promise<void> {
   setRunning(true);
+
   try {
     const { result } = await client.runOrgSkillCurator(orgId, { dryRun });
     setLatest(result);
+
     if (!dryRun && result.status === "completed") {
       setLastRunAt(result.finishedAt);
     }
@@ -88,7 +94,7 @@ function loadSkillsCuratorLatest(
     return;
   }
 
-  void loadLatest(orgId).catch((error: unknown) => {
+  void loadLatest(orgId).catch((error) => {
     toast(formatError(error));
   });
 }
@@ -105,7 +111,7 @@ function loadAutomationPollInterval(
   void client
     .getAutomationWorkerSettings()
     .then((settings) => setPollIntervalMinutes(settings.pollIntervalMinutes))
-    .catch((error: unknown) => toast(formatError(error)));
+    .catch((error) => toast(formatError(error)));
 }
 
 function useSkillsCuratorOrgCard() {
@@ -114,6 +120,7 @@ function useSkillsCuratorOrgCard() {
   const [running, setRunning] = useState(false);
   const [latest, setLatest] = useState<SkillCuratorRunResult | null>(null);
   const [lastRunAt, setLastRunAt] = useState<string | null>(null);
+
   const [pollIntervalMinutes, setPollIntervalMinutes] = useState<number | null>(
     null
   );
@@ -182,6 +189,7 @@ function SkillsCuratorFreshnessFields({
             min={1}
             onBlur={(event) => {
               const value = parseIntegerInput(event.currentTarget.value);
+
               if (value !== undefined) {
                 onUpdateFlag({ skillsCuratorStaleAfterDays: value });
               }
@@ -200,6 +208,7 @@ function SkillsCuratorFreshnessFields({
             min={2}
             onBlur={(event) => {
               const value = parseIntegerInput(event.currentTarget.value);
+
               if (value !== undefined) {
                 onUpdateFlag({ skillsCuratorArchiveAfterDays: value });
               }
@@ -235,12 +244,14 @@ function SkillsCuratorPollIntervalField({
           min={1}
           onBlur={(event) => {
             const value = parseIntegerInput(event.currentTarget.value);
+
             if (value !== undefined) {
               onPollIntervalCommit(value);
             }
           }}
           onChange={(event) => {
             const value = event.currentTarget.valueAsNumber;
+
             if (Number.isFinite(value)) {
               onPollIntervalChange(value);
             }

@@ -115,6 +115,7 @@ function ArtifactShareSuccessView({
   onClose: () => void;
 }) {
   const [revokeOpen, setRevokeOpen] = useState(false);
+
   return (
     <>
       <DialogHeader>

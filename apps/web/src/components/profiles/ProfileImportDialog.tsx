@@ -79,6 +79,7 @@ async function confirmProfilePackImport(
     const response = await importMutation.mutateAsync({
       file: selectedFile,
     });
+
     toast(`Imported "${response.manifest.meta.name}".`);
     onOpenChange(false);
     onImported(response.profileId);
@@ -269,13 +270,16 @@ function ProfileImportDialogContent({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
+
   const [preview, setPreview] = useState<ProfilePackPreviewResponse | null>(
     null
   );
+
   const [previewError, setPreviewError] = useState<string | null>(null);
   const previewMutation = usePreviewProfilePackImportMutation();
   const importMutation = useImportProfilePackMutation();
   const busy = previewMutation.isPending || importMutation.isPending;
+
   const confirmEnabled =
     Boolean(selectedFile) && Boolean(preview) && !previewError && !busy;
 

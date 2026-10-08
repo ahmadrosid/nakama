@@ -14,8 +14,10 @@ export function ImageGenerationToolRow({
   profileId?: string | null;
 }) {
   const state = buildGenerateImageToolState(message);
+
   const shouldFetch =
     shouldRenderGenerateImageToolRow(message) && state.status === "done";
+
   const preview = useAuthenticatedImagePreview(
     shouldFetch ? profileId : null,
     shouldFetch ? state.artifactPath : null
@@ -25,8 +27,8 @@ export function ImageGenerationToolRow({
     return null;
   }
 
-  const missingProfile =
-    shouldFetch && !(typeof profileId === "string" && profileId.trim());
+  const missingProfile = shouldFetch && !profileId?.trim();
+
   const error =
     state.error ??
     preview.error ??

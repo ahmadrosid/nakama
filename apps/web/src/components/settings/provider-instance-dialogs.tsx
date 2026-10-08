@@ -65,6 +65,7 @@ export function ProviderReplaceKeyDialog({
 }) {
   let title = `${instance.hasApiKey ? "Update API key" : "Add API key"} for ${instance.label}`;
   let hasCredentials = Boolean(apiKey.trim());
+
   let credentialField = (
     <InputGroup>
       <InputGroupInput

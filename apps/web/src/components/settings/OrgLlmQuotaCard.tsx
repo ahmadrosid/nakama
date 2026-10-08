@@ -11,14 +11,18 @@ const compactNumber = new Intl.NumberFormat(undefined, {
 
 export function OrgLlmQuotaCard() {
   const { activeOrg } = useAuth();
+
   const [quotaState, setQuotaState] = useState<{
     error: string | null;
     orgId: string;
     quota: OrgLlmQuotaStatusResponse | null;
   } | null>(null);
+
   const activeOrgId = activeOrg?.id;
+
   const quota =
     quotaState && quotaState.orgId === activeOrgId ? quotaState.quota : null;
+
   const error =
     quotaState && quotaState.orgId === activeOrgId ? quotaState.error : null;
 
@@ -26,6 +30,7 @@ export function OrgLlmQuotaCard() {
     if (!activeOrg || activeOrg.role !== "admin") {
       return;
     }
+
     const orgId = activeOrg.id;
     let cancelled = false;
     void client
@@ -44,6 +49,7 @@ export function OrgLlmQuotaCard() {
           });
         }
       });
+
     return () => {
       cancelled = true;
     };

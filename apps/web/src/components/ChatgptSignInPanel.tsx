@@ -66,23 +66,27 @@ function SubscriptionSignInPanel<T>({
     onModelsChange?.([]);
     setUserCode(null);
     setVerificationUri(null);
+
     if (loginUrl) {
       window.open(loginUrl, "_blank", "noopener,noreferrer");
     }
 
     try {
       const start = await startDevice();
+
       if (controller.signal.aborted) {
         return;
       }
 
       setUserCode(start.userCode);
       setVerificationUri(start.verificationUri);
+
       if (!loginUrl) {
         window.open(start.verificationUri, "_blank", "noopener,noreferrer");
       }
 
       const result = await completeDevice(start.sessionId, controller.signal);
+
       if (controller.signal.aborted) {
         return;
       }
@@ -191,6 +195,7 @@ export function ChatgptSignInPanel(
       {...props}
       completeDevice={async (sessionId) => {
         const result = await client.completeChatgptOAuthDevice({ sessionId });
+
         return { models: result.models, oauth: result.chatgptOAuth };
       }}
       label="ChatGPT"
@@ -209,6 +214,7 @@ export function XaiSignInPanel(props: SignInPanelProps<XaiOAuthCredentials>) {
           { sessionId },
           signal
         );
+
         return { models: result.models, oauth: result.xaiOAuth };
       }}
       label="Grok"

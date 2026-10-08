@@ -10,6 +10,7 @@ import {
 } from "@/context/auth-context-shared";
 
 const now = "2026-10-04T00:00:00Z";
+
 const skills: SkillSummary[] = ["One", "Two", "Three"].map((name) => ({
   createdAt: now,
   createdBy: "human",
@@ -25,6 +26,7 @@ const skills: SkillSummary[] = ["One", "Two", "Three"].map((name) => ({
 }));
 
 const cleanups: Array<() => void> = [];
+
 afterEach(() => {
   for (const cleanup of cleanups.splice(0)) {
     cleanup();
@@ -43,12 +45,13 @@ test("keeps only unadded skills selected after a partial failure", async () => {
     container.remove();
   });
 
+  // SAFETY: AddSkillDialog reads only user.isPlatformAdmin from this fixture.
+  const auth = { user: { isPlatformAdmin: true } } as AuthContextValue;
+
   await act(async () => {
     root.render(
       <QueryClientProvider client={new QueryClient()}>
-        <AuthContext.Provider
-          value={{ user: { isPlatformAdmin: true } } as AuthContextValue}
-        >
+        <AuthContext.Provider value={auth}>
           <AddSkillDialog
             assignedSkillIds={new Set()}
             bashAssigned
@@ -57,6 +60,7 @@ test("keeps only unadded skills selected after a partial failure", async () => {
               if (id === "two" && failSecond) {
                 throw new Error("Assignment failed");
               }
+
               assigned.push(id);
             }}
             onAssignBash={async () => {}}
@@ -78,15 +82,18 @@ test("keeps only unadded skills selected after a partial failure", async () => {
 
   const checkbox = (name: string) =>
     document.querySelector<HTMLInputElement>(`input[aria-label="Add ${name}"]`);
+
   await act(async () => {
     for (const name of ["One", "Two", "Three"]) {
       checkbox(name)?.click();
     }
   });
+
   const addButton = () =>
     [...document.querySelectorAll("button")].find((button) =>
       button.textContent?.includes("Add 3 skills")
     );
+
   await act(async () => {
     addButton()?.click();
   });

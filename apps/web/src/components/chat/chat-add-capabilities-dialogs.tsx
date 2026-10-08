@@ -16,6 +16,7 @@ import { Input } from "@nakama/ui/input";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { Link } from "react-router-dom";
+import { readRecord, readString } from "@/components/chat/web-search.shared";
 import { AddSkillDialog } from "@/components/SkillInstallDialog";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
 import { ToolAssignDialog } from "@/components/ToolAssignDialog";
@@ -44,6 +45,33 @@ import { client, formatError } from "@/lib/client";
 import { toolPlaygroundPath } from "@/lib/navigation";
 import { invalidateQueries } from "@/lib/query-client";
 
+type ToolCredentialResult =
+  | { type: "tool_setup_required"; orgId: string; setupId: string }
+  | {
+      type: "tool_credentials_required";
+      orgId: string;
+      toolId: string;
+      toolName: string;
+    };
+
+function isToolCredentialResult(value: unknown): value is ToolCredentialResult {
+  const record = readRecord(value);
+
+  if (!(record && readString(record.orgId))) {
+    return false;
+  }
+
+  if (record.type === "tool_setup_required") {
+    return Boolean(readString(record.setupId));
+  }
+
+  return (
+    record.type === "tool_credentials_required" &&
+    Boolean(readString(record.toolId)) &&
+    Boolean(readString(record.toolName))
+  );
+}
+
 export function ToolCredentialCard({
   result,
   sessionId,
@@ -56,15 +84,17 @@ export function ToolCredentialCard({
   onContinue?: (setupId: string) => Promise<void>;
 }) {
   const { user, activeOrg } = useAuth();
-  if (!result || typeof result !== "object") {
+
+  if (!isToolCredentialResult(result)) {
     return null;
   }
-  const value = result as Record<string, unknown>;
+
+  const value = result;
+
   if (
     value.type === "tool_setup_required" &&
-    typeof value.setupId === "string" &&
-    typeof value.orgId === "string" &&
-    value.orgId === activeOrg?.id
+    activeOrg &&
+    value.orgId === activeOrg.id
   ) {
     return (
       <ToolSetupCard
@@ -78,15 +108,15 @@ export function ToolCredentialCard({
       />
     );
   }
+
   if (
     value.type !== "tool_credentials_required" ||
-    typeof value.toolId !== "string" ||
-    typeof value.toolName !== "string" ||
-    typeof value.orgId !== "string" ||
-    value.orgId !== activeOrg?.id
+    !activeOrg ||
+    value.orgId !== activeOrg.id
   ) {
     return null;
   }
+
   return (
     <ToolCredentialForm
       canManage={user?.isPlatformAdmin === true || activeOrg.role === "admin"}
@@ -115,6 +145,7 @@ function ToolSetupCard({
 }) {
   const queryClient = useQueryClient();
   const queryKey = ["tool-setup", orgId, setupId];
+
   const setup = useQuery({
     enabled: canManage,
     queryFn: () => client.forOrg(orgId).getToolSetup(setupId),
@@ -122,11 +153,13 @@ function ToolSetupCard({
     refetchInterval: (query) =>
       query.state.data?.status === "approved" ? 2000 : false,
   });
+
   const profiles = useProfilesQuery();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const locked = saving || disabled;
   const plan = setup.data;
+
   if (!canManage) {
     return (
       <p className="text-muted-foreground text-sm">
@@ -134,6 +167,7 @@ function ToolSetupCard({
       </p>
     );
   }
+
   if (!plan) {
     return (
       <p className="text-muted-foreground text-sm" role="status">
@@ -141,6 +175,7 @@ function ToolSetupCard({
       </p>
     );
   }
+
   if (plan.sessionId !== sessionId) {
     return (
       <p className="text-muted-foreground text-sm">
@@ -148,6 +183,7 @@ function ToolSetupCard({
       </p>
     );
   }
+
   if (plan.status === "ready") {
     return (
       <div className="w-full max-w-sm rounded-xl border bg-card p-4">
@@ -158,6 +194,7 @@ function ToolSetupCard({
       </div>
     );
   }
+
   if (!profiles.data) {
     return (
       <p className="text-muted-foreground text-sm" role="status">
@@ -165,30 +202,41 @@ function ToolSetupCard({
       </p>
     );
   }
+
   const approved = plan.status === "approved";
   const buttonLabel = approved ? "Continue build" : "Create & connect";
+
   return (
     <form
       className="flex w-full max-w-md flex-col gap-4 rounded-xl border bg-card p-4"
       onSubmit={async (event) => {
         event.preventDefault();
+
         if (locked || !onContinue) {
           return;
         }
+
         const form = event.currentTarget;
         const values = new FormData(form);
         setSaving(true);
         setError(null);
+
         try {
           if (!approved) {
-            const saved = await client.forOrg(orgId).approveToolSetup(setupId, {
-              profileId: String(values.get("profileId") ?? "") || undefined,
-              ...(plan.requiresApiKey
-                ? { apiKey: String(values.get("apiKey") ?? "") }
-                : {}),
-            });
+            const profileId =
+              String(values.get("profileId") ?? "") || undefined;
+
+            const request = plan.requiresApiKey
+              ? { apiKey: String(values.get("apiKey") ?? ""), profileId }
+              : { profileId };
+
+            const saved = await client
+              .forOrg(orgId)
+              .approveToolSetup(setupId, request);
+
             queryClient.setQueryData(queryKey, saved);
           }
+
           form.reset();
           await onContinue(setupId);
           await queryClient.invalidateQueries({ queryKey });
@@ -226,9 +274,11 @@ function ToolSetupFields({
   profiles: ProfileSummary[];
 }) {
   const fieldId = useId();
+
   if (plan.status === "approved") {
     return null;
   }
+
   return (
     <>
       <div className="space-y-2">
@@ -279,15 +329,19 @@ interface ToolCredentialFormProps {
 
 function ToolCredentialForm(props: ToolCredentialFormProps) {
   const { canManage, orgId, toolId, toolName } = props;
+
   const status = useQuery({
     enabled: canManage,
     queryFn: () => client.forOrg(orgId).getToolCredentialStatus(toolId),
     queryKey: ["tool-credentials", orgId, toolId],
   });
+
   const envFields = status.data?.env;
+
   if (!(canManage && envFields)) {
     return <ToolApiKeyForm {...props} />;
   }
+
   // Tools with several declared settings are filled in on the playground,
   // which shows one field per variable.
   return (
@@ -323,6 +377,7 @@ function ToolApiKeyForm({
   const inputId = useId();
   const queryClient = useQueryClient();
   const queryKey = ["tool-credentials", orgId, toolId];
+
   const status = useQuery({
     enabled: canManage,
     queryFn: () => client.forOrg(orgId).getToolCredentialStatus(toolId),
@@ -363,18 +418,22 @@ function ToolApiKeyForm({
                 className="space-y-4"
                 onSubmit={async (event) => {
                   event.preventDefault();
+
                   if (saving) {
                     return;
                   }
+
                   const form = event.currentTarget;
                   const apiKey = String(new FormData(form).get("apiKey") ?? "");
                   form.reset();
                   setSaving(true);
                   setError(null);
+
                   try {
                     const saved = await client
                       .forOrg(orgId)
                       .saveToolCredential(toolId, apiKey);
+
                     queryClient.setQueryData(queryKey, saved);
                     setOpen(false);
                   } catch {
@@ -448,13 +507,17 @@ export function ChatAddCapabilitiesDialogs({
   const [notice, setNotice] = useState<string | null>(null);
 
   const assignedToolIds = new Set(profile?.tools.map((tool) => tool.id) ?? []);
+
   const assignedMcpIds = new Set(
     profile?.mcpServers.map((server) => server.id) ?? []
   );
+
   const availableTools = tools.filter((tool) => !assignedToolIds.has(tool.id));
+
   const availableMcpServers = servers.filter(
     (server) => !assignedMcpIds.has(server.id)
   );
+
   const busy =
     assignToolMutation.isPending ||
     assignMcpMutation.isPending ||
@@ -493,6 +556,7 @@ export function ChatAddCapabilitiesDialogs({
         ...request,
         connect: true,
       });
+
       await assignMcpMutation.mutateAsync({
         profileId,
         serverId: response.server.id,
@@ -515,6 +579,7 @@ export function ChatAddCapabilitiesDialogs({
         serverId: server.id,
         transport: server.transport,
       });
+
       if (result.ok) {
         setNotice(
           `Connection successful. Found ${result.toolCount} tool${result.toolCount === 1 ? "" : "s"}.`
@@ -544,6 +609,7 @@ export function ChatAddCapabilitiesDialogs({
           if (!open) {
             setError(null);
           }
+
           onToolOpenChange(open);
         }}
         open={toolOpen}
@@ -558,6 +624,7 @@ export function ChatAddCapabilitiesDialogs({
           if (!open) {
             setError(null);
           }
+
           onMcpOpenChange(open);
         }}
         onSubmit={handleCreateMcp}
@@ -584,11 +651,13 @@ function ChatSkillDialog({
 }) {
   const { activeOrg } = useAuth();
   const { data: profile } = useProfileQuery(profileId);
+
   const {
     data: skills = [],
     isLoading: skillsLoading,
     error: skillsError,
   } = useSkillsQuery();
+
   const assignToolMutation = useAssignToolMutation();
   const assignSkillMutation = useAssignSkillMutation();
   const deleteSkillMutation = useDeleteSkillMutation();
@@ -644,19 +713,24 @@ function ChatPluginDialog({
   const tools = useToolsQuery();
   const skills = useSkillsQuery();
   const save = useSavePluginAgentAccess();
+
   if (!user?.isPlatformAdmin) {
     return null;
   }
+
   const loading =
     plugins.isLoading ||
     profile.isLoading ||
     tools.isLoading ||
     skills.isLoading;
+
   const error =
     save.error || plugins.error || profile.error || tools.error || skills.error;
+
   const enabled = (plugins.data ?? []).filter(
     (plugin) => plugin.installed && plugin.lifecycleState === "enabled"
   );
+
   return (
     <Dialog
       onOpenChange={(open) => {
@@ -686,6 +760,7 @@ function ChatPluginDialog({
                   skills: skills.data ?? [],
                   tools: tools.data ?? [],
                 });
+
               return (
                 <li
                   className="flex items-center justify-between gap-3 py-3"

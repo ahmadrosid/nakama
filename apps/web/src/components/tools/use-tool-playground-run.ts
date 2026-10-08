@@ -5,11 +5,15 @@ import { client, formatError } from "@/lib/client";
 import { buildSuperBotFixDraft } from "@/lib/tool-playground-draft";
 import { buildExampleParametersJson } from "@/lib/tool-playground-params";
 
+type JsonValue = string | number | boolean | null | JsonValue[] | JsonRecord;
+
+type JsonRecord = { [key: string]: JsonValue };
+
 type ToolPlaygroundRunState =
   | { status: "idle" }
   | { status: "running" }
-  | { status: "success"; result: unknown; parameters: Record<string, unknown> }
-  | { status: "error"; error: string; parameters: Record<string, unknown> };
+  | { status: "success"; result: unknown; parameters: JsonRecord }
+  | { status: "error"; error: string; parameters: JsonRecord };
 
 export interface ToolPlaygroundRunControls {
   actionError: string | null;
@@ -26,16 +30,12 @@ export interface ToolPlaygroundRunControls {
   suggesting: boolean;
 }
 
-function parseParametersJson(raw: string): Record<string, unknown> | null {
+function parseParametersJson(raw: string): JsonRecord | null {
   try {
     const parsed: unknown = JSON.parse(raw);
 
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      !Array.isArray(parsed)
-    ) {
-      return parsed as Record<string, unknown>;
+    if (isJsonRecord(parsed)) {
+      return parsed;
     }
   } catch {
     return null;
@@ -44,20 +44,54 @@ function parseParametersJson(raw: string): Record<string, unknown> | null {
   return null;
 }
 
+function isJsonRecord(value: unknown): value is JsonRecord {
+  return (
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- JSON.parse output needs a record check.
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every(isJsonValue)
+  );
+}
+
+function isJsonValue(value: unknown): value is JsonValue {
+  if (
+    value === null ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- JSON.parse output needs a scalar check.
+    typeof value === "string" ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- JSON.parse output needs a scalar check.
+    typeof value === "number" ||
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- JSON.parse output needs a scalar check.
+    typeof value === "boolean"
+  ) {
+    return true;
+  }
+
+  if (Array.isArray(value)) {
+    return value.every(isJsonValue);
+  }
+
+  return isJsonRecord(value);
+}
+
 export function useToolPlaygroundRun(
   tool: ToolDetail,
   superBotProfileId: string | null
 ): ToolPlaygroundRunControls {
   const { navigateToNewChat } = useAppNavigation();
+
   const [parametersJson, setParametersJsonState] = useState(() =>
     buildExampleParametersJson(tool.parameters)
   );
+
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [assistPrompt, setAssistPrompt] = useState("");
   const [suggesting, setSuggesting] = useState(false);
+
   const [runState, setRunState] = useState<ToolPlaygroundRunState>({
     status: "idle",
   });
+
   const [actionError, setActionError] = useState<string | null>(null);
 
   async function handleSuggestParams() {
@@ -65,6 +99,7 @@ export function useToolPlaygroundRun(
 
     if (!prompt) {
       setActionError("Describe what you want to test first.");
+
       return;
     }
 
@@ -86,6 +121,7 @@ export function useToolPlaygroundRun(
 
     if (!parameters) {
       setJsonError("Enter valid JSON parameters before running.");
+
       return;
     }
 
@@ -102,6 +138,7 @@ export function useToolPlaygroundRun(
           parameters,
           status: "error",
         });
+
         return;
       }
 
@@ -150,7 +187,7 @@ export function useToolPlaygroundRun(
   };
 }
 
-export function formatToolPlaygroundResult(value: unknown): string {
+export function formatToolPlaygroundResult<Value>(value: Value): string {
   try {
     return JSON.stringify(value, null, 2);
   } catch {

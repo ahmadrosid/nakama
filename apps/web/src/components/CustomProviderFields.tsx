@@ -68,6 +68,7 @@ export function CustomProviderFields({
   onWireApiChange,
 }: CustomProviderFieldsProps) {
   const identityDisabled = disabled || identityReadOnly;
+
   const resolvedBrowseLabel =
     browseLabel ?? (remoteProvider === "ollama" ? "Ollama" : "this endpoint");
 

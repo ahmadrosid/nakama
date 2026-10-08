@@ -183,6 +183,7 @@ function formatWebSearchDisplayUrl(source: WebSearchSource): string {
     const parsed = new URL(href.startsWith("http") ? href : `https://${href}`);
     const host = parsed.hostname.replace(/^www\./, "");
     const path = parsed.pathname === "/" ? "" : parsed.pathname;
+
     return `${host}${path}${parsed.search}`;
   } catch {
     return source.url;
@@ -196,6 +197,7 @@ function webSearchHeaderLabel(
   if (mode === "fetch") {
     return isComplete ? "Fetched" : "Fetching";
   }
+
   return isComplete ? "Searched" : "Searching";
 }
 

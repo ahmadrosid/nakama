@@ -82,6 +82,7 @@ function formatInlineMetaLine({
     } else {
       const matchLabel = usageSummary.useCount === 1 ? "match" : "matches";
       parts.push(`${usageSummary.useCount} ${matchLabel}`);
+
       if (usageSummary.lastUsedAt) {
         parts.push(
           `last matched ${formatUsageTimestamp(usageSummary.lastUsedAt)}`

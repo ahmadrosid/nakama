@@ -10,32 +10,41 @@ export interface LocalFileCitation {
 export function formatLocalCitations(
   markdown: string,
   profileId?: string | null
-): { markdown: string; citations: LocalFileCitation[] } {
+) {
   const citations: LocalFileCitation[] = [];
+
   const formatted = markdown.replace(
     /(?<!!)\[([^\]]+)\]\(([^\s)]+)\)/g,
     (link, label: string, path: string) => {
       if (/^[a-z][a-z\d+.-]*:/i.test(path) || /^[/.#]/.test(path)) {
         return link;
       }
+
       if (!profileId) {
         return `${label} (\`${path}\`)`;
       }
+
       const existing = citations.find((citation) => citation.path === path);
+
       if (existing) {
         return `[${existing.number}](${existing.href})`;
       }
+
       const number = citations.length + 1;
+
       const query = new URLSearchParams({
         citation: String(number),
         file: path,
         profile: profileId,
       });
+
       const href = `#file-citation?${query}`;
       citations.push({ href, label, number, path });
+
       return `[${number}](${href})`;
     }
   );
+
   return { citations, markdown: formatted };
 }
 
@@ -47,11 +56,14 @@ export function toolGroupElapsedSeconds(
   if (tools.length === 0) {
     return null;
   }
+
   let startedAt = Number.POSITIVE_INFINITY;
   let completedAt = Number.NEGATIVE_INFINITY;
+
   for (const tool of tools) {
     const start = tool.toolStartedAt;
     const end = tool.toolStatus === "running" ? now : tool.toolCompletedAt;
+
     if (
       start === undefined ||
       end === undefined ||
@@ -61,9 +73,11 @@ export function toolGroupElapsedSeconds(
     ) {
       return null;
     }
+
     startedAt = Math.min(startedAt, start);
     completedAt = Math.max(completedAt, end);
   }
+
   return Math.max(
     1,
     Math.floor(((active ? now : completedAt) - startedAt) / 1000)
@@ -85,12 +99,14 @@ export function segmentAssistantTurn(
   streamActive = false
 ): AssistantTurnSegment[] {
   const segments: AssistantTurnSegment[] = [];
+
   for (const message of messages) {
     if (
       message.role === "tool" ||
       (message.role === "assistant" && hasThinkingContent(message))
     ) {
       const previous = segments.at(-1);
+
       const work: Extract<AssistantTurnSegment, { kind: "work" }> =
         previous?.kind === "work"
           ? previous
@@ -99,12 +115,14 @@ export function segmentAssistantTurn(
               kind: "work",
               tools: [],
             };
+
       if (work !== previous) {
         segments.push(work);
       }
 
       if (message.role === "tool") {
         work.tools.push(message);
+
         if (work.thinking) {
           work.thinking = { ...work.thinking, thinkingStreaming: false };
         }
@@ -134,9 +152,11 @@ export function segmentAssistantTurn(
   }
 
   const latestWork = segments.findLast((segment) => segment.kind === "work");
+
   if (latestWork?.kind === "work") {
     latestWork.active = streamActive;
   }
+
   return segments;
 }
 

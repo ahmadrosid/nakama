@@ -6,6 +6,6 @@
 export function composerActions(state: {
   canStop: boolean;
   hasContent: boolean;
-}): { showStop: boolean; showSubmit: boolean } {
+}) {
   return { showStop: state.canStop, showSubmit: state.hasContent };
 }

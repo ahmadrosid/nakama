@@ -53,12 +53,15 @@ function buildStreamingArtifactRef(
 
 function streamingPreviewFlags(artifact: ChatArtifactRef) {
   const mimeType = artifact.mimeType;
+
   const isWordDocument =
     isDocxFile(artifact.filename, mimeType) ||
     isLegacyDocFile(artifact.filename, mimeType);
+
   const isHtml = isHtmlArtifactMimeType(mimeType);
   const isMarkdown = isMarkdownArtifactMimeType(mimeType) || isWordDocument;
   const isSpreadsheet = isDelimitedSpreadsheetFile(artifact.filename, mimeType);
+
   return { isHtml, isMarkdown, isSpreadsheet, isWordDocument, mimeType };
 }
 
@@ -68,11 +71,13 @@ function buildStreamingArtifactHeader(
 ) {
   const { isHtml, isMarkdown, isSpreadsheet, mimeType } =
     streamingPreviewFlags(artifact);
+
   const showPreviewToggle = artifactCanTogglePreviewSource({
     isHtml,
     isMarkdown,
     isSpreadsheet,
   });
+
   return {
     ...artifactPanelHeaderMeta({
       filename: artifact.filename,
@@ -188,22 +193,25 @@ function withPanelPreviewMode(
   current: Partial<Record<string, ArtifactPreviewMode>>,
   panelId: string,
   mode: ArtifactPreviewMode
-): Partial<Record<string, ArtifactPreviewMode>> {
+) {
   if (current[panelId] === mode) {
     return current;
   }
+
   return { ...current, [panelId]: mode };
 }
 
 function withoutPanelPreviewMode(
   current: Partial<Record<string, ArtifactPreviewMode>>,
   panelId: string
-): Partial<Record<string, ArtifactPreviewMode>> {
+) {
   if (!(panelId in current)) {
     return current;
   }
+
   const next = { ...current };
   delete next[panelId];
+
   return next;
 }
 
@@ -220,14 +228,17 @@ export function ArtifactStreamingPanelBridge({
   const lastEligibleRef = useRef<EligibleStreamTarget | null>(null);
   const handedOffRef = useRef(new Set<string>());
   const autoWidthAppliedRef = useRef(new Set<string>());
+
   const [previewModeByPanel, setPreviewModeByPanel] = useState<
     Partial<Record<string, ArtifactPreviewMode>>
   >({});
+
   const [stableContent, setStableContent] = useState<{
     artifact: ChatArtifactRef;
     content: string;
     toolCallId: string;
   } | null>(null);
+
   const streaming = useMemo(
     () => findLatestStreamingArtifact(messages),
     [messages]
@@ -262,23 +273,29 @@ export function ArtifactStreamingPanelBridge({
     }
 
     const filename = streaming.parsed.filename ?? "Writing artifact…";
+
     const artifact = buildStreamingArtifactRef(
       filename,
       streaming.parsed.relativePath,
       streaming.tool
     );
+
     const body = buildStreamingPanelBody({
       artifact,
       content: streaming.parsed.content ?? "",
       previewMode,
     });
+
     const defaultWidth = artifactPanelDefaultWidth(
       artifact.filename,
       artifact.mimeType
     );
+
     const header = buildStreamingArtifactHeader(artifact, { streaming: true });
+
     const { isHtml, isMarkdown, isSpreadsheet } =
       streamingPreviewFlags(artifact);
+
     const bodyClassName = artifactPanelBodyClassName({
       isHtml,
       isImage: false,
@@ -286,6 +303,7 @@ export function ArtifactStreamingPanelBridge({
       isSpreadsheet,
       previewMode,
     });
+
     const leading = header.showPreviewToggle ? (
       <ArtifactPreviewModeToggle
         mode={previewMode}
@@ -296,6 +314,7 @@ export function ArtifactStreamingPanelBridge({
         }
       />
     ) : null;
+
     const widthPatch =
       defaultWidth === 768 && !autoWidthAppliedRef.current.has(panelId)
         ? { defaultWidth }
@@ -315,6 +334,7 @@ export function ArtifactStreamingPanelBridge({
         typeLabel: header.typeLabel,
         ...widthPatch,
       });
+
       return;
     }
 
@@ -323,9 +343,11 @@ export function ArtifactStreamingPanelBridge({
     }
 
     openedRef.current = panelId;
+
     if (defaultWidth === 768) {
       autoWidthAppliedRef.current.add(panelId);
     }
+
     show({
       bodyClassName: artifactPanelBodyClassName({
         isHtml,
@@ -407,14 +429,17 @@ export function ArtifactStreamingPanelBridge({
         }
 
         const text = new TextDecoder().decode(response.data);
+
         const filename =
           handoffTarget.relativePath.split("/").pop() ??
           handoffTarget.relativePath;
+
         const artifact = buildStreamingArtifactRef(
           filename,
           handoffTarget.relativePath,
           handoffTarget.tool
         );
+
         setStableContent({
           artifact,
           content: text,
@@ -445,9 +470,11 @@ export function ArtifactStreamingPanelBridge({
 
     const previewMode =
       previewModeByPanel[stableContent.toolCallId] ?? "preview";
+
     const header = buildStreamingArtifactHeader(stableContent.artifact, {
       sizeBytes: new TextEncoder().encode(stableContent.content).byteLength,
     });
+
     const { isHtml, isMarkdown, isSpreadsheet } = streamingPreviewFlags(
       stableContent.artifact
     );

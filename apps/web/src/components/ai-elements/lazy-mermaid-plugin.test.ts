@@ -15,8 +15,10 @@ const createDelegate = (
 describe("createLazyMermaidPlugin", () => {
   test("does not load Mermaid for an empty streamed chart", async () => {
     let loadCount = 0;
+
     const plugin = createLazyMermaidPlugin(async () => {
       loadCount += 1;
+
       return {
         mermaid: createDelegate(async () => ({ svg: "unused" })),
       };
@@ -29,29 +31,36 @@ describe("createLazyMermaidPlugin", () => {
   });
 
   test("preserves config and render arguments when delegating", async () => {
-    const received: {
+    type Received = {
       chart?: string;
       config?: Parameters<DiagramPlugin["getMermaid"]>[0];
       id?: string;
-    } = {};
+    };
+
+    const received: Received = {};
+
     const delegate = createDelegate(
       async (id, chart) => {
         received.id = id;
         received.chart = chart;
+
         return { svg: "<svg />" };
       },
       (config) => {
         received.config = config;
+
         return {
           initialize: () => undefined,
           render: async (id, chart) => {
             received.id = id;
             received.chart = chart;
+
             return { svg: "<svg />" };
           },
         };
       }
     );
+
     const plugin = createLazyMermaidPlugin(async () => ({ mermaid: delegate }));
     const config = { theme: "dark" } as const;
     const chart = " \n graph TD\n ";
@@ -68,6 +77,7 @@ describe("createLazyMermaidPlugin", () => {
 
   test("propagates loader rejection to Streamdown", async () => {
     const loadError = new Error("loader rejected");
+
     const plugin = createLazyMermaidPlugin(async () => {
       throw loadError;
     });

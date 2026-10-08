@@ -37,6 +37,7 @@ import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import { formatError } from "@/lib/client";
 
 const SLACK_NEW_APP_URL = "https://api.slack.com/apps?new_app=1";
+
 /** Slack section of this server's API reference, which carries the setup guide. */
 const SLACK_GUIDE_URL = "/docs#tag/slack";
 
@@ -141,9 +142,11 @@ function MemberIdsInput({
 
   function commit(raw: string) {
     const { ids, invalid } = parseSlackMemberIdInput(raw);
+
     if (ids.length > 0) {
       onChange([...new Set([...value, ...ids])]);
     }
+
     // Leave what was rejected in the field so it can be fixed, not retyped.
     setDraft(invalid.join(" "));
     setError(
@@ -157,8 +160,10 @@ function MemberIdsInput({
     if (event.key === "Enter" || event.key === "," || event.key === " ") {
       event.preventDefault();
       commit(draft);
+
       return;
     }
+
     if (event.key === "Backspace" && !draft && value.length > 0) {
       onChange(value.slice(0, -1));
     }
@@ -325,13 +330,16 @@ function statusBadge(state: {
   if (!state.configured) {
     return "Not set up";
   }
+
   // A running worker can still have lost its Slack socket.
   if (state.running && !state.connected) {
     return "Disconnected";
   }
+
   if (state.linked && state.running) {
     return "Connected";
   }
+
   return state.linked ? "Paired" : "Awaiting link";
 }
 
@@ -351,6 +359,7 @@ function SlackStatusHeader({
   if (embedded) {
     return null;
   }
+
   return (
     <IntegrationStatusHeader
       configured={configured}
@@ -521,6 +530,73 @@ function ConfiguredSlackSettings({
   );
 }
 
+function SlackAppSetup({
+  copy,
+}: {
+  copy: (text: string, done: string) => void;
+}) {
+  return (
+    <div className="space-y-3 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-medium text-foreground text-sm">Create the app</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            className={buttonVariants({ size: "sm", variant: "ghost" })}
+            href={SLACK_GUIDE_URL}
+            id="link-slack-guide"
+            rel="noreferrer"
+            target="_blank"
+          >
+            Guide
+          </a>
+          <Button
+            id="btn-copy-slack-manifest"
+            onClick={() => copy(SLACK_APP_MANIFEST, "Manifest copied.")}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Copy manifest
+          </Button>
+        </div>
+      </div>
+      <div className="overflow-hidden rounded-md border border-border">
+        <PairingStepTile
+          className="border-border border-b"
+          description={
+            <>
+              Open{" "}
+              <a
+                className="font-medium text-primary underline-offset-2 hover:underline"
+                href={SLACK_NEW_APP_URL}
+                rel="noreferrer"
+                target="_blank"
+              >
+                Slack apps
+              </a>
+              , choose From a manifest, pick your workspace, and paste the
+              manifest.
+            </>
+          }
+          step={1}
+          title="New app from manifest"
+        />
+        <PairingStepTile
+          className="border-border border-b"
+          description="Install App → Install to Workspace, then copy the Bot User OAuth Token (xoxb-)."
+          step={2}
+          title="Bot token"
+        />
+        <PairingStepTile
+          description="Basic Information → App-Level Tokens → Generate with the connections:write scope (xapp-)."
+          step={3}
+          title="App token"
+        />
+      </div>
+    </div>
+  );
+}
+
 export function SlackSettingsCard({
   embedded = false,
 }: {
@@ -533,6 +609,7 @@ export function SlackSettingsCard({
     error: loadError,
     refetch,
   } = useSlackSettings();
+
   const { data: status } = useSystemStatusQuery();
   const saveMutation = useSaveSlackSettings();
   const regenerateMutation = useRegenerateSlackHandshake();
@@ -562,16 +639,22 @@ export function SlackSettingsCard({
     if (!settings) {
       return;
     }
+
     if (!dirtyRef.current) {
       applySaved(settings);
+
       return;
     }
+
     // Unsaved edits win; a refresh only adds members who paired since.
     const seenPaired = new Set(seenPairedRef.current);
+
     const newlyPaired = settings.pairedUserIds.filter(
       (id) => !seenPaired.has(id)
     );
+
     seenPairedRef.current = settings.pairedUserIds;
+
     if (newlyPaired.length > 0) {
       setAllowedUserIds((current) => [
         ...new Set([...current, ...newlyPaired]),
@@ -586,16 +669,21 @@ export function SlackSettingsCard({
     if (!pairingCodeValue) {
       return;
     }
+
     const startedAt = Date.now();
+
     const timer = setInterval(() => {
       if (Date.now() - startedAt > 10 * 60 * 1000) {
         clearInterval(timer);
+
         return;
       }
+
       if (document.visibilityState === "visible") {
         void refetch();
       }
     }, 5000);
+
     return () => clearInterval(timer);
   }, [pairingCodeValue, refetch]);
 
@@ -604,10 +692,12 @@ export function SlackSettingsCard({
   }
 
   const configured = settings?.configured === true;
+
   const linked =
     settings?.allowWorkspace === true ||
     (settings?.pairedUserIds.length ?? 0) > 0 ||
     (settings?.allowedUserIds.length ?? 0) > 0;
+
   const worker = status?.slackWorker;
   const running = worker?.running === true;
   const connected = worker?.connected === true;
@@ -626,34 +716,44 @@ export function SlackSettingsCard({
   function handleSave() {
     setFormError(null);
     setHint(null);
+
     // The bridge reads tokens when it starts, so a running one needs a restart.
     const needsRestart =
       Boolean(botToken.trim() || appToken.trim()) &&
       worker?.process?.status === "online";
-    saveMutation.mutate(
-      {
-        allowedUserIds: allowedUserIds.join(","),
-        allowWorkspace,
-        ...(botToken.trim() ? { botToken: botToken.trim() } : {}),
-        ...(appToken.trim() ? { appToken: appToken.trim() } : {}),
+
+    const settings: Parameters<typeof saveMutation.mutate>[0] = {
+      allowedUserIds: allowedUserIds.join(","),
+      allowWorkspace,
+    };
+
+    const trimmedBotToken = botToken.trim();
+    const trimmedAppToken = appToken.trim();
+
+    if (trimmedBotToken) {
+      settings.botToken = trimmedBotToken;
+    }
+
+    if (trimmedAppToken) {
+      settings.appToken = trimmedAppToken;
+    }
+
+    saveMutation.mutate(settings, {
+      onError: (error) => setFormError(formatError(error)),
+      onSuccess: (saved) => {
+        dirtyRef.current = false;
+        applySaved(saved);
+        setBotToken("");
+        setAppToken("");
+        setHint(
+          needsRestart
+            ? "Saved. Restart the bridge worker so it uses the new tokens."
+            : saved.handshakeCode
+              ? "Saved. Send the pairing code to the bot in Slack."
+              : "Saved."
+        );
       },
-      {
-        onError: (error) => setFormError(formatError(error)),
-        onSuccess: (saved) => {
-          dirtyRef.current = false;
-          applySaved(saved);
-          setBotToken("");
-          setAppToken("");
-          setHint(
-            needsRestart
-              ? "Saved. Restart the bridge worker so it uses the new tokens."
-              : saved.handshakeCode
-                ? "Saved. Send the pairing code to the bot in Slack."
-                : "Saved."
-          );
-        },
-      }
-    );
+    });
   }
 
   function handleRegenerate() {
@@ -681,64 +781,7 @@ export function SlackSettingsCard({
         running={running}
       />
 
-      <div className="space-y-3 px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="font-medium text-foreground text-sm">Create the app</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <a
-              className={buttonVariants({ size: "sm", variant: "ghost" })}
-              href={SLACK_GUIDE_URL}
-              id="link-slack-guide"
-              rel="noreferrer"
-              target="_blank"
-            >
-              Guide
-            </a>
-            <Button
-              id="btn-copy-slack-manifest"
-              onClick={() => void copy(SLACK_APP_MANIFEST, "Manifest copied.")}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Copy manifest
-            </Button>
-          </div>
-        </div>
-        <div className="overflow-hidden rounded-md border border-border">
-          <PairingStepTile
-            className="border-border border-b"
-            description={
-              <>
-                Open{" "}
-                <a
-                  className="font-medium text-primary underline-offset-2 hover:underline"
-                  href={SLACK_NEW_APP_URL}
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  Slack apps
-                </a>
-                , choose From a manifest, pick your workspace, and paste the
-                manifest.
-              </>
-            }
-            step={1}
-            title="New app from manifest"
-          />
-          <PairingStepTile
-            className="border-border border-b"
-            description="Install App → Install to Workspace, then copy the Bot User OAuth Token (xoxb-)."
-            step={2}
-            title="Bot token"
-          />
-          <PairingStepTile
-            description="Basic Information → App-Level Tokens → Generate with the connections:write scope (xapp-)."
-            step={3}
-            title="App token"
-          />
-        </div>
-      </div>
+      <SlackAppSetup copy={(text, done) => void copy(text, done)} />
 
       <SettingsRow label="Bot token">
         <TokenInput
