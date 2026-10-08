@@ -6,6 +6,7 @@ import { createCapturingProvider } from "./test-helpers";
 
 function setup(tools: ToolDefinition[]) {
   const records: Array<{ id: string; status: string }> = [];
+
   const context: ToolContext = {
     codeModeAudit: {
       async begin({ id }) {
@@ -19,10 +20,13 @@ function setup(tools: ToolDefinition[]) {
     parentToolCallId: "parent_1",
     sessionId: "session_1",
   };
+
   const execute = createCodeModeTool(tools, context);
+
   if (!execute) {
     throw new Error("No code-mode catalog");
   }
+
   return { context, execute, records };
 }
 
@@ -54,6 +58,7 @@ test("code mode combines assigned built-in and MCP results without a child resul
       },
     },
   ]);
+
   expect(
     await execute.run(
       {
@@ -72,6 +77,7 @@ test("code mode combines assigned built-in and MCP results without a child resul
 
 test("code mode rejects unassigned tools and invalid input before dispatch", async () => {
   let calls = 0;
+
   const { execute, context, records } = setup([
     {
       description: "Find files",
@@ -79,10 +85,12 @@ test("code mode rejects unassigned tools and invalid input before dispatch", asy
       parameters: inputSchema,
       async run() {
         calls++;
+
         return {};
       },
     },
   ]);
+
   expect(
     await execute.run(
       { code: 'return await tools.not_assigned({query:"a"});' },
@@ -101,19 +109,23 @@ test("code mode rejects unassigned tools and invalid input before dispatch", asy
 
 test("code mode fails closed when audit begin fails", async () => {
   let calls = 0;
+
   const tool: ToolDefinition = {
     description: "Find files",
     name: "search_files",
     parameters: inputSchema,
     async run() {
       calls++;
+
       return {};
     },
   };
+
   const { execute, context } = setup([tool]);
   context.codeModeAudit!.begin = async () => {
     throw new Error("audit unavailable");
   };
+
   expect(
     await execute.run(
       { code: 'return await tools.search_files({query:"a"});' },
@@ -125,6 +137,7 @@ test("code mode fails closed when audit begin fails", async () => {
 
 test("code mode waits for an unawaited child and records media without repeating the call", async () => {
   let calls = 0;
+
   const { execute, context, records } = setup([
     {
       codeModeEligible: true,
@@ -133,14 +146,17 @@ test("code mode waits for an unawaited child and records media without repeating
       parameters: inputSchema,
       async run() {
         calls++;
+
         return { hasMedia: true, value: null };
       },
     },
   ]);
+
   const result = await execute.run(
     { code: 'tools.issues__get({query:"a"}); return "done";' },
     context
   );
+
   expect(result).toHaveProperty("error");
   expect(calls).toBe(1);
   expect(records.map((record) => record.status)).toEqual(["running", "media"]);
@@ -150,6 +166,7 @@ test("code mode runs safe reads together and other tools in call order", async (
   let active = 0;
   let peak = 0;
   const order: string[] = [];
+
   const read: ToolDefinition = {
     description: "Find files",
     name: "search_files",
@@ -160,10 +177,13 @@ test("code mode runs safe reads together and other tools in call order", async (
       peak = Math.max(peak, active);
       await Bun.sleep(10);
       active--;
+      // SAFETY: Ajv validates this tool's query schema before execution.
       order.push((input as { query: string }).query);
+
       return {};
     },
   };
+
   const write: ToolDefinition = {
     codeModeEligible: true,
     description: "Write issue",
@@ -172,9 +192,11 @@ test("code mode runs safe reads together and other tools in call order", async (
     async run() {
       expect(active).toBe(0);
       order.push("write");
+
       return {};
     },
   };
+
   const { execute, context } = setup([read, write]);
   expect(
     await execute.run(
@@ -191,6 +213,7 @@ test("code mode runs safe reads together and other tools in call order", async (
 test("code mode serializes MCP calls in Promise.all", async () => {
   let active = 0;
   let peak = 0;
+
   const { execute, context } = setup([
     {
       codeModeEligible: true,
@@ -202,10 +225,12 @@ test("code mode serializes MCP calls in Promise.all", async () => {
         peak = Math.max(peak, active);
         await Bun.sleep(10);
         active--;
+
         return {};
       },
     },
   ]);
+
   expect(
     await execute.run(
       {
@@ -228,6 +253,7 @@ test("code mode has no process or network globals", async () => {
       },
     },
   ]);
+
   expect(
     await execute.run(
       { code: "return [typeof process, typeof fetch, typeof require];" },
@@ -245,11 +271,13 @@ test("code mode is unavailable without durable audit or an eligible schema", () 
       return {};
     },
   };
+
   expect(
     createCodeModeTool([tool], { orgId: "org_1", sessionId: "session_1" })
   ).toBeNull();
   expect(
     createCodeModeTool([tool], {
+      // SAFETY: This test passes an incomplete audit object to verify the guard.
       codeModeAudit: { begin: async () => {} } as never,
       orgId: "org_1",
       sessionId: "session_1",
@@ -260,6 +288,7 @@ test("code mode is unavailable without durable audit or an eligible schema", () 
       [
         {
           ...tool,
+          // SAFETY: This test injects an invalid schema to verify catalog rejection.
           parameters: { ...inputSchema, unsupportedKeyword: true } as never,
         },
       ],
@@ -277,21 +306,26 @@ test("chat exposes execute only with audit and stores only the outer result", as
       return { matches: ["one", "two"] };
     },
   };
+
   const context = setup([read]).context;
   let calls = 0;
+
   const provider = createCapturingProvider({
     assistantMessage: { content: "Done", role: "assistant" },
     content: "Done",
     toolCalls: [],
   });
+
   const original = provider.generateChat;
   provider.generateChat = async (input) => {
     calls++;
+
     if (calls === 1) {
       expect(input.tools?.map((tool) => tool.name)).toEqual([
         "search_files",
         "execute",
       ]);
+
       return {
         assistantMessage: {
           content: "",
@@ -318,12 +352,15 @@ test("chat exposes execute only with audit and stores only the outer result", as
         ],
       };
     }
+
     return original(input);
   };
+
   const session = createAgentChatSession(
     { provider, tools: [read] },
     { toolContext: context, tools: [read] }
   );
+
   await session.send("Find a file");
   expect(
     session.getHistory().filter((message) => message.role === "tool")
@@ -331,11 +368,13 @@ test("chat exposes execute only with audit and stores only the outer result", as
   expect(
     session.getHistory().find((message) => message.role === "tool")?.content
   ).toBe('["one"]');
+
   const withoutAudit = createCapturingProvider({
     assistantMessage: { content: "Done", role: "assistant" },
     content: "Done",
     toolCalls: [],
   });
+
   await createAgentChatSession(
     { provider: withoutAudit, tools: [read] },
     { tools: [read] }
@@ -356,6 +395,7 @@ test("code mode interrupts a busy loop and caps output", async () => {
       },
     },
   ]);
+
   const started = Date.now();
   expect(
     await execute.run({ code: "while (true) {}" }, context)
@@ -378,9 +418,11 @@ test("code mode cancels an active child and marks its outcome unknown", async ()
   const controller = new AbortController();
   let sawSignal = false;
   let started!: () => void;
+
   const running = new Promise<void>((resolve) => {
     started = resolve;
   });
+
   const { execute, context, records } = setup([
     {
       codeModeEligible: true,
@@ -393,15 +435,19 @@ test("code mode cancels an active child and marks its outcome unknown", async ()
         });
         started();
         await Bun.sleep(50);
+
         return {};
       },
     },
   ]);
+
   context.signal = controller.signal;
+
   const result = execute.run(
     { code: 'return await tools.issues__slow({query:"a"});' },
     context
   );
+
   await running;
   controller.abort();
   expect(await result).toHaveProperty("error");
