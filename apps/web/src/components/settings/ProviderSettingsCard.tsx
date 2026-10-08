@@ -14,6 +14,7 @@ import {
   useDeleteProviderMutation,
   useModelsQuery,
   useProvidersQuery,
+  useReorderChatgptAccountsMutation,
   useUpdateProviderMutation,
 } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
@@ -39,9 +40,13 @@ export function ProviderSettingsCard({
   });
   const updateProviderMutation = useUpdateProviderMutation();
   const deleteProviderMutation = useDeleteProviderMutation();
+  const reorderChatgptMutation = useReorderChatgptAccountsMutation();
   const [addOpen, setAddOpen] = useState(false);
 
   const providers = providersResponse?.providers ?? [];
+  const chatgptIds = providers
+    .filter((provider) => provider.type === "chatgpt")
+    .map((provider) => provider.id);
   const catalog = catalogResponse?.models ?? [];
   const isConfigured = providers.length > 0;
   const catalogError = catalogQueryError
@@ -92,6 +97,14 @@ export function ProviderSettingsCard({
                   {providers.map((instance) => (
                     <ProviderInstanceCard
                       catalog={catalog}
+                      chatgptPosition={
+                        instance.type === "chatgpt"
+                          ? {
+                              count: chatgptIds.length,
+                              index: chatgptIds.indexOf(instance.id),
+                            }
+                          : undefined
+                      }
                       instance={instance}
                       isSole={
                         providers.length === 1 ||
@@ -104,6 +117,16 @@ export function ProviderSettingsCard({
                         onFormError(null);
                       }}
                       onError={onFormError}
+                      onMoveChatgpt={async (direction) => {
+                        const next = [...chatgptIds];
+                        const index = next.indexOf(instance.id);
+                        const target = index + direction;
+                        [next[index], next[target]] = [
+                          next[target]!,
+                          next[index]!,
+                        ];
+                        await reorderChatgptMutation.mutateAsync(next);
+                      }}
                       onUpdate={async (providerId, request) => {
                         await updateProviderMutation.mutateAsync({
                           providerId,

@@ -235,6 +235,7 @@ import {
   isCostEstimated,
   resolveModelLimits,
 } from "../providers";
+import { clearChatgptAccountStatus } from "../providers/chatgpt";
 import {
   fetchChatgptCodexModels,
   refreshChatgptOAuthToken,
@@ -3124,9 +3125,26 @@ export class AgentService {
     }
 
     const updated = applyProviderInstanceUpdate(current, request);
+    if (
+      updated.type === "chatgpt" &&
+      this.userConfig.providers.some(
+        (instance) =>
+          instance.id !== providerId &&
+          instance.type === "chatgpt" &&
+          instance.chatgptAccountId === updated.chatgptAccountId
+      )
+    ) {
+      throw new NakamaApiError(
+        "This ChatGPT account is already connected.",
+        409
+      );
+    }
     const providers = this.userConfig.providers.map((instance) =>
       instance.id === providerId ? updated : instance
     );
+    if (updated.type === "chatgpt" && request.chatgptOAuth) {
+      clearChatgptAccountStatus(providerId);
+    }
 
     this.userConfig = { ...this.userConfig, providers };
     await saveUserConfig(this.userConfig);
@@ -3138,6 +3156,35 @@ export class AgentService {
         countModelsForInstance(updated)
       ),
     };
+  }
+
+  async reorderChatgptAccounts(providerIds: string[]): Promise<void> {
+    if (!this.userConfig) {
+      throw new NakamaApiError("Providers are not configured.", 400);
+    }
+    const providers = this.userConfig.providers;
+    const currentIds = providers
+      .filter((instance) => instance.type === "chatgpt")
+      .map((instance) => instance.id);
+    if (
+      new Set(providerIds).size !== providerIds.length ||
+      providerIds.length !== currentIds.length ||
+      currentIds.some((id) => !providerIds.includes(id))
+    ) {
+      throw new NakamaApiError("ChatGPT account order is invalid.", 400);
+    }
+    const ordered = providerIds.map(
+      (id) => providers.find((p) => p.id === id)!
+    );
+    let next = 0;
+    this.userConfig = {
+      ...this.userConfig,
+      providers: providers.map((instance) =>
+        instance.type === "chatgpt" ? ordered[next++]! : instance
+      ),
+    };
+    await saveUserConfig(this.userConfig);
+    this.refreshProviderConfig();
   }
 
   async deleteProvider(providerId: string): Promise<DeleteProviderResponse> {
@@ -3398,7 +3445,18 @@ export class AgentService {
   }
 
   private refreshProviderConfig(): void {
-    const provider = createProviderFromActiveConfig(this.userConfig);
+    const provider = createProviderFromActiveConfig(
+      this.userConfig,
+      process.env,
+      {
+        onChatgptTokenRefresh: (instanceId, oauth) =>
+          this.persistChatgptOAuth(instanceId, oauth),
+        onXaiTokenRefresh: (instanceId, oauth) =>
+          this.persistXaiOAuth(instanceId, oauth),
+        resolveInstance: (instanceId) =>
+          findProviderInstance(this.userConfig, instanceId),
+      }
+    );
     this._providerConfigured =
       isProviderConfigured(this.userConfig) && provider !== null;
     this.sessions.clear();
@@ -4561,6 +4619,7 @@ export class AgentService {
           visionSelection.model,
           process.env,
           {
+            fallbackInstances: this.userConfig?.providers,
             onChatgptTokenRefresh: (instanceId, oauth) =>
               this.persistChatgptOAuth(instanceId, oauth),
             onXaiTokenRefresh: (instanceId, oauth) =>
@@ -4934,6 +4993,7 @@ export class AgentService {
       resolved.model,
       process.env,
       {
+        fallbackInstances: this.userConfig?.providers,
         onChatgptTokenRefresh: (instanceId, oauth) =>
           this.persistChatgptOAuth(instanceId, oauth),
         onXaiTokenRefresh: (instanceId, oauth) =>
