@@ -17,6 +17,7 @@ describe("parseSkillPostTurnReviewResponse", () => {
       }),
       { catalogNames }
     );
+
     expect(outcome).toEqual({
       action: "create",
       content:
@@ -35,6 +36,7 @@ describe("parseSkillPostTurnReviewResponse", () => {
       }),
       { catalogNames }
     );
+
     expect(outcome.action).toBe("patch");
   });
 
@@ -86,6 +88,7 @@ describe("buildSkillPostTurnReviewPrompt", () => {
         { content: '{"ok":true}', name: "bash", role: "tool", toolCallId: "1" },
       ],
     });
+
     expect(prompt).toContain("deploy-checklist");
     expect(prompt).toContain("bash");
     expect(prompt).toContain("deploy staging");

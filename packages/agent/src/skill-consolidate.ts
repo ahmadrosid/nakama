@@ -30,6 +30,7 @@ function truncate(value: string, max: number): string {
   if (value.length <= max) {
     return value;
   }
+
   return `${value.slice(0, max).trimEnd()}\n…`;
 }
 
@@ -39,11 +40,13 @@ function buildSkillConsolidatePrompt(input: {
   winner: SkillConsolidateBodyInput;
 }): string {
   const lines: string[] = [];
+
   if (input.mode === "merge") {
     lines.push("## Winner skill (keep this name)", "");
     lines.push(`name: ${input.winner.name}`);
     lines.push(`description: ${input.winner.description}`);
     lines.push("", "### Body", "", input.winner.body);
+
     for (const loser of input.losers ?? []) {
       lines.push("", `## Duplicate to merge (${loser.name})`, "");
       lines.push(`description: ${loser.description}`);
@@ -55,6 +58,7 @@ function buildSkillConsolidatePrompt(input: {
     lines.push(`description: ${input.winner.description}`);
     lines.push("", "### Body", "", input.winner.body);
   }
+
   return truncate(lines.join("\n"), PROMPT_CHAR_MAX);
 }
 
@@ -65,14 +69,17 @@ export async function generateSkillConsolidateMarkdown(input: {
   winner: SkillConsolidateBodyInput;
 }): Promise<string | null> {
   const prompt = buildSkillConsolidatePrompt(input);
+
   const result = await input.provider.generateText({
     format: "text",
     prompt,
     system: input.mode === "merge" ? MERGE_SYSTEM : DESLOP_SYSTEM,
   });
+
   const markdown = result.text
     .trim()
     .replace(/^```(?:markdown|md)?\s*/i, "")
     .replace(/\s*```$/, "");
+
   return markdown || null;
 }

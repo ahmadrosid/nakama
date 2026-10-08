@@ -11,14 +11,19 @@ import {
 } from "@nakama/core";
 
 const COMPACTION_BUFFER = 20_000;
+
 // Pruning thresholds are fractions of the model's usable context so that
 // large-window models keep their history intact when tool output is small
 // relative to the window, while small-window models still reclaim tokens
 // before overflow. See #342.
 const PRUNE_PROTECT_FRACTION = 0.5;
+
 const PRUNE_MINIMUM_FRACTION = 0.1;
+
 const TAIL_TURNS = 2;
+
 const TOKEN_ESTIMATE_RATIO = 4;
+
 const PRUNE_TRUNCATION = "[output truncated by compaction]";
 
 const COMPACTION_SYSTEM =
@@ -64,6 +69,15 @@ Rules:
 export interface CompactionConfig {
   contextWindow: number;
   maxOutputTokens: number;
+}
+
+interface CompactionRange {
+  head: ChatMessage[];
+  tailStartIndex: number;
+}
+
+interface PruneToolOutputsResult {
+  prunedTokens: number;
 }
 
 export interface CompactHistoryInput {
@@ -162,6 +176,7 @@ export function estimateHistoryTokens(
     tools,
     replaysThinking
   );
+
   return (
     breakdown.systemPrompt + breakdown.conversation + breakdown.toolDefinitions
   );
@@ -236,17 +251,17 @@ export function buildCompactionPrompt(previousSummary?: string): string {
 export function selectCompactionRange(
   messages: readonly ChatMessage[],
   tailTurns = TAIL_TURNS
-): { head: ChatMessage[]; tailStartIndex: number } {
+): CompactionRange {
   const turns = getTurns(messages);
 
   if (turns.length <= tailTurns) {
-    return { head: [], tailStartIndex: 0 };
+    return { head: messages.slice(0, 0), tailStartIndex: 0 };
   }
 
   const tailStartIndex = turns[turns.length - tailTurns]!.start;
 
   if (tailStartIndex <= 0) {
-    return { head: [], tailStartIndex: 0 };
+    return { head: messages.slice(0, 0), tailStartIndex: 0 };
   }
 
   return {
@@ -258,7 +273,7 @@ export function selectCompactionRange(
 export function pruneToolOutputs(
   messages: ChatMessage[],
   compaction: CompactionConfig
-): { prunedTokens: number } {
+): PruneToolOutputsResult {
   const usable = usableContextTokens(compaction);
   const protect = Math.floor(usable * PRUNE_PROTECT_FRACTION);
   const minimum = Math.floor(usable * PRUNE_MINIMUM_FRACTION);
@@ -308,6 +323,7 @@ export function pruneToolOutputs(
     const estimate =
       estimateTokens(message.content) +
       estimateUserContentTokens(message.attachments ?? []);
+
     total += estimate;
 
     if (total <= protect) {
@@ -325,9 +341,11 @@ export function pruneToolOutputs(
   // Copy-on-write (#589): replace slots so in-flight providers keep originals.
   for (const index of pruneIndexes) {
     const message = messages[index];
+
     if (!message || message.role !== "tool") {
       continue;
     }
+
     messages[index] = {
       ...message,
       attachments: undefined,
@@ -343,12 +361,14 @@ export async function compactHistory(
 ): Promise<CompactionResponse> {
   const messagesBefore = input.history.length;
   const { prunedTokens } = pruneToolOutputs(input.history, input.compaction);
+
   const usedTokens = estimateHistoryTokens(
     input.history,
     input.systemPrompt,
     input.tools,
     providerReplaysThinking(input.provider.name)
   );
+
   const overflow = isOverflow(usedTokens, input.compaction);
   const shouldSummarize = input.force === true || overflow;
 
@@ -374,6 +394,7 @@ export async function compactHistory(
 
   const previousSummary = findPreviousSummary(head);
   const compactionPrompt = buildCompactionPrompt(previousSummary);
+
   const result = await input.provider.generateChat({
     messages: [
       ...stripImagesForCompaction(head),
