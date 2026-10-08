@@ -3,7 +3,7 @@ name: Quality
 on:
   pull_request:
     # Markdown-only PRs change no code.
-    paths-ignore: ['**.md', '.agents/**', 'docs/**', 'scripts/**', 'assets/**']
+    paths-ignore: ['**.md', '.agents/**', 'assets/**']
 
 permissions:
   contents: read
@@ -24,10 +24,7 @@ jobs:
         run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Check
-        run: |
-          bun x oxlint apps/server/src/http --ignore-pattern 'apps/server/src/http/routes/**'
-          bun x oxlint docs/website
-          bun x ultracite check docs/website
+        run: bun run check
 
   duplication:
     runs-on: ubuntu-latest
