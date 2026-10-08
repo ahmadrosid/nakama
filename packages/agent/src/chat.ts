@@ -589,9 +589,18 @@ async function sendMessage(
       : input.clientOrigin?.trim()
         ? { clientOrigin: input.clientOrigin.trim() }
         : options.toolContext;
-  const effectiveToolContext = options.signal
-    ? { ...baseToolContext, signal: options.signal }
-    : baseToolContext;
+  const effectiveToolContext = {
+    ...baseToolContext,
+    currentChatImages:
+      typeof userContent === "string"
+        ? []
+        : userContent.flatMap((part) =>
+            part.type === "image_ref"
+              ? [{ attachmentId: part.attachmentId, mediaType: part.mediaType }]
+              : []
+          ),
+    ...(options.signal ? { signal: options.signal } : {}),
+  };
 
   try {
     const reply = await runConversation(

@@ -54,6 +54,25 @@ Nakama **caches** the tool list at connect time — it is not re-fetched on ever
 - **Sync** — reconnects and refreshes the cache (after the server adds/removes tools)
 - **Startup** — Nakama auto-reconnects enabled HTTP servers; failures log a warning and set status to `error`. Command servers connect when a profile calls a tool
 
+### Current chat context
+
+An MCP tool can request images from the current message. Add an optional `nakamaContext` property to its input schema:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": { "type": "string" },
+    "nakamaContext": {
+      "type": "object",
+      "x-nakama-context": "current-chat"
+    }
+  }
+}
+```
+
+Nakama hides this property from the model and adds it to the MCP call. `nakamaContext.images` contains current-message images as `{ "data": "<base64>", "mediaType": "image/png" }`. This sends image data to that MCP server.
+
 ## Setup
 
 Platform admins manage servers in **Control center → Agent tools → MCP** and assign them by opening **Agent**, selecting a profile, and choosing **MCP**. Registering a server does not assign it to any profile.

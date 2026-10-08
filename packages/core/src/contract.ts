@@ -2913,6 +2913,13 @@ export interface ToolContext {
   clientOrigin?: string;
   /** Local CLI launch directory for shell commands, including coding agents. */
   codingWorkspaceRoot?: string;
+  /** Images attached to the current user message, as scoped stored references. */
+  currentChatImages?: Array<
+    Pick<
+      Extract<MessageContentPart, { type: "image_ref" }>,
+      "attachmentId" | "mediaType"
+    >
+  >;
   /** Emits concise live status lines while a sub-agent child loop runs (parent web UI). */
   emitSubAgentActivity?: (label: string) => void;
   /**

@@ -1,9 +1,10 @@
-import type { JsonSchema, ToolDefinition } from "@nakama/core";
-import { emptyObjectSchema } from "@nakama/core";
+import type { JsonSchema, ToolContext, ToolDefinition } from "@nakama/core";
+import { emptyObjectSchema, validateImageAttachments } from "@nakama/core";
 import type { DatabaseAdapter, StoredMcpServerRecord } from "@nakama/db";
 import type { McpService } from "./mcp-service";
 
 const LLM_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+const CURRENT_CHAT_CONTEXT = "x-nakama-context";
 
 export function buildMcpToolDefinitions(
   servers: StoredMcpServerRecord[],
@@ -26,12 +27,16 @@ export function buildMcpToolDefinitions(
         usedNames
       );
       usedNames.add(name);
+      const inputSchema = toJsonSchema(cachedTool.inputSchema);
+      const hasCurrentChatContext = isCurrentChatContext(inputSchema);
 
       tools.push({
         description: cachedTool.description,
         name,
-        parameters: toJsonSchema(cachedTool.inputSchema),
-        async run(input) {
+        parameters: hasCurrentChatContext
+          ? withoutNakamaContext(inputSchema)
+          : inputSchema,
+        async run(input, context) {
           try {
             const currentServer = await db.getMcpServer(server.id);
 
@@ -41,10 +46,13 @@ export function buildMcpToolDefinitions(
               };
             }
 
+            const arguments_ = hasCurrentChatContext
+              ? await withCurrentChatContext(input, context)
+              : input;
             return await mcpService.callTool(
               currentServer,
               cachedTool.name,
-              input,
+              arguments_,
               orgId,
               profileId
             );
@@ -59,6 +67,52 @@ export function buildMcpToolDefinitions(
   }
 
   return tools;
+}
+
+function isCurrentChatContext(schema: JsonSchema): boolean {
+  const property = schema.properties?.nakamaContext;
+  return (
+    typeof property === "object" &&
+    property !== null &&
+    property[CURRENT_CHAT_CONTEXT] === "current-chat" &&
+    !(schema.required ?? []).includes("nakamaContext")
+  );
+}
+
+function withoutNakamaContext(schema: JsonSchema): JsonSchema {
+  const { nakamaContext: _context, ...properties } = schema.properties ?? {};
+  return { ...schema, properties };
+}
+
+async function withCurrentChatContext(
+  input: unknown,
+  context: ToolContext
+): Promise<Record<string, unknown>> {
+  const args =
+    typeof input === "object" && input !== null && !Array.isArray(input)
+      ? { ...(input as Record<string, unknown>) }
+      : {};
+  delete args.nakamaContext;
+
+  const images: Array<{ data: string; mediaType: string }> = [];
+  for (const image of context.currentChatImages ?? []) {
+    const loaded = await context.loadAttachment?.(image.attachmentId);
+    if (!loaded) {
+      throw new Error(`Image attachment not found: ${image.attachmentId}`);
+    }
+    images.push({
+      data: loaded.bytes.toString("base64"),
+      mediaType: loaded.mediaType,
+    });
+  }
+  validateImageAttachments(images);
+
+  if (images.length) {
+    args.nakamaContext = {
+      images,
+    };
+  }
+  return args;
 }
 
 export function sanitizeLlmToolNamePart(name: string): string {
