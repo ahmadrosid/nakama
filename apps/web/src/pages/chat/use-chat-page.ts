@@ -90,6 +90,7 @@ import {
   resolveModelThinkingSupport,
   resolveModelVisionSupport,
 } from "@/lib/models";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 import {
   buildAutoEnableThinkingPayload,
@@ -345,9 +346,15 @@ export function useChatPage() {
     () =>
       effectiveProfileModelSelection(
         sessionModel ?? activeProfile?.model,
-        providerModelGroups
+        providerModelGroups,
+        models?.currentProviderId
       ),
-    [activeProfile?.model, providerModelGroups, sessionModel]
+    [
+      activeProfile?.model,
+      models?.currentProviderId,
+      providerModelGroups,
+      sessionModel,
+    ]
   );
 
   const renderModelLabel = useCallback(
@@ -1047,9 +1054,7 @@ export function useChatPage() {
           // session: it is not in `sessions`, so there is nothing to refetch.
           if (!cognitoRef.current) {
             syncChatUrl(profileId, activeSession.id);
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.sessions(profileId),
-            });
+            void invalidateQueries(queryClient, queryKeys.sessions(profileId));
           }
         }
 
@@ -1197,16 +1202,13 @@ export function useChatPage() {
         if (turnSessionId) {
           useRunningTurnsStore.getState().endTurn(turnSessionId);
         }
+
         // The sessions list still wants the new title and preview, but nothing
         // else here belongs to a detached turn: the page has moved on and
         // releaseActiveStream already cleared the flags and the queue.
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.sessions(profileId),
-        });
+        void invalidateQueries(queryClient, queryKeys.sessions(profileId));
         // A turn can remove an artifact owned by any profile.
-        void queryClient.invalidateQueries({
-          queryKey: ["artifacts"],
-        });
+        void invalidateQueries(queryClient, ["artifacts"]);
 
         if (!detached) {
           streamAbortRef.current = null;

@@ -20,6 +20,40 @@ function fakeStdioServer(id = "stdio-server"): StoredMcpServerRecord {
 }
 
 describe("McpClientManager", () => {
+  test("forgets a connection when its transport closes", async () => {
+    const clients: Client[] = [];
+    using _connect = spyOn(Client.prototype, "connect").mockImplementation(
+      async function (this: Client) {
+        clients.push(this);
+      }
+    );
+    using _listTools = spyOn(Client.prototype, "listTools").mockResolvedValue({
+      tools: [],
+    });
+    using _close = spyOn(
+      StdioClientTransport.prototype,
+      "close"
+    ).mockResolvedValue(undefined);
+    const manager = new McpClientManager();
+    const server = fakeStdioServer();
+
+    await manager.ensureConnected(server, "org_1", "profile_1");
+    expect(manager.isConnected(server.id, "stdio", "profile_1", "org_1")).toBe(
+      true
+    );
+
+    clients[0]?.onclose?.();
+
+    expect(manager.isConnected(server.id, "stdio", "profile_1", "org_1")).toBe(
+      false
+    );
+
+    await manager.ensureConnected(server, "org_1", "profile_1");
+    expect(clients).toHaveLength(2);
+    expect(manager.getConnectedCount()).toBe(1);
+    await manager.disconnectAll();
+  });
+
   test("concurrent ensureConnected shares one client", async () => {
     let releaseListTools!: () => void;
     const listToolsGate = new Promise<void>((resolve) => {

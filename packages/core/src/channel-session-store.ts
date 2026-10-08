@@ -1,5 +1,6 @@
 import { dirname } from "node:path";
 import type { DeliverableChannelArtifact } from "./channel-artifact-delivery";
+import { createChatLock } from "./channel-chat-lock";
 import { readTextOrNull, writeTextFile } from "./fs";
 
 export interface ChatSessionRecord {
@@ -13,6 +14,10 @@ export interface ChatSessionRecord {
 }
 
 type ChatSessionMap = Record<string, ChatSessionRecord>;
+
+// Each save rewrites the whole map. Unserialized, an older snapshot can be
+// renamed into place after a newer one and undo it on the next restart.
+const saveLock = createChatLock();
 
 /** JSON session map for channel bridges (Discord / Telegram / WhatsApp). */
 export class ChannelSessionStore {
@@ -99,8 +104,10 @@ export class ChannelSessionStore {
   }
 
   async save(): Promise<void> {
-    await writeTextFile(this.path, `${JSON.stringify(this.map, null, 2)}\n`, {
-      ensureDir: dirname(this.path),
-    });
+    await saveLock.withLock(this.path, () =>
+      writeTextFile(this.path, `${JSON.stringify(this.map, null, 2)}\n`, {
+        ensureDir: dirname(this.path),
+      })
+    );
   }
 }

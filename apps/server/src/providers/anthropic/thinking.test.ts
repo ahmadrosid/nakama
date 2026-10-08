@@ -3,27 +3,6 @@ import type { ChatMessage, GenerateChatInput } from "@nakama/core";
 import { createAnthropicProvider, parseAnthropicContent } from "./index";
 
 describe("Anthropic thinking requests", () => {
-  test("caps indexing output", async () => {
-    let maxTokens = 0;
-    const provider = createAnthropicProvider({
-      apiKey: "test-key",
-      fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
-        maxTokens = JSON.parse(String(init?.body)).max_tokens;
-        return Response.json({
-          content: [{ text: "ok", type: "text" }],
-          stop_reason: "end_turn",
-          usage: { input_tokens: 1, output_tokens: 1 },
-        });
-      }) as typeof fetch,
-      model: "claude-sonnet-4-6",
-    });
-    await provider.generateChat({
-      messages: [{ content: "index", role: "user" }],
-      providerOptions: { maxOutputTokens: 300, thinking: { enabled: false } },
-      system: "index",
-    });
-    expect(maxTokens).toBe(300);
-  });
   test.each([
     [
       "claude-sonnet-5",

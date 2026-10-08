@@ -13,17 +13,13 @@ import { getGlobalSkillsDir } from "../skills/paths";
 import { getProfileSoulDir } from "../soul/resolve";
 import { emailTool } from "./email";
 import { extractDocumentTextTool } from "./extract-document-text";
-import {
-  knowledgeBaseIndexTool,
-  knowledgeBaseSearchTool,
-} from "./knowledge-base-search";
+import { knowledgeBaseSearchTool } from "./knowledge-base-search";
 import {
   comparablePath,
   getCustomToolsDir,
   guardFilePath,
   PathGuardError,
   type PathGuardOptions,
-  refuseKnowledgeIndexPath,
   resolveWithRealpath,
 } from "./paths";
 import {
@@ -379,7 +375,6 @@ export async function runWriteFile(
     contentBytes,
     { ...guardOptions, cwd: artifactRoot }
   );
-  refuseKnowledgeIndexPath(guarded.resolved);
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseMemoryFileWrite(
     context,
@@ -457,7 +452,6 @@ export async function runWriteDocx(
       cwd: fileToolWorkspaceRoot(context, options),
     }
   );
-  refuseKnowledgeIndexPath(guarded.resolved);
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseMemoryFileWrite(
     context,
@@ -501,7 +495,6 @@ export async function runDeleteFile(
     undefined,
     guardOptions
   );
-  refuseKnowledgeIndexPath(guarded.resolved);
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseMemoryFileWrite(
     context,
@@ -542,7 +535,6 @@ export async function runEditFile(
     undefined,
     guardOptions
   );
-  refuseKnowledgeIndexPath(guarded.resolved);
   refuseProfileSkillMarkdownWrite(context, guarded.resolved);
   refuseMemoryFileWrite(
     context,
@@ -843,7 +835,6 @@ export async function runReadFile(
     guardOptions
   );
   const filePath = guarded.resolved;
-  refuseKnowledgeIndexPath(filePath);
 
   if (BLOCKED_READ_BASENAMES.includes(path.basename(filePath).toLowerCase())) {
     throw new PathGuardError(
@@ -932,7 +923,6 @@ export const builtinTools: ToolDefinition[] = [
   listArtifactsTool,
   searchFilesTool,
   knowledgeBaseSearchTool,
-  knowledgeBaseIndexTool,
   sqliteTool,
   webSearchTool,
   webFetchTool,

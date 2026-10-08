@@ -239,7 +239,10 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
       method: "delete",
       operationId: "deleteMcpServer",
       path: "/v1/mcp/servers/{serverId}",
-      request: { params: serverIdParam },
+      request: {
+        params: serverIdParam,
+        query: z.object({ force: z.enum(["true", "false"]).optional() }),
+      },
       responses: {
         204: { description: "MCP server deleted" },
         409: {
@@ -409,7 +412,10 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
 
   app.delete("/v1/mcp/servers/:serverId", async (c) => {
     requirePlatformAdminFromContext(c);
-    await mcpService.deleteServer(decodeURIComponent(c.req.param("serverId")));
+    await mcpService.deleteServer(
+      decodeURIComponent(c.req.param("serverId")),
+      c.req.query("force") === "true"
+    );
     return new Response(null, { status: 204 });
   });
 

@@ -55,6 +55,8 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateLlmUsageOrgScope);
   atomic(migrateToolOutputSavingsTable);
   atomic(migrateLlmTurnUsageTable);
+  atomic(migrateLlmUsageActorStatsTable);
+  atomic(migrateLlmUsageDailyStatsTable);
   atomic(migrateAttachmentsTable);
   atomic(migrateAutomationRunsTable);
   atomic(migrateAutomationRunReadStateTable);
@@ -63,6 +65,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateComposioUserConnections);
   atomic(migrateAuditEventsTable);
   atomic(migrateProfileChangeEventsTable);
+  atomic(migrateSkillVersionsTable);
   atomic(migratePluginTables);
   atomic(migrateRemoveGoogleMeetPlugin);
   atomic(migrateFilePinsTable);
@@ -584,6 +587,71 @@ function migrateLlmTurnUsageTable(db: Database): void {
   `);
 }
 
+/**
+ * LLM usage per org, per agent (profile), per user (#1626). An empty
+ * `profile_id` or `user_id` is the unattributed group.
+ *
+ * Totals recorded before this table existed carry no agent or user, so they
+ * move in as one unattributed row per org. That keeps the groups summing to the
+ * org total without guessing who ran up the old spend. The copy happens only
+ * when the table is created, so it is not repeated on later opens.
+ */
+function migrateLlmUsageActorStatsTable(db: Database): void {
+  const exists = db
+    .prepare(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'llm_usage_actor_stats'"
+    )
+    .get();
+  if (exists) {
+    return;
+  }
+
+  db.exec(`
+    CREATE TABLE llm_usage_actor_stats (
+      org_id TEXT NOT NULL,
+      profile_id TEXT NOT NULL DEFAULT '',
+      user_id TEXT NOT NULL DEFAULT '',
+      request_count INTEGER NOT NULL DEFAULT 0,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      estimated_cost_usd REAL NOT NULL DEFAULT 0,
+      tracked_since TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (org_id, profile_id, user_id)
+    );
+    INSERT INTO llm_usage_actor_stats (
+      org_id, profile_id, user_id, request_count, input_tokens, output_tokens,
+      estimated_cost_usd, tracked_since, updated_at
+    )
+    SELECT org_id, '', '', request_count, input_tokens, output_tokens,
+      estimated_cost_usd, tracked_since, updated_at
+    FROM llm_usage_stats
+    WHERE id = 'default';
+  `);
+}
+
+/**
+ * LLM usage per org, per UTC day, per model, per provider, for the usage
+ * charts. Running totals carry no dates, so this table starts empty: it cannot
+ * say on which day old spend happened.
+ */
+function migrateLlmUsageDailyStatsTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS llm_usage_daily_stats (
+      org_id TEXT NOT NULL,
+      day TEXT NOT NULL,
+      model_id TEXT NOT NULL,
+      provider TEXT NOT NULL DEFAULT '',
+      request_count INTEGER NOT NULL DEFAULT 0,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      estimated_cost_usd REAL NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (org_id, day, model_id, provider)
+    );
+  `);
+}
+
 function migrateToolOutputSavingsTable(db: Database): void {
   // The first cut of this table had no `bucket`, and CREATE TABLE IF NOT EXISTS
   // will not add one. It is a counter with no history worth keeping and it has
@@ -955,15 +1023,17 @@ function migrateLlmUsageQuotaColumns(db: Database): void {
 
 function migrateOrgLlmMonthlyQuotaTable(db: Database): void {
   db.exec(`
-    CREATE TABLE IF NOT EXISTS org_llm_monthly_quota (
+    -- Its counters only ever grew, so every row in it is a false exhaustion.
+    DROP TABLE IF EXISTS org_llm_monthly_quota;
+    CREATE TABLE IF NOT EXISTS org_llm_quota_reservations (
+      id TEXT PRIMARY KEY,
       org_id TEXT NOT NULL,
-      month TEXT NOT NULL,
-      reserved_turns INTEGER NOT NULL DEFAULT 0,
-      reserved_tokens INTEGER NOT NULL DEFAULT 0,
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY (org_id, month),
+      reserved_tokens INTEGER NOT NULL CHECK (reserved_tokens >= 0),
+      created_at TEXT NOT NULL,
       FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE
     );
+    CREATE INDEX IF NOT EXISTS idx_org_llm_quota_reservations_org
+      ON org_llm_quota_reservations(org_id);
   `);
 }
 
@@ -1901,6 +1971,26 @@ function migrateProfileChangeEventsTable(db: Database): void {
 
     CREATE INDEX IF NOT EXISTS profile_change_events_profile_created
       ON profile_change_events (profile_id, created_at DESC);
+  `);
+}
+
+function migrateSkillVersionsTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS skill_versions (
+      id TEXT PRIMARY KEY NOT NULL,
+      skill_id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      content TEXT NOT NULL,
+      note TEXT,
+      actor_user_id TEXT,
+      source TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_version
+      ON skill_versions (skill_id, version);
   `);
 }
 

@@ -5,8 +5,6 @@ import { getOrgConfigDir } from "../user-config";
 export const KNOWLEDGE_BASE_RELATIVE_DIR = "knowledge-base";
 export const KNOWLEDGE_BASE_MANIFEST_FILE = "manifest.json";
 export const KNOWLEDGE_BASE_EXTRACTED_SUFFIX = ".extracted.txt";
-export const KNOWLEDGE_INDEX_FILE = "index.md";
-export const KNOWLEDGE_INDEX_META_FILE = "index.meta.json";
 
 /** Root for documents shared by profiles in an organization. */
 export function getOrgKnowledgeBaseDir(orgId: string): string {
@@ -20,30 +18,6 @@ export function getKnowledgeBaseDir(orgId: string, profileId: string): string {
 
 export function getKnowledgeBaseManifestPath(dir: string): string {
   return join(dir, KNOWLEDGE_BASE_MANIFEST_FILE);
-}
-
-export function getKnowledgeIndexPath(
-  orgId: string,
-  profileId: string
-): string {
-  return join(getKnowledgeBaseDir(orgId, profileId), KNOWLEDGE_INDEX_FILE);
-}
-
-export function getKnowledgeIndexMetaPath(
-  orgId: string,
-  profileId: string
-): string {
-  return join(getKnowledgeBaseDir(orgId, profileId), KNOWLEDGE_INDEX_META_FILE);
-}
-
-export function getKnowledgeIndexEntryPath(
-  dir: string,
-  documentId: string
-): string {
-  return join(
-    dir,
-    `${assertConfigPathSegment(documentId, "documentId")}.index.json`
-  );
 }
 
 export function getKnowledgeBaseStoredDocumentPath(

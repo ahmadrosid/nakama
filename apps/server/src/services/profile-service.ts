@@ -87,6 +87,10 @@ import {
   getCustomToolHandler,
   isCustomToolType,
 } from "./custom-tool-handlers";
+import {
+  parseToolEnvDeclarations,
+  type ToolEnvVar,
+} from "./custom-tool-shared";
 import { toMcpServerSummaries } from "./mcp-service";
 import { MemoryBackendService } from "./memory-backend-service";
 import {
@@ -192,7 +196,6 @@ const BASIC_PROFILE_TOOL_IDS = [
   BUILTIN_TOOL_IDS.read_file,
   BUILTIN_TOOL_IDS.search_files,
   BUILTIN_TOOL_IDS.knowledge_base_search,
-  BUILTIN_TOOL_IDS.knowledge_base_index,
   BUILTIN_TOOL_IDS.web_fetch,
 ] as const;
 const SOUL_FILE_KEY_BY_NAME = {
@@ -762,15 +765,7 @@ export class ProfileService {
     await withAssignmentChange(
       this.db,
       { field: "tools", meta, orgId, profileId },
-      async () => {
-        await this.db.assignToolToProfile(profileId, request.toolId);
-        if (request.toolId === BUILTIN_TOOL_IDS.knowledge_base_search) {
-          await this.db.assignToolToProfile(
-            profileId,
-            BUILTIN_TOOL_IDS.knowledge_base_index
-          );
-        }
-      }
+      () => this.db.assignToolToProfile(profileId, request.toolId)
     );
 
     return this.getProfile(orgId, profileId);
@@ -794,12 +789,6 @@ export class ProfileService {
         );
         if (!removed) {
           throw new Error("Tool is not assigned to this profile.");
-        }
-        if (toolId === BUILTIN_TOOL_IDS.knowledge_base_search) {
-          await this.db.unassignToolFromProfile(
-            profileId,
-            BUILTIN_TOOL_IDS.knowledge_base_index
-          );
         }
       }
     );
@@ -1447,7 +1436,12 @@ function readToolHandlerType(handlerType: string | undefined): CustomToolType {
 function readCustomToolHandlerConfig(
   handlerType: CustomToolType,
   handlerConfig: unknown
-): { modulePath: string; parameters?: JsonSchema; requiresApiKey?: boolean } {
+): {
+  env?: ToolEnvVar[];
+  modulePath: string;
+  parameters?: JsonSchema;
+  requiresApiKey?: boolean;
+} {
   const { extension } = CUSTOM_TOOL_HANDLERS[handlerType];
 
   if (typeof handlerConfig !== "object" || handlerConfig === null) {
@@ -1487,7 +1481,10 @@ function readCustomToolHandlerConfig(
     );
   }
 
+  const env = parseToolEnvDeclarations(config.env);
+
   return {
+    ...(env.length > 0 ? { env } : {}),
     modulePath: modulePath.trim(),
     ...(config.requiresApiKey === true ? { requiresApiKey: true } : {}),
     ...(parameters === undefined ? {} : { parameters }),

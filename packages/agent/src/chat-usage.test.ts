@@ -109,6 +109,105 @@ describe("per-call usage", () => {
     expect(calls).toBe(0);
   });
 
+  test("releases the quota reservation when the provider call fails", async () => {
+    let released = 0;
+    const session = createAgentChatSession(
+      {
+        provider: {
+          generateChat: () => Promise.reject(new Error("provider exploded")),
+          generateText: () => Promise.resolve({ content: "" }),
+          name: "openai",
+          streamChat: () => Promise.reject(new Error("provider exploded")),
+        },
+        tools: [],
+      },
+      {
+        toolContext: {
+          assertCanStartLlmTurn: () =>
+            Promise.resolve(() => {
+              released += 1;
+              return Promise.resolve();
+            }),
+        },
+      }
+    );
+
+    await expect(session.send("hi")).rejects.toThrow("provider exploded");
+    await expect(session.sendStream("hi", { onChunk() {} })).rejects.toThrow(
+      "provider exploded"
+    );
+    expect(released).toBe(2);
+  });
+
+  test("releases the quota reservation when a streaming call is cancelled", async () => {
+    const controller = new AbortController();
+    let released = 0;
+    const session = createAgentChatSession(
+      {
+        provider: {
+          ...providerWithUsage(),
+          streamChat: (input) => {
+            controller.abort();
+            return Promise.reject(input.signal?.reason);
+          },
+        },
+        tools: [],
+      },
+      {
+        toolContext: {
+          assertCanStartLlmTurn: () =>
+            Promise.resolve(() => {
+              released += 1;
+              return Promise.resolve();
+            }),
+        },
+      }
+    );
+
+    await expect(
+      session.sendStream("hi", { onChunk() {} }, { signal: controller.signal })
+    ).rejects.toThrow();
+    expect(released).toBe(1);
+  });
+
+  test("releases each call's reservation before its tools run", async () => {
+    const events: string[] = [];
+    const session = createAgentChatSession(
+      {
+        provider: providerWithUsage(),
+        tools: [
+          {
+            ...pingTool,
+            run: () => {
+              events.push("tool");
+              return Promise.resolve({ pong: true });
+            },
+          },
+        ],
+      },
+      {
+        toolContext: {
+          assertCanStartLlmTurn: () => {
+            events.push("reserve");
+            return Promise.resolve(() => {
+              events.push("release");
+              return Promise.resolve();
+            });
+          },
+        },
+      }
+    );
+
+    await session.send("hi");
+    expect(events).toEqual([
+      "reserve",
+      "release",
+      "tool",
+      "reserve",
+      "release",
+    ]);
+  });
+
   test("emits onUsage per LLM call and stores usage on history messages", async () => {
     const session = createAgentChatSession(
       { provider: providerWithUsage(), tools: [pingTool] },

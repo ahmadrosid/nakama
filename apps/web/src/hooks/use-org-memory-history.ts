@@ -1,17 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 function invalidateOrgMemoryQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   orgId: string
 ) {
-  return Promise.all([
-    queryClient.invalidateQueries({ queryKey: queryKeys.orgMemory(orgId) }),
-    queryClient.invalidateQueries({
-      queryKey: queryKeys.orgMemoryHistory(orgId),
-    }),
-  ]);
+  return invalidateQueries(
+    queryClient,
+    queryKeys.orgMemory(orgId),
+    queryKeys.orgMemoryHistory(orgId)
+  );
 }
 
 export function useOrgMemoryHistory(orgId: string | null) {

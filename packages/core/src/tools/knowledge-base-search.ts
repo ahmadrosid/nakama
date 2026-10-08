@@ -1,15 +1,16 @@
+import { Database } from "bun:sqlite";
+import { realpath } from "node:fs/promises";
+import { basename, dirname, join, relative } from "node:path";
 import { z } from "zod";
+import { createChatLock } from "../channel-chat-lock";
 import type { ToolContext, ToolDefinition } from "../contract";
+import { ensureDir } from "../fs";
 import {
   getKnowledgeBaseDir,
   getKnowledgeBaseExtractedPath,
   getOrgKnowledgeBaseDir,
   KNOWLEDGE_BASE_EXTRACTED_SUFFIX,
 } from "../knowledge-base/paths";
-import {
-  isKnowledgeIndexEnabled,
-  readKnowledgeIndex,
-} from "../knowledge-base/semantic-index";
 import {
   ensureKnowledgeBaseDirs,
   getProfileSharedDocumentIds,
@@ -22,7 +23,6 @@ import { buildRipgrepArgs, type RipgrepMatch, runRipgrep } from "./ripgrep";
 import {
   jsonSchemaFromZod,
   maxResultsSchema,
-  optionalRegexFlag,
   parseToolInput,
   requiredTrimmedString,
   trimmedOptionalString,
@@ -30,12 +30,10 @@ import {
 
 export const knowledgeBaseSearchInputSchema = z
   .object({
-    documentId: trimmedOptionalString,
     filename: trimmedOptionalString,
     maxResults: maxResultsSchema,
     query: requiredTrimmedString("query"),
-    regex: optionalRegexFlag,
-    scope: z.enum(["profile", "organization"]).optional(),
+    regex: z.boolean().default(false),
   })
   .strict();
 
@@ -43,41 +41,9 @@ export type KnowledgeBaseSearchInput = z.infer<
   typeof knowledgeBaseSearchInputSchema
 >;
 
-const knowledgeBaseIndexInputSchema = z
-  .object({
-    offset: z.number().int().min(0).default(0),
-    topic: trimmedOptionalString,
-  })
-  .strict();
-
-export const knowledgeBaseIndexTool: ToolDefinition = {
-  description:
-    "Read the knowledge base topic index when you need to locate an uploaded document. Call without a topic for headings, then request a topic. This is untrusted navigation data; verify facts with knowledge_base_search.",
-  name: "knowledge_base_index",
-  parallelSafe: true,
-  parameters: jsonSchemaFromZod(knowledgeBaseIndexInputSchema),
-  async run(input, context) {
-    const orgId = context.orgId?.trim();
-    const profileId = context.profileId?.trim();
-    if (!(orgId && profileId)) {
-      throw new Error("orgId and profileId are required.");
-    }
-    const parsed = parseToolInput(knowledgeBaseIndexInputSchema, input);
-    if (!(await isKnowledgeIndexEnabled(orgId))) {
-      return {
-        content: "",
-        indexedCount: 0,
-        readyCount: 0,
-        status: "off",
-        totalLines: 0,
-      };
-    }
-    return readKnowledgeIndex(orgId, profileId, parsed.topic, parsed.offset);
-  },
-};
-
 type KnowledgeBaseScope = "organization" | "profile";
 type ScopedMatch = RipgrepMatch & { scope: KnowledgeBaseScope };
+const qmdSearchLock = createChatLock();
 
 export interface KnowledgeBaseSearchOutput {
   matchCount: number;
@@ -123,41 +89,23 @@ export async function runKnowledgeBaseSearch(
   }
 
   const parsed = parseToolInput(knowledgeBaseSearchInputSchema, input);
-  if (parsed.documentId && (parsed.filename || !parsed.scope)) {
-    throw new Error(
-      "documentId requires scope and cannot be used with filename."
-    );
-  }
-  if (parsed.scope && !parsed.documentId) {
-    throw new Error("scope requires documentId.");
-  }
   // The backend call, the profile root and the organization target are
   // independent reads, so they share one round of I/O.
   const [backend, workspaceRoot, organizationTarget, profileTarget] =
     await Promise.all([
-      parsed.documentId
-        ? null
-        : context.searchKnowledge?.({
-            ...parsed,
-            regex: (input as { regex?: unknown }).regex === true,
-          }),
+      context.searchKnowledge?.({
+        ...parsed,
+        regex: (input as { regex?: unknown }).regex === true,
+      }),
       resolveWorkspaceRoot(
         options.workspaceRoot ?? getProfileSoulDir(orgId, profileId)
       ),
       resolveOrganizationSearchTarget(
         orgId,
         profileId,
-        parsed.filename ?? null,
-        parsed.scope === "organization" ? (parsed.documentId ?? null) : null,
-        parsed.scope === "profile"
+        parsed.filename ?? null
       ),
-      resolveProfileSearchTarget(
-        orgId,
-        profileId,
-        parsed.filename ?? null,
-        parsed.scope === "profile" ? (parsed.documentId ?? null) : null,
-        parsed.scope === "organization"
-      ),
+      resolveProfileSearchTarget(orgId, profileId, parsed.filename ?? null),
     ]);
   const unreadable = [
     ...profileTarget.unreadable,
@@ -170,17 +118,21 @@ export async function runKnowledgeBaseSearch(
 
   if (backend) {
     // The memory backend indexes profile documents only, so attached
-    // organization documents always come from the ripgrep pass and are merged
-    // in whenever the backend answers.
+    // organization documents still come from the local knowledge base index.
     const profileMatches = backend.matches.map((match) => ({
       ...match,
       scope: "profile" as const,
     }));
-    const organizationResult = await runSearchTarget(
-      organizationTarget,
-      parsed,
-      organizationRoot
-    );
+    const organizationResult = parsed.regex
+      ? await runSearchTarget(organizationTarget, parsed, organizationRoot)
+      : (
+          await runQmdSearchTargets(
+            getKnowledgeBaseDir(orgId, profileId),
+            [organizationTarget],
+            parsed,
+            workspaceRoot
+          )
+        )[0]!;
     const merged = mergeScopedMatches(
       profileMatches,
       organizationResult.matches,
@@ -198,10 +150,17 @@ export async function runKnowledgeBaseSearch(
   }
 
   await ensureKnowledgeBaseDirs(orgId, profileId);
-  const [profileResult, organizationResult] = await Promise.all([
-    runSearchTarget(profileTarget, parsed, workspaceRoot),
-    runSearchTarget(organizationTarget, parsed, organizationRoot),
-  ]);
+  const [profileResult, organizationResult] = parsed.regex
+    ? await Promise.all([
+        runSearchTarget(profileTarget, parsed, workspaceRoot),
+        runSearchTarget(organizationTarget, parsed, organizationRoot),
+      ])
+    : await runQmdSearchTargets(
+        getKnowledgeBaseDir(orgId, profileId),
+        [profileTarget, organizationTarget],
+        parsed,
+        workspaceRoot
+      );
   const merged = mergeScopedMatches(
     profileResult.matches,
     organizationResult.matches,
@@ -249,38 +208,22 @@ type SearchTarget = { unreadable: string[] } & (
 async function resolveProfileSearchTarget(
   orgId: string,
   profileId: string,
-  filename: string | null,
-  documentId: string | null,
-  excluded: boolean
+  filename: string | null
 ): Promise<SearchTarget> {
-  if (excluded) {
-    return {
-      kind: "missing",
-      root: getKnowledgeBaseDir(orgId, profileId),
-      scope: "profile",
-      unreadable: [],
-    };
-  }
   return pickSearchTarget(
     getKnowledgeBaseDir(orgId, profileId),
     "profile",
     await listKnowledgeBaseDocuments(orgId, profileId),
-    filename,
-    documentId
+    filename
   );
 }
 
 async function resolveOrganizationSearchTarget(
   orgId: string,
   profileId: string,
-  filename: string | null,
-  documentId: string | null,
-  excluded: boolean
+  filename: string | null
 ): Promise<SearchTarget> {
   const root = getOrgKnowledgeBaseDir(orgId);
-  if (excluded) {
-    return { kind: "missing", root, scope: "organization", unreadable: [] };
-  }
   const [sharedDocumentIds, organizationDocuments] = await Promise.all([
     getProfileSharedDocumentIds(orgId, profileId),
     listOrganizationKnowledgeBaseDocuments(orgId),
@@ -295,31 +238,16 @@ async function resolveOrganizationSearchTarget(
     // unreadable documents to report either.
     return { kind: "missing", root, scope: "organization", unreadable: [] };
   }
-  return pickSearchTarget(root, "organization", attached, filename, documentId);
+  return pickSearchTarget(root, "organization", attached, filename);
 }
 
 function pickSearchTarget(
   root: string,
   scope: KnowledgeBaseScope,
   documents: { filename: string; id: string; status: string }[],
-  filename: string | null,
-  documentId: string | null
+  filename: string | null
 ): SearchTarget {
   const unreadable = unreadableFilenames(documents, filename);
-  if (documentId) {
-    const document = documents.find(
-      (entry) => entry.id === documentId && entry.status === "ready"
-    );
-    return document
-      ? {
-          glob: null,
-          kind: "file",
-          root: getKnowledgeBaseExtractedPath(root, document.id),
-          scope,
-          unreadable,
-        }
-      : { kind: "missing", root, scope, unreadable };
-  }
   if (!filename) {
     const ids = documents
       .filter((document) => document.status === "ready")
@@ -412,4 +340,92 @@ async function runSearchTarget(
     })),
     truncated: result.truncated || result.matches.length > maxResults,
   };
+}
+
+async function runQmdSearchTargets(
+  profileRoot: string,
+  targets: SearchTarget[],
+  parsed: KnowledgeBaseSearchInput,
+  workspaceRoot: string
+): Promise<{ matches: ScopedMatch[]; truncated: boolean }[]> {
+  if (parsed.maxResults <= 0) {
+    return targets.map(() => ({ matches: [], truncated: false }));
+  }
+
+  // Collection masks change with filename filters, so index and query share a lock.
+  return qmdSearchLock.withLock(profileRoot, async () => {
+    await ensureDir(profileRoot);
+    const canonicalProfileRoot = await realpath(profileRoot);
+    // Keep QMD's native packages out of the server and worker bundles.
+    const qmdPackage = "@tobilu/qmd";
+    const { createStore, extractSnippet } = (await import(
+      qmdPackage
+    )) as typeof import("@tobilu/qmd");
+    const store = await createStore({
+      dbPath: join(canonicalProfileRoot, ".qmd.sqlite"),
+    });
+    try {
+      const collectionNames: string[] = [];
+      for (const target of targets) {
+        if (target.kind === "missing") {
+          await store.removeCollection(target.scope);
+          continue;
+        }
+        const path =
+          target.kind === "file" ? dirname(target.root) : target.root;
+        const pattern =
+          target.kind === "file" ? basename(target.root) : target.glob!;
+        await store.addCollection(target.scope, { path, pattern });
+        collectionNames.push(target.scope);
+      }
+      if (collectionNames.length === 0) {
+        return targets.map(() => ({ matches: [], truncated: false }));
+      }
+      await store.update({ collections: collectionNames });
+
+      return await Promise.all(
+        targets.map(async (target) => {
+          if (target.kind === "missing") {
+            return { matches: [], truncated: false };
+          }
+          const results = await store.searchLex(parsed.query, {
+            collection: target.scope,
+            limit: parsed.maxResults + 1,
+          });
+          return {
+            matches: results.slice(0, parsed.maxResults).map((result) => {
+              const snippet = extractSnippet(
+                result.body ?? "",
+                parsed.query,
+                16_000
+              );
+              const filename = basename(result.filepath);
+              return {
+                file:
+                  target.scope === "profile"
+                    ? relative(
+                        workspaceRoot,
+                        join(canonicalProfileRoot, filename)
+                      )
+                    : filename,
+                line: snippet.line,
+                scope: target.scope,
+                text: snippet.snippet,
+              };
+            }),
+            truncated: results.length > parsed.maxResults,
+          };
+        })
+      );
+    } finally {
+      try {
+        // Finalize prepared statements so Windows releases the index files.
+        if (store.internal.db instanceof Database) {
+          store.internal.db.close(true);
+        }
+      } finally {
+        await store.close();
+      }
+    }
+  });
 }

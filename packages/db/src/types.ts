@@ -210,6 +210,33 @@ export interface StoredLlmUsageModelStatsRecord {
   updatedAt: string;
 }
 
+/** One org's ledger for one agent and user pair. Null means the call had no such context. */
+export interface StoredLlmUsageActorStatsRecord {
+  estimatedCostUsd: number;
+  inputTokens: number;
+  orgId: string;
+  outputTokens: number;
+  profileId: string | null;
+  requestCount: number;
+  trackedSince: string;
+  updatedAt: string;
+  userId: string | null;
+}
+
+/** One org's ledger for one UTC day, model, and provider. */
+export interface StoredLlmUsageDailyStatsRecord {
+  /** `YYYY-MM-DD`, UTC. */
+  day: string;
+  estimatedCostUsd: number;
+  inputTokens: number;
+  modelId: string;
+  orgId: string;
+  outputTokens: number;
+  /** Empty when the call had no provider context. */
+  provider: string;
+  requestCount: number;
+}
+
 export interface StoredWorkspaceSettingsRecord {
   /** Workspace-global interval for refreshing automation schedules and curator work. */
   automationWorkerPollIntervalMs: number;
@@ -314,6 +341,12 @@ export interface StoredProfileComposioToolkitRecord {
   toolkitId: string;
 }
 
+/** Who caused an LLM call. A missing ID puts the call in the unattributed group. */
+export interface LlmUsageActor {
+  profileId?: string | null;
+  userId?: string | null;
+}
+
 export interface LlmUsageStatsDelta {
   estimatedCostUsd: number;
   inputTokens: number;
@@ -362,7 +395,11 @@ export interface StoredToolOutputSavingsRecord {
   updatedAt: string;
 }
 
-export type McpServerStatus = "connected" | "disconnected" | "error";
+export type McpServerStatus =
+  | "connected"
+  | "disconnected"
+  | "error"
+  | "needs_auth";
 export type McpTransport = "http" | "stdio";
 
 export interface CachedMcpTool {
@@ -597,6 +634,20 @@ export interface StoredProfileChangeEvent {
   source: ProfileChangeSource;
 }
 
+export type SkillVersionKind = "created" | "original" | "restored" | "updated";
+
+export interface StoredSkillVersion {
+  actorUserId: string | null;
+  content: string;
+  createdAt: string;
+  id: string;
+  kind: SkillVersionKind;
+  note: string | null;
+  skillId: string;
+  source: ProfileChangeSource | null;
+  version: number;
+}
+
 export interface StoredOrgMemoryProposal {
   bullet: string;
   createdAt: string;
@@ -814,6 +865,11 @@ export interface DatabaseAdapter {
   createSkillProposal(record: StoredSkillProposal): Promise<void>;
 
   createSkillSuggestion(record: StoredSkillSuggestion): Promise<void>;
+
+  /** Appends a snapshot; the adapter assigns the next version number. */
+  createSkillVersion(
+    record: Omit<StoredSkillVersion, "version">
+  ): Promise<StoredSkillVersion>;
   createUser(record: StoredUserRecord): Promise<void>;
   deleteAttachment(id: string): Promise<boolean>;
   deleteAutomation(id: string): Promise<boolean>;
@@ -992,8 +1048,16 @@ export interface DatabaseAdapter {
     profileId: string,
     skillId: string
   ): Promise<StoredSkillUsageRecord | null>;
+  getSkillVersion(
+    skillId: string,
+    versionId: string
+  ): Promise<StoredSkillVersion | null>;
   getTool(id: string): Promise<StoredToolRecord | null>;
   getToolByName(name: string): Promise<StoredToolRecord | null>;
+  getToolByNameForOrg(
+    orgId: string,
+    name: string
+  ): Promise<StoredToolRecord | null>;
   getUserByEmail(email: string): Promise<StoredUserRecord | null>;
   getUserById(id: string): Promise<StoredUserRecord | null>;
   getUserContext(orgId: string, userId: string): Promise<string | null>;
@@ -1004,9 +1068,26 @@ export interface DatabaseAdapter {
   ): Promise<StoredWorkflowRunRecord | null>;
 
   getWorkspaceSettings(): Promise<StoredWorkspaceSettingsRecord | null>;
+  /**
+   * Moves each attachment of this session that another session in the org
+   * still names over to that session. Call it before deleting a session's
+   * attachments, or a branch loses the files it copied references to.
+   */
+  handOverSharedAttachments(sessionId: string, orgId: string): Promise<void>;
   incrementLlmTurnUsage(orgId: string, delta: LlmTurnUsageDelta): Promise<void>;
+  incrementLlmUsageDailyStats(
+    orgId: string,
+    key: { day: string; modelId: string; provider: string },
+    delta: LlmUsageStatsDelta
+  ): Promise<void>;
   incrementLlmUsageStats(
     orgId: string,
+    delta: LlmUsageStatsDelta,
+    trackedSince: string
+  ): Promise<void>;
+  incrementLlmUsageStatsByActor(
+    orgId: string,
+    actor: LlmUsageActor,
     delta: LlmUsageStatsDelta,
     trackedSince: string
   ): Promise<void>;
@@ -1086,6 +1167,14 @@ export interface DatabaseAdapter {
     profileId: string
   ): Promise<string[]>;
   listLlmTurnUsage(orgId: string): Promise<StoredLlmTurnUsageRecord[]>;
+  /** Rows from `sinceDay` (inclusive, `YYYY-MM-DD`) onward. */
+  listLlmUsageDailyStats(
+    orgId: string,
+    sinceDay: string
+  ): Promise<StoredLlmUsageDailyStatsRecord[]>;
+  listLlmUsageStatsByActor(
+    orgId: string
+  ): Promise<StoredLlmUsageActorStatsRecord[]>;
   listLlmUsageStatsByModel(
     orgId: string
   ): Promise<StoredLlmUsageModelStatsRecord[]>;
@@ -1148,6 +1237,7 @@ export interface DatabaseAdapter {
 
   listSessions(): Promise<StoredSessionRecord[]>;
   listSessionsForUser(userId: string): Promise<StoredSessionRecord[]>;
+
   listSkillProposals(
     orgId: string,
     options?: {
@@ -1172,6 +1262,12 @@ export interface DatabaseAdapter {
   listSkillUsageForProfile(
     profileId: string
   ): Promise<StoredSkillUsageRecord[]>;
+
+  /** Newest first. */
+  listSkillVersions(
+    skillId: string,
+    options?: { limit?: number }
+  ): Promise<StoredSkillVersion[]>;
 
   listToolOutputSavings(
     orgId: string
@@ -1205,6 +1301,8 @@ export interface DatabaseAdapter {
   publishOrgPluginRelease(
     input: PublishOrgPluginReleaseInput
   ): Promise<PluginPublishResult>;
+  /** Gives back one hold taken by tryReserveMonthlyLlmQuota, at most once. */
+  releaseMonthlyLlmQuota(orgId: string, reservationId: string): Promise<void>;
   renameFilePins(
     orgId: string,
     profileId: string,
@@ -1272,12 +1370,12 @@ export interface DatabaseAdapter {
     archivedAt: string
   ): Promise<boolean>;
   tryReserveMonthlyLlmQuota(input: {
+    createdAt: string;
     existingTokens: number;
     existingTurns: number;
-    month: string;
     orgId: string;
+    reservationId: string;
     reservedTokens: number;
-    updatedAt: string;
   }): Promise<boolean>;
   unassignMcpServerFromProfile(
     profileId: string,

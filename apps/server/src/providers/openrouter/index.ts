@@ -22,7 +22,6 @@ import type {
   ChatRequest,
   ChatRequestReasoning,
   ChatStreamChunk,
-  ChatStreamToolCall,
   ChatToolCall,
 } from "@openrouter/sdk/models";
 import {
@@ -33,8 +32,11 @@ import { toOpenAIMessages } from "../openai";
 import {
   buildChatCompletionResult,
   extractOpenAITokenUsage,
+  finalizePendingToolCalls,
+  mergePendingToolCall,
   normalizeThinkingEffort,
   notifyToolInputDelta,
+  type PendingToolCall,
   parseJsonRecord,
 } from "../shared";
 import { openRouterModelSupportsThinking } from "./thinking";
@@ -306,12 +308,6 @@ async function buildChatRequestBase(options: {
   };
 }
 
-interface PendingToolCall {
-  arguments: string;
-  id: string;
-  name: string;
-}
-
 class OpenRouterStreamError extends Error {
   readonly code: number;
 
@@ -327,53 +323,6 @@ class OpenRouterStreamError extends Error {
     );
     this.code = error.code;
   }
-}
-
-function mergePendingToolCall(
-  pending: Map<number, PendingToolCall>,
-  toolDelta: ChatStreamToolCall
-): void {
-  const index = toolDelta.index ?? 0;
-  const current = pending.get(index) ?? {
-    arguments: "",
-    id: "",
-    name: "",
-  };
-
-  if (toolDelta.id) {
-    current.id = toolDelta.id;
-  }
-
-  if (toolDelta.function?.name) {
-    current.name = toolDelta.function.name;
-  }
-
-  if (toolDelta.function?.arguments) {
-    current.arguments += toolDelta.function.arguments;
-  }
-
-  pending.set(index, current);
-}
-
-function finalizePendingToolCalls(
-  pending: Map<number, PendingToolCall>
-): ToolCall[] {
-  return [...pending.entries()]
-    .sort(([left], [right]) => left - right)
-    .map(([, call]) => call)
-    .flatMap((call) => {
-      if (!(call.id && call.name)) {
-        return [];
-      }
-
-      return [
-        {
-          arguments: parseJsonRecord(call.arguments),
-          id: call.id,
-          name: call.name,
-        },
-      ];
-    });
 }
 
 async function readOpenRouterStream(

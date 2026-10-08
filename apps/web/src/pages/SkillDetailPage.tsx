@@ -11,7 +11,7 @@ import {
   Folder01Icon,
   FolderOpenIcon,
 } from "hugeicons-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   Link,
   Navigate,
@@ -29,6 +29,7 @@ import {
 } from "@/hooks/use-resource-mutations";
 import { client, formatError } from "@/lib/client";
 import { canAccessSystemPage, skillDetailBackTarget } from "@/lib/navigation";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 const sectionClass = "rounded-md border border-border bg-card";
@@ -121,6 +122,7 @@ function SkillDetailPageContent({
   const [removeOpen, setRemoveOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editBody, setEditBody] = useState(skill.body);
+  const [editNote, setEditNote] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id ?? "";
@@ -152,6 +154,7 @@ function SkillDetailPageContent({
 
   function handleStartEdit() {
     setEditBody(skill.body);
+    setEditNote("");
     setSaveError(null);
     setEditing(true);
   }
@@ -175,7 +178,7 @@ function SkillDetailPageContent({
 
     try {
       await patchSkillMutation.mutateAsync({
-        input: { body: editBody },
+        input: { body: editBody, note: editNote.trim() || undefined },
         profileId: profileId ?? undefined,
         skillId: skill.id,
       });
@@ -239,20 +242,29 @@ function SkillDetailPageContent({
         </aside>
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-5">
           {selectedFile === "SKILL.md" ? (
-            <SkillDetailContent
-              createdBy={createdBy}
-              editBody={editBody}
-              editing={editing}
-              onCancelEdit={handleCancelEdit}
-              onEditBodyChange={setEditBody}
-              onSaveEdit={() => void handleSaveEdit()}
-              onStartEdit={handleStartEdit}
-              saveBusy={patchSkillMutation.isPending}
-              saveError={saveError}
-              showTitle={false}
-              skill={skill}
-              usageSummary={usageSummary}
-            />
+            <div className="space-y-6">
+              <SkillDetailContent
+                createdBy={createdBy}
+                editBody={editBody}
+                editing={editing}
+                editNote={editNote}
+                onCancelEdit={handleCancelEdit}
+                onEditBodyChange={setEditBody}
+                onEditNoteChange={setEditNote}
+                onSaveEdit={() => void handleSaveEdit()}
+                onStartEdit={handleStartEdit}
+                saveBusy={patchSkillMutation.isPending}
+                saveError={saveError}
+                showTitle={false}
+                skill={skill}
+                usageSummary={usageSummary}
+              />
+              <SkillVersionHistory
+                disabled={editing || busy}
+                orgId={orgId}
+                skillId={skill.id}
+              />
+            </div>
           ) : (
             <SkillFilePreview
               orgId={orgId}
@@ -384,8 +396,285 @@ function PageState({ message }: { message: string }) {
   );
 }
 
-import type { SkillFilesResponse } from "@nakama/core/contract";
-import { useQuery } from "@tanstack/react-query";
+import type { SkillFilesResponse, SkillVersion } from "@nakama/core/contract";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { buildFileDiffRows, FileDiff } from "@/components/file-diff";
+import {
+  formatSessionRelativeTime,
+  formatSessionTimestamp,
+} from "@/lib/chat-history";
+
+const versionKindLabels: Record<SkillVersion["kind"], string> = {
+  created: "Created",
+  original: "Original",
+  restored: "Restored",
+  updated: "Updated",
+};
+
+const versionSourceLabels: Record<
+  NonNullable<SkillVersion["source"]>,
+  string
+> = {
+  dashboard: "Dashboard",
+  pack_import: "Pack import",
+  skill_manage: "Agent",
+  super_bot: "Super Bot",
+};
+
+function versionAuthor(version: SkillVersion): string {
+  if (version.actorName) {
+    return version.actorName;
+  }
+  if (version.kind === "original") {
+    return "Before history";
+  }
+  return version.source ? versionSourceLabels[version.source] : "System";
+}
+
+function VersionTimelineItem({
+  badge,
+  children,
+  current = false,
+  label,
+  last,
+  onToggle,
+  open,
+  pill,
+  subtitle,
+  suggested = false,
+  title,
+}: {
+  badge: string;
+  children?: ReactNode;
+  current?: boolean;
+  label: string;
+  last: boolean;
+  onToggle: () => void;
+  open: boolean;
+  pill?: string;
+  subtitle: ReactNode;
+  suggested?: boolean;
+  title: string | null;
+}) {
+  return (
+    <li className="relative pl-11">
+      {!last && (
+        <span
+          aria-hidden
+          className="absolute top-10 bottom-0 left-4 w-px bg-border"
+        />
+      )}
+      <span
+        aria-hidden
+        className={cn(
+          "absolute top-3 left-0 flex size-8 items-center justify-center rounded-full border text-xs tabular-nums",
+          current && "border-foreground bg-foreground text-background",
+          suggested &&
+            "border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+          !(current || suggested) &&
+            "border-border bg-background text-muted-foreground"
+        )}
+      >
+        {badge}
+      </span>
+      <button
+        aria-expanded={open}
+        className="w-full rounded-md px-2 py-3 text-left hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        onClick={onToggle}
+        type="button"
+      >
+        <span className="flex items-center gap-2">
+          <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+            {label}
+          </span>
+          {pill && (
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-xs",
+                suggested
+                  ? "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                  : "bg-muted"
+              )}
+            >
+              {pill}
+            </span>
+          )}
+          <span className="sr-only">{badge}</span>
+        </span>
+        {title && (
+          <span className="mt-1 block break-words font-medium text-sm">
+            {title}
+          </span>
+        )}
+        <span className="mt-1 block text-muted-foreground text-sm">
+          {subtitle}
+        </span>
+      </button>
+      {open && children}
+    </li>
+  );
+}
+
+function RelativeTime({ value }: { value: string }) {
+  return (
+    <time dateTime={value} title={formatSessionTimestamp(value)}>
+      {formatSessionRelativeTime(value)}
+    </time>
+  );
+}
+
+function SkillVersionHistory({
+  disabled,
+  orgId,
+  skillId,
+}: {
+  disabled: boolean;
+  orgId: string;
+  skillId: string;
+}) {
+  const queryClient = useQueryClient();
+  const [openId, setOpenId] = useState<string | null>(null);
+  const versionsQuery = useQuery({
+    enabled: Boolean(orgId),
+    queryFn: () => client.listSkillVersions(skillId, orgId),
+    queryKey: [...queryKeys.skills.detail(skillId), "versions", orgId],
+  });
+  const restoreMutation = useMutation({
+    mutationFn: (versionId: string) =>
+      client.restoreSkillVersion(skillId, versionId, orgId),
+    onError: (error) => toast(formatError(error)),
+    onSuccess: async () => {
+      setOpenId(null);
+      await invalidateQueries(
+        queryClient,
+        queryKeys.skills.all,
+        queryKeys.skills.detail(skillId)
+      );
+    },
+  });
+  const versions = versionsQuery.data?.versions ?? [];
+  const pending = versionsQuery.data?.pending ?? [];
+  const currentContent = versionsQuery.data?.currentContent ?? null;
+  const nextVersion = (versions[0]?.version ?? 0) + 1;
+  const toggle = (id: string) => setOpenId(openId === id ? null : id);
+
+  return (
+    <section
+      aria-labelledby="skill-version-history"
+      className="overflow-hidden rounded-lg border border-border bg-card"
+    >
+      <h2
+        className="border-border border-b px-4 py-3 font-medium text-sm"
+        id="skill-version-history"
+      >
+        Version history
+      </h2>
+      {versionsQuery.isLoading && (
+        <p className="px-4 py-3 text-muted-foreground text-sm" role="status">
+          Loading versions…
+        </p>
+      )}
+      {versionsQuery.error && (
+        <p className="px-4 py-3 text-destructive text-sm" role="alert">
+          {formatError(versionsQuery.error)}{" "}
+          <Button
+            className="h-auto p-0"
+            onClick={() => void versionsQuery.refetch()}
+            type="button"
+            variant="link"
+          >
+            Retry
+          </Button>
+        </p>
+      )}
+      {versionsQuery.isSuccess &&
+        versions.length === 0 &&
+        pending.length === 0 && (
+          <p className="px-4 py-3 text-muted-foreground text-sm">
+            No changes yet.
+          </p>
+        )}
+      {(versions.length > 0 || pending.length > 0) && (
+        <ol className="px-4 py-2">
+          {pending.map((proposal, index) => (
+            <VersionTimelineItem
+              badge={`v${nextVersion + index}`}
+              key={proposal.id}
+              label="Suggested"
+              last={index === pending.length - 1 && versions.length === 0}
+              onToggle={() => toggle(proposal.id)}
+              open={openId === proposal.id}
+              pill="Pending review"
+              subtitle={
+                <>
+                  {proposal.proposedByName ?? "Agent"}
+                  {" · "}
+                  <RelativeTime value={proposal.createdAt} />
+                </>
+              }
+              suggested
+              title={null}
+            >
+              <FileDiff
+                className="mb-3 overflow-hidden rounded-md border border-border"
+                rows={buildFileDiffRows(currentContent, proposal.content)}
+                wrap
+              />
+            </VersionTimelineItem>
+          ))}
+          {versions.map((version, index) => {
+            const current = index === 0;
+            return (
+              <VersionTimelineItem
+                badge={`v${version.version}`}
+                current={current}
+                key={version.id}
+                label={versionKindLabels[version.kind]}
+                last={index === versions.length - 1}
+                onToggle={() => toggle(version.id)}
+                open={openId === version.id}
+                pill={current ? "Current" : undefined}
+                subtitle={
+                  <>
+                    {versionAuthor(version)}
+                    {" · "}
+                    <RelativeTime value={version.createdAt} />
+                  </>
+                }
+                title={version.note}
+              >
+                <FileDiff
+                  className="mb-3 overflow-hidden rounded-md border border-border"
+                  rows={buildFileDiffRows(
+                    versions[index + 1]?.content ?? null,
+                    version.content
+                  )}
+                  wrap
+                />
+                {!current && (
+                  <Button
+                    className="mb-3"
+                    disabled={disabled || restoreMutation.isPending}
+                    onClick={() => restoreMutation.mutate(version.id)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    {restoreMutation.isPending ? (
+                      <Spinner className="size-4" />
+                    ) : (
+                      "Restore this version"
+                    )}
+                  </Button>
+                )}
+              </VersionTimelineItem>
+            );
+          })}
+        </ol>
+      )}
+    </section>
+  );
+}
 
 function SkillFilePreview({
   orgId,

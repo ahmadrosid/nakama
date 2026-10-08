@@ -1263,6 +1263,59 @@ describe("llm usage org scope", () => {
   });
 });
 
+describe("llm usage by agent and user", () => {
+  test("moves existing org totals into the unattributed group once", () => {
+    const db = new Database(":memory:");
+    try {
+      migrateDatabase(db);
+      // The ledger as it was before usage had an agent or user.
+      db.exec(`
+        DROP TABLE llm_usage_actor_stats;
+        INSERT INTO llm_usage_stats (
+          org_id, id, request_count, input_tokens, output_tokens,
+          estimated_cost_usd, tracked_since, updated_at
+        ) VALUES
+          ('org-a', 'default', 7, 900, 300, 1.25, '2026-01-01', '2026-02-01'),
+          ('org-b', 'default', 2, 50, 10, 0.5, '2026-01-03', '2026-02-01');
+      `);
+
+      migrateDatabase(db);
+      const rows = () =>
+        db
+          .query(
+            "SELECT org_id, profile_id, user_id, request_count, input_tokens, output_tokens, estimated_cost_usd FROM llm_usage_actor_stats ORDER BY org_id"
+          )
+          .all();
+      const migrated = rows();
+      expect(migrated).toEqual([
+        {
+          estimated_cost_usd: 1.25,
+          input_tokens: 900,
+          org_id: "org-a",
+          output_tokens: 300,
+          profile_id: "",
+          request_count: 7,
+          user_id: "",
+        },
+        {
+          estimated_cost_usd: 0.5,
+          input_tokens: 50,
+          org_id: "org-b",
+          output_tokens: 10,
+          profile_id: "",
+          request_count: 2,
+          user_id: "",
+        },
+      ]);
+
+      migrateDatabase(db);
+      expect(rows()).toEqual(migrated);
+    } finally {
+      db.close();
+    }
+  });
+});
+
 test("upgrading skill proposals preserves pending content and adds supporting files once", () => {
   const db = new Database(":memory:");
   try {
@@ -1430,5 +1483,42 @@ test("file pins migrate existing databases, survive reopen and cascade with prof
   } finally {
     db.close(true);
     rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+test("llm quota reservations: an upgrade drops the old counter table and its false exhaustion", () => {
+  const db = new Database(":memory:");
+  try {
+    migrateDatabase(db);
+    db.exec(`
+      INSERT INTO organizations (id, name, slug, created_at, updated_at)
+      VALUES ('org_acme', 'Acme', 'acme', '2026-01-01', '2026-01-01');
+      DROP TABLE org_llm_quota_reservations;
+      CREATE TABLE org_llm_monthly_quota (
+        org_id TEXT NOT NULL,
+        month TEXT NOT NULL,
+        reserved_turns INTEGER NOT NULL DEFAULT 0,
+        reserved_tokens INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (org_id, month)
+      );
+      INSERT INTO org_llm_monthly_quota
+      VALUES ('org_acme', '2026-10', 900, 9000000, '2026-10-01');
+    `);
+
+    migrateDatabase(db);
+    migrateDatabase(db);
+
+    const tables = db
+      .query(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'org_llm_%quota%' ORDER BY name"
+      )
+      .all();
+    expect(tables).toEqual([{ name: "org_llm_quota_reservations" }]);
+    expect(
+      db.query("SELECT COUNT(*) AS held FROM org_llm_quota_reservations").get()
+    ).toEqual({ held: 0 });
+  } finally {
+    db.close();
   }
 });

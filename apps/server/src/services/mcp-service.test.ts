@@ -1,7 +1,10 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import {
+  StreamableHTTPClientTransport,
+  StreamableHTTPError,
+} from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { getProfileSoulDir, NakamaApiError, nanoid } from "@nakama/core";
 import { PREINSTALLED_MCP_SERVER_IDS } from "@nakama/core/mcp/preinstalled";
 import {
@@ -157,7 +160,7 @@ describe("McpService", () => {
 
     const existingTools = buildMcpToolDefinitions(
       await db.listMcpServersForProfile(profileId),
-      manager,
+      service,
       db,
       "org_test",
       profileId
@@ -168,7 +171,7 @@ describe("McpService", () => {
     });
     const futureTools = buildMcpToolDefinitions(
       await db.listMcpServersForProfile(profileId),
-      manager,
+      service,
       db,
       "org_test",
       profileId
@@ -183,6 +186,113 @@ describe("McpService", () => {
     expect(existingResult).toEqual({ error: expect.any(String) });
     await expect(service.connectServer(created.server.id)).rejects.toThrow();
     expect(calls).toEqual(["connect", "disconnect"]);
+  });
+
+  test("reconnects a dropped HTTP server and retries a lost session once", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const calls: string[] = [];
+    let connected = false;
+    let callCount = 0;
+    const manager = {
+      async callTool() {
+        calls.push("callTool");
+        callCount += 1;
+        if (callCount === 1) {
+          throw new StreamableHTTPError(404, "Session not found");
+        }
+        return { ok: true };
+      },
+      async connect() {
+        calls.push("connect");
+        connected = true;
+        return [{ description: "Search", inputSchema: {}, name: "search" }];
+      },
+      async dropConnection() {
+        calls.push("dropConnection");
+        connected = false;
+      },
+      isConnected: () => connected,
+    } as unknown as McpClientManager;
+    const service = new McpService(db, manager);
+    const created = await service.createServer({
+      config: { url: "https://example.com/mcp" },
+      connect: false,
+      name: "search",
+      transport: "http",
+    });
+    const server = await db.getMcpServer(created.server.id);
+
+    const result = await service.callTool(
+      server!,
+      "search",
+      {},
+      "org_test",
+      "profile_test"
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(calls).toEqual([
+      "connect",
+      "callTool",
+      "dropConnection",
+      "connect",
+      "callTool",
+    ]);
+    expect((await db.getMcpServer(created.server.id))?.status).toBe(
+      "connected"
+    );
+  });
+
+  test("does not retry a tool call that may have run", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    let callCount = 0;
+    const manager = {
+      async callTool() {
+        callCount += 1;
+        throw new Error("Request timed out");
+      },
+      isConnected: () => true,
+    } as unknown as McpClientManager;
+    const service = new McpService(db, manager);
+    const created = await service.createServer({
+      config: { url: "https://example.com/mcp" },
+      connect: false,
+      name: "search",
+      transport: "http",
+    });
+    const server = await db.getMcpServer(created.server.id);
+
+    await expect(
+      service.callTool(server!, "search", {}, "org_test", "profile_test")
+    ).rejects.toThrow();
+    expect(callCount).toBe(1);
+  });
+
+  test("reports a stored connected HTTP server as disconnected when it dropped", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    let connected = true;
+    const manager = {
+      async connect() {
+        return [];
+      },
+      isConnected: () => connected,
+    } as unknown as McpClientManager;
+    const service = new McpService(db, manager);
+    const created = await service.createServer({
+      config: { url: "https://example.com/mcp" },
+      name: "search",
+      transport: "http",
+    });
+
+    expect(created.server.status).toBe("connected");
+    connected = false;
+
+    expect((await service.getServer(created.server.id)).server.status).toBe(
+      "disconnected"
+    );
+    expect((await service.listServers()).servers[0]?.status).toBe(
+      "disconnected"
+    );
   });
 
   test("creates and lists MCP servers", async () => {
@@ -438,6 +548,11 @@ describe("McpService", () => {
     );
 
     expect(await db.getMcpServer(created.server.id)).not.toBeNull();
+
+    await service.deleteServer(created.server.id, true);
+
+    expect(await db.getMcpServer(created.server.id)).toBeNull();
+    expect(await db.listProfilesForMcpServer(created.server.id)).toEqual([]);
   });
 
   test("deletes MCP server when not assigned to any profile", async () => {
@@ -563,7 +678,7 @@ describe("McpService", () => {
     await db.upsertMcpServer(scopedServer);
     const tools = buildMcpToolDefinitions(
       [scopedServer],
-      manager,
+      service,
       db,
       orgId,
       profileId

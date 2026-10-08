@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
+import { readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   DocumentAttachment,
@@ -31,328 +31,8 @@ import {
   getKnowledgeBaseExtractedPath,
   getKnowledgeBaseManifestPath,
   getKnowledgeBaseStoredDocumentPath,
-  getKnowledgeIndexEntryPath,
-  getKnowledgeIndexMetaPath,
-  getKnowledgeIndexPath,
   getOrgKnowledgeBaseDir,
 } from "./paths";
-
-export interface KnowledgeIndexJob {
-  contentHash: string;
-  documentId: string;
-  profileId?: string;
-  scope: "profile" | "organization";
-  state: "pending" | "claimed" | "waiting" | "failed" | "done";
-}
-
-function indexWorkPath(orgId: string): string {
-  return join(getOrgKnowledgeBaseDir(orgId), "index-work.json");
-}
-
-async function readIndexWork(orgId: string): Promise<KnowledgeIndexJob[]> {
-  const raw = await readTextOrNull(indexWorkPath(orgId));
-  if (!raw) {
-    return [];
-  }
-  try {
-    const jobs = JSON.parse(raw);
-    return Array.isArray(jobs) ? jobs : [];
-  } catch {
-    return [];
-  }
-}
-
-async function writeIndexWork(
-  orgId: string,
-  jobs: KnowledgeIndexJob[]
-): Promise<void> {
-  await writeTextFile(indexWorkPath(orgId), `${JSON.stringify(jobs)}\n`);
-}
-
-async function indexingEnabled(orgId: string): Promise<boolean> {
-  const raw = await readTextOrNull(
-    join(getOrgKnowledgeBaseDir(orgId), "index-settings.json")
-  );
-  if (!raw) {
-    return false;
-  }
-  try {
-    return JSON.parse(raw).enabled === true;
-  } catch {
-    return false;
-  }
-}
-
-async function enqueueIndexJob(
-  orgId: string,
-  document: KnowledgeBaseDocument,
-  scope: KnowledgeIndexJob["scope"],
-  profileId?: string
-): Promise<void> {
-  if (document.status !== "ready" || !(await indexingEnabled(orgId))) {
-    return;
-  }
-  const dir =
-    scope === "organization"
-      ? getOrgKnowledgeBaseDir(orgId)
-      : getKnowledgeBaseDir(orgId, profileId!);
-  const saved = await readTextOrNull(
-    getKnowledgeIndexEntryPath(dir, document.id)
-  );
-  if (saved) {
-    try {
-      if (JSON.parse(saved).contentHash === document.contentHash) {
-        return;
-      }
-    } catch {
-      // Rebuild this entry below.
-    }
-  }
-  const jobs = await readIndexWork(orgId);
-  if (
-    jobs.some(
-      (job) =>
-        job.documentId === document.id &&
-        job.contentHash === document.contentHash
-    )
-  ) {
-    return;
-  }
-  const pendingCount = jobs.filter(
-    (job) =>
-      job.state === "pending" || job.state === "claimed" || job.state === "done"
-  ).length;
-  jobs.push({
-    contentHash: document.contentHash ?? "",
-    documentId: document.id,
-    ...(profileId ? { profileId } : {}),
-    scope,
-    state: pendingCount < 6 ? "pending" : "waiting",
-  });
-  await writeIndexWork(orgId, jobs);
-}
-
-export async function listKnowledgeIndexJobs(
-  orgId: string
-): Promise<KnowledgeIndexJob[]> {
-  return readIndexWork(orgId);
-}
-
-export async function claimKnowledgeIndexJob(
-  orgId: string
-): Promise<KnowledgeIndexJob | null> {
-  return withKnowledgeIndexLock(orgId, async () => {
-    if (!(await indexingEnabled(orgId))) {
-      return null;
-    }
-    const jobs = await readIndexWork(orgId);
-    const job = jobs.find((item) => item.state === "pending");
-    if (!job) {
-      return null;
-    }
-    job.state = "claimed";
-    await writeIndexWork(orgId, jobs);
-    return job;
-  });
-}
-
-export async function finishKnowledgeIndexJob(
-  orgId: string,
-  documentId: string,
-  failed: boolean
-): Promise<void> {
-  await withKnowledgeIndexLock(orgId, async () => {
-    const jobs = await readIndexWork(orgId);
-    const job = jobs.find(
-      (item) => item.documentId === documentId && item.state === "claimed"
-    );
-    if (!job) {
-      return;
-    }
-    job.state = failed ? "failed" : "done";
-    await writeIndexWork(orgId, jobs);
-  });
-}
-
-async function forgetIndexJob(
-  orgId: string,
-  documentId: string
-): Promise<void> {
-  const jobs = await readIndexWork(orgId);
-  if (!jobs.some((job) => job.documentId === documentId)) {
-    return;
-  }
-  await writeIndexWork(
-    orgId,
-    jobs.filter((job) => job.documentId !== documentId)
-  );
-}
-
-export async function approveKnowledgeIndexJobs(
-  orgId: string
-): Promise<number> {
-  return withKnowledgeIndexLock(orgId, async () => {
-    const current = await readIndexWork(orgId);
-    if (current.some((job) => job.state === "pending")) {
-      throw new Error("Approved index work remains pending.");
-    }
-    const workerAge = await stat(
-      join(getOrgKnowledgeBaseDir(orgId), ".index-worker.lock")
-    )
-      .then((value) => Date.now() - value.mtimeMs)
-      .catch(() => Number.POSITIVE_INFINITY);
-    if (workerAge < 120_000) {
-      throw new Error("Knowledge index is updating.");
-    }
-    const jobs = current.filter((job) => job.state !== "done");
-    let count = 0;
-    for (const job of jobs) {
-      if (count === 6) {
-        break;
-      }
-      if (
-        job.state === "waiting" ||
-        job.state === "failed" ||
-        job.state === "claimed"
-      ) {
-        job.state = "pending";
-        count += 1;
-      }
-    }
-    await writeIndexWork(orgId, jobs);
-    return count;
-  });
-}
-
-export async function queueKnowledgeIndexBackfill(
-  orgId: string,
-  force = false
-): Promise<number> {
-  return withKnowledgeIndexLock(orgId, async () => {
-    if (force) {
-      const workerAge = await stat(
-        join(getOrgKnowledgeBaseDir(orgId), ".index-worker.lock")
-      )
-        .then((value) => Date.now() - value.mtimeMs)
-        .catch(() => Number.POSITIVE_INFINITY);
-      if (workerAge < 120_000) {
-        throw new Error("Knowledge index is updating.");
-      }
-      await writeIndexWork(orgId, []);
-      for (const profileId of await listProfileIdsOnDisk(orgId)) {
-        await removeProfileIndex(orgId, profileId);
-        for (const document of await listKnowledgeBaseDocuments(
-          orgId,
-          profileId
-        )) {
-          await rm(
-            getKnowledgeIndexEntryPath(
-              getKnowledgeBaseDir(orgId, profileId),
-              document.id
-            ),
-            { force: true }
-          );
-        }
-      }
-      for (const document of await listOrganizationKnowledgeBaseDocuments(
-        orgId
-      )) {
-        await rm(
-          getKnowledgeIndexEntryPath(
-            getOrgKnowledgeBaseDir(orgId),
-            document.id
-          ),
-          { force: true }
-        );
-      }
-    }
-    let queued = 0;
-    for (const profileId of await listProfileIdsOnDisk(orgId)) {
-      for (const document of await listKnowledgeBaseDocuments(
-        orgId,
-        profileId
-      )) {
-        if (document.status === "ready") {
-          await enqueueIndexJob(orgId, document, "profile", profileId);
-          queued += 1;
-        }
-      }
-    }
-    for (const document of await listOrganizationKnowledgeBaseDocuments(
-      orgId
-    )) {
-      if (document.status === "ready") {
-        await enqueueIndexJob(orgId, document, "organization");
-        queued += 1;
-      }
-    }
-    return queued;
-  });
-}
-
-async function removeProfileIndex(
-  orgId: string,
-  profileId: string
-): Promise<void> {
-  await Promise.all([
-    rm(getKnowledgeIndexPath(orgId, profileId), { force: true }),
-    rm(getKnowledgeIndexMetaPath(orgId, profileId), { force: true }),
-  ]);
-}
-
-export async function withKnowledgeIndexLock<T>(
-  orgId: string,
-  action: () => Promise<T>
-): Promise<T> {
-  const dir = getOrgKnowledgeBaseDir(orgId);
-  const lock = join(dir, ".index.lock");
-  await ensureDir(dir);
-  for (let attempt = 0; attempt < 600; attempt += 1) {
-    try {
-      await mkdir(lock);
-      try {
-        return await action();
-      } finally {
-        await rm(lock, { force: true, recursive: true });
-      }
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-        throw error;
-      }
-      const age = await stat(lock)
-        .then((value) => Date.now() - value.mtimeMs)
-        .catch(() => 0);
-      if (age > 120_000) {
-        await rm(lock, { force: true, recursive: true });
-      }
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-  }
-  throw new Error("Knowledge index is busy.");
-}
-
-export async function acquireKnowledgeIndexWorkerLease(
-  orgId: string
-): Promise<(() => Promise<void>) | null> {
-  const dir = getOrgKnowledgeBaseDir(orgId);
-  const lock = join(dir, ".index-worker.lock");
-  await ensureDir(dir);
-  try {
-    await mkdir(lock);
-    return () => rm(lock, { force: true, recursive: true });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-      throw error;
-    }
-    const age = await stat(lock)
-      .then((value) => Date.now() - value.mtimeMs)
-      .catch(() => 0);
-    if (age > 120_000) {
-      await rm(lock, { force: true, recursive: true });
-    }
-    return null;
-  }
-}
 
 interface KnowledgeBaseManifest {
   documents: KnowledgeBaseDocument[];
@@ -655,8 +335,7 @@ async function uploadDocumentTo(
   dir: string,
   attachment: DocumentAttachment,
   onDuplicate: KnowledgeBaseDuplicateAction,
-  guardRemoval?: (documentId: string) => Promise<void>,
-  beforeChange?: () => Promise<void>
+  guardRemoval?: (documentId: string) => Promise<void>
 ): Promise<UploadKnowledgeBaseDocumentResult> {
   const filename = attachment.filename.trim();
 
@@ -714,8 +393,7 @@ async function uploadDocumentTo(
     const removed = await deleteDocumentFrom(
       dir,
       duplicate.document.id,
-      guardRemoval,
-      beforeChange
+      guardRemoval
     );
     if (!removed) {
       throw new Error("Failed to replace existing knowledge base document.");
@@ -774,7 +452,6 @@ async function uploadDocumentTo(
 
   const manifest = await readManifestFrom(dir);
   manifest.documents.push(document);
-  await beforeChange?.();
   await writeManifestTo(dir, manifest);
 
   return { document, outcome };
@@ -786,19 +463,11 @@ export async function uploadKnowledgeBaseDocument(
   attachment: DocumentAttachment,
   onDuplicate: KnowledgeBaseDuplicateAction = "error"
 ): Promise<UploadKnowledgeBaseDocumentResult> {
-  return withKnowledgeIndexLock(orgId, async () => {
-    const result = await uploadDocumentTo(
-      await profileKnowledgeBaseDir(orgId, profileId),
-      attachment,
-      onDuplicate,
-      undefined,
-      () => removeProfileIndex(orgId, profileId)
-    );
-    if (result.outcome !== "skipped") {
-      await enqueueIndexJob(orgId, result.document, "profile", profileId);
-    }
-    return result;
-  });
+  return uploadDocumentTo(
+    await profileKnowledgeBaseDir(orgId, profileId),
+    attachment,
+    onDuplicate
+  );
 }
 
 export async function uploadOrganizationKnowledgeBaseDocument(
@@ -807,19 +476,13 @@ export async function uploadOrganizationKnowledgeBaseDocument(
   onDuplicate: KnowledgeBaseDuplicateAction = "error",
   knownProfileIds?: readonly string[]
 ): Promise<UploadKnowledgeBaseDocumentResult> {
-  return withKnowledgeIndexLock(orgId, async () => {
-    const result = await uploadDocumentTo(
-      await orgKnowledgeBaseDir(orgId),
-      attachment,
-      onDuplicate,
-      (documentId) =>
-        guardSharedDocumentRemoval(orgId, documentId, knownProfileIds)
-    );
-    if (result.outcome !== "skipped") {
-      await enqueueIndexJob(orgId, result.document, "organization");
-    }
-    return result;
-  });
+  return await uploadDocumentTo(
+    await orgKnowledgeBaseDir(orgId),
+    attachment,
+    onDuplicate,
+    (documentId) =>
+      guardSharedDocumentRemoval(orgId, documentId, knownProfileIds)
+  );
 }
 
 /**
@@ -860,8 +523,7 @@ async function listProfileIdsOnDisk(orgId: string): Promise<string[]> {
 async function deleteDocumentFrom(
   dir: string,
   documentId: string,
-  guardRemoval?: (documentId: string) => Promise<void>,
-  beforeChange?: () => Promise<void>
+  guardRemoval?: (documentId: string) => Promise<void>
 ): Promise<boolean> {
   const manifest = await readManifestFrom(dir);
   const index = manifest.documents.findIndex(
@@ -876,12 +538,9 @@ async function deleteDocumentFrom(
     await guardRemoval(documentId);
   }
 
-  await beforeChange?.();
-
   const document = manifest.documents[index]!;
   manifest.documents.splice(index, 1);
   await writeManifestTo(dir, manifest);
-  await rm(getKnowledgeIndexEntryPath(dir, documentId), { force: true });
 
   const storedPath = getKnowledgeBaseStoredDocumentPath(
     dir,
@@ -907,15 +566,7 @@ export async function deleteKnowledgeBaseDocument(
   documentId: string
 ): Promise<boolean> {
   const dir = await profileKnowledgeBaseDir(orgId, profileId);
-  return withKnowledgeIndexLock(orgId, async () => {
-    const deleted = await deleteDocumentFrom(dir, documentId, undefined, () =>
-      removeProfileIndex(orgId, profileId)
-    );
-    if (deleted) {
-      await forgetIndexJob(orgId, documentId);
-    }
-    return deleted;
-  });
+  return deleteDocumentFrom(dir, documentId);
 }
 
 export async function deleteOrganizationKnowledgeBaseDocument(
@@ -924,15 +575,9 @@ export async function deleteOrganizationKnowledgeBaseDocument(
   knownProfileIds?: readonly string[]
 ): Promise<boolean> {
   const dir = await orgKnowledgeBaseDir(orgId);
-  return withKnowledgeIndexLock(orgId, async () => {
-    const deleted = await deleteDocumentFrom(dir, documentId, (candidate) =>
-      guardSharedDocumentRemoval(orgId, candidate, knownProfileIds)
-    );
-    if (deleted) {
-      await forgetIndexJob(orgId, documentId);
-    }
-    return deleted;
-  });
+  return await deleteDocumentFrom(dir, documentId, (candidate) =>
+    guardSharedDocumentRemoval(orgId, candidate, knownProfileIds)
+  );
 }
 
 export async function getProfileSharedDocumentIds(
@@ -949,19 +594,16 @@ export async function attachSharedKnowledgeBaseDocument(
   profileId: string,
   documentId: string
 ): Promise<void> {
-  return withKnowledgeIndexLock(orgId, async () => {
-    const shared = await readManifestFrom(await orgKnowledgeBaseDir(orgId));
-    if (!shared.documents.some((document) => document.id === documentId)) {
-      throw new Error("Shared knowledge base document not found.");
-    }
-    const dir = await profileKnowledgeBaseDir(orgId, profileId);
-    const manifest = await readManifestFrom(dir);
-    await removeProfileIndex(orgId, profileId);
-    manifest.sharedDocumentIds = [
-      ...new Set([...(manifest.sharedDocumentIds ?? []), documentId]),
-    ];
-    await writeManifestTo(dir, manifest);
-  });
+  const shared = await readManifestFrom(await orgKnowledgeBaseDir(orgId));
+  if (!shared.documents.some((document) => document.id === documentId)) {
+    throw new Error("Shared knowledge base document not found.");
+  }
+  const dir = await profileKnowledgeBaseDir(orgId, profileId);
+  const manifest = await readManifestFrom(dir);
+  manifest.sharedDocumentIds = [
+    ...new Set([...(manifest.sharedDocumentIds ?? []), documentId]),
+  ];
+  await writeManifestTo(dir, manifest);
 }
 
 export async function detachSharedKnowledgeBaseDocument(
@@ -969,18 +611,15 @@ export async function detachSharedKnowledgeBaseDocument(
   profileId: string,
   documentId: string
 ): Promise<boolean> {
-  return withKnowledgeIndexLock(orgId, async () => {
-    const dir = await profileKnowledgeBaseDir(orgId, profileId);
-    const manifest = await readManifestFrom(dir);
-    const ids = manifest.sharedDocumentIds ?? [];
-    if (!ids.includes(documentId)) {
-      return false;
-    }
-    await removeProfileIndex(orgId, profileId);
-    manifest.sharedDocumentIds = ids.filter((id) => id !== documentId);
-    await writeManifestTo(dir, manifest);
-    return true;
-  });
+  const dir = await profileKnowledgeBaseDir(orgId, profileId);
+  const manifest = await readManifestFrom(dir);
+  const ids = manifest.sharedDocumentIds ?? [];
+  if (!ids.includes(documentId)) {
+    return false;
+  }
+  manifest.sharedDocumentIds = ids.filter((id) => id !== documentId);
+  await writeManifestTo(dir, manifest);
+  return true;
 }
 
 /**

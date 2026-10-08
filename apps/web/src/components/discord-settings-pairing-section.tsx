@@ -5,10 +5,8 @@ import {
   Copy01Icon,
   RefreshIcon,
 } from "hugeicons-react";
-import {
-  DiscordPairingGuide,
-  SettingsRow,
-} from "@/components/discord-settings-card.shared";
+import { DiscordPairingGuide } from "@/components/discord-settings-card.shared";
+import { SettingsRow } from "@/components/integration-settings.shared";
 
 function pairingCodeDescription(
   pairingCode: string | null,

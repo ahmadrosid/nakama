@@ -6,12 +6,15 @@ import type { OrgService } from "./services/org-service";
 const SEED_ADMIN_EMAIL = "NAKAMA_SEED_ADMIN_EMAIL";
 const SEED_ADMIN_NAME = "NAKAMA_SEED_ADMIN_NAME";
 const SEED_ADMIN_PASSWORD = "NAKAMA_SEED_ADMIN_PASSWORD";
+const SEED_ADMIN_PASSWORD_HASH = "NAKAMA_SEED_ADMIN_PASSWORD_HASH";
 const SEED_ORG_NAME = "NAKAMA_SEED_ORG_NAME";
 
-const REQUIRED_SEED_ENV_KEYS = [
+const SEED_ENV_KEYS = [
   SEED_ADMIN_EMAIL,
   SEED_ADMIN_NAME,
   SEED_ADMIN_PASSWORD,
+  SEED_ADMIN_PASSWORD_HASH,
+  SEED_ORG_NAME,
 ] as const;
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -31,7 +34,7 @@ export async function runFirstBootSeed(
   deps: FirstBootSeedDeps
 ): Promise<FirstBootSeedResult> {
   const env = deps.env ?? process.env;
-  const present = REQUIRED_SEED_ENV_KEYS.filter((key) => {
+  const present = SEED_ENV_KEYS.filter((key) => {
     const value = env[key]?.trim();
     return Boolean(value);
   });
@@ -40,10 +43,14 @@ export async function runFirstBootSeed(
     return { seeded: false };
   }
 
-  if (present.length < REQUIRED_SEED_ENV_KEYS.length) {
-    const missing = REQUIRED_SEED_ENV_KEYS.filter((key) => !env[key]?.trim());
+  const missing = [SEED_ADMIN_EMAIL, SEED_ADMIN_NAME].filter(
+    (key) => !env[key]?.trim()
+  );
+  const hasPassword = Boolean(env[SEED_ADMIN_PASSWORD]?.trim());
+  const hasHash = Boolean(env[SEED_ADMIN_PASSWORD_HASH]?.trim());
+  if (missing.length > 0 || hasPassword === hasHash) {
     throw new Error(
-      `First-boot seed is partially configured. Missing: ${missing.join(", ")}. Set all of ${REQUIRED_SEED_ENV_KEYS.join(", ")} or none.`
+      `First-boot seed requires ${SEED_ADMIN_EMAIL}, ${SEED_ADMIN_NAME}, and exactly one of ${SEED_ADMIN_PASSWORD} or ${SEED_ADMIN_PASSWORD_HASH}. Missing: ${missing.join(", ")}.`
     );
   }
 
@@ -53,13 +60,22 @@ export async function runFirstBootSeed(
 
   const adminEmail = env[SEED_ADMIN_EMAIL]!.trim();
   const adminName = env[SEED_ADMIN_NAME]!.trim();
-  const adminPassword = env[SEED_ADMIN_PASSWORD]!.trim();
+  const adminPassword = env[SEED_ADMIN_PASSWORD]?.trim();
+  const suppliedHash = env[SEED_ADMIN_PASSWORD_HASH]?.trim();
   const orgName = env[SEED_ORG_NAME]?.trim() || "Personal";
   const orgSlug = slugifyOrgName(orgName);
 
-  if (adminPassword.length < MIN_PASSWORD_LENGTH) {
+  if (adminPassword && adminPassword.length < MIN_PASSWORD_LENGTH) {
     throw new Error(
       `First-boot seed failed: ${SEED_ADMIN_PASSWORD} must be at least ${MIN_PASSWORD_LENGTH} characters.`
+    );
+  }
+  if (
+    suppliedHash &&
+    !/^\$2[aby]\$(?:0[4-9]|[12]\d|3[01])\$[./A-Za-z0-9]{53}$/.test(suppliedHash)
+  ) {
+    throw new Error(
+      `First-boot seed failed: ${SEED_ADMIN_PASSWORD_HASH} must be a bcrypt hash.`
     );
   }
 
@@ -68,7 +84,8 @@ export async function runFirstBootSeed(
       admin: {
         email: adminEmail,
         name: adminName,
-        passwordHash: await deps.authService.hashPassword(adminPassword),
+        passwordHash:
+          suppliedHash ?? (await deps.authService.hashPassword(adminPassword!)),
         phone: "",
       },
       organization: {
@@ -84,7 +101,7 @@ export async function runFirstBootSeed(
   }
 
   // No provider is seeded: OpenCode's free tier rejects the "public" key
-  // outside OpenCode, so the admin picks one at /setup after first login.
+  // outside OpenCode. Free-tier admins add a provider after sign-in.
   return { seeded: true };
 }
 

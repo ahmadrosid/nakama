@@ -27,6 +27,8 @@ import type {
   StoredBrowserSessionRecord,
   StoredComposioToolkitRecord,
   StoredComposioUserConnectionRecord,
+  StoredLlmUsageActorStatsRecord,
+  StoredLlmUsageDailyStatsRecord,
   StoredLlmUsageModelStatsRecord,
   StoredLlmUsageStatsRecord,
   StoredMcpServerRecord,
@@ -48,6 +50,7 @@ import type {
   StoredSkillRecord,
   StoredSkillSuggestion,
   StoredSkillUsageRecord,
+  StoredSkillVersion,
   StoredToolRecord,
   StoredUserOrganizationRecord,
   StoredUserRecord,
@@ -250,6 +253,29 @@ interface LlmUsageModelStatsRow {
   updated_at: string;
 }
 
+interface LlmUsageActorStatsRow {
+  estimated_cost_usd: number;
+  input_tokens: number;
+  org_id: string;
+  output_tokens: number;
+  profile_id: string;
+  request_count: number;
+  tracked_since: string;
+  updated_at: string;
+  user_id: string;
+}
+
+interface LlmUsageDailyStatsRow {
+  day: string;
+  estimated_cost_usd: number;
+  input_tokens: number;
+  model_id: string;
+  org_id: string;
+  output_tokens: number;
+  provider: string;
+  request_count: number;
+}
+
 interface WorkspaceSettingsRow {
   automation_worker_poll_interval_ms: number;
   coding_agent_harnesses: string;
@@ -449,6 +475,18 @@ interface ProfileChangeEventRow {
   org_id: string;
   profile_id: string;
   source: string;
+}
+
+interface SkillVersionRow {
+  actor_user_id: string | null;
+  content: string;
+  created_at: string;
+  id: string;
+  kind: string;
+  note: string | null;
+  skill_id: string;
+  source: string | null;
+  version: number;
 }
 
 interface SkillProposalRow {
@@ -989,6 +1027,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listToolsStmt = db.prepare("SELECT * FROM tools");
   const getToolStmt = db.prepare("SELECT * FROM tools WHERE id = ?");
   const getToolByNameStmt = db.prepare("SELECT * FROM tools WHERE name = ?");
+  // The org's own tool wins over a global tool of the same name; tools owned
+  // by another organization are never visible to name lookups.
+  const getToolByNameForOrgStmt = db.prepare(`
+    SELECT * FROM tools
+    WHERE name = ? AND (org_id IS NULL OR org_id = ?)
+    ORDER BY org_id IS NULL
+    LIMIT 1
+  `);
   const upsertToolStmt = db.prepare(`
     INSERT INTO tools (
       id, name, description, handler_type, handler_config, org_id, plugin_id, plugin_key, created_at, updated_at
@@ -1143,6 +1189,31 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listAttachmentsForSessionStmt = db.prepare(
     "SELECT * FROM attachments WHERE session_id = ? AND NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = attachments.session_id AND app_user_id IS NOT NULL)"
   );
+  // Gives each attachment of a session to another live session whose messages
+  // still name it, so purging the first one leaves the file in place. The new
+  // owner must be on the attachment's own profile, the only place the file can
+  // be read from, and that profile must belong to the caller's org. A session
+  // elsewhere that names the same id keeps nothing alive. An attachment nobody
+  // else names keeps its owner and is deleted with it.
+  const handOverSharedAttachmentsStmt = db.prepare(`
+    UPDATE attachments
+    SET session_id = COALESCE(
+      (
+        SELECT s.id
+        FROM sessions AS s
+        JOIN profiles AS p ON p.id = s.profile_id
+        JOIN session_messages AS m ON m.session_id = s.id
+        WHERE p.org_id = ?2
+          AND s.profile_id = attachments.profile_id
+          AND s.app_user_id IS NULL
+          AND s.id != ?1
+          AND instr(m.payload, '"attachmentId":"' || attachments.id || '"') > 0
+        LIMIT 1
+      ),
+      session_id
+    )
+    WHERE session_id = ?1 AND org_id = ?2
+  `);
   const listEphemeralAttachmentsStmt = db.prepare(
     "SELECT * FROM attachments WHERE ephemeral = 1 AND NOT EXISTS (SELECT 1 FROM sessions WHERE sessions.id = attachments.session_id AND app_user_id IS NOT NULL)"
   );
@@ -1243,6 +1314,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE org_id = ?
     ORDER BY request_count DESC, input_tokens + output_tokens DESC, model_id ASC
   `);
+  const listLlmUsageStatsByActorStmt = db.prepare(`
+    SELECT * FROM llm_usage_actor_stats
+    WHERE org_id = ?
+    ORDER BY request_count DESC, input_tokens + output_tokens DESC
+  `);
+  const listLlmUsageDailyStatsStmt = db.prepare(`
+    SELECT * FROM llm_usage_daily_stats
+    WHERE org_id = ? AND day >= ?
+    ORDER BY day ASC, model_id ASC, provider ASC
+  `);
   const listMcpServersStmt = db.prepare("SELECT * FROM mcp_servers");
   const getMcpServerStmt = db.prepare("SELECT * FROM mcp_servers WHERE id = ?");
   const getMcpServerByNameStmt = db.prepare(
@@ -1265,6 +1346,15 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   `);
   const deleteMcpServerStmt = db.prepare(
     "DELETE FROM mcp_servers WHERE id = ?"
+  );
+  const unassignMcpServerFromAllProfilesStmt = db.prepare(
+    "DELETE FROM profile_mcp_servers WHERE server_id = ?"
+  );
+  const deleteMcpServerEverywhereTransaction = db.transaction(
+    (serverId: string) => {
+      unassignMcpServerFromAllProfilesStmt.run(serverId);
+      return deleteMcpServerStmt.run(serverId);
+    }
   );
   const listMcpServersForProfileStmt = db.prepare(`
     SELECT mcp_servers.*
@@ -1329,6 +1419,37 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       updated_at = excluded.updated_at
   `);
   const deleteSkillStmt = db.prepare("DELETE FROM skills WHERE id = ?");
+  const deleteSkillVersionsStmt = db.prepare(
+    "DELETE FROM skill_versions WHERE skill_id = ?"
+  );
+  const createSkillVersionStmt = db.prepare(`
+    INSERT INTO skill_versions (
+      id, skill_id, version, kind, content, note, actor_user_id, source,
+      created_at
+    )
+    SELECT ?, ?, COALESCE(MAX(version), 0) + 1, ?, ?, ?, ?, ?, ?
+    FROM skill_versions WHERE skill_id = ?
+    RETURNING version
+  `);
+  const listSkillVersionsStmt = db.prepare(`
+    SELECT
+      id, skill_id, version, kind, content, note, actor_user_id, source,
+      created_at
+    FROM skill_versions
+    WHERE skill_id = ?
+    ORDER BY version DESC
+    LIMIT ?
+  `);
+  const getSkillVersionStmt = db.prepare(`
+    SELECT
+      id, skill_id, version, kind, content, note, actor_user_id, source,
+      created_at
+    FROM skill_versions
+    WHERE skill_id = ? AND id = ?
+  `);
+  const clearErasedUserSkillVersionsStmt = db.prepare(
+    "UPDATE skill_versions SET actor_user_id = NULL WHERE actor_user_id = ?"
+  );
   const getPluginReleaseStmt = db.prepare(
     "SELECT * FROM plugin_releases WHERE plugin_id = ? AND version = ?"
   );
@@ -1488,6 +1609,48 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       input_tokens = llm_usage_model_stats.input_tokens + excluded.input_tokens,
       output_tokens = llm_usage_model_stats.output_tokens + excluded.output_tokens,
       estimated_cost_usd = llm_usage_model_stats.estimated_cost_usd + excluded.estimated_cost_usd,
+      updated_at = excluded.updated_at
+  `);
+  // An empty string stands for "no agent" or "no user": SQLite treats every
+  // NULL in a primary key as distinct, so NULL would split the unattributed group.
+  const incrementLlmUsageStatsByActorStmt = db.prepare(`
+    INSERT INTO llm_usage_actor_stats (
+      org_id,
+      profile_id,
+      user_id,
+      request_count,
+      input_tokens,
+      output_tokens,
+      estimated_cost_usd,
+      tracked_since,
+      updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(org_id, profile_id, user_id) DO UPDATE SET
+      request_count = llm_usage_actor_stats.request_count + excluded.request_count,
+      input_tokens = llm_usage_actor_stats.input_tokens + excluded.input_tokens,
+      output_tokens = llm_usage_actor_stats.output_tokens + excluded.output_tokens,
+      estimated_cost_usd = llm_usage_actor_stats.estimated_cost_usd + excluded.estimated_cost_usd,
+      updated_at = excluded.updated_at
+  `);
+  const incrementLlmUsageDailyStatsStmt = db.prepare(`
+    INSERT INTO llm_usage_daily_stats (
+      org_id,
+      day,
+      model_id,
+      provider,
+      request_count,
+      input_tokens,
+      output_tokens,
+      estimated_cost_usd,
+      updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(org_id, day, model_id, provider) DO UPDATE SET
+      request_count = llm_usage_daily_stats.request_count + excluded.request_count,
+      input_tokens = llm_usage_daily_stats.input_tokens + excluded.input_tokens,
+      output_tokens = llm_usage_daily_stats.output_tokens + excluded.output_tokens,
+      estimated_cost_usd = llm_usage_daily_stats.estimated_cost_usd + excluded.estimated_cost_usd,
       updated_at = excluded.updated_at
   `);
   const incrementToolOutputSavingsStmt = db.prepare(`
@@ -1974,6 +2137,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
       clearErasedUserSkillSuggestionsStmt.run(input.id);
       clearErasedUserProfileEventsStmt.run(input.id);
+      clearErasedUserSkillVersionsStmt.run(input.id);
       deleteErasedUserAutomationReadsStmt.run(input.id);
       deleteErasedUserMembershipsStmt.run(input.id);
       deleteErasedUserChannelMappingsStmt.run(input.id);
@@ -2139,6 +2303,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     // schema definitions, so the organization cascade cannot remove them.
     for (const table of [
       "llm_turn_usage",
+      "llm_usage_actor_stats",
+      "llm_usage_daily_stats",
       "llm_usage_stats",
       "llm_usage_model_stats",
       "mcp_servers",
@@ -2172,26 +2338,32 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       archived_at = excluded.archived_at,
       updated_at = excluded.updated_at
   `);
+  // One row per LLM call in flight. Usage already spent comes from the ledger
+  // (?5, ?6), so a hold only has to cover calls that have not reported yet.
+  // ponytail: a hold older than an hour belongs to a call that died without
+  // releasing (crash, hung provider) and is ignored; nothing sweeps those rows.
   const tryReserveMonthlyLlmQuotaStmt = db.prepare(`
-    INSERT INTO org_llm_monthly_quota (
-      org_id, month, reserved_turns, reserved_tokens, updated_at
+    WITH held AS (
+      SELECT COUNT(*) AS turns, COALESCE(SUM(reserved_tokens), 0) AS tokens
+      FROM org_llm_quota_reservations
+      WHERE org_id = ?1
+        AND created_at > strftime('%Y-%m-%dT%H:%M:%fZ', ?4, '-1 hour')
     )
-    SELECT o.id, ?, ? + 1, ? + ?, ?
-    FROM organizations AS o
-    WHERE o.id = ?
+    INSERT INTO org_llm_quota_reservations (
+      id, org_id, reserved_tokens, created_at
+    )
+    SELECT ?2, o.id, ?3, ?4
+    FROM organizations AS o, held
+    WHERE o.id = ?1
       AND o.archived_at IS NULL
-      AND (o.monthly_llm_turn_limit IS NULL OR o.monthly_llm_turn_limit <= 0 OR ? + 1 <= o.monthly_llm_turn_limit)
-      AND (o.monthly_llm_token_limit IS NULL OR o.monthly_llm_token_limit <= 0 OR ? + ? <= o.monthly_llm_token_limit)
-    ON CONFLICT(org_id, month) DO UPDATE SET
-      reserved_turns = org_llm_monthly_quota.reserved_turns + 1,
-      reserved_tokens = org_llm_monthly_quota.reserved_tokens + excluded.reserved_tokens,
-      updated_at = excluded.updated_at
-    WHERE
-      (COALESCE((SELECT monthly_llm_turn_limit FROM organizations WHERE id = org_llm_monthly_quota.org_id), 0) <= 0
-        OR org_llm_monthly_quota.reserved_turns + 1 <= (SELECT monthly_llm_turn_limit FROM organizations WHERE id = org_llm_monthly_quota.org_id))
-      AND (COALESCE((SELECT monthly_llm_token_limit FROM organizations WHERE id = org_llm_monthly_quota.org_id), 0) <= 0
-        OR org_llm_monthly_quota.reserved_tokens + excluded.reserved_tokens <= (SELECT monthly_llm_token_limit FROM organizations WHERE id = org_llm_monthly_quota.org_id));
+      AND (o.monthly_llm_turn_limit IS NULL OR o.monthly_llm_turn_limit <= 0 OR ?5 + held.turns + 1 <= o.monthly_llm_turn_limit)
+      AND (o.monthly_llm_token_limit IS NULL OR o.monthly_llm_token_limit <= 0 OR ?6 + held.tokens + ?3 <= o.monthly_llm_token_limit)
   `);
+  // Deleting the row is the release, so a second call for the same id frees
+  // nothing and the held total cannot go below zero.
+  const releaseMonthlyLlmQuotaStmt = db.prepare(
+    "DELETE FROM org_llm_quota_reservations WHERE id = ? AND org_id = ?"
+  );
   const listOrganizationsStmt = db.prepare(`
     SELECT id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
@@ -3173,6 +3345,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
+    async createSkillVersion(record) {
+      const row = createSkillVersionStmt.get(
+        record.id,
+        record.skillId,
+        record.kind,
+        record.content,
+        record.note,
+        record.actorUserId,
+        record.source,
+        record.createdAt,
+        record.skillId
+      ) as { version: number };
+      return { ...record, version: row.version };
+    },
+
     async createUser(record) {
       runCreateUserStmt(record);
     },
@@ -3202,7 +3389,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async deleteMcpServer(id) {
-      const result = deleteMcpServerStmt.run(id);
+      const result = deleteMcpServerEverywhereTransaction(id);
       return result.changes > 0;
     },
 
@@ -3265,6 +3452,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async deleteSkill(id) {
+      // FK cascade is off (PRAGMA foreign_keys = OFF), so versions go too.
+      deleteSkillVersionsStmt.run(id);
       const result = deleteSkillStmt.run(id);
       return result.changes > 0;
     },
@@ -3629,6 +3818,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return row ? toSkillUsageRecord(row) : null;
     },
 
+    async getSkillVersion(skillId, versionId) {
+      const row = getSkillVersionStmt.get(skillId, versionId) as
+        | SkillVersionRow
+        | undefined;
+      return row ? toSkillVersionRecord(row) : null;
+    },
+
     async getTool(id) {
       const row = getToolStmt.get(id) as ToolRow | null;
       return row ? toToolRecord(row) : null;
@@ -3636,6 +3832,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async getToolByName(name) {
       const row = getToolByNameStmt.get(name) as ToolRow | null;
+      return row ? toToolRecord(row) : null;
+    },
+
+    async getToolByNameForOrg(orgId, name) {
+      const row = getToolByNameForOrgStmt.get(name, orgId) as ToolRow | null;
       return row ? toToolRecord(row) : null;
     },
     async getUserByEmail(email) {
@@ -3675,6 +3876,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return row ? toWorkspaceSettingsRecord(row) : null;
     },
 
+    async handOverSharedAttachments(sessionId, orgId) {
+      handOverSharedAttachmentsStmt.run(sessionId, orgId);
+    },
+
     async incrementLlmTurnUsage(orgId, delta) {
       const updatedAt = new Date().toISOString();
       incrementLlmTurnUsageStmt.run(
@@ -3688,11 +3893,40 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
+    async incrementLlmUsageDailyStats(orgId, key, delta) {
+      incrementLlmUsageDailyStatsStmt.run(
+        orgId,
+        key.day,
+        key.modelId,
+        key.provider,
+        delta.requestCount,
+        delta.inputTokens,
+        delta.outputTokens,
+        delta.estimatedCostUsd,
+        new Date().toISOString()
+      );
+    },
+
     async incrementLlmUsageStats(orgId, delta, trackedSince) {
       const updatedAt = new Date().toISOString();
       incrementLlmUsageStatsStmt.run(
         orgId,
         LLM_USAGE_STATS_ID,
+        delta.requestCount,
+        delta.inputTokens,
+        delta.outputTokens,
+        delta.estimatedCostUsd,
+        trackedSince,
+        updatedAt
+      );
+    },
+
+    async incrementLlmUsageStatsByActor(orgId, actor, delta, trackedSince) {
+      const updatedAt = new Date().toISOString();
+      incrementLlmUsageStatsByActorStmt.run(
+        orgId,
+        actor.profileId?.trim() ?? "",
+        actor.userId?.trim() ?? "",
         delta.requestCount,
         delta.inputTokens,
         delta.outputTokens,
@@ -3958,6 +4192,18 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       }));
     },
 
+    async listLlmUsageDailyStats(orgId, sinceDay) {
+      return listLlmUsageDailyStatsStmt
+        .all(orgId, sinceDay)
+        .map((row) => toLlmUsageDailyStatsRecord(row as LlmUsageDailyStatsRow));
+    },
+
+    async listLlmUsageStatsByActor(orgId) {
+      return listLlmUsageStatsByActorStmt
+        .all(orgId)
+        .map((row) => toLlmUsageActorStatsRecord(row as LlmUsageActorStatsRow));
+    },
+
     async listLlmUsageStatsByModel(orgId) {
       return listLlmUsageStatsByModelStmt
         .all(orgId)
@@ -4193,6 +4439,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         .map((row) => toSkillUsageRecord(row as SkillUsageRow));
     },
 
+    async listSkillVersions(skillId, options = {}) {
+      const rows = listSkillVersionsStmt.all(
+        skillId,
+        options.limit ?? 50
+      ) as SkillVersionRow[];
+      return rows.map(toSkillVersionRecord);
+    },
+
     async listToolOutputSavings(orgId) {
       return (
         listToolOutputSavingsStmt.all(orgId) as {
@@ -4289,6 +4543,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async publishOrgPluginRelease(input) {
       return publishOrgPluginReleaseTx(input);
+    },
+
+    async releaseMonthlyLlmQuota(orgId, reservationId) {
+      releaseMonthlyLlmQuotaStmt.run(reservationId, orgId);
     },
 
     async renameFilePins(orgId, profileId, oldPath, newPath) {
@@ -4394,15 +4652,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async tryReserveMonthlyLlmQuota(input) {
       const result = tryReserveMonthlyLlmQuotaStmt.run(
-        input.month,
-        input.existingTurns,
-        input.existingTokens,
-        input.reservedTokens,
-        input.updatedAt,
         input.orgId,
+        input.reservationId,
+        input.reservedTokens,
+        input.createdAt,
         input.existingTurns,
-        input.existingTokens,
-        input.reservedTokens
+        input.existingTokens
       );
       return result.changes === 1;
     },
@@ -5176,6 +5431,37 @@ function toLlmUsageStatsRecord(
   };
 }
 
+function toLlmUsageActorStatsRecord(
+  row: LlmUsageActorStatsRow
+): StoredLlmUsageActorStatsRecord {
+  return {
+    estimatedCostUsd: row.estimated_cost_usd,
+    inputTokens: row.input_tokens,
+    orgId: row.org_id,
+    outputTokens: row.output_tokens,
+    profileId: row.profile_id || null,
+    requestCount: row.request_count,
+    trackedSince: row.tracked_since,
+    updatedAt: row.updated_at,
+    userId: row.user_id || null,
+  };
+}
+
+function toLlmUsageDailyStatsRecord(
+  row: LlmUsageDailyStatsRow
+): StoredLlmUsageDailyStatsRecord {
+  return {
+    day: row.day,
+    estimatedCostUsd: row.estimated_cost_usd,
+    inputTokens: row.input_tokens,
+    modelId: row.model_id,
+    orgId: row.org_id,
+    outputTokens: row.output_tokens,
+    provider: row.provider,
+    requestCount: row.request_count,
+  };
+}
+
 function toLlmUsageModelStatsRecord(
   row: LlmUsageModelStatsRow
 ): StoredLlmUsageModelStatsRecord {
@@ -5568,6 +5854,20 @@ function toProfileChangeEventRecord(
     orgId: row.org_id,
     profileId: row.profile_id,
     source: row.source as StoredProfileChangeEvent["source"],
+  };
+}
+
+function toSkillVersionRecord(row: SkillVersionRow): StoredSkillVersion {
+  return {
+    actorUserId: row.actor_user_id,
+    content: row.content,
+    createdAt: row.created_at,
+    id: row.id,
+    kind: row.kind as StoredSkillVersion["kind"],
+    note: row.note,
+    skillId: row.skill_id,
+    source: row.source as StoredSkillVersion["source"],
+    version: row.version,
   };
 }
 

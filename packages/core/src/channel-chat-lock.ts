@@ -4,7 +4,7 @@ export interface ChannelChatLock {
   options: { waitMs: number };
   resetForTests(): void;
   seedForTests(key: string, promise: Promise<void>): void;
-  withLock(key: string, fn: () => Promise<void>): Promise<void>;
+  withLock<T>(key: string, fn: () => Promise<T>): Promise<T>;
 }
 
 /**
@@ -63,7 +63,7 @@ export function createChatLock(defaults?: {
       }
 
       try {
-        await fn();
+        return await fn();
       } finally {
         release();
         if (locks.get(key) === gate) {

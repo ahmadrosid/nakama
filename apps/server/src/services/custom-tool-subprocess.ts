@@ -100,13 +100,14 @@ interface SpawnJsonToolTransport {
 }
 
 export interface SpawnJsonToolOptions {
-  apiKey?: string;
   args: string[];
   bin: string;
   context: ToolContext;
   /** Working directory for the child. Keeps a tool's relative file access
    * scoped to its own directory instead of the server's checkout. */
   cwd: string;
+  /** Extra variables for the child, e.g. a tool's saved configuration. */
+  env?: Record<string, string>;
   input: unknown;
   /** Used in error messages, e.g. "Python tool", "JavaScript tool". */
   label: string;
@@ -130,9 +131,7 @@ export async function spawnJsonTool(
     transport?.includeConfigDir ?? true
   );
   const timeoutMs = transport?.timeoutMs ?? resolveCustomToolTimeoutMs();
-  if (options.apiKey) {
-    env.NAKAMA_TOOL_API_KEY = options.apiKey;
-  }
+  Object.assign(env, options.env);
 
   const result = await new Promise<{ stderr: string; stdout: string }>(
     (resolve, reject) => {

@@ -1,13 +1,7 @@
-import path from "node:path";
 import { z } from "zod";
 import type { ToolContext, ToolDefinition } from "../contract";
-import { getKnowledgeBaseDir } from "../knowledge-base/paths";
 import { getProfileSoulDir } from "../soul/resolve";
-import {
-  guardFilePath,
-  refuseKnowledgeIndexPath,
-  resolveWorkspaceRoot,
-} from "./paths";
+import { guardFilePath, resolveWorkspaceRoot } from "./paths";
 import { buildRipgrepArgs, type RipgrepMatch, runRipgrep } from "./ripgrep";
 import {
   jsonSchemaFromZod,
@@ -76,13 +70,6 @@ export async function runSearchFiles(
     workspaceRoot,
     parsed.path ?? null
   );
-  const knowledgeRoot = getKnowledgeBaseDir(orgId, profileId);
-  if (
-    searchRoot === knowledgeRoot ||
-    searchRoot.startsWith(`${knowledgeRoot}${path.sep}`)
-  ) {
-    throw new Error("Use knowledge_base_search for knowledge documents.");
-  }
   const args = buildRipgrepArgs({
     glob: parsed.glob ?? null,
     maxResults: parsed.maxResults,
@@ -90,20 +77,6 @@ export async function runSearchFiles(
     regex: parsed.regex,
     searchRoot,
   });
-  args.splice(
-    -3,
-    0,
-    "--glob",
-    "!**/knowledge-base/index.md",
-    "--glob",
-    "!**/knowledge-base/index.meta.json",
-    "--glob",
-    "!**/knowledge-base/*.index.json",
-    "--glob",
-    "!**/knowledge-base/index-settings.json",
-    "--glob",
-    "!**/knowledge-base/index-work.json"
-  );
 
   const searchResult = await runRipgrep(args, {
     maxResults: parsed.maxResults,
@@ -132,6 +105,5 @@ async function resolveSearchRoot(
     allowedDirs: [workspaceRoot],
     cwd: workspaceRoot,
   });
-  refuseKnowledgeIndexPath(guarded.resolved);
   return guarded.resolved;
 }

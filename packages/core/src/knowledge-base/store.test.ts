@@ -9,34 +9,23 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { composeKnowledgeBaseCatalog } from "./catalog";
 import {
   getKnowledgeBaseDir,
   getKnowledgeBaseExtractedPath,
   getKnowledgeBaseManifestPath,
   getKnowledgeBaseStoredDocumentPath,
-  getKnowledgeIndexPath,
 } from "./paths";
 import {
-  readKnowledgeIndex,
-  rebuildKnowledgeIndex,
-  saveKnowledgeIndexEntry,
-  setKnowledgeIndexEnabled,
-} from "./semantic-index";
-import {
-  acquireKnowledgeIndexWorkerLease,
-  approveKnowledgeIndexJobs,
   attachSharedKnowledgeBaseDocument,
-  claimKnowledgeIndexJob,
   deleteKnowledgeBaseDocument,
   deleteOrganizationKnowledgeBaseDocument,
   detachSharedKnowledgeBaseDocument,
   findProfilesReferencingSharedDocument,
-  finishKnowledgeIndexJob,
   getProfileSharedDocumentIds,
   type KnowledgeBaseDocumentInUseError,
   KnowledgeBaseDuplicateError,
   listKnowledgeBaseDocuments,
-  listKnowledgeIndexJobs,
   listOrganizationKnowledgeBaseDocuments,
   readKnowledgeBaseDocumentContent,
   uploadKnowledgeBaseDocument,
@@ -71,6 +60,86 @@ describe("knowledge base store", () => {
       })
     );
   }
+
+  test("bounds the catalog and searches documents without listing their names", async () => {
+    const profileId = "profile_kb_catalog";
+    await setupProfile(profileId);
+    const uploaded = await uploadKnowledgeBaseDocument(ORG_ID, profileId, {
+      data: Buffer.from("invoice due date").toString("base64"),
+      filename: "catalog-source.txt",
+      mediaType: "text/plain",
+    });
+    const before = await composeKnowledgeBaseCatalog(ORG_ID, profileId);
+    const manifestPath = getKnowledgeBaseManifestPath(
+      getKnowledgeBaseDir(ORG_ID, profileId)
+    );
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.documents.push(
+      ...Array.from({ length: 199 }, (_, index) => ({
+        ...uploaded.document,
+        filename: `extra-document-${index}.txt`,
+        id: `kb_catalog_${index}`,
+      })),
+      { ...uploaded.document, id: "kb_failed", status: "failed" }
+    );
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    const after = await composeKnowledgeBaseCatalog(ORG_ID, profileId);
+    expect(after.match(/\b(\d+) ready documents\b/)?.[1]).toBe("200");
+    expect(Buffer.byteLength(after) - Buffer.byteLength(before)).toBe(2);
+    expect(after).not.toContain(uploaded.document.filename);
+    const { runKnowledgeBaseSearch } = await import(
+      "../tools/knowledge-base-search"
+    );
+    const result = await runKnowledgeBaseSearch(
+      { query: "date invoice" },
+      { orgId: ORG_ID, profileId }
+    );
+    expect(result.matchCount).toBe(1);
+    expect(result.matches[0]?.text).toContain("invoice due date");
+  });
+
+  test("counts only current ready documents in the profile's scope", async () => {
+    const profileId = "profile_kb_catalog_scope";
+    await setupProfile(profileId);
+    const source = {
+      data: Buffer.from("scope check").toString("base64"),
+      filename: "scope.txt",
+      mediaType: "text/plain",
+    };
+    const profile = await uploadKnowledgeBaseDocument(
+      ORG_ID,
+      profileId,
+      source
+    );
+    await uploadKnowledgeBaseDocument(ORG_ID, "other_profile", source);
+    const shared = await uploadOrganizationKnowledgeBaseDocument(
+      ORG_ID,
+      source
+    );
+    await uploadOrganizationKnowledgeBaseDocument(ORG_ID, {
+      ...source,
+      data: Buffer.from("unattached content").toString("base64"),
+      filename: "unattached.txt",
+    });
+    await uploadOrganizationKnowledgeBaseDocument("other_org", source);
+    await attachSharedKnowledgeBaseDocument(
+      ORG_ID,
+      profileId,
+      shared.document.id
+    );
+    const attached = await composeKnowledgeBaseCatalog(ORG_ID, profileId);
+    expect(attached.match(/\b(\d+) ready documents\b/)?.[1]).toBe("2");
+    await detachSharedKnowledgeBaseDocument(
+      ORG_ID,
+      profileId,
+      shared.document.id
+    );
+    const detached = await composeKnowledgeBaseCatalog(ORG_ID, profileId);
+    expect(detached.match(/\b(\d+) ready documents\b/)?.[1]).toBe("1");
+    await deleteKnowledgeBaseDocument(ORG_ID, profileId, profile.document.id);
+    const empty = await composeKnowledgeBaseCatalog(ORG_ID, profileId);
+    expect(empty.match(/\b(\d+) ready documents\b/)).toBeNull();
+  });
 
   test("uploads, lists, and deletes text documents", async () => {
     const profileId = "profile_kb_test";
@@ -165,141 +234,6 @@ describe("knowledge base store", () => {
         uploaded.document.id
       )
     ).toBe(true);
-  });
-
-  test("indexes saved topics and removes detached shared sources", async () => {
-    const profileId = "profile_kb_index";
-    await setupProfile(profileId);
-    await setKnowledgeIndexEnabled(ORG_ID, true);
-    const own = await uploadKnowledgeBaseDocument(ORG_ID, profileId, {
-      data: Buffer.from("Invoice due dates", "utf8").toString("base64"),
-      filename: "notes.txt",
-      mediaType: "text/plain",
-    });
-    const shared = await uploadOrganizationKnowledgeBaseDocument(ORG_ID, {
-      data: Buffer.from("Refund policy", "utf8").toString("base64"),
-      filename: "shared.txt",
-      mediaType: "text/plain",
-    });
-    expect(await listKnowledgeIndexJobs(ORG_ID)).toHaveLength(2);
-    await attachSharedKnowledgeBaseDocument(
-      ORG_ID,
-      profileId,
-      shared.document.id
-    );
-    await saveKnowledgeIndexEntry(
-      ORG_ID,
-      profileId,
-      { ...own.document, scope: "profile" },
-      [
-        {
-          description: "Invoice due dates",
-          name: "Billing",
-          terms: ["payment"],
-        },
-      ],
-      false
-    );
-    await saveKnowledgeIndexEntry(
-      ORG_ID,
-      profileId,
-      { ...shared.document, scope: "organization" },
-      [{ description: "Refund policy", name: "Refunds", terms: ["returns"] }],
-      false
-    );
-    expect((await rebuildKnowledgeIndex(ORG_ID, profileId)).status).toBe(
-      "ready"
-    );
-    expect((await readKnowledgeIndex(ORG_ID, profileId)).content).toContain(
-      "## refunds"
-    );
-    expect(
-      (await readKnowledgeIndex(ORG_ID, profileId, "Refunds")).content
-    ).toContain(`organization:${shared.document.id}`);
-    await writeFile(getKnowledgeIndexPath(ORG_ID, profileId), "# changed\n");
-    expect((await readKnowledgeIndex(ORG_ID, profileId)).status).toBe("stale");
-    await rebuildKnowledgeIndex(ORG_ID, profileId);
-    await detachSharedKnowledgeBaseDocument(
-      ORG_ID,
-      profileId,
-      shared.document.id
-    );
-    expect((await readKnowledgeIndex(ORG_ID, profileId)).status).toBe(
-      "missing"
-    );
-    await rebuildKnowledgeIndex(ORG_ID, profileId);
-    expect((await readKnowledgeIndex(ORG_ID, profileId)).content).not.toContain(
-      "refunds"
-    );
-    expect(
-      (await readKnowledgeIndex(ORG_ID, profileId, "Billing")).content
-    ).toContain(`profile:${own.document.id}`);
-  });
-
-  test("stops automatic indexing at six documents until approval", async () => {
-    const profileId = "profile_kb_budget";
-    await setupProfile(profileId);
-    await setKnowledgeIndexEnabled(ORG_ID, true);
-    for (let index = 0; index < 7; index += 1) {
-      await uploadKnowledgeBaseDocument(ORG_ID, profileId, {
-        data: Buffer.from(`Document ${index}`, "utf8").toString("base64"),
-        filename: `${index}.txt`,
-        mediaType: "text/plain",
-      });
-    }
-    expect(
-      (await listKnowledgeIndexJobs(ORG_ID)).filter(
-        (job) => job.state === "pending"
-      )
-    ).toHaveLength(6);
-    const claimed = await claimKnowledgeIndexJob(ORG_ID);
-    expect(claimed).not.toBeNull();
-    await finishKnowledgeIndexJob(ORG_ID, claimed!.documentId, false);
-    expect(
-      (await listKnowledgeIndexJobs(ORG_ID)).filter(
-        (job) => job.state === "waiting"
-      )
-    ).toHaveLength(1);
-    for (let remaining = 0; remaining < 5; remaining += 1) {
-      const next = await claimKnowledgeIndexJob(ORG_ID);
-      await finishKnowledgeIndexJob(ORG_ID, next!.documentId, false);
-    }
-    expect(await approveKnowledgeIndexJobs(ORG_ID)).toBe(1);
-    expect(
-      (await listKnowledgeIndexJobs(ORG_ID)).filter(
-        (job) => job.state === "pending"
-      )
-    ).toHaveLength(1);
-  });
-
-  test("allows one index worker for an organization", async () => {
-    await setupProfile("profile_kb_lock");
-    const release = await acquireKnowledgeIndexWorkerLease(ORG_ID);
-    expect(release).not.toBeNull();
-    expect(await acquireKnowledgeIndexWorkerLease(ORG_ID)).toBeNull();
-    await release!();
-    const next = await acquireKnowledgeIndexWorkerLease(ORG_ID);
-    expect(next).not.toBeNull();
-    await next!();
-  });
-
-  test("keeps both documents from concurrent uploads", async () => {
-    const profileId = "profile_kb_concurrent";
-    await setupProfile(profileId);
-    await Promise.all(
-      ["first", "second"].map((name) =>
-        uploadKnowledgeBaseDocument(ORG_ID, profileId, {
-          data: Buffer.from(name).toString("base64"),
-          filename: `${name}.txt`,
-          mediaType: "text/plain",
-        })
-      )
-    );
-    expect(
-      (await listKnowledgeBaseDocuments(ORG_ID, profileId))
-        .map((document) => document.filename)
-        .sort()
-    ).toEqual(["first.txt", "second.txt"]);
   });
 
   test("rejects duplicate uploads by default and supports skip/replace", async () => {

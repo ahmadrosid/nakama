@@ -88,7 +88,6 @@ import type {
   InvokePluginActionRequest,
   InvokePluginActionResponse,
   KnowledgeBaseDuplicateAction,
-  KnowledgeIndexResponse,
   ListArtifactsResponse,
   ListAutomationRunsResponse,
   ListAutomationsResponse,
@@ -112,6 +111,7 @@ import type {
   ListSkillProposalsResponse,
   ListSkillSuggestionsResponse,
   ListSkillsResponse,
+  ListSkillVersionsResponse,
   ListTimezonesResponse,
   ListToolsResponse,
   ListUserOrgsResponse,
@@ -210,6 +210,7 @@ import type {
   TimezoneSettingsResponse,
   TokenOptimizationResponse,
   TokenOptimizationUpdateResponse,
+  ToolCredentialStatus,
   ToolResponse,
   ToolSetupPlan,
   ToolSourceResponse,
@@ -1007,9 +1008,7 @@ export class NakamaClient {
     );
   }
 
-  async getToolCredentialStatus(
-    toolId: string
-  ): Promise<{ configured: boolean }> {
+  async getToolCredentialStatus(toolId: string): Promise<ToolCredentialStatus> {
     return this.request(`/v1/tools/${encodeURIComponent(toolId)}/credentials`);
   }
 
@@ -1030,9 +1029,19 @@ export class NakamaClient {
   async saveToolCredential(
     toolId: string,
     apiKey: string
-  ): Promise<{ configured: boolean }> {
+  ): Promise<ToolCredentialStatus> {
     return this.request(`/v1/tools/${encodeURIComponent(toolId)}/credentials`, {
       body: JSON.stringify({ apiKey }),
+      method: "PUT",
+    });
+  }
+
+  async saveToolEnv(
+    toolId: string,
+    env: Record<string, string>
+  ): Promise<ToolCredentialStatus> {
+    return this.request(`/v1/tools/${encodeURIComponent(toolId)}/credentials`, {
+      body: JSON.stringify({ env }),
       method: "PUT",
     });
   }
@@ -1140,10 +1149,12 @@ export class NakamaClient {
     );
   }
 
-  async deleteMcpServer(serverId: string): Promise<void> {
-    await this.request(`/v1/mcp/servers/${encodeURIComponent(serverId)}`, {
-      method: "DELETE",
-    });
+  async deleteMcpServer(serverId: string, force = false): Promise<void> {
+    const query = force ? "?force=true" : "";
+    await this.request(
+      `/v1/mcp/servers/${encodeURIComponent(serverId)}${query}`,
+      { method: "DELETE" }
+    );
   }
 
   async connectMcpServer(serverId: string): Promise<McpServerResponse> {
@@ -1206,6 +1217,27 @@ export class NakamaClient {
     return this.request<SkillFilesResponse>(
       `/v1/skills/${encodeURIComponent(skillId)}/files`,
       { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
+  async listSkillVersions(
+    skillId: string,
+    orgId: string
+  ): Promise<ListSkillVersionsResponse> {
+    return this.request<ListSkillVersionsResponse>(
+      `/v1/skills/${encodeURIComponent(skillId)}/versions`,
+      { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
+  async restoreSkillVersion(
+    skillId: string,
+    versionId: string,
+    orgId: string
+  ): Promise<SkillResponse> {
+    return this.request<SkillResponse>(
+      `/v1/skills/${encodeURIComponent(skillId)}/versions/${encodeURIComponent(versionId)}/restore`,
+      { headers: { "X-Org-Id": orgId }, method: "POST" }
     );
   }
 
@@ -1643,39 +1675,6 @@ export class NakamaClient {
   ): Promise<ListKnowledgeBaseResponse> {
     return this.request<ListKnowledgeBaseResponse>(
       `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base`
-    );
-  }
-
-  async getKnowledgeIndex(
-    profileId: string,
-    topic?: string,
-    offset = 0
-  ): Promise<KnowledgeIndexResponse> {
-    const query = new URLSearchParams();
-    if (topic) {
-      query.set("topic", topic);
-    }
-    if (offset) {
-      query.set("offset", String(offset));
-    }
-    return this.request<KnowledgeIndexResponse>(
-      `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base/index${query.size ? `?${query}` : ""}`
-    );
-  }
-
-  async changeKnowledgeIndex(
-    profileId: string,
-    action:
-      | "enable"
-      | "disable"
-      | "backfill"
-      | "retry"
-      | "rebuild"
-      | "reanalyze"
-  ): Promise<KnowledgeIndexResponse> {
-    return this.request<KnowledgeIndexResponse>(
-      `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base/index`,
-      { body: JSON.stringify({ action }), method: "POST" }
     );
   }
 

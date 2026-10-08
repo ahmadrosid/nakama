@@ -656,7 +656,9 @@ describe("createHonoApp", () => {
     );
 
     const csp = response.headers.get("Content-Security-Policy") ?? "";
-    expect(csp).toContain("img-src 'self' data: blob:");
+    expect(csp).toContain(
+      "img-src 'self' data: blob: https://logos.composio.dev;"
+    );
     expect(csp).toContain("media-src 'self' blob:");
     expect(csp).toContain("object-src blob:");
     expect(csp).toContain("frame-src 'self' blob:");

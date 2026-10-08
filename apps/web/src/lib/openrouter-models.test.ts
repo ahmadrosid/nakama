@@ -1,10 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  isOpenRouterModelDeprecated,
-  isOpenRouterModelFree,
-  normalizeOpenRouterModels,
-  openRouterPricingPerMillion,
-} from "./openrouter-models";
+import { normalizeOpenRouterModels } from "./openrouter-models";
 
 const fixture = {
   data: [
@@ -22,7 +17,6 @@ const fixture = {
       architecture: { input_modalities: ["text", "image"] },
       context_length: 1_000_000,
       description: "Paid variant",
-      expiration_date: null,
       id: "nvidia/nemotron-3-ultra-550b-a55b",
       name: "NVIDIA: Nemotron 3 Ultra",
       pricing: { completion: "0.0000025", prompt: "0.0000005" },
@@ -51,42 +45,18 @@ const fixture = {
   ],
 };
 
-describe("isOpenRouterModelFree", () => {
-  test("returns true when prompt and completion are zero", () => {
-    expect(isOpenRouterModelFree({ completion: "0", prompt: "0" })).toBe(true);
-  });
-
-  test("returns false when completion is non-zero", () => {
-    expect(
-      isOpenRouterModelFree({ completion: "0.0000025", prompt: "0" })
-    ).toBe(false);
-  });
-});
-
-describe("openRouterPricingPerMillion", () => {
-  test("converts per-token API pricing to dollars per million tokens", () => {
-    expect(
-      openRouterPricingPerMillion({
-        completion: "0.0000025",
-        prompt: "0.0000005",
-      })
-    ).toEqual({
-      inputPerMillionUsd: 0.5,
-      outputPerMillionUsd: 2.5,
-    });
-  });
-
-  test("returns zero rates for free models", () => {
-    expect(
-      openRouterPricingPerMillion({
-        completion: "0",
-        prompt: "0",
-      })
-    ).toEqual({
-      inputPerMillionUsd: 0,
-      outputPerMillionUsd: 0,
-    });
-  });
+test("a non-zero completion price is not free", () => {
+  expect(
+    normalizeOpenRouterModels({
+      data: [
+        {
+          id: "paid",
+          name: "Paid",
+          pricing: { completion: "0.0000025", prompt: "0" },
+        },
+      ],
+    })[0]?.isFree
+  ).toBe(false);
 });
 
 describe("normalizeOpenRouterModels", () => {
@@ -99,6 +69,9 @@ describe("normalizeOpenRouterModels", () => {
     expect(rows[2]?.isFree).toBe(true);
     expect(rows[3]?.isFree).toBe(false);
     expect(rows.find((row) => row.id.endsWith(":free"))?.isFree).toBe(true);
+    expect(rows[0]?.deprecated).toBe(false);
+    expect(rows[0]?.inputPerMillionUsd).toBe(0);
+    expect(rows[0]?.outputPerMillionUsd).toBe(0);
   });
 
   test("detects vision and capability chips", () => {
@@ -108,6 +81,7 @@ describe("normalizeOpenRouterModels", () => {
     );
 
     expect(paid?.vision).toBe(true);
+    expect(paid?.deprecated).toBe(false);
     expect(paid?.tools).toBe(true);
     expect(paid?.reasoning).toBe(false);
     expect(paid?.inputPerMillionUsd).toBe(0.5);
@@ -126,20 +100,5 @@ describe("normalizeOpenRouterModels", () => {
     const oxAlpha = rows.find((row) => row.id === "stealth/ox-alpha");
 
     expect(oxAlpha?.deprecated).toBe(false);
-  });
-});
-
-describe("isOpenRouterModelDeprecated", () => {
-  test("returns false for missing expiration", () => {
-    expect(isOpenRouterModelDeprecated(null)).toBe(false);
-    expect(isOpenRouterModelDeprecated(undefined)).toBe(false);
-  });
-
-  test("returns true for a scheduled sunset", () => {
-    expect(isOpenRouterModelDeprecated("2026-08-24")).toBe(true);
-  });
-
-  test("returns false for far-future sentinel dates", () => {
-    expect(isOpenRouterModelDeprecated("2098-12-31")).toBe(false);
   });
 });

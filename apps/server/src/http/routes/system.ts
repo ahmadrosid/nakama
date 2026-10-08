@@ -248,14 +248,18 @@ export function registerSystemRoutes(
 
   app.openapi(systemStatusRoute, async (c) => {
     const profileId = c.req.query("profileId")?.trim();
-    const orgId = getRequestAuth(c).activeOrgId ?? null;
+    const auth = getRequestAuth(c);
+    const orgId = auth.activeOrgId ?? null;
     if (profileId) {
       requireOrgAdminOrPlatformAdminFromContext(c);
       await agent.getProfile(requireActiveOrgIdFromContext(c), profileId);
     }
     return c.json(
       await systemStatus.getStatus(
-        profileId && orgId ? { orgId, profileId } : orgId
+        profileId && orgId ? { orgId, profileId } : orgId,
+        {
+          includeUsageByActor: auth.orgRole === "admin" || auth.isPlatformAdmin,
+        }
       ),
       200
     );

@@ -134,22 +134,6 @@ export async function ensureBuiltinToolDefinitions(
       updatedAt: now,
     });
   }
-  for (const profile of await db.listProfiles()) {
-    const assigned = await db.listToolsForProfile(profile.id);
-    if (
-      assigned.some(
-        (tool) => tool.id === BUILTIN_TOOL_IDS.knowledge_base_search
-      ) &&
-      !assigned.some(
-        (tool) => tool.id === BUILTIN_TOOL_IDS.knowledge_base_index
-      )
-    ) {
-      await db.assignToolToProfile(
-        profile.id,
-        BUILTIN_TOOL_IDS.knowledge_base_index
-      );
-    }
-  }
 }
 
 export async function ensureSubAgentToolDefinition(

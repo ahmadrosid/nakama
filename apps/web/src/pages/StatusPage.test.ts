@@ -28,6 +28,7 @@ const healthyStatus: SystemStatusResponse = {
   llmUsage: {
     costEstimated: false,
     currentModel: "gpt-4o",
+    daily: [],
     displayName: "OpenAI",
     estimatedCostUsd: 0,
     inputTokens: 0,

@@ -217,13 +217,42 @@ export interface LlmUsageModelStats extends LlmUsageStats {
   modelId: string;
 }
 
+/** One agent's or one user's share of the org ledger. A null `id` is the unattributed group. */
+export interface LlmUsageGroupStats extends LlmUsageStats {
+  id: string | null;
+  name: string | null;
+}
+
+/** One provider's share of one day. A null provider means the call had no provider context. */
+export interface LlmUsageDayProviderStats {
+  estimatedCostUsd: number;
+  provider: string | null;
+  totalTokens: number;
+}
+
+/** One UTC day of the org ledger. Days without calls are present with zeros. */
+export interface LlmUsageDayStats {
+  /** `YYYY-MM-DD`, UTC. */
+  day: string;
+  estimatedCostUsd: number;
+  providers: LlmUsageDayProviderStats[];
+  requestCount: number;
+  totalTokens: number;
+}
+
 export interface LlmUsageStatus extends LlmUsageStats {
+  /** Org admins and platform admins only. */
+  agents?: LlmUsageGroupStats[];
   costEstimated: boolean;
   currentModel: string | null;
+  /** The last 30 UTC days, oldest first. */
+  daily: LlmUsageDayStats[];
   displayName: string | null;
   models: LlmUsageModelStats[];
   provider: ProviderName | null;
   providerConfigured: boolean;
+  /** Org admins and platform admins only. */
+  users?: LlmUsageGroupStats[];
 }
 
 export interface McpStatus {
@@ -2124,6 +2153,8 @@ export interface PatchSkillRequest {
   body?: string;
   description?: string;
   disableModelInvocation?: boolean;
+  /** Optional change note, shown as the version title. */
+  note?: string;
 }
 
 export interface SyncSkillsResponse {
@@ -2322,6 +2353,35 @@ export interface ProfileChangeEvent {
   source: ProfileChangeSource;
 }
 
+export interface SkillVersion {
+  actorName: string | null;
+  content: string;
+  createdAt: string;
+  id: string;
+  /** "original" is the content saved before the first tracked change. */
+  kind: "created" | "original" | "restored" | "updated";
+  note: string | null;
+  source: ProfileChangeSource | null;
+  version: number;
+}
+
+/** A pending skill proposal, shown as the SKILL.md it would produce. */
+export interface PendingSkillVersion {
+  content: string;
+  createdAt: string;
+  id: string;
+  proposedByName: string | null;
+}
+
+export interface ListSkillVersionsResponse {
+  /** SKILL.md on disk; the base for pending diffs. */
+  currentContent: string;
+  /** Newest first. */
+  pending: PendingSkillVersion[];
+  /** Newest first. */
+  versions: SkillVersion[];
+}
+
 export interface ListProfileChangeHistoryResponse {
   events: ProfileChangeEvent[];
 }
@@ -2331,6 +2391,18 @@ export interface CreateToolRequest {
   handlerConfig?: unknown;
   handlerType?: string;
   name: string;
+}
+
+export interface ToolCredentialStatus {
+  configured: boolean;
+  /** Present when the tool declares handlerConfig.env. */
+  env?: {
+    configured: boolean;
+    name: string;
+    secret: boolean;
+    /** Only for non-secret variables. */
+    value?: string;
+  }[];
 }
 
 export interface ToolSetupPlan {
@@ -2528,27 +2600,6 @@ export interface ListKnowledgeBaseResponse {
   documents: KnowledgeBaseDocument[];
   profileId: string;
   sources: KnowledgeBaseSource[];
-}
-
-export interface KnowledgeIndexResponse {
-  content: string;
-  enabled: boolean;
-  failed: number;
-  indexedCount: number;
-  nextOffset?: number;
-  pending: number;
-  provider: string | null;
-  readyCount: number;
-  status:
-    | "off"
-    | "updating"
-    | "partial"
-    | "ready"
-    | "needs_retry"
-    | "needs_setup"
-    | "missing"
-    | "stale";
-  totalLines: number;
 }
 
 export interface UploadKnowledgeBaseRequest {
@@ -2792,7 +2843,6 @@ export interface GenerateTextResult {
 }
 
 export interface ProviderChatOptions {
-  maxOutputTokens?: number;
   thinking?: {
     enabled: boolean;
     effort?: ThinkingEffort;
@@ -2848,8 +2898,13 @@ export interface ProviderClient {
 export interface ToolContext {
   /** Nesting depth for sub-agent execution (0 = parent, 1 = child). */
   agentDepth?: number;
-  /** Atomically reserves quota before a new LLM invocation. */
-  assertCanStartLlmTurn?: (reservedTokens: number) => Promise<void>;
+  /**
+   * Atomically reserves quota before a new LLM invocation. The reservation is
+   * a hold, not a charge: call the returned function once the call settles.
+   */
+  assertCanStartLlmTurn?: (
+    reservedTokens: number
+  ) => Promise<() => Promise<void>>;
   automationId?: string;
   automationRunId?: string;
   /** Session channel when known (used for interactive-only tool gates). */

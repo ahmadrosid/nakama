@@ -1854,6 +1854,60 @@ describe("createChatHandler guild thread routing", () => {
     });
   });
 
+  for (const commandName of ["new", "clear", "compact"] as const) {
+    test(`/${commandName} is refused while a turn is running`, async () => {
+      await withTempHome(async (homeDir) => {
+        let turnStarted!: () => void;
+        const started = new Promise<void>((resolve) => {
+          turnStarted = resolve;
+        });
+        let releaseTurn!: () => void;
+        const hold = new Promise<void>((resolve) => {
+          releaseTurn = resolve;
+        });
+        const { calls, client, handleMessage, handleSlashCommand } =
+          await createPairedHandler(homeDir, {
+            onSendStream: async () => {
+              turnStarted();
+              await hold;
+              return "done";
+            },
+          });
+        const session = client.createChatSession("session_test", "discord");
+        const clear = spyOn(session, "clear");
+        const compact = spyOn(session, "compact");
+        const mutations = () =>
+          calls.createSession +
+          clear.mock.calls.length +
+          compact.mock.calls.length;
+
+        const dm = createDmMessage({ content: "hello agent" });
+        const turn = handleMessage(dm.message);
+        await started;
+        const before = mutations();
+
+        const refused = createSlashInteraction({
+          channelId: dm.message.channel.id,
+          commandName,
+        });
+        await handleSlashCommand(refused.interaction);
+        expect(mutations()).toBe(before);
+        expect(refused.replies).toHaveLength(1);
+
+        releaseTurn();
+        await turn;
+        expect(dm.sentMessages).toContain("done");
+
+        const allowed = createSlashInteraction({
+          channelId: dm.message.channel.id,
+          commandName,
+        });
+        await handleSlashCommand(allowed.interaction);
+        expect(mutations()).toBe(before + 1);
+      });
+    });
+  }
+
   test("close archives a bot-owned thread and clears ownership for that thread only", async () => {
     await withTempHome(async (homeDir) => {
       const { handleSlashCommand, threadStore, handleMessage } =

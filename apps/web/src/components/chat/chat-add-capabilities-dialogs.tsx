@@ -15,6 +15,7 @@ import {
 import { Input } from "@nakama/ui/input";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
+import { Link } from "react-router-dom";
 import { AddSkillDialog } from "@/components/SkillInstallDialog";
 import { McpServerDialog } from "@/components/soul-tools/mcp-tab/McpServerDialog";
 import { ToolAssignDialog } from "@/components/ToolAssignDialog";
@@ -40,6 +41,8 @@ import {
   useInstallSkillMutation,
 } from "@/hooks/use-resource-mutations";
 import { client, formatError } from "@/lib/client";
+import { toolPlaygroundPath } from "@/lib/navigation";
+import { invalidateQueries } from "@/lib/query-client";
 
 export function ToolCredentialCard({
   result,
@@ -189,7 +192,7 @@ function ToolSetupCard({
           form.reset();
           await onContinue(setupId);
           await queryClient.invalidateQueries({ queryKey });
-          await queryClient.invalidateQueries({ queryKey: ["profiles"] });
+          await invalidateQueries(queryClient, ["profiles"]);
         } catch (error) {
           setError(formatError(error));
         } finally {
@@ -267,17 +270,53 @@ function ToolSetupFields({
   );
 }
 
-function ToolCredentialForm({
+interface ToolCredentialFormProps {
+  canManage: boolean;
+  orgId: string;
+  toolId: string;
+  toolName: string;
+}
+
+function ToolCredentialForm(props: ToolCredentialFormProps) {
+  const { canManage, orgId, toolId, toolName } = props;
+  const status = useQuery({
+    enabled: canManage,
+    queryFn: () => client.forOrg(orgId).getToolCredentialStatus(toolId),
+    queryKey: ["tool-credentials", orgId, toolId],
+  });
+  const envFields = status.data?.env;
+  if (!(canManage && envFields)) {
+    return <ToolApiKeyForm {...props} />;
+  }
+  // Tools with several declared settings are filled in on the playground,
+  // which shows one field per variable.
+  return (
+    <div className="flex w-full max-w-sm items-center justify-between gap-3 rounded-xl border bg-card p-4">
+      <div className="min-w-0">
+        <p className="truncate font-medium text-sm">{toolName}</p>
+        <p className="text-muted-foreground text-xs" role="status">
+          {envFields.every((field) => field.configured)
+            ? "Settings saved"
+            : "Connect settings"}
+        </p>
+      </div>
+      <Button
+        render={<Link to={toolPlaygroundPath(toolId)} />}
+        size="sm"
+        variant="outline"
+      >
+        Configure
+      </Button>
+    </div>
+  );
+}
+
+function ToolApiKeyForm({
   toolId,
   toolName,
   orgId,
   canManage,
-}: {
-  toolId: string;
-  toolName: string;
-  orgId: string;
-  canManage: boolean;
-}) {
+}: ToolCredentialFormProps) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

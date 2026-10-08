@@ -242,7 +242,7 @@ export async function continueAnthropicUntilDone(
       : {}),
   };
   const requestBase = {
-    max_tokens: options.thinking?.maxOutputTokens ?? 4096,
+    max_tokens: 4096,
     messages: apiMessages,
     model: options.model,
     system: options.system,

@@ -6,7 +6,11 @@ import {
 import { AgentService } from "../../services/agent-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
-import { loginUserSession, seedOrgAdmin } from "../test-session-helpers";
+import {
+  loginUserSession,
+  seedOrgAdmin,
+  setupFreshInstallSession,
+} from "../test-session-helpers";
 
 setupTestConfigDir("nakama-rbac-mutations-test-");
 
@@ -200,4 +204,52 @@ describe("RBAC: admin can still reach the same routes (not a 403)", () => {
 
     expect(response.status).not.toBe(403);
   });
+});
+
+test("force deleting an MCP server requires a platform admin", async () => {
+  const calls: Array<[string, boolean]> = [];
+  const { app, authService, databaseAdapter } = createMinimalHonoApp({
+    mcpService: {
+      deleteServer: async (serverId: string, force: boolean) => {
+        calls.push([serverId, force]);
+      },
+    },
+  });
+  const platformAdmin = await setupFreshInstallSession(app, databaseAdapter);
+  const orgId = platformAdmin.orgId!;
+  await seedOrgAdmin(databaseAdapter, {
+    authService,
+    email: "org-admin@example.com",
+    orgId,
+    password: PASSWORD,
+    role: "admin",
+    userId: "user_org_admin",
+  });
+  const orgAdmin = await loginUserSession(
+    app,
+    "org-admin@example.com",
+    PASSWORD,
+    orgId
+  );
+  const url = "http://localhost:4310/v1/mcp/servers/mcp_test?force=true";
+
+  const denied = await app.fetch(
+    new Request(url, {
+      headers: orgAdmin.headers({ "X-CSRF-Token": orgAdmin.csrfToken }),
+      method: "DELETE",
+    })
+  );
+  expect(denied.status).toBe(403);
+  expect(calls).toEqual([]);
+
+  const allowed = await app.fetch(
+    new Request(url, {
+      headers: platformAdmin.headers({
+        "X-CSRF-Token": platformAdmin.csrfToken,
+      }),
+      method: "DELETE",
+    })
+  );
+  expect(allowed.status).toBe(204);
+  expect(calls).toEqual([["mcp_test", true]]);
 });

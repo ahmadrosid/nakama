@@ -15,6 +15,10 @@ import {
 } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
+import {
+  createAttachmentLoader,
+  createAttachmentSaver,
+} from "./attachment-service";
 import { ProfileService } from "./profile-service";
 import {
   archiveSessionHistory,
@@ -86,6 +90,35 @@ async function seedSession(
     profileId,
     title: null,
   });
+}
+
+/** Foreign keys on, as in production: the in-memory adapter turns them off. */
+async function openDatabaseWithProfiles(
+  ...profiles: [orgId: string, profileId: string][]
+) {
+  const database = await createSqliteDatabase(":memory:");
+  const now = new Date().toISOString();
+  for (const [orgId, id] of profiles) {
+    await database.adapter.upsertOrganization({
+      createdAt: now,
+      id: orgId,
+      name: orgId,
+      slug: orgId,
+      updatedAt: now,
+    });
+    await database.adapter.upsertProfile({
+      createdAt: now,
+      id,
+      isDefault: true,
+      isSuper: false,
+      model: null,
+      name: id,
+      orgId,
+      systemPrompt: "",
+      updatedAt: now,
+    });
+  }
+  return database;
 }
 
 describe("session persistence", () => {
@@ -501,6 +534,116 @@ describe("session persistence", () => {
     await expect(readFile(attachmentPath)).rejects.toThrow();
     expect(await db.getAttachment("attachment")).toBeNull();
   });
+
+  test("a branch keeps its attachments after the source session is purged", async () => {
+    const database = await openDatabaseWithProfiles(
+      ["org_1", "profile"],
+      ["org_2", "other-profile"]
+    );
+    const db = database.adapter;
+    try {
+      const service = new AgentService(null, null, db);
+      const sourceId = await service.createSession("org_1", "web", "profile");
+      const { attachmentId } = await createAttachmentSaver(db, {
+        channel: "web",
+        orgId: "org_1",
+        profileId: "profile",
+        sessionId: sourceId,
+      })({
+        bytes: Buffer.from("shared"),
+        kind: "image",
+        mediaType: "image/png",
+      });
+      const history: ChatMessage[] = [
+        {
+          content: [
+            {
+              attachmentId,
+              mediaType: "image/png",
+              size: 6,
+              type: "image_ref",
+            },
+          ],
+          role: "user",
+        },
+      ];
+      await replaceSessionHistory(db, sourceId, history);
+      // Another organization naming the same id must not keep the file alive.
+      const foreignId = await service.createSession(
+        "org_2",
+        "web",
+        "other-profile"
+      );
+      await replaceSessionHistory(db, foreignId, history);
+      const load = createAttachmentLoader(db, {
+        orgId: "org_1",
+        profileId: "profile",
+      });
+
+      const branch = await service.branchSession(sourceId, 0, "org_1");
+      expect(await service.purgeSession(sourceId, "org_1")).toBe(true);
+      expect((await load(attachmentId))?.bytes.toString()).toBe("shared");
+
+      expect(await service.purgeSession(branch!.sessionId, "org_1")).toBe(true);
+      expect(await load(attachmentId)).toBeNull();
+      expect(await db.getAttachment(attachmentId)).toBeNull();
+    } finally {
+      database.close();
+    }
+  });
+
+  test.each([
+    ["clearSession", "cached"],
+    ["clearSession", "evicted"],
+    ["purgeSession", "cached"],
+    ["purgeSession", "evicted"],
+  ] as const)(
+    "%s during a turn leaves no history behind (%s session)",
+    async (method, cache) => {
+      const database = await openDatabaseWithProfiles(["org_1", "profile"]);
+      const db = database.adapter;
+      try {
+        const service = new AgentService(null, null, db);
+        const sessionId = await service.createSession(
+          "org_1",
+          "web",
+          "profile"
+        );
+        const session = await service.resolveSession(sessionId, "org_1");
+        const paused = Promise.withResolvers<void>();
+        const release = Promise.withResolvers<void>();
+        // The wrapper persists the user message, then calls this: the turn is
+        // held open exactly where a provider call would be.
+        const turn = session!.send("hello", {
+          async onUserMessage() {
+            paused.resolve();
+            await release.promise;
+          },
+        });
+        await paused.promise;
+        expect(await db.listMessagesForSession(sessionId)).toHaveLength(1);
+        if (cache === "evicted") {
+          // A profile edit drops the cached session while its turn still runs.
+          await service.updateProfile("org_1", "profile", { model: null });
+        }
+
+        expect(await service[method](sessionId, "org_1")).toBe(true);
+        release.resolve();
+        await turn;
+
+        expect(await db.listMessagesForSession(sessionId)).toEqual([]);
+        if (method === "clearSession") {
+          expect(
+            (await service.getSessionMessages(sessionId, "org_1"))?.messages
+          ).toEqual([]);
+          const next = await service.resolveSession(sessionId, "org_1");
+          expect(next!.getHistory()).toEqual([]);
+        }
+      } finally {
+        database.close();
+      }
+    }
+  );
 
   test("clear during an archive write does not resurrect history or leave an archive", async () => {
     const db = createInMemoryDatabaseAdapter();

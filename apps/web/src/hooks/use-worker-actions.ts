@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/use-auth";
 import { useChannelProfileId } from "@/hooks/use-app-queries";
 import { client } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 function useWorkerMutation(mutationFn: (name: string) => Promise<unknown>) {
@@ -9,12 +10,10 @@ function useWorkerMutation(mutationFn: (name: string) => Promise<unknown>) {
 
   return useMutation({
     mutationFn,
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.systemStatus }),
-        queryClient.invalidateQueries({ queryKey: ["plugin-workers"] }),
-      ]);
-    },
+    onSuccess: () =>
+      invalidateQueries(queryClient, queryKeys.systemStatus, [
+        "plugin-workers",
+      ]),
   });
 }
 

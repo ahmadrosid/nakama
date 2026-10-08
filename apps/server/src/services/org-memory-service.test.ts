@@ -99,6 +99,18 @@ describe("OrgMemoryService", () => {
     );
   });
 
+  test("no-op save does not create history", async () => {
+    const service = await setup();
+    const content = `${ORG_MEMORY_PREAMBLE}\n\n- stable fact\n`;
+
+    await service.setMemory("org_a", content);
+    expect((await service.listHistory("org_a")).changes).toHaveLength(1);
+
+    await service.setMemory("org_a", content);
+
+    expect((await service.listHistory("org_a")).changes).toHaveLength(1);
+  });
+
   test("search finds bullets in the live file and archive files", async () => {
     const service = await setup();
     await service.addFact("org_a", "we use Bun not Node", { pin: true });
@@ -407,5 +419,42 @@ describe("OrgMemoryService", () => {
     expect(archived.archived).toBe(1);
     const parsed = parseOrgMemoryContent(await service.getMemory("org_b"));
     expect(parsed.pinned).toEqual(["active fact"]);
+  });
+
+  test("concurrent fact additions all survive", async () => {
+    const service = await setup();
+    const facts = ["first fact", "second fact", "third fact", "fourth fact"];
+
+    await Promise.all(
+      facts.map((fact) => service.addFact("org_a", fact, { pin: true }))
+    );
+
+    const parsed = parseOrgMemoryContent(await service.getMemory("org_a"));
+    expect(parsed.pinned.sort()).toEqual([...facts].sort());
+  });
+
+  test("concurrent approvals and a write from a second service instance all survive", async () => {
+    const service = await setup();
+    // The server builds one service for the routes and one inside AgentService.
+    const second = new OrgMemoryService(null, { configDir: tempDir });
+    const proposals = [
+      await service.propose("org_a", { bullet: "approved one" }),
+      await service.propose("org_a", { bullet: "approved two" }),
+    ];
+
+    await Promise.all([
+      ...proposals.map((proposal) =>
+        service.approveProposal("org_a", proposal.proposalId!, "admin_user", {
+          pin: true,
+        })
+      ),
+      second.addRecentLogFact("org_a", "logged fact", "2026-01-01"),
+    ]);
+
+    const parsed = parseOrgMemoryContent(await service.getMemory("org_a"));
+    expect(parsed.pinned.sort()).toEqual(["approved one", "approved two"]);
+    expect(parsed.sections.flatMap((section) => section.bullets)).toEqual([
+      "logged fact",
+    ]);
   });
 });

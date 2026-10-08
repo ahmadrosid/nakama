@@ -1,18 +1,26 @@
-import {
-  getKnowledgeIndexStatus,
-  isKnowledgeIndexEnabled,
-  listAccessibleKnowledgeDocuments,
-} from "./semantic-index";
 import { DEFAULT_KNOWLEDGE_SOURCES, NAKAMA_DOCS_LLMS_URL } from "./sources";
+import {
+  getProfileSharedDocumentIds,
+  listKnowledgeBaseDocuments,
+  listOrganizationKnowledgeBaseDocuments,
+} from "./store";
 
 export async function composeKnowledgeBaseCatalog(
   orgId: string,
   profileId: string
 ): Promise<string> {
-  const [documents, enabled] = await Promise.all([
-    listAccessibleKnowledgeDocuments(orgId, profileId),
-    isKnowledgeIndexEnabled(orgId),
-  ]);
+  const [profileDocuments, sharedDocumentIds, organizationDocuments] =
+    await Promise.all([
+      listKnowledgeBaseDocuments(orgId, profileId),
+      getProfileSharedDocumentIds(orgId, profileId),
+      listOrganizationKnowledgeBaseDocuments(orgId),
+    ]);
+  const documents = [
+    ...profileDocuments,
+    ...organizationDocuments.filter((document) =>
+      sharedDocumentIds.includes(document.id)
+    ),
+  ];
   const sources = DEFAULT_KNOWLEDGE_SOURCES;
   const readyDocuments = documents.filter(
     (document) => document.status === "ready"
@@ -25,14 +33,9 @@ export async function composeKnowledgeBaseCatalog(
   const sections: string[] = [];
 
   if (readyDocuments.length > 0) {
-    const status = enabled
-      ? await getKnowledgeIndexStatus(orgId, profileId)
-      : null;
-    sections.push("# Uploaded documents");
     sections.push(
-      status && (status.status === "ready" || status.status === "partial")
-        ? `${readyDocuments.length} ready; ${status.indexedCount} indexed. Use knowledge_base_index to find topics, then knowledge_base_search to verify facts.`
-        : `${readyDocuments.length} ready. Use knowledge_base_search to find facts.`
+      "# Uploaded documents",
+      `${readyDocuments.length} ready documents. Use knowledge_base_search to find facts in their contents.`
     );
   }
 

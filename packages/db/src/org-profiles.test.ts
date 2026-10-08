@@ -122,7 +122,10 @@ describe("seedOrgSuperBotProfile", () => {
     );
 
     for (const toolId of Object.values(BUILTIN_TOOL_IDS)) {
-      if (toolId !== BUILTIN_TOOL_IDS.delete_file) {
+      if (
+        toolId !== BUILTIN_TOOL_IDS.delete_file &&
+        toolId !== BUILTIN_TOOL_IDS.email
+      ) {
         expect(toolIds).toContain(toolId);
       }
     }
@@ -130,6 +133,28 @@ describe("seedOrgSuperBotProfile", () => {
     expect(toolIds).toContain(BASH_TOOL_ID);
     expect(toolIds).not.toContain(BUILTIN_TOOL_IDS.delete_file);
     expect(toolIds).not.toContain(GENERATE_IMAGE_TOOL_ID);
+  });
+
+  test("the shared mailbox tool is never assigned by default, on create or on a later boot", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    await ensureBuiltinToolDefinitions(db);
+    const superBot = await seedOrgSuperBotProfile(db, "org_a");
+    const defaultBot = await seedOrgDefaultProfile(db, "org_a");
+    const toolIdsOf = async (profileId: string) =>
+      (await db.listToolsForProfile(profileId)).map((tool) => tool.id);
+
+    expect(await toolIdsOf(superBot.id)).not.toContain(BUILTIN_TOOL_IDS.email);
+    expect(await toolIdsOf(defaultBot.id)).not.toContain(
+      BUILTIN_TOOL_IDS.email
+    );
+
+    // An admin's explicit choice survives the seed that runs on every boot.
+    await db.assignToolToProfile(defaultBot.id, BUILTIN_TOOL_IDS.email);
+    await seedOrgSuperBotProfile(db, "org_a");
+    await seedOrgDefaultProfile(db, "org_a");
+
+    expect(await toolIdsOf(superBot.id)).not.toContain(BUILTIN_TOOL_IDS.email);
+    expect(await toolIdsOf(defaultBot.id)).toContain(BUILTIN_TOOL_IDS.email);
   });
 
   test("unassigns delete_file from an existing super bot", async () => {
