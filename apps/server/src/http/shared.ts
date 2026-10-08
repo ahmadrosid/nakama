@@ -509,10 +509,14 @@ export function assertJsonRequest(request: Request): void {
 
 export async function readJson<T>(
   request: Request,
-  schema: ZodType<T>
+  schema?: ZodType<T>
 ): Promise<T> {
   try {
     const body = await request.json();
+
+    if (!schema) {
+      return body;
+    }
 
     const parsed = schema.safeParse(body);
 
@@ -550,7 +554,7 @@ export function parseOptionalQueryEnum<const T extends string>(
 export async function readOptionalJson<T>(
   request: Request,
   fallback: T,
-  schema: ZodType<T>
+  schema?: ZodType<T>
 ): Promise<T> {
   const body = await request.text();
 
@@ -559,7 +563,13 @@ export async function readOptionalJson<T>(
   }
 
   try {
-    const parsed = schema.safeParse(JSON.parse(body));
+    const value = JSON.parse(body);
+
+    if (!schema) {
+      return value;
+    }
+
+    const parsed = schema.safeParse(value);
 
     if (!parsed.success) {
       throw new NakamaApiError("Invalid request body.", 400);
