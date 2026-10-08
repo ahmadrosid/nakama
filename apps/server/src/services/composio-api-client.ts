@@ -19,14 +19,6 @@ export interface ComposioSessionMcpEndpoint {
   url: string;
 }
 
-interface ComposioSessionConfig {
-  connectedAccounts?: { enable: string[] };
-  mcp: true;
-  sessionPreset: "direct_tools";
-  toolkits?: { enable: string[] };
-  tools?: Record<string, { enable: string[] }>;
-}
-
 export function extractComposioListItems<T>(
   response: { items?: T[] } | T[] | null | undefined
 ): T[] {
@@ -46,37 +38,36 @@ export function parseCatalogToolkitItem(item: {
   name?: unknown;
   meta?: { description?: unknown; logo?: unknown };
 }): ComposioCatalogToolkit | null {
-  const slug = isString(item.slug)
-    ? item.slug
-    : isString(item.name)
-      ? item.name.toLowerCase()
-      : null;
+  const slug =
+    typeof item.slug === "string"
+      ? item.slug
+      : typeof item.name === "string"
+        ? item.name.toLowerCase()
+        : null;
 
   if (!slug) {
     return null;
   }
 
   return {
-    description: isString(item.meta?.description)
-      ? item.meta.description
-      : null,
-    logoUrl: isString(item.meta?.logo) ? item.meta.logo : null,
-    name: isString(item.name) ? item.name : slug,
+    description:
+      typeof item.meta?.description === "string" ? item.meta.description : null,
+    logoUrl: typeof item.meta?.logo === "string" ? item.meta.logo : null,
+    name: typeof item.name === "string" ? item.name : slug,
     slug: slug.toLowerCase(),
   };
 }
 
-export function parseLinkRedirectUrl<T>(response: T): string | null {
-  if (isString(response) && response.startsWith("http")) {
+export function parseLinkRedirectUrl(response: unknown): string | null {
+  if (typeof response === "string" && response.startsWith("http")) {
     return response;
   }
 
-  const record = readRecord(response);
-
-  if (!record) {
+  if (!response || typeof response !== "object") {
     return null;
   }
 
+  const record = response as Record<string, unknown>;
   for (const key of [
     "redirectUrl",
     "redirect_url",
@@ -84,19 +75,15 @@ export function parseLinkRedirectUrl<T>(response: T): string | null {
     "authorization_url",
     "url",
   ]) {
-    const value = record.get(key);
-
-    if (isString(value) && value) {
-      return value;
+    if (typeof record[key] === "string" && record[key]) {
+      return record[key] as string;
     }
   }
 
   for (const nestedKey of ["connectionRequest", "data", "connection"]) {
-    const nested = record.get(nestedKey);
-
-    if (nested instanceof Object) {
+    const nested = record[nestedKey];
+    if (nested && typeof nested === "object") {
       const nestedUrl = parseLinkRedirectUrl(nested);
-
       if (nestedUrl) {
         return nestedUrl;
       }
@@ -106,46 +93,36 @@ export function parseLinkRedirectUrl<T>(response: T): string | null {
   return null;
 }
 
-function parseConnectionRequestId<T>(response: T): string | undefined {
-  const record = readRecord(response);
-
-  if (!record) {
+function parseConnectionRequestId(response: unknown): string | undefined {
+  if (!response || typeof response !== "object") {
     return;
   }
 
-  const id = record.get("id");
-
-  if (isString(id)) {
-    return id;
+  const record = response as Record<string, unknown>;
+  if (typeof record.id === "string") {
+    return record.id;
   }
 
-  const connectedAccountId = record.get("connectedAccountId");
-
-  if (isString(connectedAccountId)) {
-    return connectedAccountId;
+  if (typeof record.connectedAccountId === "string") {
+    return record.connectedAccountId;
   }
 
-  const connectedAccountIdSnake = record.get("connected_account_id");
-
-  if (isString(connectedAccountIdSnake)) {
-    return connectedAccountIdSnake;
+  if (typeof record.connected_account_id === "string") {
+    return record.connected_account_id;
   }
 }
 
-export function unwrapComposioError(cause: unknown): Error {
-  if (!(cause instanceof Error)) {
-    return new Error(String(cause));
+export function unwrapComposioError(error: unknown): Error {
+  if (!(error instanceof Error)) {
+    return new Error(String(error));
   }
 
-  const nestedCause = "cause" in cause ? cause.cause : undefined;
-
-  if (nestedCause instanceof Error && nestedCause.message.trim()) {
-    return new Error(`${cause.message}: ${nestedCause.message}`, {
-      cause: nestedCause,
-    });
+  const cause = (error as Error & { cause?: unknown }).cause;
+  if (cause instanceof Error && cause.message.trim()) {
+    return new Error(`${error.message}: ${cause.message}`, { cause });
   }
 
-  return cause;
+  return error;
 }
 
 type ComposioAuthConfigClient = {
@@ -165,7 +142,6 @@ export async function resolveAuthConfigId(
   toolkitSlug: string
 ): Promise<string> {
   const slug = toolkitSlug.toLowerCase();
-
   const listed = await composio.authConfigs.list({
     toolkit: slug,
   });
@@ -173,13 +149,11 @@ export async function resolveAuthConfigId(
   const existingId =
     listed.items.find((item) => item.id && item.isComposioManaged === false)
       ?.id ?? listed.items.find((item) => item.id)?.id;
-
   if (existingId) {
     return existingId;
   }
 
   const created = await composio.authConfigs.create(slug);
-
   if (!created.id) {
     throw new Error(`Failed to create Composio auth config for ${slug}.`);
   }
@@ -196,32 +170,39 @@ export function parseSessionToolItems(
     input_parameters?: unknown;
   }>
 ): ComposioCachedToolSummary[] {
-  return items.flatMap((tool) => {
-    const slug = isString(tool.slug)
-      ? tool.slug
-      : isString(tool.name)
-        ? tool.name
-        : null;
+  return items
+    .map((tool) => {
+      const slug =
+        typeof tool.slug === "string"
+          ? tool.slug
+          : typeof tool.name === "string"
+            ? tool.name
+            : null;
 
-    if (!slug) {
-      return [];
-    }
+      if (!slug) {
+        return null;
+      }
 
-    const inputSchema =
-      readRecord(tool.inputParameters) ?? readRecord(tool.input_parameters);
+      const inputSchema =
+        typeof tool.inputParameters === "object" &&
+        tool.inputParameters !== null
+          ? (tool.inputParameters as Record<string, unknown>)
+          : typeof tool.input_parameters === "object" &&
+              tool.input_parameters !== null
+            ? (tool.input_parameters as Record<string, unknown>)
+            : {};
 
-    return [
-      {
+      return {
         description:
-          isString(tool.description) && tool.description.trim()
+          typeof tool.description === "string" && tool.description.trim()
             ? tool.description
             : slug,
-        inputSchema: inputSchema ? Object.fromEntries(inputSchema) : {},
-        name: isString(tool.name) ? tool.name : slug,
+        inputSchema,
+        name: typeof tool.name === "string" ? tool.name : slug,
         slug,
-      },
-    ];
-  });
+      };
+    })
+    .filter((tool): tool is ComposioCachedToolSummary => tool !== null);
 }
 
 export class ComposioApiClient {
@@ -253,7 +234,6 @@ export class ComposioApiClient {
         this.composio,
         toolkitSlug
       );
-
       const response = await this.composio.connectedAccounts.link(
         userId,
         authConfigId,
@@ -306,7 +286,6 @@ export class ComposioApiClient {
     const tools = await this.composio.tools.getRawToolRouterSessionTools(
       session.sessionId
     );
-
     return parseSessionToolItems(extractComposioListItems(tools));
   }
 
@@ -330,21 +309,13 @@ export class ComposioApiClient {
         ? connectedAccountsByToolkit
         : undefined;
 
-    const config: ComposioSessionConfig = {
+    return {
       mcp: true as const,
       sessionPreset: "direct_tools" as const,
       toolkits: toolkitSlugs.length > 0 ? { enable: toolkitSlugs } : undefined,
+      ...(connectedAccounts ? { connectedAccounts } : {}),
+      ...(Object.keys(tools).length > 0 ? { tools } : {}),
     };
-
-    if (connectedAccounts) {
-      config.connectedAccounts = connectedAccounts;
-    }
-
-    if (Object.keys(tools).length > 0) {
-      config.tools = tools;
-    }
-
-    return config;
   }
 
   private openSession(session: {
@@ -364,16 +335,4 @@ export class ComposioApiClient {
       url,
     };
   }
-}
-
-function readRecord<T>(value: T): Map<string, unknown> | undefined {
-  if (!(value instanceof Object)) {
-    return;
-  }
-
-  return new Map(Object.entries(value));
-}
-
-function isString<T>(value: T): value is T & string {
-  return Object.prototype.toString.call(value) === "[object String]";
 }

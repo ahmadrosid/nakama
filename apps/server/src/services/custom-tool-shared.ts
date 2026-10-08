@@ -1,7 +1,12 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { JsonSchema, ToolDefinition, ToolSetupPlan } from "@nakama/core";
+import type {
+  JsonSchema,
+  ToolContext,
+  ToolDefinition,
+  ToolSetupPlan,
+} from "@nakama/core";
 import {
   ensureUserConfigDir,
   getCustomToolsDir,
@@ -15,55 +20,7 @@ import {
 import type { StoredToolRecord } from "@nakama/db";
 
 const CREDENTIAL_SECTION_PREFIX = "tool-key.";
-
 const SETUP_SECTION_PREFIX = "tool-setup.";
-
-export type CustomToolJsonValue =
-  | boolean
-  | null
-  | number
-  | string
-  | CustomToolJsonValue[]
-  | { [key: string]: CustomToolJsonValue };
-
-export function parseCustomToolJsonValue<T>(value: T): CustomToolJsonValue {
-  if (value === null || value === true || value === false || isString(value)) {
-    return value;
-  }
-
-  if (isFiniteNumber(value)) {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    return value.map(parseCustomToolJsonValue);
-  }
-
-  if (!(value instanceof Object)) {
-    throw new Error("Custom tool values must be JSON serializable.");
-  }
-
-  const prototype = Object.getPrototypeOf(value);
-
-  if (prototype !== Object.prototype && prototype !== null) {
-    throw new Error("Custom tool values must be JSON serializable.");
-  }
-
-  return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => [
-      key,
-      parseCustomToolJsonValue(entry),
-    ])
-  );
-}
-
-function isFiniteNumber<T>(value: T): value is T & number {
-  return (
-    Object.prototype.toString.call(value) === "[object Number]" &&
-    !(value instanceof Number) &&
-    Number.isFinite(value)
-  );
-}
 
 /**
  * Section names encode `[orgId, id]` as base64url so every entry belonging to
@@ -89,12 +46,10 @@ function belongsToOrgSection(
   if (!section.startsWith(prefix)) {
     return false;
   }
-
   try {
     const decoded: unknown = JSON.parse(
       Buffer.from(section.slice(prefix.length), "base64url").toString("utf8")
     );
-
     return Array.isArray(decoded) && decoded[0] === orgId;
   } catch {
     // Not one of our encoded sections, so it is not this org's entry.
@@ -105,12 +60,11 @@ function belongsToOrgSection(
 async function readConfig() {
   try {
     return parseIniWithSections(await readFile(getUserConfigPath(), "utf8"));
-  } catch (cause) {
-    if (getNodeErrorCode(cause) === "ENOENT") {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return { global: {}, sections: {} };
     }
-
-    throw cause;
+    throw error;
   }
 }
 
@@ -123,30 +77,25 @@ const CREDENTIAL_KEY_FILE = "tool-credentials.key";
 
 async function readCredentialEncryptionKey(): Promise<Buffer> {
   const keyPath = path.join(getUserConfigDir(), CREDENTIAL_KEY_FILE);
-
   try {
     return Buffer.from((await readFile(keyPath, "utf8")).trim(), "base64url");
-  } catch (cause) {
-    if (getNodeErrorCode(cause) !== "ENOENT") {
-      throw cause;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
     }
   }
-
   await ensureUserConfigDir();
   const key = randomBytes(32);
-
   try {
     await writeFile(keyPath, key.toString("base64url"), {
       flag: "wx",
       mode: 0o600,
     });
-
     return key;
-  } catch (cause) {
-    if (getNodeErrorCode(cause) !== "EEXIST") {
-      throw cause;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      throw error;
     }
-
     return Buffer.from((await readFile(keyPath, "utf8")).trim(), "base64url");
   }
 }
@@ -156,22 +105,18 @@ async function encryptForOrg(
   plaintext: string
 ): Promise<string> {
   const iv = randomBytes(12);
-
   const cipher = createCipheriv(
     "aes-256-gcm",
     await readCredentialEncryptionKey(),
     iv
   );
-
   // Binding the org stops a ciphertext copied into another org's section
   // from decrypting there.
   cipher.setAAD(Buffer.from(orgId, "utf8"));
-
   const ciphertext = Buffer.concat([
     cipher.update(plaintext, "utf8"),
     cipher.final(),
   ]);
-
   return Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString(
     "base64url"
   );
@@ -179,16 +124,13 @@ async function encryptForOrg(
 
 async function decryptForOrg(orgId: string, value: string): Promise<string> {
   const encoded = Buffer.from(value, "base64url");
-
   const decipher = createDecipheriv(
     "aes-256-gcm",
     await readCredentialEncryptionKey(),
     encoded.subarray(0, 12)
   );
-
   decipher.setAAD(Buffer.from(orgId, "utf8"));
   decipher.setAuthTag(encoded.subarray(12, 28));
-
   return Buffer.concat([
     decipher.update(encoded.subarray(28)),
     decipher.final(),
@@ -210,7 +152,6 @@ async function decryptToolApiKey(
     // Keys saved before encryption stay readable until the next save.
     return credential?.api_key;
   }
-
   return decryptForOrg(orgId, credential.api_key_enc);
 }
 
@@ -221,16 +162,10 @@ async function decryptToolEnv(
   if (!credential?.env_enc) {
     return {};
   }
-
-  const parsed: unknown = JSON.parse(
-    await decryptForOrg(orgId, credential.env_enc)
-  );
-
-  if (!isToolEnvironment(parsed)) {
-    return {};
-  }
-
-  return parsed;
+  return JSON.parse(await decryptForOrg(orgId, credential.env_enc)) as Record<
+    string,
+    string
+  >;
 }
 
 export async function loadToolApiKey(
@@ -255,21 +190,24 @@ export async function loadToolEnv(
 
 let credentialWrite: Promise<void> = Promise.resolve();
 
-function validateApiKey(value: string): string {
-  if (!value.trim() || value.length > 8192 || /[\r\n\0]/.test(value)) {
+function validateApiKey(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    !value.trim() ||
+    value.length > 8192 ||
+    /[\r\n\0]/.test(value)
+  ) {
     throw new NakamaApiError("Enter a valid API key.", 400);
   }
-
   return value.trim();
 }
 
 export function saveToolApiKey(
   orgId: string,
   toolId: string,
-  value: string
+  value: unknown
 ): Promise<void> {
   const apiKey = validateApiKey(value);
-
   const write = credentialWrite.then(async () => {
     const encrypted = await encryptToolApiKey(orgId, apiKey);
     const parsed = await readConfig();
@@ -278,9 +216,7 @@ export function saveToolApiKey(
     parsed.sections[section] = { ...existing, ...encrypted };
     await writeParsedConfigIni(parsed.global, parsed.sections);
   });
-
   credentialWrite = write.catch(() => undefined);
-
   return write;
 }
 
@@ -290,7 +226,6 @@ export function saveToolApiKey(
  * that Nakama itself sets are refused, so a saved value cannot load code.
  */
 const TOOL_ENV_NAME_PATTERN = /^[A-Z][A-Z0-9_]{0,63}$/;
-
 const BLOCKED_TOOL_ENV_PREFIXES = [
   "BUN_",
   "DYLD_",
@@ -300,7 +235,6 @@ const BLOCKED_TOOL_ENV_PREFIXES = [
   "NPM_",
   "PYTHON",
 ];
-
 const BLOCKED_TOOL_ENV_NAMES = new Set([
   "COMSPEC",
   "HOME",
@@ -320,31 +254,23 @@ export interface ToolEnvVar {
 }
 
 /** Reads and validates handlerConfig.env. Throws on any invalid entry. */
-export function parseToolEnvDeclarations(
-  value: unknown[] | undefined
-): ToolEnvVar[] {
+export function parseToolEnvDeclarations(value: unknown): ToolEnvVar[] {
   if (value === undefined) {
     return [];
   }
-
-  if (value.length > 20) {
+  if (!Array.isArray(value) || value.length > 20) {
     throw new NakamaApiError(
       "handlerConfig.env must be a list of up to 20 variables.",
       400
     );
   }
-
   const seen = new Set<string>();
-
   return value.map((entry) => {
     const record =
-      entry instanceof Object && !Array.isArray(entry)
-        ? new Map(Object.entries(entry))
-        : new Map<string, unknown>();
-
-    const nameValue = record.get("name");
-    const name = isString(nameValue) ? nameValue.trim() : "";
-
+      typeof entry === "object" && entry !== null
+        ? (entry as Record<string, unknown>)
+        : {};
+    const name = typeof record.name === "string" ? record.name.trim() : "";
     if (
       !TOOL_ENV_NAME_PATTERN.test(name) ||
       BLOCKED_TOOL_ENV_NAMES.has(name) ||
@@ -356,34 +282,22 @@ export function parseToolEnvDeclarations(
         400
       );
     }
-
-    const secret = record.get("secret");
-
-    if (
-      secret !== undefined &&
-      Object.prototype.toString.call(secret) !== "[object Boolean]"
-    ) {
+    if (record.secret !== undefined && typeof record.secret !== "boolean") {
       throw new NakamaApiError(
         "handlerConfig.env[].secret must be a boolean.",
         400
       );
     }
-
     seen.add(name);
-
-    return { name, secret: secret === true };
+    return { name, secret: record.secret === true };
   });
 }
 
-export function readToolEnvDeclarations<T>(handlerConfig: T): ToolEnvVar[] {
+export function readToolEnvDeclarations(handlerConfig: unknown): ToolEnvVar[] {
   try {
-    if (!(handlerConfig instanceof Object) || Array.isArray(handlerConfig)) {
-      return [];
-    }
-
-    const value = new Map(Object.entries(handlerConfig)).get("env");
-
-    return Array.isArray(value) ? parseToolEnvDeclarations(value) : [];
+    return parseToolEnvDeclarations(
+      (handlerConfig as Record<string, unknown> | null)?.env
+    );
   } catch {
     return [];
   }
@@ -394,23 +308,24 @@ export function saveToolEnv(
   orgId: string,
   toolId: string,
   declared: ToolEnvVar[],
-  values: Record<string, string>
+  values: Record<string, unknown>
 ): Promise<void> {
   const names = new Set(declared.map((entry) => entry.name));
   const updates: Record<string, string> = {};
-
   for (const [name, value] of Object.entries(values)) {
     if (!names.has(name)) {
       throw new NakamaApiError(`${name} is not a variable of this tool.`, 400);
     }
-
-    if (!value.trim() || value.length > 8192 || /[\r\n\0]/.test(value)) {
+    if (
+      typeof value !== "string" ||
+      !value.trim() ||
+      value.length > 8192 ||
+      /[\r\n\0]/.test(value)
+    ) {
       throw new NakamaApiError(`Enter a valid value for ${name}.`, 400);
     }
-
     updates[name] = value.trim();
   }
-
   const write = credentialWrite.then(async () => {
     const parsed = await readConfig();
     const section = credentialSection(orgId, toolId);
@@ -422,9 +337,7 @@ export function saveToolEnv(
     };
     await writeParsedConfigIni(parsed.global, parsed.sections);
   });
-
   credentialWrite = write.catch(() => undefined);
-
   return write;
 }
 
@@ -438,18 +351,10 @@ export async function loadToolSetup(
 ): Promise<ToolSetupPlan> {
   const value = (await readConfig()).sections[setupSection(orgId, setupId)]
     ?.plan;
-
   if (!value) {
     throw new NakamaApiError("Tool setup not found.", 404);
   }
-
-  const parsed: unknown = JSON.parse(value);
-
-  if (!isToolSetupPlan(parsed)) {
-    throw new Error("Tool setup plan is invalid.");
-  }
-
-  return parsed;
+  return JSON.parse(value) as ToolSetupPlan;
 }
 
 export function saveToolSetup(
@@ -463,9 +368,7 @@ export function saveToolSetup(
     };
     await writeParsedConfigIni(parsed.global, parsed.sections);
   });
-
   credentialWrite = write.catch(() => undefined);
-
   return write;
 }
 
@@ -478,45 +381,30 @@ export function approveToolSetup(
     const parsed = await readConfig();
     const section = setupSection(orgId, setupId);
     const value = parsed.sections[section]?.plan;
-
     if (!value) {
       throw new NakamaApiError("Tool setup not found.", 404);
     }
-
-    const parsedPlan: unknown = JSON.parse(value);
-
-    if (!isToolSetupPlan(parsedPlan)) {
-      throw new Error("Tool setup plan is invalid.");
-    }
-
-    const plan = parsedPlan;
-
+    const plan = JSON.parse(value) as ToolSetupPlan;
     if (plan.status !== "pending") {
       return plan;
     }
-
     if (plan.requiresApiKey) {
       parsed.sections[credentialSection(orgId, setupId)] =
         await encryptToolApiKey(orgId, validateApiKey(input.apiKey));
     }
-
     const approved: ToolSetupPlan = {
       ...plan,
       profileId: input.profileId,
       status: "approved",
     };
-
     parsed.sections[section] = { plan: JSON.stringify(approved) };
     await writeParsedConfigIni(parsed.global, parsed.sections);
-
     return approved;
   });
-
   credentialWrite = write.then(
     () => undefined,
     () => undefined
   );
-
   return write;
 }
 
@@ -528,28 +416,22 @@ export function completeToolSetup(
   const write = credentialWrite.then(async () => {
     const parsed = await readConfig();
     const staged = credentialSection(orgId, plan.id);
-
     if (plan.requiresApiKey) {
       const credential = parsed.sections[staged];
-
       if (!(credential?.api_key_enc || credential?.api_key)) {
         throw new Error(
           "The API key is missing. Configure the tool before using it."
         );
       }
-
       parsed.sections[credentialSection(orgId, toolId)] = credential;
       delete parsed.sections[staged];
     }
-
     parsed.sections[setupSection(orgId, plan.id)] = {
       plan: JSON.stringify({ ...plan, status: "ready", toolId }),
     };
     await writeParsedConfigIni(parsed.global, parsed.sections);
   });
-
   credentialWrite = write.catch(() => undefined);
-
   return write;
 }
 
@@ -563,27 +445,21 @@ export function deleteOrgToolCredentials(orgId: string): Promise<void> {
   const write = credentialWrite.then(async () => {
     const parsed = await readConfig();
     let removed = false;
-
     for (const prefix of [CREDENTIAL_SECTION_PREFIX, SETUP_SECTION_PREFIX]) {
       for (const section of Object.keys(parsed.sections)) {
         if (!belongsToOrgSection(prefix, section, orgId)) {
           continue;
         }
-
         delete parsed.sections[section];
         removed = true;
       }
     }
-
     if (!removed) {
       return;
     }
-
     await writeParsedConfigIni(parsed.global, parsed.sections);
   });
-
   credentialWrite = write.catch(() => undefined);
-
   return write;
 }
 
@@ -604,25 +480,25 @@ function createErrorTool(
   };
 }
 
-export function readOptionalString<T>(value: T): string | undefined {
-  return isString(value) && value ? value : undefined;
+export function readOptionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value ? value : undefined;
 }
 
 /** Shared load path for javascript/python subprocess tools. */
-interface LoadCustomSubprocessToolOptions {
+export async function loadCustomSubprocessTool(options: {
   allowParallelSafe?: boolean;
   record: StoredToolRecord;
   resolveModulePath: (modulePath: string) => string;
-  run: ToolDefinition["run"];
+  run: (
+    modulePath: string,
+    input: unknown,
+    context: ToolContext,
+    env?: Record<string, string>
+  ) => Promise<unknown>;
   validateModule: (modulePath: string) => Promise<void>;
-}
-
-export async function loadCustomSubprocessTool(
-  options: LoadCustomSubprocessToolOptions
-): Promise<ToolDefinition | null> {
+}): Promise<ToolDefinition | null> {
   const { allowParallelSafe, record, resolveModulePath, run, validateModule } =
     options;
-
   const config = readHandlerConfig(record.handlerConfig);
 
   if (!config?.modulePath) {
@@ -653,34 +529,29 @@ export async function loadCustomSubprocessTool(
     );
   }
 
-  const definition: ToolDefinition = {
+  return {
     description: record.description,
     name: record.name,
     parameters: config.parameters ?? permissiveObjectSchema(),
+    ...(allowParallelSafe && config.parallelSafe ? { parallelSafe: true } : {}),
     async run(input, context) {
       if (record.orgId && record.orgId !== context.orgId) {
         throw new Error("Tool not available in this organization.");
       }
-
       const needsCredentials = config.requiresApiKey || config.env.length > 0;
-
       if (!context.orgId) {
         if (needsCredentials) {
           throw new Error("Organization context is required.");
         }
-
         return run(modulePath, input, context);
       }
-
       // A key saved from the playground reaches the tool even when the tool
       // was registered without requiresApiKey.
       const apiKey = await loadToolApiKey(context.orgId, record.id);
       const saved = await loadToolEnv(context.orgId, record.id);
-
       const missing = config.env
         .map((entry) => entry.name)
         .filter((name) => !saved[name]);
-
       if ((config.requiresApiKey && !apiKey) || missing.length > 0) {
         return {
           missing,
@@ -690,17 +561,13 @@ export async function loadCustomSubprocessTool(
           type: "tool_credentials_required",
         };
       }
-
       const env: Record<string, string> = {};
-
       for (const entry of config.env) {
         env[entry.name] = saved[entry.name]!;
       }
-
       if (apiKey) {
         env.NAKAMA_TOOL_API_KEY = apiKey;
       }
-
       // Keep accidental secret echoes and subprocess errors out of chat and
       // logs. Plain values such as URLs stay readable.
       const secrets = [
@@ -709,7 +576,6 @@ export async function loadCustomSubprocessTool(
           .filter((entry) => entry.secret)
           .map((entry) => env[entry.name]!),
       ];
-
       const redact = (text: string) =>
         secrets.reduce(
           (current, secret) =>
@@ -718,17 +584,14 @@ export async function loadCustomSubprocessTool(
               .replaceAll(JSON.stringify(secret).slice(1, -1), "[REDACTED]"),
           text
         );
-
-      const redactResult = (value: JsonToolValue): JsonToolValue => {
-        if (isString(value)) {
+      const redactResult = (value: unknown): unknown => {
+        if (typeof value === "string") {
           return redact(value);
         }
-
         if (Array.isArray(value)) {
           return value.map(redactResult);
         }
-
-        if (value instanceof Object) {
+        if (value && typeof value === "object") {
           return Object.fromEntries(
             Object.entries(value).map(([key, entry]) => [
               redact(key),
@@ -736,24 +599,11 @@ export async function loadCustomSubprocessTool(
             ])
           );
         }
-
         return value;
       };
-
       try {
         const result = await run(modulePath, input, context, env);
-
-        if (secrets.length === 0) {
-          return result;
-        }
-
-        if (!isJsonToolValue(result)) {
-          throw new Error(
-            "Tool returned a value that cannot be redacted safely."
-          );
-        }
-
-        return redactResult(result);
+        return secrets.length > 0 ? redactResult(result) : result;
       } catch (error) {
         throw new Error(
           redact(error instanceof Error ? error.message : String(error))
@@ -761,12 +611,6 @@ export async function loadCustomSubprocessTool(
       }
     },
   };
-
-  if (allowParallelSafe && config.parallelSafe) {
-    definition.parallelSafe = true;
-  }
-
-  return definition;
 }
 
 function isPathInsideDirectory(
@@ -788,125 +632,57 @@ interface CustomToolHandlerConfig {
   requiresApiKey?: boolean;
 }
 
-type JsonToolValue =
-  | boolean
-  | null
-  | number
-  | string
-  | JsonToolValue[]
-  | { [key: string]: JsonToolValue };
-
-function readHandlerConfig<T>(
-  handlerConfig: T
+function readHandlerConfig(
+  handlerConfig: unknown
 ): CustomToolHandlerConfig | null {
-  if (!(handlerConfig instanceof Object) || Array.isArray(handlerConfig)) {
+  if (typeof handlerConfig !== "object" || handlerConfig === null) {
     return null;
   }
 
-  const record = new Map(Object.entries(handlerConfig));
-  const rawModulePath = record.get("modulePath");
-
+  const record = handlerConfig as Record<string, unknown>;
   const modulePath =
-    isString(rawModulePath) && rawModulePath.trim()
-      ? rawModulePath.trim()
+    typeof record.modulePath === "string" && record.modulePath.trim()
+      ? record.modulePath.trim()
       : null;
 
   if (!modulePath) {
     return null;
   }
 
-  const rawParameters = record.get("parameters");
-  const parameters = isJsonSchema(rawParameters) ? rawParameters : undefined;
-
-  const parallelSafe = record.get("parallelSafe") === true;
+  const parameters = isJsonSchema(record.parameters)
+    ? record.parameters
+    : undefined;
+  const parallelSafe = record.parallelSafe === true;
 
   return {
-    env: readToolEnvDeclarations(handlerConfig),
+    env: readToolEnvDeclarations(record),
     modulePath,
     parallelSafe,
     parameters,
-    requiresApiKey: record.get("requiresApiKey") === true,
+    requiresApiKey: record.requiresApiKey === true,
   };
 }
 
-function isToolSetupPlan(value: unknown): value is ToolSetupPlan {
-  if (!(value instanceof Object) || Array.isArray(value)) {
-    return false;
-  }
-
-  const plan = new Map(Object.entries(value));
-  const status = plan.get("status");
-
-  return (
-    isString(plan.get("description")) &&
-    isString(plan.get("id")) &&
-    isString(plan.get("name")) &&
-    isString(plan.get("plan")) &&
-    isString(plan.get("sessionId")) &&
-    Object.prototype.toString.call(plan.get("requiresApiKey")) ===
-      "[object Boolean]" &&
-    (status === "pending" || status === "approved" || status === "ready") &&
-    (plan.get("profileId") === undefined || isString(plan.get("profileId"))) &&
-    (plan.get("toolId") === undefined || isString(plan.get("toolId")))
-  );
-}
-
-export function readHandlerModulePath<T>(handlerConfig: T): string | null {
-  if (!(handlerConfig instanceof Object) || Array.isArray(handlerConfig)) {
+export function readHandlerModulePath(handlerConfig: unknown): string | null {
+  if (typeof handlerConfig !== "object" || handlerConfig === null) {
     return null;
   }
 
-  const modulePath = new Map(Object.entries(handlerConfig)).get("modulePath");
+  const modulePath = (handlerConfig as Record<string, unknown>).modulePath;
 
-  if (!(isString(modulePath) && modulePath.trim())) {
+  if (typeof modulePath !== "string" || !modulePath.trim()) {
     return null;
   }
 
   return modulePath.trim();
 }
 
-export function isJsonSchema<T>(value: T): value is T & JsonSchema {
-  return value instanceof Object && !Array.isArray(value);
-}
-
-function getNodeErrorCode(cause: unknown): string | undefined {
-  if (!(cause instanceof Object && "code" in cause)) {
-    return;
-  }
-
-  return isString(cause.code) ? cause.code : undefined;
-}
-
-function isToolEnvironment(value: unknown): value is Record<string, string> {
-  return (
-    value instanceof Object &&
-    !Array.isArray(value) &&
-    Object.values(value).every(isString)
-  );
-}
-
-function isJsonToolValue(value: unknown): value is JsonToolValue {
-  if (value === null || value === true || value === false || isString(value)) {
-    return true;
-  }
-
-  if (
-    Object.prototype.toString.call(value) === "[object Number]" &&
-    !(value instanceof Number)
-  ) {
-    return Number.isFinite(value);
-  }
-
-  if (Array.isArray(value)) {
-    return value.every(isJsonToolValue);
-  }
-
-  return value instanceof Object && Object.values(value).every(isJsonToolValue);
+function isJsonSchema(value: unknown): value is JsonSchema {
+  return typeof value === "object" && value !== null;
 }
 
 export function resolveCustomToolModulePath(modulePath: string): string {
   const toolsDir = path.resolve(getCustomToolsDir());
-
   const resolved = path.isAbsolute(modulePath)
     ? path.resolve(modulePath)
     : path.resolve(toolsDir, modulePath);
@@ -916,8 +692,4 @@ export function resolveCustomToolModulePath(modulePath: string): string {
   }
 
   return resolved;
-}
-
-function isString<T>(value: T): value is T & string {
-  return Object.prototype.toString.call(value) === "[object String]";
 }
