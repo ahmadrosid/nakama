@@ -184,10 +184,7 @@ export function parsePreparedWhatsAppArtifact(
 
   const sizeBytes = Number(rawSizeBytes);
 
-  if (
-    sizeBytes < 0 ||
-    sizeBytes > WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES
-  ) {
+  if (sizeBytes < 0 || sizeBytes > WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES) {
     return null;
   }
 

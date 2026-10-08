@@ -1,6 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { NakamaClient, SendMessageArg, StreamHandlers } from "@nakama/client";
+import type {
+  NakamaClient,
+  SendMessageArg,
+  StreamHandlers,
+} from "@nakama/client";
 import {
   assertBridgeClientMethods,
   parseListProfilesResponse,
@@ -46,7 +50,10 @@ export function createMessageContext(options: {
   const replies: string[] = [];
   const replyOptions: Array<Parameters<Context["reply"]>[1]> = [];
   const edits: Array<{ chatId: number; messageId: number; text: string }> = [];
-  const editOptions: Array<Parameters<Context["api"]["editMessageText"]>[3]> = [];
+
+  const editOptions: Array<Parameters<Context["api"]["editMessageText"]>[3]> =
+    [];
+
   let nextMessageId = 1;
 
   const replyFrom =

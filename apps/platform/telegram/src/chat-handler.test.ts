@@ -1783,12 +1783,12 @@ describe("createChatHandler document attachments", () => {
     const base = createMessageContext({ userId: options.userId });
     Object.assign(base.ctx, {
       message: {
-      caption: options.caption,
-      document: {
-        file_id: "doc-1",
-        file_name: options.fileName,
-        mime_type: options.mimeType,
-      },
+        caption: options.caption,
+        document: {
+          file_id: "doc-1",
+          file_name: options.fileName,
+          mime_type: options.mimeType,
+        },
       },
     });
     Object.assign(base.ctx.api, {

@@ -85,8 +85,11 @@ export async function startWhatsAppOutboundServer(
           );
         }
 
-        if (!(body instanceof Object) || !("text" in body)) {
-          return Response.json({ error: "Invalid JSON body." }, { status: 400 });
+        if (!(body instanceof Object && "text" in body)) {
+          return Response.json(
+            { error: "Invalid JSON body." },
+            { status: 400 }
+          );
         }
 
         const rawText = body.text;

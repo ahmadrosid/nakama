@@ -30,10 +30,7 @@ import { createChatHandler } from "./chat-handler";
 import { loadConfig } from "./config";
 import { startWhatsAppOutboundServer } from "./outbound-server";
 import { registerProcessLifecycleHandlers } from "./process-lifecycle";
-import {
-  createWhatsAppSocket,
-  type WhatsAppSocketHandle,
-} from "./socket";
+import { createWhatsAppSocket, type WhatsAppSocketHandle } from "./socket";
 
 installErrorHandlers("worker:whatsapp");
 
@@ -148,8 +145,7 @@ try {
     authStore,
     client,
     config,
-    getSocket: () =>
-      socketHandle?.socket ?? null,
+    getSocket: () => socketHandle?.socket ?? null,
     orgStore,
     sessionStore,
     whatsappContextToken: process.env.NAKAMA_WHATSAPP_CONTEXT_TOKEN,

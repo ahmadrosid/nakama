@@ -3,6 +3,7 @@ import path from "node:path";
 import type {
   NakamaClient,
   SendMessageArg,
+  SendStreamOptions,
   StreamHandlers,
 } from "@nakama/client";
 import {
@@ -54,6 +55,7 @@ export function createMockClient(
 ) {
   const profileIds: string[] = [];
   const streamInputs: SendMessageArg[] = [];
+  const streamOptions: Array<SendStreamOptions | undefined> = [];
 
   const calls = {
     compact: 0,
@@ -67,8 +69,8 @@ export function createMockClient(
     readProfileArtifactContent: 0,
     sendStream: 0,
     setOrgId: 0,
-    streamInputs: [] as unknown[],
-    streamOptions: [] as unknown[],
+    streamInputs,
+    streamOptions,
   };
 
   const orgIds: string[] = [];
@@ -76,19 +78,13 @@ export function createMockClient(
   let streamControl: MockStreamControl | null = null;
 
   const sendStream = async (
-    _input: unknown,
-    handlers: unknown,
-    streamOptions?: {
-      signal?: AbortSignal;
-      whatsappContextToken?: string;
-      whatsappMessage?: unknown;
-    }
+    _input: SendMessageArg,
+    streamHandlers: StreamHandlers,
+    streamOptions?: SendStreamOptions
   ) => {
     calls.sendStream += 1;
     calls.streamInputs.push(_input);
     calls.streamOptions.push(streamOptions);
-
-    const streamHandlers = handlers;
 
     if (!options.streaming) {
       for (const event of options.toolEvents ?? []) {

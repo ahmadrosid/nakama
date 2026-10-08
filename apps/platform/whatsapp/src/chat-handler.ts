@@ -1,4 +1,8 @@
-import type { NakamaClient, RemoteChatSession } from "@nakama/client";
+import type {
+  NakamaClient,
+  RemoteChatSession,
+  SendStreamOptions,
+} from "@nakama/client";
 import {
   extractPairedTurnArtifacts,
   isAttachOnlyCommand,
@@ -45,9 +49,9 @@ import {
 import type { WhatsAppAuthStore } from "./auth-store";
 import {
   maybeSendWhatsAppAttachOnlyCommand,
+  type PreparedWhatsAppArtifactCandidate,
   parsePreparedWhatsAppArtifact,
   sendArtifactDocumentForPath,
-  type PreparedWhatsAppArtifactCandidate,
 } from "./channel-artifact-flow";
 import { isChannelDebugEnabled } from "./channel-log";
 import type { WhatsAppBridgeConfig } from "./config";
@@ -106,6 +110,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     getSocket,
     whatsappContextToken,
   } = deps;
+
   if (config.orgId) {
     client.setOrgId(config.orgId);
   }
@@ -583,6 +588,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       typingLoop.start();
 
       try {
+        const streamOptions: SendStreamOptions = { signal };
+
+        if (whatsappContextToken) {
+          streamOptions.whatsappContextToken = whatsappContextToken;
+          streamOptions.whatsappMessage = whatsappMessage;
+        }
+
         reply = await session.sendStream(
           input,
           {
@@ -629,12 +641,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             },
             onToolStart: () => typingLoop.ping(),
           },
-          {
-            signal,
-            ...(whatsappContextToken
-              ? { whatsappContextToken, whatsappMessage }
-              : {}),
-          }
+          streamOptions
         );
 
         if (signal.aborted) {

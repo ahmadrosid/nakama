@@ -149,6 +149,7 @@ describe("createChatHandler", () => {
         pairedJid: PAIRED_JID,
         phoneNumber: "1234567890",
       });
+
       const {
         calls,
         handler: handle,
@@ -157,6 +158,7 @@ describe("createChatHandler", () => {
         config: { phoneNumber: "1234567890", profileId: "default" },
         whatsappContextToken: "worker-secret",
       });
+
       const download = spyOn(
         baileys,
         "downloadContentFromMessage"
