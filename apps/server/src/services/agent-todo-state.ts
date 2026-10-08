@@ -38,6 +38,7 @@ export class AgentTodoState {
 
     const todos = await this.db.getSessionTodos(sessionId);
     this.cache.set(sessionId, todos);
+
     return [...todos];
   }
 
@@ -116,6 +117,7 @@ export class AgentTodoState {
 
     this.cache.set(sessionId, next);
     await this.db.updateSessionTodos(sessionId, next);
+
     return [...next];
   }
 
@@ -149,6 +151,7 @@ export class AgentTodoState {
             : todo.status === "cancelled"
               ? "[cancelled]"
               : "[pending]";
+
       return `- ${label} ${todo.content} (id: ${todo.id})`;
     });
 

@@ -11,8 +11,11 @@ import {
 import { loadPythonTool, resolvePythonBin } from "./python-tool-loader";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
+
 const originalPythonBin = process.env.NAKAMA_PYTHON_BIN;
+
 const setupToolsDir = setupCustomToolsDir;
+
 const makeRecord = (overrides = {}) =>
   makeCustomToolRecord({
     handlerConfig: { modulePath: "echo.py" },
@@ -87,11 +90,13 @@ describe.skipIf(process.platform !== "win32")(
     afterEach(async () => {
       process.env.LOCALAPPDATA = originalLocalAppData;
       process.env.ProgramFiles = originalProgramFiles;
+
       if (originalPythonBin === undefined) {
         delete process.env.NAKAMA_PYTHON_BIN;
       } else {
         process.env.NAKAMA_PYTHON_BIN = originalPythonBin;
       }
+
       if (tempDir) {
         await rm(tempDir, { force: true, recursive: true });
         tempDir = "";
@@ -112,6 +117,7 @@ describe.skipIf(process.platform !== "win32")(
       const file = path.join(tempDir, ...segments);
       await mkdir(path.dirname(file), { recursive: true });
       await writeFile(file, "", "utf8");
+
       return file;
     }
 
@@ -129,6 +135,7 @@ describe.skipIf(process.platform !== "win32")(
 
     test("accepts python.org install roots read from the environment", async () => {
       await useFakeInstallRoots();
+
       const perUser = await fakeInterpreter(
         "Local",
         "Programs",
@@ -136,6 +143,7 @@ describe.skipIf(process.platform !== "win32")(
         "Python313",
         "python.exe"
       );
+
       const allUsers = await fakeInterpreter(
         "Program Files",
         "Python313-arm64",
@@ -152,17 +160,20 @@ describe.skipIf(process.platform !== "win32")(
 
     test("rejects interpreters outside the install roots", async () => {
       await useFakeInstallRoots();
+
       const sibling = await fakeInterpreter(
         "Local",
         "Programs",
         "Pythonic",
         "python.exe"
       );
+
       const unversioned = await fakeInterpreter(
         "Program Files",
         "PythonTools",
         "python.exe"
       );
+
       const elsewhere = await fakeInterpreter("bin", "python.exe");
 
       expect(() => resolvePythonBin(sibling)).toThrow(/allowlist/i);
@@ -183,6 +194,7 @@ describe("python tool loader", () => {
     } else {
       process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     }
+
     if (originalPythonBin === undefined) {
       delete process.env.NAKAMA_PYTHON_BIN;
     } else {
@@ -219,10 +231,12 @@ if __name__ == "__main__":
     expect(tool?.name).toBe("echo");
     expect(tool?.parallelSafe).not.toBe(true);
 
+    // SAFETY: The test fixture matches the contract used by this test.
     const result = (await tool!.run(
       { message: "hello" },
       { workspaceRoot: "/tmp/nakama-ws" }
     )) as { echoed: string; root: string };
+
     expect(result.echoed).toBe("hello");
     // The loader must forward context.workspaceRoot to the child process as
     // NAKAMA_WORKSPACE_ROOT.
@@ -254,6 +268,7 @@ if __name__ == "__main__":
     configDir = dir;
 
     const tool = await loadPythonTool(makeRecord());
+    // SAFETY: The test fixture matches the contract used by this test.
     const result = (await tool!.run({}, {})) as { error: string };
 
     expect(result.error).toContain("echo.py");
@@ -275,6 +290,7 @@ print("hi")
       makeRecord({ handlerConfig: { modulePath: "norun.py" }, name: "norun" })
     );
 
+    // SAFETY: The test fixture matches the contract used by this test.
     const result = (await tool!.run({}, {})) as { error: string };
     expect(result.error).toMatch(/run\s*\(/i);
   });
@@ -298,6 +314,7 @@ print("hi")
       })
     );
 
+    // SAFETY: The test fixture matches the contract used by this test.
     const result = (await tool!.run({}, {})) as { error: string };
     expect(result.error).toMatch(/__main__/i);
   });
@@ -326,10 +343,12 @@ if __name__ == "__main__":
 
     // A failed spawn must reject so the retry policy can retry transient
     // failures; executeToolCall turns the throw into `{ error }` for callers.
-    const err = await tool!.run({}, {}).catch((e: unknown) => e);
+    const err = await tool!.run({}, {}).catch((error: Error) => error);
 
     expect(err).toBeInstanceOf(Error);
+    // SAFETY: The test fixture matches the contract used by this test.
     expect((err as Error).message).toMatch(/exit code/i);
+    // SAFETY: The test fixture matches the contract used by this test.
     expect((err as Error).message).toContain("kaboom");
   });
 
@@ -415,6 +434,7 @@ if __name__ == "__main__":
       })
     );
 
+    // SAFETY: The test fixture matches the contract used by this test.
     const result = (await tool!.run({}, {})) as { cwd: string };
     expect(realpathSync(result.cwd)).toBe(realpathSync(toolsDir));
   });
@@ -445,7 +465,9 @@ if __name__ == "__main__":
     );
 
     process.env.NAKAMA_TEST_CANARY_SECRET = "canary-not-a-real-secret";
+
     try {
+      // SAFETY: The test fixture matches the contract used by this test.
       const result = (await tool!.run({}, {})) as { secret: string | null };
       expect(result.secret).toBeNull();
     } finally {
@@ -490,6 +512,7 @@ if __name__ == "__main__":
     );
 
     process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS = "200";
+
     try {
       await expect(tool!.run({}, {})).rejects.toThrow(/timed out/i);
     } finally {
@@ -541,6 +564,7 @@ if __name__ == "__main__":
     );
 
     const { resolveToolsFromStorage } = await import("./tool-resolver");
+
     const tools = await resolveToolsFromStorage([
       {
         createdAt: new Date().toISOString(),

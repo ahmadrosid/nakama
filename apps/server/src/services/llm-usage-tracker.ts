@@ -60,11 +60,13 @@ export class LlmUsageTracker {
     options: LlmUsageRecordOptions
   ): number | null {
     const orgId = options.orgId.trim();
+
     if (!orgId) {
       return null;
     }
 
     const { cachedInputTokens = 0, pricingContext = {} } = options;
+
     const costDelta = estimateUsageCostUsd(
       modelId,
       inputTokens,
@@ -79,11 +81,13 @@ export class LlmUsageTracker {
       outputTokens,
       requestCount: 1,
     };
+
     // Fire and forget on purpose: a counter for a dashboard must never delay a
     // model response or fail a turn, so the write is not awaited here and a
     // rejection is swallowed inside persist().
     const provider =
       pricingContext.provider ?? pricingContext.providerInstance?.type ?? "";
+
     const write = this.persist(
       orgId,
       modelId,
@@ -91,6 +95,7 @@ export class LlmUsageTracker {
       { profileId: options.profileId, userId: options.userId },
       delta
     );
+
     this.pendingWrites.add(write);
     void write.finally(() => this.pendingWrites.delete(write));
 
@@ -195,14 +200,17 @@ export class LlmUsageTracker {
           totalTokens: 0,
           trackedSince: row.trackedSince,
         };
+
         group.estimatedCostUsd += row.estimatedCostUsd;
         group.inputTokens += row.inputTokens;
         group.outputTokens += row.outputTokens;
         group.requestCount += row.requestCount;
         group.totalTokens += row.inputTokens + row.outputTokens;
+
         if (row.trackedSince < group.trackedSince) {
           group.trackedSince = row.trackedSince;
         }
+
         groups.set(id, group);
       }
     }
@@ -229,16 +237,20 @@ export class LlmUsageTracker {
     now = new Date()
   ): Promise<LlmUsageDayStats[]> {
     await this.settled();
+
     const today = Date.UTC(
       now.getUTCFullYear(),
       now.getUTCMonth(),
       now.getUTCDate()
     );
+
     const window = Array.from({ length: days }, (_, index) =>
       utcDay(new Date(today - (days - 1 - index) * 86_400_000))
     );
+
     const rows =
       (await this.db?.listLlmUsageDailyStats(orgId, window[0] ?? "")) ?? [];
+
     const byDay = new Map<string, LlmUsageDayStats>(
       window.map((day) => [
         day,
@@ -254,15 +266,18 @@ export class LlmUsageTracker {
 
     for (const row of rows) {
       const entry = byDay.get(row.day);
+
       if (!entry) {
         continue;
       }
+
       const tokens = row.inputTokens + row.outputTokens;
       const provider = row.provider || null;
       entry.estimatedCostUsd += row.estimatedCostUsd;
       entry.requestCount += row.requestCount;
       entry.totalTokens += tokens;
       const share = entry.providers.find((item) => item.provider === provider);
+
       if (share) {
         share.estimatedCostUsd += row.estimatedCostUsd;
         share.totalTokens += tokens;
@@ -276,10 +291,16 @@ export class LlmUsageTracker {
     }
 
     return window.map((day) => {
-      const entry = byDay.get(day) as LlmUsageDayStats;
+      const entry = byDay.get(day);
+
+      if (!entry) {
+        throw new Error(`Missing usage stats for ${day}.`);
+      }
+
       entry.providers.sort(
         (left, right) => right.totalTokens - left.totalTokens
       );
+
       return entry;
     });
   }

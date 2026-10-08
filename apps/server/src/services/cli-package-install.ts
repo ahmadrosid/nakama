@@ -17,6 +17,7 @@ const CLI_SETTLE_TIMEOUT_MS = 5000;
 
 function readPositiveEnvMs(name: string): number | undefined {
   const parsed = Number(process.env[name]);
+
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
@@ -171,37 +172,38 @@ export interface PinnedPackageDist {
  * that is not the exact package and hash we pinned. A compromised or
  * misconfigured registry therefore cannot redirect the install to other code.
  */
-export function readPinnedPackageDist(
-  payload: unknown,
+export function readPinnedPackageDist<T>(
+  payload: T,
   pkg: PinnedNpmPackage
 ): PinnedPackageDist {
   assertPinnedNpmPackage(pkg);
 
-  const record = (payload ?? {}) as {
-    dist?: { integrity?: unknown; tarball?: unknown };
-    name?: unknown;
-    version?: unknown;
-  };
+  const record = readRecord(payload);
+  const name = record?.get("name");
+  const version = record?.get("version");
+  const dist = readRecord(record?.get("dist"));
+  const integrity = readString(dist?.get("integrity"));
+  const tarball = readString(dist?.get("tarball"));
 
-  if (record.name !== pkg.name || record.version !== pkg.version) {
+  if (name !== pkg.name || version !== pkg.version) {
     throw new Error(
-      `Registry served ${String(record.name)}@${String(record.version)} for pinned ${pkg.name}@${pkg.version}.`
+      `Registry served ${String(name)}@${String(version)} for pinned ${pkg.name}@${pkg.version}.`
     );
   }
 
-  const integrity = String(record.dist?.integrity);
+  if (!(integrity && tarball)) {
+    throw new Error("Registry metadata is missing tarball integrity details.");
+  }
+
   assertIntegrity(
     integrity,
     pkg.integrity,
     `${pkg.name}@${pkg.version} registry integrity does not match the pinned hash.`
   );
 
-  const tarball = assertRegistryUrl(
-    String(record.dist?.tarball ?? ""),
-    "tarball"
-  );
+  const tarballUrl = assertRegistryUrl(tarball, "tarball");
 
-  return { integrity, tarball: tarball.toString() };
+  return { integrity, tarball: tarballUrl.toString() };
 }
 
 /**
@@ -260,6 +262,7 @@ export async function downloadPinnedPackageTarball(
   options.onProgress?.(`Downloading ${pkg.name}@${pkg.version}.`);
 
   const tarballResponse = await fetch(dist.tarball, { signal: options.signal });
+
   if (!tarballResponse.ok) {
     throw new Error(
       `Tarball download for ${pkg.name}@${pkg.version} failed (${tarballResponse.status}).`
@@ -267,6 +270,7 @@ export async function downloadPinnedPackageTarball(
   }
 
   const declaredLength = Number(tarballResponse.headers.get("content-length"));
+
   if (
     Number.isFinite(declaredLength) &&
     declaredLength > MAX_PACKAGE_TARBALL_BYTES
@@ -277,6 +281,7 @@ export async function downloadPinnedPackageTarball(
   }
 
   const bytes = new Uint8Array(await tarballResponse.arrayBuffer());
+
   if (bytes.byteLength > MAX_PACKAGE_TARBALL_BYTES) {
     throw new Error(
       `Tarball for ${pkg.name}@${pkg.version} is larger than the ${MAX_PACKAGE_TARBALL_BYTES}-byte install limit.`
@@ -289,10 +294,12 @@ export async function downloadPinnedPackageTarball(
   );
 
   const dir = await mkdtemp(join(tmpdir(), "nakama-pinned-pkg-"));
+
   const file = join(
     dir,
     `${pkg.name.replace(/[^A-Za-z0-9.-]/g, "+")}-${pkg.version}.tgz`
   );
+
   await writeFile(file, bytes);
 
   return {
@@ -306,7 +313,7 @@ export async function downloadPinnedPackageTarball(
  * of what a package installer needs and nothing else: in particular none of
  * the server's provider keys, session secrets, or `npm_config_*` auth tokens.
  */
-const INSTALL_ENV_PASSTHROUGH: Record<string, true> = {
+const INSTALL_ENV_PASSTHROUGH = {
   all_proxy: true,
   bun_install: true,
   bun_install_bin: true,
@@ -334,7 +341,7 @@ const INSTALL_ENV_PASSTHROUGH: Record<string, true> = {
   xdg_cache_home: true,
   xdg_config_home: true,
   xdg_data_home: true,
-};
+} satisfies Record<string, true>;
 
 export function buildRestrictedInstallEnv(
   env: NodeJS.ProcessEnv = getToolExecutionEnv()
@@ -381,6 +388,7 @@ export function buildPinnedPackageInstallPlan(
 
 function extractCliVersion(stdout: string, stderr: string): string | null {
   const output = `${stdout}\n${stderr}`.trim();
+
   if (!output) {
     return null;
   }
@@ -393,6 +401,7 @@ export function summarizeInstallOutput(output: string): string {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
+
   const meaningful =
     lines.find((line) => /^error:/i.test(line)) ??
     lines.find((line) =>
@@ -401,6 +410,7 @@ export function summarizeInstallOutput(output: string): string {
     lines.find((line) => !/^bun (?:add|install) v/i.test(line)) ??
     lines[0] ??
     output.trim();
+
   return meaningful.length > 180
     ? `${meaningful.slice(0, 177)}...`
     : meaningful;
@@ -413,6 +423,7 @@ export async function probeCliVersion(command: string): Promise<{
 }> {
   const { spawn } = await import("node:child_process");
   const timeoutMs = readPositiveEnvMs("NAKAMA_CLI_PROBE_TIMEOUT_MS") ?? 5000;
+
   const sigtermGraceMs =
     readPositiveEnvMs("NAKAMA_CLI_SIGTERM_GRACE_MS") ?? CLI_SIGTERM_GRACE_MS;
 
@@ -431,6 +442,7 @@ export async function probeCliVersion(command: string): Promise<{
         missing: true,
         version: null,
       });
+
       return;
     }
 
@@ -455,7 +467,7 @@ export async function probeCliVersion(command: string): Promise<{
       clearTimeout(killTimeoutId);
       resolve({
         installed: false,
-        missing: (error as NodeJS.ErrnoException).code === "ENOENT",
+        missing: getNodeErrorCode(error) === "ENOENT",
         version: null,
       });
     });
@@ -506,6 +518,7 @@ export async function runTimedInstallCommand(
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
+
     let stdout = "";
     let stderr = "";
     let timedOut = false;
@@ -555,13 +568,16 @@ export async function runTimedInstallCommand(
           ["/PID", String(child.pid), "/T", "/F"],
           { stdio: "ignore", windowsHide: true }
         );
+
         killer.once("error", () => child.kill("SIGKILL"));
+
         return;
       }
 
       if (child.pid) {
         try {
           process.kill(-child.pid, killSignal);
+
           return;
         } catch {
           // Group already reaped, fall through to the direct child.
@@ -582,6 +598,7 @@ export async function runTimedInstallCommand(
       // whatever the installer left running. There is nothing left to wait for.
       if (exited) {
         settleAsTimedOut();
+
         return;
       }
 
@@ -661,6 +678,7 @@ export async function runTimedInstallCommand(
       if (stdoutBuffer.trim()) {
         emitLine("stdout", stdoutBuffer.trim());
       }
+
       if (stderrBuffer.trim()) {
         emitLine("stderr", stderrBuffer.trim());
       }
@@ -679,6 +697,7 @@ export async function runTimedInstallCommand(
       if (stdoutBuffer.trim()) {
         emitLine("stdout", stdoutBuffer.trim());
       }
+
       if (stderrBuffer.trim()) {
         emitLine("stderr", stderrBuffer.trim());
       }
@@ -691,4 +710,27 @@ export async function runTimedInstallCommand(
       });
     });
   });
+}
+
+function readRecord<T>(value: T): Map<string, unknown> | undefined {
+  if (!(value instanceof Object) || Array.isArray(value)) {
+    return;
+  }
+
+  return new Map(Object.entries(value));
+}
+
+function readString<T>(value: T): string | undefined {
+  // SAFETY: The object tag check confirms that the input uses the string representation.
+  return Object.prototype.toString.call(value) === "[object String]"
+    ? (value as T & string)
+    : undefined;
+}
+
+function getNodeErrorCode<T>(error: T): string | undefined {
+  if (!(error instanceof Error && "code" in error)) {
+    return;
+  }
+
+  return readString(error.code);
 }

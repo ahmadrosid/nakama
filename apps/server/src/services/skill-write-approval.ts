@@ -16,13 +16,17 @@ export async function isSkillWriteApprovalRequired(
   profileId: string
 ): Promise<boolean> {
   const org = await database.getOrganizationById(orgId);
+
   if (!org) {
     throw new NakamaApiError("Organization not found.", 404);
   }
+
   const profile = await database.getProfileForOrg(profileId, orgId);
+
   if (!profile) {
     throw new NakamaApiError("Profile not found.", 404);
   }
+
   return resolveProfileOrgBooleanOverride(
     profile.skillsWriteApproval ?? null,
     org.skillsWriteApproval ?? false

@@ -23,6 +23,7 @@ export function normalizeCodingAgentModel(
 
   if (colonIndex >= 0) {
     const normalized = trimmed.slice(colonIndex + 1).trim();
+
     return normalized || null;
   }
 
@@ -30,6 +31,7 @@ export function normalizeCodingAgentModel(
 
   if (slashIndex >= 0) {
     const normalized = trimmed.slice(slashIndex + 1).trim();
+
     return normalized || null;
   }
 
@@ -52,12 +54,15 @@ export function formatModelForHarness(
     if (providerType === "openai_compatible") {
       return model.trim();
     }
+
     // For known providers, only strip the "provider:" prefix (e.g. "anthropic:claude-sonnet-4-6"),
     // not slashes (e.g. "openrouter/anthropic/claude-sonnet-4-6").
     const colonIndex = model.indexOf(":");
+
     if (colonIndex >= 0) {
       return model.slice(colonIndex + 1).trim() || model.trim();
     }
+
     return model.trim();
   }
 
@@ -152,6 +157,7 @@ export function mapNakamaProviderToPi(
   baseUrl?: string | null
 ): string | null {
   const builtinName = PI_PROVIDER_NAME[providerType];
+
   if (!builtinName) {
     return null;
   }
@@ -160,6 +166,7 @@ export function mapNakamaProviderToPi(
   // "nakama" provider entry from models.json instead of the built-in provider.
   if (baseUrl) {
     const defaultUrl = PI_DEFAULT_BASE_URLS[providerType];
+
     if (
       defaultUrl &&
       baseUrl.replace(/\/+$/, "") !== defaultUrl.replace(/\/+$/, "")
@@ -174,7 +181,7 @@ export function mapNakamaProviderToPi(
 export function buildClaudeCodeSpawnEnv(
   routing: CodingAgentProviderRouting,
   providerType: ProviderName = "anthropic"
-): Record<string, string> {
+) {
   if (!(routing.active && routing.baseUrl && routing.apiKey)) {
     return {};
   }
@@ -204,7 +211,7 @@ export function buildClaudeCodeSpawnEnv(
 export function buildCodexSpawnEnv(
   routing: CodingAgentProviderRouting,
   providerType: ProviderName = "openai"
-): Record<string, string> {
+) {
   if (!(routing.active && routing.baseUrl && routing.apiKey)) {
     return {};
   }
@@ -346,8 +353,8 @@ export function mergeCodingAgentSpawnEnv(
 
     if (
       options.protectCredentialKeys &&
-      CODING_AGENT_CREDENTIAL_ENV_KEYS.includes(
-        key as (typeof CODING_AGENT_CREDENTIAL_ENV_KEYS)[number]
+      CODING_AGENT_CREDENTIAL_ENV_KEYS.some(
+        (credentialKey) => credentialKey === key
       )
     ) {
       continue;
@@ -359,9 +366,7 @@ export function mergeCodingAgentSpawnEnv(
   return { ...baseEnv, ...merged };
 }
 
-export function redactSpawnEnvForPrompt(
-  env: Record<string, string>
-): Record<string, string> {
+export function redactSpawnEnvForPrompt(env: Record<string, string>) {
   const redacted: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(env)) {

@@ -1,3 +1,8 @@
+import {
+  type CustomToolJsonValue,
+  parseCustomToolJsonValue,
+} from "./custom-tool-shared";
+
 const CATALOG_URLS = {
   cerebras: "https://api.cerebras.ai/public/v1/models",
   "models-dev": "https://models.dev/api.json",
@@ -10,7 +15,7 @@ const CACHE_TTL_MS = 1000 * 60 * 30;
 
 type CacheEntry = {
   fetchedAt: number;
-  payload: unknown;
+  payload: CustomToolJsonValue;
 };
 
 const cache = new Map<ExternalModelCatalogId, CacheEntry>();
@@ -23,18 +28,21 @@ export function isExternalModelCatalogId(
 
 export async function getExternalModelCatalog(
   catalogId: ExternalModelCatalogId
-): Promise<unknown> {
+): Promise<CustomToolJsonValue> {
   const cached = cache.get(catalogId);
+
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
     return cached.payload;
   }
 
   const response = await fetch(CATALOG_URLS[catalogId]);
+
   if (!response.ok) {
     throw new Error(`Failed to fetch model catalog (${response.status})`);
   }
 
-  const payload = await response.json();
+  const payload = parseCustomToolJsonValue(await response.json());
   cache.set(catalogId, { fetchedAt: Date.now(), payload });
+
   return payload;
 }

@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 
 const SALT_ROUNDS = 10;
+
 const SESSION_EXPIRY_DAYS = 7;
 
 export class AuthService {
@@ -15,11 +16,7 @@ export class AuthService {
     return Bun.password.verify(password, hash);
   }
 
-  createBrowserSessionTokens(): {
-    sessionToken: string;
-    csrfToken: string;
-    expiresAt: string;
-  } {
+  createBrowserSessionTokens() {
     return {
       csrfToken: generateOpaqueToken(),
       expiresAt: new Date(

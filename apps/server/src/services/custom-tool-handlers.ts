@@ -89,20 +89,24 @@ export class RetryableToolError extends Error {
  * are replayed. Timeouts, exit codes other than {@link TOOL_RETRYABLE_EXIT_CODE},
  * validation failures, and plain `Error` throws are permanent.
  */
-function isRetryableToolError(error: unknown): boolean {
-  if (!error || typeof error !== "object") {
+function isRetryableToolError(cause: unknown): boolean {
+  if (!(cause instanceof Object)) {
     return false;
   }
-  if ((error as { retryable?: unknown }).retryable === true) {
+
+  if ("retryable" in cause && cause.retryable === true) {
     return true;
   }
-  if (
-    "code" in error &&
-    typeof (error as { code?: unknown }).code === "string"
-  ) {
-    return RETRYABLE_SPAWN_ERRNOS.has((error as { code: string }).code);
+
+  if ("code" in cause && isStringValue(cause.code)) {
+    return RETRYABLE_SPAWN_ERRNOS.has(cause.code);
   }
+
   return false;
+}
+
+function isStringValue(value: unknown): value is string {
+  return Object.prototype.toString.call(value) === "[object String]";
 }
 
 /**
@@ -117,21 +121,25 @@ function isRetryableToolError(error: unknown): boolean {
  * A final failure (exhausted retryable budget, or a permanent error) is also
  * mirrored to the operator's error tracker, tagged `tool:<name>`.
  */
-export function withToolRetries(
-  run: (input: unknown, context: ToolContext) => Promise<unknown>,
+export function withToolRetries<Input, Output>(
+  run: (input: Input, context: ToolContext) => Promise<Output>,
   toolName: string
-): (input: unknown, context: ToolContext) => Promise<unknown> {
+): (input: Input, context: ToolContext) => Promise<Output> {
   return async (input, context) => {
     let attempts = 0;
+
     for (;;) {
       context.signal?.throwIfAborted();
+
       try {
         return await run(input, context);
       } catch (error) {
         attempts += 1;
         context.signal?.throwIfAborted();
+
         const canRetry =
           isRetryableToolError(error) && attempts <= TOOL_RETRY_LIMIT;
+
         if (!canRetry) {
           // Not awaited: reportError queues synchronously and never throws, and
           // the model should not wait out the tracker's HTTP timeout on a turn
@@ -139,6 +147,7 @@ export function withToolRetries(
           void reportError(error, { kind: "tool", source: `tool:${toolName}` });
           throw error;
         }
+
         // Rejects immediately if the signal aborts mid-backoff (including an
         // already-aborted signal), so a cancelled turn never waits out the delay.
         try {
@@ -159,21 +168,25 @@ export function withToolRetries(
 export function getCustomToolHandler(
   handlerType: string
 ): CustomToolHandler | null {
-  const handler =
-    (CUSTOM_TOOL_HANDLERS as Record<string, CustomToolHandler>)[handlerType] ??
-    null;
+  const handler = isCustomToolType(handlerType)
+    ? CUSTOM_TOOL_HANDLERS[handlerType]
+    : null;
+
   if (!handler) {
     return null;
   }
+
   return {
     ...handler,
     // Both loader types resolve through this seam, so wrapping load here
     // applies the retry policy to JavaScript and Python in one place.
     load: async (record) => {
       const definition = await handler.load(record);
+
       if (!definition) {
         return null;
       }
+
       return {
         ...definition,
         run: withToolRetries(definition.run, definition.name),

@@ -39,6 +39,7 @@ function formatNotificationMessage(
 
   if (payload.title) {
     const title = plainText ? payload.title : `**${payload.title}**`;
+
     return `${prefix} ${title}\n\n${payload.body}`;
   }
 
@@ -47,18 +48,21 @@ function formatNotificationMessage(
 
 function normalizeIdempotencyKey(value: string | null): string {
   const trimmed = value?.trim() ?? "";
+
   if (!trimmed) {
     throw new NakamaApiError(
       "Idempotency-Key header is required for notification webhooks.",
       400
     );
   }
+
   if (trimmed.length > NOTIFICATION_WEBHOOK_IDEMPOTENCY_KEY_MAX_LENGTH) {
     throw new NakamaApiError(
       `Idempotency-Key must be at most ${NOTIFICATION_WEBHOOK_IDEMPOTENCY_KEY_MAX_LENGTH} characters.`,
       400
     );
   }
+
   return trimmed;
 }
 
@@ -83,10 +87,10 @@ export class NotificationWebhookService {
     this.whatsapp = options.whatsapp ?? createWhatsAppOutboundAdapter();
   }
 
-  async deliver(
+  async deliver<T>(
     destinationId: string,
     apiKey: string | null,
-    payload: unknown,
+    payload: T,
     /**
      * Required Idempotency-Key header value. Claimed in SQLite before any
      * channel send so replays and concurrent duplicates never double-deliver.
@@ -97,6 +101,7 @@ export class NotificationWebhookService {
   ): Promise<void> {
     const destination =
       await this.databaseAdapter.getNotificationDestination(destinationId);
+
     if (
       !(destination && apiKey) ||
       this.authService.hashToken(apiKey) !== destination.secretHash
@@ -107,12 +112,14 @@ export class NotificationWebhookService {
     const organization = await this.databaseAdapter.getOrganizationById(
       destination.orgId
     );
+
     if (!organization || organization.archivedAt) {
       throw new NakamaApiError("Not found", 404);
     }
 
     const eventId = normalizeIdempotencyKey(idempotencyKey);
     const normalized = normalizeNotificationWebhookRequest(payload);
+
     if (
       !(
         destination.config.profileId &&
@@ -129,8 +136,10 @@ export class NotificationWebhookService {
 
     if (
       destination.channel === "discord" &&
-      (typeof destination.config.channelId !== "string" ||
-        !/^\d{17,20}$/.test(destination.config.channelId))
+      !(
+        isString(destination.config.channelId) &&
+        /^\d{17,20}$/.test(destination.config.channelId)
+      )
     ) {
       throw new NakamaApiError(
         "Choose a valid Discord channel for this destination.",
@@ -143,22 +152,27 @@ export class NotificationWebhookService {
       eventId,
       new Date().toISOString()
     );
+
     if (!claimed) {
       throw new NakamaApiError("Duplicate notification delivery.", 409);
     }
 
     let result: ChannelSendResult;
+
     if (destination.channel === "telegram") {
-      result = await this.telegram.send({
+      const telegramPayload: Parameters<typeof this.telegram.send>[0] = {
         chatIds: [destination.config.chatId],
         orgId: destination.orgId,
         parseMode: "HTML",
         profileId: destination.config.profileId,
         text: formatNotificationMessage(normalized),
-        ...(destination.config.topicId
-          ? { topicId: destination.config.topicId }
-          : {}),
-      });
+      };
+
+      if (destination.config.topicId) {
+        telegramPayload.topicId = destination.config.topicId;
+      }
+
+      result = await this.telegram.send(telegramPayload);
     } else if (destination.channel === "discord") {
       result = await this.discord.send({
         channelId: destination.config.channelId,
@@ -183,4 +197,8 @@ export class NotificationWebhookService {
       );
     }
   }
+}
+
+function isString<T>(value: T): value is T & string {
+  return Object.prototype.toString.call(value) === "[object String]";
 }

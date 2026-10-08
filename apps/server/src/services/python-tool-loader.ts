@@ -6,6 +6,7 @@ import { pathExists } from "@nakama/core";
 import type { StoredToolRecord } from "@nakama/db";
 import {
   loadCustomSubprocessTool,
+  parseCustomToolJsonValue,
   readOptionalString,
   resolveCustomToolModulePath,
 } from "./custom-tool-shared";
@@ -13,6 +14,7 @@ import { spawnJsonTool } from "./custom-tool-subprocess";
 
 /** Bare interpreter names allowed when NAKAMA_PYTHON_BIN has no path. */
 const ALLOWED_PYTHON_BASENAME = /^python(\d+(\.\d+)*)?$/;
+
 const ALLOWED_WINDOWS_PYTHON_BASENAME = /^python(\d+(\.\d+)*)?(\.exe)?$/i;
 
 /**
@@ -62,6 +64,7 @@ function isOnWindowsPythonAllowlist(resolved: string): boolean {
     .filter((prefix): prefix is string => Boolean(prefix))
     .some((prefix) => {
       const lowered = prefix.toLowerCase();
+
       return (
         candidate.startsWith(lowered) &&
         WINDOWS_PYTHON_VERSION_DIR.test(candidate.slice(lowered.length))
@@ -92,6 +95,7 @@ export function resolvePythonBin(
         `NAKAMA_PYTHON_BIN bare name must match python or python3…; got "${value}".`
       );
     }
+
     return value;
   }
 
@@ -102,6 +106,7 @@ export function resolvePythonBin(
   }
 
   let resolved = value;
+
   try {
     // The native call also expands 8.3 short names (`C:\PROGRA~1`) on Windows,
     // which the JS realpath leaves as typed.
@@ -114,6 +119,7 @@ export function resolvePythonBin(
   }
 
   const basename = path.basename(resolved);
+
   if (!pythonBasenamePattern().test(basename)) {
     throw new Error(
       `NAKAMA_PYTHON_BIN basename must match python or python3…; got "${basename}".`
@@ -129,6 +135,7 @@ export function resolvePythonBin(
               resolved === prefix.slice(0, -1) || resolved.startsWith(prefix)
             );
           }
+
           // Homebrew Cellar formula dirs are `python` or `python@3.x` — require a
           // path boundary so `…/Cellar/pythonfoo` cannot sneak through.
           return (
@@ -181,6 +188,7 @@ export async function validatePythonToolModule(
   const hasHarness =
     /if\s+__name__\s*==\s*["']__main__["']\s*:/.test(source) &&
     source.includes("sys.stdin");
+
   if (!hasHarness) {
     throw new Error(
       'Python tools must include an if __name__ == "__main__" harness that reads JSON from sys.stdin.'
@@ -188,24 +196,26 @@ export async function validatePythonToolModule(
   }
 }
 
-async function runPythonTool(
+async function runPythonTool<T>(
   modulePath: string,
-  input: unknown,
+  input: T,
   context: ToolContext,
   env?: Record<string, string>
-): Promise<unknown> {
+): Promise<import("./custom-tool-shared").CustomToolJsonValue> {
   // No try/catch here on purpose: a failed spawn must reject so the retry
   // policy in withToolRetries can retry explicitly opt-in transient failures
   // (RetryableToolError / exit 75). executeToolCall converts the throw into
   // `{ error: message }`.
-  return spawnJsonTool({
+  const result = await spawnJsonTool({
     args: [modulePath],
     bin: resolvePythonBin(),
     context,
     cwd: path.dirname(modulePath),
     env,
-    input,
+    input: parseCustomToolJsonValue(input),
     label: "Python tool",
     workspaceRoot: readOptionalString(context?.workspaceRoot),
   });
+
+  return parseCustomToolJsonValue(result);
 }

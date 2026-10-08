@@ -27,6 +27,7 @@ function buildServices(db: DatabaseAdapter) {
   const skills = new SkillsService(db);
   const proposals = new SkillProposalService(db, skills);
   const suggestions = new SkillSuggestionService(db, skills, proposals);
+
   return { proposals, skills, suggestions };
 }
 
@@ -93,6 +94,7 @@ describe("SkillSuggestionService", () => {
       created.id,
       "admin_user"
     );
+
     expect(result.outcome).toBe("applied");
     expect(result.suggestion.status).toBe("applied");
     expect(result.suggestion.appliedAt).toBeTruthy();
@@ -123,6 +125,7 @@ describe("SkillSuggestionService", () => {
       created.id,
       "admin_user"
     );
+
     expect(first.outcome).toBe("applied");
 
     const second = await suggestions.applySuggestion(
@@ -130,6 +133,7 @@ describe("SkillSuggestionService", () => {
       created.id,
       "admin_user"
     );
+
     expect(second.outcome).toBe("already_applied");
   });
 
@@ -158,6 +162,7 @@ describe("SkillSuggestionService", () => {
       created.id,
       "admin_user"
     );
+
     expect(result.outcome).toBe("staged_as_proposal");
     expect(result.proposalId).toBeTruthy();
     expect(result.suggestion.status).toBe("applied");
@@ -170,6 +175,7 @@ describe("SkillSuggestionService", () => {
     const { proposals: pending } = await proposals.listProposals(ORG_ID, {
       profileId: profile.id,
     });
+
     expect(pending).toHaveLength(1);
     expect(pending[0]?.id).toBe(result.proposalId!);
     expect(pending[0]?.status).toBe("pending");

@@ -90,6 +90,7 @@ describe("resolveAuthConfigId", () => {
         },
         async list(query: { toolkit?: string }) {
           expect(query).toEqual({ toolkit: "metaads" });
+
           return {
             items: [
               { id: "ac_managed", isComposioManaged: true },
@@ -127,6 +128,7 @@ describe("resolveAuthConfigId", () => {
       authConfigs: {
         async create(toolkitSlug: string) {
           expect(toolkitSlug).toBe("gmail");
+
           return { id: "ac_new" };
         },
         async list() {

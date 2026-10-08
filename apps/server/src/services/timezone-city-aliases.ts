@@ -2,7 +2,7 @@
  * Common city names that share an IANA zone with a different canonical city.
  * Keys are IANA zone IDs from `Intl.supportedValuesOf("timeZone")`.
  */
-const TIMEZONE_CITY_ALIASES: Readonly<Record<string, readonly string[]>> = {
+const TIMEZONE_CITY_ALIASES = {
   "America/Chicago": [
     "Dallas",
     "Houston",
@@ -39,7 +39,7 @@ const TIMEZONE_CITY_ALIASES: Readonly<Record<string, readonly string[]>> = {
   "Australia/Sydney": ["Melbourne", "Canberra"],
   "Europe/London": ["Manchester", "Birmingham", "Edinburgh", "Dublin"],
   "Europe/Paris": ["Brussels", "Amsterdam"],
-};
+} as const satisfies Readonly<Record<string, readonly string[]>>;
 
 export function getTimezoneCityAliases(zoneName: string): string[] {
   return [...(TIMEZONE_CITY_ALIASES[zoneName] ?? [])];

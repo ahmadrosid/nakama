@@ -3,6 +3,7 @@ import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { LlmUsageTracker } from "./llm-usage-tracker";
 
 const ORG_A = "org_a";
+
 const ORG_B = "org_b";
 
 describe("LlmUsageTracker", () => {
@@ -130,6 +131,7 @@ describe("LlmUsageTracker", () => {
     });
 
     const { agents, users } = await tracker.getStatsByActor(ORG_A);
+
     const pick = (groups: typeof agents) =>
       Object.fromEntries(
         groups.map((group) => [
@@ -150,9 +152,11 @@ describe("LlmUsageTracker", () => {
     });
 
     const total = await tracker.getStats(ORG_A);
+
     for (const groups of [agents, users]) {
       const sum = (key: "requestCount" | "totalTokens" | "estimatedCostUsd") =>
         groups.reduce((acc, group) => acc + group[key], 0);
+
       expect(sum("requestCount")).toBe(total.requestCount);
       expect(sum("totalTokens")).toBe(total.totalTokens);
       expect(sum("estimatedCostUsd")).toBeCloseTo(total.estimatedCostUsd, 12);
@@ -161,12 +165,14 @@ describe("LlmUsageTracker", () => {
 
   test("reports the last days oldest first, split by provider, zero-filled", async () => {
     const db = createInMemoryDatabaseAdapter();
+
     const delta = (tokens: number) => ({
       estimatedCostUsd: tokens / 1000,
       inputTokens: tokens,
       outputTokens: 0,
       requestCount: 1,
     });
+
     await db.incrementLlmUsageDailyStats(
       ORG_A,
       { day: "2026-10-05", modelId: "gpt-4o", provider: "openai" },

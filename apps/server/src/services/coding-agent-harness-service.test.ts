@@ -100,9 +100,11 @@ describe("coding-agent harness resolution", () => {
     });
 
     const statuses = await listCodingAgentHarnessStatuses(db);
+
     const cursor = statuses.find(
       (harness) => harness.id === "coding-harness-cursor-agent"
     );
+
     expect(cursor?.installed).toBe(true);
     expect(cursor?.ready).toBe(true);
     expect(cursor?.statusMessage).toMatch(/host Cursor auth/i);
@@ -131,9 +133,11 @@ describe("coding-agent harness resolution", () => {
     });
 
     const statuses = await listCodingAgentHarnessStatuses(db);
+
     const codex = statuses.find(
       (harness) => harness.id === "coding-harness-codex"
     );
+
     expect(codex?.installed).toBe(true);
     expect(codex?.ready).toBe(true);
     expect(codex?.statusMessage).toMatch(/codex login/i);
@@ -165,6 +169,7 @@ describe("coding-agent harness resolution", () => {
       db,
       "coding-harness-codex"
     );
+
     expect(probed.ready).toBe(true);
 
     const cached = await listCodingAgentHarnessStatuses(db);
@@ -181,13 +186,16 @@ describe("coding-agent harness resolution", () => {
         const dir = await mkdtemp(
           path.join(tmpdir(), "nakama-stubborn-harness-")
         );
+
         const command = path.join(dir, "stubborn");
         const pidFile = path.join(dir, "descendant.pid");
+
         const descendantCode = [
           'process.on("SIGTERM", () => {});',
           `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
           "setInterval(() => {}, 1000);",
         ].join("\n");
+
         let descendantPid: number | undefined;
         await writeFile(
           command,
@@ -238,6 +246,7 @@ describe("coding-agent harness resolution", () => {
           if (descendantPid && !(await waitForExit(descendantPid, 100))) {
             process.kill(descendantPid, "SIGKILL");
           }
+
           await rm(dir, { force: true, recursive: true });
         }
       },
@@ -252,6 +261,7 @@ describe("coding-agent harness resolution", () => {
         const dir = await mkdtemp(
           path.join(tmpdir(), "nakama-sigterm-proof-harness-")
         );
+
         const command = path.join(dir, "stubborn-version");
         const pidFile = path.join(dir, "pid");
         // Hangs on --version and swallows SIGTERM, so only the SIGKILL escalation

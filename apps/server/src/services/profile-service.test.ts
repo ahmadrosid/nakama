@@ -73,6 +73,7 @@ describe("profile service createTool", () => {
     );
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
+
     const tool = await service.createTool({
       description: "Echo input",
       handlerConfig: { modulePath: "echo.js" },
@@ -93,6 +94,7 @@ describe("profile service createTool", () => {
     await writeFile(path.join(toolsDir, "echo.py"), PYTHON_ECHO_TOOL);
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
+
     const tool = await service.createTool({
       description: "Echo input",
       handlerConfig: { modulePath: "echo.py" },
@@ -118,7 +120,9 @@ describe("profile service createTool", () => {
       required: ["message"],
       type: "object",
     };
+
     const service = new ProfileService(createInMemoryDatabaseAdapter());
+
     const tool = await service.createTool({
       description: "Echo input",
       handlerConfig: {
@@ -157,6 +161,7 @@ describe("profile service createTool", () => {
     await writeFile(path.join(toolsDir, "echo.py"), PYTHON_ECHO_TOOL);
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
+
     const tool = await service.createTool({
       description: "Echo input",
       handlerConfig: { modulePath: "echo.py" },
@@ -262,6 +267,7 @@ describe("profile service createProfile", () => {
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
     const created = await service.createProfile(ORG_ID, { name: "Soul Bot" });
+
     const soulDir = path.join(
       tempConfigDir,
       "orgs",
@@ -269,6 +275,7 @@ describe("profile service createProfile", () => {
       "profiles",
       created.profile.id
     );
+
     const soulContent = await readFile(path.join(soulDir, "SOUL.md"), "utf8");
 
     expect(soulContent.trim().length).toBeGreaterThan(0);
@@ -340,9 +347,11 @@ describe("profile service createProfile", () => {
     const db = createInMemoryDatabaseAdapter();
 
     const service = new ProfileService(db);
+
     const created = await service.createProfile(ORG_ID, {
       name: "No Tools Bot",
     });
+
     const tools = await db.listToolsForProfile(created.profile.id);
 
     expect(tools).toEqual([]);
@@ -355,6 +364,7 @@ describe("profile service createProfile", () => {
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
+
     const created = await service.createProfile(ORG_ID, {
       name: "Support Bot",
       soulFiles: {
@@ -363,6 +373,7 @@ describe("profile service createProfile", () => {
         "STYLE.md": "# Style\n\nClear and kind.",
       },
     });
+
     const soulDir = path.join(
       tempConfigDir,
       "orgs",
@@ -396,6 +407,7 @@ describe("profile service createProfile", () => {
     await expect(
       service.createProfile(ORG_ID, {
         name: "Bad Soul Bot",
+        // SAFETY: The test fixture matches the contract used by this test.
         soulFiles: {
           "../SOUL.md": "# Bad",
         } as never,
@@ -432,6 +444,7 @@ describe("profile service createProfile", () => {
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
+
     const created = await service.createProfile(ORG_ID, {
       name: "Research Assistant",
     });
@@ -446,9 +459,11 @@ describe("profile service createProfile", () => {
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
+
     const first = await service.createProfile("org_first", {
       name: "Penulis",
     });
+
     const second = await service.createProfile("org_second", {
       name: "Penulis",
     });
@@ -467,6 +482,7 @@ describe("profile service createProfile", () => {
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
+
     const created = await service.createProfile(ORG_ID, {
       id: "research-bot",
       name: "Research Bot",
@@ -579,6 +595,7 @@ describe("profile service updateProfile", () => {
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
+
     const created = await service.createProfile(ORG_ID, {
       name: "Support Bot",
       soulFiles: {
@@ -587,6 +604,7 @@ describe("profile service updateProfile", () => {
         "STYLE.md": "# Style\n\nClear and kind.",
       },
     });
+
     const soulDir = path.join(
       tempConfigDir,
       "orgs",
@@ -621,6 +639,7 @@ describe("profile service assignSkill", () => {
   afterEach(async () => {
     process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     process.env.PATH = originalPath;
+
     if (originalDisableFixPath === undefined) {
       delete process.env.NAKAMA_DISABLE_FIX_PATH;
     } else {
@@ -681,6 +700,7 @@ describe("profile service assignSkill", () => {
     const service = new ProfileService(db);
     const created = await service.createProfile(ORG_ID, { name: "Worker Bot" });
     const now = new Date().toISOString();
+
     for (const [id, orgId] of [
       ["other-skill", "other-org"],
       ["shared-skill", null],
@@ -705,9 +725,11 @@ describe("profile service assignSkill", () => {
         skillId: "other-skill",
       })
     ).rejects.toThrow("Skill not found.");
+
     const updated = await service.assignSkill(ORG_ID, created.profile.id, {
       skillId: "shared-skill",
     });
+
     expect(updated.profile.skills.map((skill) => skill.id)).toEqual([
       "shared-skill",
     ]);
@@ -757,6 +779,7 @@ describe("profile service knowledge base", () => {
       profileId,
       uploaded.document.id
     );
+
     expect(deleted.deleted).toBe(true);
 
     const afterDelete = await service.listKnowledgeBase(ORG_ID, profileId);
@@ -770,6 +793,7 @@ describe("profile service knowledge base", () => {
     const service = new ProfileService(createInMemoryDatabaseAdapter());
     const created = await service.createProfile(ORG_ID, { name: "KB Bot" });
     const profileId = created.profile.id;
+
     const attachment = {
       data: Buffer.from("project fact", "utf8").toString("base64"),
       filename: "notes.txt",
@@ -792,6 +816,7 @@ describe("profile service knowledge base", () => {
       attachment,
       "replace"
     );
+
     expect(replaced.outcome).toBe("replaced");
     expect(replaced.document.id).not.toBe(first.document.id);
 
@@ -823,6 +848,7 @@ describe("profile service knowledge base", () => {
       uploaded.document.id,
       { render: "text" }
     );
+
     expect(preview.contentType).toBe("text/plain");
     expect(preview.bytes.toString("utf8")).toBe("project fact");
 
@@ -831,6 +857,7 @@ describe("profile service knowledge base", () => {
       profileId,
       uploaded.document.id
     );
+
     expect(download.bytes.toString("utf8")).toBe("project fact");
   });
 
@@ -874,11 +901,13 @@ describe("profile service cloneProfile", () => {
     const db = createInMemoryDatabaseAdapter();
     await ensureBuiltinToolDefinitions(db);
     const service = new ProfileService(db);
+
     const source = await service.createProfile(ORG_ID, {
       model: "anthropic:claude-sonnet-4-6",
       name: "Research Bot",
       systemPrompt: "You research things.",
     });
+
     return { db, service, sourceId: source.profile.id };
   }
 
@@ -996,6 +1025,7 @@ describe("profile service cloneProfile", () => {
     "clones get a random id even when a case-similar id is taken on Windows",
     async () => {
       const { service, sourceId } = await setup();
+
       const taken = await service.createProfile(ORG_ID, {
         id: "Research-Bot-Copy",
         name: "Taken",
@@ -1012,10 +1042,12 @@ describe("profile service cloneProfile", () => {
 
   test("refuses to clone Super Bot and writes nothing", async () => {
     const { db, service } = await setup();
+
     const superBot = await service.createProfile(ORG_ID, {
       isSuper: true,
       name: "Super Bot",
     });
+
     const countBefore = (await db.listProfilesForOrg(ORG_ID)).length;
 
     await expect(
@@ -1103,6 +1135,7 @@ describe("profile service cloneProfile", () => {
     const retry = await service.cloneProfile(ORG_ID, sourceId, {
       id: destId,
     });
+
     expect(retry.profile.id).toBe(destId);
     expect(retry.profile.tools.length).toBeGreaterThan(0);
   });
@@ -1130,6 +1163,7 @@ describe("profile service deleteProfile", () => {
     );
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
     const db = createInMemoryDatabaseAdapter();
+
     return { db, service: new ProfileService(db) };
   }
 
@@ -1177,12 +1211,14 @@ describe("profile service deleteProfile", () => {
     const { db, service } = await setup();
     const removed = await service.createProfile(ORG_ID, { name: "Removed" });
     const shareId = "share_delete_test";
+
     const storagePath = await writeArtifactShareSnapshot({
       bytes: Buffer.from("shared private data"),
       filename: "report.md",
       orgId: ORG_ID,
       shareId,
     });
+
     await db.createArtifactShare({
       createdAt: new Date().toISOString(),
       createdByUserId: "user_test",
@@ -1241,6 +1277,7 @@ describe("profile service plugin tool org scope", () => {
 
   afterEach(async () => {
     process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
+
     if (tempConfigDir) {
       await rm(tempConfigDir, { force: true, recursive: true });
       tempConfigDir = "";
@@ -1321,6 +1358,7 @@ describe("profile organization transfer", () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new ProfileService(db);
     const now = new Date().toISOString();
+
     for (const id of ["source", "destination"]) {
       await db.upsertOrganization({
         createdAt: now,
@@ -1330,15 +1368,19 @@ describe("profile organization transfer", () => {
         updatedAt: now,
       });
     }
+
     const { profile } = await service.createProfile("source", {
       name: "Moving bot",
     });
+
     const sourceDir = path.join(configDir, "orgs/source/profiles", profile.id);
+
     const targetDir = path.join(
       configDir,
       "orgs/destination/profiles",
       profile.id
     );
+
     await writeFile(path.join(sourceDir, "MEMORY.md"), "Remember me");
     await db.upsertSession({
       channel: "web",
@@ -1367,10 +1409,12 @@ describe("profile organization transfer", () => {
     const databasePath = path.join(configDir, "transfer.sqlite");
     const database = await createSqliteDatabase(`file:${databasePath}`);
     const raw = new Database(databasePath);
+
     try {
       const db = database.adapter;
       const service = new ProfileService(db);
       const now = new Date().toISOString();
+
       for (const id of ["source", "destination"]) {
         await db.upsertOrganization({
           createdAt: now,
@@ -1380,24 +1424,30 @@ describe("profile organization transfer", () => {
           updatedAt: now,
         });
       }
+
       const { profile } = await service.createProfile("source", {
         name: "Transfer data",
       });
+
       const { profile: successor } = await service.createProfile("source", {
         name: "Successor",
       });
+
       const stored = (await db.getProfile(profile.id))!;
       await db.upsertProfile({ ...stored, isDefault: true });
+
       const sourceDir = path.join(
         configDir,
         "orgs/source/profiles",
         profile.id
       );
+
       const targetDir = path.join(
         configDir,
         "orgs/destination/profiles",
         profile.id
       );
+
       await writeFile(path.join(sourceDir, "MEMORY.md"), "Keep my memory");
       await db.upsertSession({
         channel: "web",
@@ -1527,6 +1577,7 @@ describe("profile organization transfer", () => {
       });
       expect((await db.getProfile(successor.id))?.isDefault).toBe(true);
       expect((await db.getProfile(profile.id))?.isDefault).toBe(false);
+
       for (const table of [
         "sessions",
         "attachments",
@@ -1539,6 +1590,7 @@ describe("profile organization transfer", () => {
             .get(profile.id)
         ).toEqual({ org_id: "destination" });
       }
+
       expect((await db.getAutomation("transfer-auto"))?.enabled).toBe(false);
       expect((await db.getWorkflow("transfer-flow"))?.enabled).toBe(false);
       expect(await db.listProfileComposioToolkits(profile.id)).toHaveLength(0);

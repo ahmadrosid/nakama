@@ -8,13 +8,19 @@ import {
   resolveComposioCallbackBaseUrl,
 } from "./composio-callback-url";
 import type { ComposioService } from "./composio-service";
-import type { McpClientManager } from "./mcp-client-manager";
+import {
+  type McpClientManager,
+  parseMcpToolArguments,
+} from "./mcp-client-manager";
 
 const COMPOSIO_META_TOOL_PATTERN = /^COMPOSIO_(MANAGE|WAIT|SEARCH|MULTI)/;
+
 const composioSessionUrls = new Map<string, string>();
 
 const MAX_SEARCH_DESCRIPTION_CHARS = 120;
+
 const TRUNCATION_MARKER = "\n...[truncated]";
+
 const MAX_COMPOSIO_TOOL_RESULT_CHARS = 16_000;
 
 async function ensureComposioMcpConnection(
@@ -35,6 +41,7 @@ async function ensureComposioMcpConnection(
       session.headers
     );
     composioSessionUrls.set(connectionKey, session.url);
+
     return;
   }
 
@@ -68,10 +75,6 @@ function notConnectedError(toolkitSlug: string): ComposioToolErrorResult {
   };
 }
 
-interface ComposioConnectAccountInput {
-  toolkit_slug: string;
-}
-
 interface SearchableAction {
   description: string;
   name: string;
@@ -79,22 +82,13 @@ interface SearchableAction {
   toolkitSlug: string;
 }
 
-interface ComposioSearchActionsInput {
-  query: string;
-  toolkit_slug?: string;
-}
-
-interface ComposioInvokeActionInput {
-  action_slug: string;
-  arguments: Record<string, unknown>;
-  toolkit_slug: string;
-}
-
 function trimDescription(value: string | null | undefined): string {
   const text = (value ?? "").trim();
+
   if (text.length <= MAX_SEARCH_DESCRIPTION_CHARS) {
     return text;
   }
+
   return `${text.slice(0, MAX_SEARCH_DESCRIPTION_CHARS - 1)}…`;
 }
 
@@ -114,9 +108,11 @@ function buildSearchableActions(
       if (isBlockedComposioMetaTool(cachedTool.slug)) {
         continue;
       }
+
       if (allowedActions && !allowedActions.includes(cachedTool.slug)) {
         continue;
       }
+
       actions.push({
         description: trimDescription(cachedTool.description),
         name: cachedTool.name,
@@ -131,9 +127,11 @@ function buildSearchableActions(
 
 function actionMatchesQuery(action: SearchableAction, query: string): boolean {
   const needle = query.trim().toLowerCase();
+
   if (needle === "") {
     return true;
   }
+
   return (
     action.slug.toLowerCase().includes(needle) ||
     action.name.toLowerCase().includes(needle) ||
@@ -153,15 +151,20 @@ function findSearchableAction(
   );
 }
 
-function truncateComposioToolResult(result: unknown): unknown {
-  const text = typeof result === "string" ? result : JSON.stringify(result);
+function truncateComposioToolResult<T>(result: T) {
+  const text = isString(result)
+    ? result
+    : (JSON.stringify(result) ?? String(result));
+
   if (text.length <= MAX_COMPOSIO_TOOL_RESULT_CHARS) {
     return result;
   }
+
   const keep = Math.max(
     0,
     MAX_COMPOSIO_TOOL_RESULT_CHARS - TRUNCATION_MARKER.length
   );
+
   return {
     content: `${text.slice(0, keep)}${TRUNCATION_MARKER}`,
     truncated: true,
@@ -187,6 +190,7 @@ export async function buildComposioConnectTools(
     userId,
     profileId
   );
+
   const needsConnection = assigned.filter(
     ({ orgToolkit, userConnection }) =>
       orgToolkit.status === "enabled" && userConnection?.status !== "connected"
@@ -199,6 +203,7 @@ export async function buildComposioConnectTools(
   const allowedSlugs = needsConnection.map(
     ({ orgToolkit }) => orgToolkit.toolkitSlug
   );
+
   const slugList = allowedSlugs.join(", ");
 
   return [
@@ -216,13 +221,12 @@ export async function buildComposioConnectTools(
         type: "object",
       },
       async run(input, context: ToolContext) {
-        const toolkitSlug =
-          typeof input === "object" &&
-          input &&
-          typeof (input as ComposioConnectAccountInput).toolkit_slug ===
-            "string"
-            ? (input as ComposioConnectAccountInput).toolkit_slug.toLowerCase()
-            : null;
+        const parsed = parseMcpToolArguments(input);
+        const rawToolkitSlug = parsed.toolkit_slug;
+
+        const toolkitSlug = isString(rawToolkitSlug)
+          ? rawToolkitSlug.toLowerCase()
+          : null;
 
         if (!(toolkitSlug && allowedSlugs.includes(toolkitSlug))) {
           return {
@@ -300,6 +304,7 @@ export async function buildComposioToolDefinitions(
     userId,
     profileId
   );
+
   if (assigned.length === 0) {
     return [];
   }
@@ -320,6 +325,7 @@ export async function buildComposioToolDefinitions(
     userId,
     profileId
   );
+
   if (!session) {
     return [];
   }
@@ -329,6 +335,7 @@ export async function buildComposioToolDefinitions(
   await ensureComposioMcpConnection(mcpClientManager, connectionKey, session);
 
   const searchableActions = buildSearchableActions(connectedAssignments);
+
   if (searchableActions.length === 0) {
     return [];
   }
@@ -336,6 +343,7 @@ export async function buildComposioToolDefinitions(
   const toolkitSlugs = [
     ...new Set(searchableActions.map((action) => action.toolkitSlug)),
   ];
+
   const toolkitList = toolkitSlugs.join(", ");
 
   const searchTool: ToolDefinition = {
@@ -357,12 +365,12 @@ export async function buildComposioToolDefinitions(
       type: "object",
     },
     async run(input) {
-      const parsed = input as ComposioSearchActionsInput;
-      const query = typeof parsed?.query === "string" ? parsed.query : "";
-      const toolkitSlug =
-        typeof parsed?.toolkit_slug === "string"
-          ? parsed.toolkit_slug.toLowerCase()
-          : undefined;
+      const parsed = parseMcpToolArguments(input);
+      const query = isString(parsed.query) ? parsed.query : "";
+
+      const toolkitSlug = isString(parsed?.toolkit_slug)
+        ? parsed.toolkit_slug.toLowerCase()
+        : undefined;
 
       const matches = searchableActions.filter(
         (action) =>
@@ -407,21 +415,17 @@ export async function buildComposioToolDefinitions(
       type: "object",
     },
     async run(input) {
-      const parsed = input as ComposioInvokeActionInput;
-      const toolkitSlug =
-        typeof parsed?.toolkit_slug === "string"
-          ? parsed.toolkit_slug.toLowerCase()
-          : null;
-      const actionSlug =
-        typeof parsed?.action_slug === "string"
-          ? parsed.action_slug.toUpperCase()
-          : null;
-      const args =
-        parsed?.arguments &&
-        typeof parsed.arguments === "object" &&
-        !Array.isArray(parsed.arguments)
-          ? (parsed.arguments as Record<string, unknown>)
-          : {};
+      const parsed = parseMcpToolArguments(input);
+
+      const toolkitSlug = isString(parsed?.toolkit_slug)
+        ? parsed.toolkit_slug.toLowerCase()
+        : null;
+
+      const actionSlug = isString(parsed?.action_slug)
+        ? parsed.action_slug.toUpperCase()
+        : null;
+
+      const args = parseMcpToolArguments(parsed.arguments);
 
       if (!(toolkitSlug && actionSlug)) {
         return {
@@ -435,6 +439,7 @@ export async function buildComposioToolDefinitions(
         toolkitSlug,
         actionSlug
       );
+
       if (!action) {
         return {
           code: "COMPOSIO_POLICY",
@@ -446,7 +451,9 @@ export async function buildComposioToolDefinitions(
       const assignment = connectedAssignments.find(
         ({ orgToolkit }) => orgToolkit.toolkitSlug === action.toolkitSlug
       );
+
       const userConnection = assignment?.userConnection;
+
       if (userConnection?.status !== "connected") {
         return notConnectedError(action.toolkitSlug);
       }
@@ -482,4 +489,8 @@ export async function buildComposioToolDefinitions(
   };
 
   return [searchTool, invokeTool];
+}
+
+function isString<T>(value: T): value is T & string {
+  return Object.prototype.toString.call(value) === "[object String]";
 }

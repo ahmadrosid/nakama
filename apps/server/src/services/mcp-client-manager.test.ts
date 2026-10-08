@@ -22,18 +22,22 @@ function fakeStdioServer(id = "stdio-server"): StoredMcpServerRecord {
 describe("McpClientManager", () => {
   test("forgets a connection when its transport closes", async () => {
     const clients: Client[] = [];
+
     using _connect = spyOn(Client.prototype, "connect").mockImplementation(
       async function (this: Client) {
         clients.push(this);
       }
     );
+
     using _listTools = spyOn(Client.prototype, "listTools").mockResolvedValue({
       tools: [],
     });
+
     using _close = spyOn(
       StdioClientTransport.prototype,
       "close"
     ).mockResolvedValue(undefined);
+
     const manager = new McpClientManager();
     const server = fakeStdioServer();
 
@@ -56,9 +60,11 @@ describe("McpClientManager", () => {
 
   test("concurrent ensureConnected shares one client", async () => {
     let releaseListTools!: () => void;
+
     const listToolsGate = new Promise<void>((resolve) => {
       releaseListTools = resolve;
     });
+
     let clientConnectCount = 0;
     let listToolsCount = 0;
     let closeCount = 0;
@@ -68,15 +74,18 @@ describe("McpClientManager", () => {
         clientConnectCount += 1;
       }
     );
+
     using _listTools = spyOn(Client.prototype, "listTools").mockImplementation(
       async () => {
         listToolsCount += 1;
         await listToolsGate;
+
         return {
           tools: [{ description: "Demo", inputSchema: {}, name: "demo_tool" }],
         };
       }
     );
+
     using _close = spyOn(
       StdioClientTransport.prototype,
       "close"
@@ -95,6 +104,7 @@ describe("McpClientManager", () => {
     for (let i = 0; i < 50 && listToolsCount === 0; i += 1) {
       await Bun.sleep(1);
     }
+
     expect(listToolsCount).toBe(1);
     expect(clientConnectCount).toBe(1);
 
@@ -112,14 +122,17 @@ describe("McpClientManager", () => {
 
   test("concurrent ensureConnected failures leave no map entry", async () => {
     let releaseListTools!: () => void;
+
     const listToolsGate = new Promise<void>((resolve) => {
       releaseListTools = resolve;
     });
+
     let listToolsCount = 0;
 
     using _connect = spyOn(Client.prototype, "connect").mockResolvedValue(
       undefined
     );
+
     using _listTools = spyOn(Client.prototype, "listTools").mockImplementation(
       async () => {
         listToolsCount += 1;
@@ -139,6 +152,7 @@ describe("McpClientManager", () => {
     for (let i = 0; i < 50 && listToolsCount === 0; i += 1) {
       await Bun.sleep(1);
     }
+
     expect(listToolsCount).toBe(1);
 
     releaseListTools();
@@ -151,9 +165,11 @@ describe("McpClientManager", () => {
 
   test("ensureConnected reconnects after disconnect following a shared connect", async () => {
     let releaseListTools!: () => void;
+
     const listToolsGate = new Promise<void>((resolve) => {
       releaseListTools = resolve;
     });
+
     let clientConnectCount = 0;
 
     using _connect = spyOn(Client.prototype, "connect").mockImplementation(
@@ -161,14 +177,17 @@ describe("McpClientManager", () => {
         clientConnectCount += 1;
       }
     );
+
     using _listTools = spyOn(Client.prototype, "listTools").mockImplementation(
       async () => {
         await listToolsGate;
+
         return {
           tools: [{ description: "Demo", inputSchema: {}, name: "demo_tool" }],
         };
       }
     );
+
     using _close = spyOn(
       StdioClientTransport.prototype,
       "close"
@@ -183,6 +202,7 @@ describe("McpClientManager", () => {
       manager.ensureConnected(server, orgId, profileId),
       manager.ensureConnected(server, orgId, profileId),
     ]);
+
     releaseListTools();
     await shared;
     expect(manager.getConnectedCount()).toBe(1);

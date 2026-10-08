@@ -55,16 +55,20 @@ export class AutomationDeliveryService {
         deliveryError: null,
         deliveryStatus: "skipped",
       });
+
       return;
     }
 
     const bodySource =
       run.status === "failed" ? (run.error ?? run.output) : run.output;
+
     const body = truncateForChannel(
       bodySource?.trim() || "(no output)",
       delivery.channel
     );
+
     const completedAt = run.completedAt ?? new Date().toISOString();
+
     const formatted = formatAutomationDeliveryMessage({
       automationName: automation.name,
       body,
@@ -76,11 +80,13 @@ export class AutomationDeliveryService {
 
     if (delivery.channel === "email") {
       const to = delivery.to?.trim();
+
       if (!to) {
         throw new Error(
           "delivery.to is required when delivery.channel is email."
         );
       }
+
       result = await this.email.send({
         orgId: automation.orgId,
         profileId: automation.profileId,

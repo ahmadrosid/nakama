@@ -14,6 +14,7 @@ async function tokenLimitedOrg(orgId: string, now?: () => Date) {
     slug: orgId,
     updatedAt: createdAt,
   });
+
   return { db, quota: new OrgUsageQuotaService(db, now) };
 }
 
@@ -103,6 +104,7 @@ describe("OrgUsageQuotaService", () => {
       slug: "warning-organization",
       updatedAt: now,
     });
+
     for (let turn = 0; turn < 8; turn += 1) {
       await db.incrementLlmTurnUsage("org_warning", {
         estimated: false,
@@ -188,6 +190,7 @@ describe("OrgUsageQuotaService", () => {
 
   test("provider errors do not exhaust the organization quota", async () => {
     const { quota } = await tokenLimitedOrg("org_failing");
+
     const session = createAgentChatSession(
       {
         provider: {

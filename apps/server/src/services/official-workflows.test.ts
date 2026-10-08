@@ -11,6 +11,7 @@ import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { PluginService } from "./plugin-service";
 
 const directories: string[] = [];
+
 afterEach(async () => {
   for (const dir of directories.splice(0)) {
     await rm(dir, { force: true, recursive: true });
@@ -21,6 +22,7 @@ test("official workflow install imports once, executes through IPC, isolates org
   const dir = await mkdtemp(join(tmpdir(), "official-workflows-"));
   directories.push(dir);
   const officialPackagesDir = join(dir, "official");
+
   for (const pluginId of ["workflows", "supermemory"]) {
     await cp(
       resolve(import.meta.dir, "../../../../packages/plugins", pluginId),
@@ -28,7 +30,9 @@ test("official workflow install imports once, executes through IPC, isolates org
       { recursive: true }
     );
   }
+
   const db = createInMemoryDatabaseAdapter();
+
   const legacy: StoredWorkflow = {
     description: "",
     enabled: true,
@@ -39,37 +43,52 @@ test("official workflow install imports once, executes through IPC, isolates org
     steps: [{ id: "summary", kind: "summarize", prompt: "Summarize" }],
     version: 1,
   };
+
   const seen: string[] = [];
+
   const service = new PluginService(db, dir, {
     officialPackagesDir,
     onHostRequest: async (value, context) => {
-      const request = value as Record<string, unknown>;
-      seen.push(`${context.orgId}:${request.op}`);
-      if (request.op === "legacy_workflows") {
+      if (!(value instanceof Object)) {
+        throw new Error("Invalid host request.");
+      }
+
+      const request = new Map(Object.entries(value));
+      const operation = request.get("op");
+      seen.push(`${context.orgId}:${operation}`);
+
+      if (operation === "legacy_workflows") {
         return context.orgId === "org_a"
           ? [{ runs: [], workflow: legacy }]
           : [];
       }
-      if (request.op === "profiles") {
+
+      if (operation === "profiles") {
         return [{ id: "profile_a", isDefault: true }];
       }
-      if (request.op === "tools") {
+
+      if (operation === "tools") {
         return [{ name: "echo" }];
       }
-      if (request.op === "execute_tool") {
-        return request.input;
+
+      if (operation === "execute_tool") {
+        return request.get("input");
       }
-      if (request.op === "summarize") {
-        return JSON.stringify(request.bag);
+
+      if (operation === "summarize") {
+        return JSON.stringify(request.get("bag"));
       }
+
       throw new Error("Unknown request");
     },
   });
+
   const actor = { id: "admin", role: "admin" as const };
   expect(
     (await service.listOfficialPlugins()).map((plugin) => plugin.id)
   ).toEqual(expect.arrayContaining(["workflows", "supermemory"]));
   await service.installOfficialPlugin("org_a", "workflows", actor);
+
   const invoke = async (key: string, input = {}, orgId = "org_a") =>
     (
       await service.invokePluginAction({
@@ -81,10 +100,13 @@ test("official workflow install imports once, executes through IPC, isolates org
         pluginId: "workflows",
       })
     ).result;
+
   expect(await invoke("list_workflows")).toEqual([legacy]);
   await invoke("delete_workflow", { workflowId: "legacy" });
   await service.installOfficialPlugin("org_a", "workflows", actor);
   expect(await invoke("list_workflows")).toEqual([]);
+
+  // SAFETY: The test fixture matches the contract used by this test.
   const workflow = (await invoke("create_workflow", {
     name: "Echo",
     steps: [
@@ -97,10 +119,13 @@ test("official workflow install imports once, executes through IPC, isolates org
       { id: "summary", kind: "summarize", prompt: "Summarize" },
     ],
   })) as StoredWorkflow;
+
+  // SAFETY: The test fixture matches the contract used by this test.
   const result = (await invoke("run_workflow", {
     input: { value: "hello" },
     workflowId: workflow.id,
   })) as { run: WorkflowRunRecord };
+
   expect(result.run.status).toBe("completed");
   expect(result.run.steps?.map((step) => step.status)).toEqual([
     "completed",
@@ -116,6 +141,7 @@ test("official workflow install imports once, executes through IPC, isolates org
   const before = (await db.getOrgPlugin("org_a", "workflows"))!;
   const savedWorkflows = await invoke("list_workflows");
   const otherOrg = await db.getOrgPlugin("org_b", "workflows");
+
   const originalUi = await readFile(
     join(
       getPluginReleaseDir("workflows", before.selectedVersion!, dir),
@@ -123,6 +149,7 @@ test("official workflow install imports once, executes through IPC, isolates org
     ),
     "utf8"
   );
+
   await appendFile(
     join(officialPackagesDir, "workflows/ui/app.js"),
     "\n// rebuilt for development\n"
@@ -141,12 +168,14 @@ test("official workflow install imports once, executes through IPC, isolates org
     )
   ).rejects.toThrow();
   expect(await db.getOrgPlugin("org_a", "workflows")).toEqual(before);
+
   const reinstalled = await service.installOfficialPlugin(
     "org_a",
     "workflows",
     actor,
     { expectedRevision: before.revision }
   );
+
   expect(reinstalled.lifecycleState).toBe("enabled");
   expect(reinstalled.selectedVersion).not.toBe(before.selectedVersion);
   expect(reinstalled.revision).toBeGreaterThan(before.revision);
@@ -171,16 +200,19 @@ test("official workflow install imports once, executes through IPC, isolates org
   expect(await db.getOrgPlugin("org_b", "workflows")).toEqual(otherOrg);
   expect(await invoke("list_workflows")).toEqual(savedWorkflows);
   expect(
+    // SAFETY: The test fixture matches the contract used by this test.
     (
       (await invoke("runs", { workflowId: workflow.id })) as WorkflowRunRecord[]
     )[0]?.id
   ).toBe(result.run.id);
+
   const repeated = await service.installOfficialPlugin(
     "org_a",
     "workflows",
     actor,
     { expectedRevision: reinstalled.revision }
   );
+
   expect(repeated.selectedVersion).toBe(reinstalled.selectedVersion);
   expect(repeated.revision).toBeGreaterThan(reinstalled.revision);
   await expect(
@@ -207,19 +239,23 @@ test("official workflow install imports once, executes through IPC, isolates org
     join(officialPackagesDir, "workflows/ui/app.js"),
     "\n// another development build\n"
   );
+
   const refreshedDisabled = await service.installOfficialPlugin(
     "org_a",
     "workflows",
     actor,
     { expectedRevision: disabled.revision }
   );
+
   expect(refreshedDisabled.lifecycleState).toBe("disabled");
   expect(refreshedDisabled.selectedVersion).not.toBe(disabled.selectedVersion);
+
   const ready = await service.enableOrgPlugin(
     "org_a",
     "workflows",
     refreshedDisabled.revision
   );
+
   await appendFile(
     join(officialPackagesDir, "workflows/migrations/001-workflows.sql"),
     "\nINVALID MIGRATION;\n"
@@ -241,6 +277,7 @@ test("host capabilities enforce profile tenancy, Super Bot access, and tool assi
   const { createPluginAgentHost } = await import("./plugin-agent-host");
   const db = createInMemoryDatabaseAdapter();
   const now = new Date().toISOString();
+
   for (const [id, orgId, isSuper] of [
     ["normal", "org_a", false],
     ["super", "org_a", true],
@@ -258,6 +295,7 @@ test("host capabilities enforce profile tenancy, Super Bot access, and tool assi
       updatedAt: now,
     });
   }
+
   const agent = {
     buildPluginToolContext: () => ({}),
     resolvePluginExecutionTools: async () => [
@@ -271,7 +309,7 @@ test("host capabilities enforce profile tenancy, Super Bot access, and tool assi
         description: "Save a memory",
         name: "plugin_supermemory__save_memory",
         parameters: { type: "object" },
-        run: async (input: unknown) => ({ saved: input }),
+        run: async (input: { text: string }) => ({ saved: input }),
       },
       {
         name: "plugin_workflows__run_workflow",
@@ -281,7 +319,10 @@ test("host capabilities enforce profile tenancy, Super Bot access, and tool assi
       },
     ],
   };
+
+  // SAFETY: The test fixture matches the contract used by this test.
   const host = createPluginAgentHost(db, agent as never);
+
   const context = {
     actor: { id: "member", role: "member" as const },
     apiVersion: 1 as const,
@@ -291,6 +332,7 @@ test("host capabilities enforce profile tenancy, Super Bot access, and tool assi
     pluginId: "workflows",
     pluginVersion: "1.0.0",
   };
+
   await expect(
     host({ agentId: "foreign", op: "tools" }, context)
   ).rejects.toThrow();
@@ -312,10 +354,12 @@ test("host capabilities enforce profile tenancy, Super Bot access, and tool assi
       context
     )
   ).toEqual({ ok: true });
+
   const denied = await host(
     { agentId: "normal", input: {}, name: "unassigned", op: "execute_tool" },
     context
   );
+
   expect(denied).toHaveProperty("error");
   expect(
     await host(
@@ -328,6 +372,7 @@ test("host capabilities enforce profile tenancy, Super Bot access, and tool assi
       context
     )
   ).toEqual({ saved: { text: "Meeting summary" } });
+
   for (const name of [
     "plugin_workflows__run_workflow",
     "plugin_supermemory__unassigned",
@@ -345,12 +390,14 @@ test("official dependencies are checked before publishing or changing org state"
   const dir = await mkdtemp(join(tmpdir(), "official-dependencies-"));
   directories.push(dir);
   const db = createInMemoryDatabaseAdapter();
+
   const service = new PluginService(db, dir, {
     officialPackagesDir: resolve(
       import.meta.dir,
       "../../../../packages/plugins"
     ),
   });
+
   await expect(
     service.installOfficialPlugin("org_a", "workflows", {
       id: "admin",
@@ -367,6 +414,7 @@ test("failed official setup disables the new installation and can be retried", a
   directories.push(dir);
   const db = createInMemoryDatabaseAdapter();
   let failSetup = true;
+
   const service = new PluginService(db, dir, {
     officialPackagesDir: resolve(
       import.meta.dir,
@@ -376,9 +424,11 @@ test("failed official setup disables the new installation and can be retried", a
       if (failSetup) {
         throw new Error("Legacy data is temporarily unavailable.");
       }
+
       return [];
     },
   });
+
   const actor = { id: "admin", role: "admin" as const };
   await expect(
     service.installOfficialPlugin("org_a", "workflows", actor)
@@ -387,10 +437,12 @@ test("failed official setup disables the new installation and can be retried", a
   expect(failed?.lifecycleState).toBe("disabled");
   expect(failed?.databaseGeneration).toBeTruthy();
   failSetup = false;
+
   const retried = await service.installOfficialPlugin(
     "org_a",
     "workflows",
     actor
   );
+
   expect(retried.lifecycleState).toBe("enabled");
 });

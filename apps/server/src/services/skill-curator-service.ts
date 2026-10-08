@@ -111,7 +111,9 @@ export class SkillCuratorService {
         dryRun,
         startedAt,
       });
+
       await this.writeReports(orgId, result);
+
       return result;
     } finally {
       this.inFlight.delete(orgId);
@@ -122,11 +124,14 @@ export class SkillCuratorService {
     const raw = await readTextIfExists(
       join(getOrgCuratorLogDir(orgId), "run.json")
     );
+
     if (!raw) {
       return null;
     }
 
+    // SAFETY: writeReports serializes this exact result type to the same path.
     const parsed = JSON.parse(raw) as SkillCuratorRunResult;
+
     if (parsed.orgId !== orgId) {
       return null;
     }
@@ -142,19 +147,23 @@ export class SkillCuratorService {
     options: SkillCuratorRunOptions & { dryRun: boolean; startedAt: string }
   ): Promise<SkillCuratorRunResult> {
     const now = options.now ?? new Date();
+
     const counts: CuratorCounts = {
       ...emptyCounts,
       restoreMisses: [],
     };
+
     const org = await this.db.getOrganizationById(orgId);
     const staleAfterDays = org?.skillsCuratorStaleAfterDays ?? 30;
     const archiveAfterDays = org?.skillsCuratorArchiveAfterDays ?? 90;
     const profiles = await this.db.listProfilesForOrg(orgId);
+
     for (const profile of profiles) {
       if (profile.orgId !== orgId) {
         throw new Error("Curator profile must belong to the requested org.");
       }
     }
+
     const enabledAutomationProfileIds = new Set(
       (await this.db.listAutomationsForOrg(orgId))
         .filter((automation) => automation.enabled)
@@ -163,6 +172,7 @@ export class SkillCuratorService {
 
     for (const profile of profiles) {
       const assigned = await this.db.listSkillsForProfile(profile.id);
+
       const usageBySkillId = new Map(
         (await this.db.listSkillUsageForProfile(profile.id)).map((row) => [
           row.skillId,
@@ -179,6 +189,7 @@ export class SkillCuratorService {
         }
 
         const usage = usageBySkillId.get(skill.id);
+
         const freshness = classifySkillFreshness({
           archiveAfterDays,
           createdAt: skill.createdAt,
@@ -218,6 +229,7 @@ export class SkillCuratorService {
           counts.archived += 1;
         } else {
           counts.skippedError += 1;
+
           if (outcome.restoreMiss) {
             counts.restoreMisses.push(outcome.restoreMiss);
           }
@@ -260,21 +272,25 @@ export class SkillCuratorService {
         profile.skillsCuratorConsolidateEnabled ?? null,
         org?.skillsCuratorConsolidateEnabled ?? false
       );
+
       if (!consolidateEnabled) {
         continue;
       }
 
       const assigned = await this.db.listSkillsForProfile(profile.id);
+
       const usageBySkillId = new Map(
         (await this.db.listSkillUsageForProfile(profile.id)).map((row) => [
           row.skillId,
           row,
         ])
       );
+
       const pending = await this.db.listSkillProposals(input.orgId, {
         profileId: profile.id,
         status: "pending",
       });
+
       const pendingSkillNames = new Set(
         pending.map((proposal) => proposal.skillName)
       );
@@ -285,8 +301,10 @@ export class SkillCuratorService {
         if (isExemptFromCurator(skill)) {
           continue;
         }
+
         const body =
           (await readTextIfExists(join(skill.sourcePath, "SKILL.md"))) ?? "";
+
         const usage = usageBySkillId.get(skill.id);
         candidates.push({
           body,
@@ -309,6 +327,7 @@ export class SkillCuratorService {
       });
 
       input.counts.consolidateSkipped += plan.skippedCount;
+
       if (plan.budgetExhausted) {
         input.counts.consolidateBudgetExhausted = true;
       }
@@ -328,6 +347,7 @@ export class SkillCuratorService {
           profileId: profile.id,
           winner: cluster.winner,
         });
+
         this.recordConsolidateOutcome(input.counts, "merge", outcome);
       }
 
@@ -340,6 +360,7 @@ export class SkillCuratorService {
           profileId: profile.id,
           winner: solo,
         });
+
         this.recordConsolidateOutcome(input.counts, "deslopify", outcome);
       }
     }
@@ -352,13 +373,16 @@ export class SkillCuratorService {
   ): void {
     if (outcome === "skipped") {
       counts.consolidateSkipped += 1;
+
       return;
     }
+
     if (mode === "merge") {
       counts.consolidateMerged += 1;
     } else {
       counts.consolidateDeslopified += 1;
     }
+
     if (outcome === "staged") {
       counts.consolidateStaged += 1;
     } else {
@@ -375,6 +399,7 @@ export class SkillCuratorService {
     winner: ConsolidateCandidateSkill;
   }): Promise<"staged" | "applied" | "skipped"> {
     const hasLosers = input.losers.length > 0;
+
     if ((input.mode === "merge") !== hasLosers) {
       throw new Error("Merge requires losers; deslopify requires none.");
     }
@@ -392,6 +417,7 @@ export class SkillCuratorService {
     }));
 
     let markdown: string | null;
+
     try {
       markdown = await this.generateMarkdown({
         losers: loserBodies.length > 0 ? loserBodies : undefined,
@@ -409,6 +435,7 @@ export class SkillCuratorService {
 
     const loserNames = input.losers.map((loser) => loser.name);
     const proposals = this.skillProposalService;
+
     const writeApprovalRequired = proposals
       ? await proposals.isWriteApprovalRequired(input.orgId, input.profileId)
       : false;
@@ -423,6 +450,7 @@ export class SkillCuratorService {
           profileId: input.profileId,
           skillName: input.winner.name,
         });
+
         return staged.outcome === "created" ? "staged" : "skipped";
       } catch {
         return "skipped";
@@ -444,6 +472,7 @@ export class SkillCuratorService {
           profileId: input.profileId,
           skill: loserSkill,
         });
+
         if (!outcome.archived) {
           return "skipped";
         }
@@ -473,6 +502,7 @@ export class SkillCuratorService {
         profileId: input.profileId,
         skillName: input.skill.name,
       });
+
       archivedDirectory = archived.archivedDirectory;
       await this.skillsService.unassignArchivedProfileSkill(
         input.orgId,
@@ -480,6 +510,7 @@ export class SkillCuratorService {
         input.skill.id,
         archived.archivedDirectory
       );
+
       return { archived: true };
     } catch {
       if (archivedDirectory && (await pathExists(archivedDirectory))) {
@@ -555,11 +586,13 @@ function formatCuratorReport(result: SkillCuratorRunResult): string {
       "",
       "Restore misses (folder stayed in .archive; catalog row still points at the live path):"
     );
+
     for (const miss of result.restoreMisses) {
       lines.push(`- ${miss.skillId} ${miss.archivedDirectory}`);
     }
   }
 
   lines.push("");
+
   return lines.join("\n");
 }

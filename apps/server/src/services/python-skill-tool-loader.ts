@@ -22,15 +22,18 @@ export async function loadPythonSkillTool(
   const modulePath = script?.path ?? skill.toolPath;
   const toolName = script?.name ?? skill.name;
   const toolDescription = script?.description ?? skill.description;
+
   if (!modulePath?.endsWith(".py")) {
     return null;
   }
 
   try {
     const source = await readFile(modulePath, "utf8");
+
     if (!/\bdef\s+run\s*\(/.test(source)) {
       throw new Error("Python skill tool must define run(input, context).");
     }
+
     // No check on how the result is written. `print(json.dumps(...))` is the
     // ordinary way to reach stdout in Python and a substring search for
     // `sys.stdout` refused it, claiming a harness was missing from a file that
@@ -60,15 +63,15 @@ export async function loadPythonSkillTool(
           input,
           label: "Python skill tool",
           transport: { includeConfigDir: options.exposeConfigDir === true },
-          workspaceRoot:
-            typeof context.workspaceRoot === "string"
-              ? context.workspaceRoot
-              : undefined,
+          workspaceRoot: isString(context.workspaceRoot)
+            ? context.workspaceRoot
+            : undefined,
         });
       },
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+
     return {
       description: toolDescription,
       name: toolName,
@@ -78,4 +81,8 @@ export async function loadPythonSkillTool(
       },
     };
   }
+}
+
+function isString<T>(value: T): value is T & string {
+  return Object.prototype.toString.call(value) === "[object String]";
 }
