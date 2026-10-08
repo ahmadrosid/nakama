@@ -41,14 +41,17 @@ export function ProfileConfigAssignmentsSection({
     setSkillInstallOpen,
     selectedId,
   } = state;
+
   const { navigateToSkillDetail } = useAppNavigation();
   const { activeOrg } = useAuth();
   const isOrgAdmin = activeOrg?.role === "admin";
   const [capability, setCapability] = useState("tools");
+
   const { data: proposals } = useSkillProposals(
     isOrgAdmin && selectedId ? activeOrg.id : null,
     { profileId: selectedId ?? undefined, status: "pending" }
   );
+
   const readOnly = busy || !canManageProfile;
 
   if (!detail) {
@@ -63,6 +66,7 @@ export function ProfileConfigAssignmentsSection({
         if (value !== "proposals") {
           setCapability(String(value));
         }
+
         state.setDetailTab(value === "proposals" ? "proposals" : "profile");
       }}
       value={
@@ -164,14 +168,17 @@ function ProfilePluginsSection({ state }: { state: ProfilesPageState }) {
   const plugins = useOrgPlugins();
   const save = useSavePluginAgentAccess();
   const { detail, allTools, allSkills, busy, canManageProfile } = state;
+
   if (!detail) {
     return null;
   }
+
   if (plugins.isLoading) {
     return (
       <p className="py-5 text-muted-foreground text-sm">Loading plugins…</p>
     );
   }
+
   if (plugins.error) {
     return (
       <p className="py-5 text-destructive text-sm" role="alert">
@@ -179,7 +186,9 @@ function ProfilePluginsSection({ state }: { state: ProfilesPageState }) {
       </p>
     );
   }
+
   const installed = (plugins.data ?? []).filter((plugin) => plugin.installed);
+
   return (
     <div className="pt-5">
       {save.error ? (
@@ -196,7 +205,9 @@ function ProfilePluginsSection({ state }: { state: ProfilesPageState }) {
             skills: allSkills,
             tools: allTools,
           });
+
           const Icon = pluginIcon(plugin.pluginId);
+
           return (
             <li
               className="flex items-center gap-3 px-4 py-3"

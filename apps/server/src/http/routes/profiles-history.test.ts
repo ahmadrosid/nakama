@@ -15,6 +15,7 @@ const BASE = "http://localhost:4310";
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const profileService = new ProfileService(databaseAdapter);
+
   return {
     ...createMinimalHonoApp({
       agent: {
@@ -29,17 +30,9 @@ function createApp() {
         updateProfile: (
           orgId: string,
           profileId: string,
-          request: unknown,
-          meta?: unknown
-        ) =>
-          profileService.updateProfile(
-            orgId,
-            profileId,
-            request as { systemPrompt?: string },
-            meta as
-              | { actorUserId?: string | null; source: "dashboard" }
-              | undefined
-          ),
+          request: Parameters<ProfileService["updateProfile"]>[2],
+          meta?: Parameters<ProfileService["updateProfile"]>[3]
+        ) => profileService.updateProfile(orgId, profileId, request, meta),
       },
       databaseAdapter,
     }),
@@ -51,11 +44,13 @@ function createApp() {
 describe("GET /v1/profiles/:profileId/history", () => {
   test("org admin can read history; viewer gets 403", async () => {
     const { app, authService, databaseAdapter, profileService } = createApp();
+
     const platform = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "history-admin@example.com"
     );
+
     const orgId = platform.orgId!;
     const profiles = await databaseAdapter.listProfilesForOrg(orgId);
     const profileId = profiles[0]!.id;
@@ -72,10 +67,14 @@ describe("GET /v1/profiles/:profileId/history", () => {
         headers: platform.headers({}, orgId),
       })
     );
+
     expect(allowed.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await allowed.json()) as {
       events: Array<{ field: string; source: string }>;
     };
+
     expect(body.events.some((event) => event.field === "system_prompt")).toBe(
       true
     );
@@ -107,6 +106,7 @@ describe("GET /v1/profiles/:profileId/history", () => {
         headers: viewer.headers({}, orgId),
       })
     );
+
     expect(denied.status).toBe(403);
   }, 20_000);
 });

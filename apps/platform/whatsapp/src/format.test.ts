@@ -49,6 +49,7 @@ describe("splitWhatsAppMessage", () => {
     const chunks = splitWhatsAppMessage(text);
 
     expect(chunks.length).toBeGreaterThan(1);
+
     for (const chunk of chunks) {
       expect(chunk.length).toBeLessThanOrEqual(400);
     }

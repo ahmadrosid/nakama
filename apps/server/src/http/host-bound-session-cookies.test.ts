@@ -18,6 +18,7 @@ import type { HonoApp } from "./types";
  */
 
 const VICTIM_ORIGIN = "https://nakama.example.com";
+
 const SIBLING_ORIGIN = "https://evil.example.com";
 
 setupTestConfigDir("nakama-host-cookie-test-");
@@ -47,6 +48,7 @@ class BrowserCookieJar {
   cookieHeader(origin: string): string {
     const url = new URL(origin);
     const secure = url.protocol === "https:";
+
     return [...this.cookies.values()]
       .filter(
         (cookie) =>
@@ -70,9 +72,11 @@ class BrowserCookieJar {
     const separator = pair.indexOf("=");
     const name = pair.slice(0, separator).trim();
     const value = pair.slice(separator + 1).trim();
+
     const attributes = new Map(
       rawAttributes.map((attribute) => {
         const index = attribute.indexOf("=");
+
         return index === -1
           ? ([attribute.trim().toLowerCase(), ""] as const)
           : ([
@@ -89,6 +93,7 @@ class BrowserCookieJar {
 
     if (Number.isFinite(maxAge) && maxAge <= 0) {
       this.cookies.delete(key);
+
       return;
     }
 
@@ -99,6 +104,7 @@ class BrowserCookieJar {
         domainAttribute !== undefined)
     ) {
       this.rejected.push(setCookie);
+
       return;
     }
 
@@ -107,6 +113,7 @@ class BrowserCookieJar {
       !this.domainMatches(url.hostname, domainAttribute)
     ) {
       this.rejected.push(setCookie);
+
       return;
     }
 
@@ -132,9 +139,10 @@ class BrowserCookieJar {
   }
 }
 
-function cookiePair(setCookie: string): { name: string; value: string } {
+function cookiePair(setCookie: string) {
   const [pair = ""] = setCookie.split(";");
   const separator = pair.indexOf("=");
+
   return {
     name: pair.slice(0, separator).trim(),
     value: pair.slice(separator + 1).trim(),
@@ -150,13 +158,17 @@ async function requestApp(
 ): Promise<Response> {
   const headers = new Headers(init.headers);
   const cookie = jar.cookieHeader(origin);
+
   if (cookie) {
     headers.set("Cookie", cookie);
   }
+
   const response = await app.fetch(
     new Request(`${origin}${path}`, { ...init, headers })
   );
+
   jar.applySetCookies(origin, response.headers.getSetCookie());
+
   return response;
 }
 
@@ -176,6 +188,7 @@ function sessionCookieValue(response: Response): string {
   const setCookie = response.headers
     .getSetCookie()
     .find((entry) => entry.startsWith("__Host-nakama_session="));
+
   if (!setCookie) {
     throw new Error("Login did not issue a host-bound session cookie.");
   }
@@ -208,6 +221,7 @@ async function createAttackerSession(
       method: "POST",
     })
   );
+
   if (response.status !== 200) {
     throw new Error(`Attacker login failed: ${response.status}`);
   }
@@ -218,8 +232,10 @@ async function createAttackerSession(
       .map(cookiePair)
       .map(({ name, value }) => [name, value])
   );
+
   const session = values.get("__Host-nakama_session");
   const csrf = values.get("__Host-nakama_csrf");
+
   if (!(session && csrf)) {
     throw new Error("Attacker login did not issue host-bound cookies.");
   }
@@ -236,12 +252,15 @@ describe("host-bound browser session cookies", () => {
     expect(setup.status).toBe(201);
 
     const issued = setup.headers.getSetCookie();
+
     const sessionCookie = issued.find((entry) =>
       entry.startsWith("__Host-nakama_session=")
     );
+
     const csrfCookie = issued.find((entry) =>
       entry.startsWith("__Host-nakama_csrf=")
     );
+
     expect(sessionCookie).toBeDefined();
     expect(csrfCookie).toBeDefined();
     // The prefix is only honoured when the cookie is Secure, Path=/ and has
@@ -268,6 +287,7 @@ describe("host-bound browser session cookies", () => {
 
     const me = await requestApp(app, jar, VICTIM_ORIGIN, "/v1/auth/me");
     expect(me.status).toBe(200);
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     expect(((await me.json()) as { email: string }).email).toBe(
       "admin@example.com"
     );
@@ -275,6 +295,7 @@ describe("host-bound browser session cookies", () => {
 
   test("rejects a sibling-domain session planted by an attacker", async () => {
     const { app, authService, databaseAdapter } = createMinimalHonoApp();
+
     const attacker = await createAttackerSession(
       app,
       authService,
@@ -304,6 +325,7 @@ describe("host-bound browser session cookies", () => {
       "/v1/auth/logout",
       { headers: { "X-CSRF-Token": attacker.csrf }, method: "POST" }
     );
+
     expect(write.status).toBe(401);
 
     // The attacker's own session is untouched, so nothing here revoked it.
@@ -314,6 +336,7 @@ describe("host-bound browser session cookies", () => {
         },
       })
     );
+
     expect(attackerCheck.status).toBe(200);
   });
 
@@ -328,6 +351,7 @@ describe("host-bound browser session cookies", () => {
 
     const me = await requestApp(app, jar, VICTIM_ORIGIN, "/v1/auth/me");
     expect(me.status).toBe(200);
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     expect(((await me.json()) as { email: string }).email).toBe(
       "admin@example.com"
     );
@@ -370,10 +394,12 @@ describe("host-bound browser session cookies", () => {
       .split("; ")
       .find((entry) => entry.startsWith("nakama_csrf="))!
       .split("=")[1]!;
+
     const logout = await requestApp(app, jar, origin, "/v1/auth/logout", {
       headers: { "X-CSRF-Token": csrf },
       method: "POST",
     });
+
     expect(logout.status).toBe(200);
     // Logout clears the host-bound pair too, so a scheme drift on the same
     // browser cannot leave a live session behind.

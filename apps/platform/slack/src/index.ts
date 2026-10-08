@@ -29,22 +29,30 @@ import { createChatHandler, type SlackApi } from "./chat-handler";
 import { connectSlackSocket } from "./socket";
 
 installErrorHandlers("worker:slack");
+
 void installErrorTrackingSink();
 
 const owner = channelOwnerFromEnv();
+
 const heartbeat = createSlackWorkerHeartbeat(owner);
 
 let spawnedChild: Bun.Subprocess | null = null;
+
 let closeSocket: (() => void) | null = null;
+
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
 let connected = false;
 
 async function shutdown(code: number): Promise<never> {
   closeSocket?.();
+
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
   }
+
   await heartbeat.clear();
+
   if (hasActiveStreams()) {
     console.warn(
       "Leaving the spawned Nakama server running so in-flight agent turns can finish; the next worker start will reuse it."
@@ -52,12 +60,14 @@ async function shutdown(code: number): Promise<never> {
   } else {
     stopSpawnedServer(spawnedChild);
   }
+
   process.exit(code);
 }
 
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
   process.on(signal, () => void shutdown(0));
 }
+
 // pm2 stops Windows workers with a "shutdown" message instead of a signal.
 if (process.platform === "win32") {
   process.on("message", (message) => {
@@ -67,7 +77,7 @@ if (process.platform === "win32") {
   });
 }
 
-function isSlackBlockRejection(error: unknown): boolean {
+function isSlackBlockRejection(error: Error): boolean {
   return error instanceof Error && /failed: invalid_blocks/.test(error.message);
 }
 
@@ -96,10 +106,11 @@ function createSlackApi(botToken: string): SlackApi {
         await callSlackApi("chat.postMessage", botToken, {
           ...message,
           blocks: [{ text: chunk, type: "markdown" }],
-        }).catch((error: unknown) => {
-          if (!isSlackBlockRejection(error)) {
+        }).catch((error) => {
+          if (!(error instanceof Error) || !isSlackBlockRejection(error)) {
             throw error;
           }
+
           return callSlackApi("chat.postMessage", botToken, message);
         });
       }
@@ -116,6 +127,7 @@ function createSlackApi(botToken: string): SlackApi {
 
 try {
   const existing = await heartbeat.read();
+
   if (existing && existing.pid !== process.pid && isHeartbeatAlive(existing)) {
     throw new Error(
       `Another Nakama Slack bridge already runs this connection (pid ${existing.pid}).`
@@ -123,6 +135,7 @@ try {
   }
 
   const config = await loadSlackConfigFile(owner);
+
   if (!config?.appToken) {
     throw new Error(
       "Configure this agent's Slack connection before starting its worker."
@@ -131,11 +144,13 @@ try {
 
   const { serverUrl, spawnedChild: child } = await ensureServerRunning();
   spawnedChild = child;
+
   const client = new NakamaClient({
     authToken: (await loadLocalAuthToken("slack@nakama.internal")) ?? undefined,
     baseUrl: serverUrl,
     clientOrigin: resolveWebPublicUrl(),
   });
+
   await client.listUserOrgs();
 
   const identity = await callSlackApi<{ team_id: string; user_id: string }>(
@@ -146,6 +161,7 @@ try {
   const sessionStore = new ChannelSessionStore(
     join(getSlackConfigDir(owner), "chat-sessions.json")
   );
+
   await sessionStore.load();
 
   const handleEvent = createChatHandler({
@@ -165,6 +181,7 @@ try {
           `[slack] ${event.type} channel_type=${event.channel_type} subtype=${event.subtype ?? "-"} user=${event.user ?? "-"} thread=${event.thread_ts ? "yes" : "no"}`
         );
       }
+
       handleEvent(event).catch((error) => {
         console.error("Slack message handler error:", error);
       });

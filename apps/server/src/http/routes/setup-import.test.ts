@@ -29,10 +29,13 @@ async function createArchiveOverEntryLimit(): Promise<Buffer> {
   const archive = (
     await createNakamaDataExport({ rootDir: getUserConfigDir() })
   ).data;
+
   const entries = unzipSync(archive);
+
   for (let index = 0; index < MAX_IMPORT_ENTRIES; index += 1) {
     entries[`empty-${index}.txt`] = new Uint8Array();
   }
+
   return Buffer.from(zipSync(entries, { level: 0 }));
 }
 
@@ -41,9 +44,11 @@ describe("setup import routes", () => {
     const { app } = createApp();
     const configPath = join(getUserConfigDir(), "config.ini");
     await writeFile(configPath, "original");
+
     const archive = (
       await createNakamaDataExport({ rootDir: getUserConfigDir() })
     ).data;
+
     await writeFile(configPath, "changed");
 
     const previewResponse = await app.fetch(
@@ -53,6 +58,7 @@ describe("setup import routes", () => {
         method: "POST",
       })
     );
+
     const restoreResponse = await app.fetch(
       new Request("http://localhost:4310/v1/auth/setup/import/restore", {
         body: JSON.stringify({
@@ -71,16 +77,20 @@ describe("setup import routes", () => {
 
   test("restore blocks traffic and waits for active turns before replacing data", async () => {
     let stopped = false;
+
     const { app } = createMinimalHonoApp({
       onBeforeDataRestore: () => {
         stopped = true;
       },
       onDataRestored: async () => {},
     });
+
     const archive = (
       await createNakamaDataExport({ rootDir: getUserConfigDir() })
     ).data;
+
     sessionTurnRegistry.beginTurn("restore-drain-test");
+
     const restoring = app.fetch(
       new Request("http://localhost/v1/auth/setup/import/restore", {
         method: "POST",
@@ -91,21 +101,27 @@ describe("setup import routes", () => {
         }),
       })
     );
+
     try {
       let status = 0;
+
       for (let attempt = 0; attempt < 100; attempt += 1) {
         status = (await app.fetch(new Request("http://localhost/v1/auth/me")))
           .status;
+
         if (status === 503) {
           break;
         }
+
         await Bun.sleep(5);
       }
+
       expect(status).toBe(503);
       expect(stopped).toBe(false);
     } finally {
       sessionTurnRegistry.cancelTurn("restore-drain-test");
     }
+
     expect((await restoring).status).toBe(200);
     expect(stopped).toBe(true);
     expect(
@@ -116,9 +132,11 @@ describe("setup import routes", () => {
   test("fresh install can preview and restore import without authentication", async () => {
     const { app } = createApp();
     await writeFile(join(getUserConfigDir(), "config.ini"), "original");
+
     const archive = (
       await createNakamaDataExport({ rootDir: getUserConfigDir() })
     ).data;
+
     await writeFile(join(getUserConfigDir(), "config.ini"), "changed");
 
     const previewResponse = await app.fetch(
@@ -162,6 +180,7 @@ describe("setup import routes", () => {
 
   test("setup restore reports requiresRestart false after onDataRestored succeeds", async () => {
     let restoredCalls = 0;
+
     const { app } = createMinimalHonoApp({
       agent: {
         listProfiles: async () => ({ profiles: [{ id: "default" }] }),
@@ -173,9 +192,11 @@ describe("setup import routes", () => {
     });
 
     await writeFile(join(getUserConfigDir(), "config.ini"), "original");
+
     const archive = (
       await createNakamaDataExport({ rootDir: getUserConfigDir() })
     ).data;
+
     await writeFile(join(getUserConfigDir(), "config.ini"), "changed");
 
     const restoreResponse = await app.fetch(
@@ -212,6 +233,7 @@ describe("setup import routes", () => {
     });
 
     await writeFile(join(getUserConfigDir(), "config.ini"), "original");
+
     const archive = (
       await createNakamaDataExport({ rootDir: getUserConfigDir() })
     ).data;
@@ -241,6 +263,7 @@ describe("setup import routes", () => {
 
   test("setup restore releases the database before files move and reopens after", async () => {
     const calls: string[] = [];
+
     const { app } = createMinimalHonoApp({
       agent: {
         listProfiles: async () => ({ profiles: [{ id: "default" }] }),
@@ -251,6 +274,7 @@ describe("setup import routes", () => {
           join(getUserConfigDir(), "config.ini"),
           "utf8"
         );
+
         calls.push(`release:${live}`);
       },
       onDataRestored: async () => {
@@ -259,9 +283,11 @@ describe("setup import routes", () => {
     });
 
     await writeFile(join(getUserConfigDir(), "config.ini"), "original");
+
     const archive = (
       await createNakamaDataExport({ rootDir: getUserConfigDir() })
     ).data;
+
     await writeFile(join(getUserConfigDir(), "config.ini"), "changed");
 
     const restoreResponse = await app.fetch(
@@ -281,6 +307,7 @@ describe("setup import routes", () => {
 
   test("setup restore reopens the database when it fails after releasing it", async () => {
     let reopened = 0;
+
     const { app } = createMinimalHonoApp({
       agent: {
         listProfiles: async () => ({ profiles: [{ id: "default" }] }),
@@ -295,9 +322,11 @@ describe("setup import routes", () => {
     });
 
     await writeFile(join(getUserConfigDir(), "config.ini"), "original");
+
     const archive = (
       await createNakamaDataExport({ rootDir: getUserConfigDir() })
     ).data;
+
     await writeFile(join(getUserConfigDir(), "config.ini"), "changed");
 
     const restoreResponse = await app.fetch(
@@ -321,6 +350,7 @@ describe("setup import routes", () => {
   test("setup import is blocked after the first admin account exists", async () => {
     const { app, authService, databaseAdapter } = createApp();
     await loginPlatformAdminSession(app, authService, databaseAdapter);
+
     const archive = (
       await createNakamaDataExport({ rootDir: getUserConfigDir() })
     ).data;
@@ -377,6 +407,7 @@ describe("setup import routes", () => {
         method: "POST",
       })
     );
+
     const restoreResponse = await app.fetch(
       new Request("http://localhost:4310/v1/auth/setup/import/restore", {
         body: JSON.stringify({ confirm: true, data }),
@@ -384,6 +415,7 @@ describe("setup import routes", () => {
         method: "POST",
       })
     );
+
     expect(restoreResponse.status).toBe(400);
     await expect(readFile(configPath, "utf8")).resolves.toBe("keep");
   });
@@ -398,6 +430,7 @@ describe("setup import routes", () => {
         method: "POST",
       })
     );
+
     expect(previewResponse.status).toBe(400);
 
     const restoreResponse = await app.fetch(
@@ -407,12 +440,14 @@ describe("setup import routes", () => {
         method: "POST",
       })
     );
+
     expect(restoreResponse.status).toBe(400);
   });
 
   test("setup import preview does not leak an unexpected error's message", async () => {
     const { app } = createApp();
     await writeFile(join(getUserConfigDir(), "config.ini"), "keep");
+
     const archive = (
       await createNakamaDataExport({ rootDir: getUserConfigDir() })
     ).data;
@@ -447,9 +482,11 @@ describe("setup import routes", () => {
   test("setup import preview accepts valid archives", async () => {
     const { app } = createApp();
     await writeFile(join(getUserConfigDir(), "config.ini"), "provider=openai");
+
     const archive = (
       await createNakamaDataExport({ rootDir: getUserConfigDir() })
     ).data;
+
     const preview = await previewNakamaDataImport(archive, {
       rootDir: getUserConfigDir(),
     });

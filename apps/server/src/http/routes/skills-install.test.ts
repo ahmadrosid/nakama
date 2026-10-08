@@ -29,6 +29,7 @@ Just a body.
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const skillsService = new SkillsService(databaseAdapter);
+
   return {
     ...createMinimalHonoApp({
       agent: {
@@ -36,11 +37,10 @@ function createApp() {
           skillsService.listSkillFiles(orgId, skillId),
         readSkillFile: (orgId: string, skillId: string, filePath: string) =>
           skillsService.readSkillFile(orgId, skillId, filePath),
-        installSkillFromGitHub: (orgId: string, request: unknown) =>
-          skillsService.installSkillFromGitHub(
-            orgId,
-            request as { profileId: string; url: string }
-          ),
+        installSkillFromGitHub: (
+          orgId: string,
+          request: Parameters<SkillsService["installSkillFromGitHub"]>[1]
+        ) => skillsService.installSkillFromGitHub(orgId, request),
         listProfiles: async () => ({ profiles: [] }),
       },
       databaseAdapter,
@@ -63,6 +63,7 @@ describe("POST /v1/skills/install", () => {
   });
 
   test("platform admin installs a valid public SKILL.md and assigns it", async () => {
+    // SAFETY: This test controls the fixture shape at this boundary.
     globalThis.fetch = mock(
       async () =>
         new Response(
@@ -74,14 +75,16 @@ describe("POST /v1/skills/install", () => {
               new TextEncoder().encode("Explainer instructions"),
           })
         )
-    ) as unknown as typeof fetch;
+    ) as typeof fetch;
 
     const { app, databaseAdapter, skillsService } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin@org.com"
     );
+
     const orgId = adminSession.orgId!;
     const profiles = await databaseAdapter.listProfilesForOrg(orgId);
     const profileId = profiles[0]!.id;
@@ -104,33 +107,42 @@ describe("POST /v1/skills/install", () => {
     );
 
     expect(response.status).toBe(201);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await response.json()) as {
       skill: { name: string; id: string; createdBy: string };
     };
+
     expect(body.skill.name).toBe("github-weather");
     expect(body.skill.createdBy).toBe("human");
+
     const filesResponse = await app.fetch(
       new Request(`${BASE}/v1/skills/${body.skill.id}/files`, {
         headers: adminSession.headers({}, orgId),
       })
     );
+
     expect(filesResponse.status).toBe(200);
     expect((await filesResponse.json()).files).toContainEqual({
       path: "references/explainer.md",
       type: "file",
     });
+
     const fileResponse = await app.fetch(
       new Request(
         `${BASE}/v1/skills/${body.skill.id}/file?path=references%2Fexplainer.md`,
         { headers: adminSession.headers({}, orgId) }
       )
     );
+
     expect(fileResponse.status).toBe(200);
     expect((await fileResponse.json()).content).toBe("Explainer instructions");
+
     const installed = await databaseAdapter.getSkillByName(
       "github-weather",
       orgId
     );
+
     expect(
       await readFile(
         join(installed!.sourcePath, "references/explainer.md"),
@@ -160,8 +172,10 @@ describe("POST /v1/skills/install", () => {
 
   test("installs a skill from an npx skills add command", async () => {
     let requestedUrl = "";
+    // SAFETY: This test controls the fixture shape at this boundary.
     globalThis.fetch = mock(async (input) => {
       requestedUrl = String(input);
+
       return new Response(
         zipSync({
           "agent-skills-main/pdf/SKILL.md": new TextEncoder().encode(
@@ -169,14 +183,16 @@ describe("POST /v1/skills/install", () => {
           ),
         })
       );
-    }) as unknown as typeof fetch;
+    }) as typeof fetch;
 
     const { app, databaseAdapter } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin-command@org.com"
     );
+
     const orgId = adminSession.orgId!;
     const profileId = (await databaseAdapter.listProfilesForOrg(orgId))[0]!.id;
 
@@ -204,6 +220,7 @@ describe("POST /v1/skills/install", () => {
   });
 
   test("invalid frontmatter returns 400 and writes no skill", async () => {
+    // SAFETY: This test controls the fixture shape at this boundary.
     globalThis.fetch = mock(
       async () =>
         new Response(
@@ -213,14 +230,16 @@ describe("POST /v1/skills/install", () => {
             ),
           })
         )
-    ) as unknown as typeof fetch;
+    ) as typeof fetch;
 
     const { app, databaseAdapter } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin@org.com"
     );
+
     const orgId = adminSession.orgId!;
     const profiles = await databaseAdapter.listProfilesForOrg(orgId);
     const profileId = profiles[0]!.id;
@@ -250,11 +269,13 @@ describe("POST /v1/skills/install", () => {
 
   test("non-GitHub URL returns 400", async () => {
     const { app, databaseAdapter } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin@org.com"
     );
+
     const orgId = adminSession.orgId!;
     const profiles = await databaseAdapter.listProfilesForOrg(orgId);
     const profileId = profiles[0]!.id;
@@ -277,17 +298,20 @@ describe("POST /v1/skills/install", () => {
     );
 
     expect(response.status).toBe(400);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await response.json()) as { error: string };
     expect(body.error).toMatch(/GitHub/i);
   });
 
   test("non-admin returns 403", async () => {
     const { app, databaseAdapter } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin@org.com"
     );
+
     const orgId = adminSession.orgId!;
 
     const memberResp = await app.fetch(
@@ -307,23 +331,29 @@ describe("POST /v1/skills/install", () => {
         method: "POST",
       })
     );
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const memberProvisioned = (await memberResp.json()) as {
       temporaryPassword: string;
     };
+
     const memberSession = await loginUserSession(
       app,
       "member@org.com",
       memberProvisioned.temporaryPassword,
       orgId
     );
+
     for (const suffix of ["files", "file?path=SKILL.md"]) {
       const result = await app.fetch(
         new Request(`${BASE}/v1/skills/any-skill/${suffix}`, {
           headers: memberSession.headers({}, orgId),
         })
       );
+
       expect(result.status).toBe(403);
     }
+
     const profiles = await databaseAdapter.listProfilesForOrg(orgId);
     const profileId = profiles[0]!.id;
 
@@ -349,11 +379,13 @@ describe("POST /v1/skills/install", () => {
 
   test("incomplete body returns 400, not 500", async () => {
     const { app, databaseAdapter } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin-malformed@org.com"
     );
+
     const orgId = adminSession.orgId!;
 
     const response = await app.fetch(
@@ -371,11 +403,13 @@ describe("POST /v1/skills/install", () => {
     );
 
     expect(response.status).toBe(400);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await response.json()) as { error: string };
     expect(body.error).toMatch(/GitHub URL.*ZIP file/i);
   });
 
   test("installing the same skill onto a second profile returns 409", async () => {
+    // SAFETY: This test controls the fixture shape at this boundary.
     globalThis.fetch = mock(
       async () =>
         new Response(
@@ -385,14 +419,16 @@ describe("POST /v1/skills/install", () => {
             ),
           })
         )
-    ) as unknown as typeof fetch;
+    ) as typeof fetch;
 
     const { app, databaseAdapter } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin-dup@org.com"
     );
+
     const orgId = adminSession.orgId!;
     const profiles = await databaseAdapter.listProfilesForOrg(orgId);
     const firstProfileId = profiles[0]!.id;
@@ -413,6 +449,7 @@ describe("POST /v1/skills/install", () => {
         method: "POST",
       })
     );
+
     expect(first.status).toBe(201);
 
     const now = new Date().toISOString();
@@ -449,6 +486,7 @@ describe("POST /v1/skills/install", () => {
     );
 
     expect(second.status).toBe(409);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await second.json()) as { error: string };
     expect(body.error).toMatch(/already exists|cannot be attached/i);
   });

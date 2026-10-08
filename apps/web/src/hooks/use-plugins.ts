@@ -19,6 +19,7 @@ import {
 import { useAuth } from "@/context/use-auth";
 import { client } from "@/lib/client";
 import { canAccessIntegrationsPage } from "@/lib/navigation";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 export type PluginPageViewKind =
@@ -176,8 +177,7 @@ export function useSavePluginAgentAccess() {
       pluginId: string;
       changes: Record<string, boolean>;
     }) => savePluginAgentAccess(orgId, pluginId, changes),
-    onSettled: () =>
-      queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
+    onSettled: () => invalidateQueries(queryClient, queryKeys.profiles.all),
   });
 }
 
@@ -226,9 +226,7 @@ export function useInstallOfficialPlugin() {
     (pluginId: string, orgId) => client.installOfficialPlugin(pluginId, orgId),
     async ({ orgId, queryClient }) => {
       await invalidateOrgPlugins(queryClient, orgId);
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.plugins.releases,
-      });
+      await invalidateQueries(queryClient, queryKeys.plugins.releases);
     }
   );
 }
@@ -247,9 +245,7 @@ export function useReinstallOfficialPlugin() {
     onMutate: () => ({ orgId }),
     onSettled: async (_data, _error, _variables, context) => {
       await invalidateOrgPlugins(queryClient, context?.orgId ?? orgId);
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.plugins.releases,
-      });
+      await invalidateQueries(queryClient, queryKeys.plugins.releases);
     },
   });
 }
@@ -276,12 +272,13 @@ function invalidateOrgPlugins(
   queryClient: ReturnType<typeof useQueryClient>,
   orgId: string
 ) {
-  return Promise.all([
-    queryClient.invalidateQueries({ queryKey: queryKeys.plugins.all(orgId) }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.tools.all }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.skills.all }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all }),
-  ]);
+  return invalidateQueries(
+    queryClient,
+    queryKeys.plugins.all(orgId),
+    queryKeys.tools.all,
+    queryKeys.skills.all,
+    queryKeys.profiles.all
+  );
 }
 
 function usePluginMutation<TVariables, TData>(
@@ -318,9 +315,7 @@ export function useInstallPluginPackage() {
     (request: InstallPluginPackageRequest) =>
       client.installPluginPackage(request),
     async ({ orgId, queryClient }) => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.plugins.releases,
-      });
+      await invalidateQueries(queryClient, queryKeys.plugins.releases);
       if (orgId) {
         await invalidateOrgPlugins(queryClient, orgId);
       }
@@ -333,9 +328,7 @@ export function useRemovePluginRelease() {
     ({ pluginId, version }: { pluginId: string; version: string }) =>
       client.removePluginRelease(pluginId, version),
     async ({ orgId, queryClient }) => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.plugins.releases,
-      });
+      await invalidateQueries(queryClient, queryKeys.plugins.releases);
       if (orgId) {
         await invalidateOrgPlugins(queryClient, orgId);
       }

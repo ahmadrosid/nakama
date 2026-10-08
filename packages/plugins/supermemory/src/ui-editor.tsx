@@ -3,9 +3,11 @@
 /** @jsxFrag React.Fragment */
 import type { Context } from "./ui-context";
 import type { CollectionModel } from "./use-collection";
+
 export function createEditor(ctx: Context) {
   const React = ctx.React;
   const { Button, Input, Textarea } = ctx.ui;
+
   return function Editor({ model }: { model: CollectionModel }) {
     const {
       memory,
@@ -21,6 +23,7 @@ export function createEditor(ctx: Context) {
       setEditing,
       save,
     } = model;
+
     return (
       <form className="sm-card sm-stack" onSubmit={save}>
         {!memory && (

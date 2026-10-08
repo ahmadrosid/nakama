@@ -27,12 +27,17 @@ import { loadConfig } from "./config";
 import { ThreadStore } from "./thread-store";
 
 installErrorHandlers("worker:discord");
+
 void installErrorTrackingSink();
 
 const owner = channelOwnerFromEnv();
+
 const heartbeat = createDiscordWorkerHeartbeat(owner);
+
 const clearDiscordWorkerHeartbeat = heartbeat.clear;
+
 const readDiscordWorkerHeartbeat = heartbeat.read;
+
 const writeDiscordWorkerHeartbeat = (
   pid: number,
   updatedAt: string,
@@ -40,15 +45,20 @@ const writeDiscordWorkerHeartbeat = (
 ) => heartbeat.write({ connected, pid, updatedAt });
 
 let spawnedChild: Bun.Subprocess | null = null;
+
 let clientStop: (() => void | Promise<void>) | null = null;
+
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
 registerCleanupHandlers(async () => {
   await clientStop?.();
+
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
   }
+
   void clearDiscordWorkerHeartbeat();
+
   if (hasActiveStreams()) {
     console.warn(
       "Leaving the spawned Nakama server running so in-flight agent turns can finish; the next worker start will reuse it."
@@ -75,9 +85,11 @@ try {
 
   const config = await loadConfig();
   await heartbeat.acquire();
+
   const { serverUrl, spawnedChild: child } = await ensureServerRunning({
     spawn: false,
   });
+
   spawnedChild = child;
 
   const client = new NakamaClient({
@@ -87,6 +99,7 @@ try {
     clientOrigin: resolveWebPublicUrl(),
     orgId: owner.orgId,
   });
+
   const health = await client.health();
 
   if (!health.providerConfigured) {
@@ -110,16 +123,19 @@ try {
   const sessionStore = new ChannelSessionStore(
     join(getDiscordConfigDir(owner), "chat-sessions.json")
   );
+
   await sessionStore.load();
 
   const threadStore = new ThreadStore(
     join(getDiscordConfigDir(owner), "chat-threads.json")
   );
+
   await threadStore.load();
 
   const orgStore = new ChannelOrgStore(
     join(getDiscordConfigDir(owner), "org-selection.json")
   );
+
   await orgStore.load();
 
   const authStore = new DiscordAuthStore(owner);
@@ -164,15 +180,18 @@ try {
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   console.error(message);
+
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
   }
+
   try {
     await clientStop?.();
   } catch {
     // Destroy best-effort on fatal path.
   }
+
   // Await before exit — void + process.exit can leave a stale heartbeat file.
   await clearDiscordWorkerHeartbeat();
   stopSpawnedServer(spawnedChild);
@@ -189,6 +208,7 @@ function registerCleanupHandlers(cleanup: () => void | Promise<void>): void {
       }
     });
   }
+
   // pm2 stops Windows workers with a "shutdown" message instead of a signal.
   if (process.platform === "win32") {
     process.on("message", async (message) => {

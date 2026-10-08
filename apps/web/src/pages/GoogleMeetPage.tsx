@@ -1,6 +1,7 @@
 import {
   formatTranscript,
   type MeetAction,
+  type MeetActionResults,
   type Meeting,
   type MeetOverview as Overview,
   type TranscriptSegment,
@@ -26,11 +27,21 @@ import {
 } from "hugeicons-react";
 import * as React from "react";
 import { useAuth } from "@/context/use-auth";
-import { client } from "@/lib/client";
+import { client, formatError } from "@/lib/client";
 
-type MeetCall = (action: MeetAction, input?: unknown) => Promise<unknown>;
-const message = (error: unknown) =>
-  error instanceof Error ? error.message : "Request failed";
+type MeetCallInput = {
+  after?: number;
+  apiKey?: string;
+  content?: string;
+  enabled?: boolean;
+  filename?: string;
+  meetingId?: string;
+};
+
+type MeetCall = <Action extends MeetAction>(
+  action: Action,
+  input?: MeetCallInput
+) => Promise<MeetActionResults[Action]>;
 
 function meetingStatus(meeting: Meeting) {
   if (
@@ -39,22 +50,26 @@ function meetingStatus(meeting: Meeting) {
     if ((meeting.pendingSeconds ?? 0) > 30) {
       return "Transcription is catching up…";
     }
+
     if (meeting.state === "recording") {
       return meeting.stopRequested
         ? "Stopping…"
         : "Recording and transcribing…";
     }
+
     return meeting.stopRequested
       ? "Stopping…"
       : meeting.state === "transcribing"
         ? "Finishing transcript…"
         : "Connecting…";
   }
+
   if (meeting.state === "failed") {
     return meeting.transcriptFile
       ? "Partial transcript"
       : "Transcription failed";
   }
+
   return meeting.transcriptFile ? "Transcript ready" : "No speech captured";
 }
 
@@ -73,10 +88,12 @@ function Settings({
   const [apiKey, setApiKey] = React.useState("");
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+
   async function save(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError("");
+
     try {
       await call("configure", {
         apiKey: apiKey.trim() || undefined,
@@ -85,11 +102,12 @@ function Settings({
       setApiKey("");
       close();
     } catch (reason) {
-      setError(message(reason));
+      setError(formatError(reason));
     } finally {
       setBusy(false);
     }
   }
+
   return (
     <Dialog
       onOpenChange={(open) => {
@@ -197,24 +215,25 @@ function Transcript({
     let alive = true;
     let cursor = 0;
     let running = false;
+
     function refresh() {
       if (!alive || running || signal.aborted) {
         return;
       }
+
       running = true;
       void call("transcript", {
         after: cursor,
         meetingId: meeting.id,
       })
         .then((result) => {
-          const value = result as {
-            segments: (TranscriptSegment & { sequence: number })[];
-            nextCursor: number;
-          };
+          const value = result;
+
           if (alive && !signal.aborted) {
             cursor = value.nextCursor;
             setSegments((previous) => {
               const seen = new Set(previous.map((segment) => segment.id));
+
               return [
                 ...previous,
                 ...value.segments.filter((segment) => !seen.has(segment.id)),
@@ -226,24 +245,28 @@ function Transcript({
         })
         .catch((reason) => {
           if (alive && !signal.aborted) {
-            setError(message(reason));
+            setError(formatError(reason));
           }
         })
         .finally(() => {
           running = false;
         });
     }
+
     void refresh();
     const timer = setInterval(() => void refresh(), 2000);
+
     return () => {
       alive = false;
       clearInterval(timer);
     };
   }, [meeting.id, call, signal]);
+
   function download() {
     const url = URL.createObjectURL(
       new Blob([text], { type: "text/plain;charset=utf-8" })
     );
+
     const link = document.createElement("a");
     link.href = url;
     link.download = meeting.sourceName
@@ -252,6 +275,7 @@ function Transcript({
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+
   return (
     <section className="meet-detail">
       <div>
@@ -443,6 +467,7 @@ function ConnectionStatus({
 }) {
   let connectionMessage =
     "Connected. Start transcription from the extension in your Google Meet tab. Keep this page open.";
+
   if (!overview) {
     connectionMessage = "Checking connection…";
   } else if (!overview.configured) {
@@ -453,11 +478,146 @@ function ConnectionStatus({
     connectionMessage =
       "Open the Chrome extension on this page and choose Connect this Nakama tab.";
   }
+
   return (
     <span className="meet-status" role="status">
       {connectionMessage}
     </span>
   );
+}
+
+function readUploadContent(file: File) {
+  const markdown = /\.(md|markdown)$/i.test(file.name);
+
+  if (!(markdown || /\.(mp3|mp4|mpeg|mpga|m4a|wav|webm)$/i.test(file.name))) {
+    throw new Error("Choose a Markdown or supported audio file");
+  }
+
+  if (!file.size || file.size > (markdown ? 1 : 7) * 1024 * 1024) {
+    throw new Error(`Choose a nonempty file under ${markdown ? 1 : 7} MB`);
+  }
+
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1]!);
+    reader.onerror = () => reject(new Error("Could not read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function useExtensionBridge(
+  call: MeetCall,
+  signal: AbortSignal,
+  setConnected: (connected: boolean) => void,
+  setSelected: (meeting: Meeting) => void
+) {
+  React.useEffect(() => {
+    async function receive(event: MessageEvent) {
+      if (event.source !== window || event.origin !== window.location.origin) {
+        return;
+      }
+
+      const eventData = event.data;
+
+      if (!(eventData instanceof Object)) {
+        return;
+      }
+
+      if ("type" in eventData && eventData.type === "NAKAMA_MEET_EXTENSION") {
+        setConnected("connected" in eventData && eventData.connected === true);
+
+        return;
+      }
+
+      if (
+        !("type" in eventData) ||
+        eventData.type !== "NAKAMA_MEET_ACTION" ||
+        !("id" in eventData) ||
+        !("action" in eventData)
+      ) {
+        return;
+      }
+
+      const actions: Array<
+        | "meetings"
+        | "start-capture"
+        | "leave"
+        | "transcript"
+        | "show-transcript"
+      > = [
+        "meetings",
+        "start-capture",
+        "leave",
+        "transcript",
+        "show-transcript",
+      ];
+
+      const action = actions.find(
+        (candidate) => candidate === String(eventData.action)
+      );
+
+      if (!action) {
+        return;
+      }
+
+      const id = String(eventData.id);
+
+      const incoming =
+        "input" in eventData && eventData.input instanceof Object
+          ? eventData.input
+          : {};
+
+      const input: MeetCallInput = {
+        after: "after" in incoming ? Number(incoming.after) : undefined,
+        apiKey: "apiKey" in incoming ? String(incoming.apiKey) : undefined,
+        content: "content" in incoming ? String(incoming.content) : undefined,
+        enabled: "enabled" in incoming ? incoming.enabled === true : undefined,
+        filename:
+          "filename" in incoming ? String(incoming.filename) : undefined,
+        meetingId:
+          "meetingId" in incoming ? String(incoming.meetingId) : undefined,
+      };
+
+      try {
+        let result: MeetActionResults[MeetAction];
+
+        if (action === "show-transcript") {
+          const transcript = await call("transcript", input);
+          result = transcript;
+          setSelected(transcript.meeting);
+        } else {
+          result = await call(action, input);
+        }
+
+        window.postMessage(
+          { id, result, type: "NAKAMA_MEET_RESULT" },
+          window.location.origin
+        );
+      } catch (reason) {
+        if (signal.aborted) {
+          return;
+        }
+
+        window.postMessage(
+          { error: formatError(reason), id, type: "NAKAMA_MEET_RESULT" },
+          window.location.origin
+        );
+      }
+    }
+
+    window.addEventListener("message", receive);
+
+    const ping = () =>
+      window.postMessage({ type: "NAKAMA_MEET_PING" }, window.location.origin);
+
+    ping();
+    const timer = setInterval(ping, 3000);
+
+    return () => {
+      window.removeEventListener("message", receive);
+      clearInterval(timer);
+    };
+  }, [call, signal, setConnected, setSelected]);
 }
 
 function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
@@ -470,131 +630,76 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
   const [selected, setSelected] = React.useState<Meeting | null>(null);
   const [uploading, setUploading] = React.useState(false);
   const uploadInput = React.useRef<HTMLInputElement>(null);
+
   async function upload(file: File) {
     setUploading(true);
     setError("");
+
     try {
-      const markdown = /\.(md|markdown)$/i.test(file.name);
-      if (
-        !(markdown || /\.(mp3|mp4|mpeg|mpga|m4a|wav|webm)$/i.test(file.name))
-      ) {
-        throw new Error("Choose a Markdown or supported audio file");
-      }
-      if (!file.size || file.size > (markdown ? 1 : 7) * 1024 * 1024) {
-        throw new Error(`Choose a nonempty file under ${markdown ? 1 : 7} MB`);
-      }
-      const content = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result).split(",")[1]!);
-        reader.onerror = () => reject(new Error("Could not read file"));
-        reader.readAsDataURL(file);
-      });
+      const content = await readUploadContent(file);
+
       await call("upload", { content, filename: file.name });
-      setOverview((await call("meetings")) as Overview);
+      setOverview(await call("meetings"));
     } catch (reason) {
-      setError(message(reason));
+      setError(formatError(reason));
     } finally {
       setUploading(false);
     }
   }
-  React.useEffect(() => {
-    async function receive(event: MessageEvent) {
-      if (event.source !== window || event.origin !== window.location.origin) {
-        return;
-      }
-      const data = event.data;
-      if (data?.type === "NAKAMA_MEET_EXTENSION") {
-        setExtensionConnected(data.connected === true);
-        return;
-      }
-      if (
-        data?.type !== "NAKAMA_MEET_ACTION" ||
-        typeof data.id !== "string" ||
-        ![
-          "meetings",
-          "start-capture",
-          "leave",
-          "transcript",
-          "show-transcript",
-        ].includes(data.action)
-      ) {
-        return;
-      }
-      try {
-        const result = await call(
-          data.action === "show-transcript" ? "transcript" : data.action,
-          data.input
-        );
-        if (data.action === "show-transcript") {
-          setSelected((result as { meeting: Meeting }).meeting);
-        }
-        window.postMessage(
-          { id: data.id, result, type: "NAKAMA_MEET_RESULT" },
-          window.location.origin
-        );
-      } catch (reason) {
-        if (signal.aborted) {
-          return;
-        }
-        window.postMessage(
-          { error: message(reason), id: data.id, type: "NAKAMA_MEET_RESULT" },
-          window.location.origin
-        );
-      }
-    }
-    window.addEventListener("message", receive);
-    const ping = () =>
-      window.postMessage({ type: "NAKAMA_MEET_PING" }, window.location.origin);
-    ping();
-    const timer = setInterval(ping, 3000);
-    return () => {
-      window.removeEventListener("message", receive);
-      clearInterval(timer);
-    };
-  }, [call, signal]);
+
+  useExtensionBridge(call, signal, setExtensionConnected, setSelected);
+
   React.useEffect(() => {
     let alive = true;
     let running = false;
+
     function refresh() {
       if (!alive || running || signal.aborted) {
         return;
       }
+
       running = true;
       void call("meetings")
         .then((result) => {
           if (alive && !signal.aborted) {
-            setOverview(result as Overview);
+            setOverview(result);
           }
         })
         .catch((reason) => {
           if (alive && !signal.aborted) {
-            setError(message(reason));
+            setError(formatError(reason));
           }
         })
         .finally(() => {
           running = false;
         });
     }
+
     void refresh();
     const timer = setInterval(() => void refresh(), 3000);
+
     return () => {
       alive = false;
       clearInterval(timer);
     };
   }, [call, signal]);
-  async function action(name: MeetAction, input: unknown) {
+
+  async function action(name: MeetAction, input: MeetCallInput) {
     setBusy(true);
     setError("");
+
     try {
       await call(name, input);
-      setOverview((await call("meetings")) as Overview);
+      setOverview(await call("meetings"));
     } catch (reason) {
-      setError(message(reason));
+      setError(formatError(reason));
     } finally {
       setBusy(false);
     }
   }
+
   const meetings = overview?.meetings ?? [];
+
   const groups = [
     {
       meetings: meetings.filter((meeting) =>
@@ -611,6 +716,7 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
       title: "Meeting history",
     },
   ];
+
   if (selected) {
     return (
       <section className="meet-page">
@@ -626,6 +732,7 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
       </section>
     );
   }
+
   return (
     <section className="meet-page">
       <a download href="/google-meet-extension.zip">
@@ -656,11 +763,12 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
         </div>
       </Card>
       {overview ? (
-        groups
-          .filter(
-            (group) => group.title !== "In progress" || group.meetings.length
-          )
-          .map((group) => (
+        groups.flatMap((group) => {
+          if (group.title === "In progress" && !group.meetings.length) {
+            return [];
+          }
+
+          return [
             <section key={group.title}>
               <Card className="meet-card">
                 <div className="meet-card-heading">
@@ -676,6 +784,7 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
                           onChange={(event) => {
                             const file = event.target.files?.[0];
                             event.target.value = "";
+
                             if (file) {
                               void upload(file);
                             }
@@ -715,8 +824,9 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
                   <p className="meet-empty">No meetings yet.</p>
                 )}
               </Card>
-            </section>
-          ))
+            </section>,
+          ];
+        })
       ) : (
         <p>Loading…</p>
       )}
@@ -755,9 +865,11 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
 
 export function GoogleMeetPage() {
   const { activeOrg } = useAuth();
+
   if (!activeOrg || activeOrg.role === "viewer") {
     return <p role="alert">Member access required</p>;
   }
+
   return <OrganizationMeetPage key={activeOrg.id} orgId={activeOrg.id} />;
 }
 
@@ -766,23 +878,32 @@ function OrganizationMeetPage({ orgId }: { orgId: string }) {
     call: MeetCall;
     signal: AbortSignal;
   } | null>(null);
+
   React.useEffect(() => {
     const abort = new AbortController();
     setScope({
-      call: async (action: MeetAction, input?: unknown) => {
+      call: async <Action extends MeetAction>(
+        action: Action,
+        input?: MeetCallInput
+      ): Promise<MeetActionResults[Action]> => {
         abort.signal.throwIfAborted();
+
         const result = await client.invokeGoogleMeet(
           action,
           input,
           orgId,
           abort.signal
         );
+
         abort.signal.throwIfAborted();
+
         return result;
       },
       signal: abort.signal,
     });
+
     return () => abort.abort();
   }, [orgId]);
+
   return scope ? <MeetPage {...scope} /> : null;
 }

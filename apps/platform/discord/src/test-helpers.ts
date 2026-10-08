@@ -18,9 +18,11 @@ import type {
   UserOrgSummary,
 } from "@nakama/core/contract";
 import type { Message } from "discord.js";
+import { z } from "zod";
 
 export function createMultiTestOrgs(): UserOrgSummary[] {
   const now = new Date().toISOString();
+
   return [
     {
       createdAt: now,
@@ -61,7 +63,7 @@ export function createMockClient(
       updatedAt: string;
     }>;
     onSendStream?: (
-      input: unknown,
+      input: SendMessageInput,
       handlers?: StreamHandlers
     ) => Promise<string>;
     artifactContentBytes?: Uint8Array;
@@ -78,13 +80,19 @@ export function createMockClient(
     readProfileArtifactContent: 0,
     sendStream: 0,
   };
+
   const createdSessionProfileIds: string[] = [];
 
-  const sendStream = async (input: unknown, handlers?: StreamHandlers) => {
+  const sendStream = async (
+    input: SendMessageInput,
+    handlers?: StreamHandlers
+  ) => {
     calls.sendStream += 1;
+
     if (options.onSendStream) {
       return options.onSendStream(input, handlers);
     }
+
     return "Agent reply";
   };
 
@@ -98,6 +106,7 @@ export function createMockClient(
     createAutomation: async () => ({}),
     getMessages: async () => {
       calls.getMessages += 1;
+
       return options.messages ?? [];
     },
     id: "session_test",
@@ -110,16 +119,20 @@ export function createMockClient(
   const orgs = options.orgs ?? createDefaultTestOrgs();
   let activeOrgId: string | null = orgs[0]?.id ?? null;
 
+  // SAFETY: This client mock implements the bridge calls exercised by its tests.
   const client = {
     createChatSession: () => {
       calls.createChatSession += 1;
+
       return session;
     },
     createSession: async (_channel: string, input?: { profileId?: string }) => {
       calls.createSession += 1;
+
       if (input?.profileId) {
         createdSessionProfileIds.push(input.profileId);
       }
+
       return session;
     },
     forOrg: () => client,
@@ -132,6 +145,7 @@ export function createMockClient(
     }),
     getSessionMessages: async () => {
       calls.getSessionMessages += 1;
+
       return {
         channel: "discord" as const,
         messageMeta: [],
@@ -144,6 +158,7 @@ export function createMockClient(
     listProfileArtifacts: async () => {
       calls.listProfileArtifacts += 1;
       const artifacts = options.listedArtifacts ?? [];
+
       return {
         artifacts,
         directory: "/tmp/artifacts",
@@ -165,6 +180,7 @@ export function createMockClient(
     listUserOrgs: async () => parseListUserOrgsResponse({ orgs }),
     publishProfileArtifactShare: async () => {
       calls.publishProfileArtifactShare += 1;
+
       return {
         id: "share_test",
         refreshed: false,
@@ -176,8 +192,10 @@ export function createMockClient(
     },
     readProfileArtifactContent: async () => {
       calls.readProfileArtifactContent += 1;
+
       const data =
         options.artifactContentBytes ?? new TextEncoder().encode("# Report");
+
       return {
         contentType: "text/markdown",
         data: data.buffer.slice(
@@ -189,7 +207,7 @@ export function createMockClient(
     setOrgId: (orgId: string | null) => {
       activeOrgId = orgId?.trim() || null;
     },
-  } as unknown as NakamaClient;
+  } as NakamaClient;
 
   assertBridgeClientMethods(client);
 
@@ -262,17 +280,22 @@ export function createDmMessage(options: {
     },
     parentId: null,
     send: async (payload: string | { files: unknown[] }) => {
-      if (typeof payload === "string") {
-        sentMessages.push(payload);
+      const messageText = z.string().safeParse(payload);
+
+      if (messageText.success) {
+        sentMessages.push(messageText.data);
+
         return { id: String(sentMessages.length) };
       }
 
       fileSendCalls += 1;
+
       return { id: String(sentMessages.length) };
     },
     sendTyping: async () => {},
   };
 
+  // SAFETY: This fixture mocks only the message fields used by bridge tests.
   const message = {
     attachments: buildMockAttachments(options.attachments),
     author: { bot: false, id: options.userId ?? "424242424242424242" },
@@ -280,7 +303,7 @@ export function createDmMessage(options: {
     client: { user: { id: "bot_id", username: "nakamabot" } },
     content: options.content ?? "",
     stickers: { size: 0 },
-  } as unknown as Message;
+  } as Message;
 
   return {
     get fileSendCalls() {
@@ -339,8 +362,10 @@ export function createGuildChatMessage(options: {
   const userId = options.userId ?? "424242424242424242";
   const channelId = options.channelId ?? "guild_channel_1";
   const threadId = options.threadId ?? "thread_1";
+
   const parentId =
     options.parentId === null ? null : (options.parentId ?? channelId);
+
   const fetchParentId = options.fetchParentId ?? channelId;
   const botId = "bot_id";
   const guildId = "guild_1";
@@ -349,6 +374,7 @@ export function createGuildChatMessage(options: {
   const existingThreads = options.existingThreads ?? new Map();
 
   const messages = new Map<string, { author: { id: string } }>();
+
   if (options.replyToBot) {
     messages.set("reply_1", { author: { id: botId } });
   }
@@ -374,20 +400,26 @@ export function createGuildChatMessage(options: {
       parentId: parent,
       partial: parent === null,
       send: async (payload: string | { files: unknown[] }) => {
-        if (typeof payload === "string") {
-          threadSentMessages.push(payload);
+        const messageText = z.string().safeParse(payload);
+
+        if (messageText.success) {
+          threadSentMessages.push(messageText.data);
+
           return { id: `tmsg_${threadSentMessages.length}` };
         }
 
         threadFileSendCalls += 1;
+
         return { id: `tfile_${threadFileSendCalls}` };
       },
       sendTyping: async () => {},
       setArchived: async (value: boolean) => {
         archived = value;
+
         return createThreadChannel(id, parent, archived);
       },
     };
+
     return channel;
   }
 
@@ -402,14 +434,18 @@ export function createGuildChatMessage(options: {
         edit: async () => {},
       }),
     },
-    parentId: null as string | null,
+    parentId: null,
     send: async (payload: string | { files: unknown[] }) => {
-      if (typeof payload === "string") {
-        channelSentMessages.push(payload);
+      const messageText = z.string().safeParse(payload);
+
+      if (messageText.success) {
+        channelSentMessages.push(messageText.data);
+
         return { id: `cmsg_${channelSentMessages.length}` };
       }
 
       channelFileSendCalls += 1;
+
       return { id: `cfile_${channelFileSendCalls}` };
     },
     sendTyping: async () => {},
@@ -422,6 +458,7 @@ export function createGuildChatMessage(options: {
   const clientChannels = {
     fetch: async (id: string) => {
       const known = existingThreads.get(id);
+
       if (known) {
         return createThreadChannel(
           known.id,
@@ -438,6 +475,7 @@ export function createGuildChatMessage(options: {
     },
   };
 
+  // SAFETY: This fixture mocks only the message fields used by bridge tests.
   const message = {
     attachments: buildMockAttachments(options.attachments),
     author: { bot: false, id: userId },
@@ -471,6 +509,7 @@ export function createGuildChatMessage(options: {
     startThread: async ({ name }: { name: string }) => {
       startThreadCalls += 1;
       lastThreadName = name;
+
       if (options.startThreadError) {
         throw options.startThreadError;
       }
@@ -482,10 +521,11 @@ export function createGuildChatMessage(options: {
         id: createdThreadId,
         parentId: channelId,
       });
+
       return thread;
     },
     stickers: { size: 0 },
-  } as unknown as Message;
+  } as Message;
 
   return {
     get channelFileSendCalls() {
@@ -522,16 +562,15 @@ export function createSlashInteraction(options: {
   /** Resolved USER option for commands like /allow. Pass `null` for missing. */
   userOption?: { id: string; username?: string } | null;
   stringOptions?: Record<string, string>;
-}): {
-  interaction: import("discord.js").ChatInputCommandInteraction;
-  replies: string[];
-} {
+}) {
   const replies: string[] = [];
   const userId = options.userId ?? "424242424242424242";
   const channelId = options.channelId ?? "guild_channel_1";
   const threadId = options.threadId ?? "thread_1";
+
   const parentId =
     options.parentId === null ? null : (options.parentId ?? channelId);
+
   const fetchParentId = options.fetchParentId ?? channelId;
   const hasUserOption = options.userOption !== undefined;
 
@@ -552,6 +591,7 @@ export function createSlashInteraction(options: {
         partial: parentId === null,
         setArchived: async (value: boolean) => {
           channel.archived = value;
+
           return channel;
         },
       }
@@ -562,6 +602,7 @@ export function createSlashInteraction(options: {
         parentId: null,
       };
 
+  // SAFETY: The mock implements command fields read by chat-handler tests.
   const interaction = {
     channel,
     channelId: options.inThread ? threadId : channelId,
@@ -589,7 +630,7 @@ export function createSlashInteraction(options: {
       replies.push(content);
     },
     user: { id: userId },
-  } as unknown as import("discord.js").ChatInputCommandInteraction;
+  } as import("discord.js").ChatInputCommandInteraction;
 
   return { interaction, replies };
 }

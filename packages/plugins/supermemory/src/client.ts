@@ -7,6 +7,24 @@ export {
 
 import { normalizeUrl } from "@nakama/core/supermemory-client";
 
+type JsonValue =
+  | boolean
+  | null
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+type JsonRecord = { [key: string]: JsonValue };
+
+function asJsonRecord(value: JsonValue): JsonRecord | null {
+  return value instanceof Object && !Array.isArray(value) ? value : null;
+}
+
+function readString(value: JsonValue | undefined): string | null {
+  return value === String(value) ? value : null;
+}
+
 export interface ExtractionConfig {
   apiKey: string;
   baseUrl: string;
@@ -24,6 +42,7 @@ export async function validateExtraction(
       "Configure an extraction API key and model in Supermemory Settings"
     );
   }
+
   const response = await fetch(
     `${normalizeUrl(config.baseUrl)}/chat/completions`,
     {
@@ -55,12 +74,19 @@ export async function validateExtraction(
       signal: AbortSignal.timeout(20_000),
     }
   );
+
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    const reason =
-      typeof body?.error?.message === "string"
-        ? body.error.message
-        : `HTTP ${response.status}`;
+    const body: JsonValue = await response.json().catch(() => ({}));
+    const bodyRecord = asJsonRecord(body);
+
+    const errorRecord = bodyRecord?.error
+      ? asJsonRecord(bodyRecord.error)
+      : null;
+
+    const message = errorRecord && readString(errorRecord.message);
+
+    const reason = message ?? `HTTP ${response.status}`;
+
     throw new Error(
       `Extraction provider rejected the check: ${reason
         .replaceAll(config.apiKey, "[REDACTED]")
@@ -68,14 +94,28 @@ export async function validateExtraction(
         .slice(0, 300)}`
     );
   }
-  const body = await response.json().catch(() => ({}));
-  const content = body?.choices?.[0]?.message?.content;
+
+  const body: JsonValue = await response.json().catch(() => ({}));
+  const bodyRecord = asJsonRecord(body);
+  const choices = bodyRecord?.choices;
+  const firstChoice = Array.isArray(choices) ? choices[0] : undefined;
+  const choiceRecord = firstChoice ? asJsonRecord(firstChoice) : null;
+
+  const messageRecord = choiceRecord?.message
+    ? asJsonRecord(choiceRecord.message)
+    : null;
+
+  const content = messageRecord && readString(messageRecord.content);
   let valid = false;
+
   try {
-    valid = typeof content === "string" && JSON.parse(content)?.ok === true;
+    const parsed: JsonValue = JSON.parse(content ?? "");
+    const parsedRecord = asJsonRecord(parsed);
+    valid = parsedRecord?.ok === true;
   } catch {
     // Do not expose model output in validation errors.
   }
+
   if (!valid) {
     throw new Error(
       "Extraction model did not return the required structured response"

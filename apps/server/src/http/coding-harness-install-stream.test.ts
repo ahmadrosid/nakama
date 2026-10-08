@@ -5,10 +5,13 @@ import { streamInstallEvents } from "./coding-harness-install-stream";
 type TestEvent = { type: string; message?: string; error?: string };
 
 const TIMEOUT_MS = 10;
+
 const OUTLIVES_TIMEOUT_MS = 30;
 
 async function readEvents(response: Response): Promise<TestEvent[]> {
   const body = await response.text();
+
+  // SAFETY: The stream fixture emits the event contract checked by this test.
   return body
     .split("\n\n")
     .filter((chunk) => chunk.startsWith("data: "))
@@ -23,18 +26,22 @@ describe("streamInstallEvents", () => {
 
     const response = streamInstallEvents<TestEvent>(async (send) => {
       await clientGone.promise;
+
       try {
         send({ message: "unpacking", type: "progress" });
       } catch (error) {
         thrown.push(error);
       }
+
       executorDone.resolve();
     });
 
     const body = response.body;
+
     if (!body) {
       throw new Error("the install stream response has no body");
     }
+
     await body.getReader().cancel();
     clientGone.resolve();
     await executorDone.promise;
@@ -46,6 +53,7 @@ describe("streamInstallEvents", () => {
     const response = streamInstallEvents<TestEvent>((send) => {
       send({ message: "unpacking", type: "progress" });
       send({ type: "done" });
+
       return Promise.resolve();
     });
 
@@ -102,11 +110,13 @@ describe("streamInstallEvents", () => {
         await new Promise((settle) =>
           setTimeout(settle, TIMEOUT_MS + OUTLIVES_TIMEOUT_MS)
         );
+
         try {
           send({ message: "still unpacking", type: "progress" });
         } catch (error) {
           thrown.push(error);
         }
+
         executorDone.resolve();
       },
       { timeoutMessage: "Install timed out.", timeoutMs: TIMEOUT_MS }

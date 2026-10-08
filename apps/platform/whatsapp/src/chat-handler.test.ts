@@ -62,14 +62,18 @@ function defaultProfiles() {
 }
 
 const PAIRING_CODE = "A1B2C3D4E5F60718293A4B5C6D7E8F90";
+
 const LIVE_CODE_EXPIRY = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
 const WRONG_PAIRING_CODE = "0".repeat(32);
 
 function createMockSocket() {
+  type MessageContent = Parameters<baileys.WASocket["sendMessage"]>[1];
+
   const sent: Array<{
     jid: string;
     text: string;
-    content: Record<string, unknown>;
+    content: MessageContent;
   }> = [];
 
   const socket = {
@@ -78,11 +82,11 @@ function createMockSocket() {
       off: () => {},
       on: () => {},
     },
-    sendMessage: async (jid: string, content: Record<string, unknown>) => {
+    sendMessage: async (jid: string, content: MessageContent) => {
       sent.push({
         content,
         jid,
-        text: typeof content.text === "string" ? content.text : "",
+        text: "text" in content ? (content.text ?? "") : "",
       });
     },
     sendPresenceUpdate: async () => {},
@@ -102,25 +106,32 @@ async function createTestHandler(
   const authStore = new WhatsAppAuthStore();
   await authStore.reload();
   const mock = createMockClient(clientOptions);
+
   const sessionStore = new SessionStore(
     path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
   );
+
   const orgStore = createTestOrgStore(homeDir);
   await orgStore.load();
   const { socket, sent } = createMockSocket();
+
   const handler = createChatHandler({
     ...options,
     authStore,
     client: mock.client,
+    // SAFETY: This handler uses only the socket methods supplied by the fixture.
     getSocket: () => socket as any,
     orgStore,
     sessionStore,
   });
+
   return { ...mock, authStore, handler, orgStore, sent, sessionStore, socket };
 }
 
 function documentSendCount(
-  sent: Array<{ content: Record<string, unknown> }>
+  sent: Array<{
+    content: Parameters<baileys.WASocket["sendMessage"]>[1];
+  }>
 ): number {
   return sent.filter((entry) => entry.content.document !== undefined).length;
 }
@@ -150,6 +161,7 @@ describe("createChatHandler", () => {
         baileys,
         "downloadContentFromMessage"
       ).mockImplementation(
+        // SAFETY: The fixture stream yields the bytes requested by the handler.
         async () => Readable.from([Buffer.from("file bytes")]) as any
       );
 
@@ -251,6 +263,7 @@ describe("createChatHandler", () => {
         expect(sent.at(-1)?.text).toContain("too large");
 
         download.mockImplementation(
+          // SAFETY: The fixture stream yields bytes above the configured size cap.
           async () => Readable.from([Buffer.alloc(6 * 1024 * 1024)]) as any
         );
         await handle({
@@ -282,22 +295,28 @@ describe("createChatHandler", () => {
       await syncWhatsAppOwnerPairing({ ownerJid: PAIRED_JID }, "org_a");
       const authStore = new WhatsAppAuthStore("org_a");
       await authStore.reload();
+
       const { client, calls, orgIds } = createMockClient({
         orgs: createMultiTestOrgs(),
       });
+
       const sessionStore = new SessionStore(
         path.join(getWhatsAppConfigDir("org_a"), "chat-sessions.json")
       );
+
       const orgStore = createTestOrgStore(homeDir);
       const { socket } = createMockSocket();
+
       const handle = createChatHandler({
         authStore,
         client,
         config: { orgId: "org_a", phoneNumber: "", profileId: "default" },
+        // SAFETY: This handler uses only the socket methods supplied by the fixture.
         getSocket: () => socket as any,
         orgStore,
         sessionStore,
       });
+
       await handle({ jid: PAIRED_JID, text: "/org org_b" });
       await handle({ jid: PAIRED_JID, text: "well test" });
       expect(calls.listUserOrgs).toBe(0);
@@ -732,6 +751,7 @@ describe("bridge API integration", () => {
 });
 
 const GROUP_JID = "120363042000000000@g.us";
+
 const BOT_ME = {
   id: "628100000000@s.whatsapp.net",
   lid: "236283431522503@lid",
@@ -747,6 +767,7 @@ function groupInbound(options: {
   fromMe?: boolean;
 }) {
   const senderJid = options.senderJid ?? PAIRED_JID;
+
   return {
     fromMe: options.fromMe ?? false,
     isGroup: true,
@@ -801,6 +822,7 @@ describe("createChatHandler group chats", () => {
         expect(output).not.toContain(senderJid);
       } finally {
         log.mockRestore();
+
         if (previousDebug === undefined) {
           delete process.env.NAKAMA_CH_DEBUG;
         } else {
@@ -1259,6 +1281,7 @@ describe("createChatHandler group chats", () => {
 
       const { calls, handler: handleMessage } =
         await createTestHandler(homeDir);
+
       const senderJid = "6281227900622@s.whatsapp.net";
 
       await handleMessage(groupInbound({ senderJid, text: "hi" }));
@@ -1289,9 +1312,11 @@ describe("createChatHandler group chats", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
+
       const sessionStore = new SessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
+
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
       const { socket } = createMockSocket();
@@ -1303,10 +1328,12 @@ describe("createChatHandler group chats", () => {
           },
         ],
       });
+
       const handleMessage = createChatHandler({
         authStore,
         client,
         config: { phoneNumber: "1234567890", profileId: "default" },
+        // SAFETY: This handler uses only the socket methods supplied by the fixture.
         getSocket: () => socket as any,
         orgStore,
         sessionStore,
@@ -1418,6 +1445,7 @@ describe("createChatHandler artifact delivery", () => {
 
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
+
       const { calls, client } = createMockClient({
         done: options?.done,
         getMessagesError: options?.getMessagesError,
@@ -1426,26 +1454,34 @@ describe("createChatHandler artifact delivery", () => {
         streamError: options?.streamError,
         toolEvents: options?.toolEvents,
       });
+
       const sessionStore = new SessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
+
       await sessionStore.load();
-      sessionStore.set(PAIRED_JID, {
-        ...(options?.deliverableArtifacts
-          ? { deliverableArtifacts: options.deliverableArtifacts }
-          : {}),
+
+      const session: Parameters<SessionStore["set"]>[1] = {
         profileId: "default",
         sessionId: "session_test",
         updatedAt: new Date().toISOString(),
-      });
+      };
+
+      if (options?.deliverableArtifacts) {
+        session.deliverableArtifacts = options.deliverableArtifacts;
+      }
+
+      sessionStore.set(PAIRED_JID, session);
       await sessionStore.save();
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
       const { sent, socket } = createMockSocket();
+
       const handleMessage = createChatHandler({
         authStore,
         client,
         config: { phoneNumber: "1234567890", profileId: "default" },
+        // SAFETY: This handler uses only the socket methods supplied by the fixture.
         getSocket: () => socket as never,
         orgStore,
         sessionStore,
@@ -1471,13 +1507,18 @@ describe("createChatHandler artifact delivery", () => {
     tool: "send_whatsapp_artifact",
     toolCallId: "send_1",
   });
-  const writeEvents = artifactMessages
-    .filter((message) => message.role === "tool")
-    .map((message) => ({
-      result: JSON.parse(message.content),
-      tool: message.name,
-      toolCallId: message.toolCallId,
-    }));
+
+  const writeEvents = artifactMessages.flatMap((message) =>
+    message.role === "tool"
+      ? [
+          {
+            result: JSON.parse(message.content),
+            tool: message.name,
+            toolCallId: message.toolCallId,
+          },
+        ]
+      : []
+  );
 
   test.each([
     "send file monthly report.csv",
@@ -1534,16 +1575,21 @@ describe("createChatHandler artifact delivery", () => {
       const readContent = ctx.client.readProfileArtifactContent;
       ctx.client.forOrg = (orgId) => {
         pinnedOrg = orgId;
+
+        // SAFETY: This client override only replaces the method used by the test.
         return {
           readProfileArtifactContent: async (...args) => {
             reads += 1;
+
             return readContent(...args);
           },
         } as typeof ctx.client;
       };
+
       ctx.client.readProfileArtifactContent = async () => {
         throw new Error("Shared client must not be used for delivery");
       };
+
       await ctx.handleMessage({ jid: PAIRED_JID, text: "send report.md" });
       expect(pinnedOrg).toBeTruthy();
       expect(reads).toBe(1);
@@ -1689,10 +1735,12 @@ describe("createChatHandler artifact delivery", () => {
           if (content.document) {
             throw new Error("upload rejected");
           }
-          if (typeof content.text === "string") {
+
+          if ("text" in content && content.text) {
             texts.push(content.text);
           }
         };
+
         await ctx.handleMessage({ jid: PAIRED_JID, text: "send reports" });
         expect(ctx.calls.readProfileArtifactContent).toBe(1);
         expect(ctx.sessionStore.getDeliverableArtifacts(PAIRED_JID)).toEqual(
@@ -1721,6 +1769,7 @@ describe("createChatHandler artifact delivery", () => {
           await save();
           stopActiveStream(PAIRED_JID);
         };
+
         await ctx.handleMessage({ jid: PAIRED_JID, text: "send reports" });
         expect(documentSendCount(ctx.sent)).toBe(1);
         expect(ctx.calls.readProfileArtifactContent).toBe(1);
@@ -1748,6 +1797,7 @@ describe("createChatHandler artifact delivery", () => {
             stopActiveStream(PAIRED_JID);
           }
         };
+
         await ctx.handleMessage({ jid: PAIRED_JID, text: "send reports" });
         expect(attempted).toBe(1);
         expect(ctx.calls.readProfileArtifactContent).toBe(1);
@@ -1849,19 +1899,24 @@ describe("stream cleanup", () => {
 
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
+
       const { client, getStreamControl } = createMockClient({
         streaming: true,
       });
+
       const sessionStore = new SessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
+
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
       const { socket, sent } = createMockSocket();
+
       const handleMessage = createChatHandler({
         authStore,
         client,
         config: { phoneNumber: "1234567890", profileId: "default" },
+        // SAFETY: This handler uses only the socket methods supplied by the fixture.
         getSocket: () => socket as any,
         orgStore,
         sessionStore,
@@ -1884,10 +1939,12 @@ describe("stream cleanup", () => {
 
 describe("withChatLock", () => {
   test("keeps the lock chain rejection-safe across a failed prior run", async () => {
-    const rejections: unknown[] = [];
-    const onUnhandled = (reason: unknown) => {
+    const rejections: Error[] = [];
+
+    const onUnhandled = (reason: Error) => {
       rejections.push(reason);
     };
+
     process.on("unhandledRejection", onUnhandled);
 
     try {
@@ -1924,9 +1981,11 @@ describe("createChatHandler session hot cache", () => {
       const authStore = new WhatsAppAuthStore();
       await authStore.reload();
       const { client, calls } = createMockClient();
+
       const sessionStore = new SessionStore(
         path.join(homeDir, ".nakama", "whatsapp", "chat-sessions.json")
       );
+
       await sessionStore.load();
       sessionStore.set(PAIRED_JID, {
         profileId: "default",
@@ -1942,6 +2001,7 @@ describe("createChatHandler session hot cache", () => {
         authStore,
         client,
         config: { phoneNumber: "1234567890", profileId: "default" },
+        // SAFETY: This handler uses only the socket methods supplied by the fixture.
         getSocket: () => socket as never,
         orgStore,
         sessionStore,

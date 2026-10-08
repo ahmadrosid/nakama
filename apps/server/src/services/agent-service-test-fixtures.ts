@@ -2,6 +2,7 @@ import type { StoredProfileRecord } from "@nakama/db";
 
 export function createDefaultProfile(): StoredProfileRecord {
   const now = new Date().toISOString();
+
   return {
     createdAt: now,
     id: "profile_default",

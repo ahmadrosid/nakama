@@ -7,6 +7,7 @@ import { legacySystemDestination } from "@/pages/system-page.shared";
 export function SystemPage() {
   const { user, activeOrg, isLoading } = useAuth();
   const [searchParams] = useSearchParams();
+
   if (isLoading) {
     return (
       <div className="flex min-h-64 items-center justify-center">
@@ -14,10 +15,13 @@ export function SystemPage() {
       </div>
     );
   }
+
   const isPlatformAdmin = user?.isPlatformAdmin === true;
+
   if (!canAccessSystemPage(isPlatformAdmin, activeOrg?.role)) {
     return <Navigate replace to="/chat" />;
   }
+
   return (
     <Navigate
       replace

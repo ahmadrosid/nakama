@@ -46,16 +46,20 @@ export class AutomationWorkerScheduler {
       }
 
       this.pollInFlight = true;
+
       try {
         const settings = await this.client
           .getAutomationWorkerSettings()
           .catch(() => null);
+
         const nextIntervalMs = settings
           ? settings.pollIntervalMinutes * 60 * 1000
           : (this.pollIntervalMs ?? intervalMs);
+
         if (nextIntervalMs !== this.pollIntervalMs) {
           this.beginPolling(nextIntervalMs);
         }
+
         await this.scheduler.reload();
         await this.tickCurator();
         this.notifyStatus();
@@ -92,9 +96,11 @@ export class AutomationWorkerScheduler {
   ): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
     try {
       await this.client.runAutomationInternal(automationId, orgId);
+
       return { ok: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+
       return { error: message, ok: false };
     }
   }

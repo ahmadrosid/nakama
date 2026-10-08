@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/use-auth";
 import { useChannelProfileId } from "@/hooks/use-app-queries";
 import { client } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 export function useWorkerLogs(
@@ -50,9 +51,7 @@ export function useClearWorkerLogs(workerName: string) {
           stdout: "",
         }
       );
-      void queryClient.invalidateQueries({
-        queryKey: submittedQueryKey,
-      });
+      void invalidateQueries(queryClient, submittedQueryKey);
     },
   });
 }

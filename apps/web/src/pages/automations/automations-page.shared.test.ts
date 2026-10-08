@@ -29,6 +29,7 @@ test("run conversations retain tools and text and only animate a running run", (
     startedAt: "2026-10-01T00:00:00Z",
     status: "running",
   };
+
   const live = automationRunMessages(run);
   expect(live.map((item) => item.role)).toEqual(["user", "tool"]);
   expect(live[1]).toMatchObject({

@@ -28,6 +28,12 @@ function normalizeUrl(value) {
   return url.toString().replace(/\/+$/, "");
 }
 // src/client.ts
+function asJsonRecord(value) {
+  return value instanceof Object && !Array.isArray(value) ? value : null;
+}
+function readString(value) {
+  return value === String(value) ? value : null;
+}
 async function validateExtraction(config) {
   if (!(config.apiKey?.trim() && config.model?.trim() && config.revision?.trim())) {
     throw new Error("Configure an extraction API key and model in Supermemory Settings");
@@ -62,14 +68,24 @@ async function validateExtraction(config) {
   });
   if (!response.ok) {
     const body2 = await response.json().catch(() => ({}));
-    const reason = typeof body2?.error?.message === "string" ? body2.error.message : `HTTP ${response.status}`;
+    const bodyRecord2 = asJsonRecord(body2);
+    const errorRecord = bodyRecord2?.error ? asJsonRecord(bodyRecord2.error) : null;
+    const message = errorRecord && readString(errorRecord.message);
+    const reason = message ?? `HTTP ${response.status}`;
     throw new Error(`Extraction provider rejected the check: ${reason.replaceAll(config.apiKey, "[REDACTED]").replace(/Bearer\s+[^\s,"}]+/gi, "Bearer [REDACTED]").slice(0, 300)}`);
   }
   const body = await response.json().catch(() => ({}));
-  const content = body?.choices?.[0]?.message?.content;
+  const bodyRecord = asJsonRecord(body);
+  const choices = bodyRecord?.choices;
+  const firstChoice = Array.isArray(choices) ? choices[0] : undefined;
+  const choiceRecord = firstChoice ? asJsonRecord(firstChoice) : null;
+  const messageRecord = choiceRecord?.message ? asJsonRecord(choiceRecord.message) : null;
+  const content = messageRecord && readString(messageRecord.content);
   let valid = false;
   try {
-    valid = typeof content === "string" && JSON.parse(content)?.ok === true;
+    const parsed = JSON.parse(content ?? "");
+    const parsedRecord = asJsonRecord(parsed);
+    valid = parsedRecord?.ok === true;
   } catch {}
   if (!valid) {
     throw new Error("Extraction model did not return the required structured response");
@@ -78,6 +94,9 @@ async function validateExtraction(config) {
 
 // src/worker.ts
 var VERSION = "0.0.8";
+function isJsonRecord(value) {
+  return value instanceof Object && !Array.isArray(value);
+}
 var CHECKSUMS = {
   "darwin-arm64": "12b7817a105ed0a9e70f96c461fb6f8dded5d70eaeb6034e774778c257bed78a",
   "darwin-x64": "2b50821fc2b0a952d1431fa5daf5af19a350748a82e1242a65c4a1e5cb453beb",
@@ -150,7 +169,7 @@ function startExtractionProxy(config, signal) {
       }
       try {
         const body = await request.json();
-        if (!body || typeof body !== "object" || Array.isArray(body)) {
+        if (!isJsonRecord(body)) {
           return new Response(null, { status: 400 });
         }
         if (body.serviceTier !== undefined) {

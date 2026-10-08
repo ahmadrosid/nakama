@@ -30,23 +30,29 @@ import { createChatHandler } from "./chat-handler";
 import { loadConfig } from "./config";
 import { startWhatsAppOutboundServer } from "./outbound-server";
 import { registerProcessLifecycleHandlers } from "./process-lifecycle";
-import { createWhatsAppSocket } from "./socket";
+import {
+  createWhatsAppSocket,
+  type WhatsAppSocketHandle,
+} from "./socket";
 
 installErrorHandlers("worker:whatsapp");
+
 void installErrorTrackingSink();
+
 const restoreBaileysConsole = installBaileysConsoleRedaction();
 
 let spawnedChild: Bun.Subprocess | null = null;
-let socketHandle: {
-  stop: () => void | Promise<void>;
-  socket: {
-    sendMessage: (jid: string, content: { text: string }) => Promise<unknown>;
-  } | null;
-} | null = null;
+
+let socketHandle: WhatsAppSocketHandle | null = null;
+
 let outboundServer: { port: number; stop: () => void } | null = null;
+
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
 let bridgeConnected = false;
+
 const orgId = channelOwnerFromEnv();
+
 const heartbeat = createWhatsAppWorkerHeartbeat(orgId);
 
 function persistWorkerHeartbeat(): void {
@@ -60,12 +66,15 @@ function persistWorkerHeartbeat(): void {
 registerProcessLifecycleHandlers(async () => {
   outboundServer?.stop();
   await socketHandle?.stop();
+
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
   }
+
   await heartbeat.clear();
   await clearWhatsAppQrCode(orgId);
   restoreBaileysConsole();
+
   if (hasActiveStreams()) {
     console.warn(
       "Leaving the spawned Nakama server running so in-flight agent turns can finish; the next worker start will reuse it."
@@ -78,6 +87,7 @@ registerProcessLifecycleHandlers(async () => {
 try {
   const config = await loadConfig();
   const existingHeartbeat = await heartbeat.read();
+
   if (
     existingHeartbeat &&
     existingHeartbeat.pid !== process.pid &&
@@ -88,6 +98,7 @@ try {
     );
     process.exit(1);
   }
+
   await heartbeat.acquire();
   // Publish ownership before server startup can migrate legacy credentials.
   await heartbeat.write({
@@ -95,9 +106,11 @@ try {
     pid: process.pid,
     updatedAt: new Date().toISOString(),
   });
+
   const { serverUrl, spawnedChild: child } = await ensureServerRunning({
     spawn: false,
   });
+
   spawnedChild = child;
 
   const client = new NakamaClient({
@@ -107,6 +120,7 @@ try {
     clientOrigin: resolveWebPublicUrl(),
     orgId: orgId.orgId,
   });
+
   const health = await client.health();
 
   if (!health.providerConfigured) {
@@ -118,11 +132,13 @@ try {
   const sessionStore = new ChannelSessionStore(
     join(getWhatsAppConfigDir(orgId), "chat-sessions.json")
   );
+
   await sessionStore.load();
 
   const orgStore = new ChannelOrgStore(
     join(getWhatsAppConfigDir(orgId), "org-selection.json")
   );
+
   await orgStore.load();
 
   const authStore = new WhatsAppAuthStore(orgId);
@@ -133,7 +149,7 @@ try {
     client,
     config,
     getSocket: () =>
-      socketHandle ? ((socketHandle as any).socket ?? null) : null,
+      socketHandle?.socket ?? null,
     orgStore,
     sessionStore,
     whatsappContextToken: process.env.NAKAMA_WHATSAPP_CONTEXT_TOKEN,
@@ -205,16 +221,20 @@ try {
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   console.error(message);
+
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
   }
+
   outboundServer?.stop();
+
   try {
     await socketHandle?.stop();
   } catch {
     // Socket stop best-effort on fatal path.
   }
+
   // Await before exit — void + process.exit can leave a stale heartbeat/QR file.
   await heartbeat.clear();
   await clearWhatsAppQrCode(orgId);

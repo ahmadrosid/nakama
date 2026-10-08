@@ -111,6 +111,7 @@ export function EditableProfileAvatar({
   size?: "xs" | "sm" | "md" | "ml" | "lg";
 }) {
   const [removeOpen, setRemoveOpen] = useState(false);
+
   const triggerClassName =
     "group relative shrink-0 rounded-full transition-transform duration-150 ease-out active:not-disabled:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
 

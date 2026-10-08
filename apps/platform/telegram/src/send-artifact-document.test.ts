@@ -6,6 +6,7 @@ import {
 
 describe("sendTelegramArtifactDocument", () => {
   test("rejects files over the telegram cap", async () => {
+    // SAFETY: This test supplies only the API and chat fields read by the function.
     const result = await sendTelegramArtifactDocument(
       { api: { sendDocument: async () => ({}) }, chat: { id: 1 } } as never,
       {

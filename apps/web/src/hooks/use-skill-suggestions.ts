@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 export function useSkillSuggestions(
@@ -34,9 +35,7 @@ function invalidateSkillSuggestionQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   orgId: string
 ) {
-  return queryClient.invalidateQueries({
-    queryKey: ["skillSuggestions", orgId],
-  });
+  return invalidateQueries(queryClient, ["skillSuggestions", orgId]);
 }
 
 export function useApplySkillSuggestion(orgId: string) {
@@ -46,11 +45,9 @@ export function useApplySkillSuggestion(orgId: string) {
       client.applySkillSuggestion(orgId, suggestionId),
     onSuccess: () => {
       void invalidateSkillSuggestionQueries(queryClient, orgId);
-      void queryClient.invalidateQueries({
-        queryKey: ["skillProposals", orgId],
-      });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.skills.all });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.profiles.all });
+      void invalidateQueries(queryClient, ["skillProposals", orgId]);
+      void invalidateQueries(queryClient, queryKeys.skills.all);
+      void invalidateQueries(queryClient, queryKeys.profiles.all);
     },
   });
 }

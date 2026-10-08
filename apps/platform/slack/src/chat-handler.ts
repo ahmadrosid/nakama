@@ -91,18 +91,23 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   // Fails closed: a lookup error (missing users:read, unknown user) is "no".
   async function isWorkspaceMember(userId: string): Promise<boolean> {
     const cached = memberCache.get(userId);
+
     if (cached && Date.now() - cached.at < MEMBER_CACHE_MS) {
       return cached.member;
     }
+
     try {
       const member = isSlackWorkspaceMember(
         await slack.getMember(userId),
         botTeamId
       );
+
       memberCache.set(userId, { at: Date.now(), member });
+
       return member;
     } catch (error) {
       console.warn(`Slack member lookup failed for ${userId}:`, error);
+
       return false;
     }
   }
@@ -126,6 +131,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     const raw = event.text ?? "";
     const text = normalizeSlackText(raw, botUserId);
     const threadTs = isDm ? event.thread_ts : (event.thread_ts ?? event.ts);
+
     const conversationKey = isDm
       ? event.channel
       : `${event.channel}:${threadTs}`;
@@ -143,6 +149,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     const reply = (message: string) =>
       slack.postMessage(event.channel, message, threadTs);
+
     const config = await loadSlackConfigFile(owner);
 
     const authorized =
@@ -157,18 +164,25 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         if (raw.includes(`<@${botUserId}>`)) {
           await reply(LINK_IN_DM_REPLY);
         }
+
         return;
       }
+
       if (!hasActiveHandshakeCode(config)) {
         await reply(NO_CODE_PROMPT);
+
         return;
       }
+
       if (!looksLikePairingCode(text)) {
         await reply(PAIRING_PROMPT);
+
         return;
       }
+
       const result = await verifyAndPairSlackUser(owner, text, event.user);
       await reply(result.message);
+
       return;
     }
 
@@ -180,6 +194,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       await reply(
         stopActiveStream(conversationKey) ? "Stopping…" : "Nothing to stop."
       );
+
       return;
     }
 
@@ -191,11 +206,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     if (command === "help") {
       await reply(HELP_TEXT);
+
       return;
     }
 
     if (command === "org" || command === "profile") {
       await reply(`This connection belongs to agent ${owner.profileId}.`);
+
       return;
     }
 
@@ -207,22 +224,30 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       switch (command) {
         case "": {
           await runTurn(client, event, conversationKey, text, isDm);
+
           return;
         }
+
         case "new": {
           await createAndBindSession(client, conversationKey);
           await reply("Started a new conversation.");
+
           return;
         }
+
         case "clear": {
           await (await resolveSession(client, conversationKey)).clear();
           await reply("History cleared.");
+
           return;
         }
+
         case "status": {
           await reply(await describeStatus(client, conversationKey));
+
           return;
         }
+
         default:
           await reply("Unknown command. Send !help for the list.");
       }
@@ -234,15 +259,19 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     ): Promise<string> {
       try {
         const health = await client.health();
+
         const lines = [
           `Server: ${health.ok ? "ok" : "degraded"}`,
           `Provider configured: ${health.providerConfigured ? "yes" : "no"}`,
         ];
+
         const profile = await resolveOwnerProfile(client);
         lines.push(`Agent: ${profile.name}`);
+
         if (profile?.model) {
           lines.push(`Model: ${profile.model.split("::").pop()}`);
         }
+
         return lines.join("\n");
       } catch (error) {
         return formatClientError(error);
@@ -258,6 +287,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     ): Promise<void> {
       if (!message) {
         await reply("Send me a message to get started. Try !help.");
+
         return;
       }
 
@@ -284,6 +314,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             onToolStart: () => {
               const early = pending.trim();
               pending = "";
+
               if (early) {
                 postedEarly = true;
                 earlyPosts = earlyPosts
@@ -296,6 +327,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           },
           { signal }
         );
+
         // The streamed chunks are the reply; `final` only fills in when none arrived.
         if (!(postedEarly || pending.trim())) {
           pending = final;
@@ -304,6 +336,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         if (!isAbortError(error)) {
           await earlyPosts;
           await reply(formatClientError(error));
+
           return;
         }
       } finally {
@@ -314,9 +347,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       }
 
       await earlyPosts;
+
       if (pending.trim()) {
         await reply(pending.trim());
       }
+
       if (signal.aborted) {
         await reply("Stopped.");
       }
@@ -327,9 +362,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   async function resolveOwnerProfile(client: NakamaClient) {
     const { profiles } = await client.listProfiles(owner.orgId);
     const profile = profiles.find((entry) => entry.id === owner.profileId);
+
     if (!profile) {
       throw new Error("The connection owner is unavailable.");
     }
+
     return profile;
   }
 
@@ -341,17 +378,22 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     if (sessionStore.get(sessionKey)?.profileId !== owner.profileId) {
       sessionStore.delete(sessionKey);
     }
+
     const existing = sessionStore.get(sessionKey);
 
     if (existing) {
       const hot = sessionStore.getHotSession<RemoteChatSession>(sessionKey);
+
       if (hot) {
         return hot;
       }
+
       const session = client.createChatSession(existing.sessionId, "slack");
+
       try {
         await session.getMessages();
         sessionStore.setHotSession(sessionKey, session);
+
         return session;
       } catch {
         // Session is gone on the server; start a new one below.
@@ -375,6 +417,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     });
     sessionStore.setHotSession(sessionKey, session);
     await sessionStore.save();
+
     return session;
   }
 }

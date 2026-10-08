@@ -14,15 +14,21 @@ function createServerOptions() {
   const authService = new AuthService();
 
   return {
+    // SAFETY: This test controls the fixture shape at this boundary.
     agent: {} as any,
     authService,
+    // SAFETY: This test controls the fixture shape at this boundary.
     automationService: {} as any,
     databaseAdapter,
+    // SAFETY: This test controls the fixture shape at this boundary.
     mcpService: {} as any,
     orgService: new OrgService(databaseAdapter, authService),
+    // SAFETY: This test controls the fixture shape at this boundary.
     skillCuratorService: {} as any,
+    // SAFETY: This test controls the fixture shape at this boundary.
     systemStatus: {} as any,
     webDistDir: null,
+    // SAFETY: This test controls the fixture shape at this boundary.
     workerManager: {} as any,
   };
 }
@@ -69,6 +75,7 @@ describe("internal curator routes", () => {
   test("keeps a browser session out of the curator endpoints", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
+
     const session = await setupFreshInstallSession(
       app,
       options.databaseAdapter
@@ -79,6 +86,7 @@ describe("internal curator routes", () => {
         headers: session.headers(),
       })
     );
+
     expect(list.status).toBe(401);
 
     const run = await app.fetch(
@@ -94,6 +102,7 @@ describe("internal curator routes", () => {
         }
       )
     );
+
     expect(run.status).toBe(401);
   });
 });

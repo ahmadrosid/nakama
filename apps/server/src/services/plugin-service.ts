@@ -42,14 +42,23 @@ import type {
 } from "@nakama/db";
 import * as pacote from "pacote";
 import { Parser } from "tar";
+import { z } from "zod";
 import { spawnJsonTool } from "./custom-tool-subprocess";
 import type { WorkerManagerService } from "./worker-manager-service";
 
 const MAX_COMPRESSED_BYTES = 20 * 1024 * 1024;
+
 const MAX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024;
+
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
+
 const MAX_FILES = 2000;
+
 const MAX_PATH_BYTES = 240;
+
+const pluginJsonSchema = z.json();
+
+type PluginJsonValue = z.infer<typeof pluginJsonSchema>;
 
 export class PluginHostError extends Error {
   constructor(
@@ -98,7 +107,9 @@ interface InspectedPackage {
 }
 
 const installLocks = new Map<string, Promise<unknown>>();
+
 const officialInstallLocks = new Map<string, Promise<unknown>>();
+
 // Shipped composition, rather than package author/id claims, grants official status.
 const OFFICIAL_PLUGINS = new Map<
   string,
@@ -107,12 +118,17 @@ const OFFICIAL_PLUGINS = new Map<
   ["workflows", { requiresHost: true, setupAction: "import_legacy" }],
   ["supermemory", { requiresHost: true }],
 ]);
+
 const lifecycleLocks = new Map<string, Promise<unknown>>();
+
 const BUN_BIN = process.env.NAKAMA_BUN_BIN ?? "bun";
+
 const PLUGIN_RUNNER_PATH = fileURLToPath(
   new URL("./plugin-runner.js", import.meta.url)
 );
+
 const MAX_PLUGIN_INVOCATIONS = 4;
+
 const SPOOFABLE_INPUT_KEYS = new Set([
   "actor",
   "actorId",
@@ -137,10 +153,10 @@ export interface PluginServiceOptions {
   drainTimeoutMs?: number;
   officialPackagesDir?: string;
   onHostRequest?: (
-    request: unknown,
+    request: PluginJsonValue,
     context: PluginExecutionContext,
     signal?: AbortSignal
-  ) => Promise<unknown>;
+  ) => Promise<PluginJsonValue>;
   workerManager?: Pick<
     WorkerManagerService,
     "registerPluginWorkers" | "unregisterPluginWorkers"
@@ -159,10 +175,12 @@ const pluginWorkerManagers = new Set<
   NonNullable<PluginServiceOptions["workerManager"]>
 >();
 
-let pluginLifecycleTestHooks: {
+type PluginLifecycleTestHooks = {
   afterMigrationBeforePublish?: () => Promise<void>;
   afterPublishBeforeFinalize?: () => Promise<void>;
-} = {};
+};
+
+let pluginLifecycleTestHooks: PluginLifecycleTestHooks = {};
 
 export function setPluginLifecycleTestHooks(
   hooks: typeof pluginLifecycleTestHooks | null
@@ -175,6 +193,11 @@ interface PendingPluginOperation {
   operationId: string;
   targetGeneration: string | null;
   targetVersion: string | null;
+}
+
+interface MaterializedPluginContributions {
+  skills: StoredSkillRecord[];
+  tools: StoredToolRecord[];
 }
 
 type PluginActionAccessKind = "tool" | "ui";
@@ -204,11 +227,15 @@ interface AdmissionGate {
 }
 
 const admissionGates = new Map<string, AdmissionGate>();
+
 // One API process owns plugin execution. Exports also exclude package/lifecycle
 // mutations, which may change the selected database while it is being copied.
 let exportPending = false;
+
 let activeMutations = 0;
+
 const MIGRATION_LEDGER_TABLE = "_nakama_plugin_migrations";
+
 const DEFAULT_DRAIN_TIMEOUT_MS = 6000;
 
 export async function resetPluginAdmissionForTests(): Promise<void> {
@@ -246,33 +273,43 @@ export async function runWithPluginExportBarrier<T>(
       "A plugin export is already in progress."
     );
   }
+
   exportPending = true;
   const timeoutMs = options.drainTimeoutMs ?? DEFAULT_DRAIN_TIMEOUT_MS;
+
   const paused: {
     manager: NonNullable<PluginServiceOptions["workerManager"]>;
     names: string[];
   }[] = [];
+
   try {
     const deadline = Date.now() + timeoutMs;
+
     while (activeMutations > 0 && Date.now() < deadline) {
       await Bun.sleep(10);
     }
+
     if (activeMutations > 0) {
       throw new PluginExportBarrierError();
     }
+
     const gates = [...admissionGates.values()];
     await Promise.all(gates.map((gate) => drainAdmissionGate(gate, timeoutMs)));
+
     if (gates.some((gate) => gate.active > 0)) {
       throw new PluginExportBarrierError();
     }
+
     for (const manager of pluginWorkerManagers) {
       if (manager.pausePluginWorkers) {
         paused.push({ manager, names: await manager.pausePluginWorkers() });
       }
     }
+
     return await work();
   } finally {
     exportPending = false;
+
     for (const { manager, names } of paused) {
       await manager.resumePluginWorkers?.(names);
     }
@@ -283,7 +320,9 @@ async function withPluginMutation<T>(work: () => Promise<T>): Promise<T> {
   if (exportPending) {
     throw new PluginHostError("in_use");
   }
+
   activeMutations += 1;
+
   try {
     return await work();
   } finally {
@@ -307,6 +346,7 @@ export async function vacuumPluginDatabaseInto(
 ): Promise<void> {
   await ensureDir(dirname(targetPath));
   const source = new Database(sourcePath);
+
   try {
     source.exec(`VACUUM INTO ${sqlQuote(targetPath)}`);
   } finally {
@@ -316,17 +356,22 @@ export async function vacuumPluginDatabaseInto(
 
 export async function shutdownPluginRuntime(timeoutMs = 1500): Promise<void> {
   const gates = [...admissionGates.values()];
+
   for (const gate of gates) {
     gate.closed = true;
+
     for (const controller of gate.controllers) {
       controller.abort();
     }
   }
+
   const deadline = Date.now() + timeoutMs;
+
   while (Date.now() < deadline) {
     if (gates.every((gate) => gate.active === 0)) {
       return;
     }
+
     await Bun.sleep(25);
   }
 }
@@ -351,8 +396,10 @@ export class PluginService {
         "configDir must be an absolute path; relative paths resolve against process.cwd() and break plugin isolation."
       );
     }
+
     this.configDir = configDir;
     this.options = options;
+
     if (options.workerManager?.pausePluginWorkers) {
       pluginWorkerManagers.add(options.workerManager);
     }
@@ -362,6 +409,7 @@ export class PluginService {
     source: PluginPackageRequest
   ): Promise<PluginPackagePreview> {
     const inspected = await inspectPluginPackage(source);
+
     return toPreview(inspected);
   }
 
@@ -369,11 +417,13 @@ export class PluginService {
     if (!this.options.officialPackagesDir) {
       return [];
     }
+
     return Promise.all(
       [...OFFICIAL_PLUGINS.keys()].map(async (pluginId) => {
         const inspected = await this.inspectOfficialPlugin(pluginId);
         const { id, name, description, version, icon } = inspected.manifest;
-        return { description, id, name, version, ...(icon ? { icon } : {}) };
+
+        return { description, id, name, version, ...(icon && { icon }) };
       })
     );
   }
@@ -387,25 +437,31 @@ export class PluginService {
     if (actor.role !== "admin") {
       throw new PluginHostError("forbidden");
     }
+
     const official = OFFICIAL_PLUGINS.get(pluginId);
+
     if (!official) {
       throw new PluginHostError("not_found");
     }
+
     if (official.requiresHost && !this.options.onHostRequest) {
       throw new PluginHostError(
         "package_unavailable",
         "This plugin requires agent host capabilities."
       );
     }
+
     const inspected = await this.inspectOfficialPlugin(
       pluginId,
       Boolean(reinstall)
     );
+
     return withKeyedLock(
       officialInstallLocks,
       `${this.configDir}:${orgId}:${pluginId}`,
       async () => {
         let install = await this.db.getOrgPlugin(orgId, pluginId);
+
         if (reinstall) {
           if (
             !(
@@ -415,12 +471,15 @@ export class PluginService {
           ) {
             throw new PluginHostError("invalid_state");
           }
+
           if (install.revision !== reinstall.expectedRevision) {
             throw new PluginHostError("stale_revision");
           }
         }
+
         const shouldEnable =
           !reinstall || install?.lifecycleState === "enabled";
+
         await withPluginMutation(() =>
           withKeyedLock(
             installLocks,
@@ -431,6 +490,7 @@ export class PluginService {
               )
           )
         );
+
         if (!install || install.lifecycleState === "retained") {
           install = await this.addOrgPlugin(
             orgId,
@@ -445,6 +505,7 @@ export class PluginService {
               install.revision
             );
           }
+
           if (install.selectedVersion !== inspected.manifest.version) {
             install = await this.updateOrgPlugin(
               orgId,
@@ -453,11 +514,14 @@ export class PluginService {
               install.revision
             );
           }
+
           if (!shouldEnable) {
             return install;
           }
         }
+
         const enabledByInstall = install.lifecycleState === "disabled";
+
         if (enabledByInstall) {
           install = await this.enableOrgPlugin(
             orgId,
@@ -465,9 +529,11 @@ export class PluginService {
             install.revision
           );
         }
+
         if (install.lifecycleState !== "enabled") {
           throw new PluginHostError("invalid_state");
         }
+
         if (official.setupAction) {
           try {
             await this.invokePluginAction({
@@ -482,9 +548,11 @@ export class PluginService {
             if (enabledByInstall) {
               await this.disableOrgPlugin(orgId, pluginId, install.revision);
             }
+
             throw error;
           }
         }
+
         return install;
       }
     );
@@ -498,15 +566,19 @@ export class PluginService {
     if (!(OFFICIAL_PLUGINS.has(pluginId) && this.options.officialPackagesDir)) {
       throw new PluginHostError("not_found");
     }
+
     const directory = join(this.options.officialPackagesDir, pluginId);
     const files = new Map<string, Uint8Array>();
+
     for (const file of ["package.json", PLUGIN_MANIFEST_FILENAME]) {
       files.set(file, await readFile(join(directory, file)));
     }
+
     for (const folder of ["actions", "migrations", "ui", "skills", "workers"]) {
       if (!(await pathExists(join(directory, folder)))) {
         continue;
       }
+
       for (const entry of await readdir(join(directory, folder), {
         recursive: true,
         withFileTypes: true,
@@ -514,6 +586,7 @@ export class PluginService {
         if (!entry.isFile()) {
           continue;
         }
+
         const path = join(entry.parentPath, entry.name);
         files.set(
           relative(directory, path).split(sep).join("/"),
@@ -521,29 +594,38 @@ export class PluginService {
         );
       }
     }
+
     const validated = validatePluginManifest(
       JSON.parse(Buffer.from(files.get(PLUGIN_MANIFEST_FILENAME)!).toString())
     );
+
     if (!validated.ok || validated.manifest.id !== pluginId) {
       throw new PluginHostError("invalid_manifest");
     }
+
     if (validated.manifest.id === "google-meet") {
       throw new PluginHostError("invalid_manifest");
     }
+
     assertReferencedFilesExist(validated.manifest, files);
+
     const digestFiles = () => {
       const hash = createHash("sha256");
+
       for (const [name, data] of [...files].sort(([a], [b]) =>
         a.localeCompare(b)
       )) {
         hash.update(JSON.stringify([name, data.byteLength])).update(data);
       }
+
       return hash.digest("hex");
     };
+
     const existing = await this.db.getPluginRelease(
       pluginId,
       validated.manifest.version
     );
+
     if (
       developmentSnapshot ||
       (existing?.digest && existing.digest !== digestFiles())
@@ -551,11 +633,13 @@ export class PluginService {
       // New bytes get their own release; other organizations keep their selected copy.
       const version = `${validated.manifest.version.split("+")[0]}+dev.${digestFiles().slice(0, 12)}`;
       validated.manifest.version = version;
+
       for (const file of ["package.json", PLUGIN_MANIFEST_FILENAME]) {
         const metadata = JSON.parse(Buffer.from(files.get(file)!).toString());
         files.set(file, Buffer.from(JSON.stringify({ ...metadata, version })));
       }
     }
+
     return {
       digest: digestFiles(),
       files,
@@ -573,6 +657,7 @@ export class PluginService {
         source,
         options.expectedIntegrity
       );
+
       if (
         options.expectedDigest !== undefined &&
         options.expectedDigest !== inspected.digest
@@ -581,9 +666,11 @@ export class PluginService {
       }
 
       const { id, version } = inspected.manifest;
+
       return withKeyedLock(installLocks, `${id}@${version}`, async () =>
         withKeyedLock(stagingLocks, "staging", async () => {
           await cleanupAbandonedStaging(this.configDir);
+
           try {
             return await this.publishInspectedPackage(inspected);
           } finally {
@@ -603,18 +690,28 @@ export class PluginService {
 
     const { handle, install, manifest, releaseDir } =
       await this.admitInvocation(input.orgId, input.pluginId);
+
     try {
       const action = manifest.actions.find(
         (item) => item.key === input.actionKey
       );
+
       if (!action) {
         throw new PluginHostError("unknown_action");
       }
+
       if (!actorMayInvoke(action.access, input.actor.role)) {
         throw new PluginHostError("forbidden");
       }
 
-      const cleanedInput = stripSpoofedInput(input.input);
+      const pluginInput = pluginJsonSchema.safeParse(input.input);
+
+      if (!pluginInput.success) {
+        throw new PluginHostError("invalid_input");
+      }
+
+      const cleanedInput = stripSpoofedInput(pluginInput.data);
+
       if (!validatePluginJsonInstance(action.inputSchema, cleanedInput).ok) {
         throw new PluginHostError("invalid_input");
       }
@@ -629,7 +726,9 @@ export class PluginService {
         profileId: input.access === "tool" ? input.profileId : undefined,
         sessionId: input.access === "tool" ? input.sessionId : undefined,
       });
+
       context.actionKey = action.key;
+
       if (input.access === "tool" && !context.profileId) {
         throw new PluginHostError("invalid_input");
       }
@@ -652,6 +751,7 @@ export class PluginService {
 
   async capabilityRevisionForOrg(orgId: string): Promise<string> {
     const installs = await this.db.listOrgPlugins(orgId);
+
     return installs
       .map(
         (install) =>
@@ -667,6 +767,7 @@ export class PluginService {
     pluginKey: string
   ): Promise<string | null> {
     const install = await this.db.getOrgPlugin(orgId, pluginId);
+
     if (
       !(
         install &&
@@ -681,9 +782,11 @@ export class PluginService {
       pluginId,
       install.selectedVersion
     );
+
     const skill = release?.manifest.skills.find(
       (item) => item.key === pluginKey
     );
+
     if (!skill) {
       return null;
     }
@@ -693,6 +796,7 @@ export class PluginService {
       install.selectedVersion,
       this.configDir
     );
+
     try {
       return resolvePluginReleaseEntry(releaseDir, skill.directory);
     } catch {
@@ -706,6 +810,7 @@ export class PluginService {
     actionKey: string
   ): Promise<PluginManifest["actions"][number] | null> {
     const install = await this.db.getOrgPlugin(orgId, pluginId);
+
     if (
       !(
         install &&
@@ -715,13 +820,16 @@ export class PluginService {
     ) {
       return null;
     }
+
     const release = await this.db.getPluginRelease(
       pluginId,
       install.selectedVersion
     );
+
     const action = release?.manifest.actions.find(
       (item) => item.key === actionKey && item.exposeAsTool
     );
+
     return action ?? null;
   }
 
@@ -736,6 +844,7 @@ export class PluginService {
     retainedToolIds: string[];
   }> {
     const target = await this.db.getPluginRelease(pluginId, targetVersion);
+
     if (!target) {
       throw new PluginHostError("not_found");
     }
@@ -743,14 +852,17 @@ export class PluginService {
     const targetSkillKeys = new Set(
       target.manifest.skills.map((skill) => skill.key)
     );
+
     const targetActionKeys = new Set(
       target.manifest.actions
         .filter((action) => action.exposeAsTool)
         .map((action) => action.key)
     );
+
     const skills = (await this.db.listSkills()).filter(
       (skill) => skill.orgId === orgId && skill.pluginId === pluginId
     );
+
     const tools = (await this.db.listTools()).filter(
       (tool) => tool.orgId === orgId && tool.pluginId === pluginId
     );
@@ -782,13 +894,16 @@ export class PluginService {
     await withAdmissionGate(gate, () => {
       gate.closed = true;
     });
+
     for (const controller of [...gate.controllers]) {
       controller.abort();
     }
+
     await drainAdmissionGate(
       gate,
       this.options.drainTimeoutMs ?? DEFAULT_DRAIN_TIMEOUT_MS
     );
+
     if (gate.active > 0) {
       throw new PluginHostError("in_use");
     }
@@ -802,6 +917,7 @@ export class PluginService {
     return this.withOrgPluginMutation(orgId, pluginId, async () => {
       const existing = await this.db.getOrgPlugin(orgId, pluginId);
       const release = await this.resolveApprovedRelease(pluginId, version);
+
       if (!release) {
         throw new PluginHostError("not_found");
       }
@@ -824,6 +940,7 @@ export class PluginService {
           existing,
           release.manifest
         );
+
         return this.writeOrgPluginState({
           databaseGeneration: existing.databaseGeneration,
           expectedRevision: existing.revision,
@@ -839,6 +956,7 @@ export class PluginService {
         if (version && existing.selectedVersion !== version) {
           throw new PluginHostError("invalid_state");
         }
+
         return existing;
       }
 
@@ -853,9 +971,11 @@ export class PluginService {
   ): Promise<StoredOrgPluginRecord> {
     return this.withOrgPluginMutation(orgId, pluginId, async () => {
       const install = await this.requireOrgPlugin(orgId, pluginId);
+
       if (install.revision !== expectedRevision) {
         throw new PluginHostError("stale_revision");
       }
+
       if (install.lifecycleState !== "disabled" || !install.selectedVersion) {
         throw new PluginHostError("invalid_state");
       }
@@ -864,26 +984,31 @@ export class PluginService {
         pluginId,
         install.selectedVersion
       );
+
       if (!release) {
         throw new PluginHostError("package_unavailable");
       }
+
       if (await this.describeMissingPluginBytes(install)) {
         throw new PluginHostError("package_unavailable");
       }
 
       const operationId = randomUUID();
+
       const targetGeneration = await this.planDatabaseGeneration(
         orgId,
         pluginId,
         install,
         release.manifest
       );
+
       const pending = serializePending({
         kind: "enable",
         operationId,
         targetGeneration,
         targetVersion: install.selectedVersion,
       });
+
       const enabling = await this.writeOrgPluginState({
         databaseGeneration: install.databaseGeneration,
         expectedRevision,
@@ -896,6 +1021,7 @@ export class PluginService {
       });
 
       let published = false;
+
       try {
         await this.preparePluginDatabase({
           install,
@@ -920,6 +1046,7 @@ export class PluginService {
         });
         published = true;
         await pluginLifecycleTestHooks.afterPublishBeforeFinalize?.();
+
         const enabled = await this.writeOrgPluginState({
           databaseGeneration: targetGeneration,
           expectedRevision: enabling.revision + 1,
@@ -930,12 +1057,15 @@ export class PluginService {
           pluginId,
           selectedVersion: install.selectedVersion,
         });
+
         this.openPluginAdmission(orgId, pluginId);
+
         return enabled;
       } catch (error) {
         if (error instanceof PluginHostError && error.code === "interrupted") {
           throw error;
         }
+
         if (!published) {
           await this.options.workerManager?.unregisterPluginWorkers(
             orgId,
@@ -950,7 +1080,9 @@ export class PluginService {
           await this.writeOrgPluginState({
             databaseGeneration: install.databaseGeneration,
             expectedRevision: enabling.revision,
-            lastLifecycleError: lifecycleErrorMessage(error),
+            lastLifecycleError: lifecycleErrorMessage(
+              error instanceof Error ? error : String(error)
+            ),
             lifecycleState: "disabled",
             orgId,
             pendingOperation: null,
@@ -958,12 +1090,14 @@ export class PluginService {
             selectedVersion: install.selectedVersion,
           }).catch(() => undefined);
         }
+
         if (error instanceof PluginHostError) {
           throw error;
         }
+
         throw new PluginHostError(
           "migration_failed",
-          lifecycleErrorMessage(error)
+          lifecycleErrorMessage(error instanceof Error ? error : String(error))
         );
       }
     });
@@ -976,9 +1110,11 @@ export class PluginService {
   ): Promise<StoredOrgPluginRecord> {
     return this.withOrgPluginMutation(orgId, pluginId, async () => {
       const install = await this.requireOrgPlugin(orgId, pluginId);
+
       if (install.revision !== expectedRevision) {
         throw new PluginHostError("stale_revision");
       }
+
       if (install.lifecycleState !== "enabled") {
         throw new PluginHostError("invalid_state");
       }
@@ -989,6 +1125,7 @@ export class PluginService {
         targetGeneration: install.databaseGeneration,
         targetVersion: install.selectedVersion,
       });
+
       const disabling = await this.writeOrgPluginState({
         databaseGeneration: install.databaseGeneration,
         expectedRevision,
@@ -1029,17 +1166,21 @@ export class PluginService {
   ): Promise<StoredOrgPluginRecord> {
     return this.withOrgPluginMutation(orgId, pluginId, async () => {
       const install = await this.requireOrgPlugin(orgId, pluginId);
+
       if (install.revision !== expectedRevision) {
         throw new PluginHostError("stale_revision");
       }
+
       if (install.lifecycleState !== "disabled" || !install.selectedVersion) {
         throw new PluginHostError("invalid_state");
       }
 
       const target = await this.db.getPluginRelease(pluginId, targetVersion);
+
       if (!target) {
         throw new PluginHostError("not_found");
       }
+
       this.assertContributionNames(pluginId, target.manifest);
 
       const targetGeneration = await this.planDatabaseGeneration(
@@ -1048,12 +1189,14 @@ export class PluginService {
         install,
         target.manifest
       );
+
       const pending = serializePending({
         kind: "update",
         operationId: randomUUID(),
         targetGeneration,
         targetVersion,
       });
+
       const updating = await this.writeOrgPluginState({
         databaseGeneration: install.databaseGeneration,
         expectedRevision,
@@ -1066,6 +1209,7 @@ export class PluginService {
       });
 
       let published = false;
+
       try {
         await this.closePluginAdmission(orgId, pluginId);
         await this.preparePluginDatabase({
@@ -1090,6 +1234,7 @@ export class PluginService {
         });
         published = true;
         await pluginLifecycleTestHooks.afterPublishBeforeFinalize?.();
+
         return this.writeOrgPluginState({
           databaseGeneration: targetGeneration,
           expectedRevision: updating.revision + 1,
@@ -1104,6 +1249,7 @@ export class PluginService {
         if (error instanceof PluginHostError && error.code === "interrupted") {
           throw error;
         }
+
         if (!published) {
           await this.discardUnpublishedGeneration(
             orgId,
@@ -1114,7 +1260,9 @@ export class PluginService {
           await this.writeOrgPluginState({
             databaseGeneration: install.databaseGeneration,
             expectedRevision: updating.revision,
-            lastLifecycleError: lifecycleErrorMessage(error),
+            lastLifecycleError: lifecycleErrorMessage(
+              error instanceof Error ? error : String(error)
+            ),
             lifecycleState: "disabled",
             orgId,
             pendingOperation: null,
@@ -1122,12 +1270,14 @@ export class PluginService {
             selectedVersion: install.selectedVersion,
           }).catch(() => undefined);
         }
+
         if (error instanceof PluginHostError) {
           throw error;
         }
+
         throw new PluginHostError(
           "migration_failed",
-          lifecycleErrorMessage(error)
+          lifecycleErrorMessage(error instanceof Error ? error : String(error))
         );
       }
     });
@@ -1140,9 +1290,11 @@ export class PluginService {
   ): Promise<StoredOrgPluginRecord> {
     return this.withOrgPluginMutation(orgId, pluginId, async () => {
       const install = await this.requireOrgPlugin(orgId, pluginId);
+
       if (install.revision !== expectedRevision) {
         throw new PluginHostError("stale_revision");
       }
+
       if (
         install.lifecycleState !== "disabled" &&
         install.lifecycleState !== "retained"
@@ -1152,6 +1304,7 @@ export class PluginService {
 
       await this.closePluginAdmission(orgId, pluginId);
       await this.syncProfileSkills?.(orgId);
+
       return this.writeOrgPluginState({
         databaseGeneration: install.databaseGeneration,
         expectedRevision,
@@ -1172,20 +1325,25 @@ export class PluginService {
   ): Promise<void> {
     return this.withOrgPluginMutation(orgId, pluginId, async () => {
       const install = await this.requireOrgPlugin(orgId, pluginId);
+
       if (install.revision !== expectedRevision) {
         throw new PluginHostError("stale_revision");
       }
+
       if (install.lifecycleState !== "retained") {
         throw new PluginHostError("invalid_state");
       }
+
       const deleted = await this.db.deleteOrgPlugin(
         orgId,
         pluginId,
         expectedRevision
       );
+
       if (!deleted) {
         throw new PluginHostError("stale_revision");
       }
+
       await rm(getOrgPluginDataDir(orgId, pluginId, this.configDir), {
         force: true,
         recursive: true,
@@ -1202,19 +1360,24 @@ export class PluginService {
   async listOrgPluginDetails(orgId: string): Promise<OrgPluginDetail[]> {
     const releases = await this.db.listPluginReleases();
     const installs = await this.db.listOrgPlugins(orgId);
+
     const pluginIds = [
       ...new Set([
         ...releases.map((release) => release.pluginId),
         ...installs.map((install) => install.pluginId),
       ]),
     ].sort();
+
     const details: OrgPluginDetail[] = [];
+
     for (const pluginId of pluginIds) {
       const detail = await this.getOrgPluginDetail(orgId, pluginId);
+
       if (detail) {
         details.push(detail);
       }
     }
+
     return details;
   }
 
@@ -1224,6 +1387,7 @@ export class PluginService {
   ): Promise<OrgPluginDetail | null> {
     const releases = await this.db.listPluginReleases(pluginId);
     const install = await this.db.getOrgPlugin(orgId, pluginId);
+
     if (releases.length === 0 && !install) {
       return null;
     }
@@ -1236,6 +1400,7 @@ export class PluginService {
         : null) ??
       releases.at(-1) ??
       null;
+
     const manifest = selected?.manifest ?? null;
 
     return {
@@ -1243,7 +1408,7 @@ export class PluginService {
       availableVersions: releases.map((release) => release.version),
       databaseGeneration: install?.databaseGeneration ?? null,
       description: manifest?.description ?? "",
-      ...(manifest?.icon ? { icon: manifest.icon } : {}),
+      ...(manifest?.icon && { icon: manifest.icon }),
       installed: Boolean(install),
       lastLifecycleError: install?.lastLifecycleError ?? null,
       lifecycleState: install?.lifecycleState ?? "disabled",
@@ -1266,6 +1431,7 @@ export class PluginService {
   async removePluginRelease(pluginId: string, version: string): Promise<void> {
     return withPluginMutation(async () => {
       const release = await this.db.getPluginRelease(pluginId, version);
+
       if (!release) {
         throw new PluginHostError("not_found");
       }
@@ -1274,11 +1440,13 @@ export class PluginService {
         (install) =>
           install.pluginId === pluginId && install.selectedVersion === version
       );
+
       if (dependents.length > 0) {
         throw new PluginHostError("in_use");
       }
 
       const deleted = await this.db.deletePluginRelease(pluginId, version);
+
       if (!deleted) {
         throw new PluginHostError("not_found");
       }
@@ -1296,6 +1464,7 @@ export class PluginService {
     assetPath: string
   ): Promise<{ isDocument: boolean; path: string } | null> {
     const install = await this.db.getOrgPlugin(orgId, pluginId);
+
     if (
       !(
         install &&
@@ -1310,18 +1479,22 @@ export class PluginService {
       pluginId,
       install.selectedVersion
     );
+
     const ui = release?.manifest.ui;
+
     if (!ui) {
       return null;
     }
 
     const uiDirectory = dirname(ui.entryModule);
+
     const relativePath =
       assetPath === ""
         ? ui.entryModule
         : uiDirectory === "."
           ? assetPath
           : `${uiDirectory}/${assetPath}`;
+
     if (!isUiReleasePath(ui, relativePath)) {
       return null;
     }
@@ -1331,11 +1504,14 @@ export class PluginService {
       install.selectedVersion,
       this.configDir
     );
+
     try {
       const resolved = resolvePluginReleaseEntry(releaseDir, relativePath);
+
       if (!(await pathExists(resolved))) {
         return null;
       }
+
       return {
         isDocument: relativePath.endsWith(".html"),
         path: resolved,
@@ -1354,9 +1530,11 @@ export class PluginService {
     if (!manifest.workers?.length) {
       return;
     }
+
     if (!this.options.workerManager) {
       throw new PluginHostError("workers_unavailable");
     }
+
     await this.options.workerManager.registerPluginWorkers(
       {
         configDir: this.configDir,
@@ -1380,14 +1558,17 @@ export class PluginService {
       if (install.lifecycleState !== "enabled" || !install.selectedVersion) {
         continue;
       }
+
       try {
         const release = await this.resolveApprovedRelease(
           install.pluginId,
           install.selectedVersion
         );
+
         if (!release) {
           throw new PluginHostError("package_unavailable");
         }
+
         await this.startPluginWorkers(
           install.orgId,
           install.pluginId,
@@ -1398,10 +1579,11 @@ export class PluginService {
         console.warn(
           "Could not recover plugin worker",
           install.pluginId,
-          lifecycleErrorMessage(error)
+          lifecycleErrorMessage(error instanceof Error ? error : String(error))
         );
       }
     }
+
     await this.options.workerManager?.removeOrphanPluginWorkers?.(
       this.configDir
     );
@@ -1410,6 +1592,7 @@ export class PluginService {
   async recoverInterruptedPluginOperations(): Promise<void> {
     return withPluginMutation(async () => {
       const installs = await this.db.listOrgPlugins();
+
       for (const install of installs) {
         try {
           await this.recoverOneInstall(install);
@@ -1417,7 +1600,9 @@ export class PluginService {
           await this.writeOrgPluginState({
             databaseGeneration: install.databaseGeneration,
             expectedRevision: install.revision,
-            lastLifecycleError: lifecycleErrorMessage(error),
+            lastLifecycleError: lifecycleErrorMessage(
+              error instanceof Error ? error : String(error)
+            ),
             lifecycleState:
               install.lifecycleState === "enabled" ? "disabled" : "disabled",
             orgId: install.orgId,
@@ -1434,22 +1619,26 @@ export class PluginService {
     input: InvokePluginActionInput
   ): Promise<void> {
     const profileId = input.profileId?.trim();
+
     if (!profileId) {
       throw new PluginHostError("invalid_input");
     }
 
     const profile = await this.db.getProfileForOrg(profileId, input.orgId);
+
     if (!profile) {
       throw new PluginHostError("forbidden");
     }
 
     const assigned = await this.db.listToolsForProfile(profileId);
+
     const ok = assigned.some(
       (tool) =>
         tool.handlerType === "plugin" &&
         tool.pluginId === input.pluginId &&
         tool.pluginKey === input.actionKey
     );
+
     if (!ok) {
       throw new PluginHostError("forbidden");
     }
@@ -1469,18 +1658,22 @@ export class PluginService {
     releaseDir: string;
   }> {
     const gate = admissionGateFor(orgId, pluginId);
+
     return withAdmissionGate(gate, async () => {
       if (gate.closed) {
         throw new PluginHostError("admission_closed");
       }
 
       const install = await this.db.getOrgPlugin(orgId, pluginId);
+
       if (!(install && install.selectedVersion)) {
         throw new PluginHostError("not_installed");
       }
+
       if (install.lifecycleState !== "enabled") {
         throw new PluginHostError("not_enabled");
       }
+
       if (gate.active >= MAX_PLUGIN_INVOCATIONS) {
         throw new PluginHostError("busy");
       }
@@ -1489,6 +1682,7 @@ export class PluginService {
         pluginId,
         install.selectedVersion
       );
+
       if (!release) {
         throw new PluginHostError("not_installed");
       }
@@ -1498,6 +1692,7 @@ export class PluginService {
         install.selectedVersion,
         this.configDir
       );
+
       if (!(await pathExists(releaseDir))) {
         throw new PluginHostError("not_installed");
       }
@@ -1507,9 +1702,11 @@ export class PluginService {
       if (exportPending) {
         throw new PluginHostError("admission_closed");
       }
+
       gate.active += 1;
       const abort = new AbortController();
       gate.controllers.add(abort);
+
       return {
         handle: {
           abort,
@@ -1541,6 +1738,7 @@ export class PluginService {
       input.pluginId,
       this.configDir
     );
+
     const context: PluginExecutionContext = {
       actor: { id: input.actor.id, role: input.actor.role },
       apiVersion: PLUGIN_MANIFEST_API_VERSION,
@@ -1552,6 +1750,7 @@ export class PluginService {
     };
 
     const generation = input.install.databaseGeneration;
+
     if (generation) {
       context.databasePath = getOrgPluginDatabasePath(
         input.orgId,
@@ -1574,10 +1773,13 @@ export class PluginService {
           assertConfigPathSegment(input.profileId, "profileId")
         ),
       });
+
       context.profileId = input.profileId;
+
       if (input.sessionId) {
         context.sessionId = input.sessionId;
       }
+
       if (toolContext.workspaceRoot) {
         context.workspaceRoot = toolContext.workspaceRoot;
       }
@@ -1589,24 +1791,26 @@ export class PluginService {
   private async spawnPluginModule(input: {
     context: PluginExecutionContext;
     entry: string;
-    input: unknown;
+    input: PluginJsonValue;
     label: string;
     releaseDir: string;
     signal?: AbortSignal;
-  }): Promise<unknown> {
+  }): Promise<PluginJsonValue> {
     let entryPath: string;
+
     try {
       entryPath = resolvePluginReleaseEntry(input.releaseDir, input.entry);
     } catch {
       throw new PluginHostError("invalid_entry");
     }
+
     if (!(await pathExists(entryPath))) {
       throw new PluginHostError("invalid_entry");
     }
 
     await ensureDir(input.context.dataDir);
 
-    return spawnJsonTool({
+    const result = await spawnJsonTool({
       args: ["--no-install", PLUGIN_RUNNER_PATH, entryPath],
       bin: BUN_BIN,
       context: { signal: input.signal },
@@ -1618,7 +1822,7 @@ export class PluginService {
         onHostRequest: this.options.onHostRequest
           ? (request, signal) =>
               this.options.onHostRequest!(
-                request,
+                pluginJsonSchema.parse(request),
                 input.context,
                 mergeAbortSignals(input.signal, signal)
               )
@@ -1631,6 +1835,8 @@ export class PluginService {
       },
       workspaceRoot: input.context.workspaceRoot,
     });
+
+    return pluginJsonSchema.parse(result);
   }
 
   private withOrgPluginMutation<T>(
@@ -1655,9 +1861,11 @@ export class PluginService {
     pluginId: string
   ): Promise<StoredOrgPluginRecord> {
     const install = await this.db.getOrgPlugin(orgId, pluginId);
+
     if (!install) {
       throw new PluginHostError("not_found");
     }
+
     return install;
   }
 
@@ -1665,7 +1873,9 @@ export class PluginService {
     if (version) {
       return this.db.getPluginRelease(pluginId, version);
     }
+
     const releases = await this.db.listPluginReleases(pluginId);
+
     return (
       releases.sort((left, right) =>
         compareSemver(right.version, left.version)
@@ -1694,13 +1904,17 @@ export class PluginService {
       pluginId: input.pluginId,
       selectedVersion: input.selectedVersion,
     });
+
     if (!result.ok) {
       throw new PluginHostError("stale_revision");
     }
+
     const saved = await this.db.getOrgPlugin(input.orgId, input.pluginId);
+
     if (!saved) {
       throw new PluginHostError("not_found");
     }
+
     return saved;
   }
 
@@ -1716,6 +1930,7 @@ export class PluginService {
     selectedVersion: string;
   }): Promise<void> {
     const now = new Date().toISOString();
+
     const result = await this.db.publishOrgPluginRelease({
       contributions: materializeContributions(
         input.orgId,
@@ -1733,6 +1948,7 @@ export class PluginService {
       pluginId: input.pluginId,
       selectedVersion: input.selectedVersion,
     });
+
     if (!result.ok) {
       throw new PluginHostError(
         result.reason === "stale_revision" ? "stale_revision" : "invalid_state"
@@ -1748,6 +1964,7 @@ export class PluginService {
       if (!action.exposeAsTool) {
         continue;
       }
+
       if (!derivePluginToolName(pluginId, action.key)) {
         throw new PluginHostError("invalid_state");
       }
@@ -1761,22 +1978,28 @@ export class PluginService {
     manifest: PluginManifest
   ): Promise<string | null> {
     const migrations = manifest.database?.migrations ?? [];
+
     if (migrations.length === 0) {
       return install.databaseGeneration;
     }
+
     if (!install.databaseGeneration) {
       return newDatabaseGeneration();
     }
+
     const selectedPath = getOrgPluginDatabasePath(
       orgId,
       pluginId,
       install.databaseGeneration,
       this.configDir
     );
+
     if (!(await pathExists(selectedPath))) {
       return newDatabaseGeneration();
     }
+
     const pending = await this.countPendingMigrations(selectedPath, manifest);
+
     return pending > 0 ? newDatabaseGeneration() : install.databaseGeneration;
   }
 
@@ -1786,10 +2009,12 @@ export class PluginService {
   ): Promise<number> {
     const migrations = await this.loadMigrationFiles(manifest);
     const db = new Database(databasePath);
+
     try {
       ensureMigrationLedger(db);
       const applied = readAppliedMigrations(db);
       assertMigrationCompatibility(applied, migrations);
+
       return migrations.filter(
         (migration) => !applied.some((row) => row.id === migration.id)
       ).length;
@@ -1809,14 +2034,17 @@ export class PluginService {
     if (!input.targetGeneration) {
       return;
     }
+
     const targetPath = getOrgPluginDatabasePath(
       input.orgId,
       input.pluginId,
       input.targetGeneration,
       this.configDir
     );
+
     await ensureDir(dirname(targetPath));
     const sourceGeneration = input.install.databaseGeneration;
+
     if (
       sourceGeneration &&
       sourceGeneration !== input.targetGeneration &&
@@ -1852,7 +2080,9 @@ export class PluginService {
       manifest.version,
       this.configDir
     );
+
     const loaded: Array<{ checksum: string; id: string; sql: string }> = [];
+
     for (const migration of manifest.database?.migrations ?? []) {
       const path = resolvePluginReleaseEntry(releaseDir, migration.path);
       const sql = await readFile(path, "utf8");
@@ -1862,6 +2092,7 @@ export class PluginService {
         sql,
       });
     }
+
     return loaded;
   }
 
@@ -1874,6 +2105,7 @@ export class PluginService {
     if (!targetGeneration || targetGeneration === selectedGeneration) {
       return;
     }
+
     await rm(
       getOrgPluginDatabasePath(
         orgId,
@@ -1894,12 +2126,14 @@ export class PluginService {
     if (!install.databaseGeneration) {
       return;
     }
+
     const databasePath = getOrgPluginDatabasePath(
       orgId,
       pluginId,
       install.databaseGeneration,
       this.configDir
     );
+
     if (!(await pathExists(databasePath))) {
       if (
         install.selectedVersion &&
@@ -1907,14 +2141,17 @@ export class PluginService {
       ) {
         throw new PluginHostError("incompatible");
       }
+
       return;
     }
+
     try {
       await this.countPendingMigrations(databasePath, manifest);
     } catch (error) {
       if (error instanceof PluginHostError) {
         throw error;
       }
+
       throw new PluginHostError("incompatible");
     }
   }
@@ -1923,6 +2160,7 @@ export class PluginService {
     install: StoredOrgPluginRecord
   ): Promise<void> {
     const pending = parsePending(install.pendingOperation);
+
     const transient =
       install.lifecycleState === "enabling" ||
       install.lifecycleState === "disabling" ||
@@ -1930,6 +2168,7 @@ export class PluginService {
 
     if (transient) {
       const published = isPublishedPair(install, pending);
+
       const recovered = await this.writeOrgPluginState({
         databaseGeneration: install.databaseGeneration,
         expectedRevision: install.revision,
@@ -1940,6 +2179,7 @@ export class PluginService {
         pluginId: install.pluginId,
         selectedVersion: install.selectedVersion,
       });
+
       if (
         pending?.targetGeneration &&
         !published &&
@@ -1956,16 +2196,20 @@ export class PluginService {
 
     const current =
       (await this.db.getOrgPlugin(install.orgId, install.pluginId)) ?? install;
+
     const missing = await this.describeMissingPluginBytes(current);
+
     if (!missing) {
       return;
     }
+
     if (
       current.lastLifecycleError === missing &&
       current.lifecycleState !== "enabled"
     ) {
       return;
     }
+
     await this.writeOrgPluginState({
       databaseGeneration: current.databaseGeneration,
       expectedRevision: current.revision,
@@ -1987,9 +2231,11 @@ export class PluginService {
         install.selectedVersion,
         this.configDir
       );
+
       if (!(await pathExists(releaseDir))) {
         return "package_unavailable";
       }
+
       if (
         !(await pluginReleaseIntegrityMatches(
           install.pluginId,
@@ -2000,6 +2246,7 @@ export class PluginService {
         return "package_unavailable";
       }
     }
+
     if (install.databaseGeneration) {
       const databasePath = getOrgPluginDatabasePath(
         install.orgId,
@@ -2007,9 +2254,11 @@ export class PluginService {
         install.databaseGeneration,
         this.configDir
       );
+
       if (!(await pathExists(databasePath))) {
         return "database_unavailable";
       }
+
       try {
         const db = new Database(databasePath);
         db.close(true);
@@ -2017,6 +2266,7 @@ export class PluginService {
         return "database_unavailable";
       }
     }
+
     return null;
   }
 
@@ -2024,11 +2274,13 @@ export class PluginService {
     inspected: InspectedPackage
   ): Promise<PluginPackageInstallResult> {
     const { digest, manifest } = inspected;
+
     const releaseDir = getPluginReleaseDir(
       manifest.id,
       manifest.version,
       this.configDir
     );
+
     const existing = await this.db.getPluginRelease(
       manifest.id,
       manifest.version
@@ -2044,6 +2296,7 @@ export class PluginService {
         manifest.version,
         this.configDir
       );
+
       return {
         createdAt: existing.createdAt,
         digest,
@@ -2063,9 +2316,12 @@ export class PluginService {
       getPluginStagingRootDir(this.configDir),
       randomUUID()
     );
+
     let published = false;
+
     try {
       await writePackageTree(stagingDir, inspected.files);
+
       if (await pathExists(releaseDir)) {
         await rm(stagingDir, { force: true, recursive: true });
       } else {
@@ -2075,6 +2331,7 @@ export class PluginService {
       }
 
       const createdAt = existing?.createdAt ?? new Date().toISOString();
+
       const result = await this.db.upsertPluginRelease({
         createdAt,
         digest,
@@ -2082,10 +2339,12 @@ export class PluginService {
         pluginId: manifest.id,
         version: manifest.version,
       });
+
       if (!result.ok) {
         if (published) {
           await rm(releaseDir, { force: true, recursive: true });
         }
+
         throw new PluginHostError("version_conflict");
       }
 
@@ -2106,12 +2365,14 @@ export class PluginService {
       };
     } catch (error) {
       await rm(stagingDir, { force: true, recursive: true });
+
       if (
         published &&
         !(await this.db.getPluginRelease(manifest.id, manifest.version))
       ) {
         await rm(releaseDir, { force: true, recursive: true });
       }
+
       throw error;
     }
   }
@@ -2137,7 +2398,9 @@ function isUiReleasePath(
   if (relativePath === ui.entryModule) {
     return true;
   }
+
   const assetsDir = ui.assetsDir.replace(/\/+$/, "");
+
   return relativePath === assetsDir || relativePath.startsWith(`${assetsDir}/`);
 }
 
@@ -2145,9 +2408,9 @@ function toPreview(inspected: InspectedPackage): PluginPackagePreview {
   return {
     contributions: {
       actionKeys: inspected.manifest.actions.map((action) => action.key),
-      ...(inspected.manifest.workers?.length
-        ? { workerKeys: inspected.manifest.workers.map((worker) => worker.key) }
-        : {}),
+      ...(inspected.manifest.workers?.length && {
+        workerKeys: inspected.manifest.workers.map((worker) => worker.key),
+      }),
       hasDatabase: Boolean(inspected.manifest.database?.migrations.length),
       hasUi: Boolean(inspected.manifest.ui),
       skillKeys: inspected.manifest.skills.map((skill) => skill.key),
@@ -2158,26 +2421,29 @@ function toPreview(inspected: InspectedPackage): PluginPackagePreview {
   };
 }
 
-async function inspectPluginPackage(
-  source: PluginPackageRequest,
+async function inspectPluginPackage<T>(
+  source: T,
   expectedIntegrity?: string
 ): Promise<InspectedPackage> {
-  if (
-    !source ||
-    typeof source.packageName !== "string" ||
-    source.packageName.length > 214 ||
-    !/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(
-      source.packageName
-    ) ||
-    typeof source.version !== "string" ||
-    source.version.length > 128 ||
-    !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(
-      source.version
-    )
-  ) {
+  const identity = z
+    .object({
+      packageName: z
+        .string()
+        .max(214)
+        .regex(/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/),
+      version: z
+        .string()
+        .max(128)
+        .regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/),
+    })
+    .safeParse(source);
+
+  if (!identity.success) {
     throw new PluginHostError("invalid_package");
   }
-  const spec = `${source.packageName}@${source.version}`;
+
+  const spec = `${identity.data.packageName}@${identity.data.version}`;
+
   const options = {
     allowDirectory: "none",
     allowFile: "none",
@@ -2191,15 +2457,18 @@ async function inspectPluginPackage(
     signal: AbortSignal.timeout(30_000),
     timeout: 30_000,
   } as const;
+
   let archive: Buffer;
   let integrity: string;
+
   try {
     const metadata = await pacote.manifest(spec, options);
     integrity = metadata.dist?.integrity ?? "";
     const tarball = new URL(metadata.dist?.tarball ?? "");
+
     if (
-      metadata.name !== source.packageName ||
-      metadata.version !== source.version ||
+      metadata.name !== identity.data.packageName ||
+      metadata.version !== identity.data.version ||
       !/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(integrity) ||
       tarball.protocol !== "https:" ||
       tarball.hostname !== "registry.npmjs.org" ||
@@ -2209,21 +2478,27 @@ async function inspectPluginPackage(
     ) {
       throw new PluginHostError("invalid_package");
     }
+
     if (expectedIntegrity !== undefined && integrity !== expectedIntegrity) {
       throw new PluginHostError("digest_mismatch");
     }
+
     archive = await pacote.tarball.stream(
       tarball.href,
       async (stream) => {
         const chunks: Buffer[] = [];
         let size = 0;
+
         for await (const chunk of stream) {
           size += chunk.length;
+
           if (size > MAX_COMPRESSED_BYTES) {
             throw new PluginHostError("archive_too_large");
           }
+
           chunks.push(chunk);
         }
+
         return Buffer.concat(chunks);
       },
       { ...options, allowRemote: "all", integrity }
@@ -2232,11 +2507,13 @@ async function inspectPluginPackage(
     if (error instanceof PluginHostError) {
       throw error;
     }
+
     throw new PluginHostError("package_unavailable");
   }
 
   const files = await readNpmPackage(archive);
   let manifest: unknown;
+
   let packageJson: {
     name?: string;
     version?: string;
@@ -2244,6 +2521,7 @@ async function inspectPluginPackage(
     optionalDependencies?: Record<string, string>;
     peerDependencies?: Record<string, string>;
   };
+
   try {
     manifest = JSON.parse(
       Buffer.from(files.get(PLUGIN_MANIFEST_FILENAME) ?? []).toString()
@@ -2254,13 +2532,15 @@ async function inspectPluginPackage(
   } catch {
     throw new PluginHostError("invalid_manifest");
   }
+
   const validated = validatePluginManifest(manifest);
+
   if (
     !validated.ok ||
-    validated.manifest.version !== source.version ||
+    validated.manifest.version !== identity.data.version ||
     !packageJson ||
-    packageJson.name !== source.packageName ||
-    packageJson.version !== source.version ||
+    packageJson.name !== identity.data.packageName ||
+    packageJson.version !== identity.data.version ||
     [
       packageJson.dependencies,
       packageJson.optionalDependencies,
@@ -2269,10 +2549,13 @@ async function inspectPluginPackage(
   ) {
     throw new PluginHostError("invalid_manifest");
   }
+
   if (validated.manifest.id === "google-meet") {
     throw new PluginHostError("invalid_manifest");
   }
+
   assertReferencedFilesExist(validated.manifest, files);
+
   return {
     digest: digestArchive(archive),
     files,
@@ -2285,12 +2568,14 @@ async function readNpmPackage(
   archive: Uint8Array
 ): Promise<Map<string, Uint8Array>> {
   let unpacked: Buffer;
+
   try {
     // Include tar headers and metadata in the expansion budget, not just file bodies.
     unpacked = gunzipSync(archive, { maxOutputLength: MAX_UNCOMPRESSED_BYTES });
   } catch {
     throw new PluginHostError("invalid_archive");
   }
+
   const files = new Map<string, Uint8Array>();
   const seen = new Set<string>();
   let count = 0;
@@ -2299,23 +2584,30 @@ async function readNpmPackage(
       filter(path, entry) {
         try {
           count += 1;
+
           if (count > MAX_FILES || entry.size > MAX_FILE_BYTES) {
             throw new PluginHostError("expansion_limit");
           }
+
           if (Buffer.byteLength(path) > MAX_PATH_BYTES) {
             throw new PluginHostError("unsafe_path");
           }
+
           const name = normalizeArchivePath(path);
+
           if (seen.has(name)) {
             throw new PluginHostError("duplicate_entry");
           }
+
           seen.add(name);
+
           if (
             !("type" in entry) ||
             (entry.type !== "File" && entry.type !== "Directory")
           ) {
             throw new PluginHostError("unsupported_entry");
           }
+
           if (
             !(
               (name === "package" && entry.type === "Directory") ||
@@ -2324,12 +2616,14 @@ async function readNpmPackage(
           ) {
             throw new PluginHostError("unsafe_path");
           }
+
           return entry.type === "File";
         } catch (error) {
           reject(error);
           parser.abort(
             error instanceof Error ? error : new Error(String(error))
           );
+
           return false;
         }
       },
@@ -2342,10 +2636,12 @@ async function readNpmPackage(
       },
       strict: true,
     });
+
     parser.on("error", () => reject(new PluginHostError("invalid_archive")));
     parser.on("end", resolveRead);
     parser.end(unpacked);
   });
+
   return files;
 }
 
@@ -2360,14 +2656,17 @@ function normalizeArchivePath(name: string): string {
   ) {
     throw new PluginHostError("unsafe_path");
   }
+
   const trimmed = name.endsWith("/") ? name.slice(0, -1) : name;
   const parts = trimmed.split("/");
+
   if (
     parts.length === 0 ||
     parts.some((part) => part === "" || part === "." || part === "..")
   ) {
     throw new PluginHostError("unsafe_path");
   }
+
   return parts.join("/");
 }
 
@@ -2380,11 +2679,13 @@ function assertReferencedFilesExist(
       throw new PluginHostError("missing_referenced_file");
     }
   }
+
   for (const action of [...manifest.actions, ...(manifest.workers ?? [])]) {
     if (!files.has(action.entry)) {
       throw new PluginHostError("missing_referenced_file");
     }
   }
+
   if (
     manifest.ui &&
     !(
@@ -2394,6 +2695,7 @@ function assertReferencedFilesExist(
   ) {
     throw new PluginHostError("missing_referenced_file");
   }
+
   for (const migration of manifest.database?.migrations ?? []) {
     if (!files.has(migration.path)) {
       throw new PluginHostError("missing_referenced_file");
@@ -2403,11 +2705,13 @@ function assertReferencedFilesExist(
 
 function hasPrefix(files: Map<string, Uint8Array>, directory: string): boolean {
   const prefix = `${directory}/`;
+
   for (const name of files.keys()) {
     if (name === directory || name.startsWith(prefix)) {
       return true;
     }
   }
+
   return false;
 }
 
@@ -2417,11 +2721,14 @@ async function writePackageTree(
 ): Promise<void> {
   const root = resolve(stagingDir);
   await ensureDir(root);
+
   for (const [relativePath, data] of files) {
     const dest = resolve(root, relativePath);
+
     if (dest !== root && !dest.startsWith(`${root}${sep}`)) {
       throw new PluginHostError("unsafe_path");
     }
+
     await ensureDir(dirname(dest));
     await writeFile(dest, data, { mode: 0o600 });
   }
@@ -2462,13 +2769,17 @@ async function pluginReleaseIntegrityMatches(
     version,
     configDir
   );
+
   if (!(await pathExists(integrityPath))) {
     return true;
   }
+
   const expected = (await readFile(integrityPath, "utf8")).trim();
+
   const actual = await hashPluginReleaseTree(
     getPluginReleaseDir(pluginId, version, configDir)
   );
+
   return expected === actual;
 }
 
@@ -2476,32 +2787,42 @@ export async function quarantineInvalidPluginReleases(
   configDir: string
 ): Promise<string[]> {
   const root = getPluginsRootDir(configDir);
+
   if (!(await pathExists(root))) {
     return [];
   }
+
   const quarantined: string[] = [];
+
   for (const plugin of await readdir(root, { withFileTypes: true })) {
     if (!plugin.isDirectory() || plugin.name.startsWith(".")) {
       continue;
     }
+
     const pluginDir = join(root, plugin.name);
+
     for (const entry of await readdir(pluginDir, { withFileTypes: true })) {
       if (!(entry.isFile() && entry.name.endsWith(".integrity"))) {
         continue;
       }
+
       const version = entry.name.slice(0, -".integrity".length);
+
       if (
         await pluginReleaseIntegrityMatches(plugin.name, version, configDir)
       ) {
         continue;
       }
+
       const releaseDir = getPluginReleaseDir(plugin.name, version, configDir);
+
       if (await pathExists(releaseDir)) {
         await rename(releaseDir, `${releaseDir}.unavailable`);
         quarantined.push(`${plugin.name}@${version}`);
       }
     }
   }
+
   return quarantined;
 }
 
@@ -2510,12 +2831,14 @@ async function hashPluginReleaseTree(releaseDir: string): Promise<string> {
   await collectReleaseFiles(releaseDir, releaseDir, files);
   files.sort();
   const hash = createHash("sha256");
+
   for (const relativePath of files) {
     hash.update(relativePath);
     hash.update("\0");
     hash.update(await readFile(join(releaseDir, relativePath)));
     hash.update("\0");
   }
+
   return hash.digest("hex");
 }
 
@@ -2526,6 +2849,7 @@ async function collectReleaseFiles(
 ): Promise<void> {
   for (const entry of await readdir(current, { withFileTypes: true })) {
     const absolute = join(current, entry.name);
+
     if (entry.isDirectory()) {
       await collectReleaseFiles(root, absolute, out);
     } else if (entry.isFile()) {
@@ -2537,16 +2861,20 @@ async function collectReleaseFiles(
 function admissionGateFor(orgId: string, pluginId: string): AdmissionGate {
   const key = `${orgId}\0${pluginId}`;
   const existing = admissionGates.get(key);
+
   if (existing) {
     return existing;
   }
+
   const created: AdmissionGate = {
     active: 0,
     closed: false,
     controllers: new Set(),
     tail: Promise.resolve(),
   };
+
   admissionGates.set(key, created);
+
   return created;
 }
 
@@ -2555,12 +2883,15 @@ async function withAdmissionGate<T>(
   work: () => Promise<T> | T
 ): Promise<T> {
   let releaseLock = () => {};
+
   const current = new Promise<void>((resolveLock) => {
     releaseLock = resolveLock;
   });
+
   const previous = gate.tail;
   gate.tail = previous.then(() => current);
   await previous;
+
   try {
     return await work();
   } finally {
@@ -2573,6 +2904,7 @@ async function drainAdmissionGate(
   timeoutMs: number
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
+
   while (gate.active > 0 && Date.now() < deadline) {
     await Bun.sleep(20);
   }
@@ -2593,12 +2925,18 @@ function parsePending(raw: string | null): PendingPluginOperation | null {
   if (!raw) {
     return null;
   }
+
   try {
-    const parsed = JSON.parse(raw) as PendingPluginOperation;
-    if (!parsed || typeof parsed !== "object") {
-      return null;
-    }
-    return parsed;
+    const parsed = z
+      .object({
+        kind: z.enum(["disable", "enable", "uninstall", "update"]),
+        operationId: z.string(),
+        targetGeneration: z.string().nullable(),
+        targetVersion: z.string().nullable(),
+      })
+      .safeParse(JSON.parse(raw));
+
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }
@@ -2611,6 +2949,7 @@ function isPublishedPair(
   if (!pending) {
     return false;
   }
+
   return (
     install.selectedVersion === pending.targetVersion &&
     install.databaseGeneration === pending.targetGeneration
@@ -2624,20 +2963,20 @@ function newDatabaseGeneration(): string {
 function compareSemver(left: string, right: string): number {
   const leftParts = left.split("-")[0]?.split(".").map(Number) ?? [];
   const rightParts = right.split("-")[0]?.split(".").map(Number) ?? [];
+
   for (let index = 0; index < 3; index += 1) {
     const delta = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+
     if (delta !== 0) {
       return delta;
     }
   }
+
   return 0;
 }
 
-function lifecycleErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-  return String(error);
+function lifecycleErrorMessage(error: Error | string): string {
+  return error instanceof Error ? error.message || String(error) : error;
 }
 
 function materializeContributions(
@@ -2645,7 +2984,7 @@ function materializeContributions(
   pluginId: string,
   manifest: PluginManifest,
   now: string
-): { skills: StoredSkillRecord[]; tools: StoredToolRecord[] } {
+): MaterializedPluginContributions {
   return {
     skills: manifest.skills.map((skill) => ({
       createdAt: now,
@@ -2692,11 +3031,15 @@ function ensureMigrationLedger(db: Database): void {
 function readAppliedMigrations(
   db: Database
 ): Array<{ checksum: string; id: string }> {
-  return db
+  const rows: unknown = db
     .query(
       `SELECT id, checksum FROM ${MIGRATION_LEDGER_TABLE} ORDER BY applied_at ASC`
     )
-    .all() as Array<{ checksum: string; id: string }>;
+    .all();
+
+  return z
+    .array(z.object({ checksum: z.string(), id: z.string() }))
+    .parse(rows);
 }
 
 function assertMigrationCompatibility(
@@ -2706,12 +3049,16 @@ function assertMigrationCompatibility(
   if (applied.length > incoming.length) {
     throw new PluginHostError("incompatible", "migration downgrade");
   }
+
   const incomingById = new Map(incoming.map((row) => [row.id, row]));
+
   for (const row of applied) {
     const expected = incomingById.get(row.id);
+
     if (!expected) {
       throw new PluginHostError("incompatible", "migration downgrade");
     }
+
     if (expected.checksum !== row.checksum) {
       throw new PluginHostError("incompatible", "checksum_mismatch");
     }
@@ -2723,15 +3070,18 @@ function applyPluginMigrations(
   migrations: Array<{ checksum: string; id: string; sql: string }>
 ): void {
   const db = new Database(databasePath);
+
   try {
     ensureMigrationLedger(db);
     const applied = readAppliedMigrations(db);
     assertMigrationCompatibility(applied, migrations);
     const appliedIds = new Set(applied.map((row) => row.id));
+
     for (const migration of migrations) {
       if (appliedIds.has(migration.id)) {
         continue;
       }
+
       db.exec(migration.sql);
       db.query(
         `INSERT INTO ${MIGRATION_LEDGER_TABLE} (id, checksum, applied_at) VALUES (?, ?, ?)`
@@ -2741,7 +3091,11 @@ function applyPluginMigrations(
     if (error instanceof PluginHostError) {
       throw error;
     }
-    throw new PluginHostError("migration_failed", lifecycleErrorMessage(error));
+
+    throw new PluginHostError(
+      "migration_failed",
+      lifecycleErrorMessage(error instanceof Error ? error : String(error))
+    );
   } finally {
     db.close(true);
   }
@@ -2758,27 +3112,30 @@ export function actorMayInvoke(
   if (role === "viewer") {
     return false;
   }
+
   if (access === "admin") {
     return role === "admin";
   }
+
   return role === "admin" || role === "member";
 }
 
-function stripSpoofedInput(input: unknown): unknown {
-  if (!isPlainObject(input)) {
+function stripSpoofedInput(input: PluginJsonValue): PluginJsonValue {
+  const parsed = z.record(z.string(), pluginJsonSchema).safeParse(input);
+
+  if (!parsed.success) {
     return input;
   }
-  const cleaned: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(input)) {
+
+  const cleaned: Record<string, PluginJsonValue> = {};
+
+  for (const [key, value] of Object.entries(parsed.data)) {
     if (!SPOOFABLE_INPUT_KEYS.has(key)) {
       cleaned[key] = value;
     }
   }
-  return cleaned;
-}
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
+  return cleaned;
 }
 
 const stagingLocks = new Map<string, Promise<unknown>>();
@@ -2790,16 +3147,20 @@ async function withKeyedLock<T>(
 ): Promise<T> {
   const previous = locks.get(key) ?? Promise.resolve();
   let releaseLock = () => {};
+
   const current = new Promise<void>((resolveLock) => {
     releaseLock = resolveLock;
   });
+
   const chained = previous.then(() => current);
   locks.set(key, chained);
   await previous;
+
   try {
     return await work();
   } finally {
     releaseLock();
+
     if (locks.get(key) === chained) {
       locks.delete(key);
     }

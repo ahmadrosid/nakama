@@ -47,6 +47,7 @@ import {
   maybeSendWhatsAppAttachOnlyCommand,
   parsePreparedWhatsAppArtifact,
   sendArtifactDocumentForPath,
+  type PreparedWhatsAppArtifactCandidate,
 } from "./channel-artifact-flow";
 import { isChannelDebugEnabled } from "./channel-log";
 import type { WhatsAppBridgeConfig } from "./config";
@@ -121,6 +122,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
 
     const trimmed = text.trim();
+
     if (
       isWhatsAppOutboundEcho({
         fromMe: inbound.fromMe,
@@ -139,6 +141,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           ].join(" ")
         );
       }
+
       return;
     }
 
@@ -146,9 +149,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     const conversationKey = jid;
     const channelOrgKey = resolveChannelOrgKey(jid, isGroup);
     await authStore.reload();
+
     const requireGroupMention =
       authStore.getConfig()?.requireGroupMention ??
       DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION;
+
     const groupDecision = isGroup
       ? explainGroupMessageHandling({
           me: inbound.me,
@@ -171,12 +176,14 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           ].join(" ")
         );
       }
+
       return;
     }
 
     if (isStopCommand(trimmed)) {
       await authStore.reload();
       const stopSenderJids = [...inbound.senderJids];
+
       let stopAuthorized =
         inbound.fromMe ||
         authStore.isAuthorized(stopSenderJids) ||
@@ -189,6 +196,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           jid,
           stopSenderJids
         );
+
         stopSenderJids.push(...resolvedSenderJids);
         stopAuthorized = authStore.isAuthorized(stopSenderJids);
       }
@@ -208,6 +216,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       await authStore.reload();
       const senderJids = [...inbound.senderJids];
       const pairingText = isGroup ? stripWhatsAppBotMention(trimmed) : trimmed;
+
       let authorized =
         inbound.fromMe ||
         authStore.isAuthorized(senderJids) ||
@@ -220,6 +229,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           jid,
           senderJids
         );
+
         senderJids.push(...resolvedSenderJids);
         authorized =
           authStore.isAuthorized(senderJids) ||
@@ -243,12 +253,14 @@ export function createChatHandler(deps: ChatHandlerDeps) {
               ].join(" ")
             );
           }
+
           return;
         }
 
         if (isGroup) {
           if (looksLikePairingCode(pairingText)) {
             await handlePairing(inbound.senderJid, pairingText);
+
             return;
           }
 
@@ -257,25 +269,31 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           }
 
           await sendText(jid, LINK_IN_PRIVATE_REPLY);
+
           return;
         }
 
         await handlePairing(jid, trimmed);
+
         return;
       }
 
       if (looksLikePairingCode(pairingText)) {
         await sendText(jid, ALREADY_LINKED_REPLY);
+
         return;
       }
 
       const command = trimmed.startsWith("/") ? parseCommand(trimmed) : null;
+
       const bypassOrgGate =
         command === "/help" || command === "/start" || command === "/org";
+
       const orgGateText = isGroup ? stripWhatsAppBotMention(trimmed) : trimmed;
 
       if (!bypassOrgGate) {
         const orgReady = await ensureOrgReady(channelOrgKey, orgGateText, jid);
+
         if (!orgReady) {
           return;
         }
@@ -288,12 +306,15 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       // After pairing + org-ready: `/attach` skips handleCommand, not auth/org.
       if (isAttachOnlyCommand(attachUserText)) {
         const socket = getSocket();
+
         if (!socket) {
           await sendText(jid, "WhatsApp is not connected.");
+
           return;
         }
 
         await resolveSession(conversationKey);
+
         const profileId =
           sessionStore.get(conversationKey)?.profileId ??
           (await resolveProfileId());
@@ -307,19 +328,23 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           sessionStore,
           socket,
         });
+
         return;
       }
 
       if (trimmed.startsWith("/")) {
         await handleCommand(conversationKey, channelOrgKey, jid, trimmed);
+
         return;
       }
 
       const mediaInput = inbound.media
         ? await buildWhatsAppMediaInput(inbound.media)
         : null;
+
       if (mediaInput?.kind === "reject") {
         await sendText(jid, mediaInput.message);
+
         return;
       }
 
@@ -349,11 +374,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     if (command === "/help") {
       await sendText(jid, `${PAIRING_PROMPT}\n\n${HELP_TEXT}`);
+
       return;
     }
 
     if (!looksLikePairingCode(text)) {
       await sendText(jid, PAIRING_PROMPT);
+
       return;
     }
 
@@ -373,6 +400,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       case "/start":
       case "/help":
         await sendText(jid, HELP_TEXT);
+
         return;
 
       case "/clear": {
@@ -380,6 +408,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         await session.clear();
         await clearSessionArtifactState(conversationKey);
         await sendText(jid, "History cleared.");
+
         return;
       }
 
@@ -390,21 +419,25 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           jid,
           `Compacted (${result.action}). Messages: ${result.messagesAfter}.`
         );
+
         return;
       }
 
       case "/new": {
         await createAndBindSession(conversationKey);
         await sendText(jid, "Started a new conversation.");
+
         return;
       }
 
       case "/status":
         await replyStatus(jid);
+
         return;
 
       case "/org":
         await handleOrgCommand(conversationKey, channelOrgKey, jid, text);
+
         return;
 
       default:
@@ -419,8 +452,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   ): Promise<boolean> {
     if (config.orgId) {
       client.setOrgId(config.orgId);
+
       return true;
     }
+
     const orgContext = await prepareChannelOrgContext({
       getSelectedOrgId: () => orgStore.get(channelOrgKey)?.orgId,
       listOrgs: () => client.listUserOrgs(),
@@ -433,11 +468,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     if (orgContext.status === "empty") {
       await sendText(replyJid, "No organizations are configured yet.");
+
       return false;
     }
 
     if (orgContext.status === "prompt") {
       await sendText(replyJid, orgContext.message);
+
       return false;
     }
 
@@ -445,6 +482,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     if (orgContext.justSelected) {
       await sendText(replyJid, formatOrgSwitchConfirmation(orgContext.orgName));
+
       return false;
     }
 
@@ -459,27 +497,34 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   ): Promise<void> {
     if (config.orgId) {
       await sendText(jid, "This number serves a single organization.");
+
       return;
     }
+
     const { orgs } = await client.listUserOrgs();
 
     if (orgs.length === 0) {
       await sendText(jid, "No organizations are configured yet.");
+
       return;
     }
 
     const arg = text.trim().split(/\s+/).slice(1).join(" ");
+
     if (!arg) {
       await sendText(
         jid,
         formatOrgSelectionPrompt(orgs, orgStore.get(channelOrgKey)?.orgId)
       );
+
       return;
     }
 
     const picked = findOrgBySelectionInput(arg, orgs);
+
     if (!picked) {
       await sendText(jid, "Unknown organization. Send /org to see the list.");
+
       return;
     }
 
@@ -508,6 +553,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         orgStore.get(resolveChannelOrgKey(jid, jid.endsWith("@g.us")))?.orgId ??
         null
     );
+
     const session = await resolveSession(conversationKey);
     const profileId = sessionStore.get(conversationKey)?.profileId;
     const socket = getSocket();
@@ -516,14 +562,18 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       if (!socket) {
         return;
       }
+
       await socket.sendPresenceUpdate("composing", jid);
     });
+
     const todoStatus = new WhatsAppTodoStatusMessage(socket, jid);
     let reply = "";
     let completed = false;
+
     const selections: NonNullable<
       ReturnType<typeof parsePreparedWhatsAppArtifact>
     >[] = [];
+
     const seenCalls = new Set<string>();
     const seenPaths = new Set<string>();
     const writeCalls = new Set<string>();
@@ -531,6 +581,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     try {
       typingLoop.start();
+
       try {
         reply = await session.sendStream(
           input,
@@ -548,6 +599,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             },
             onToolEnd: (event) => {
               typingLoop.ping();
+
               if (
                 event.tool === "write_file" ||
                 event.tool === "write_docx" ||
@@ -555,14 +607,21 @@ export function createChatHandler(deps: ChatHandlerDeps) {
               ) {
                 writeCalls.add(event.toolCallId);
               }
+
               if (
                 event.tool !== "send_whatsapp_artifact" ||
                 seenCalls.has(event.toolCallId)
               ) {
                 return;
               }
+
               seenCalls.add(event.toolCallId);
-              const artifact = parsePreparedWhatsAppArtifact(event.result);
+
+              // SAFETY: The parser validates each field before returning an artifact.
+              const artifact = parsePreparedWhatsAppArtifact(
+                event.result as PreparedWhatsAppArtifactCandidate
+              );
+
               if (artifact && !seenPaths.has(artifact.path)) {
                 seenPaths.add(artifact.path);
                 selections.push(artifact);
@@ -577,9 +636,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
               : {}),
           }
         );
+
         if (signal.aborted) {
           throw new DOMException("Stopped", "AbortError");
         }
+
         if (!completed) {
           throw new Error(
             "The agent turn was interrupted before completion. No documents were sent."
@@ -591,6 +652,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             const messages = await session.getMessages({
               signal: AbortSignal.timeout(30_000),
             });
+
             // Keep assistant call inputs but exclude tools from any earlier turn.
             const artifacts = extractPairedTurnArtifacts(
               messages.filter(
@@ -598,8 +660,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
                   message.role !== "tool" || writeCalls.has(message.toolCallId)
               )
             );
+
             let registry =
               sessionStore.getDeliverableArtifacts(conversationKey);
+
             for (const artifact of artifacts) {
               registry = pushDeliverableArtifact(registry, {
                 ...artifact,
@@ -607,6 +671,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
                 shareUrl: null,
               });
             }
+
             sessionStore.updateArtifactState(conversationKey, {
               deliverableArtifacts: registry,
             });
@@ -621,6 +686,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       }
 
       let sent = 0;
+
       for (const artifact of selections) {
         if (signal.aborted) {
           await todoStatus.stop();
@@ -628,14 +694,18 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             jid,
             `Stopped. Sent ${sent} of ${selections.length} documents.`
           );
+
           return;
         }
+
         const deliverySocket = getSocket();
+
         if (!(profileId && deliverySocket)) {
           throw new Error(
             "WhatsApp is disconnected. No further documents were sent."
           );
         }
+
         const result = await sendArtifactDocumentForPath({
           ...artifact,
           client: deliveryClient,
@@ -645,16 +715,20 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           signal,
           socket: deliverySocket,
         });
+
         if (!result.ok) {
           await todoStatus.fail();
+
           if (sent) {
             await sendText(
               jid,
               `Sent ${sent} of ${selections.length} documents; remaining uploads stopped.`
             );
           }
+
           return;
         }
+
         sent += 1;
         sessionStore.updateArtifactState(conversationKey, {
           deliverableArtifacts: pushDeliverableArtifact(
@@ -667,21 +741,26 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             }
           ),
         });
+
         try {
           await sessionStore.save();
         } catch (error) {
           console.warn("WhatsApp sent artifact registry save failed", error);
         }
       }
+
       if (signal.aborted) {
         await todoStatus.stop();
         await sendText(
           jid,
           `Stopped. Sent ${sent} of ${selections.length} documents.`
         );
+
         return;
       }
+
       await todoStatus.complete();
+
       if (reply.trim()) {
         await sendText(jid, reply.trim());
       } else if (!sent) {
@@ -704,6 +783,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   async function replyStatus(jid: string): Promise<void> {
     try {
       const health = await client.health();
+
       const lines = [
         `Server: ${health.ok ? "ok" : "degraded"}`,
         `Provider configured: ${health.providerConfigured ? "yes" : "no"}`,
@@ -713,12 +793,15 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         const models = await client.getModels();
         const profileId = await resolveProfileId();
         const profiles = await client.listProfiles();
+
         const profile = profiles.profiles.find(
           (entry) => entry.id === profileId
         );
+
         const modelLabel = profile?.model?.includes("::")
           ? profile.model.slice(profile.model.indexOf("::") + 2)
           : (profile?.model ?? "none");
+
         lines.push(`Provider: ${models.provider ?? "unknown"}`);
         lines.push(`Model: ${modelLabel}`);
       } else {
@@ -734,15 +817,21 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   async function resolveProfileId(): Promise<string> {
     if (config.owner) {
       const { profiles } = await client.listProfiles(config.owner.orgId);
+
       if (!profiles.some((profile) => profile.id === config.owner!.profileId)) {
         throw new Error("The connection owner is unavailable.");
       }
+
       return config.owner.profileId;
     }
+
     const fileConfig = authStore.getConfig();
+
     const preferredProfileId =
       fileConfig?.profileId?.trim() || config.profileId;
+
     const profiles = await client.listProfiles();
+
     return pickProfileForOrg(profiles.profiles, preferredProfileId).id;
   }
 
@@ -753,6 +842,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     if (existing && existing.profileId === profileId) {
       if (config.owner) {
         const { sessions } = await client.listSessions(profileId, "whatsapp");
+
         if (
           !sessions.some(
             (session) =>
@@ -762,10 +852,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         ) {
           sessionStore.delete(jid);
           await sessionStore.save();
+
           return createAndBindSession(jid, profileId);
         }
       }
+
       const hot = sessionStore.getHotSession<RemoteChatSession>(jid);
+
       if (hot) {
         return hot;
       }
@@ -775,6 +868,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       try {
         await session.getMessages();
         sessionStore.setHotSession(jid, session);
+
         return session;
       } catch {
         // Session missing on server; create a new one below
@@ -791,6 +885,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     const resolvedProfileId = config.owner
       ? await resolveProfileId()
       : (profileId ?? (await resolveProfileId()));
+
     const session = await client.createSession("whatsapp", {
       profileId: resolvedProfileId,
     });
@@ -812,11 +907,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     options?: { raw?: boolean }
   ): Promise<void> {
     const socket = getSocket();
+
     if (!socket) {
       return;
     }
 
     const prepared = options?.raw ? text.trim() : prepareWhatsAppReply(text);
+
     if (!prepared) {
       return;
     }
@@ -836,6 +933,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     conversationKey: string
   ): Promise<void> {
     const existing = sessionStore.get(conversationKey);
+
     if (!existing) {
       return;
     }
@@ -853,12 +951,14 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     senderJids: readonly string[]
   ): Promise<string[]> {
     const socket = getSocket();
-    if (!socket || typeof socket.groupMetadata !== "function") {
+
+    if (!socket) {
       return [];
     }
 
     try {
       const metadata = await socket.groupMetadata(groupJid);
+
       return extraJidsFromGroupParticipants(
         metadata.participants ?? [],
         senderJids
@@ -869,13 +969,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   }
 }
 
-function readSentMessageId(sent: unknown): string | null {
-  if (!sent || typeof sent !== "object") {
-    return null;
-  }
-
-  const id = (sent as { key?: { id?: string | null } }).key?.id;
-  return id?.trim() || null;
+function readSentMessageId(
+  sent: Awaited<ReturnType<WASocket["sendMessage"]>>
+): string | null {
+  return sent?.key.id?.trim() || null;
 }
 
 function normalizeInboundChat(
@@ -908,26 +1005,30 @@ async function buildWhatsAppMediaInput(
     media.kind === "document"
       ? media.message.fileName?.trim() || "document"
       : "";
+
   const declaredType = media.message.mimetype?.trim().toLowerCase() || "";
   const extension = filename.slice(filename.lastIndexOf(".")).toLowerCase();
-  const imageTypeFromName = (
-    {
-      ".jpeg": "image/jpeg",
-      ".jpg": "image/jpeg",
-      ".png": "image/png",
-      ".webp": "image/webp",
-    } as Record<string, string>
-  )[extension];
+
+  const imageTypeFromName = new Map([
+    [".jpeg", "image/jpeg"],
+    [".jpg", "image/jpeg"],
+    [".png", "image/png"],
+    [".webp", "image/webp"],
+  ]).get(extension);
+
   const imageType =
     declaredType === "image/jpg"
       ? "image/jpeg"
       : declaredType && declaredType !== "application/octet-stream"
         ? declaredType
         : imageTypeFromName || (media.kind === "image" ? "image/jpeg" : "");
+
   const isImage = media.kind === "image" || imageType.startsWith("image/");
+
   const mediaType = isImage
     ? imageType
     : normalizeDocumentMediaType(declaredType, filename);
+
   if (
     isImage
       ? !["image/jpeg", "image/png", "image/webp"].includes(mediaType)
@@ -941,6 +1042,7 @@ async function buildWhatsAppMediaInput(
   }
 
   const maxBytes = isImage ? MAX_IMAGE_BYTES : MAX_DOCUMENT_BYTES;
+
   if (Number(media.message.fileLength ?? 0) > maxBytes) {
     return {
       kind: "reject",
@@ -952,27 +1054,34 @@ async function buildWhatsAppMediaInput(
     const stream = await downloadContentFromMessage(media.message, media.kind);
     const chunks: Buffer[] = [];
     let size = 0;
+
     for await (const chunk of stream) {
       size += chunk.length;
+
       if (size > maxBytes) {
         stream.destroy();
+
         return {
           kind: "reject",
           message: "File is too large. Maximum size is 5 MB.",
         };
       }
+
       chunks.push(chunk);
     }
 
     const data = Buffer.concat(chunks).toString("base64");
+
     if (isImage) {
       const images = [{ data, mediaType }];
       validateImageAttachments(images);
+
       return { input: { images }, kind: "input" };
     }
 
     const documents = [{ data, filename, mediaType }];
     validateDocumentAttachments(documents);
+
     return { input: { documents }, kind: "input" };
   } catch {
     return {
@@ -984,6 +1093,7 @@ async function buildWhatsAppMediaInput(
 
 function withQuotedContext(message: string, quotedText: string | null): string {
   const quote = quotedText?.trim();
+
   if (!quote) {
     return message;
   }
@@ -1009,6 +1119,7 @@ function withGroupContext(message: string, isGroup: boolean): string {
 
 function parseCommand(text: string): string {
   const token = text.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+
   return token;
 }
 

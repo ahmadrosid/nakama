@@ -19,6 +19,7 @@ export function streamInstallEvents<TEvent extends { type: string }>(
   const encoder = new TextEncoder();
   const keepaliveIntervalMs = 4000;
   const timeoutMs = options.timeoutMs ?? INSTALL_STREAM_TIMEOUT_MS;
+
   const timeoutMessage =
     options.timeoutMessage ??
     `Install timed out after ${Math.round(timeoutMs / 1000)}s waiting for the installer.`;
@@ -45,10 +46,11 @@ export function streamInstallEvents<TEvent extends { type: string }>(
       abortController.abort();
     },
     async start(controller) {
-      const send = (event: TEvent) => {
+      const send = (event: TEvent | InstallStreamErrorEvent) => {
         if (terminated) {
           return;
         }
+
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify(event)}\n\n`)
         );
@@ -68,8 +70,10 @@ export function streamInstallEvents<TEvent extends { type: string }>(
       keepalive = setInterval(() => {
         if (terminated) {
           clearTimers();
+
           return;
         }
+
         controller.enqueue(encoder.encode(": ping\n\n"));
       }, keepaliveIntervalMs);
 
@@ -77,7 +81,7 @@ export function streamInstallEvents<TEvent extends { type: string }>(
         send({
           error: timeoutMessage,
           type: "error",
-        } as Extract<TEvent, InstallStreamErrorEvent>);
+        });
         abortController.abort();
         finish();
       }, timeoutMs);
@@ -88,7 +92,7 @@ export function streamInstallEvents<TEvent extends { type: string }>(
         send({
           error: formatServerError(error),
           type: "error",
-        } as Extract<TEvent, InstallStreamErrorEvent>);
+        });
       } finally {
         finish();
       }

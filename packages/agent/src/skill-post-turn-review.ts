@@ -4,10 +4,26 @@ import {
   getUserMessageText,
   type ProviderClient,
 } from "@nakama/core";
+import { z } from "zod";
 
 const TURN_SNIPPET_MAX = 4000;
+
 const TOOL_RESULT_MAX = 400;
+
 const bundledNames = new Set<string>(BUNDLED_SKILL_NAMES);
+
+const SkillPostTurnReviewResponseSchema = z.object({
+  action: z.string().optional().catch(undefined),
+  content: z.string().optional().catch(undefined),
+  name: z.string().optional().catch(undefined),
+  newString: z.string().optional().catch(undefined),
+  oldString: z.string().optional().catch(undefined),
+  reason: z.string().optional().catch(undefined),
+});
+
+type SkillPostTurnReviewResponse = z.infer<
+  typeof SkillPostTurnReviewResponseSchema
+>;
 
 export type SkillPostTurnReviewOutcome =
   | { action: "noop"; reason?: string }
@@ -38,9 +54,11 @@ const REVIEW_SYSTEM = [
 
 function truncate(value: string, max: number): string {
   const trimmed = value.trim();
+
   if (trimmed.length <= max) {
     return trimmed;
   }
+
   return `${trimmed.slice(0, max).trimEnd()}…`;
 }
 
@@ -65,14 +83,17 @@ export function buildSkillPostTurnReviewPrompt(input: {
       lines.push(`User: ${truncate(getUserMessageText(message.content), 800)}`);
       continue;
     }
+
     if (message.role === "assistant") {
       const tools =
         message.toolCalls?.map((call) => call.name).join(", ") ?? "";
+
       lines.push(
         `Assistant: ${truncate(message.content || "(tool calls)", 800)}${tools ? ` [tools: ${tools}]` : ""}`
       );
       continue;
     }
+
     if (message.role === "tool") {
       lines.push(
         `Tool ${message.name}: ${truncate(message.content, TOOL_RESULT_MAX)}`
@@ -83,22 +104,33 @@ export function buildSkillPostTurnReviewPrompt(input: {
   return truncate(lines.join("\n"), TURN_SNIPPET_MAX);
 }
 
-function extractJsonObject(raw: string): unknown {
+function extractJsonObject(raw: string): SkillPostTurnReviewResponse | null {
   const trimmed = raw.trim();
+
   if (!trimmed) {
     return null;
   }
 
   try {
-    return JSON.parse(trimmed) as unknown;
+    const parsed = SkillPostTurnReviewResponseSchema.safeParse(
+      JSON.parse(trimmed)
+    );
+
+    return parsed.success ? parsed.data : null;
   } catch {
     const start = trimmed.indexOf("{");
     const end = trimmed.lastIndexOf("}");
+
     if (start === -1 || end <= start) {
       return null;
     }
+
     try {
-      return JSON.parse(trimmed.slice(start, end + 1)) as unknown;
+      const parsed = SkillPostTurnReviewResponseSchema.safeParse(
+        JSON.parse(trimmed.slice(start, end + 1))
+      );
+
+      return parsed.success ? parsed.data : null;
     } catch {
       return null;
     }
@@ -114,17 +146,17 @@ export function parseSkillPostTurnReviewResponse(
   options: { catalogNames: Set<string> }
 ): SkillPostTurnReviewOutcome {
   const parsed = extractJsonObject(raw);
-  if (typeof parsed !== "object" || parsed === null) {
+
+  if (!parsed) {
     return { action: "noop", reason: "malformed_json" };
   }
 
-  const record = parsed as Record<string, unknown>;
-  const action = record.action;
+  const action = parsed.action;
 
   if (action === "noop") {
     return {
       action: "noop",
-      reason: typeof record.reason === "string" ? record.reason : undefined,
+      reason: parsed.reason,
     };
   }
 
@@ -133,35 +165,46 @@ export function parseSkillPostTurnReviewResponse(
   }
 
   if (action === "create") {
-    const name = typeof record.name === "string" ? record.name.trim() : "";
-    const content = typeof record.content === "string" ? record.content : "";
+    const name = parsed.name?.trim() ?? "";
+    const content = parsed.content ?? "";
+
     if (!(isValidSkillName(name) && content.trim())) {
       return { action: "noop", reason: "invalid_create" };
     }
+
     if (bundledNames.has(name)) {
       return { action: "noop", reason: "bundled_forbidden" };
     }
+
     if (options.catalogNames.has(name)) {
       return { action: "noop", reason: "create_collides_with_existing" };
     }
+
     return { action: "create", content, name };
   }
 
   if (action === "patch") {
-    const name = typeof record.name === "string" ? record.name.trim() : "";
-    const oldString =
-      typeof record.oldString === "string" ? record.oldString : "";
-    const newString =
-      typeof record.newString === "string" ? record.newString : "";
-    if (!(isValidSkillName(name) && oldString) || newString === undefined) {
+    const name = parsed.name?.trim() ?? "";
+
+    const oldString = parsed.oldString ?? "";
+
+    const newString = parsed.newString ?? "";
+
+    if (
+      !(isValidSkillName(name) && oldString) ||
+      parsed.newString === undefined
+    ) {
       return { action: "noop", reason: "invalid_patch" };
     }
+
     if (bundledNames.has(name)) {
       return { action: "noop", reason: "bundled_forbidden" };
     }
+
     if (!options.catalogNames.has(name)) {
       return { action: "noop", reason: "patch_unknown_skill" };
     }
+
     return { action: "patch", name, newString, oldString };
   }
 
@@ -177,6 +220,7 @@ export async function generateSkillPostTurnReview(input: {
     catalog: input.catalog,
     turnMessages: input.turnMessages,
   });
+
   const catalogNames = new Set(input.catalog.map((skill) => skill.name));
 
   try {
@@ -185,9 +229,11 @@ export async function generateSkillPostTurnReview(input: {
       prompt,
       system: REVIEW_SYSTEM,
     });
+
     return parseSkillPostTurnReviewResponse(result.content, { catalogNames });
   } catch (error) {
     console.error("Failed post-turn skill review LLM call:", error);
+
     return { action: "noop", reason: "provider_error" };
   }
 }

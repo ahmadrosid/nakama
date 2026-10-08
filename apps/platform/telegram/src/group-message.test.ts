@@ -17,16 +17,17 @@ function groupContext(
     text?: string;
     entities?: Array<{ type: "mention"; offset: number; length: number }>;
     replyToBot?: boolean;
-    chatType?: "group" | "supergroup";
+    chatType?: "group" | "private" | "supergroup";
     messageThreadId?: number;
   } = {}
 ): Context {
   const text = options.text ?? "";
+
   const replyFrom = options.replyToBot
     ? { id: botInfo.id, is_bot: true as const }
     : undefined;
 
-  return {
+  const context = {
     chat: { id: -100_123, type: options.chatType ?? "supergroup" },
     message: {
       entities: options.entities,
@@ -34,7 +35,10 @@ function groupContext(
       reply_to_message: replyFrom ? { from: replyFrom } : undefined,
       text,
     },
-  } as unknown as Context;
+  };
+
+  // SAFETY: The fixture supplies the chat and message fields used by these helpers.
+  return context as Context;
 }
 
 describe("group-message helpers", () => {
@@ -43,11 +47,9 @@ describe("group-message helpers", () => {
     expect(isTelegramGroupChat(groupContext({ chatType: "supergroup" }))).toBe(
       true
     );
-    expect(
-      isTelegramGroupChat({
-        chat: { id: 1, type: "private" },
-      } as Context)
-    ).toBe(false);
+    expect(isTelegramGroupChat(groupContext({ chatType: "private" }))).toBe(
+      false
+    );
   });
 
   test("shouldHandleGroupMessage accepts mention, reply, and slash commands", () => {
@@ -77,7 +79,7 @@ describe("group-message helpers", () => {
   });
 
   test("shouldHandleGroupMessage matches @username using ctx.me", () => {
-    const ctx = {
+    const fixture = {
       chat: { id: -100_123, type: "supergroup" as const },
       me: {
         first_name: "Gavin",
@@ -89,15 +91,21 @@ describe("group-message helpers", () => {
         entities: [{ length: 14, offset: 0, type: "mention" as const }],
         text: "@try_gavin_bot what is in your memory",
       },
-    } as unknown as Context;
+    };
+
+    // SAFETY: The fixture supplies `me`, chat, and mention fields used by the helper.
+    const ctx = fixture as Context;
 
     expect(shouldHandleGroupMessage(ctx)).toBe(true);
   });
 
   test("resolveBotInfo prefers ctx.me over stored bot info", () => {
-    const ctx = {
+    const fixture = {
       me: { first_name: "Bot", id: 42, is_bot: true, username: "live_bot" },
-    } as Context;
+    };
+
+    // SAFETY: The fixture supplies the live bot identity used by the helper.
+    const ctx = fixture as Context;
 
     expect(resolveBotInfo(ctx, { id: 1, username: "stale" })).toEqual({
       id: 42,
@@ -106,7 +114,7 @@ describe("group-message helpers", () => {
   });
 
   test("shouldHandleGroupMessage accepts text_mention entity from mention picker", () => {
-    const ctx = {
+    const fixture = {
       chat: { id: -100_123, type: "supergroup" as const },
       message: {
         entities: [
@@ -119,7 +127,10 @@ describe("group-message helpers", () => {
         ],
         text: "Nakama hello",
       },
-    } as unknown as Context;
+    };
+
+    // SAFETY: The fixture supplies the chat and text mention fields used by the helper.
+    const ctx = fixture as Context;
 
     expect(shouldHandleGroupMessage(ctx, botInfo)).toBe(true);
   });
@@ -130,16 +141,15 @@ describe("group-message helpers", () => {
   });
 
   test("resolveConversationKey preserves private and group keys without topics", () => {
-    expect(
-      resolveConversationKey(
-        {
-          chat: { id: 42, type: "private" },
-          message: { text: "hello" },
-        } as unknown as Context,
-        "42",
-        false
-      )
-    ).toBe("42");
+    const privateContext = {
+      chat: { id: 42, type: "private" },
+      message: { text: "hello" },
+    };
+
+    // SAFETY: The fixture supplies the chat and text fields used by this helper.
+    const ctx = privateContext as Context;
+
+    expect(resolveConversationKey(ctx, "42", false)).toBe("42");
     expect(resolveConversationKey(groupContext(), "-100123", true)).toBe(
       "-100123"
     );
@@ -163,12 +173,19 @@ describe("group-message helpers", () => {
   });
 
   test("resolveConversationKey tolerates missing message or chat", () => {
-    expect(resolveConversationKey({} as Context, "-100123", true)).toBe(
+    // SAFETY: This test covers a missing chat and message.
+    const emptyContext = {} as Context;
+
+    expect(resolveConversationKey(emptyContext, "-100123", true)).toBe(
       "-100123"
     );
+    const chatOnly = { chat: { id: -100_123, type: "supergroup" } };
+
+    // SAFETY: This test covers a group chat without a message.
+    const chatContext = chatOnly as Context;
     expect(
       resolveConversationKey(
-        { chat: { id: -100_123, type: "supergroup" } } as Context,
+        chatContext,
         "-100123",
         true
       )

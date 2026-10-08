@@ -11,6 +11,7 @@ class CountingAuthService extends AuthService {
 
   override verifyPassword(password: string, hash: string): Promise<boolean> {
     this.verifyCalls += 1;
+
     return super.verifyPassword(password, hash);
   }
 }

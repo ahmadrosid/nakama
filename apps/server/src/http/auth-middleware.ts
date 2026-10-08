@@ -1,3 +1,4 @@
+import { NakamaApiError } from "@nakama/core";
 import type { MiddlewareHandler } from "hono";
 import type { ServerOptions } from "./context";
 import { isPublicRouteRequest } from "./public-routes";
@@ -18,6 +19,7 @@ export function createAuthMiddleware(
 
     if (!authService || isPublicRouteRequest(c.req.method, c.req.path)) {
       await next();
+
       return;
     }
 
@@ -26,6 +28,7 @@ export function createAuthMiddleware(
         { error: "Authentication not configured" },
         { status: 500 }
       );
+
       return;
     }
 
@@ -34,27 +37,25 @@ export function createAuthMiddleware(
       authService,
       databaseAdapter
     );
+
     if (!auth) {
       c.res = Response.json(
         { error: "Authentication required" },
         { status: 401 }
       );
+
       return;
     }
 
     try {
       assertBrowserCsrf(c.req.raw, auth, authService);
     } catch (error) {
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "message" in error &&
-        "status" in error
-      ) {
+      if (error instanceof NakamaApiError) {
         c.res = Response.json(
-          { error: String(error.message) },
-          { status: Number(error.status) }
+          { error: error.message },
+          { status: error.status }
         );
+
         return;
       }
 
@@ -69,6 +70,7 @@ export function createAuthMiddleware(
         "Complete MFA enrollment before accessing this resource.",
         403
       );
+
       return;
     }
 
@@ -79,8 +81,10 @@ export function createAuthMiddleware(
         /^\/v1\/profiles\/[^/]+\/artifacts(?:\/|$)/.test(c.req.path))
     ) {
       c.res = errorResponse("App-user scope is no longer supported.", 400);
+
       return;
     }
+
     c.set("auth", auth);
     await next();
   };

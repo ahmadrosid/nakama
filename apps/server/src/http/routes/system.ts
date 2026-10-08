@@ -5,7 +5,6 @@ import {
   isComposioConfiguredAsync,
   NAKAMA_API_VERSION,
 } from "@nakama/core";
-import type { UpdateWebPublicUrlRequest } from "@nakama/core/contract";
 import { BUILTIN_TOOL_IDS } from "@nakama/core/tools/protected";
 import {
   getWebPublicUrlSettings,
@@ -22,12 +21,14 @@ import type { HonoApp } from "../types";
 
 export const DOCS_SCRIPT_URL =
   "https://cdn.jsdelivr.net/npm/@scalar/api-reference";
+
 const DOCS_BOOTSTRAP = `
       Scalar.createApiReference("#app", {
         url: "/openapi.json",
         theme: "default",
       });
     `;
+
 export const DOCS_SCRIPT_HASH = `sha256-${createHash("sha256").update(DOCS_BOOTSTRAP).digest("base64")}`;
 
 const DOCS_HTML = `<!doctype html>
@@ -52,8 +53,10 @@ const DOCS_HTML = `<!doctype html>
  * web client still loads it sandboxed without `allow-same-origin`.
  */
 export const ARTIFACT_FRAME_PATH = "/artifact-frame";
+
 export const ARTIFACT_FRAME_CSP =
   "default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'self'";
+
 const ARTIFACT_FRAME_HTML = `<!doctype html>
 <script>
   addEventListener("message", (event) => {
@@ -73,6 +76,7 @@ export function registerSystemRoutes(
   options: ServerOptions
 ): void {
   const { agent, databaseAdapter, systemStatus } = options;
+
   const healthResponseSchema = z
     .object({
       apiVersion: z.number().int(),
@@ -93,10 +97,12 @@ export function registerSystemRoutes(
       version: z.string(),
     })
     .openapi("HealthResponse");
+
   const systemStatusSchema = z
     .object({ ok: z.boolean() })
     .passthrough()
     .openapi("SystemStatusResponse");
+
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
@@ -231,6 +237,7 @@ export function registerSystemRoutes(
     // Local checks only — Composio reachability is on GET /v1/system/status.
     const humanUserCount = (await databaseAdapter?.countHumanUsers()) ?? 0;
     const composioConfigured = await isComposioConfiguredAsync();
+
     return c.json(
       {
         apiVersion: NAKAMA_API_VERSION,
@@ -250,10 +257,12 @@ export function registerSystemRoutes(
     const profileId = c.req.query("profileId")?.trim();
     const auth = getRequestAuth(c);
     const orgId = auth.activeOrgId ?? null;
+
     if (profileId) {
       requireOrgAdminOrPlatformAdminFromContext(c);
       await agent.getProfile(requireActiveOrgIdFromContext(c), profileId);
     }
+
     return c.json(
       await systemStatus.getStatus(
         profileId && orgId ? { orgId, profileId } : orgId,
@@ -267,6 +276,7 @@ export function registerSystemRoutes(
 
   app.openapi(getWebPublicUrlRoute, async (c) => {
     requirePlatformAdminFromContext(c);
+
     return c.json(await getWebPublicUrlSettings(), 200);
   });
 
@@ -277,7 +287,12 @@ export function registerSystemRoutes(
     // OAuth state and share links are delivered, so an org admin must not be
     // able to point it at a host they control.
     requirePlatformAdminFromContext(c);
-    const body = await readJson<UpdateWebPublicUrlRequest>(c.req.raw);
+
+    const body = await readJson(
+      c.req.raw,
+      z.object({ webPublicUrl: z.string() }).strict()
+    );
+
     // Only the body sets this. Falling back to Origin/Referer would let a header
     // pin the base an OAuth code is delivered to, which is what #712 took away
     // from the read path.

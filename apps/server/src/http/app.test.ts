@@ -42,6 +42,7 @@ setupTestConfigDir("nakama-http-app-test-");
 async function withNodeEnv<T>(env: string, run: () => Promise<T>): Promise<T> {
   const previousNodeEnv = process.env.NODE_ENV;
   process.env.NODE_ENV = env;
+
   try {
     return await run();
   } finally {
@@ -67,6 +68,8 @@ function expectCookiesSecure(setCookies: string[], expected: boolean): void {
 function createServerOptions() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const authService = new AuthService();
+
+  // SAFETY: The test checks this response against the endpoint contract asserted below.
   return {
     agent: {
       assertSessionProfileAccess: async () => {},
@@ -120,22 +123,29 @@ describe("createHonoApp", () => {
     const root = await mkdtemp(join(tmpdir(), "retired-key-auth-"));
     const filename = join(root, "nakama.sqlite");
     const database = await createSqliteDatabase(`file:${filename}`);
+
     const options = {
       ...createServerOptions(),
       databaseAdapter: database.adapter,
     };
+
     options.orgService = new OrgService(database.adapter, options.authService);
     const app = createHonoApp(options);
+
     try {
       await seedDatabase(database.adapter);
+
       const browser = await setupFreshInstallSession(
         app,
         options.databaseAdapter
       );
+
       const user =
         await options.databaseAdapter.getUserByEmail("admin@example.com");
+
       const raw = new Database(filename);
       const token = `nk_live_${"a".repeat(64)}`;
+
       try {
         raw.exec(
           "CREATE TABLE api_keys (id TEXT, org_id TEXT, name TEXT, environment TEXT, key_prefix TEXT, secret_hash TEXT, created_by_user_id TEXT, created_at TEXT, last_used_at TEXT, expires_at TEXT, revoked_at TEXT)"
@@ -199,13 +209,17 @@ describe("createHonoApp", () => {
     let created = 0;
     options.agent.createSession = async () => {
       created += 1;
+
       return "session_1";
     };
+
     const app = createHonoApp(options);
+
     const session = await setupFreshInstallSession(
       app,
       options.databaseAdapter
     );
+
     for (const token of [
       `nk_live_${"a".repeat(64)}`,
       `nk_test_${"b".repeat(64)}`,
@@ -226,6 +240,7 @@ describe("createHonoApp", () => {
         ).status
       ).toBe(401);
     }
+
     for (const [method, suffix] of [
       ["GET", ""],
       ["POST", ""],
@@ -246,6 +261,7 @@ describe("createHonoApp", () => {
         ).status
       ).toBe(404);
     }
+
     for (const appUserId of ["alice", "", null]) {
       expect(
         (
@@ -263,6 +279,7 @@ describe("createHonoApp", () => {
         ).status
       ).toBe(400);
     }
+
     for (const path of [
       "/v1/sessions?profileId=default&channel=web",
       "/v1/sessions/old/messages",
@@ -280,6 +297,7 @@ describe("createHonoApp", () => {
         ).status
       ).toBe(400);
     }
+
     expect(created).toBe(0);
     expect(
       (
@@ -293,9 +311,11 @@ describe("createHonoApp", () => {
       ).status
     ).toBe(201);
     expect(created).toBe(1);
+
     const spec = await (
       await app.fetch(new Request("http://localhost/openapi.json"))
     ).text();
+
     expect(spec.includes("api-keys")).toBe(false);
     expect(spec.includes("appUserId")).toBe(false);
     expect(spec.includes('"api-key"')).toBe(false);
@@ -304,19 +324,24 @@ describe("createHonoApp", () => {
   test("built-in Meet routes use current org roles and reject spoofed actor fields", async () => {
     const options = createServerOptions();
     const root = await mkdtemp(join(tmpdir(), "meet-http-"));
+
     const googleMeetService = new GoogleMeetService(
       options.databaseAdapter,
       root,
       async () => ({ text: "Speech" })
     );
+
     try {
       const app = createHonoApp({ ...options, googleMeetService });
+
       const session = await setupFreshInstallSession(
         app,
         options.databaseAdapter
       );
+
       const user =
         await options.databaseAdapter.getUserByEmail("admin@example.com");
+
       const request = (action: string, input = {}) =>
         app.fetch(
           new Request(`http://localhost:4310/v1/meet/actions/${action}`, {
@@ -325,6 +350,7 @@ describe("createHonoApp", () => {
             method: "POST",
           })
         );
+
       expect((await request("meetings")).status).toBe(200);
       expect(
         (await request("meetings", { actorId: "someone-else" })).status
@@ -367,6 +393,7 @@ describe("createHonoApp", () => {
         method: "POST",
       })
     );
+
     expect(defaultLimitResponse.status).toBe(413);
 
     const importWithinLimitResponse = await app.fetch(
@@ -379,6 +406,7 @@ describe("createHonoApp", () => {
         method: "POST",
       })
     );
+
     expect(importWithinLimitResponse.status).toBe(400);
 
     const importLimitResponse = await app.fetch(
@@ -391,11 +419,13 @@ describe("createHonoApp", () => {
         method: "POST",
       })
     );
+
     expect(importLimitResponse.status).toBe(413);
   });
 
   test("knowledge uploads allow a base64-encoded 20 MiB document through the body limit", async () => {
     const app = createHonoApp(createServerOptions());
+
     const request = (size: number) =>
       new Request("http://localhost:4310/v1/profiles/example/knowledge-base", {
         body: "{}",
@@ -405,6 +435,7 @@ describe("createHonoApp", () => {
         },
         method: "POST",
       });
+
     expect(
       (await app.fetch(request(Math.ceil((20 * 1024 * 1024) / 3) * 4 + 1024)))
         .status
@@ -414,9 +445,11 @@ describe("createHonoApp", () => {
 
   test("liveness stays up while readiness tracks a closed and reopened database", async () => {
     const database = await createSqliteDatabase(":memory:");
+
     const { app } = createMinimalHonoApp({
       databaseAdapter: database.adapter,
     });
+
     try {
       expect((await app.request("/up")).status).toBe(200);
       expect((await app.request("/healthz")).status).toBe(200);
@@ -439,7 +472,9 @@ describe("createHonoApp", () => {
       level: process.env.NAKAMA_LOG_LEVEL,
       metrics: process.env.NAKAMA_METRICS,
     };
+
     const output = spyOn(console, "log").mockImplementation(() => {});
+
     try {
       delete process.env.NAKAMA_METRICS;
       expect(
@@ -449,17 +484,22 @@ describe("createHonoApp", () => {
       process.env.NAKAMA_LOG_FORMAT = "json";
       process.env.NAKAMA_LOG_LEVEL = "debug";
       output.mockClear();
+
       const { app, databaseAdapter } = createMinimalHonoApp({
         webDistDir: resolve(import.meta.dir, "../../../web"),
       });
+
       const response = await app.request("/v1/private-secret?token=hidden", {
         headers: { "X-Request-Id": "probe-123" },
       });
+
       expect(response.status).toBe(401);
       expect(response.headers.get("X-Request-Id")).toBe("probe-123");
+
       const records = output.mock.calls.map(([line]) =>
         JSON.parse(String(line))
       );
+
       expect(records).toHaveLength(1);
       expect(records[0]).toMatchObject({
         message: "http.request",
@@ -468,9 +508,11 @@ describe("createHonoApp", () => {
       });
       expect(JSON.stringify(records)).not.toContain("private-secret");
       expect(JSON.stringify(records)).not.toContain("hidden");
+
       const generated = await app.request("/healthz", {
         headers: { "X-Request-Id": "x".repeat(300) },
       });
+
       expect(generated.headers.get("X-Request-Id")).toHaveLength(36);
       const metrics = await app.request("/metrics");
       expect(metrics.status).toBe(200);
@@ -481,14 +523,17 @@ describe("createHonoApp", () => {
       output.mockClear();
       await app.request("/healthz");
       expect(output).not.toHaveBeenCalled();
+
       const failure = spyOn(
         databaseAdapter,
         "countHumanUsers"
       ).mockRejectedValue(new Error("database unavailable"));
+
       try {
         const error = await app.request("/health", {
           headers: { "X-Request-Id": "failed-probe" },
         });
+
         expect(error.status).toBe(500);
         expect(error.headers.get("X-Request-Id")).toBe("failed-probe");
         expect(output).toHaveBeenCalledTimes(1);
@@ -505,6 +550,7 @@ describe("createHonoApp", () => {
       }
     } finally {
       output.mockRestore();
+
       for (const [key, value] of [
         ["NAKAMA_METRICS", previous.metrics],
         ["NAKAMA_LOG_FORMAT", previous.format],
@@ -572,6 +618,7 @@ describe("createHonoApp", () => {
     const configDir = await mkdtemp(
       join(tmpdir(), "nakama-bearer-auth-autoprovision-")
     );
+
     process.env.NAKAMA_CONFIG_DIR = configDir;
 
     try {
@@ -634,6 +681,7 @@ describe("createHonoApp", () => {
   test("rejects invalid bearer auth with 401 instead of 500", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/profiles", {
         headers: { Authorization: "Bearer invalid_token" },
@@ -649,6 +697,7 @@ describe("createHonoApp", () => {
   test("allows blob: media and PDFs so authenticated previews can render", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/profiles", {
         headers: { Authorization: "Bearer invalid_token" },
@@ -672,9 +721,11 @@ describe("createHonoApp", () => {
       ...createServerOptions(),
       webDistDir: resolve(import.meta.dir, "../../../web"),
     });
+
     const response = await app.fetch(
       new Request("http://localhost:4310/artifact-frame")
     );
+
     expect(response.status).toBe(200);
     expect(await response.text()).toContain("nakama-artifact-frame-ready");
     const csp = response.headers.get("Content-Security-Policy") ?? "";
@@ -687,23 +738,29 @@ describe("createHonoApp", () => {
     "allows the docs scripts on %s",
     async (path) => {
       const app = createHonoApp(createServerOptions());
+
       const response = await app.fetch(
         new Request(`http://localhost:4310${path}`)
       );
+
       expect(response.status).toBe(200);
       const html = await response.text();
       const inlineScript = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
       const scriptUrl = html.match(/<script src="([^"]+)"/)?.[1];
       expect(inlineScript).toBeDefined();
       expect(scriptUrl).toBeDefined();
+
       const hash = new Bun.CryptoHasher("sha256")
         .update(inlineScript!)
         .digest("base64");
+
       const csp = response.headers.get("Content-Security-Policy") ?? "";
+
       const scriptSrc =
         csp
           .split(";")
           .find((directive) => directive.trim().startsWith("script-src")) ?? "";
+
       expect(scriptSrc).toContain(scriptUrl!);
       expect(scriptSrc).toContain(`'sha256-${hash}'`);
       expect(scriptSrc).not.toContain("'unsafe-inline'");
@@ -719,9 +776,11 @@ describe("createHonoApp", () => {
     "keeps Scalar resource permissions off %s",
     async (path) => {
       const app = createHonoApp(createServerOptions());
+
       const response = await app.fetch(
         new Request(`http://localhost:4310${path}`)
       );
+
       const csp = response.headers.get("Content-Security-Policy") ?? "";
       expect(csp).toContain("font-src 'self' data:;");
       expect(csp).toContain("connect-src 'self';");
@@ -734,16 +793,20 @@ describe("createHonoApp", () => {
     const indexHtml = await Bun.file(
       resolve(import.meta.dir, "../../../web/index.html")
     ).text();
+
     const inlineScript = indexHtml.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+
     if (!inlineScript) {
       throw new Error("apps/web/index.html no longer inlines a script");
     }
+
     const hash = new Bun.CryptoHasher("sha256")
       .update(inlineScript)
       .digest("base64");
 
     const options = createServerOptions();
     const app = createHonoApp(options);
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/profiles", {
         headers: { Authorization: "Bearer invalid_token" },
@@ -754,6 +817,7 @@ describe("createHonoApp", () => {
       .split(";")
       .map((directive) => directive.trim())
       .find((directive) => directive.startsWith("script-src"));
+
     expect(scriptSrc).toBe(`script-src 'self' 'sha256-${hash}'`);
   });
 
@@ -801,6 +865,7 @@ describe("createHonoApp", () => {
     try {
       const options = createServerOptions();
       const app = createHonoApp(options);
+
       const setupResponse = await app.fetch(
         new Request("http://localhost:4310/v1/auth/setup", {
           body: JSON.stringify(
@@ -812,7 +877,9 @@ describe("createHonoApp", () => {
           method: "POST",
         })
       );
+
       const setupCookies = extractSetCookies(setupResponse);
+
       const orgId = await seedOrgForUser(
         options.databaseAdapter,
         "admin@example.com"
@@ -832,6 +899,7 @@ describe("createHonoApp", () => {
       );
 
       expect(rotateResponse.status).toBe(200);
+      // SAFETY: The test checks this response against the endpoint contract asserted below.
       const rotatePayload = (await rotateResponse.json()) as { token: string };
       expect(rotatePayload.token).toStartWith("tc_local_");
 
@@ -847,6 +915,7 @@ describe("createHonoApp", () => {
     const configDir = await mkdtemp(
       join(tmpdir(), "nakama-rotate-auth-bearer-")
     );
+
     process.env.NAKAMA_CONFIG_DIR = configDir;
 
     try {
@@ -854,6 +923,7 @@ describe("createHonoApp", () => {
       const options = createServerOptions();
       await seedLocalClientUser(options.databaseAdapter);
       const app = createHonoApp(options);
+
       const response = await app.fetch(
         new Request("http://localhost:4310/v1/auth/local-token/rotate", {
           headers: { Authorization: `Bearer ${token}` },
@@ -875,11 +945,13 @@ describe("createHonoApp", () => {
     const configDir = await mkdtemp(
       join(tmpdir(), "nakama-rotate-auth-member-")
     );
+
     process.env.NAKAMA_CONFIG_DIR = configDir;
 
     try {
       const options = createServerOptions();
       const app = createHonoApp(options);
+
       const setupResponse = await app.fetch(
         new Request("http://localhost:4310/v1/auth/setup", {
           body: JSON.stringify(
@@ -891,7 +963,9 @@ describe("createHonoApp", () => {
           method: "POST",
         })
       );
+
       expect(setupResponse.status).toBe(201);
+
       const orgId = await seedOrgForUser(
         options.databaseAdapter,
         "admin@example.com"
@@ -939,6 +1013,7 @@ describe("createHonoApp", () => {
   test("serves health through the Hono fetch boundary", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
+
     const response = await app.fetch(
       new Request("http://localhost:4310/health")
     );
@@ -1036,6 +1111,7 @@ describe("createHonoApp", () => {
       await withNodeEnv(tc.nodeEnv, async () => {
         const options = createServerOptions();
         const app = createHonoApp(options);
+
         const setupResponse = await app.fetch(
           new Request(tc.url, {
             body: JSON.stringify(
@@ -1058,6 +1134,7 @@ describe("createHonoApp", () => {
               headers: { Cookie: cookieHeaderFromSetCookies(setCookies) },
             })
           );
+
           expect(meResponse.status).toBe(200);
         }
       });
@@ -1067,6 +1144,7 @@ describe("createHonoApp", () => {
   test("a rejected setup leaves no organization behind", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
+
     const setup = (email: string) =>
       app.fetch(
         new Request("http://localhost:4310/v1/auth/setup", {
@@ -1091,6 +1169,7 @@ describe("createHonoApp", () => {
   test("concurrent setup creates exactly one org and one admin", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
+
     const setup = (slug: string) =>
       app.fetch(
         new Request("http://localhost:4310/v1/auth/setup", {
@@ -1114,9 +1193,11 @@ describe("createHonoApp", () => {
 
     const organizations = await options.databaseAdapter.listOrganizations();
     expect(organizations).toHaveLength(1);
+
     const members = await options.databaseAdapter.listOrgMembers(
       organizations[0]?.id ?? ""
     );
+
     expect(
       members.filter((member) => member.userId !== LOCAL_CLIENT_USER_ID)
     ).toHaveLength(1);
@@ -1182,12 +1263,15 @@ describe("createHonoApp", () => {
       { send: async () => ({ error: "Email unavailable.", ok: false }) }
     );
     const app = createHonoApp(options);
+
     const session = await setupFreshInstallSession(
       app,
       options.databaseAdapter
     );
+
     const admin =
       await options.databaseAdapter.getUserByEmail("admin@example.com");
+
     const invite = await options.orgService.createInvite({
       email: "invitee@example.com",
       invitedByUserId: admin!.id,
@@ -1213,6 +1297,7 @@ describe("createHonoApp", () => {
         method: "POST",
       })
     );
+
     expect(accepted.status).toBe(200);
     expect(extractSetCookies(accepted).length).toBeGreaterThan(0);
   });
@@ -1220,6 +1305,7 @@ describe("createHonoApp", () => {
   test("logout clears both Secure and non-Secure session cookies", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
+
     const setupResponse = await app.fetch(
       new Request("http://localhost:4310/v1/auth/setup", {
         body: JSON.stringify(
@@ -1231,7 +1317,9 @@ describe("createHonoApp", () => {
         method: "POST",
       })
     );
+
     expect(setupResponse.status).toBe(201);
+
     const session = {
       cookieHeader: cookieHeaderFromSetCookies(
         extractSetCookies(setupResponse)
@@ -1251,12 +1339,15 @@ describe("createHonoApp", () => {
 
     expect(logoutResponse.status).toBe(200);
     const clearCookies = extractSetCookies(logoutResponse);
+
     const sessionClears = clearCookies.filter((cookie) =>
       cookie.startsWith("nakama_session=")
     );
+
     const csrfClears = clearCookies.filter((cookie) =>
       cookie.startsWith("nakama_csrf=")
     );
+
     expect(
       sessionClears.some((cookie) => /;\s*Secure(?:;|$)/i.test(cookie))
     ).toBe(true);
@@ -1281,21 +1372,26 @@ describe("createHonoApp", () => {
 
   test("disconnect routes all agent channels to their scoped connection", async () => {
     const options = createServerOptions();
+
     const calls: Array<{
       name: string;
       owner: { orgId: string; profileId: string };
     }> = [];
+
     options.workerManager.disconnectChannel = async (
       name: string,
       owner: { orgId: string; profileId: string }
     ) => {
       calls.push({ name, owner });
     };
+
     const app = createHonoApp(options);
+
     const session = await setupFreshInstallSession(
       app,
       options.databaseAdapter
     );
+
     const disconnect = (path: string) =>
       app.fetch(
         new Request(`http://localhost:4310/v1/workers/${path}`, {
@@ -1303,11 +1399,13 @@ describe("createHonoApp", () => {
           method: "POST",
         })
       );
+
     for (const name of ["telegram", "discord", "whatsapp"]) {
       const response = await disconnect(`${name}/disconnect?profileId=default`);
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ ok: true });
     }
+
     expect(calls).toEqual(
       ["telegram", "discord", "whatsapp"].map((name) => ({
         name,
@@ -1330,14 +1428,18 @@ describe("createHonoApp", () => {
     ) => {
       calls.push(`start:${name}:${owner.orgId}:${owner.profileId}`);
     };
+
     options.workerManager.stopWorker = async (name: string) => {
       calls.push(`stop:${name}`);
     };
+
     const app = createHonoApp(options);
+
     const platformSession = await setupFreshInstallSession(
       app,
       options.databaseAdapter
     );
+
     const now = new Date().toISOString();
 
     await options.databaseAdapter.createUser({
@@ -1360,6 +1462,7 @@ describe("createHonoApp", () => {
       "password123",
       platformSession.orgId
     );
+
     const denied = await app.fetch(
       new Request(
         "http://localhost:4310/v1/workers/whatsapp/start?profileId=default",
@@ -1403,6 +1506,7 @@ describe("createHonoApp", () => {
         name === "plugin-owned" && orgId === owner,
       listPluginWorkers: async (orgId: string) => {
         calls.push("list:" + orgId);
+
         return [];
       },
       startWorker: async (name: string) => {
@@ -1412,6 +1516,7 @@ describe("createHonoApp", () => {
     const app = createHonoApp(options);
     const admin = await setupFreshInstallSession(app, options.databaseAdapter);
     owner = admin.orgId!;
+
     for (const suffix of ["start", "logs", "clear-logs"]) {
       const response = await app.fetch(
         new Request(
@@ -1422,21 +1527,27 @@ describe("createHonoApp", () => {
           }
         )
       );
+
       expect(response.status).toBe(404);
     }
+
     expect(calls).toEqual([]);
+
     const allowed = await app.fetch(
       new Request("http://localhost:4310/v1/workers/plugin-owned/start", {
         headers: admin.headers({ "X-CSRF-Token": admin.csrfToken }),
         method: "POST",
       })
     );
+
     expect(allowed.status).toBe(200);
+
     const listed = await app.fetch(
       new Request("http://localhost:4310/v1/workers/plugins", {
         headers: admin.headers(),
       })
     );
+
     expect(listed.status).toBe(200);
     expect(calls).toEqual(["plugin-owned", "list:" + owner]);
 
@@ -1454,12 +1565,14 @@ describe("createHonoApp", () => {
       role: "member",
       userId: "worker-member",
     });
+
     const member = await loginUserSession(
       app,
       "worker-member@example.com",
       "password123",
       owner
     );
+
     for (const suffix of ["start", "logs", "clear-logs"]) {
       const denied = await app.fetch(
         new Request("http://localhost:4310/v1/workers/plugin-owned/" + suffix, {
@@ -1467,6 +1580,7 @@ describe("createHonoApp", () => {
           method: suffix === "logs" ? "GET" : "POST",
         })
       );
+
       expect(denied.status).toBe(403);
     }
   });
@@ -1474,6 +1588,7 @@ describe("createHonoApp", () => {
   test("creates and lists sessions through Hono routes", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
+
     const session = await setupFreshInstallSession(
       app,
       options.databaseAdapter
@@ -1512,14 +1627,17 @@ describe("createHonoApp", () => {
   test("GET /v1/sessions rejects missing or invalid channel", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
+
     const session = await setupFreshInstallSession(
       app,
       options.databaseAdapter
     );
+
     const listCalls: Array<{ channel: string; profileId: string }> = [];
     const originalListSessions = options.agent.listSessions;
     options.agent.listSessions = async (orgId, profileId, channel) => {
       listCalls.push({ channel, profileId });
+
       return originalListSessions(orgId, profileId, channel);
     };
 
@@ -1528,6 +1646,7 @@ describe("createHonoApp", () => {
         headers: session.headers(),
       })
     );
+
     expect(missingChannel.status).toBe(400);
     await expect(missingChannel.json()).resolves.toMatchObject({
       error: expect.any(String),
@@ -1541,6 +1660,7 @@ describe("createHonoApp", () => {
         }
       )
     );
+
     expect(invalidChannel.status).toBe(400);
     await expect(invalidChannel.json()).resolves.toMatchObject({
       error: expect.any(String),
@@ -1552,17 +1672,21 @@ describe("createHonoApp", () => {
   test("GET /v1/sessions reads channels, limit and cursor", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
+
     const session = await setupFreshInstallSession(
       app,
       options.databaseAdapter
     );
+
     const listCalls: unknown[][] = [];
     options.agent.listSessions = async (...args: unknown[]) => {
       // Everything after orgId and profileId: channels, auth, page,
       // query.
       listCalls.push(args.slice(2));
+
       return { nextCursor: null, sessions: [] };
     };
+
     const list = (query: string) =>
       app.fetch(
         new Request(
@@ -1575,6 +1699,7 @@ describe("createHonoApp", () => {
       (await list("channels=web,telegram&limit=30&cursor=abc")).status
     ).toBe(200);
     expect((await list("channel=web")).status).toBe(200);
+
     for (const invalid of [
       "channels=web,not-a-channel",
       "channel=web&limit=0",
@@ -1598,15 +1723,19 @@ describe("createHonoApp", () => {
   test("GET /v1/sessions passes a trimmed q of up to 200 characters", async () => {
     const options = createServerOptions();
     const app = createHonoApp(options);
+
     const session = await setupFreshInstallSession(
       app,
       options.databaseAdapter
     );
+
     const queries: unknown[] = [];
     options.agent.listSessions = async (...args: unknown[]) => {
       queries.push(args[5]);
+
       return { nextCursor: null, sessions: [] };
     };
+
     const list = (q: string) =>
       app.fetch(
         new Request(
@@ -1627,6 +1756,7 @@ describe("createHonoApp", () => {
     test("setup stores active org on the session", async () => {
       const options = createServerOptions();
       const app = createHonoApp(options);
+
       const setupResponse = await app.fetch(
         new Request("http://localhost:4310/v1/auth/setup", {
           body: JSON.stringify(buildSetupAuthBody()),
@@ -1636,10 +1766,13 @@ describe("createHonoApp", () => {
       );
 
       expect(setupResponse.status).toBe(201);
+
+      // SAFETY: The test checks this response against the endpoint contract asserted below.
       const setupBody = (await setupResponse.json()) as {
         activeOrgId: string;
         orgId: string;
       };
+
       expect(setupBody.activeOrgId).toStartWith("org_");
       expect(setupBody.orgId).toBe(setupBody.activeOrgId);
 
@@ -1698,6 +1831,7 @@ describe("createHonoApp", () => {
     test("returns 404 when org membership is missing", async () => {
       const options = createServerOptions();
       const app = createHonoApp(options);
+
       const session = await setupFreshInstallSession(
         app,
         options.databaseAdapter
@@ -1716,6 +1850,7 @@ describe("createHonoApp", () => {
     test("skips org context for auth routes", async () => {
       const options = createServerOptions();
       const app = createHonoApp(options);
+
       const setupResponse = await app.fetch(
         new Request("http://localhost:4310/v1/auth/setup", {
           body: JSON.stringify(buildSetupAuthBody()),
@@ -1740,6 +1875,7 @@ describe("createHonoApp", () => {
     test("returns 403 when viewers mutate protected routes", async () => {
       const options = createServerOptions();
       const app = createHonoApp(options);
+
       const session = await setupFreshInstallSession(
         app,
         options.databaseAdapter,
@@ -1763,6 +1899,7 @@ describe("createHonoApp", () => {
     test("returns 403 when viewers send session messages", async () => {
       const options = createServerOptions();
       const app = createHonoApp(options);
+
       const session = await setupFreshInstallSession(
         app,
         options.databaseAdapter,
@@ -1788,6 +1925,7 @@ describe("createHonoApp", () => {
   describe("auth request bodies", () => {
     test("rejects wrong-typed setup fields before invoking auth services", async () => {
       const app = createHonoApp(createServerOptions());
+
       const response = await app.fetch(
         new Request("http://localhost:4310/v1/auth/setup", {
           body: JSON.stringify({
@@ -1808,6 +1946,7 @@ describe("createHonoApp", () => {
 
     test("rejects missing required setup fields", async () => {
       const app = createHonoApp(createServerOptions());
+
       const response = await app.fetch(
         new Request("http://localhost:4310/v1/auth/setup", {
           body: JSON.stringify({
@@ -1827,6 +1966,7 @@ describe("createHonoApp", () => {
 
     test("keeps malformed auth JSON as a bad request", async () => {
       const app = createHonoApp(createServerOptions());
+
       const response = await app.fetch(
         new Request("http://localhost:4310/v1/auth/setup", {
           body: "{",
@@ -1858,6 +1998,7 @@ describe("createHonoApp", () => {
           method: "POST",
         })
       );
+
       expect(platformLogin.status).toBe(200);
       const platformCookies = extractSetCookies(platformLogin);
 
@@ -1882,7 +2023,10 @@ describe("createHonoApp", () => {
           method: "POST",
         })
       );
+
       expect(createOrgResponse.status).toBe(201);
+
+      // SAFETY: The test checks this response against the endpoint contract asserted below.
       const created = (await createOrgResponse.json()) as {
         organization: { id: string };
         adminMember: { temporaryPassword: string };
@@ -1898,8 +2042,10 @@ describe("createHonoApp", () => {
           method: "POST",
         })
       );
+
       expect(orgAdminLogin.status).toBe(200);
       const orgAdminCookies = extractSetCookies(orgAdminLogin);
+
       const orgHeaders = {
         Cookie: cookieHeaderFromSetCookies(orgAdminCookies),
         "X-Org-Id": created.organization.id,
@@ -1910,6 +2056,7 @@ describe("createHonoApp", () => {
           headers: orgHeaders,
         })
       );
+
       expect(listResponse.status).toBe(200);
 
       const createProfileResponse = await app.fetch(
@@ -1923,6 +2070,7 @@ describe("createHonoApp", () => {
           method: "POST",
         })
       );
+
       expect(createProfileResponse.status).toBe(403);
 
       const soulResponse = await app.fetch(
@@ -1930,15 +2078,18 @@ describe("createHonoApp", () => {
           headers: orgHeaders,
         })
       );
+
       expect(soulResponse.status).toBe(403);
 
       const skillsResponse = await app.fetch(
         new Request("http://localhost:4310/v1/skills", { headers: orgHeaders })
       );
+
       expect(skillsResponse.status).toBe(403);
     });
     test("returns generic passkey options without authentication", async () => {
       const app = createHonoApp(createServerOptions());
+
       const response = await app.fetch(
         new Request("http://localhost:4310/v1/auth/passkey/login/options", {
           body: "{}",
@@ -1948,11 +2099,14 @@ describe("createHonoApp", () => {
       );
 
       expect(response.status).toBe(200);
+
+      // SAFETY: The test checks this response against the endpoint contract asserted below.
       const body = (await response.json()) as {
         challenge: string;
         options: { allowCredentials?: unknown };
         totpEnabled?: unknown;
       };
+
       expect(body.challenge).toBeString();
       expect(body.options.allowCredentials).toBeUndefined();
       expect(body.totpEnabled).toBeUndefined();

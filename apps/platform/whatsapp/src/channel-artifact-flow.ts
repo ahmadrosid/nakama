@@ -13,6 +13,16 @@ import {
   WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES,
 } from "./send-artifact-document";
 
+export interface PreparedWhatsAppArtifactCandidate {
+  filename?: unknown;
+  mimeType?: unknown;
+  ok?: unknown;
+  path?: unknown;
+  sha256?: unknown;
+  sizeBytes?: unknown;
+  status?: unknown;
+}
+
 /** `/attach` shortcut: most recent registry artifact, or a missing-artifact message. */
 export async function maybeSendWhatsAppAttachOnlyCommand(input: {
   client: NakamaClient;
@@ -26,8 +36,10 @@ export async function maybeSendWhatsAppAttachOnlyCommand(input: {
   const artifact = getMostRecentDeliverableArtifact(
     input.sessionStore.getDeliverableArtifacts(input.conversationKey)
   );
+
   if (!artifact) {
     await input.sendPlain(formatMissingAttachArtifactMessage());
+
     return;
   }
 
@@ -54,11 +66,12 @@ export async function sendArtifactDocumentForPath(input: {
   sendPlain: (text: string) => Promise<void>;
 }): Promise<SendWhatsAppArtifactDocumentResult> {
   if (
-    typeof input.sizeBytes === "number" &&
+    input.sizeBytes !== undefined &&
     input.sizeBytes > WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES
   ) {
     const error = formatWhatsAppArtifactOversizeError(input.sizeBytes);
     await input.sendPlain(error);
+
     return { error, ok: false, status: "failed" };
   }
 
@@ -73,7 +86,9 @@ export async function sendArtifactDocumentForPath(input: {
           : AbortSignal.timeout(30_000),
       }
     );
+
     input.signal?.throwIfAborted();
+
     if (
       input.sha256 &&
       createHash("sha256").update(new Uint8Array(data)).digest("hex") !==
@@ -83,6 +98,7 @@ export async function sendArtifactDocumentForPath(input: {
         "The selected file changed before delivery. Ask me to select it again."
       );
     }
+
     const result = await sendWhatsAppArtifactDocument(
       input.socket,
       input.jid,
@@ -98,46 +114,84 @@ export async function sendArtifactDocumentForPath(input: {
     if (!result.ok && result.error) {
       await input.sendPlain(result.error);
     }
+
     return result;
   } catch (error) {
     const message =
       error instanceof Error
         ? error.message
         : "Failed to read the artifact for attachment.";
+
     await input.sendPlain(message);
+
     return { error: message, ok: false, status: "failed" };
   }
 }
 
-export function parsePreparedWhatsAppArtifact(result: unknown): {
+export function parsePreparedWhatsAppArtifact(
+  result: PreparedWhatsAppArtifactCandidate
+): {
   filename: string;
   mimeType: string;
   path: string;
   sizeBytes: number;
   sha256: string;
 } | null {
-  if (!result || typeof result !== "object") {
+  if (!(result instanceof Object)) {
     return null;
   }
-  const record = result as Record<string, unknown>;
+
+  const candidate = result;
+  const pathValue = candidate.path;
+  const filenameValue = candidate.filename;
+  const mimeTypeValue = candidate.mimeType;
+  const sha256Value = candidate.sha256;
+
+  const path =
+    Object.prototype.toString.call(pathValue) === "[object String]"
+      ? String(pathValue)
+      : null;
+
+  const filename =
+    Object.prototype.toString.call(filenameValue) === "[object String]"
+      ? String(filenameValue)
+      : null;
+
+  const mimeType =
+    Object.prototype.toString.call(mimeTypeValue) === "[object String]"
+      ? String(mimeTypeValue)
+      : null;
+
+  const sha256 =
+    Object.prototype.toString.call(sha256Value) === "[object String]"
+      ? String(sha256Value)
+      : null;
+
+  const rawSizeBytes = candidate.sizeBytes;
+
   if (
-    record.ok !== true ||
-    record.status !== "prepared" ||
-    typeof record.path !== "string" ||
-    typeof record.filename !== "string" ||
-    typeof record.mimeType !== "string" ||
-    typeof record.sha256 !== "string" ||
-    !/^[a-f0-9]{64}$/.test(record.sha256) ||
-    typeof record.sizeBytes !== "number" ||
-    !Number.isSafeInteger(record.sizeBytes) ||
-    record.sizeBytes < 0 ||
-    record.sizeBytes > WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES
+    candidate.ok !== true ||
+    candidate.status !== "prepared" ||
+    path === null ||
+    filename === null ||
+    mimeType === null ||
+    sha256 === null ||
+    !/^[a-f0-9]{64}$/.test(sha256) ||
+    !Number.isSafeInteger(rawSizeBytes)
   ) {
     return null;
   }
-  const path = record.path;
+
+  const sizeBytes = Number(rawSizeBytes);
+
   if (
-    !path ||
+    sizeBytes < 0 ||
+    sizeBytes > WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES
+  ) {
+    return null;
+  }
+
+  if (
     path.startsWith("/") ||
     /^[a-z]:/i.test(path) ||
     path.includes("\\") ||
@@ -145,11 +199,12 @@ export function parsePreparedWhatsAppArtifact(result: unknown): {
   ) {
     return null;
   }
+
   return {
-    filename: record.filename,
-    mimeType: record.mimeType,
+    filename,
+    mimeType,
     path,
-    sha256: record.sha256,
-    sizeBytes: record.sizeBytes,
+    sha256,
+    sizeBytes,
   };
 }

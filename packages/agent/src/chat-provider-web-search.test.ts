@@ -25,6 +25,7 @@ async function turn(
   const provider = createCapturingProvider(done, { name });
   const session = createAgentChatSession({ provider, tools }, { tools });
   await session.send("hello");
+
   return provider.lastInput;
 }
 

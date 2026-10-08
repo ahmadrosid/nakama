@@ -5,10 +5,15 @@ import { buildLlmsTxt, type PageMetadata } from "../lib/site-meta";
 import { type ContentPage, readContentPages } from "./content-inventory";
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
+
 const CONTENT_DIR = path.join(ROOT, "..", "content", "docs");
+
 const PUBLIC_DIR = path.join(ROOT, "..", "public");
+
 const WEBSITE_DIR = path.join(ROOT, "..");
+
 const MIRRORS_DIR = path.join(WEBSITE_DIR, "generated", "mirrors");
+
 const MIRROR_ROUTES_DIR = path.join(WEBSITE_DIR, "app", "(mirrors)");
 
 const EXTRA_MIRRORS = ["getting-started.md"];
@@ -22,15 +27,19 @@ function checkInternalLinks(contentPages: ContentPage[]): void {
     ),
     ...EXTRA_MIRRORS.map((extra) => extra.replace(/\.md$/, "")),
   ]);
+
   const missing: string[] = [];
 
   for (const page of contentPages) {
     for (const match of page.markdown.matchAll(/\[[^\]]*\]\(([^)\s]+)/g)) {
       const href = match[1];
+
       if (!href.startsWith("/") || href.startsWith("//")) {
         continue;
       }
+
       const route = href.replace(/[?#].*$/, "").replace(/^\/+|\/+$/g, "");
+
       if (
         route === "" ||
         route === "llms.txt" ||
@@ -39,6 +48,7 @@ function checkInternalLinks(contentPages: ContentPage[]): void {
       ) {
         continue;
       }
+
       missing.push(`${page.mdxPath}: ${href}`);
     }
   }
@@ -59,6 +69,7 @@ function mirrorContentType(relativePath: string): string {
 async function writeMirrorRoute(relativePath: string) {
   const routePath = path.join(MIRROR_ROUTES_DIR, relativePath, "route.ts");
   const contentType = mirrorContentType(relativePath);
+
   const routeSource = `import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
@@ -97,12 +108,15 @@ async function cleanGeneratedMirrors() {
   const entries = await readdir(PUBLIC_DIR, { withFileTypes: true }).catch(
     () => []
   );
+
   for (const entry of entries) {
     const full = path.join(PUBLIC_DIR, entry.name);
+
     if (entry.isDirectory() && entry.name === "docs") {
       await rm(full, { force: true, recursive: true });
       continue;
     }
+
     if (
       entry.isFile() &&
       (entry.name.endsWith(".md") || entry.name === "llms.txt")
@@ -117,6 +131,7 @@ async function main() {
 
   const contentPages: ContentPage[] = await readContentPages(CONTENT_DIR);
   checkInternalLinks(contentPages);
+
   const pages: PageMetadata[] = contentPages.map((page) => ({
     description: page.description,
     relativePath: page.relativePath,
@@ -134,13 +149,16 @@ async function main() {
     const outputPath = path.join(MIRRORS_DIR, extra);
     const raw = await readFile(sourcePath, "utf8");
     await writeFile(outputPath, raw);
+
     if (!pages.some((page) => page.relativePath === extra)) {
       const title = raw.match(/^# (.+)$/m)?.[1] ?? "Getting Started";
+
       const description =
         raw
           .split("\n")
           .map((line) => line.trim())
           .find((line) => line && !line.startsWith("#")) ?? "";
+
       pages.push({ description, relativePath: extra, title });
     }
   }
@@ -153,12 +171,14 @@ async function main() {
     "",
     ...pagePaths.map((pagePath) => {
       const clean = pagePath.replace(/index\.md$/, "").replace(/\.md$/, "");
+
       return clean ? `/${clean}` : "/";
     }),
   ];
 
   const siteUrl =
     process.env.NAKAMA_DOCS_SITE_URL ?? "https://ahmadrosid.github.io/nakama";
+
   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${sitemapUrls
@@ -170,6 +190,7 @@ ${sitemapUrls
   .join("\n")}
 </urlset>
 `;
+
   await writeFile(path.join(PUBLIC_DIR, "sitemap.xml"), sitemap);
 
   await writeMirrorRoutes([...pagePaths, "llms.txt"]);

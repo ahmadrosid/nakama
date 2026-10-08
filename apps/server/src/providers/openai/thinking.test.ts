@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { createOpenAIProvider } from "./index";
+
+type CapturedOpenAIRequest = {
+  reasoning?: { effort?: string; summary?: string };
+  reasoning_effort?: unknown;
+  tools?: Array<{ name?: string; type?: string }>;
+};
+
 import {
   openAIModelRejectsChatToolsWithReasoning,
   openAIModelRequiresResponsesApi,
@@ -83,7 +90,7 @@ describe("OpenAI codex vision routing", () => {
       }
     );
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = fetchMock;
 
     const provider = createOpenAIProvider({
       apiKey: "sk-test",
@@ -115,18 +122,17 @@ describe("OpenAI tools + reasoning routing", () => {
   test.each(["gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna", "gpt-6-astra"])(
     "%s keeps no-tool chat on Chat Completions without forcing none",
     async (model) => {
-      const requests: Array<{ url: string; body: Record<string, unknown> }> =
-        [];
-      globalThis.fetch = (async (
-        url: RequestInfo | URL,
-        init?: RequestInit
-      ) => {
+      const requests: Array<{ url: string; body: CapturedOpenAIRequest }> = [];
+
+      globalThis.fetch = async (url: RequestInfo | URL, init?: RequestInit) => {
         requests.push({
           body: JSON.parse(String(init?.body)),
           url: String(url),
         });
+
         return Response.json({ choices: [{ message: { content: "Done." } }] });
-      }) as typeof fetch;
+      };
+
       const provider = createOpenAIProvider({ apiKey: "sk-test", model });
       expect(
         (
@@ -146,12 +152,14 @@ describe("OpenAI tools + reasoning routing", () => {
 
   test("rejects Astra tools on a custom Chat Completions endpoint before HTTP", async () => {
     const fetchMock = mock(async () => Response.json({}));
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = fetchMock;
+
     const provider = createOpenAIProvider({
       apiKey: "sk-test",
       baseUrl: "https://custom.example/v1",
       model: "gpt-6-astra",
     });
+
     await expect(
       provider.generateChat({
         messages: [{ content: "Search", role: "user" }],
@@ -172,12 +180,14 @@ describe("OpenAI tools + reasoning routing", () => {
     "rejects GPT-6.1 Sol tools on a custom endpoint before HTTP (stream: %s)",
     async (streaming) => {
       const fetchMock = mock(async () => Response.json({}));
-      globalThis.fetch = fetchMock as unknown as typeof fetch;
+      globalThis.fetch = fetchMock;
+
       const provider = createOpenAIProvider({
         apiKey: "sk-test",
         baseUrl: "https://custom.example/v1",
         model: "GPT-6.1-Sol-custom",
       });
+
       const request = {
         messages: [{ content: "Search", role: "user" as const }],
         system: "Be helpful.",
@@ -189,6 +199,7 @@ describe("OpenAI tools + reasoning routing", () => {
           },
         ],
       };
+
       await expect(
         streaming
           ? provider.streamChat(request, { onChunk: () => {} })
@@ -202,20 +213,19 @@ describe("OpenAI tools + reasoning routing", () => {
     "%s respects its own tool protocol with a custom GPT-6.1 ID",
     async (providerName) => {
       const model = "GPT-6.1-Sol-custom";
-      globalThis.fetch = (async (
-        url: RequestInfo | URL,
-        init?: RequestInit
-      ) => {
+      globalThis.fetch = async (url: RequestInfo | URL, init?: RequestInit) => {
         const body = JSON.parse(String(init?.body));
         expect(body.model).toBe(model);
         expect(body.reasoning_effort).toBeUndefined();
         expect(body.reasoning).toBeUndefined();
+
         if (providerName === "openai") {
           expect(String(url)).toBe("https://api.openai.com/v1/responses");
           expect(body.tools[0]).toMatchObject({
             name: "search",
             type: "function",
           });
+
           return Response.json({
             output: [
               {
@@ -225,13 +235,16 @@ describe("OpenAI tools + reasoning routing", () => {
             ],
           });
         }
+
         expect(String(url)).toBe("https://gateway.example/v1/chat/completions");
         expect(body.tools[0]).toMatchObject({
           function: { name: "search" },
           type: "function",
         });
+
         return Response.json({ choices: [{ message: { content: "Done" } }] });
-      }) as typeof fetch;
+      };
+
       const provider = createOpenAIProvider({
         apiKey: "sk-test",
         baseUrl:
@@ -240,6 +253,7 @@ describe("OpenAI tools + reasoning routing", () => {
         model,
         providerName,
       });
+
       const result = await provider.generateChat({
         messages: [{ content: "Search", role: "user" }],
         providerOptions: { thinking: { enabled: false } },
@@ -252,6 +266,7 @@ describe("OpenAI tools + reasoning routing", () => {
           },
         ],
       });
+
       expect(result.content).toBe("Done");
     }
   );
@@ -259,10 +274,7 @@ describe("OpenAI tools + reasoning routing", () => {
   test.each(["text", "json"] as const)(
     "GPT-6.1 Sol generateText supports %s without unsupported reasoning",
     async (format) => {
-      globalThis.fetch = (async (
-        url: RequestInfo | URL,
-        init?: RequestInit
-      ) => {
+      globalThis.fetch = async (url: RequestInfo | URL, init?: RequestInit) => {
         expect(String(url)).toBe("https://api.openai.com/v1/chat/completions");
         const body = JSON.parse(String(init?.body));
         expect(body.model).toBe("gpt-6.1-sol");
@@ -271,10 +283,12 @@ describe("OpenAI tools + reasoning routing", () => {
         expect(body.response_format).toEqual(
           format === "json" ? { type: "json_object" } : undefined
         );
+
         return Response.json({
           choices: [{ message: { content: '{"title":"Migration"}' } }],
         });
-      }) as typeof fetch;
+      };
+
       const result = await createOpenAIProvider({
         apiKey: "sk-test",
         model: "gpt-6.1-sol",
@@ -283,6 +297,7 @@ describe("OpenAI tools + reasoning routing", () => {
         prompt: "Name this migration",
         system: "Write a title",
       });
+
       expect(result.content).toBe('{"title":"Migration"}');
     }
   );
@@ -290,16 +305,14 @@ describe("OpenAI tools + reasoning routing", () => {
   test.each(["gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna", "gpt-6-astra"])(
     "%s routes tools through Responses with or without explicit reasoning",
     async (model) => {
-      const requests: Array<{ url: string; body: Record<string, unknown> }> =
-        [];
-      globalThis.fetch = (async (
-        url: RequestInfo | URL,
-        init?: RequestInit
-      ) => {
+      const requests: Array<{ url: string; body: CapturedOpenAIRequest }> = [];
+
+      globalThis.fetch = async (url: RequestInfo | URL, init?: RequestInit) => {
         requests.push({
           body: JSON.parse(String(init?.body)),
           url: String(url),
         });
+
         return Response.json({
           output: [
             {
@@ -308,9 +321,10 @@ describe("OpenAI tools + reasoning routing", () => {
             },
           ],
         });
-      }) as typeof fetch;
+      };
 
       const provider = createOpenAIProvider({ apiKey: "sk-test", model });
+
       for (const thinking of [
         undefined,
         { effort: "high" as const, enabled: true },
@@ -357,11 +371,14 @@ describe("OpenAI tools + reasoning routing", () => {
     const fetchMock = mock(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         expect(String(input)).toBe("https://api.openai.com/v1/responses");
+
+        // SAFETY: The test parses a request body serialized by the provider under test.
         const body = JSON.parse(String(init?.body ?? "{}")) as {
           tools?: Array<{ type?: string; name?: string }>;
           reasoning?: unknown;
           reasoning_effort?: unknown;
         };
+
         expect(body.tools?.some((tool) => tool.name === "search_files")).toBe(
           true
         );
@@ -382,7 +399,7 @@ describe("OpenAI tools + reasoning routing", () => {
       }
     );
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = fetchMock;
 
     const provider = createOpenAIProvider({
       apiKey: "sk-test",
@@ -409,10 +426,13 @@ describe("OpenAI tools + reasoning routing", () => {
     const fetchMock = mock(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         expect(String(input)).toBe("https://api.openai.com/v1/responses");
+
+        // SAFETY: The test parses a request body serialized by the provider under test.
         const body = JSON.parse(String(init?.body ?? "{}")) as {
           tools?: unknown[];
           reasoning?: { effort?: string };
         };
+
         expect(body.tools?.length).toBe(1);
         expect(body.reasoning).toEqual({ effort: "high", summary: "auto" });
 
@@ -430,7 +450,7 @@ describe("OpenAI tools + reasoning routing", () => {
       }
     );
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = fetchMock;
 
     const provider = createOpenAIProvider({
       apiKey: "sk-test",

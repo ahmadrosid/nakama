@@ -33,43 +33,56 @@ test.each([false, true])(
       value: { getItem: () => null, removeItem() {}, setItem() {} },
     });
     let page!: ChatPageState;
+
     function Probe() {
       page = useChatPage();
+
       return null;
     }
 
     const sent: { message: string; sessionId: string }[] = [];
     let finishFirst!: () => void;
+
     const firstResponse = new Promise<void>((resolve) => {
       finishFirst = resolve;
     });
+
     let finishQueue!: () => void;
+
     const queueFinished = new Promise<void>((resolve) => {
       finishQueue = resolve;
     });
+
     const streamMocks: ReturnType<typeof spyOn>[] = [];
+
     function session(id: string) {
       const chat = client.createChatSession(id, "web");
       streamMocks.push(
         spyOn(chat, "sendStream").mockImplementation(async (input) => {
-          const message = typeof input === "string" ? input : input.message;
+          const message = input instanceof Object ? input.message : input;
           sent.push({ message, sessionId: id });
+
           if (sent.length === 1) {
             await firstResponse;
           }
+
           return "reply";
         })
       );
+
       return chat;
     }
+
     const createSession = spyOn(client, "createSession").mockImplementation(
       async () => session(`created-${createSession.mock.calls.length}`)
     );
+
     const getMessages = spyOn(client, "getSessionMessages").mockImplementation(
       async () => {
         if (sent.length === 3) {
           finishQueue();
         }
+
         return {
           channel: "web",
           messageMeta: [],
@@ -93,9 +106,11 @@ test.each([false, true])(
           </QueryClientProvider>
         </MemoryRouter>
       );
+
       const first = page.sendMessage("first", [], {
         sessionOverride: branchOverride ? session("branch") : undefined,
       });
+
       await page.sendMessage("second");
       await page.sendMessage("third");
       finishFirst();
@@ -117,9 +132,11 @@ test.each([false, true])(
     } finally {
       createSession.mockRestore();
       getMessages.mockRestore();
+
       for (const stream of streamMocks) {
         stream.mockRestore();
       }
+
       queryClient.clear();
       Object.defineProperty(globalThis, "localStorage", {
         configurable: true,
@@ -146,8 +163,10 @@ test("cognito sends the mode, stores no session id, and ends the old session", a
     },
   });
   let page!: ChatPageState;
+
   function Probe() {
     page = useChatPage();
+
     return null;
   }
 
@@ -155,6 +174,7 @@ test("cognito sends the mode, stores no session id, and ends the old session", a
   const purged: string[] = [];
   // Bound before the spy below, or building a session would re-enter it.
   const realCreateChatSession = client.createChatSession.bind(client);
+
   function session(id: string) {
     const chat = realCreateChatSession(id, "web");
     streamMocks.push(
@@ -165,14 +185,18 @@ test("cognito sends the mode, stores no session id, and ends the old session", a
         purged.push(id);
       })
     );
+
     return chat;
   }
+
   const chatSessions = spyOn(client, "createChatSession").mockImplementation(
     (id) => session(id)
   );
+
   const createSession = spyOn(client, "createSession").mockImplementation(
     async () => session(`created-${createSession.mock.calls.length}`)
   );
+
   const getMessages = spyOn(client, "getSessionMessages").mockImplementation(
     async () => ({
       channel: "web",
@@ -221,9 +245,11 @@ test("cognito sends the mode, stores no session id, and ends the old session", a
     chatSessions.mockRestore();
     createSession.mockRestore();
     getMessages.mockRestore();
+
     for (const stream of streamMocks) {
       stream.mockRestore();
     }
+
     queryClient.clear();
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
@@ -246,26 +272,33 @@ test.each(navigationScenarios)(
   async (scenario) => {
     const { act } = await import("react");
     const { createRoot } = await import("react-dom/client");
+
     const { Route, Routes, useLocation, useNavigate } = await import(
       "react-router-dom"
     );
+
     const { AppContext } = await import("@/context/app-context-shared");
+
     const { useActiveChatProfileStore } = await import(
       "@/context/active-chat-profile-store"
     );
+
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
+
     const previousStorage = Object.getOwnPropertyDescriptor(
       globalThis,
       "localStorage"
     );
+
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
       value: window.localStorage,
     });
     const previousProfile = useActiveChatProfileStore.getState();
     useActiveChatProfileStore.setState({ orgId: null, profileId: "default" });
+
     const response = (id: string) => ({
       channel: "web" as const,
       messageMeta: [],
@@ -274,8 +307,10 @@ test.each(navigationScenarios)(
       questionnaire: null,
       todos: [],
     });
+
     const pending = Promise.withResolvers<ReturnType<typeof response>>();
     const latest = Promise.withResolvers<ReturnType<typeof response>>();
+
     const mocks = [
       spyOn(client, "getMe").mockRejectedValue(new Error("Unauthenticated")),
       spyOn(client, "listUserOrgs").mockResolvedValue({ orgs: [] }),
@@ -287,11 +322,14 @@ test.each(navigationScenarios)(
       spyOn(client, "getSessionStatus").mockImplementation(async (id) => {
         if (id === "b" && scenario === "stale status") {
           await pending.promise;
+
           return { active: true };
         }
+
         return { active: false };
       }),
     ];
+
     const getMessages = spyOn(client, "getSessionMessages").mockImplementation(
       async (id) => {
         if (
@@ -301,23 +339,30 @@ test.each(navigationScenarios)(
         ) {
           return pending.promise;
         }
+
         if (id === "c") {
           return latest.promise;
         }
+
         return response(id);
       }
     );
+
     let page!: ChatPageState;
     let navigate!: ReturnType<typeof useNavigate>;
     let pathname = "";
+
     function Probe() {
       page = useChatPage();
       navigate = useNavigate();
       pathname = useLocation().pathname;
+
       return null;
     }
+
     const container = document.createElement("div");
     const root = createRoot(container);
+
     try {
       await act(async () =>
         root.render(
@@ -354,6 +399,7 @@ test.each(navigationScenarios)(
       getMessages.mockClear();
       await act(async () => navigate("/chat/default/b"));
       expect(pathname).toBe("/chat/default/b");
+
       if (scenario === "switch") {
         expect(page.session?.id).toBe("b");
         expect(getMessages.mock.calls.map(([id]) => id)).toEqual(["b"]);
@@ -392,10 +438,13 @@ test.each(navigationScenarios)(
       await act(async () => root.unmount());
       queryClient.clear();
       getMessages.mockRestore();
+
       for (const mock of mocks) {
         mock.mockRestore();
       }
+
       useActiveChatProfileStore.setState(previousProfile);
+
       if (previousStorage) {
         Object.defineProperty(globalThis, "localStorage", previousStorage);
       } else {
@@ -409,6 +458,7 @@ test("switching chats does not refetch the profile list", async () => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+
   const previousStorage = globalThis.localStorage;
   const stored: Record<string, string> = {};
   Object.defineProperty(globalThis, "localStorage", {
@@ -423,16 +473,20 @@ test("switching chats does not refetch the profile list", async () => {
       },
     },
   });
+
   const spies = [
+    // SAFETY: The mock covers only the fields this page test reads.
     spyOn(client, "getMe").mockResolvedValue({
       activeOrgId: "org1",
       id: "u1",
       isPlatformAdmin: false,
       orgId: "org1",
     } as never),
+    // SAFETY: This test supplies only the organization row used by the page.
     spyOn(client, "listUserOrgs").mockResolvedValue({
       orgs: [{ id: "org1", name: "Org" }],
     } as never),
+    // SAFETY: These fixture fields are the complete session view under test.
     spyOn(client, "getSessionMessages").mockResolvedValue({
       channel: "web",
       messageMeta: [],
@@ -441,28 +495,37 @@ test("switching chats does not refetch the profile list", async () => {
       questionnaire: null,
       todos: [],
     } as never),
+    // SAFETY: The page reads only `active` from this session status fixture.
     spyOn(client, "getSessionStatus").mockResolvedValue({
       active: false,
     } as never),
+    // SAFETY: The test does not use thinking settings.
     spyOn(client, "getThinkingSettings").mockResolvedValue({} as never),
+    // SAFETY: The test reads only profile id and skills from this fixture.
     spyOn(client, "getProfile").mockResolvedValue({
       profile: { id: "p1", skills: [] },
     } as never),
   ];
+
+  // SAFETY: This fixture supplies the profile row used by the page test.
   const listProfiles = spyOn(client, "listProfiles").mockResolvedValue({
     profiles: [{ id: "p1", name: "P1" }],
   } as never);
 
   let navigate!: ReturnType<typeof useNavigate>;
   let page!: ChatPageState;
+
   function Probe() {
     navigate = useNavigate();
     page = useChatPage();
+
     return null;
   }
+
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
+
   const settle = () =>
     act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
@@ -491,14 +554,17 @@ test("switching chats does not refetch the profile list", async () => {
       await act(async () => navigate(path));
       await settle();
     }
+
     expect(listProfiles).toHaveBeenCalledTimes(afterMount);
   } finally {
     await act(async () => root.unmount());
     container.remove();
     listProfiles.mockRestore();
+
     for (const spy of spies) {
       spy.mockRestore();
     }
+
     queryClient.clear();
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
@@ -511,10 +577,12 @@ test("switching orgs clears the old chat while new profiles load", async () => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+
   const previousStorage = Object.getOwnPropertyDescriptor(
     globalThis,
     "localStorage"
   );
+
   Object.defineProperty(globalThis, "localStorage", {
     configurable: true,
     value: window.localStorage,
@@ -525,9 +593,12 @@ test("switching orgs clears the old chat while new profiles load", async () => {
     ["profiles", "orgA"],
     [{ id: "profileA", name: "A" }]
   );
+
   const nextProfiles = Promise.withResolvers<{
     profiles: { id: string; name: string }[];
   }>();
+
+  // SAFETY: These fixture fields cover the session view used by this test.
   const getMessages = spyOn(client, "getSessionMessages").mockResolvedValue({
     channel: "web",
     messageMeta: [],
@@ -536,36 +607,49 @@ test("switching orgs clears the old chat while new profiles load", async () => {
     questionnaire: null,
     todos: [],
   } as never);
+
   const spies = [
+    // SAFETY: The page reads only `active` from this session status fixture.
     spyOn(client, "getSessionStatus").mockResolvedValue({
       active: false,
     } as never),
+    // SAFETY: The test does not use thinking settings.
     spyOn(client, "getThinkingSettings").mockResolvedValue({} as never),
+    // SAFETY: The test reads only profile id and skills from this fixture.
     spyOn(client, "getProfile").mockResolvedValue({
       profile: { id: "profileA", skills: [] },
     } as never),
   ];
+
+  // SAFETY: The deferred result supplies the profile rows asserted by this test.
   const listProfiles = spyOn(client, "listProfiles").mockImplementation(
     () => nextProfiles.promise as never
   );
+
   let page!: ChatPageState;
   let pathname = "";
+
   function Probe() {
     page = useChatPage();
     pathname = useLocation().pathname;
+
     return null;
   }
+
   const container = document.createElement("div");
   const root = createRoot(container);
+
   const settle = () =>
     act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
+
   const renderForOrg = (orgId: string) => (
     <MemoryRouter initialEntries={["/chat/profileA/sessionA"]}>
       <QueryClientProvider client={queryClient}>
         <AuthContext.Provider
           value={
+            /* SAFETY: The test supplies every auth value read by this page. */
             {
               activeOrg: { id: orgId, name: orgId },
               isAuthenticated: true,
@@ -612,11 +696,14 @@ test("switching orgs clears the old chat while new profiles load", async () => {
     client.setOrgId(null);
     getMessages.mockRestore();
     listProfiles.mockRestore();
+
     for (const spy of spies) {
       spy.mockRestore();
     }
+
     queryClient.clear();
     useActiveChatProfileStore.setState(previousProfile);
+
     if (previousStorage) {
       Object.defineProperty(globalThis, "localStorage", previousStorage);
     } else {
@@ -629,20 +716,23 @@ test("waits for the active org profile query before selecting a profile", async 
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+
   useActiveChatProfileStore.setState({ orgId: null, profileId: null });
   const previousStorage = globalThis.localStorage;
-  const stored: Record<string, string> = {
-    "nakama:active-chat-profile": "org-a-profile",
-  };
+
+  const stored = new Map<string, string>([
+    ["nakama:active-chat-profile", "org-a-profile"],
+  ]);
+
   Object.defineProperty(globalThis, "localStorage", {
     configurable: true,
     value: {
-      getItem: (key: string) => stored[key] ?? null,
+      getItem: (key: string) => stored.get(key) ?? null,
       removeItem: (key: string) => {
-        delete stored[key];
+        stored.delete(key);
       },
       setItem: (key: string, value: string) => {
-        stored[key] = value;
+        stored.set(key, value);
       },
     },
   });
@@ -650,25 +740,37 @@ test("waits for the active org profile query before selecting a profile", async 
   const profiles = Promise.withResolvers<{
     profiles: Array<{ id: string; name: string }>;
   }>();
+
+  // SAFETY: The page test reads only these user fields from the response.
   const getMe = spyOn(client, "getMe").mockResolvedValue({
     activeOrgId: "org-b",
     id: "u1",
     isPlatformAdmin: false,
     orgId: "org-b",
   } as never);
+
+  // SAFETY: This test reads only the active organization from the response.
   const listUserOrgs = spyOn(client, "listUserOrgs").mockResolvedValue({
     orgs: [{ id: "org-b", name: "Org B", role: "admin" }],
   } as never);
+
+  // SAFETY: The deferred result supplies the profile rows asserted by this test.
   const listProfiles = spyOn(client, "listProfiles").mockImplementation(
     () => profiles.promise as never
   );
+
+  // SAFETY: The page test reads only profile id, name, and skills.
   const getProfile = spyOn(client, "getProfile").mockResolvedValue({
     profile: { id: "default", name: "Default", skills: [] },
   } as never);
+
+  // SAFETY: The fixture provides the settings used by the page test.
   const getThinkingSettings = spyOn(
     client,
     "getThinkingSettings"
   ).mockResolvedValue({ effort: "medium", enabled: false } as never);
+
+  // SAFETY: These fixture fields cover the session view used by this test.
   const getSessionMessages = spyOn(
     client,
     "getSessionMessages"
@@ -680,25 +782,33 @@ test("waits for the active org profile query before selecting a profile", async 
     questionnaire: null,
     todos: [],
   } as never);
+
+  // SAFETY: This test reads only `active` from the session status fixture.
   const getSessionStatus = spyOn(client, "getSessionStatus").mockResolvedValue({
     active: false,
   } as never);
+
   const chatSession = client.createChatSession("new-session", "web");
+
   const sendStream = spyOn(chatSession, "sendStream").mockResolvedValue(
     "reply"
   );
+
   const createSession = spyOn(client, "createSession").mockResolvedValue(
     chatSession
   );
 
   let page!: ChatPageState;
+
   function Probe() {
     page = useChatPage();
+
     return null;
   }
 
   const container = document.createElement("div");
   const root = createRoot(container);
+
   try {
     await act(async () =>
       root.render(
@@ -719,8 +829,8 @@ test("waits for the active org profile query before selecting a profile", async 
     });
 
     expect(getProfile.mock.calls[0]?.[0]).toBe("default");
-    expect(stored["nakama:active-chat-profile:org-b"]).toBe("default");
-    expect(stored["nakama:active-chat-profile"]).toBeUndefined();
+    expect(stored.get("nakama:active-chat-profile:org-b")).toBe("default");
+    expect(stored.get("nakama:active-chat-profile")).toBeUndefined();
 
     await act(async () => {
       await page.sendMessage("hello");
@@ -729,6 +839,7 @@ test("waits for the active org profile query before selecting a profile", async 
   } finally {
     await act(async () => root.unmount());
     queryClient.clear();
+
     for (const mock of [
       getMe,
       listUserOrgs,
@@ -742,6 +853,7 @@ test("waits for the active org profile query before selecting a profile", async 
     ]) {
       mock.mockRestore();
     }
+
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
       value: previousStorage,

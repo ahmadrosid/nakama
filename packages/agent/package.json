@@ -10,6 +10,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@nakama/core": "workspace:*"
+    "@nakama/core": "workspace:*",
+    "zod": "^4.6.5"
   }
 }
