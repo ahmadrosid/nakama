@@ -35,6 +35,7 @@ export function ChatThinkingEffortControl({
   }
 
   const fullLabel = thinkingEffortLabel(effort);
+
   const shortLabel = ({ high: "High", low: "Low", medium: "Med" } as const)[
     effort
   ];

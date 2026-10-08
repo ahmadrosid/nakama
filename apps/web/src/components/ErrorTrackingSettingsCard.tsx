@@ -25,6 +25,7 @@ export function ErrorTrackingSettingsCard() {
     isLoading,
     error: loadError,
   } = useErrorTrackingSettings();
+
   const saveMutation = useSaveErrorTrackingSettings();
   const testMutation = useSendErrorTrackingTest();
   const [dsn, setDsn] = useState("");
@@ -106,6 +107,7 @@ export function ErrorTrackingSettingsCard() {
               id="error-tracking-dsn"
               onChange={(event) => {
                 setDsn(event.target.value);
+
                 if (formError) {
                   setFormError(null);
                 }

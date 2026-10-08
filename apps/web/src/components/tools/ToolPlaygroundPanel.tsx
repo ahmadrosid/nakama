@@ -119,14 +119,17 @@ interface ConfigField {
 function ToolConfigurationCard({ toolId }: { toolId: string }) {
   const queryClient = useQueryClient();
   const queryKey = ["tool-credentials", toolId];
+
   const status = useQuery({
     queryFn: () => client.getToolCredentialStatus(toolId),
     queryKey,
   });
+
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const envFields = status.data?.env;
+
   // Tools that declare handlerConfig.env get one field per variable; older
   // tools keep the single API key field.
   const fields: ConfigField[] = envFields
@@ -139,6 +142,7 @@ function ToolConfigurationCard({ toolId }: { toolId: string }) {
           secret: true,
         },
       ];
+
   const anyConfigured = fields.some((field) => field.configured);
 
   return (
@@ -146,26 +150,33 @@ function ToolConfigurationCard({ toolId }: { toolId: string }) {
       className="space-y-3 rounded-md border border-border bg-card p-4"
       onSubmit={async (event) => {
         event.preventDefault();
+
         if (saving) {
           return;
         }
+
         const form = event.currentTarget;
         const data = new FormData(form);
         const values: Record<string, string> = {};
+
         for (const field of fields) {
           const value = String(data.get(`tool-config-${field.name}`) ?? "");
+
           // A blank secret keeps the saved value; an unchanged plain value
           // is not sent again.
           if (value.trim() && value !== field.value) {
             values[field.name] = value;
           }
         }
+
         if (Object.keys(values).length === 0) {
           return;
         }
+
         setSaving(true);
         setJustSaved(false);
         setError(null);
+
         try {
           queryClient.setQueryData(
             queryKey,
@@ -173,16 +184,19 @@ function ToolConfigurationCard({ toolId }: { toolId: string }) {
               ? await client.saveToolEnv(toolId, values)
               : await client.saveToolCredential(toolId, values.apiKey ?? "")
           );
+
           for (const field of fields) {
             if (field.secret) {
               const input = form.elements.namedItem(
                 `tool-config-${field.name}`
               );
+
               if (input instanceof HTMLInputElement) {
                 input.value = "";
               }
             }
           }
+
           setJustSaved(true);
         } catch (saveError) {
           setError(formatError(saveError));
@@ -194,6 +208,7 @@ function ToolConfigurationCard({ toolId }: { toolId: string }) {
       <h3 className="type-section-title">Configuration</h3>
       {fields.map((field) => {
         const inputId = `${toolId}-config-${field.name}`;
+
         return (
           <div className="space-y-1.5" key={field.name}>
             <div className="flex items-center justify-between gap-2">

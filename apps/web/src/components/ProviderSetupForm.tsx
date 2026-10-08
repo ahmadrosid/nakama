@@ -56,11 +56,13 @@ export function ProviderSetupForm({
   const form = useProviderSetupForm({ onSuccess });
   const [isBrowsing, setIsBrowsing] = useState(false);
   const ollamaKeyRequired = ollamaRequiresApiKey(form.ollamaHostMode);
+
   const apiKeyOptional =
     form.selectedProvider === "openai_compatible" ||
     form.selectedProvider === "chatgpt" ||
     form.selectedProvider === "xai_oauth" ||
     (form.selectedProvider === "ollama" && !ollamaKeyRequired);
+
   const canConnect =
     form.selectedProvider === "xai_oauth"
       ? Boolean(form.xaiOAuth)
@@ -103,6 +105,7 @@ export function ProviderSetupForm({
           onValueChange={(nextValue) => {
             if (nextValue === "__browse__") {
               setIsBrowsing(true);
+
               return;
             }
 

@@ -166,7 +166,9 @@ export type ChatComposerProps =
   | ChatComposerFullProps;
 
 const EMPTY_TODOS: AgentTodo[] = [];
+
 const EMPTY_QUEUED_MESSAGES: QueuedComposerMessage[] = [];
+
 const EMPTY_SKILLS: SkillSummary[] = [];
 
 function ChatComposerNotice({
@@ -181,12 +183,15 @@ function ChatComposerNotice({
   if (error) {
     return <ChatComposerError message={error} />;
   }
+
   if (headerNotice) {
     return headerNotice;
   }
+
   if (showTips) {
     return <ChatTips />;
   }
+
   return null;
 }
 
@@ -272,6 +277,7 @@ function ChatComposerWorkStack({
 
 const FULL_TEXTAREA_CLASS =
   "max-h-36 min-h-11 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm";
+
 const MINIMAL_TEXTAREA_CLASS =
   "max-h-32 min-h-10 px-1 py-1.5 text-sm leading-relaxed placeholder:text-muted-foreground";
 
@@ -499,9 +505,15 @@ function resolveChatComposerLayout(
   const questionnaire = props.questionnaire ?? null;
   const queuedMessages = props.queuedMessages ?? EMPTY_QUEUED_MESSAGES;
   const hasQuestionnaire = hasActiveAgentQuestionnaire(questionnaire);
+
   const showTodos =
     hasActiveAgentTodos(todos) && !hasQuestionnaire && !displayError;
+
   const hasQueuedMessages = queuedMessages.length > 0;
+
+  const queueStackEdge: ComposerStackEdge =
+    hasQuestionnaire || showTodos ? "continue" : "start";
+
   const availableSkills = isMinimal
     ? EMPTY_SKILLS
     : (props.availableSkills ?? EMPTY_SKILLS);
@@ -516,9 +528,7 @@ function resolveChatComposerLayout(
     placeholder: props.placeholder ?? "Do anything...",
     questionnaire,
     queuedMessages,
-    queueStackEdge: (hasQuestionnaire || showTodos
-      ? "continue"
-      : "start") as ComposerStackEdge,
+    queueStackEdge,
     showOfflineHint: !isMinimal && props.showOfflineHint === true,
     showStacked:
       (hasQuestionnaire || showTodos || hasQueuedMessages) && !isMinimal,
@@ -601,9 +611,11 @@ function ChatComposerMain({
 export function ChatComposer(props: ChatComposerProps) {
   const { activeOrg, updateOrg, user } = useAuth();
   const { textInput } = usePromptInputController();
+
   const [addDialog, setAddDialog] = useState<ComposerAddCommandAction | null>(
     null
   );
+
   useEffect(() => {
     storeComposerDraft(props.draftStorageKey ?? null, textInput.value);
   }, [props.draftStorageKey, textInput.value]);
@@ -612,6 +624,7 @@ export function ChatComposer(props: ChatComposerProps) {
     if (!props.draftStorageKey) {
       return;
     }
+
     storeComposerDraft(props.draftStorageKey, "");
     textInput.clear();
   }
@@ -631,23 +644,31 @@ export function ChatComposer(props: ChatComposerProps) {
     onSubmit: (text, files) => {
       if (matchComposerLearningLoopCommand(text)) {
         clearDraft();
+
         if (!activeOrg) {
           toast("Select an organization before enabling the learning loop.");
+
           return;
         }
+
         void updateOrg(activeOrg.id, { skillsPostTurnReview: true })
           .then(() => toast("Learning loop activated."))
           .catch((error) => toast(formatError(error)));
+
         return;
       }
+
       const addCommand = canAddCapabilities
         ? matchComposerAddCommand(text)
         : null;
+
       if (addCommand) {
         clearDraft();
         openAddCommand(addCommand);
+
         return;
       }
+
       clearDraft();
       props.onSubmit(text, files);
     },
@@ -658,8 +679,10 @@ export function ChatComposer(props: ChatComposerProps) {
         }
       : undefined,
   };
+
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const displayError = props.error ?? attachmentError;
+
   const layout = resolveChatComposerLayout(
     composerProps,
     displayError,
@@ -730,6 +753,7 @@ function ChatComposerTextarea({
 
   const mentionOpen =
     slashRange !== null && controller.textInput.value[slashRange.start] === "@";
+
   const suggestions = useMemo(() => {
     if (!slashRange) {
       return [];
@@ -741,7 +765,9 @@ function ChatComposerTextarea({
           enableAddCommands: onAddCommand != null,
         });
   }, [availableSkills, mentionOpen, onAddCommand, slashRange]);
+
   const pickerOpen = Boolean(slashRange && !disabled && suggestions.length > 0);
+
   const safeActiveIndex =
     suggestions.length === 0
       ? 0
@@ -760,6 +786,7 @@ function ChatComposerTextarea({
       const textarea = textareaRef.current;
       const value = controller.textInput.value;
       const cursorIndex = textarea?.selectionStart ?? value.length;
+
       const activeRange =
         slashRange ??
         findActiveSkillSlashRange(
@@ -774,6 +801,7 @@ function ChatComposerTextarea({
 
       const addAction =
         suggestion.kind === "command" ? suggestion.command.action : undefined;
+
       if (
         onAddCommand &&
         (addAction === "add-tool" ||
@@ -787,6 +815,7 @@ function ChatComposerTextarea({
         setSlashRange(null);
         setActiveIndex(0);
         onAddCommand(addAction);
+
         return;
       }
 
@@ -809,6 +838,7 @@ function ChatComposerTextarea({
                 activeRange,
                 suggestion.command
               );
+
       controller.textInput.setInput(next.value);
       setSlashRange(null);
       setActiveIndex(0);
@@ -858,6 +888,7 @@ function ChatComposerTextarea({
             setActiveIndex((current) =>
               suggestions.length === 0 ? 0 : (current + 1) % suggestions.length
             );
+
             return;
           }
 
@@ -868,6 +899,7 @@ function ChatComposerTextarea({
                 ? 0
                 : (current - 1 + suggestions.length) % suggestions.length
             );
+
             return;
           }
 
@@ -875,6 +907,7 @@ function ChatComposerTextarea({
             event.preventDefault();
             setSlashRange(null);
             setActiveIndex(0);
+
             return;
           }
 
@@ -884,6 +917,7 @@ function ChatComposerTextarea({
           ) {
             event.preventDefault();
             const suggestion = suggestions[safeActiveIndex];
+
             if (suggestion) {
               selectSuggestion(suggestion);
             }
@@ -915,6 +949,7 @@ function ChatModelPicker({
     setModelSearch("");
     setShowModelSearch(false);
   };
+
   const selectModel = (value: string) => {
     void props.onModelChange(value);
     closeModelPicker();
@@ -930,12 +965,16 @@ function ChatModelPicker({
         setShowModelSearch(true);
       }
     };
+
     const observer = new ResizeObserver(showSearchForOverflow);
     observer.observe(modelList);
+
     if (modelList.firstElementChild) {
       observer.observe(modelList.firstElementChild);
     }
+
     showSearchForOverflow();
+
     return () => observer.disconnect();
   }, [modelPickerOpen, modelList]);
 
@@ -1126,6 +1165,7 @@ const composerAttachmentRemoveClassName = cn(
   composerHitTargetClass,
   "absolute top-1 right-1 flex size-7 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-[color,background-color,transform,opacity] hover:bg-background active:scale-[0.96]"
 );
+
 function ChatComposerSubmitButton({
   chatStatus,
   busy,
@@ -1141,9 +1181,11 @@ function ChatComposerSubmitButton({
 }) {
   const controller = usePromptInputController();
   const attachments = usePromptInputAttachments();
+
   const hasContent =
     controller.textInput.value.trim().length > 0 ||
     attachments.files.length > 0;
+
   const { showStop, showSubmit } = composerActions({ canStop, hasContent });
 
   const stopButton = showStop ? (
@@ -1290,6 +1332,7 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
 
     if (!input) {
       attachments.openFileDialog();
+
       return;
     }
 

@@ -37,6 +37,7 @@ import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import { formatError } from "@/lib/client";
 
 const SLACK_NEW_APP_URL = "https://api.slack.com/apps?new_app=1";
+
 /** Slack section of this server's API reference, which carries the setup guide. */
 const SLACK_GUIDE_URL = "/docs#tag/slack";
 
@@ -141,9 +142,11 @@ function MemberIdsInput({
 
   function commit(raw: string) {
     const { ids, invalid } = parseSlackMemberIdInput(raw);
+
     if (ids.length > 0) {
       onChange([...new Set([...value, ...ids])]);
     }
+
     // Leave what was rejected in the field so it can be fixed, not retyped.
     setDraft(invalid.join(" "));
     setError(
@@ -157,8 +160,10 @@ function MemberIdsInput({
     if (event.key === "Enter" || event.key === "," || event.key === " ") {
       event.preventDefault();
       commit(draft);
+
       return;
     }
+
     if (event.key === "Backspace" && !draft && value.length > 0) {
       onChange(value.slice(0, -1));
     }
@@ -325,13 +330,16 @@ function statusBadge(state: {
   if (!state.configured) {
     return "Not set up";
   }
+
   // A running worker can still have lost its Slack socket.
   if (state.running && !state.connected) {
     return "Disconnected";
   }
+
   if (state.linked && state.running) {
     return "Connected";
   }
+
   return state.linked ? "Paired" : "Awaiting link";
 }
 
@@ -351,6 +359,7 @@ function SlackStatusHeader({
   if (embedded) {
     return null;
   }
+
   return (
     <IntegrationStatusHeader
       configured={configured}
@@ -533,6 +542,7 @@ export function SlackSettingsCard({
     error: loadError,
     refetch,
   } = useSlackSettings();
+
   const { data: status } = useSystemStatusQuery();
   const saveMutation = useSaveSlackSettings();
   const regenerateMutation = useRegenerateSlackHandshake();
@@ -562,16 +572,22 @@ export function SlackSettingsCard({
     if (!settings) {
       return;
     }
+
     if (!dirtyRef.current) {
       applySaved(settings);
+
       return;
     }
+
     // Unsaved edits win; a refresh only adds members who paired since.
     const seenPaired = new Set(seenPairedRef.current);
+
     const newlyPaired = settings.pairedUserIds.filter(
       (id) => !seenPaired.has(id)
     );
+
     seenPairedRef.current = settings.pairedUserIds;
+
     if (newlyPaired.length > 0) {
       setAllowedUserIds((current) => [
         ...new Set([...current, ...newlyPaired]),
@@ -586,16 +602,21 @@ export function SlackSettingsCard({
     if (!pairingCodeValue) {
       return;
     }
+
     const startedAt = Date.now();
+
     const timer = setInterval(() => {
       if (Date.now() - startedAt > 10 * 60 * 1000) {
         clearInterval(timer);
+
         return;
       }
+
       if (document.visibilityState === "visible") {
         void refetch();
       }
     }, 5000);
+
     return () => clearInterval(timer);
   }, [pairingCodeValue, refetch]);
 
@@ -604,10 +625,12 @@ export function SlackSettingsCard({
   }
 
   const configured = settings?.configured === true;
+
   const linked =
     settings?.allowWorkspace === true ||
     (settings?.pairedUserIds.length ?? 0) > 0 ||
     (settings?.allowedUserIds.length ?? 0) > 0;
+
   const worker = status?.slackWorker;
   const running = worker?.running === true;
   const connected = worker?.connected === true;
@@ -626,34 +649,44 @@ export function SlackSettingsCard({
   function handleSave() {
     setFormError(null);
     setHint(null);
+
     // The bridge reads tokens when it starts, so a running one needs a restart.
     const needsRestart =
       Boolean(botToken.trim() || appToken.trim()) &&
       worker?.process?.status === "online";
-    saveMutation.mutate(
-      {
-        allowedUserIds: allowedUserIds.join(","),
-        allowWorkspace,
-        ...(botToken.trim() ? { botToken: botToken.trim() } : {}),
-        ...(appToken.trim() ? { appToken: appToken.trim() } : {}),
+
+    const settings: Parameters<typeof saveMutation.mutate>[0] = {
+      allowedUserIds: allowedUserIds.join(","),
+      allowWorkspace,
+    };
+
+    const trimmedBotToken = botToken.trim();
+    const trimmedAppToken = appToken.trim();
+
+    if (trimmedBotToken) {
+      settings.botToken = trimmedBotToken;
+    }
+
+    if (trimmedAppToken) {
+      settings.appToken = trimmedAppToken;
+    }
+
+    saveMutation.mutate(settings, {
+      onError: (error) => setFormError(formatError(error)),
+      onSuccess: (saved) => {
+        dirtyRef.current = false;
+        applySaved(saved);
+        setBotToken("");
+        setAppToken("");
+        setHint(
+          needsRestart
+            ? "Saved. Restart the bridge worker so it uses the new tokens."
+            : saved.handshakeCode
+              ? "Saved. Send the pairing code to the bot in Slack."
+              : "Saved."
+        );
       },
-      {
-        onError: (error) => setFormError(formatError(error)),
-        onSuccess: (saved) => {
-          dirtyRef.current = false;
-          applySaved(saved);
-          setBotToken("");
-          setAppToken("");
-          setHint(
-            needsRestart
-              ? "Saved. Restart the bridge worker so it uses the new tokens."
-              : saved.handshakeCode
-                ? "Saved. Send the pairing code to the bot in Slack."
-                : "Saved."
-          );
-        },
-      }
-    );
+    });
   }
 
   function handleRegenerate() {

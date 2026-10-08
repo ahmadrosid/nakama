@@ -36,11 +36,13 @@ export function ConversationStickinessProvider({
 
 function useConversationStickiness(): ConversationStickinessValue {
   const value = useContext(ConversationStickinessContext);
+
   if (!value) {
     throw new Error(
       "ConversationScrollButton requires ConversationStickinessProvider"
     );
   }
+
   return value;
 }
 

@@ -94,7 +94,9 @@ function DiscordBotTokenFields({
             if (configured) {
               return;
             }
+
             const token = event.clipboardData.getData("text").trim();
+
             if (token) {
               event.preventDefault();
               onBotTokenPaste(token);
@@ -149,9 +151,11 @@ function discordSetupStep(
   if (!configured) {
     return 0;
   }
+
   if (!(running && connected)) {
     return 1;
   }
+
   return hasLinkedUsers ? 3 : 2;
 }
 
@@ -223,6 +227,7 @@ export function DiscordSettingsCardContent({
     worker?.connected === true,
     hasLinkedUsers
   );
+
   const tokenEditor = (
     <DiscordBotTokenFields
       botToken={botToken}
@@ -235,6 +240,7 @@ export function DiscordSettingsCardContent({
       showBotToken={showBotToken}
     />
   );
+
   const workerActions = (
     <WorkerActionBar
       compact
@@ -243,6 +249,7 @@ export function DiscordSettingsCardContent({
       workerName="discord"
     />
   );
+
   const pairing = (
     <DiscordSettingsPairingSection
       compact
@@ -258,6 +265,7 @@ export function DiscordSettingsCardContent({
       savePending={savePending}
     />
   );
+
   const footer = (
     <IntegrationSettingsFooter
       canSave={canSave}
@@ -294,6 +302,7 @@ export function DiscordSettingsCardContent({
       {footer}
     </ChannelSetupChecklist>
   );
+
   if (step < 3) {
     return checklist;
   }

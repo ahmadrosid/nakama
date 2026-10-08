@@ -59,6 +59,7 @@ export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 const lazyMermaidPlugin = createLazyMermaidPlugin(
   () => import("@streamdown/mermaid")
 );
+
 const streamdownPlugins = { cjk, code, math, mermaid: lazyMermaidPlugin };
 
 function renderExternalLinkSafetyModal(props: LinkSafetyModalProps) {
@@ -123,6 +124,7 @@ MessageResponseBody.displayName = "MessageResponseBody";
 
 export function MessageResponse(props: MessageResponseProps) {
   const { resolvedTheme } = useTheme();
+
   const shikiTheme =
     props.shikiTheme ??
     (resolvedTheme === "dark"

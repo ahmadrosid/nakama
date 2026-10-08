@@ -86,20 +86,25 @@ export function AppSidebar({
   const { data: automationUnreadTotal = 0 } = useAutomationUnreadTotal();
   const { collapsed: shellCollapsed, toggle } = useSidebarCollapsed();
   const collapsed = variant === "shell" && shellCollapsed;
+
   const items = visibleNavGroups({
     isPlatformAdmin: user?.isPlatformAdmin === true,
     orgRole: activeOrg?.role,
   })
     .flatMap((group) => group.items)
     .filter((item) => SIDEBAR_PAGE_IDS.includes(item.id));
+
   const { data: orgPlugins = [] } = useOrgPlugins();
   const { pinned } = usePinnedPlugins();
   const pinnedIds = new Set(pinned);
+
   // Built from the enabled list, so a pin hides while its plugin is off.
   const pinnedPlugins = enabledPluginNavEntries(orgPlugins).filter((entry) =>
     pinnedIds.has(entry.pluginId)
   );
+
   const activePluginId = pluginIdFromPath(location.pathname);
+
   const onPinnedPlugin = pinnedPlugins.some(
     (entry) => entry.pluginId === activePluginId
   );
@@ -273,6 +278,7 @@ function RecentChatRow({
   const location = useLocation();
   const href = buildChatPath(profileId, session.id);
   const title = session.title?.trim() || "Untitled chat";
+
   return (
     <div className="group relative flex min-w-0 items-center" key={session.id}>
       <Link
@@ -403,6 +409,7 @@ function PinnedChats({
       SIDEBAR_PINNED_COLLAPSED_KEY,
       getInitialPinnedCollapsed
     );
+
   return sessions.length > 0 ? (
     <div className="mb-3">
       <div className="group mb-1.5 flex shrink-0 items-center gap-1 px-2">
@@ -444,6 +451,7 @@ function RecentChats() {
   const { activeOrg } = useAuth();
   const { profileId: liveChatProfileId, orgId } = useActiveChatProfile();
   const { data: profiles = [] } = useProfilesQuery();
+
   const profileId =
     resolveRecentChatsProfileId({
       liveChatProfileId:
@@ -453,17 +461,22 @@ function RecentChats() {
       profiles,
       search: location.search,
     }) ?? "";
+
   const history = useHistorySessionsQuery(profileId);
   const [search, setSearch] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   // Typing waits a moment before asking the server; clearing is immediate.
   useEffect(() => {
     const next = sessionSearchQuery(search);
+
     if (!next) {
       setSearchQuery("");
+
       return;
     }
+
     const timer = setTimeout(() => setSearchQuery(next), 250);
+
     return () => clearTimeout(timer);
   }, [search]);
   // Idle until there is a search, then its own paged list.
@@ -478,6 +491,7 @@ function RecentChats() {
     if (!(pageEnd && hasNextPage) || isFetchingNextPage) {
       return;
     }
+
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry?.isIntersecting) {
@@ -488,19 +502,24 @@ function RecentChats() {
       // margin starts the next page a little before the end comes into view.
       { root: pageEnd.parentElement, rootMargin: "0px 0px 200px 0px" }
     );
+
     observer.observe(pageEnd);
+
     return () => observer.disconnect();
   }, [pageEnd, hasNextPage, isFetchingNextPage, fetchNextPage]);
   const updateSession = useUpdateSessionMutation();
   const deleteSession = useDeleteSessionMutation();
   const [deleteTarget, setDeleteTarget] = useState<SessionTarget | null>(null);
   const [renameTarget, setRenameTarget] = useState<SessionTarget | null>(null);
+
   const { collapsed, toggle } = useLocalStorageFlag(
     SIDEBAR_RECENTS_COLLAPSED_KEY,
     getInitialRecentsCollapsed
   );
+
   const pinnedSessions = sessions.filter((session) => session.pinned);
   const recentSessions = sessions.filter((session) => !session.pinned);
+
   const renderSession = (session: (typeof sessions)[number]) => (
     <RecentChatRow
       key={session.id}
@@ -597,18 +616,23 @@ function RecentChats() {
           if (!deleteTarget) {
             return;
           }
+
           await deleteSession.mutateAsync(deleteTarget.id);
           setDeleteTarget(null);
         }}
         onRename={async (event) => {
           event.preventDefault();
+
           if (!renameTarget || updateSession.isPending) {
             return;
           }
+
           const title = renameTarget.title.trim();
+
           if (!title) {
             return;
           }
+
           await updateSession.mutateAsync({
             input: { title },
             profileId,

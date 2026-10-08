@@ -52,6 +52,7 @@ export function BrowsableModelFields<T>({
 
     if (customModels.some((model) => model.id === nextModel.id)) {
       setIsBrowsing(false);
+
       return;
     }
 
@@ -62,8 +63,10 @@ export function BrowsableModelFields<T>({
   const handleAddMany = (rows: T[]) => {
     const existingIds = new Set(customModels.map((model) => model.id));
     const nextModels: ModelListRow[] = [];
+
     for (const row of rows) {
       const model = toModelRow(row);
+
       if (existingIds.has(model.id)) {
         continue;
       }

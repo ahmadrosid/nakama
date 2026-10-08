@@ -54,16 +54,20 @@ export function useProviderInstanceCard({
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [xaiOAuth, setXaiOAuth] = useState<XaiOAuthCredentials | null>(null);
+
   const [chatgptOAuth, setChatgptOAuth] =
     useState<ChatgptOAuthCredentials | null>(null);
+
   const [showApiKey, setShowApiKey] = useState(false);
   const [editLabel, setEditLabel] = useState("");
   const [editBaseUrl, setEditBaseUrl] = useState("");
   const [editWireApi, setEditWireApi] = useState<WireApi>("chat");
   const [manageModels, setManageModels] = useState<ModelListRow[]>([]);
+
   const [openRouterRouting, setOpenRouterRouting] =
     useState<OpenRouterRoutingSettings>({});
 
+  // SAFETY: Provider instance summaries use the selected-provider contract.
   const providerType = instance.type as SelectedProvider;
   const isXaiOAuth = providerType === "xai_oauth";
   const isChatgpt = providerType === "chatgpt";
@@ -136,17 +140,22 @@ export function useProviderInstanceCard({
     if (isXaiOAuth) {
       if (!xaiOAuth) {
         setDialogError("Sign in with Grok before saving.");
+
         return;
       }
+
       await runUpdate({ xaiOAuth }, () => {
         setReplaceKeyOpen(false);
         setXaiOAuth(null);
       });
+
       return;
     }
+
     if (isChatgpt) {
       if (!chatgptOAuth) {
         setDialogError("Sign in with ChatGPT before saving.");
+
         return;
       }
 
@@ -154,6 +163,7 @@ export function useProviderInstanceCard({
         setReplaceKeyOpen(false);
         setChatgptOAuth(null);
       });
+
       return;
     }
 
@@ -163,6 +173,7 @@ export function useProviderInstanceCard({
 
     if (nextError) {
       setDialogError(nextError);
+
       return;
     }
 
@@ -190,34 +201,38 @@ export function useProviderInstanceCard({
   const saveCompatible = async () => {
     const displayNameError =
       providerType === "netra" ? null : validateDisplayNameInput(editLabel);
+
     const baseUrlError =
       providerType === "netra" ? null : validateBaseUrlInput(editBaseUrl);
+
     const modelsError = validateCustomModelsInput(manageModels);
 
     if (displayNameError || baseUrlError || modelsError) {
       setDialogError(displayNameError ?? baseUrlError ?? modelsError);
+
       return;
     }
 
-    await runUpdate(
-      {
-        ...(providerType === "netra"
-          ? {}
-          : { baseUrl: editBaseUrl, label: editLabel }),
-        ...(isOllama
-          ? {
-              hostMode: editBaseUrl.toLowerCase().includes("ollama.com")
-                ? ("cloud" as const)
-                : ("local" as const),
-            }
-          : {}),
-        customModels: normalizeModelListRows(manageModels),
-        ...(isOllama || providerType === "netra"
-          ? {}
-          : { wireApi: editWireApi }),
-      },
-      () => setEditOpen(false)
-    );
+    const request: UpdateProviderRequest = {
+      customModels: normalizeModelListRows(manageModels),
+    };
+
+    if (providerType !== "netra") {
+      request.baseUrl = editBaseUrl;
+      request.label = editLabel;
+    }
+
+    if (isOllama) {
+      request.hostMode = editBaseUrl.toLowerCase().includes("ollama.com")
+        ? "cloud"
+        : "local";
+    }
+
+    if (!isOllama && providerType !== "netra") {
+      request.wireApi = editWireApi;
+    }
+
+    await runUpdate(request, () => setEditOpen(false));
   };
 
   const saveManageModels = async () => {
@@ -231,20 +246,24 @@ export function useProviderInstanceCard({
 
     if (modelsError) {
       setDialogError(modelsError);
+
       return;
     }
 
-    await runUpdate(
-      {
-        customModels: normalizeModelListRows(manageModels),
-        ...(isOpenRouter ? { openRouterRouting } : {}),
-      },
-      () => setManageOpen(false)
-    );
+    const request: UpdateProviderRequest = {
+      customModels: normalizeModelListRows(manageModels),
+    };
+
+    if (isOpenRouter) {
+      request.openRouterRouting = openRouterRouting;
+    }
+
+    await runUpdate(request, () => setManageOpen(false));
   };
 
   const handleManageModelsChange = (rows: ModelListRow[]) => {
     setManageModels(rows);
+
     if (dialogError) {
       setDialogError(null);
     }

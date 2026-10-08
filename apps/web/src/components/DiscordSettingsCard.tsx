@@ -27,8 +27,10 @@ function hydrateAllowedUsers(
   allowedUserIds: Array<string | number>
 ): AllowedDiscordUser[] {
   const existing = new Map(current.map((user) => [user.id, user]));
+
   return allowedUserIds.map((id) => {
     const stringId = String(id);
+
     return existing.get(stringId) ?? { id: stringId };
   });
 }
@@ -44,7 +46,7 @@ function formatAllowedUserSummary(count: number): string {
 function settingsStatusLine(
   hint: string | null,
   formError: string | null,
-  loadError: unknown
+  loadError: Error | null
 ): string | null {
   if (hint) {
     return hint;
@@ -128,12 +130,14 @@ function DiscordSettingsLoading({ embedded }: { embedded: boolean }) {
 
 function useDiscordSettingsCard(onSaveSuccess?: () => void) {
   const ownerProfileId = useChannelProfileId();
+
   const {
     data: settings,
     isLoading,
     error: loadError,
     refetch,
   } = useDiscordSettings();
+
   const { data: status } = useSystemStatusQuery();
   const saveMutation = useSaveDiscordSettings();
   const startMutation = useStartWorker();
@@ -197,9 +201,11 @@ function useDiscordSettingsCard(onSaveSuccess?: () => void) {
     try {
       await navigator.clipboard.writeText(pairingCode);
       setCopied(true);
+
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current);
       }
+
       copyTimeoutRef.current = setTimeout(() => {
         setCopied(false);
         copyTimeoutRef.current = null;
@@ -213,6 +219,7 @@ function useDiscordSettingsCard(onSaveSuccess?: () => void) {
     if (savingRef.current || !token.trim()) {
       return;
     }
+
     savingRef.current = true;
     setFormError(null);
     setHint(null);
@@ -221,10 +228,13 @@ function useDiscordSettingsCard(onSaveSuccess?: () => void) {
       const saved = await saveMutation.mutateAsync(
         buildDiscordSaveRequest(allowedUsers, profileId, token)
       );
+
       setBotToken("");
+
       if (!configured && worker?.process?.managed) {
         await startMutation.mutateAsync("discord");
       }
+
       setHint(channelSaveHint(saved));
       onSaveSuccess?.();
     } catch (err) {
@@ -306,6 +316,7 @@ function DiscordSettingsCardLoaded({
       onBotTokenChange={(value) => {
         card.setBotToken(value);
         card.setHint(null);
+
         if (card.formError) {
           card.setFormError(null);
         }

@@ -307,6 +307,7 @@ export function WhatsAppSettingsLinkingSection({
   compact?: boolean;
 }) {
   const [relinkMethod, setRelinkMethod] = useState<"code" | "qr" | null>(null);
+
   return (
     <div className="divide-y divide-border border-border border-t">
       {relinkMethod ? (

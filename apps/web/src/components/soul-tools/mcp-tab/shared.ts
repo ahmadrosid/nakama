@@ -43,8 +43,10 @@ export function resolveFormTransport(
 export function argsToArray(values: string[]): string[] | undefined {
   const items = values.flatMap((value) => {
     const trimmed = value.trim();
+
     return trimmed ? [trimmed] : [];
   });
+
   return items.length > 0 ? items : undefined;
 }
 

@@ -63,6 +63,7 @@ export function DiscordAllowedUsersDialog({
 
     try {
       const parsed = parseDiscordUserIds(newUserId);
+
       if (parsed.length === 0) {
         return;
       }

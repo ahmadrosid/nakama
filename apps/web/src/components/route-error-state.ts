@@ -12,10 +12,12 @@ export function shouldReloadAfterRouteError(
   now = Date.now()
 ): boolean {
   const message = error?.toLowerCase() ?? "";
+
   const isStaleChunk =
     message.includes("failed to fetch dynamically imported module") ||
     message.includes("loading chunk") ||
     message.includes("chunkloaderror");
+
   if (!isStaleChunk) {
     return false;
   }
@@ -23,6 +25,7 @@ export function shouldReloadAfterRouteError(
   const key = "nakama:route-reload-at";
   const stored = storage.getItem(key);
   const previous = stored === null ? null : Number(stored);
+
   if (
     previous !== null &&
     Number.isFinite(previous) &&
@@ -32,6 +35,7 @@ export function shouldReloadAfterRouteError(
   }
 
   storage.setItem(key, String(now));
+
   return true;
 }
 

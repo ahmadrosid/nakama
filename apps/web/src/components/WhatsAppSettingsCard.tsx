@@ -12,6 +12,7 @@ interface WhatsAppSettingsCardProps {
 
 export function WhatsAppSettingsCard(props: WhatsAppSettingsCardProps) {
   const { activeOrg } = useAuth();
+
   return <WhatsAppSettingsCardForOrg key={activeOrg?.id} {...props} />;
 }
 

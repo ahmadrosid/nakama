@@ -30,6 +30,7 @@ export function McpToolList({
 
     return tools.filter((tool) => {
       const haystack = `${tool.name} ${tool.description ?? ""}`.toLowerCase();
+
       return haystack.includes(trimmed);
     });
   }, [query, tools]);
@@ -96,7 +97,9 @@ function formatMcpToolParamSummary(
   const requiredCount = parameters.filter(
     (parameter) => parameter.required
   ).length;
+
   const suffix = requiredCount > 0 ? ` · ${requiredCount} required` : "";
+
   return `${parameters.length} param${parameters.length === 1 ? "" : "s"}${suffix}`;
 }
 

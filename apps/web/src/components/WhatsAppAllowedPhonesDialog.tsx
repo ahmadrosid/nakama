@@ -77,6 +77,7 @@ export function WhatsAppAllowedPhonesDialog({
       phones = parseAllowedWhatsAppPhones(newPhoneInput);
     } catch (error) {
       setFormError(error instanceof Error ? error.message : String(error));
+
       return;
     }
 
@@ -104,6 +105,7 @@ export function WhatsAppAllowedPhonesDialog({
               disabled={saveMutation.isPending}
               onChange={(event) => {
                 setNewPhoneInput(event.target.value);
+
                 if (formError) {
                   setFormError(null);
                 }
@@ -189,6 +191,7 @@ export function WhatsAppAllowedPhonesDialog({
               const nextPhones = allowedPhones.filter(
                 (phone) => phone !== removeTarget
               );
+
               await saveMutation.mutateAsync({
                 allowedPhones: nextPhones.join(","),
                 profileId: profileId.trim() || "default",

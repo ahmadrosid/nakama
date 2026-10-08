@@ -45,6 +45,7 @@ export function ToolAssignDialog({
 
   function setOpen(nextOpen: boolean) {
     onOpenChange?.(nextOpen);
+
     if (openProp === undefined) {
       setUncontrolledOpen(nextOpen);
     }

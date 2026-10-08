@@ -33,6 +33,7 @@ const sizePixels = {
 /** Two OKLCH tones derived from the profile hash — same hash ⇒ same palette. */
 function tonesFromHash(hash: string): [string, string] {
   const [h1, h2, l1, l2, c1, c2] = hashToSeeds(hash, 6);
+
   return [
     oklchToCss({
       c: 0.16 + c1 * 0.14,
@@ -53,6 +54,7 @@ function resolveAvatarSrc(
   orgId?: string
 ): string | null {
   const uploaded = getProfileAvatarUrl(profile, orgId);
+
   if (uploaded) {
     return uploaded;
   }

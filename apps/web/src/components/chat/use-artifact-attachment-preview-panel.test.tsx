@@ -23,9 +23,11 @@ test("opening an artifact preview does not update the panel on every render", as
     const [config, setConfig] = useState<ChatAttachmentPanelConfig | null>(
       null
     );
+
     const show = useCallback((next: ChatAttachmentPanelConfig) => {
       setConfig(next);
     }, []);
+
     const update = useCallback(
       (id: string, patch: Partial<ChatAttachmentPanelConfig>) => {
         updates += 1;
@@ -35,6 +37,7 @@ test("opening an artifact preview does not update the panel on every render", as
       },
       []
     );
+
     return (
       <ChatAttachmentPanelContext.Provider
         value={{
@@ -63,16 +66,18 @@ test("opening an artifact preview does not update the panel on every render", as
       id: "report",
       profileId: "profile",
     }));
+
     return null;
   }
+
+  // SAFETY: Preview reads only activeOrg and user from this fixture.
+  const auth = { activeOrg: null, user: null } as AuthContextValue;
 
   try {
     await act(async () =>
       root.render(
         <QueryClientProvider client={queryClient}>
-          <AuthContext.Provider
-            value={{ activeOrg: null, user: null } as AuthContextValue}
-          >
+          <AuthContext.Provider value={auth}>
             <Preview />
           </AuthContext.Provider>
         </QueryClientProvider>

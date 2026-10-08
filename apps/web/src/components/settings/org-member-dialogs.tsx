@@ -43,6 +43,7 @@ function OrgMemberInviteForm({
   const { data: emailSettings, isLoading: emailSettingsLoading } = useQuery(
     emailSettingsQueryOptions
   );
+
   const emailConfigured = emailSettings?.configured === true;
 
   return (

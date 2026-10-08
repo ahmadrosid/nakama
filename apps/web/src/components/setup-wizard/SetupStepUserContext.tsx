@@ -25,6 +25,7 @@ interface SetupStepUserContextProps {
 
 export function SetupStepUserContext(props: SetupStepUserContextProps) {
   const { activeOrg } = useAuth();
+
   return <SetupUserContextSession key={activeOrg?.id} {...props} />;
 }
 
@@ -47,7 +48,9 @@ function SetupUserContextSession({
     includeContent: true,
     orgId,
   });
+
   const writeMutation = useWriteUserContextMutation();
+
   const { content, savedContent, setContent, setSavedContent } =
     useUserContextEditor({
       defaultName: user?.name,
@@ -68,6 +71,7 @@ function SetupUserContextSession({
     if (content !== savedContent) {
       writeUserContextDraft(orgId, content);
     }
+
     onSkip();
   }
 
@@ -75,11 +79,13 @@ function SetupUserContextSession({
     if (busy || isLoading || loadError) {
       return;
     }
+
     setFormError(null);
 
     if (content === savedContent) {
       clearUserContextDraft(orgId);
       onNext();
+
       return;
     }
 
@@ -116,6 +122,7 @@ function SetupUserContextSession({
             idPrefix="setup-user-context"
             onChange={(next) => {
               setContent(next);
+
               if (formError) {
                 setFormError(null);
               }

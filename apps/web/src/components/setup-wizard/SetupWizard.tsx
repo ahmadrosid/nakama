@@ -13,12 +13,27 @@ import type {
 import { useAppContext } from "@/context/use-app-context";
 import { pathForPage } from "@/lib/navigation";
 
+const NEXT_STEP: Record<SetupStepId, SetupStepId> = {
+  1: 2,
+  2: 3,
+  3: 4,
+  4: 4,
+};
+
+const PREVIOUS_STEP: Record<SetupStepId, SetupStepId> = {
+  1: 1,
+  2: 1,
+  3: 2,
+  4: 3,
+};
+
 export function SetupWizard({ onComplete }: SetupWizardProps) {
   const navigate = useNavigate();
   const { health } = useAppContext();
   const userAlreadyConfigured = health?.userConfigured === true;
   const firstStep: SetupStepId = userAlreadyConfigured ? 3 : 1;
   const [currentStep, setCurrentStep] = useState<SetupStepId>(firstStep);
+
   const [accountDraft, setAccountDraft] = useState<SetupAccountDraft | null>(
     null
   );
@@ -30,21 +45,11 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
   }, [currentStep, accountDraft, userAlreadyConfigured]);
 
   const goNext = useCallback(() => {
-    setCurrentStep((prev) => {
-      if (prev >= 4) {
-        return 4;
-      }
-      return (prev + 1) as SetupStepId;
-    });
+    setCurrentStep((prev) => NEXT_STEP[prev]);
   }, []);
 
   const goSkip = useCallback(() => {
-    setCurrentStep((prev) => {
-      if (prev >= 4) {
-        return 4;
-      }
-      return (prev + 1) as SetupStepId;
-    });
+    setCurrentStep((prev) => NEXT_STEP[prev]);
   }, []);
 
   const goBack = useCallback(() => {
@@ -52,7 +57,8 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
       if (prev <= firstStep) {
         return firstStep;
       }
-      return (prev - 1) as SetupStepId;
+
+      return PREVIOUS_STEP[prev];
     });
   }, [firstStep]);
 
@@ -113,6 +119,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
         if (!accountDraft) {
           return null;
         }
+
         return (
           <SetupStepOrganization
             account={accountDraft}

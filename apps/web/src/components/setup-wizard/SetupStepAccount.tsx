@@ -44,11 +44,13 @@ export function SetupStepAccount({ onNext }: SetupStepAccountProps) {
 
     if (password !== confirmPassword) {
       setError("Passwords do not match");
+
       return;
     }
 
     if (password.length < 8) {
       setError("Password must be at least 8 characters");
+
       return;
     }
 
@@ -161,9 +163,11 @@ export function SetupStepAccount({ onNext }: SetupStepAccountProps) {
             onChange={(event) => {
               const file = event.target.files?.[0] ?? null;
               event.target.value = "";
+
               if (!file) {
                 return;
               }
+
               setInitialBackupFile(file);
               setMode("backup");
             }}

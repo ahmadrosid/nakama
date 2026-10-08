@@ -81,6 +81,7 @@ export function WhatsAppSettingsCardContent({
   onSave: () => void;
 }) {
   const paneItemClass = "px-4 py-3";
+
   const linking = (
     <WhatsAppSettingsLinkingSection
       awaitingQr={awaitingQr}
@@ -102,6 +103,7 @@ export function WhatsAppSettingsCardContent({
       showReconnect={showReconnect}
     />
   );
+
   const footer = (
     <IntegrationSettingsFooter
       canSave={canSave}
@@ -115,12 +117,14 @@ export function WhatsAppSettingsCardContent({
       submitLabel={actionLabel}
     />
   );
+
   const step =
     !(configured && running) || (paired && statusBadge !== "Connected")
       ? 0
       : paired && !showQr
         ? 2
         : 1;
+
   const checklist = (
     <ChannelSetupChecklist
       label="WhatsApp setup progress"
@@ -146,9 +150,11 @@ export function WhatsAppSettingsCardContent({
       {footer}
     </ChannelSetupChecklist>
   );
+
   if (step < 2) {
     return checklist;
   }
+
   return (
     <div className="space-y-4">
       {checklist}

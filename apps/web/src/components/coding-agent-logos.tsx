@@ -135,15 +135,19 @@ export function CodingAgentCommandLogo({
   fallback: ReactNode;
 }) {
   const match = command.trim().match(CODING_AGENT_COMMAND_PATTERN)?.[1];
+
   if (!match) {
     return fallback;
   }
+
+  // SAFETY: CODING_AGENT_COMMAND_PATTERN only matches the logo keys below.
   const Logo =
     CODING_AGENT_LOGOS[
       match === "cursor-agent"
         ? "agent"
         : (match as keyof typeof CODING_AGENT_LOGOS)
     ];
+
   return <Logo className={className} />;
 }
 

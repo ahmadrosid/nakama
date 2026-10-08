@@ -140,6 +140,7 @@ async function copyArtifactContent({
 
   try {
     let text = content;
+
     if (!text) {
       const result = await client.readProfileArtifactContent(
         profileId,
@@ -149,6 +150,7 @@ async function copyArtifactContent({
           render: isWordDocument ? "markdown" : undefined,
         }
       );
+
       text = new TextDecoder().decode(result.data);
       setContent(text);
     }
@@ -170,46 +172,58 @@ export function useArtifactAttachmentPreviewPanel({
   artifact: ChatArtifactRef;
 }) {
   const { show, update, activeId } = useChatAttachmentPanel();
+
   const share = useArtifactShareControls({
     artifactPath: artifact.path,
     profileId,
   });
+
   const open = activeId === id;
   const [fullscreen, setFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
+
   const [previewMode, setPreviewMode] =
     useState<ArtifactPreviewMode>("preview");
+
   const [editMode, setEditMode] = useState<EditMode>(null);
   const [draft, setDraft] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
   const { activeOrg } = useAuth();
   const writeArtifact = useWriteArtifactMutation();
   const downloadUrl = `${client.baseUrl}${buildArtifactContentUrl(profileId, artifact.path)}`;
+
   const mimeType = resolveArtifactMimeType(
     artifact.mimeType,
     artifact.filename
   );
+
   const isHtml = isHtmlArtifactMimeType(mimeType);
   const isImage = isImageArtifactMimeType(mimeType);
   const isVideo = isVideoArtifactMimeType(mimeType);
   const isPdf = mimeType === "application/pdf";
+
   const isWordDocument =
     isDocxFile(artifact.filename, mimeType) ||
     isLegacyDocFile(artifact.filename, mimeType);
+
   const isMarkdown = isMarkdownArtifactMimeType(mimeType) || isWordDocument;
   const isSpreadsheet = isDelimitedSpreadsheetFile(artifact.filename, mimeType);
+
   const showPreviewToggle = artifactCanTogglePreviewSource({
     isHtml,
     isMarkdown,
     isSpreadsheet,
   });
+
   const header = artifactPanelHeaderMeta({
     filename: artifact.filename,
     mimeType,
     showPreviewToggle,
     sizeBytes: artifact.sizeBytes,
   });
+
   const language = artifactCodeLanguage(artifact.filename);
+
   const canPreview =
     isHtml ||
     isImage ||
@@ -218,10 +232,13 @@ export function useArtifactAttachmentPreviewPanel({
     isWordDocument ||
     isTextArtifactMimeType(mimeType) ||
     isUnknownArtifactMimeType(mimeType);
+
   const downloadLabel = downloadActionLabel(mimeType);
+
   const canEdit =
     ((isMarkdown && !isWordDocument) || isSpreadsheet) &&
     activeOrg?.role !== "viewer";
+
   const {
     loading,
     error,
@@ -248,6 +265,7 @@ export function useArtifactAttachmentPreviewPanel({
     }
 
     const timeout = window.setTimeout(() => setCopied(false), 2000);
+
     return () => window.clearTimeout(timeout);
   }, [copied]);
 
@@ -433,10 +451,13 @@ export function useArtifactAttachmentPreviewPanel({
           }
           onEdit={() => {
             setSaveError(null);
+
             if (isSpreadsheet) {
               setEditMode("spreadsheet");
+
               return;
             }
+
             setDraft(content ?? "");
             setEditMode("markdown");
           }}

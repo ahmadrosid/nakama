@@ -34,6 +34,7 @@ interface ProfileCreateDialogProps {
 }
 
 const defaultCreatePrompt = "You are a helpful assistant.";
+
 const PROFILE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
 type ProfileCreateFormState = {
@@ -72,6 +73,7 @@ function profileCreateFormReducer(
       if (state.avatarPreview) {
         URL.revokeObjectURL(state.avatarPreview);
       }
+
       return initialProfileCreateFormState;
     case "patch":
       return { ...state, ...action.values };
@@ -79,6 +81,7 @@ function profileCreateFormReducer(
       if (!action.toolId || state.toolIds.includes(action.toolId)) {
         return state;
       }
+
       return { ...state, toolIds: [...state.toolIds, action.toolId] };
     case "remove-tool":
       return {
@@ -89,8 +92,10 @@ function profileCreateFormReducer(
       if (action.revokePrevious && state.avatarPreview) {
         URL.revokeObjectURL(state.avatarPreview);
       }
+
       return { ...state, avatarPreview: action.preview };
     }
+
     default:
       return state;
   }
@@ -132,23 +137,30 @@ function ProfileCreateDialogContent({
   const uploadAvatarMutation = useUploadProfileAvatarMutation();
   const assignToolMutation = useAssignToolMutation();
   const createAvatarInputRef = useRef<HTMLInputElement>(null);
+
   const [form, dispatch] = useReducer(
     profileCreateFormReducer,
     initialProfileCreateFormState
   );
+
   const avatarFileRef = useRef<File | null>(null);
 
   const busy =
     createMutation.isPending ||
     uploadAvatarMutation.isPending ||
     assignToolMutation.isPending;
+
   const profileIdTrimmed = form.profileId.trim();
+
   const profileIdValid =
     !profileIdTrimmed || PROFILE_ID_PATTERN.test(profileIdTrimmed);
+
   const profileIdHasValue = form.profileId.length > 0;
+
   const profileIdHelpText = profileIdValid
     ? "Optional. Letters, numbers, `_`, `-` only."
     : "Agent id must start with a letter or number and only use letters, numbers, `_`, or `-`.";
+
   const toolIdSet = useMemo(() => new Set(form.toolIds), [form.toolIds]);
   const availableTools = tools.filter((tool) => !toolIdSet.has(tool.id));
   const selectableTools = availableTools;
@@ -199,6 +211,7 @@ function ProfileCreateDialogContent({
             : "Name is required.",
         },
       });
+
       return;
     }
 
@@ -212,6 +225,7 @@ function ProfileCreateDialogContent({
       });
 
       const avatarFile = avatarFileRef.current;
+
       if (avatarFile) {
         const attachment = await fileToImageAttachment(avatarFile);
 

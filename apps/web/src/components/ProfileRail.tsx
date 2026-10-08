@@ -16,6 +16,7 @@ import { ditherLogoSrc } from "@/lib/theme";
 export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { activeProfileId, onProfilesPage, profiles, selectProfile } =
     useSelectProfile();
+
   const { user, activeOrg } = useAuth();
   const { resolvedTheme } = useTheme();
   const { syncForOrg } = useActiveChatProfile();
@@ -26,10 +27,12 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
     if (profiles.length === 0) {
       return;
     }
+
     syncForOrg({ orgId: activeOrg?.id ?? null, profiles });
   }, [activeOrg?.id, profiles, syncForOrg]);
 
   const logoSrc = ditherLogoSrc(resolvedTheme);
+
   const orderedProfiles = profiles.toSorted(
     (left, right) => Number(right.isSuper) - Number(left.isSuper)
   );
@@ -60,6 +63,7 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
       <div className="no-scrollbar flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto px-1 py-1">
         {orderedProfiles.map((profile) => {
           const active = profile.id === activeProfileId;
+
           const trigger = (
             <button
               aria-current={active ? "true" : undefined}
@@ -106,11 +110,13 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
 
               if (!onProfilesPage) {
                 navigate(pathForPage("profiles"));
+
                 return;
               }
 
               if (location.pathname !== PAGE_PATHS.profiles) {
                 navigate(`${PAGE_PATHS.profiles}?create=1`);
+
                 return;
               }
 

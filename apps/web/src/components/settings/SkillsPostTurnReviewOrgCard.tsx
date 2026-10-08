@@ -21,6 +21,7 @@ export function SkillsPostTurnReviewOrgCard() {
 
   async function handleToggle(checked: boolean) {
     setBusy(true);
+
     try {
       await updateOrg(activeOrg!.id, { skillsPostTurnReview: checked });
       toast(

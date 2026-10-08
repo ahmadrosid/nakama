@@ -49,6 +49,7 @@ export function TelegramAllowedUsersDialog({
   const [importDraft, setImportDraft] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+
   const [removeTarget, setRemoveTarget] = useState<AllowedTelegramUser | null>(
     null
   );
@@ -91,6 +92,7 @@ export function TelegramAllowedUsersDialog({
       users = parseAllowedTelegramUsers(newAllowedUserInput);
     } catch (error) {
       setFormError(error instanceof Error ? error.message : String(error));
+
       return;
     }
 
@@ -122,6 +124,7 @@ export function TelegramAllowedUsersDialog({
       users = parseAllowedTelegramUsers(importDraft);
     } catch (error) {
       setImportError(error instanceof Error ? error.message : String(error));
+
       return;
     }
 
@@ -184,6 +187,7 @@ export function TelegramAllowedUsersDialog({
                 disabled={saveMutation.isPending}
                 onChange={(event) => {
                   setNewAllowedUserInput(event.target.value);
+
                   if (formError) {
                     setFormError(null);
                   }

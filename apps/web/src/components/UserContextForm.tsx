@@ -75,23 +75,28 @@ export function UserContextForm({
   // Keep unfinished whitespace while typing; the saved notes are trimmed.
   const [introDraft, setIntroDraft] = useState<string | null>(null);
   const [customHelpOpen, setCustomHelpOpen] = useState<boolean | null>(null);
+
   const suggestions = helpSuggestionsForContext(
     [extra, answers.role, answers.projects].filter(Boolean).join(" ")
   );
+
   const help = answers.help ?? "";
   const selected = new Set(splitList(help));
   const suggestionSet = new Set(suggestions);
+
   const showCustomHelp =
     customHelpOpen ??
     (help !== "" && [...selected].some((item) => !suggestionSet.has(item)));
 
   function toggleHelp(suggestion: string) {
     const next = new Set(selected);
+
     if (next.has(suggestion)) {
       next.delete(suggestion);
     } else {
       next.add(suggestion);
     }
+
     setAnswer("help", [...next].join(", "));
   }
 

@@ -13,7 +13,7 @@ import { client, formatError } from "@/lib/client";
 export function useAuthenticatedImagePreview(
   profileId: string | null | undefined,
   artifactPath: string | null | undefined
-): { error: string | null; url: string | null } {
+) {
   const [blob, setBlob] = useState<Blob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const url = useBlobObjectUrl(blob);
@@ -22,6 +22,7 @@ export function useAuthenticatedImagePreview(
     if (!(profileId?.trim() && artifactPath?.trim())) {
       setBlob(null);
       setError(null);
+
       return;
     }
 
@@ -37,15 +38,18 @@ export function useAuthenticatedImagePreview(
         }
 
         const filename = artifactPath.split("/").pop() ?? artifactPath;
+
         const contentType = resolveArtifactMimeType(
           result.contentType,
           filename
         );
+
         if (!isImageArtifactMimeType(contentType)) {
           setBlob(null);
           setError(
             "Preview is not available for this file type. Download instead."
           );
+
           return;
         }
 
@@ -72,11 +76,13 @@ function useBlobObjectUrl(blob: Blob | null) {
   useEffect(() => {
     if (!blob) {
       setUrl(null);
+
       return;
     }
 
     const nextUrl = URL.createObjectURL(blob);
     setUrl(nextUrl);
+
     return () => URL.revokeObjectURL(nextUrl);
   }, [blob]);
 
@@ -144,6 +150,7 @@ export function useArtifactPreviewContent({
           result.contentType,
           artifact.filename
         );
+
         const servedAsHtml = isHtmlArtifactMimeType(contentType);
         const servedAsImage = isImageArtifactMimeType(contentType);
         const servedAsVideo = isVideoArtifactMimeType(contentType);
@@ -153,10 +160,12 @@ export function useArtifactPreviewContent({
             setError(
               "Preview is not available for this file type. Download instead."
             );
+
             return;
           }
 
           setMediaBlob(new Blob([result.data], { type: contentType }));
+
           return;
         }
 
@@ -165,10 +174,12 @@ export function useArtifactPreviewContent({
             setError(
               "Preview is not available for this file type. Download instead."
             );
+
             return;
           }
 
           setMediaBlob(new Blob([result.data], { type: contentType }));
+
           return;
         }
 
@@ -177,10 +188,12 @@ export function useArtifactPreviewContent({
             setError(
               "Preview is not available for this file type. Download instead."
             );
+
             return;
           }
 
           setMediaBlob(new Blob([result.data], { type: contentType }));
+
           return;
         }
 
@@ -188,6 +201,7 @@ export function useArtifactPreviewContent({
           setError(
             "Preview is not available for this file type. Download instead."
           );
+
           return;
         }
 
@@ -201,6 +215,7 @@ export function useArtifactPreviewContent({
           setError(
             "Preview is not available for this file type. Download instead."
           );
+
           return;
         }
 

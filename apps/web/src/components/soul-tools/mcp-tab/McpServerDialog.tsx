@@ -20,6 +20,7 @@ import { McpServerDialogForm } from "@/components/soul-tools/mcp-tab/mcp-server-
 import { useMcpServerDialogState } from "@/components/soul-tools/mcp-tab/use-mcp-server-dialog-state";
 
 type AddMcpMode = "existing" | "new";
+
 type McpServerDialogState = ReturnType<typeof useMcpServerDialogState>;
 
 function mcpServerDialogDescription({
@@ -37,6 +38,7 @@ function mcpServerDialogDescription({
     if (transport === "stdio") {
       return "Update the command, args, or environment. Leave values blank to keep the current ones.";
     }
+
     return "Update the server URL or headers. Leave values blank to keep the current ones.";
   }
 
@@ -189,9 +191,11 @@ function McpServerDialogCreateForm({
         }}
         onCommandChange={(value) => {
           state.setCommand(value);
+
           if (value.trim()) {
             state.selectKind("stdio");
           }
+
           state.clearTestResult();
         }}
         onEnvChange={(nextEnv) => {
@@ -358,8 +362,10 @@ export function McpServerDialog({
   onTestConnection?: (server: McpServerSummary) => void;
 }) {
   const state = useMcpServerDialogState({ busy, onSubmit, open, server });
+
   const canAssignExisting =
     !state.isEdit && onAssign != null && (availableServers?.length ?? 0) > 0;
+
   const defaultMode: AddMcpMode = canAssignExisting ? "existing" : "new";
   const modeResetKey = open ? "open" : "closed";
   const [mode, setMode] = useState<AddMcpMode>(defaultMode);
@@ -367,6 +373,7 @@ export function McpServerDialog({
 
   if (modeResetKey !== prevModeResetKey) {
     setPrevModeResetKey(modeResetKey);
+
     if (open) {
       setMode(defaultMode);
     }
@@ -413,6 +420,7 @@ export function McpServerDialog({
         onApply={state.handleImportApply}
         onImportDraftChange={(value) => {
           state.setImportDraft(value);
+
           if (state.importError) {
             state.setImportError(null);
           }

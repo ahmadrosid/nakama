@@ -23,6 +23,7 @@ export function TelegramQrSetup({
   const [pairing, setPairing] = useState<TelegramPairingStartResponse | null>(
     null
   );
+
   const [error, setError] = useState<string | null>(null);
   const start = useStartTelegramPairing();
   const status = useTelegramPairingStatus(pairing?.pairingId ?? null);
@@ -32,6 +33,7 @@ export function TelegramQrSetup({
 
   const startWorker = useStartWorker();
   const restartWorker = useRestartWorker();
+
   function startPairing() {
     setError(null);
     start.mutate(
@@ -49,6 +51,7 @@ export function TelegramQrSetup({
     if (!pairing?.pairingId) {
       return;
     }
+
     cancel.mutate(pairing?.pairingId, {
       onError: (reason) => setError(formatError(reason)),
       onSuccess: () => {
@@ -61,6 +64,7 @@ export function TelegramQrSetup({
     if (!pairing?.pairingId) {
       return;
     }
+
     apply.mutate(
       { pairingId: pairing?.pairingId ?? null, profileId },
       {

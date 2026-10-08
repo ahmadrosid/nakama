@@ -132,6 +132,7 @@ function TelegramPairingCodeControls({
     </Button>
   );
 }
+
 function TelegramBotTokenRow({
   botToken,
   configured,
@@ -190,7 +191,9 @@ function TelegramBotTokenRow({
             if (configured) {
               return;
             }
+
             const token = event.clipboardData.getData("text").trim();
+
             if (token) {
               event.preventDefault();
               onBotTokenPaste(token);
@@ -304,6 +307,7 @@ export type TelegramSettingsCardView = {
   canSave: boolean;
   statusBadge: string;
 };
+
 export function TelegramSettingsCardContent({
   view,
   statusBadge,
@@ -359,6 +363,7 @@ export function TelegramSettingsCardContent({
   const paneItemClass = "px-4 py-3";
 
   const step = configured ? (running ? (hasLinkedUsers ? 3 : 2) : 1) : 0;
+
   const workerActions = (
     <WorkerActionBar
       compact
@@ -367,6 +372,7 @@ export function TelegramSettingsCardContent({
       workerName="telegram"
     />
   );
+
   const tokenEditor = (
     <TelegramBotTokenRow
       botToken={botToken}
@@ -380,6 +386,7 @@ export function TelegramSettingsCardContent({
       showBotToken={showBotToken}
     />
   );
+
   const pairing = (
     <div className="space-y-3">
       <SettingsRow
@@ -406,6 +413,7 @@ export function TelegramSettingsCardContent({
       </details>
     </div>
   );
+
   const footer = (
     <IntegrationSettingsFooter
       canSave={canSave}
@@ -419,6 +427,7 @@ export function TelegramSettingsCardContent({
       submitLabel={configured ? submitLabel : "Continue"}
     />
   );
+
   const checklist = (
     <ChannelSetupChecklist
       label="Telegram setup progress"
@@ -451,9 +460,11 @@ export function TelegramSettingsCardContent({
       {step === 0 ? null : footer}
     </ChannelSetupChecklist>
   );
+
   if (step < 3) {
     return checklist;
   }
+
   return (
     <div className="space-y-4">
       {checklist}

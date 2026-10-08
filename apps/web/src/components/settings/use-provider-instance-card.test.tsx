@@ -50,6 +50,7 @@ const catalog: ProviderModelOption[] = [
 
 function openManage(provider: ProviderInstanceSummary) {
   let rows: ReturnType<typeof useProviderInstanceCard>["manageModels"] = [];
+
   function Probe() {
     const card = useProviderInstanceCard({
       catalog: catalog.map((model) => ({ ...model, provider: provider.type })),
@@ -58,13 +59,18 @@ function openManage(provider: ProviderInstanceSummary) {
       onError: () => {},
       onUpdate: async () => {},
     });
+
     if (!card.manageOpen) {
       card.openManage();
     }
+
     rows = card.manageModels;
+
     return null;
   }
+
   renderToString(<Probe />);
+
   return rows;
 }
 
@@ -75,11 +81,13 @@ describe("provider model management", () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
+
     const routing = {
       dataCollection: "deny",
       requireParameters: true,
       zdr: true,
     } as const;
+
     function Probe() {
       card = useProviderInstanceCard({
         catalog: [],
@@ -95,8 +103,10 @@ describe("provider model management", () => {
           updates.push(request);
         },
       });
+
       return null;
     }
+
     try {
       await act(async () => root.render(<Probe />));
       await act(async () => card.openManage());
@@ -126,6 +136,7 @@ describe("provider model management", () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
+
     function Probe() {
       card = useProviderInstanceCard({
         catalog: [],
@@ -140,6 +151,7 @@ describe("provider model management", () => {
           updates.push(request);
         },
       });
+
       return (
         <ModelListEditor
           models={card.editManageModels}
@@ -147,6 +159,7 @@ describe("provider model management", () => {
         />
       );
     }
+
     try {
       await act(async () => root.render(<Probe />));
       await act(async () => card.openEdit());
@@ -214,6 +227,7 @@ describe("provider model management", () => {
         },
       ],
     });
+
     expect(normalizeModelListRows(rows)).toEqual([
       {
         cachedInputPerMillionUsd: 0,

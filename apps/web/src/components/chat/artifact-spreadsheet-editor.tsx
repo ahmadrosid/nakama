@@ -3,19 +3,18 @@ import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
 import { Add01Icon } from "hugeicons-react";
 import { useEffect, useState } from "react";
-import {
-  columnIndexToLetter,
-  normalizeSpreadsheetShape,
-  parseSpreadsheetText,
-  type SpreadsheetRows,
-  serializeSpreadsheetText,
-} from "@/lib/artifact-spreadsheet";
+import type { SpreadsheetRows } from "@/lib/artifact-spreadsheet";
+import * as artifactSpreadsheet from "@/lib/artifact-spreadsheet";
 import { isSpreadsheetNumericCell } from "./spreadsheet-numeric";
 
 const GRID_LINE = "border-border";
+
 const GUTTER_BG = "bg-muted";
+
 const GUTTER_TEXT = "text-muted-foreground";
+
 const GUTTER_ACTIVE = "bg-accent text-foreground";
+
 const SELECTION_RING = "z-[1] ring-2 ring-inset ring-ring";
 
 type CellCoord = { row: number; col: number };
@@ -35,6 +34,7 @@ export function SpreadsheetGrid({
 }) {
   const [selected, setSelected] = useState<CellCoord | null>(null);
   const namedHeaders = columnHeaders != null;
+
   const columnCount = Math.max(
     1,
     columnHeaders?.length ?? 0,
@@ -73,8 +73,8 @@ export function SpreadsheetGrid({
               >
                 {namedHeaders
                   ? (columnHeaders[columnIndex] ??
-                    columnIndexToLetter(columnIndex))
-                  : columnIndexToLetter(columnIndex)}
+                    artifactSpreadsheet.columnIndexToLetter(columnIndex))
+                  : artifactSpreadsheet.columnIndexToLetter(columnIndex)}
               </th>
             ))}
           </tr>
@@ -101,22 +101,28 @@ export function SpreadsheetGrid({
                 </th>
                 {Array.from({ length: columnCount }, (_, columnIndex) => {
                   const cell = row[columnIndex] ?? "";
+
                   const header = (
                     namedHeaders
                       ? columnHeaders[columnIndex]
                       : rows[0]?.[columnIndex]
                   )?.trim();
+
                   const columnLabel =
                     header && header.length > 0
                       ? header
-                      : `Column ${columnIndexToLetter(columnIndex)}`;
+                      : `Column ${artifactSpreadsheet.columnIndexToLetter(columnIndex)}`;
+
                   const cellLabel = isHeaderRow
                     ? `Header ${columnLabel}`
                     : `${columnLabel}, row ${rowNumber}`;
+
                   const isSelected =
                     selected?.row === rowIndex && selected.col === columnIndex;
+
                   const numeric =
                     !isHeaderRow && isSpreadsheetNumericCell(cell);
+
                   const alignClass = isHeaderRow
                     ? "justify-center text-center font-semibold"
                     : numeric
@@ -195,14 +201,15 @@ export function ArtifactSpreadsheetEditor({
   onSave: (nextContent: string) => void;
 }) {
   const [rows, setRows] = useState<SpreadsheetRows>(() =>
-    parseSpreadsheetText(filename, content)
+    artifactSpreadsheet.parseSpreadsheetText(filename, content)
   );
+
   const [baseRows, setBaseRows] = useState<SpreadsheetRows>(() =>
-    structuredClone(parseSpreadsheetText(filename, content))
+    structuredClone(artifactSpreadsheet.parseSpreadsheetText(filename, content))
   );
 
   useEffect(() => {
-    const next = parseSpreadsheetText(filename, content);
+    const next = artifactSpreadsheet.parseSpreadsheetText(filename, content);
     setRows(next);
     setBaseRows(structuredClone(next));
   }, [content, filename]);
@@ -211,13 +218,14 @@ export function ArtifactSpreadsheetEditor({
 
   function updateCell(rowIndex: number, columnIndex: number, value: string) {
     setRows((current) =>
-      normalizeSpreadsheetShape(
+      artifactSpreadsheet.normalizeSpreadsheetShape(
         current.map((row, currentRowIndex) => {
           if (currentRowIndex !== rowIndex) {
             return row;
           }
 
           const length = Math.max(row.length, columnIndex + 1);
+
           return Array.from({ length }, (_, currentColumnIndex) =>
             currentColumnIndex === columnIndex
               ? value
@@ -230,7 +238,7 @@ export function ArtifactSpreadsheetEditor({
 
   function addRow() {
     setRows((current) =>
-      normalizeSpreadsheetShape([
+      artifactSpreadsheet.normalizeSpreadsheetShape([
         ...current,
         Array.from({ length: Math.max(1, current[0]?.length ?? 1) }, () => ""),
       ])
@@ -239,7 +247,9 @@ export function ArtifactSpreadsheetEditor({
 
   function addColumn() {
     setRows((current) =>
-      normalizeSpreadsheetShape(current.map((row) => [...row, ""]))
+      artifactSpreadsheet.normalizeSpreadsheetShape(
+        current.map((row) => [...row, ""])
+      )
     );
   }
 
@@ -288,7 +298,9 @@ export function ArtifactSpreadsheetEditor({
         </Button>
         <Button
           disabled={busy || !isDirty}
-          onClick={() => onSave(serializeSpreadsheetText(filename, rows))}
+          onClick={() =>
+            onSave(artifactSpreadsheet.serializeSpreadsheetText(filename, rows))
+          }
           size="xs"
           type="button"
         >

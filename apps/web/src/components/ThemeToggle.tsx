@@ -10,8 +10,10 @@ import { isTheme } from "@/lib/theme";
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
+
   const selected =
     THEME_OPTIONS.find((option) => option.id === theme) ?? THEME_OPTIONS[1];
+
   const SelectedIcon = selected.icon;
 
   return (

@@ -13,7 +13,9 @@ import {
 import { formatBytes } from "@/lib/knowledge-base-files";
 
 const WIDE_ARTIFACT_PANEL_WIDTH = 768;
+
 const NARROW_ARTIFACT_PANEL_WIDTH = 448;
+
 /** Videos (often portrait reels) leave chat usable on tablet; avoid the 768 wide default. */
 const VIDEO_ARTIFACT_PANEL_WIDTH = 420;
 
@@ -24,8 +26,10 @@ export function artifactPanelDefaultWidth(
   const isHtml = isHtmlArtifactMimeType(mimeType);
   const isImage = isImageArtifactMimeType(mimeType);
   const isVideo = isVideoArtifactMimeType(mimeType);
+
   const isWordDocument =
     isDocxFile(filename, mimeType) || isLegacyDocFile(filename, mimeType);
+
   const isMarkdown = isMarkdownArtifactMimeType(mimeType) || isWordDocument;
   const isSpreadsheet = isDelimitedSpreadsheetFile(filename, mimeType);
   const language = artifactCodeLanguage(filename);
@@ -55,9 +59,11 @@ export function artifactPanelHeadingName(filename: string): string {
   const slash = filename.lastIndexOf("/");
   const base = slash >= 0 ? filename.slice(slash + 1) : filename;
   const dot = base.lastIndexOf(".");
+
   if (dot <= 0) {
     return base;
   }
+
   return base.slice(0, dot);
 }
 
@@ -85,11 +91,13 @@ export function artifactPanelTypeLabel({
   }
 
   const language = artifactCodeLanguage(filename);
+
   if (language) {
     return language.toUpperCase();
   }
 
   const subtype = mimeType.split("/")[1]?.trim();
+
   return subtype ? subtype.toUpperCase() : "FILE";
 }
 
@@ -105,11 +113,7 @@ export function artifactPanelHeaderMeta({
   sizeBytes?: number;
   streaming?: boolean;
   showPreviewToggle: boolean;
-}): {
-  subtitle: string | null;
-  title: string;
-  typeLabel: string | null;
-} {
+}) {
   if (showPreviewToggle) {
     return {
       subtitle: null,

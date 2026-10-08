@@ -26,6 +26,7 @@ import {
 
 const glyphTransition =
   "absolute inset-0 size-3.5 transition-[opacity,transform,filter] duration-200 ease-[cubic-bezier(0.2,0,0,1)]";
+
 type ActionIcon = typeof PlayIcon;
 
 function ActionGlyph({
@@ -82,6 +83,7 @@ function WorkerActionsMenu({
   if (!(running || showLogs)) {
     return null;
   }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

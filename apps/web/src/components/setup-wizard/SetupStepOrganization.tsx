@@ -38,6 +38,7 @@ export function SetupStepOrganization({
 
   const handleNameChange = (value: string) => {
     setName(value);
+
     if (!slugEditedRef.current) {
       setSlug(slugifyOrganizationName(value));
     }
@@ -52,11 +53,13 @@ export function SetupStepOrganization({
 
     if (!trimmedName) {
       setError("Organization name is required.");
+
       return;
     }
 
     if (!(trimmedSlug && SLUG_PATTERN.test(trimmedSlug))) {
       setError("Slug must use lowercase letters, numbers, and hyphens.");
+
       return;
     }
 

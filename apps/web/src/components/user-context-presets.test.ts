@@ -6,6 +6,7 @@ describe("helpSuggestionsForContext", () => {
     const suggestions = helpSuggestionsForContext(
       "I'm Rosid, a software engineer building my own product."
     );
+
     expect(suggestions).toContain("Writing code");
     expect(suggestions).toContain("Product decisions");
     expect(suggestions.length).toBeLessThanOrEqual(3);

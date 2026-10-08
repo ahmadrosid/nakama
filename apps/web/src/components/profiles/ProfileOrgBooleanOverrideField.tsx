@@ -25,9 +25,11 @@ function toStoredOverride(value: boolean | null | undefined): boolean | null {
   if (value === true) {
     return true;
   }
+
   if (value === false) {
     return false;
   }
+
   return null;
 }
 
@@ -173,9 +175,11 @@ function useProfileBooleanOverride(
 ) {
   const { activeOrg } = useAuth();
   const updateMutation = useUpdateProfileMutation();
+
   const [override, setOverride] = useState<boolean | null>(() =>
     toStoredOverride(profile[field])
   );
+
   const busy = updateMutation.isPending;
   const orgOn = activeOrg?.[field] === true;
   const checked = resolveProfileOrgBooleanOverride(override, orgOn);
@@ -184,6 +188,7 @@ function useProfileBooleanOverride(
   async function persist(next: boolean | null) {
     const previous = override;
     setOverride(next);
+
     try {
       await updateMutation.mutateAsync({
         input: { [field]: next },

@@ -21,7 +21,7 @@ import {
 } from "@/hooks/use-user-context-editor";
 import { formatError } from "@/lib/client";
 
-function formatUserContextError(error: unknown): string {
+function formatUserContextError(error: Error): string {
   if (error instanceof NakamaApiError && error.status === 404) {
     return "This feature needs a newer Nakama server. Restart the server and try again.";
   }
@@ -40,6 +40,7 @@ export function UserContextEditorDialog({
   onOpenChange,
 }: UserContextEditorDialogProps) {
   const { activeOrg } = useAuth();
+
   return open ? (
     <UserContextDialogSession
       key={activeOrg?.id}
@@ -55,6 +56,7 @@ function UserContextDialogSession({
 }: UserContextEditorDialogProps) {
   const { activeOrg, user } = useAuth();
   const orgId = activeOrg?.id ?? null;
+
   const {
     data: status,
     isLoading,
@@ -64,7 +66,9 @@ function UserContextDialogSession({
     includeContent: true,
     orgId,
   });
+
   const writeMutation = useWriteUserContextMutation();
+
   const { content, savedContent, setContent, setSavedContent } =
     useUserContextEditor({
       defaultName: user?.name,
@@ -84,6 +88,7 @@ function UserContextDialogSession({
       setFormError(null);
       setHint(null);
     }
+
     onOpenChange(nextOpen);
   }
 
@@ -99,7 +104,11 @@ function UserContextDialogSession({
       onOpenChange(false);
       await refetch();
     } catch (error) {
-      setFormError(formatUserContextError(error));
+      setFormError(
+        formatUserContextError(
+          error instanceof Error ? error : new Error(formatError(error))
+        )
+      );
     }
   }
 
@@ -122,6 +131,7 @@ function UserContextDialogSession({
               onChange={(next) => {
                 setContent(next);
                 setHint(null);
+
                 if (formError) {
                   setFormError(null);
                 }
@@ -201,6 +211,7 @@ function UserContextStatusCopy({
 /** USER.md row for settings and the setup wizard. Render inside a parent card. */
 export function UserContextSettings() {
   const { activeOrg } = useAuth();
+
   const {
     data: status,
     isLoading,
@@ -209,6 +220,7 @@ export function UserContextSettings() {
     includeContent: true,
     orgId: activeOrg?.id ?? null,
   });
+
   const [editorOpen, setEditorOpen] = useState(false);
   const isActive = status?.active === true;
 

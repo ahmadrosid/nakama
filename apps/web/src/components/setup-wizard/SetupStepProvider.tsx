@@ -21,11 +21,14 @@ export function SetupStepProvider({ onNext, onSkip }: SetupStepProviderProps) {
     setProvider(result);
     setBusy(true);
     setError(null);
+
     try {
       const { profiles } = await client.listProfiles();
+
       const starterProfiles = profiles.filter(
         (profile) => profile.isDefault || profile.isSuper
       );
+
       if (
         !(
           starterProfiles.some((profile) => profile.isDefault) &&
@@ -36,10 +39,12 @@ export function SetupStepProvider({ onNext, onSkip }: SetupStepProviderProps) {
           "Your starter profiles are not ready. Please try again."
         );
       }
+
       const model = encodeModelSelection(
         result.provider.id,
         result.initialModel
       );
+
       const updates = await Promise.allSettled(
         starterProfiles.map((profile) =>
           updateProfile.mutateAsync({
@@ -48,10 +53,13 @@ export function SetupStepProvider({ onNext, onSkip }: SetupStepProviderProps) {
           })
         )
       );
+
       const failed = updates.find((update) => update.status === "rejected");
+
       if (failed?.status === "rejected") {
         throw failed.reason;
       }
+
       onNext(result);
     } catch (failure) {
       setError(formatError(failure));

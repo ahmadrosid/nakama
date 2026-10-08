@@ -42,6 +42,7 @@ function resolveProfileLabel(
   if (!profileId) {
     return null;
   }
+
   return (
     profiles.find((profile) => profile.id === profileId)?.name ??
     shortenId(profileId)
@@ -60,11 +61,15 @@ function resolveProposer(
   if (!userId) {
     return null;
   }
+
   const member = members.find((entry) => entry.userId === userId);
+
   if (!member) {
     return { name: shortenId(userId) };
   }
+
   const name = member.name?.trim() || member.email;
+
   return {
     email: member.name?.trim() ? member.email : undefined,
     name,
@@ -80,6 +85,7 @@ function ProposalSources({
 }) {
   const sourceDocumentIds = proposal.sourceDocumentIds;
   const { data, isPending } = useKnowledgeBaseQuery(proposal.profileId);
+
   const documentsById = new Map(
     (data?.documents ?? []).map((document) => [document.id, document])
   );
@@ -100,12 +106,14 @@ function ProposalSources({
       <ul className="space-y-0.5 text-xs">
         {sourceDocumentIds.map((documentId) => {
           const document = documentsById.get(documentId);
+
           if (!document) {
             // Wait for KB before calling a miss "Removed"; without a profile we
             // cannot resolve filenames, so show a shortened id instead.
             if (proposal.profileId && isPending) {
               return null;
             }
+
             return (
               <li className="text-muted-foreground" key={documentId}>
                 {proposal.profileId
@@ -114,6 +122,7 @@ function ProposalSources({
               </li>
             );
           }
+
           if (knowledgeHref) {
             return (
               <li key={documentId}>
@@ -126,6 +135,7 @@ function ProposalSources({
               </li>
             );
           }
+
           return (
             <li className="text-foreground" key={documentId}>
               {document.filename}
@@ -241,6 +251,7 @@ function ProposalReviewDialog({
     if (!nextOpen) {
       setPinOnApprove(false);
     }
+
     onOpenChange(nextOpen);
   }
 

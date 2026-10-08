@@ -24,6 +24,7 @@ const RIM_LAYERS: Array<{
 const CACHE_MAX = 24;
 
 let scratch: HTMLCanvasElement | null = null;
+
 const maskCache = new Map<string, string>();
 
 function padOf(strokeWidth: number, blur: number): number {
@@ -33,6 +34,7 @@ function padOf(strokeWidth: number, blur: number): number {
 function radiusOf(el: HTMLElement): number {
   const r = Number.parseFloat(getComputedStyle(el).borderRadius) || 0;
   const { width, height } = el.getBoundingClientRect();
+
   return Math.min(r, width / 2, height / 2);
 }
 
@@ -58,7 +60,9 @@ function buildMask(o: {
     o.alpha,
     o.ring ?? 0,
   ].join("|");
+
   const hit = maskCache.get(key);
+
   if (hit !== undefined) {
     return hit;
   }
@@ -70,25 +74,31 @@ function buildMask(o: {
   if (!scratch) {
     scratch = document.createElement("canvas");
   }
+
   scratch.width = w;
   scratch.height = h;
   const ctx = scratch.getContext("2d");
+
   if (!ctx) {
     return "";
   }
+
   ctx.clearRect(0, 0, w, h);
 
   if (o.blur) {
     const isSafari =
       typeof navigator !== "undefined" &&
       /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
     ctx.filter = `blur(${isSafari ? o.blur * 0.25 : o.blur}px)`;
   }
 
   const g = ctx.createConicGradient(0, w / 2, h / 2);
+
   for (const s of RIM_STOPS) {
     g.addColorStop(s.stop / 360, s.color);
   }
+
   ctx.strokeStyle = g;
   ctx.fillStyle = g;
   ctx.globalAlpha = o.alpha;
@@ -97,6 +107,7 @@ function buildMask(o: {
   const y = (h - o.height) / 2;
   const r = Math.min(o.radius, o.width / 2, o.height / 2);
   ctx.beginPath();
+
   if (r > 0) {
     ctx.roundRect(x, y, o.width, o.height, r);
   } else {
@@ -108,10 +119,12 @@ function buildMask(o: {
     ctx.stroke();
   } else {
     ctx.fill();
+
     if (o.ring) {
       ctx.globalCompositeOperation = "destination-out";
       ctx.globalAlpha = 1;
       ctx.filter = "none";
+
       const r2 = Math.max(
         0,
         Math.min(
@@ -120,6 +133,7 @@ function buildMask(o: {
           (o.height - o.ring * 2) / 2
         )
       );
+
       ctx.beginPath();
       ctx.roundRect(
         x + o.ring,
@@ -134,18 +148,23 @@ function buildMask(o: {
   }
 
   const url = scratch.toDataURL("image/png");
+
   if (maskCache.size >= CACHE_MAX) {
     const oldest = maskCache.keys().next().value;
+
     if (oldest !== undefined) {
       maskCache.delete(oldest);
     }
   }
+
   maskCache.set(key, url);
+
   return url;
 }
 
 function hsl(h: number, s: number, l: number, a = 1): string {
   const hue = ((h % 360) + 360) % 360;
+
   return a === 1
     ? `hsl(${hue.toFixed(1)} ${s}% ${l}%)`
     : `hsl(${hue.toFixed(1)} ${s}% ${l}% / ${a})`;
@@ -172,8 +191,10 @@ function useReducedMotion(): boolean {
     const sync = () => setReduced(mq.matches);
     sync();
     mq.addEventListener("change", sync);
+
     return () => mq.removeEventListener("change", sync);
   }, []);
+
   return reduced;
 }
 
@@ -185,46 +206,58 @@ function useRimLayers(
 
   useEffect(() => {
     const el = ref.current;
+
     if (!(el && enabled)) {
       setLayers([]);
+
       return;
     }
 
     const build = () => {
       const box = el.getBoundingClientRect();
+
       if (!(box.width && box.height)) {
         return;
       }
+
       const radius = radiusOf(el);
       setLayers(
-        RIM_LAYERS.map((l) => ({
-          mask: buildMask({
-            alpha: l.alpha,
-            blur: l.blur,
+        RIM_LAYERS.flatMap((layer) => {
+          const mask = buildMask({
+            alpha: layer.alpha,
+            blur: layer.blur,
             height: box.height,
             radius,
-            ring: l.ring,
-            strokeWidth: l.strokeWidth,
+            ring: layer.ring,
+            strokeWidth: layer.strokeWidth,
             width: box.width,
-          }),
-          pad: padOf(l.strokeWidth, l.blur),
-        })).filter((l) => l.mask)
+          });
+
+          return mask
+            ? [{ mask, pad: padOf(layer.strokeWidth, layer.blur) }]
+            : [];
+        })
       );
     };
 
     build();
     let settle: number | null = null;
+
     const ro = new ResizeObserver(() => {
       if (settle !== null) {
         window.clearTimeout(settle);
       }
+
       settle = window.setTimeout(build, 120);
     });
+
     ro.observe(el);
+
     return () => {
       if (settle !== null) {
         window.clearTimeout(settle);
       }
+
       ro.disconnect();
     };
   }, [ref, enabled]);
@@ -238,12 +271,14 @@ function useStreamingOrbit(
 ): void {
   useEffect(() => {
     const host = ref.current;
+
     if (!host) {
       return;
     }
 
     if (!active) {
       host.dataset.playing = "false";
+
       return;
     }
 
@@ -258,6 +293,7 @@ function useStreamingOrbit(
         host.dataset.playing = "true";
       }
     };
+
     document.addEventListener("visibilitychange", onVis);
 
     return () => {

@@ -137,10 +137,12 @@ export function OrgMembersCard() {
     isLoading,
     error: loadError,
   } = useOrgMembers(activeOrg?.role === "admin" ? orgId : null);
+
   const inviteMutation = useInviteOrgMember(orgId ?? "");
   const addMutation = useAddOrgMember(orgId ?? "");
   const updateMemberMutation = useUpdateOrgMember(orgId ?? "");
   const removeMutation = useRemoveOrgMember(orgId ?? "");
+
   const [state, dispatch] = useReducer(
     orgMembersReducer,
     initialOrgMembersState
@@ -188,8 +190,10 @@ export function OrgMembersCard() {
     dispatch({ type: "clear-secrets" });
 
     const email = state.inviteEmail.trim();
+
     if (!email) {
       dispatch({ type: "patch", values: { formError: "Email is required." } });
+
       return;
     }
 
@@ -202,6 +206,7 @@ export function OrgMembersCard() {
           if (result.delivered) {
             toast(`Invitation sent to ${email}.`);
           }
+
           dispatch({
             type: "patch",
             values: {
@@ -232,6 +237,7 @@ export function OrgMembersCard() {
         type: "patch",
         values: { formError: "Name and email are required." },
       });
+
       return;
     }
 
@@ -253,6 +259,7 @@ export function OrgMembersCard() {
                 formError: null,
               },
             });
+
             return;
           }
 
@@ -275,6 +282,7 @@ export function OrgMembersCard() {
 
   function handleEditSubmit(event: React.FormEvent) {
     event.preventDefault();
+
     if (!state.editingMember) {
       return;
     }
@@ -344,6 +352,7 @@ export function OrgMembersCard() {
             }
             onInviteOpenChange={(open) => {
               dispatch({ type: "patch", values: { inviteOpen: open } });
+
               if (open) {
                 dispatch({ type: "reset-invite" });
                 dispatch({ type: "clear-secrets" });
@@ -434,6 +443,7 @@ function InviteDomainsForm({
     event.preventDefault();
     setSaving(true);
     setError(null);
+
     try {
       await onSave(
         value
@@ -531,6 +541,7 @@ function OrgMembersCardDialogs({
         onCopyCredential={(value) => void onCopyAddCredential(value)}
         onOpenChange={(open) => {
           dispatch({ type: "patch", values: { addOpen: open } });
+
           if (!open) {
             dispatch({ type: "reset-add" });
           }
@@ -557,6 +568,7 @@ function OrgMembersCardDialogs({
         }
         onOpenChange={(open) => {
           dispatch({ type: "patch", values: { editOpen: open } });
+
           if (!open) {
             dispatch({ type: "reset-edit" });
           }

@@ -46,6 +46,7 @@ export function OpenRouterModelsBrowseList({
       rows={catalogRows}
       status={({ filteredCount, filteredRows }) => {
         const freeCount = filteredRows.filter((row) => row.isFree).length;
+
         return `${filteredCount} models · ${freeCount} free`;
       }}
       toDisplayRow={(row) => ({

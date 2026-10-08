@@ -106,8 +106,10 @@ function AgentRow({
 export function CodingAgentsSettingsCard() {
   const { user } = useAuth();
   const canManageSettings = user?.isPlatformAdmin === true;
+
   const [settings, setSettings] =
     useState<CodingHarnessSettingsResponse | null>(null);
+
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -140,6 +142,7 @@ export function CodingAgentsSettingsCard() {
       const response = await client.setCodingHarnessSettings(
         providerPassthroughEnabled
       );
+
       setSettings(response);
     } catch (cause) {
       setError(formatError(cause));
