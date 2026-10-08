@@ -71,16 +71,20 @@ export function IntegrationsPage() {
   const { section } = useParams();
   const { activeOrg, isLoading, user } = useAuth();
   const isPlatformAdmin = user?.isPlatformAdmin === true;
+
   if (isLoading) {
     return <Spinner className="size-5" />;
   }
+
   if (!section) {
     if (searchParams.get("section") === "token") {
       return <Navigate replace to="/settings#local-token" />;
     }
+
     const target = resolveSection(searchParams.get("section"));
     const remaining = new URLSearchParams(searchParams);
     remaining.delete("section");
+
     return (
       <Navigate
         replace
@@ -88,13 +92,16 @@ export function IntegrationsPage() {
       />
     );
   }
+
   const selected = visibleIntegrationSections(
     isPlatformAdmin,
     activeOrg?.role
   ).find((item) => item.id === section);
+
   if (!selected) {
     return <Navigate replace to="/customize" />;
   }
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <Link

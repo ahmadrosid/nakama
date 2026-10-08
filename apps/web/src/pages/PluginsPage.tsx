@@ -59,10 +59,10 @@ import {
   pluginPagePath,
 } from "@/lib/navigation";
 
-const PLUGIN_DESCRIPTIONS: Record<string, string> = {
-  supermemory: "Save and search agent memories.",
-  workflows: "Automate tasks with your agents.",
-};
+const PLUGIN_DESCRIPTIONS = new Map([
+  ["supermemory", "Save and search agent memories."],
+  ["workflows", "Automate tasks with your agents."],
+]);
 
 type PluginDialog =
   | { type: "package-entry" }
@@ -95,9 +95,11 @@ function usePluginCatalog(canInstallPackages: boolean) {
   const releasesQuery = usePluginReleases(canInstallPackages);
   const officialQuery = useOfficialPlugins();
   const official = officialQuery.data?.plugins ?? [];
+
   const releases = canInstallPackages
     ? (releasesQuery.data?.releases ?? [])
     : [];
+
   const pluginIds = [
     ...new Set([
       ...plugins.map((plugin) => plugin.pluginId),
@@ -105,6 +107,7 @@ function usePluginCatalog(canInstallPackages: boolean) {
       ...releases.map((release) => release.pluginId),
     ]),
   ];
+
   return {
     catalogLoading: officialQuery.isLoading || releasesQuery.isLoading,
     error:
@@ -135,6 +138,7 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const [dialog, setDialog] = useState<PluginDialog | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
   const [accessDialog, setAccessDialog] = useState<{
     orgId: string;
     plugin: OrgPluginDetail;
@@ -172,7 +176,9 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
     if (!canInstallPackages) {
       return;
     }
+
     setActionError(null);
+
     try {
       const preview = await previewPackage.mutateAsync(source);
       setDialog({ preview, source, type: "package" });
@@ -183,11 +189,13 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
 
   async function handleUpdate(plugin: OrgPluginDetail, targetVersion: string) {
     setActionError(null);
+
     try {
       const preview = await previewUpdate.mutateAsync({
         pluginId: plugin.pluginId,
         targetVersion,
       });
+
       setDialog({ plugin, preview, targetVersion, type: "update" });
     } catch (err) {
       setActionError(formatError(err));
@@ -200,6 +208,7 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
     }
 
     setActionError(null);
+
     try {
       if (dialog.type === "official-install") {
         await installOfficial.mutateAsync(dialog.pluginId);
@@ -224,6 +233,7 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
       } else if (dialog.type === "update") {
         let plugin = dialog.plugin;
         const wasEnabled = plugin.lifecycleState === "enabled";
+
         if (wasEnabled) {
           // The server only swaps releases on a disabled plugin.
           plugin = await disableOrg.mutateAsync({
@@ -232,6 +242,7 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
           });
           setDialog({ ...dialog, plugin });
         }
+
         plugin = await updateOrg.mutateAsync({
           pluginId: plugin.pluginId,
           request: {
@@ -239,6 +250,7 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
             targetVersion: dialog.targetVersion,
           },
         });
+
         if (wasEnabled) {
           await enableOrg.mutateAsync({
             expectedRevision: plugin.revision,
@@ -247,6 +259,7 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
         }
       } else if (dialog.type === "uninstall") {
         let plugin = dialog.plugin;
+
         if (plugin.lifecycleState === "enabled") {
           plugin = await disableOrg.mutateAsync({
             expectedRevision: plugin.revision,
@@ -254,6 +267,7 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
           });
           setDialog({ plugin, type: "uninstall" });
         }
+
         await uninstallOrg.mutateAsync({
           expectedRevision: plugin.revision,
           pluginId: plugin.pluginId,
@@ -271,6 +285,7 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
           version: dialog.version,
         });
       }
+
       closeDialog();
     } catch (err) {
       setActionError(formatError(err));
@@ -301,6 +316,7 @@ export function PluginsPage() {
   const canManage = canAccessSystemPage(isPlatformAdmin, activeOrg?.role);
   const canInstallPackages = canManagePluginReleases(isPlatformAdmin);
   const orgId = activeOrg?.id ?? "";
+
   const {
     plugins,
     official,
@@ -310,6 +326,7 @@ export function PluginsPage() {
     catalogLoading,
     error: queryError,
   } = usePluginCatalog(canInstallPackages);
+
   const {
     accessDialog,
     actionError,
@@ -325,6 +342,7 @@ export function PluginsPage() {
     setActionError,
     setDialog,
   } = usePluginManagement(canInstallPackages, orgId);
+
   const agentAccess = usePluginAgentAccess();
   const accessData = isPlatformAdmin ? agentAccess.data : undefined;
 
@@ -334,6 +352,7 @@ export function PluginsPage() {
 
   const errorMessage =
     actionError ?? (queryError ? formatError(queryError) : null);
+
   const visiblePluginIds = selectedPluginId
     ? pluginIds.filter((id) => id === selectedPluginId)
     : pluginIds;
@@ -368,9 +387,11 @@ export function PluginsPage() {
           {visiblePluginIds.map((pluginId) => {
             const plugin = plugins.find((item) => item.pluginId === pluginId);
             const catalog = official.find((item) => item.id === pluginId);
+
             const pluginReleases = releases.filter(
               (item) => item.pluginId === pluginId
             );
+
             return (
               <PluginRow
                 accessCount={accessData?.counts[pluginId]}
@@ -395,6 +416,7 @@ export function PluginsPage() {
                 onAction={(type, target) => {
                   rememberFocus(target);
                   setActionError(null);
+
                   if (type === "install" && catalog) {
                     setDialog({
                       description: catalog.description,
@@ -402,15 +424,20 @@ export function PluginsPage() {
                       pluginId,
                       type: "official-install",
                     });
+
                     return;
                   }
+
                   if (!plugin) {
                     return;
                   }
+
                   if (type === "access") {
                     setAccessDialog({ orgId, plugin });
+
                     return;
                   }
+
                   if (type === "reinstall") {
                     void reinstallOfficial
                       .mutateAsync({
@@ -418,15 +445,20 @@ export function PluginsPage() {
                         pluginId,
                       })
                       .catch((err) => setActionError(formatError(err)));
+
                     return;
                   }
+
                   if (type === "update") {
                     const version = nextPluginVersions(plugin)[0];
+
                     if (version) {
                       void handleUpdate(plugin, version);
                     }
+
                     return;
                   }
+
                   setDialog({ plugin, type });
                 }}
                 onRemove={(release, event) => {
@@ -474,9 +506,11 @@ function PluginEmptyState({
   loading: boolean;
 }) {
   let message = detail ? "Plugin not found." : "No plugins available.";
+
   if (loading) {
     message = "Loading plugins…";
   }
+
   return (
     <p className="py-10 text-center text-muted-foreground text-sm">{message}</p>
   );
@@ -533,6 +567,7 @@ function PluginPackageForm({
 }) {
   const [packageName, setPackageName] = useState("");
   const [packageVersion, setPackageVersion] = useState("");
+
   return (
     <form
       className="space-y-4"
@@ -602,6 +637,7 @@ function PluginReleasesList({
   if (releases.length === 0) {
     return null;
   }
+
   return (
     <ul className="divide-y divide-border">
       {releases.map((release) => {
@@ -611,6 +647,7 @@ function PluginReleasesList({
             plugin.selectedVersion === release.version &&
             plugin.installed
         );
+
         return (
           <li
             className="flex flex-wrap items-center justify-between gap-3 py-3"
@@ -747,6 +784,7 @@ function PluginIdentity({
   | "releases"
 >) {
   const canOpen = plugin?.lifecycleState === "enabled" && plugin.ui !== null;
+
   return (
     <div className="relative flex min-w-0 flex-1 items-center gap-3">
       {detail ? null : (
@@ -793,7 +831,7 @@ function PluginIdentity({
           </div>
         ) : (
           <p className="mt-1 break-words text-muted-foreground text-sm">
-            {PLUGIN_DESCRIPTIONS[pluginId] ||
+            {PLUGIN_DESCRIPTIONS.get(pluginId) ||
               plugin?.description ||
               catalogDescription ||
               releases[0]?.manifest.description}
@@ -829,6 +867,7 @@ function PluginRowControls({
   const actions = plugin ? pluginRowActions(plugin) : null;
   const canOpen = plugin?.lifecycleState === "enabled" && plugin.ui !== null;
   const canInstall = !plugin?.installed && (official || Boolean(plugin));
+
   return (
     <div className="flex shrink-0 items-center gap-1">
       {canOpen && detail ? (
@@ -919,6 +958,7 @@ function PluginRowMenu({
 >) {
   const menuRef = useRef<HTMLButtonElement | null>(null);
   const actions = plugin ? pluginRowActions(plugin) : null;
+
   const secondaryActions = [
     ["disable", "Disable", actions?.disable],
     ["update", "Update", actions?.update],
@@ -926,18 +966,24 @@ function PluginRowMenu({
     ["uninstall", "Uninstall", actions?.uninstall],
     ["purge", "Delete data", actions?.purge],
   ] as const;
+
   const { pinned, toggle: togglePin } = usePinnedPlugins();
   const canPin = plugin?.lifecycleState === "enabled" && plugin.ui !== null;
+
   const canManageAccess =
     canManageAgentAccess && plugin?.lifecycleState === "enabled";
+
   const visibleSecondaryActions = canManage
     ? secondaryActions.filter(([, , visible]) => visible)
     : [];
+
   const hasMenu =
     !detail || canPin || canManageAccess || visibleSecondaryActions.length > 0;
+
   if (!hasMenu) {
     return null;
   }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -1045,19 +1091,25 @@ function PluginAgentAccessDialog({
   const save = useSavePluginAgentAccess();
   const [changes, setChanges] = useState<Record<string, boolean>>({});
   const data = access.data;
+
   const hasResources =
     data &&
     [...data.tools, ...data.skills].some(
       (item) => item.pluginId === plugin.pluginId
     );
+
   const busy = save.isPending;
+
   const pendingChanges = Object.fromEntries(
     Object.entries(changes).filter(([id, selected]) => {
       const profile = data?.profiles.find((item) => item.id === id);
+
       if (!(profile && data)) {
         return false;
       }
+
       const state = pluginAgentAccessState(profile, plugin.pluginId, data);
+
       return selected ? !state.full : state.assigned > 0;
     })
   );
@@ -1125,10 +1177,12 @@ function PluginAgentAccessDialog({
                   plugin.pluginId,
                   data
                 );
+
                 const partial =
                   changes[profile.id] === undefined &&
                   state.assigned > 0 &&
                   !state.full;
+
                 return (
                   <label
                     className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2.5 hover:bg-muted/50"
@@ -1200,6 +1254,7 @@ function PluginAgentAccessDialog({
 function PluginIcon({ icon, pluginId }: { icon?: string; pluginId: string }) {
   const [failedIcon, setFailedIcon] = useState<string | null>(null);
   const Icon = pluginIcon(pluginId);
+
   return (
     <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted text-foreground">
       {icon && icon !== failedIcon ? (
@@ -1237,6 +1292,7 @@ function PluginConfirmDialog({
   onPreview(source: PluginPackageRequest): void;
 }) {
   const title = dialogTitle(dialog);
+
   return (
     <Dialog
       onOpenChange={(open) => {
@@ -1304,6 +1360,7 @@ function DialogBody({
   if (dialog.type === "official-install") {
     return <p className="text-sm">{dialog.description}</p>;
   }
+
   if (dialog.type === "package") {
     return (
       <ul className="min-w-0 space-y-1 text-sm [overflow-wrap:anywhere]">
@@ -1361,33 +1418,43 @@ function dialogTitle(dialog: PluginDialog | null): string {
   if (!dialog) {
     return "Plugin";
   }
+
   if (dialog.type === "package-entry") {
     return "Install external plugin";
   }
+
   if (dialog.type === "official-install") {
     return `Install ${dialog.name}?`;
   }
+
   if (dialog.type === "package") {
     return "Install this package?";
   }
+
   if (dialog.type === "install") {
     return "Install in this org?";
   }
+
   if (dialog.type === "enable") {
     return "Enable this plugin?";
   }
+
   if (dialog.type === "disable") {
     return "Disable this plugin?";
   }
+
   if (dialog.type === "update") {
     return "Update this plugin?";
   }
+
   if (dialog.type === "uninstall") {
     return "Uninstall this plugin?";
   }
+
   if (dialog.type === "purge") {
     return "Delete retained plugin data?";
   }
+
   return "Remove this release?";
 }
 
@@ -1395,6 +1462,7 @@ function confirmLabel(dialog: PluginDialog | null): string {
   if (!dialog) {
     return "Confirm";
   }
+
   if (
     dialog.type === "package" ||
     dialog.type === "install" ||
@@ -1402,20 +1470,26 @@ function confirmLabel(dialog: PluginDialog | null): string {
   ) {
     return "Install";
   }
+
   if (dialog.type === "enable") {
     return "Enable";
   }
+
   if (dialog.type === "disable") {
     return "Disable";
   }
+
   if (dialog.type === "update") {
     return "Update";
   }
+
   if (dialog.type === "uninstall") {
     return "Uninstall";
   }
+
   if (dialog.type === "purge") {
     return "Delete data";
   }
+
   return "Remove";
 }
