@@ -14,7 +14,8 @@
     "agent:ui:stop": "bash scripts/agent-ui-harness.sh stop",
     "build": "bun run --workspaces --if-present build",
     "build:docs": "bun run --cwd docs/website build",
-    "check": "ultracite check",
+    "check": "ultracite check && bun run check:anti-slop",
+    "check:anti-slop": "oxlint",
     "cli": "bun run apps/cli/src/index.ts",
     "desktop": "bun run --cwd apps/desktop dev",
     "dev": "bun run dev:web",
@@ -47,10 +48,12 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
+    "@oxlint/plugins": "1.87.0",
     "@types/bun": "^1.4.2",
     "husky": "^9.1.7",
     "jscpd": "4.3.0",
     "knip": "6.38.0",
+    "oxlint": "1.87.0",
     "react-doctor": "0.9.14",
     "ultracite": "7.11.0"
   },
