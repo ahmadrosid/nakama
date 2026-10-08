@@ -7,6 +7,7 @@ import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { SkillsService } from "./skills-service";
 
 const ORG_ID = "org_test";
+
 const PROFILE_ID = "profile_default";
 
 const weatherSkillMarkdown = `---
@@ -58,6 +59,7 @@ describe("SkillsService", () => {
       )
     );
     const service = new SkillsService(createInMemoryDatabaseAdapter());
+
     const weather = (await service.listSkills()).skills.find(
       (skill) => skill.name === "weather"
     )!;
@@ -85,9 +87,11 @@ describe("SkillsService", () => {
     ],
   ])("previews %s as image bytes", async (filename, mediaType, bytes) => {
     const service = new SkillsService(createInMemoryDatabaseAdapter());
+
     const skill = (await service.listSkills()).skills.find(
       (item) => item.name === "weather"
     )!;
+
     await writeFile(join(skill.sourcePath, filename), bytes);
     const result = await service.readSkillFile(ORG_ID, skill.id, filename);
     expect(result.image?.mediaType).toBe(mediaType);
@@ -100,9 +104,11 @@ describe("SkillsService", () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new SkillsService(db);
     await service.syncDiscoveredSkills();
+
     const skill = (await service.listSkills()).skills.find(
       (item) => item.name === "weather"
     )!;
+
     const directory = join(configDir, "agent", "skills", "weather");
     await mkdir(join(directory, "references", "nested"), { recursive: true });
     await writeFile(
@@ -147,6 +153,7 @@ describe("SkillsService", () => {
     expect(
       (await service.readSkillFile(ORG_ID, skill.id, "large.txt")).content
     ).toBeNull();
+
     for (const target of [
       "../secret.txt",
       secret,
@@ -160,6 +167,7 @@ describe("SkillsService", () => {
         service.readSkillFile(ORG_ID, skill.id, target)
       ).rejects.toThrow();
     }
+
     const record = await db.getSkill(skill.id);
     await db.upsertSkill({ ...record!, orgId: "another_org" });
     await expect(service.listSkillFiles(ORG_ID, skill.id)).rejects.toThrow();
@@ -348,9 +356,11 @@ describe("SkillsService", () => {
     await service.syncDiscoveredSkills();
 
     const listed = await service.listSkills();
+
     const agentBrowser = listed.skills.find(
       (skill) => skill.name === "agent-browser"
     );
+
     expect(agentBrowser).toBeTruthy();
 
     await expect(service.deleteSkill(agentBrowser!.id)).rejects.toThrow(
@@ -367,6 +377,7 @@ describe("SkillsService", () => {
     const agentBrowser = (await service.listSkills()).skills.find(
       (skill) => skill.name === "agent-browser"
     );
+
     expect(agentBrowser).toBeDefined();
 
     expect(
@@ -379,6 +390,7 @@ describe("SkillsService", () => {
       ORG_ID,
       PROFILE_ID
     );
+
     expect(prompt).toContain("agent-browser skill");
     expect(prompt).toContain("Available Agent Skills");
     expect(prompt).toContain("Skills are workflow instructions");
@@ -389,6 +401,7 @@ describe("SkillsService", () => {
   test("deduplicates skills discovered from global and profile directories", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new SkillsService(db);
+
     const skillMarkdown = `---
 name: coding-backend-claude-code
 description: Runtime prompt layer for Claude Code delegated coding runs.
@@ -404,6 +417,7 @@ Use Claude Code guidance.
       "skills",
       "coding-backend-claude-code"
     );
+
     const profileDir = join(
       configDir,
       "orgs",
@@ -422,6 +436,7 @@ Use Claude Code guidance.
     await service.syncProfileSkills(ORG_ID, PROFILE_ID);
 
     const listed = await service.listSkills();
+
     const matches = listed.skills.filter(
       (skill) => skill.name === "coding-backend-claude-code"
     );
@@ -433,6 +448,7 @@ Use Claude Code guidance.
   test("syncs profile-scoped skills without scanning every profile directory", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new SkillsService(db);
+
     const profileDir = join(
       configDir,
       "orgs",
@@ -469,6 +485,7 @@ Use this skill when the user asks to save a note.
   test("patchSkill updates skill body on disk", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new SkillsService(db);
+
     const profileDir = join(
       configDir,
       "orgs",
@@ -492,9 +509,11 @@ Original body.
     );
 
     await service.syncProfileSkills(ORG_ID, PROFILE_ID);
+
     const notes = (await service.listSkills()).skills.find(
       (skill) => skill.name === "notes"
     );
+
     expect(notes).toBeDefined();
 
     const patched = await service.patchSkill(ORG_ID, notes!.id, {
@@ -510,6 +529,7 @@ Original body.
   test("patchSkill records SKILL.md versions", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new SkillsService(db);
+
     const profileDir = join(
       configDir,
       "orgs",
@@ -519,6 +539,7 @@ Original body.
       "skills",
       "notes"
     );
+
     await mkdir(profileDir, { recursive: true });
     await writeFile(
       join(profileDir, "SKILL.md"),
@@ -531,9 +552,11 @@ Original body.
 `
     );
     await service.syncProfileSkills(ORG_ID, PROFILE_ID);
+
     const notes = (await service.listSkills()).skills.find(
       (skill) => skill.name === "notes"
     );
+
     const meta = { actorUserId: "user_1", source: "dashboard" as const };
 
     await service.patchSkill(ORG_ID, notes!.id, { body: "First." }, { meta });
@@ -558,6 +581,7 @@ Original body.
   test("skill versions keep notes, restore, and show pending proposals", async () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new SkillsService(db);
+
     const profileDir = join(
       configDir,
       "orgs",
@@ -567,6 +591,7 @@ Original body.
       "skills",
       "notes"
     );
+
     await mkdir(profileDir, { recursive: true });
     await writeFile(
       join(profileDir, "SKILL.md"),
@@ -579,6 +604,7 @@ Original body.
 `
     );
     await service.syncProfileSkills(ORG_ID, PROFILE_ID);
+
     const notes = (await service.listSkills()).skills.find(
       (skill) => skill.name === "notes"
     );
@@ -589,6 +615,7 @@ Original body.
     });
     const before = await service.listSkillVersions(ORG_ID, notes!.id);
     expect(before.versions[0]?.note).toBe("Shorter steps");
+
     const original = before.versions.find(
       (version) => version.kind === "original"
     );
@@ -598,6 +625,7 @@ Original body.
       notes!.id,
       original!.id
     );
+
     expect(restored.skill.body.trim()).toBe("Original body.");
     const after = await service.listSkillVersions(ORG_ID, notes!.id);
     expect(after.versions[0]).toMatchObject({ kind: "restored", version: 3 });
@@ -636,6 +664,7 @@ Original body.
     // disabled a working skill.
     const db = createInMemoryDatabaseAdapter();
     const service = new SkillsService(db);
+
     const profileDir = join(
       configDir,
       "orgs",
@@ -666,9 +695,11 @@ Original body.
     );
 
     await service.syncProfileSkills(ORG_ID, PROFILE_ID);
+
     const beams = (await service.listSkills()).skills.find(
       (skill) => skill.name === "beams"
     );
+
     expect(beams?.hasTool).toBe(true);
 
     await service.patchSkill(ORG_ID, beams!.id, { body: "Updated body." });
@@ -679,6 +710,7 @@ Original body.
     const after = (await service.listSkills()).skills.find(
       (skill) => skill.name === "beams"
     );
+
     expect(after?.hasTool).toBe(true);
   });
 
