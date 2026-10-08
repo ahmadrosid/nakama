@@ -6,7 +6,9 @@ import type {
 import { z } from "zod";
 
 const PAIRING_TTL_MS = 10 * 60 * 1000;
+
 const API_BASE = "https://api.telegram.org";
+
 const cloudStartSchema = z.object({
   deepLink: z.url().refine((value) => new URL(value).origin === "https://t.me"),
   expiresAt: z.iso.datetime(),
@@ -14,6 +16,7 @@ const cloudStartSchema = z.object({
   secret: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
   suggestedUsername: z.string(),
 });
+
 const cloudStatusSchema = z.object({
   botUsername: z.string().nullable(),
   ownerUserId: z.number().int().positive().nullable(),
@@ -36,6 +39,16 @@ type Pairing = {
   userId: string;
   token?: string;
 };
+
+type TelegramRequestBody = {
+  allowed_updates?: string[];
+  limit?: number;
+  offset?: number;
+  timeout?: number;
+  user_id?: number;
+};
+
+type CloudPairingRequest = { action: string; pairingId?: string };
 
 export class TelegramManagedBotPairingService {
   private readonly pairings = new Map<string, Pairing>();
@@ -74,6 +87,7 @@ export class TelegramManagedBotPairingService {
         this.pairings.delete(id);
       }
     }
+
     if (!this.managerToken) {
       const started = cloudStartSchema.parse(await this.cloudCall("start"));
       this.pairings.set(started.pairingId, {
@@ -86,6 +100,7 @@ export class TelegramManagedBotPairingService {
         suggestedUsername: started.suggestedUsername,
         userId,
       });
+
       return {
         deepLink: started.deepLink,
         expiresAt: started.expiresAt,
@@ -94,7 +109,9 @@ export class TelegramManagedBotPairingService {
         suggestedUsername: started.suggestedUsername,
       };
     }
+
     const manager = await this.call<{ username?: string }>("getMe");
+
     if (!manager.username) {
       throw new Error("Telegram manager bot is not configured.");
     }
@@ -129,17 +146,20 @@ export class TelegramManagedBotPairingService {
     profileId?: string
   ): Promise<TelegramPairingStatusResponse> {
     const pairing = this.authorize(pairingId, orgId, userId, profileId);
+
     if (
       (pairing.state === "waiting" || pairing.state === "ready") &&
       Date.now() >= Date.parse(pairing.expiresAt)
     ) {
       pairing.state = "cancelled";
     }
+
     if (pairing.state === "waiting") {
       if (pairing.cloudSecret) {
         const status = cloudStatusSchema.parse(
           await this.cloudCall("status", pairing)
         );
+
         if (pairing.state === "waiting") {
           pairing.state = status.status;
           pairing.botUsername = status.botUsername ?? undefined;
@@ -149,6 +169,7 @@ export class TelegramManagedBotPairingService {
         await this.sync();
       }
     }
+
     return this.toResponse(pairing);
   }
 
@@ -159,13 +180,16 @@ export class TelegramManagedBotPairingService {
     profileId?: string
   ): Promise<TelegramPairingStatusResponse> {
     const pairing = this.authorize(pairingId, orgId, userId, profileId);
+
     if (pairing.state === "waiting" || pairing.state === "ready") {
       if (pairing.cloudSecret) {
         await this.cloudCall("cancel", pairing);
       }
+
       pairing.state = "cancelled";
       pairing.token = undefined;
     }
+
     return this.toResponse(pairing);
   }
 
@@ -182,16 +206,20 @@ export class TelegramManagedBotPairingService {
     }) => Promise<void>
   ): Promise<TelegramPairingStatusResponse> {
     const pairing = this.authorize(pairingId, orgId, userId, profileId);
+
     if (Date.now() >= Date.parse(pairing.expiresAt)) {
       throw new Error("Telegram pairing expired. Start a new pairing.");
     }
+
     if (pairing.state === "ready" && pairing.cloudSecret) {
       const result = cloudStatusSchema
         .extend({ token: z.string().min(1) })
         .parse(await this.cloudCall("token", pairing));
+
       pairing.token = result.token;
       pairing.ownerUserId = result.ownerUserId ?? undefined;
     }
+
     if (
       pairing.state !== "ready" ||
       !pairing.token ||
@@ -199,6 +227,7 @@ export class TelegramManagedBotPairingService {
     ) {
       throw new Error("Telegram bot is not ready to connect.");
     }
+
     await save({
       allowedUserIds: String(pairing.ownerUserId),
       botToken: pairing.token,
@@ -207,11 +236,13 @@ export class TelegramManagedBotPairingService {
     });
     pairing.state = "applied";
     pairing.token = undefined;
+
     if (pairing.cloudSecret) {
       // Saving succeeded; a failed cleanup must not undo the local connection.
       await this.cloudCall("cancel", pairing).catch(() => undefined);
       pairing.cloudSecret = undefined;
     }
+
     return this.toResponse(pairing);
   }
 
@@ -222,6 +253,7 @@ export class TelegramManagedBotPairingService {
     profileId?: string
   ): Pairing {
     const pairing = this.pairings.get(pairingId);
+
     if (
       !pairing ||
       pairing.orgId !== orgId ||
@@ -230,6 +262,7 @@ export class TelegramManagedBotPairingService {
     ) {
       throw new Error("Telegram pairing was not found.");
     }
+
     return pairing;
   }
 
@@ -253,13 +286,25 @@ export class TelegramManagedBotPairingService {
     if (this.syncPromise) {
       return this.syncPromise;
     }
+
     this.syncPromise = this.pullUpdates().finally(() => {
       this.syncPromise = null;
     });
+
     return this.syncPromise;
   }
 
   private async pullUpdates(): Promise<void> {
+    const requestBody: TelegramRequestBody = {
+      allowed_updates: ["managed_bot"],
+      limit: 100,
+      timeout: 0,
+    };
+
+    if (this.offset) {
+      requestBody.offset = this.offset;
+    }
+
     const updates = await this.call<
       Array<{
         managed_bot?: {
@@ -268,31 +313,33 @@ export class TelegramManagedBotPairingService {
         };
         update_id?: number;
       }>
-    >("getUpdates", {
-      allowed_updates: ["managed_bot"],
-      limit: 100,
-      ...(this.offset ? { offset: this.offset } : {}),
-      timeout: 0,
-    });
+    >("getUpdates", requestBody);
+
     for (const update of updates) {
-      if (typeof update.update_id === "number") {
+      if (Number.isFinite(update.update_id)) {
         this.offset = Math.max(this.offset, update.update_id + 1);
       }
+
       const managed = update.managed_bot;
       const bot = managed?.bot;
       const ownerUserId = managed?.user?.id;
+
       if (!bot?.id || ownerUserId == null) {
         continue;
       }
+
       const waiting = [...this.pairings.values()].filter(
         (pairing) => pairing.state === "waiting"
       );
+
       const pairing = waiting.find(
         (candidate) => candidate.suggestedUsername === bot.username
       );
+
       if (!pairing || Date.now() >= Date.parse(pairing.expiresAt)) {
         continue;
       }
+
       pairing.botId = bot.id;
       pairing.botUsername = bot.username;
       pairing.ownerUserId = ownerUserId;
@@ -303,8 +350,10 @@ export class TelegramManagedBotPairingService {
     }
   }
 
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Callers validate each cloud response with its action schema.
   private async cloudCall(action: string, pairing?: Pairing): Promise<unknown> {
     const url = new URL("/api/telegram/pairing", this.cloudUrl);
+
     if (
       url.protocol !== "https:" &&
       !(
@@ -314,61 +363,76 @@ export class TelegramManagedBotPairingService {
     ) {
       throw new Error("Telegram manager URL must use HTTPS.");
     }
+
+    const body: CloudPairingRequest = { action };
+
+    if (pairing) {
+      body.pairingId = pairing.id;
+    }
+
+    const headers = new Headers({ "content-type": "application/json" });
+
+    if (pairing?.cloudSecret) {
+      headers.set("authorization", `Bearer ${pairing.cloudSecret}`);
+    }
+
     const response = await this.request(url, {
-      body: JSON.stringify({
-        action,
-        ...(pairing ? { pairingId: pairing.id } : {}),
-      }),
-      headers: {
-        "content-type": "application/json",
-        ...(pairing?.cloudSecret
-          ? { authorization: `Bearer ${pairing.cloudSecret}` }
-          : {}),
-      },
+      body: JSON.stringify(body),
+      headers,
       method: "POST",
       redirect: "error",
       signal: AbortSignal.timeout(10_000),
     });
+
     if (response.status === 404 && pairing) {
       pairing.state = "cancelled";
       pairing.token = undefined;
     }
+
     if (!response.ok) {
       throw new Error(
         "Telegram cloud connection failed. Please retry or start a new pairing."
       );
     }
+
     return response.json();
   }
 
   private async call<T>(
     method: string,
-    body?: Record<string, unknown>
+    body?: TelegramRequestBody
   ): Promise<T> {
     if (!this.managerToken) {
       throw new Error(
         "Telegram manager bot is not configured, please include NAKAMA_TELEGRAM_MANAGER_BOT_TOKEN in environment variable."
       );
     }
+
     const response = await this.request(
       `${API_BASE}/bot${encodeURIComponent(this.managerToken)}/${method}`,
       {
         body: body ? JSON.stringify(body) : undefined,
-        headers: body ? { "content-type": "application/json" } : undefined,
+        headers: body
+          ? new Headers({ "content-type": "application/json" })
+          : undefined,
         method: body ? "POST" : "GET",
         signal: AbortSignal.timeout(5000),
       }
     );
+
+    // SAFETY: Telegram's API returns this envelope for every bot method.
     const payload = (await response.json()) as {
       description?: string;
       ok?: boolean;
       result?: T;
     };
+
     if (!(response.ok && payload.ok && payload.result !== undefined)) {
       throw new Error(
         payload.description ?? "Telegram manager bot request failed."
       );
     }
+
     return payload.result;
   }
 }

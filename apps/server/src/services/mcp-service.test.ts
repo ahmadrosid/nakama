@@ -19,6 +19,7 @@ async function seedProfile(
   db: ReturnType<typeof createInMemoryDatabaseAdapter>
 ) {
   const now = new Date().toISOString();
+
   const profile = {
     createdAt: now,
     id: nanoid(),
@@ -39,16 +40,20 @@ describe("McpClientManager", () => {
     using _connect = spyOn(Client.prototype, "connect").mockResolvedValue(
       undefined
     );
+
     using _listTools = spyOn(Client.prototype, "listTools").mockRejectedValue(
       new Error("list tools failed")
     );
+
     let closeCount = 0;
+
     using _close = spyOn(
       StdioClientTransport.prototype,
       "close"
     ).mockImplementation(async () => {
       closeCount += 1;
     });
+
     const manager = new McpClientManager();
 
     await expect(
@@ -74,16 +79,20 @@ describe("McpClientManager", () => {
     using _connect = spyOn(Client.prototype, "connect").mockResolvedValue(
       undefined
     );
+
     using _listTools = spyOn(Client.prototype, "listTools").mockRejectedValue(
       new Error("list tools failed")
     );
+
     let closeCount = 0;
+
     using _close = spyOn(
       StreamableHTTPClientTransport.prototype,
       "close"
     ).mockImplementation(async () => {
       closeCount += 1;
     });
+
     const manager = new McpClientManager();
 
     await expect(
@@ -99,16 +108,22 @@ describe("McpService", () => {
   test("refreshes tools from a new MCP connection", async () => {
     const db = createInMemoryDatabaseAdapter();
     const calls: string[] = [];
+
+    // SAFETY: This test double supplies only the fields exercised by this test.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- This test fixture uses a narrow compatibility cast for its mock.
     const manager = {
       async connect() {
         calls.push("connect");
+
         return [{ description: "New tool", inputSchema: {}, name: "new_tool" }];
       },
       async disconnect() {
         calls.push("disconnect");
       },
     } as unknown as McpClientManager;
+
     const service = new McpService(db, manager);
+
     const created = await service.createServer({
       config: { url: "https://example.com/mcp" },
       connect: false,
@@ -130,13 +145,18 @@ describe("McpService", () => {
   test("disabling disconnects and blocks current and future tool use", async () => {
     const db = createInMemoryDatabaseAdapter();
     const calls: string[] = [];
+
+    // SAFETY: This test double supplies only the fields exercised by this test.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- This test fixture uses a narrow compatibility cast for its mock.
     const manager = {
       async callTool() {
         calls.push("callTool");
+
         return { ok: true };
       },
       async connect() {
         calls.push("connect");
+
         return [
           { description: "Read a file", inputSchema: {}, name: "read_file" },
         ];
@@ -148,12 +168,15 @@ describe("McpService", () => {
         calls.push("ensureConnected");
       },
     } as unknown as McpClientManager;
+
     const service = new McpService(db, manager);
+
     const created = await service.createServer({
       config: { command: "mcp-filesystem" },
       name: "filesystem",
       transport: "stdio",
     });
+
     const profileId = await seedProfile(db);
 
     await service.assignServerToProfile(profileId, created.server.id);
@@ -165,10 +188,13 @@ describe("McpService", () => {
       "org_test",
       profileId
     );
+
     expect(existingTools).toHaveLength(1);
+
     const updated = await service.updateServer(created.server.id, {
       enabled: false,
     });
+
     const futureTools = buildMcpToolDefinitions(
       await db.listMcpServersForProfile(profileId),
       service,
@@ -176,6 +202,7 @@ describe("McpService", () => {
       "org_test",
       profileId
     );
+
     const existingResult = await existingTools[0]!.run({}, {});
 
     expect(updated.server).toMatchObject({
@@ -193,18 +220,24 @@ describe("McpService", () => {
     const calls: string[] = [];
     let connected = false;
     let callCount = 0;
+
+    // SAFETY: This test double supplies only the fields exercised by this test.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- This test fixture uses a narrow compatibility cast for its mock.
     const manager = {
       async callTool() {
         calls.push("callTool");
         callCount += 1;
+
         if (callCount === 1) {
           throw new StreamableHTTPError(404, "Session not found");
         }
+
         return { ok: true };
       },
       async connect() {
         calls.push("connect");
         connected = true;
+
         return [{ description: "Search", inputSchema: {}, name: "search" }];
       },
       async dropConnection() {
@@ -213,13 +246,16 @@ describe("McpService", () => {
       },
       isConnected: () => connected,
     } as unknown as McpClientManager;
+
     const service = new McpService(db, manager);
+
     const created = await service.createServer({
       config: { url: "https://example.com/mcp" },
       connect: false,
       name: "search",
       transport: "http",
     });
+
     const server = await db.getMcpServer(created.server.id);
 
     const result = await service.callTool(
@@ -246,6 +282,9 @@ describe("McpService", () => {
   test("does not retry a tool call that may have run", async () => {
     const db = createInMemoryDatabaseAdapter();
     let callCount = 0;
+
+    // SAFETY: This test double supplies only the fields exercised by this test.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- This test fixture uses a narrow compatibility cast for its mock.
     const manager = {
       async callTool() {
         callCount += 1;
@@ -253,13 +292,16 @@ describe("McpService", () => {
       },
       isConnected: () => true,
     } as unknown as McpClientManager;
+
     const service = new McpService(db, manager);
+
     const created = await service.createServer({
       config: { url: "https://example.com/mcp" },
       connect: false,
       name: "search",
       transport: "http",
     });
+
     const server = await db.getMcpServer(created.server.id);
 
     await expect(
@@ -271,13 +313,18 @@ describe("McpService", () => {
   test("reports a stored connected HTTP server as disconnected when it dropped", async () => {
     const db = createInMemoryDatabaseAdapter();
     let connected = true;
+
+    // SAFETY: This test double supplies only the fields exercised by this test.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- This test fixture uses a narrow compatibility cast for its mock.
     const manager = {
       async connect() {
         return [];
       },
       isConnected: () => connected,
     } as unknown as McpClientManager;
+
     const service = new McpService(db, manager);
+
     const created = await service.createServer({
       config: { url: "https://example.com/mcp" },
       name: "search",
@@ -421,9 +468,11 @@ describe("McpService", () => {
         name: "broken",
         transport: "stdio",
       })
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The test callback ignores framework inputs that this case does not inspect.
       .catch((caught: unknown) => caught);
 
     expect(error instanceof NakamaApiError).toBe(true);
+    // SAFETY: This test double supplies only the fields exercised by this test.
     expect((error as NakamaApiError).status).toBe(422);
 
     const listed = await service.listServers();
@@ -490,6 +539,7 @@ describe("McpService", () => {
       },
       connect: false,
       name: "filesystem",
+      // SAFETY: This test double supplies only the fields exercised by this test.
       transport: "command" as "stdio",
     });
 
@@ -616,16 +666,21 @@ describe("McpService", () => {
   test("defers stdio startup and opens one process in the profile cwd", async () => {
     const db = createInMemoryDatabaseAdapter();
     const startupConnections: string[] = [];
+
     const spawns: Array<{
       cwd: string;
       orgId: string;
       profileId: string;
     }> = [];
+
+    // SAFETY: This test double supplies only the fields exercised by this test.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- This test fixture uses a narrow compatibility cast for its mock.
     const manager = {
       async callTool(
         _serverId: string,
         _transport: "stdio",
         _toolName: string,
+        // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The test callback ignores framework inputs that this case does not inspect.
         _input: unknown,
         profileId: string,
         orgId: string
@@ -634,9 +689,11 @@ describe("McpService", () => {
       },
       async connect(server: { id: string }) {
         startupConnections.push(server.id);
+
         return [];
       },
       async ensureConnected(
+        // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The test callback ignores framework inputs that this case does not inspect.
         _server: unknown,
         orgId: string,
         profileId: string
@@ -648,13 +705,16 @@ describe("McpService", () => {
         });
       },
     } as unknown as McpClientManager;
+
     const service = new McpService(db, manager);
+
     const created = await service.createServer({
       config: { command: "fake-stdio-server" },
       connect: false,
       name: "filesystem",
       transport: "stdio",
     });
+
     const server = await db.getMcpServer(created.server.id);
 
     await service.connectEnabledServers();
@@ -665,6 +725,7 @@ describe("McpService", () => {
     await service.assignServerToProfile(profileId, created.server.id);
     const orgId = "org_test";
     expect(server).not.toBeNull();
+
     const scopedServer = {
       ...server!,
       cachedTools: [
@@ -675,7 +736,9 @@ describe("McpService", () => {
         },
       ],
     };
+
     await db.upsertMcpServer(scopedServer);
+
     const tools = buildMcpToolDefinitions(
       [scopedServer],
       service,
@@ -683,6 +746,7 @@ describe("McpService", () => {
       orgId,
       profileId
     );
+
     const result = await tools[0]!.run({}, {});
 
     expect(spawns).toEqual([

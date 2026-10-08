@@ -8,11 +8,22 @@ import type { ToolContext } from "@nakama/core";
 // instead of inheriting the server's full environment.
 
 const SIGKILL_GRACE_MS = 5000;
+
 const MAX_OUTPUT_CHARS = 1_000_000;
+
 const DEFAULT_TIMEOUT_MS = 30_000;
+
 // Keep in sync with TOOL_RETRYABLE_EXIT_CODE in custom-tool-handlers.ts
 // (sysexits EX_TEMPFAIL). Avoid importing that module — loaders import us.
 const RETRYABLE_EXIT_CODE = 75;
+
+type SubprocessJsonValue =
+  | boolean
+  | null
+  | number
+  | string
+  | SubprocessJsonValue[]
+  | Record<string, SubprocessJsonValue>;
 
 /** Signal a dedicated POSIX process group or a Windows process tree.
  * Callers must spawn with detached: true on POSIX. Windows callers can await
@@ -29,9 +40,11 @@ export function killProcessTree(
       // already exited
     }
   };
+
   if (!child.pid) {
     return Promise.resolve();
   }
+
   if (process.platform === "win32") {
     return new Promise((resolve) => {
       const killer = spawn(
@@ -45,6 +58,7 @@ export function killProcessTree(
         ["/F", "/T", "/PID", String(child.pid)],
         { stdio: "ignore", windowsHide: true }
       );
+
       killer.once("error", () => {
         killChild();
         resolve();
@@ -53,20 +67,24 @@ export function killProcessTree(
         if (code !== 0) {
           killChild();
         }
+
         resolve();
       });
     });
   }
+
   try {
     process.kill(-child.pid, signal);
   } catch {
     killChild();
   }
+
   return Promise.resolve();
 }
 
 function resolveCustomToolTimeoutMs(): number {
   const configured = Number(process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS);
+
   return Number.isFinite(configured) && configured > 0
     ? configured
     : DEFAULT_TIMEOUT_MS;
@@ -95,6 +113,7 @@ function buildAllowlistedSubprocessEnv(
 
 interface SpawnJsonToolTransport {
   includeConfigDir?: boolean;
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- The host callback receives IPC data before its caller validates it.
   onHostRequest?: (request: unknown, signal: AbortSignal) => Promise<unknown>;
   timeoutMs?: number;
 }
@@ -123,13 +142,15 @@ export interface SpawnJsonToolOptions {
  */
 export async function spawnJsonTool(
   options: SpawnJsonToolOptions
-): Promise<unknown> {
+): Promise<SubprocessJsonValue> {
   const { args, bin, context, cwd, input, label, transport, workspaceRoot } =
     options;
+
   const env = buildAllowlistedSubprocessEnv(
     workspaceRoot,
     transport?.includeConfigDir ?? true
   );
+
   const timeoutMs = transport?.timeoutMs ?? resolveCustomToolTimeoutMs();
   Object.assign(env, options.env);
 
@@ -146,24 +167,36 @@ export async function spawnJsonTool(
           : ["pipe", "pipe", "pipe"],
         windowsHide: true,
       });
+
       const hostAbort = new AbortController();
 
       let hostRequestPending = false;
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Node types IPC messages as unknown at this boundary.
       child.on("message", async (message: unknown) => {
         if (
           !(transport?.onHostRequest && message) ||
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- IPC may contain any serialized value.
           typeof message !== "object"
         ) {
           return;
         }
+
+        // SAFETY: The object and protocol fields are checked before the request is used.
+        // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- IPC protocol fields are validated below.
         const request = message as Record<string, unknown>;
+
         if (
           request.type !== "nakama-host-request" ||
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The protocol id must be a string before it is echoed.
           typeof request.id !== "string"
         ) {
           return;
         }
-        const reply = (payload: object) => {
+
+        const reply = (payload: {
+          error?: string;
+          result?: SubprocessJsonValue;
+        }) => {
           if (child.connected) {
             child.send(
               { id: request.id, type: "nakama-host-result", ...payload },
@@ -171,11 +204,15 @@ export async function spawnJsonTool(
             );
           }
         };
+
         if (hostRequestPending) {
           reply({ error: "Host calls must be sequential." });
+
           return;
         }
+
         hostRequestPending = true;
+
         try {
           reply({
             result: await transport.onHostRequest(
@@ -209,6 +246,7 @@ export async function spawnJsonTool(
         aborted = true;
         killChild();
       };
+
       if (context.signal?.aborted) {
         onAbort();
       } else {
@@ -248,6 +286,7 @@ export async function spawnJsonTool(
         // the budget is spent either way, so report the timeout.
         if (aborted) {
           reject(new Error(`${label} was cancelled`));
+
           return;
         }
 
@@ -257,23 +296,28 @@ export async function spawnJsonTool(
               `${label} timed out after ${timeoutMs}ms (exit code ${exitCode ?? "null"}): ${tail}`
             )
           );
+
           return;
         }
 
         if (exitCode === 0) {
           resolve({ stderr, stdout });
+
           return;
         }
 
         // Exit 75 (EX_TEMPFAIL) is the only non-zero code that opts into
         // retries — the tool author asserts the attempt was side-effect-free.
         const message = `${label} exit code ${exitCode ?? "null"}: ${tail}`;
+
         if (exitCode === RETRYABLE_EXIT_CODE) {
           reject(
             Object.assign(new Error(message), { retryable: true as const })
           );
+
           return;
         }
+
         reject(new Error(message));
       });
 
@@ -297,7 +341,8 @@ export async function spawnJsonTool(
   }
 
   try {
-    return JSON.parse(trimmed);
+    // SAFETY: JSON.parse accepts only valid JSON output from the child process.
+    return JSON.parse(trimmed) as SubprocessJsonValue;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
