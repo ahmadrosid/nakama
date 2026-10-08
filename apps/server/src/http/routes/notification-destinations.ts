@@ -1,10 +1,9 @@
+import { z } from "@hono/zod-openapi";
 import type {
-  CreateNotificationDestinationRequest,
   ListNotificationDestinationsResponse,
   NotificationDestinationSummary,
   NotificationDestinationWithSecret,
   RegenerateNotificationDestinationKeyResponse,
-  UpdateNotificationDestinationRequest,
 } from "@nakama/core";
 import { NakamaApiError } from "@nakama/core";
 import { NotificationDestinationService } from "../../services/notification-destination-service";
@@ -22,8 +21,58 @@ export function registerNotificationDestinationRoutes(
     options.authService
   );
 
+  const telegramConfigSchema = z.object({
+    chatId: z.number(),
+    profileId: z.string().optional(),
+    topicId: z.number().nullable().optional(),
+  });
+
+  const discordConfigSchema = z.object({
+    channelId: z.string(),
+    profileId: z.string(),
+  });
+
+  const whatsappConfigSchema = z.object({ profileId: z.string() });
+
+  const createRequestSchema = z.discriminatedUnion("channel", [
+    z.object({
+      channel: z.literal("telegram"),
+      name: z.string(),
+      telegram: telegramConfigSchema,
+    }),
+    z.object({
+      channel: z.literal("discord"),
+      discord: discordConfigSchema,
+      name: z.string(),
+    }),
+    z.object({
+      channel: z.literal("whatsapp"),
+      name: z.string(),
+      whatsapp: whatsappConfigSchema,
+    }),
+  ]);
+
+  const updateRequestSchema = z.union([
+    z.object({
+      channel: z.literal("telegram").optional(),
+      name: z.string(),
+      telegram: telegramConfigSchema,
+    }),
+    z.object({
+      channel: z.literal("discord"),
+      discord: discordConfigSchema,
+      name: z.string(),
+    }),
+    z.object({
+      channel: z.literal("whatsapp"),
+      name: z.string(),
+      whatsapp: whatsappConfigSchema,
+    }),
+  ]);
+
   app.get("/v1/notification-destinations", async (c) => {
     const auth = requireOrgAdminFromContext(c);
+
     return json<ListNotificationDestinationsResponse>(
       await service.list(auth.activeOrgId!)
     );
@@ -33,9 +82,8 @@ export function registerNotificationDestinationRoutes(
     const auth = requireOrgAdminFromContext(c);
 
     try {
-      const body = await readJson<CreateNotificationDestinationRequest>(
-        c.req.raw
-      );
+      const body = await readJson(c.req.raw, createRequestSchema);
+
       return json<NotificationDestinationWithSecret>(
         await service.create(auth.activeOrgId!, body)
       );
@@ -43,6 +91,7 @@ export function registerNotificationDestinationRoutes(
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
+
       return errorResponse(
         error instanceof Error ? error.message : String(error),
         400
@@ -54,9 +103,8 @@ export function registerNotificationDestinationRoutes(
     const auth = requireOrgAdminFromContext(c);
 
     try {
-      const body = await readJson<UpdateNotificationDestinationRequest>(
-        c.req.raw
-      );
+      const body = await readJson(c.req.raw, updateRequestSchema);
+
       return json<NotificationDestinationSummary>(
         await service.update(
           auth.activeOrgId!,
@@ -68,6 +116,7 @@ export function registerNotificationDestinationRoutes(
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
+
       return errorResponse(
         error instanceof Error ? error.message : String(error),
         400
@@ -91,6 +140,7 @@ export function registerNotificationDestinationRoutes(
         if (error instanceof NakamaApiError) {
           return errorResponse(error.message, error.status);
         }
+
         return errorResponse(
           error instanceof Error ? error.message : String(error),
           400
@@ -104,11 +154,13 @@ export function registerNotificationDestinationRoutes(
 
     try {
       await service.delete(auth.activeOrgId!, c.req.param("destinationId"));
+
       return new Response(null, { status: 204 });
     } catch (error) {
       if (error instanceof NakamaApiError) {
         return errorResponse(error.message, error.status);
       }
+
       return errorResponse(
         error instanceof Error ? error.message : String(error),
         400

@@ -53,11 +53,13 @@ describe("GET /v1/mcp/oauth/callback/:serverId", () => {
             `http://localhost/v1/mcp/oauth/callback/${serverId}?code=abc&state=not-the-state`
           )
         );
+
         return await response.text();
       })
     );
 
     expect(unknown).toContain("no longer valid");
+    // SAFETY: This test controls the fixture shape at this boundary.
     expect(wrongState).toBe(unknown as string);
   });
 

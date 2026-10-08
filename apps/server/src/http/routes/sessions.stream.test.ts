@@ -5,18 +5,16 @@ import { sessionTurnRegistry } from "../../services/session-turn-registry";
 import { streamMessage, streamTurnSubscribe } from "../shared";
 
 /** Stands in for a turn stuck in a long tool run: it only settles when cancelled. */
-function createCancellableSession(): {
-  session: AgentChatSession;
-  sawSignal: () => AbortSignal | undefined;
-} {
+function createCancellableSession() {
   let signal: AbortSignal | undefined;
 
+  // SAFETY: This test controls the fixture shape at this boundary.
   const session = {
     getContextUsage: () => null,
     getTurnUsage: () => null,
     sendStream: (
-      _input: unknown,
-      _handlers: unknown,
+      _input: Parameters<AgentChatSession["sendStream"]>[0],
+      _handlers: Parameters<AgentChatSession["sendStream"]>[1],
       options?: { signal?: AbortSignal }
     ) =>
       new Promise<string>((_resolve, reject) => {
@@ -30,18 +28,19 @@ function createCancellableSession(): {
           once: true,
         });
       }),
-  } as unknown as AgentChatSession;
+  } as AgentChatSession;
 
   return { sawSignal: () => signal, session };
 }
 
 /** Emits once and then stalls: a healthy turn sitting in a long tool run. */
 function createChattyThenStalledSession(): AgentChatSession {
+  // SAFETY: This test controls the fixture shape at this boundary.
   return {
     getContextUsage: () => null,
     getTurnUsage: () => null,
     sendStream: (
-      _input: unknown,
+      _input: Parameters<AgentChatSession["sendStream"]>[0],
       handlers: { onChunk: (delta: string) => void },
       options?: { signal?: AbortSignal }
     ) =>
@@ -53,7 +52,7 @@ function createChattyThenStalledSession(): AgentChatSession {
           { once: true }
         );
       }),
-  } as unknown as AgentChatSession;
+  } as AgentChatSession;
 }
 
 async function waitForTurnToEnd(sessionId: string): Promise<void> {
@@ -86,6 +85,7 @@ describe("streamTurnSubscribe", () => {
 
     while (true) {
       const { done, value } = await reader.read();
+
       if (done) {
         break;
       }
@@ -151,11 +151,13 @@ describe("streamMessage cancellation", () => {
     const { session } = createCancellableSession();
     const warn = spyOn(console, "warn").mockImplementation(() => {});
     const publish = sessionTurnRegistry.publish.bind(sessionTurnRegistry);
+
     const publishSpy = spyOn(sessionTurnRegistry, "publish").mockImplementation(
       (id, event) => {
         if (event.type === "done" || event.type === "error") {
           throw new Error("simulated transport drop before terminal publish");
         }
+
         publish(id, event);
       }
     );
@@ -164,6 +166,7 @@ describe("streamMessage cancellation", () => {
 
     try {
       expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
+
       const response = streamMessage(
         sessionId,
         session,
@@ -184,9 +187,8 @@ describe("streamMessage cancellation", () => {
       expect(
         warn.mock.calls.some(
           (args) =>
-            typeof args[0] === "string" &&
-            args[0].includes(sessionId) &&
-            args[0].includes("Stream closed before the agent finished.")
+            String(args[0]).includes(sessionId) &&
+            String(args[0]).includes("Stream closed before the agent finished.")
         )
       ).toBe(true);
     } finally {
@@ -202,6 +204,7 @@ describe("streamMessage timeout", () => {
     const { session, sawSignal } = createCancellableSession();
 
     expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
+
     const response = streamMessage(
       sessionId,
       session,
@@ -232,6 +235,7 @@ describe("streamMessage timeout", () => {
 
     expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
     const startedAt = Bun.nanoseconds();
+
     const response = streamMessage(
       sessionId,
       session,
@@ -259,6 +263,7 @@ describe("streamMessage timeout", () => {
     const session = createChattyThenStalledSession();
 
     expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
+
     const response = streamMessage(
       sessionId,
       session,
@@ -287,36 +292,45 @@ describe("streamMessage timeout", () => {
     // Distinctive enough that only the stream deadline matches.
     const deadlineMs = 300_000;
 
+    // SAFETY: This test controls the fixture shape at this boundary.
     globalThis.setTimeout = ((
       handler: TimerHandler,
       delay?: number,
       ...rest: unknown[]
     ) => {
       const handle = realSetTimeout(
+        // SAFETY: This test controls the fixture shape at this boundary.
         handler as () => void,
         delay,
+        // SAFETY: This test controls the fixture shape at this boundary.
         ...(rest as [])
       );
+
       if (delay === deadlineMs) {
         pending.add(handle);
       }
+
       return handle;
     }) as typeof globalThis.setTimeout;
+    // SAFETY: This test controls the fixture shape at this boundary.
     globalThis.clearTimeout = ((handle?: ReturnType<typeof setTimeout>) => {
       if (handle !== undefined) {
         pending.delete(handle);
       }
+
       realClearTimeout(handle);
     }) as typeof globalThis.clearTimeout;
 
     try {
+      // SAFETY: This test controls the fixture shape at this boundary.
       const session = {
         getContextUsage: () => null,
         getTurnUsage: () => null,
         sendStream: () => Promise.resolve("done"),
-      } as unknown as AgentChatSession;
+      } as AgentChatSession;
 
       expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
+
       const response = streamMessage(
         sessionId,
         session,
@@ -333,6 +347,7 @@ describe("streamMessage timeout", () => {
     } finally {
       globalThis.setTimeout = realSetTimeout;
       globalThis.clearTimeout = realClearTimeout;
+
       for (const handle of pending) {
         realClearTimeout(handle);
       }
