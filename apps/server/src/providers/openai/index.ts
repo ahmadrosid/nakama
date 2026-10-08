@@ -10,6 +10,7 @@ import type {
   ProviderClient,
   ProviderName,
   StreamChatHandlers,
+  ThinkingEffort,
   ToolCall,
 } from "@nakama/core";
 import {
@@ -18,6 +19,7 @@ import {
   messagesIncludeUserImages,
   toOpenAIChatUserContent,
 } from "@nakama/core";
+import { z } from "zod";
 import {
   buildChatCompletionResult,
   extractOpenAITokenUsage,
@@ -61,6 +63,7 @@ export function createOpenAIProvider(
   options: OpenAIProviderOptions
 ): ProviderClient {
   const model = options.model ?? "gpt-5.4";
+
   const client: OpenAIClientConfig = {
     apiKey: options.apiKey,
     baseUrl: normalizeBaseUrl(options.baseUrl ?? DEFAULT_OPENAI_BASE_URL),
@@ -68,9 +71,11 @@ export function createOpenAIProvider(
     label: providerLabel(options.providerName ?? "openai"),
     providerName: options.providerName ?? "openai",
   };
+
   const useResponsesApi =
     client.providerName === "openai" &&
     client.baseUrl === DEFAULT_OPENAI_BASE_URL;
+
   const customModels = options.customModels;
 
   return {
@@ -96,6 +101,7 @@ export function createOpenAIProvider(
     },
     generateText(input: GenerateTextInput) {
       const useJson = (input.format ?? "json") === "json";
+
       const system = useJson
         ? input.system
         : `${input.system}\n\nReturn only the requested text. No JSON, keys, labels, markdown fences, or surrounding quotes.`;
@@ -191,9 +197,7 @@ function chatCompletionsUrl(client: OpenAIClientConfig): string {
   return `${client.baseUrl}/chat/completions`;
 }
 
-function buildRequestHeaders(
-  client: OpenAIClientConfig
-): Record<string, string> {
+function buildRequestHeaders(client: OpenAIClientConfig) {
   return {
     Authorization: `Bearer ${client.apiKey}`,
     "Content-Type": "application/json",
@@ -237,9 +241,14 @@ function usesResponsesApi(
   );
 }
 
+type OpenAIUserContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } }
+  | { type: "input_file"; file_data: string; filename: string };
+
 type OpenAIMessage =
   | { role: "system"; content: string }
-  | { role: "user"; content: string | Array<Record<string, unknown>> }
+  | { role: "user"; content: string | OpenAIUserContentPart[] }
   | {
       role: "assistant";
       content: string | null;
@@ -252,6 +261,92 @@ type OpenAIMessage =
       }>;
     }
   | { role: "tool"; tool_call_id: string; content: string };
+
+type OpenAIChatCompletionRequest = {
+  model: string;
+  messages: OpenAIMessage[];
+  stream?: true;
+  stream_options?: { include_usage: boolean };
+  thinking?: { type: "disabled" | "enabled" };
+  reasoning_effort?: ThinkingEffort | "none";
+  enable_thinking?: boolean;
+  reasoning?: { effort: ThinkingEffort; enabled: true };
+  tool_choice?: "auto";
+  tools?: ReturnType<typeof toOpenAITools>;
+};
+
+type OpenAITextRequestBody = {
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+  model: string;
+  response_format?: { type: "json_object" };
+};
+
+const openAICompletionPayloadSchema = z.object({
+  choices: z
+    .array(
+      z.object({
+        delta: z
+          .object({
+            content: z.string().nullable().optional(),
+            reasoning_content: z.string().nullable().optional(),
+            tool_calls: z
+              .array(
+                z.object({
+                  function: z
+                    .object({
+                      arguments: z.string().optional(),
+                      name: z.string().optional(),
+                    })
+                    .optional(),
+                  id: z.string().optional(),
+                  index: z.number().optional(),
+                })
+              )
+              .optional(),
+          })
+          .optional(),
+        message: z
+          .object({
+            content: z.string().nullable().optional(),
+            reasoning_content: z.string().nullable().optional(),
+            tool_calls: z
+              .array(
+                z.object({
+                  function: z
+                    .object({
+                      arguments: z.string().optional(),
+                      name: z.string().optional(),
+                    })
+                    .optional(),
+                  id: z.string().optional(),
+                })
+              )
+              .optional(),
+          })
+          .optional(),
+      })
+    )
+    .optional(),
+  citations: z
+    .array(z.string())
+    .nullish()
+    .transform((citations) => citations ?? undefined),
+  usage: z
+    .object({
+      completion_tokens: z.number().optional(),
+      prompt_tokens: z.number().optional(),
+      prompt_tokens_details: z
+        .object({ cached_tokens: z.number().optional() })
+        .optional(),
+      total_tokens: z.number().optional(),
+    })
+    .optional(),
+});
+
+type OpenAIReasoningValue = {
+  reasoning?: string | null;
+  reasoning_content?: string | null;
+};
 
 export async function toOpenAIMessages(
   system: string,
@@ -272,10 +367,11 @@ async function toOpenAIMessage(
   provider: ProviderName
 ): Promise<OpenAIMessage> {
   if (message.role === "user") {
+    const content = await toOpenAIChatUserContent(message.content, provider);
+
     return {
-      content: (await toOpenAIChatUserContent(message.content, provider)) as
-        | string
-        | Array<Record<string, unknown>>,
+      // SAFETY: Core's converter emits text, image URL, or input file parts.
+      content: content as string | OpenAIUserContentPart[],
       role: "user",
     };
   }
@@ -297,19 +393,24 @@ function toOpenAIAssistantMessage(
 ): Extract<OpenAIMessage, { role: "assistant" }> {
   const thinking = message.thinking?.trim();
 
-  return {
+  const result: Extract<OpenAIMessage, { role: "assistant" }> = {
     content: message.content || null,
     role: "assistant",
-    ...(thinking && !(provider === "netra" && message.providerContent?.length)
-      ? { reasoning_content: thinking }
-      : {}),
-    ...(provider === "netra" && message.providerContent?.length
-      ? { reasoning_details: message.providerContent }
-      : {}),
-    ...(message.toolCalls?.length
-      ? { tool_calls: toOpenAIAssistantToolCalls(message.toolCalls) }
-      : {}),
   };
+
+  if (thinking && !(provider === "netra" && message.providerContent?.length)) {
+    result.reasoning_content = thinking;
+  }
+
+  if (provider === "netra" && message.providerContent?.length) {
+    result.reasoning_details = message.providerContent;
+  }
+
+  if (message.toolCalls?.length) {
+    result.tool_calls = toOpenAIAssistantToolCalls(message.toolCalls);
+  }
+
+  return result;
 }
 
 function toOpenAIAssistantToolCalls(toolCalls: ToolCall[]) {
@@ -377,9 +478,10 @@ async function buildChatCompletionRequestBody(options: {
   streamOptions?: { includeUsage: boolean };
   provider?: ProviderName;
   thinking?: ProviderChatOptions["thinking"];
-}) {
+}): Promise<OpenAIChatCompletionRequest> {
   const provider = options.provider ?? "openai";
   const hasTools = provider !== "perplexity" && Boolean(options.tools?.length);
+
   if (
     hasTools &&
     (options.model.trim().toLowerCase().startsWith("gpt-6-astra") ||
@@ -389,68 +491,83 @@ async function buildChatCompletionRequestBody(options: {
     throw new Error(`${options.model} requires the Responses API for tools.`);
   }
 
-  return {
-    model: options.model,
-    ...(options.stream ? { stream: true } : {}),
-    ...(options.streamOptions && provider !== "perplexity"
-      ? {
-          stream_options: { include_usage: options.streamOptions.includeUsage },
-        }
-      : {}),
+  const body: OpenAIChatCompletionRequest = {
     messages: await toOpenAIMessages(
       options.system,
       options.messages,
       provider
     ),
-    ...(provider === "deepseek"
-      ? buildDeepSeekThinkingBody(options.thinking)
-      : {}),
-    ...(provider === "xiaomi" ? buildXiaomiThinkingBody(options.thinking) : {}),
-    ...(provider === "qwen" || provider === "qwen_cn"
-      ? { enable_thinking: Boolean(options.thinking?.enabled) }
-      : {}),
-    ...(provider === "doubao" ? buildDoubaoThinkingBody(options.thinking) : {}),
-    ...(provider === "vercel_ai_gateway" && options.thinking?.enabled
-      ? {
-          reasoning: {
-            effort: normalizeThinkingEffort(options.thinking.effort),
-            enabled: true,
-          },
-        }
-      : {}),
-    ...(provider === "perplexity" && options.thinking?.enabled
-      ? {
-          reasoning_effort: normalizeThinkingEffort(options.thinking.effort),
-        }
-      : {}),
-    ...(hasTools
-      ? {
-          tool_choice: "auto",
-          tools: toOpenAITools(options.tools),
-          // Safety net if a caller still hits chat/completions for gpt-5.4+.
-          ...(openAIModelRejectsChatToolsWithReasoning(options.model)
-            ? { reasoning_effort: "none" }
-            : {}),
-        }
-      : {}),
+    model: options.model,
   };
-}
 
-function formatPerplexityCitations(value: unknown): string {
-  if (!Array.isArray(value)) {
-    return "";
+  if (options.stream) {
+    body.stream = true;
   }
 
+  if (options.streamOptions && provider !== "perplexity") {
+    body.stream_options = {
+      include_usage: options.streamOptions.includeUsage,
+    };
+  }
+
+  if (provider === "deepseek") {
+    const thinkingBody = buildDeepSeekThinkingBody(options.thinking);
+
+    if (thinkingBody.thinking) {
+      body.thinking = thinkingBody.thinking;
+    }
+
+    if (thinkingBody.reasoning_effort) {
+      body.reasoning_effort = thinkingBody.reasoning_effort;
+    }
+  }
+
+  if (provider === "xiaomi") {
+    body.thinking = buildXiaomiThinkingBody(options.thinking).thinking;
+  }
+
+  if (provider === "qwen" || provider === "qwen_cn") {
+    body.enable_thinking = Boolean(options.thinking?.enabled);
+  }
+
+  if (provider === "doubao") {
+    body.thinking = buildDoubaoThinkingBody(options.thinking).thinking;
+  }
+
+  if (provider === "vercel_ai_gateway" && options.thinking?.enabled) {
+    body.reasoning = {
+      effort: normalizeThinkingEffort(options.thinking.effort),
+      enabled: true,
+    };
+  }
+
+  if (provider === "perplexity" && options.thinking?.enabled) {
+    body.reasoning_effort = normalizeThinkingEffort(options.thinking.effort);
+  }
+
+  if (hasTools) {
+    body.tool_choice = "auto";
+    body.tools = toOpenAITools(options.tools);
+
+    // Safety net if a caller still hits chat/completions for gpt-5.4+.
+    if (openAIModelRejectsChatToolsWithReasoning(options.model)) {
+      body.reasoning_effort = "none";
+    }
+  }
+
+  return body;
+}
+
+function formatPerplexityCitations(
+  citationsInput: string[] | undefined
+): string {
   const citations: string[] = [];
   const seen = new Set<string>();
 
-  for (const citation of value) {
-    if (typeof citation !== "string") {
-      continue;
-    }
-
+  for (const citation of citationsInput ?? []) {
     try {
       const url = new URL(citation);
+
       if (
         (url.protocol === "http:" || url.protocol === "https:") &&
         !seen.has(url.href)
@@ -516,20 +633,10 @@ function buildDoubaoThinkingBody(
 }
 
 function readReasoningContent(
-  value: unknown,
+  value: OpenAIReasoningValue | undefined,
   options?: { preserveWhitespace?: boolean }
 ): string | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return;
-  }
-
-  const record = value as Record<string, unknown>;
-  const direct =
-    typeof record.reasoning_content === "string"
-      ? record.reasoning_content
-      : typeof record.reasoning === "string"
-        ? record.reasoning
-        : undefined;
+  const direct = value?.reasoning_content ?? value?.reasoning ?? undefined;
 
   if (direct === undefined) {
     return;
@@ -540,6 +647,7 @@ function readReasoningContent(
   }
 
   const trimmed = direct.trim();
+
   return trimmed ? trimmed : undefined;
 }
 
@@ -572,27 +680,16 @@ async function requestChatCompletion(
     );
   }
 
-  const payload = (await response.json()) as {
-    citations?: unknown;
-    usage?: Record<string, unknown>;
-    choices?: Array<{
-      message?: {
-        content?: string | null;
-        reasoning_content?: string | null;
-        tool_calls?: Array<{
-          id?: string;
-          function?: { name?: string; arguments?: string };
-        }>;
-      };
-    }>;
-  };
+  const payload = openAICompletionPayloadSchema.parse(await response.json());
 
   const message = payload.choices?.[0]?.message;
   const toolCalls = parseOpenAIToolCalls(message?.tool_calls);
+
   const citationText =
     client.providerName === "perplexity"
       ? formatPerplexityCitations(payload.citations)
       : "";
+
   const content = `${message?.content ?? ""}${citationText}`;
   const thinking = readReasoningContent(message);
 
@@ -666,14 +763,17 @@ async function requestCompletion(
     responseFormat?: { type: "json_object" };
   }
 ): Promise<GenerateTextResult> {
+  const requestBody: OpenAITextRequestBody = {
+    messages: options.messages,
+    model: options.model,
+  };
+
+  if (options.responseFormat && client.providerName !== "perplexity") {
+    requestBody.response_format = options.responseFormat;
+  }
+
   const response = await fetchWithoutIdleTimeout(chatCompletionsUrl(client), {
-    body: JSON.stringify({
-      messages: options.messages,
-      model: options.model,
-      ...(options.responseFormat && client.providerName !== "perplexity"
-        ? { response_format: options.responseFormat }
-        : {}),
-    }),
+    body: JSON.stringify(requestBody),
     headers: buildRequestHeaders(client),
     method: "POST",
   });
@@ -684,23 +784,27 @@ async function requestCompletion(
     );
   }
 
+  // SAFETY: OpenAI Chat Completions returns the documented choices and usage fields.
   const payload = (await response.json()) as {
     choices?: Array<{ message?: { content?: string | null } }>;
+    usage?: unknown;
   };
 
   const content = payload.choices?.[0]?.message?.content?.trim();
-  const usage = extractOpenAITokenUsage(
-    (payload as { usage?: Record<string, unknown> }).usage
-  );
+
+  const usage = extractOpenAITokenUsage(payload.usage);
 
   if (!content) {
     throw new Error(`${client.label} returned an empty response.`);
   }
 
-  return {
-    content,
-    ...(usage ? { usage } : {}),
-  };
+  const result: GenerateTextResult = { content };
+
+  if (usage) {
+    result.usage = usage;
+  }
+
+  return result;
 }
 
 async function readOpenAIStream(
@@ -712,25 +816,11 @@ async function readOpenAIStream(
   let content = "";
   let thinking = "";
   let usage: ChatCompletionResult["usage"];
-  let citations: unknown;
+  let citations: string[] | undefined;
   const pending = new Map<number, PendingToolCall>();
 
   await readSseEvents(body, ({ data }) => {
-    const payload = JSON.parse(data) as {
-      citations?: unknown;
-      usage?: Record<string, unknown>;
-      choices?: Array<{
-        delta?: {
-          content?: string | null;
-          reasoning_content?: string | null;
-          tool_calls?: Array<{
-            index?: number;
-            id?: string;
-            function?: { name?: string; arguments?: string };
-          }>;
-        };
-      }>;
-    };
+    const payload = openAICompletionPayloadSchema.parse(JSON.parse(data));
 
     usage = extractOpenAITokenUsage(payload.usage) ?? usage;
     citations = payload.citations ?? citations;
@@ -769,6 +859,7 @@ async function readOpenAIStream(
 
   const toolCalls = finalizePendingToolCalls(pending);
   const thinkingText = thinking.trim() || undefined;
+
   const citationText =
     provider === "perplexity" ? formatPerplexityCitations(citations) : "";
 
