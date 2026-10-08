@@ -31,14 +31,10 @@ export interface McpOAuthGrant {
 
 export type StoredMcpHttpConfig = McpHttpConfig & { oauth?: McpOAuthGrant };
 
-export function readMcpOAuthGrant(config: unknown): McpOAuthGrant | undefined {
-  if (typeof config !== "object" || config === null) {
-    return;
-  }
-
-  const grant = (config as StoredMcpHttpConfig).oauth;
-
-  return typeof grant === "object" && grant !== null ? grant : undefined;
+export function readMcpOAuthGrant(
+  config: StoredMcpHttpConfig | undefined
+): McpOAuthGrant | undefined {
+  return config?.oauth;
 }
 
 /** A stalled well-known endpoint must not hold a Test connection open (#326). */
@@ -61,6 +57,7 @@ export async function serverAdvertisesOAuth(url: string): Promise<boolean> {
           signal: AbortSignal.timeout(OAUTH_PROBE_TIMEOUT_MS),
         })
     );
+
     return true;
   } catch {
     return false;
@@ -109,6 +106,7 @@ export class McpServerOAuthProvider implements OAuthClientProvider {
   async saveClientInformation(
     clientInformation: OAuthClientInformationMixed
   ): Promise<void> {
+    // SAFETY: The SDK supplies the mixed client record that it persists as full client information.
     await this.update({
       clientInformation: clientInformation as OAuthClientInformationFull,
     });
@@ -161,13 +159,22 @@ export class McpServerOAuthProvider implements OAuthClientProvider {
 
     const all = scope === "all";
 
-    await this.update({
-      ...(all || scope === "client" ? { clientInformation: undefined } : {}),
-      ...(all || scope === "tokens" ? { tokens: undefined } : {}),
-      ...(all || scope === "verifier"
-        ? { codeVerifier: undefined, state: undefined }
-        : {}),
-    });
+    const patch: Partial<McpOAuthGrant> = {};
+
+    if (all || scope === "client") {
+      patch.clientInformation = undefined;
+    }
+
+    if (all || scope === "tokens") {
+      patch.tokens = undefined;
+    }
+
+    if (all || scope === "verifier") {
+      patch.codeVerifier = undefined;
+      patch.state = undefined;
+    }
+
+    await this.update(patch);
   }
 
   /** True once the provider has issued something worth refreshing. */

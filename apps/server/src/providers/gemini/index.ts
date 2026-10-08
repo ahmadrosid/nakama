@@ -17,6 +17,10 @@ import {
   buildChatCompletionResult,
   extractGeminiTokenUsage,
   notifyToolInputDelta,
+  type ProviderJsonRecord,
+  parseJsonRecord,
+  readProviderString,
+  readRecord,
 } from "../shared";
 import { buildGeminiChatConfig, buildGeminiGenerateConfig } from "./config";
 import {
@@ -27,6 +31,7 @@ import {
 } from "./messages";
 
 const PROVIDER_LABEL = "Gemini";
+
 const DEFAULT_MODEL = "gemini-2.5-flash";
 
 export interface GeminiProviderOptions {
@@ -37,10 +42,16 @@ export interface GeminiProviderOptions {
 
 function createGeminiClient(apiKey: string, baseUrl?: string): GoogleGenAI {
   const trimmed = baseUrl?.trim();
-  return new GoogleGenAI({
+
+  const options: ConstructorParameters<typeof GoogleGenAI>[0] = {
     apiKey,
-    ...(trimmed ? { httpOptions: { baseUrl: trimmed } } : {}),
-  });
+  };
+
+  if (trimmed) {
+    options.httpOptions = { baseUrl: trimmed };
+  }
+
+  return new GoogleGenAI(options);
 }
 
 /**
@@ -60,10 +71,10 @@ const REFUSAL_FINISH_REASONS = new Set([
 /** Marks the one empty-response shape worth a second attempt. */
 const RETRYABLE_EMPTY = Symbol("gemini.retryableEmptyResponse");
 
-function isRetryableEmptyResponse(error: unknown): boolean {
-  return (
-    typeof error === "object" && error !== null && RETRYABLE_EMPTY in error
-  );
+function isRetryableEmptyResponse<Value>(
+  error: Value
+): error is Value & { [RETRYABLE_EMPTY]?: true } {
+  return error instanceof Object && RETRYABLE_EMPTY in error;
 }
 
 /**
@@ -72,8 +83,8 @@ function isRetryableEmptyResponse(error: unknown): boolean {
  * out before a part was emitted, a refusal means the model declined, and no
  * reason at all is the transient case that a retry actually fixes.
  */
-function emptyResponseError(finishReason: unknown): Error {
-  const reason = typeof finishReason === "string" ? finishReason : "";
+function emptyResponseError<Value>(finishReason: Value): Error {
+  const reason = readProviderString(finishReason) ?? "";
 
   if (REFUSAL_FINISH_REASONS.has(reason)) {
     // 422, not 500: the request reached the model and the model said no.
@@ -96,7 +107,7 @@ function emptyResponseError(finishReason: unknown): Error {
   return error;
 }
 
-function formatGeminiError(error: unknown): Error {
+function formatGeminiError<ProviderError>(error: ProviderError): Error {
   if (error instanceof ApiError) {
     return new Error(
       `${PROVIDER_LABEL} request failed (${error.status}): ${error.message}`
@@ -168,7 +179,7 @@ interface PendingFunctionCall {
 
 function mergePendingFunctionCall(
   pending: Map<string, PendingFunctionCall>,
-  call: { id?: string; name?: string; args?: Record<string, unknown> },
+  call: { id?: string; name?: string; args?: ProviderJsonRecord },
   handlers?: StreamChatHandlers
 ): void {
   // Gemini 2.5 sends no call id, so one is minted from the tool name. The old
@@ -182,10 +193,12 @@ function mergePendingFunctionCall(
 
   if (call.args) {
     const nextJson = JSON.stringify(call.args);
+
     const delta =
       nextJson.length > current.argsJson.length
         ? nextJson.slice(current.argsJson.length)
         : nextJson;
+
     current.argsJson = nextJson;
     notifyToolInputDelta(
       handlers,
@@ -207,7 +220,7 @@ function finalizePendingFunctionCalls(
 
     return parseGeminiFunctionCalls([
       {
-        args: JSON.parse(call.argsJson) as Record<string, unknown>,
+        args: parseJsonRecord(call.argsJson),
         id: call.id,
         name: call.name,
       },
@@ -230,7 +243,7 @@ function accumulateStreamParts(
     if (!text) {
       if (part.functionCall) {
         handlers?.onToolStart?.({
-          input: (part.functionCall.args ?? {}) as Record<string, unknown>,
+          input: readRecord(part.functionCall.args ?? {}),
           tool: part.functionCall.name ?? "",
           toolCallId:
             part.functionCall.id ??
@@ -316,6 +329,7 @@ export function createGeminiProvider(
     },
     generateText(input: GenerateTextInput) {
       const useJson = (input.format ?? "json") === "json";
+
       const system = useJson
         ? `${input.system}\n\nRespond with valid JSON only.`
         : `${input.system}\n\nReturn only the requested text. No JSON, labels, or markdown fences.`;
@@ -338,10 +352,13 @@ export function createGeminiProvider(
           throw emptyResponseError(response.candidates?.[0]?.finishReason);
         }
 
-        return {
-          content,
-          ...(usage ? { usage } : {}),
-        } satisfies GenerateTextResult;
+        const result: GenerateTextResult = { content };
+
+        if (usage) {
+          result.usage = usage;
+        }
+
+        return result;
       });
     },
     name: "gemini",

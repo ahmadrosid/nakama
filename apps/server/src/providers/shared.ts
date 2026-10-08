@@ -5,11 +5,34 @@ import type {
   ThinkingEffort,
   ToolCall,
 } from "@nakama/core";
+import { z } from "zod";
 
-function readNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value)
-    ? value
-    : undefined;
+export type ProviderJsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | ProviderJsonValue[]
+  | ProviderJsonRecord;
+
+export interface ProviderJsonRecord {
+  [key: string]: ProviderJsonValue;
+}
+
+const providerNumberSchema = z.number().finite();
+
+const providerStringSchema = z.string();
+
+export function readProviderNumber<Value>(value: Value): number | undefined {
+  const parsed = providerNumberSchema.safeParse(value);
+
+  return parsed.success ? parsed.data : undefined;
+}
+
+export function readProviderString<Value>(value: Value): string | undefined {
+  const parsed = providerStringSchema.safeParse(value);
+
+  return parsed.success ? parsed.data : undefined;
 }
 
 export function buildTokenUsage(options: {
@@ -18,10 +41,10 @@ export function buildTokenUsage(options: {
   outputTokens?: unknown;
   totalTokens?: unknown;
 }): ChatCompletionResult["usage"] | undefined {
-  const cachedInputTokens = readNumber(options.cachedInputTokens);
-  let inputTokens = readNumber(options.inputTokens);
-  let outputTokens = readNumber(options.outputTokens);
-  let totalTokens = readNumber(options.totalTokens);
+  const cachedInputTokens = readProviderNumber(options.cachedInputTokens);
+  let inputTokens = readProviderNumber(options.inputTokens);
+  let outputTokens = readProviderNumber(options.outputTokens);
+  let totalTokens = readProviderNumber(options.totalTokens);
 
   if (inputTokens === undefined && outputTokens === undefined) {
     return;
@@ -51,22 +74,28 @@ export function buildTokenUsage(options: {
     totalTokens = inputTokens + outputTokens;
   }
 
-  return {
+  const usage: NonNullable<ChatCompletionResult["usage"]> = {
     inputTokens,
     outputTokens,
     totalTokens,
-    // A zero carries the same information as the provider saying nothing, and
-    // emitting it would change the shape of every existing usage object.
-    ...(cachedInputTokens ? { cachedInputTokens } : {}),
   };
+
+  // A zero carries the same information as the provider saying nothing, and
+  // emitting it would change the shape of every existing usage object.
+  if (cachedInputTokens) {
+    usage.cachedInputTokens = cachedInputTokens;
+  }
+
+  return usage;
 }
 
-export function extractOpenAITokenUsage(
-  value: unknown
+export function extractOpenAITokenUsage<Value>(
+  value: Value
 ): ChatCompletionResult["usage"] | undefined {
   const record = readRecord(value);
   // OpenAI counts cached tokens inside prompt_tokens, so this is a subset.
   const details = readRecord(record.prompt_tokens_details);
+
   return buildTokenUsage({
     cachedInputTokens: details.cached_tokens,
     inputTokens: record.prompt_tokens,
@@ -75,10 +104,11 @@ export function extractOpenAITokenUsage(
   });
 }
 
-export function extractGeminiTokenUsage(
-  value: unknown
+export function extractGeminiTokenUsage<Value>(
+  value: Value
 ): ChatCompletionResult["usage"] | undefined {
   const record = readRecord(value);
+
   return buildTokenUsage({
     cachedInputTokens: record.cachedContentTokenCount,
     inputTokens: record.promptTokenCount,
@@ -113,22 +143,35 @@ export function buildChatCompletionResult(options: {
 }): ChatCompletionResult {
   const content = options.content?.trim() ?? "";
   const thinking = options.thinking?.trim();
+
   const assistantMessage: Extract<ChatMessage, { role: "assistant" }> = {
     content,
     role: "assistant",
-    ...(options.providerContent?.length
-      ? { providerContent: options.providerContent }
-      : {}),
-    ...(thinking ? { thinking } : {}),
-    ...(options.toolCalls.length > 0 ? { toolCalls: options.toolCalls } : {}),
   };
 
-  return {
+  if (options.providerContent?.length) {
+    assistantMessage.providerContent = options.providerContent;
+  }
+
+  if (thinking) {
+    assistantMessage.thinking = thinking;
+  }
+
+  if (options.toolCalls.length > 0) {
+    assistantMessage.toolCalls = options.toolCalls;
+  }
+
+  const result: ChatCompletionResult = {
     assistantMessage,
     content,
     toolCalls: options.toolCalls,
-    ...(options.usage ? { usage: options.usage } : {}),
   };
+
+  if (options.usage) {
+    result.usage = options.usage;
+  }
+
+  return result;
 }
 
 /**
@@ -140,12 +183,9 @@ export function sanitizeToolCallHistory(
   messages: ChatMessage[]
 ): ChatMessage[] {
   const toolResultIds = new Set(
-    messages
-      .filter(
-        (message): message is Extract<ChatMessage, { role: "tool" }> =>
-          message.role === "tool"
-      )
-      .map((message) => message.toolCallId)
+    messages.flatMap((message) =>
+      message.role === "tool" ? [message.toolCallId] : []
+    )
   );
 
   const validToolCallIds = new Set<string>();
@@ -156,6 +196,7 @@ export function sanitizeToolCallHistory(
     }
 
     const ids = message.toolCalls.map((call) => call.id);
+
     if (ids.every((id) => toolResultIds.has(id))) {
       for (const id of ids) {
         validToolCallIds.add(id);
@@ -221,6 +262,7 @@ export async function readSseEvents(
   if (buffer.trim()) {
     sawDone = (await emitSseEvent(buffer, onEvent)) || sawDone;
   }
+
   return sawDone;
 }
 
@@ -252,11 +294,13 @@ async function emitSseEvent(
   if (normalized === "[DONE]") {
     return true;
   }
+
   if (!normalized) {
     return false;
   }
 
   await onEvent({ data, event });
+
   return false;
 }
 
@@ -289,7 +333,7 @@ function readSseField(line: string, prefix: string): string | null {
   return value;
 }
 
-export function parseJsonRecord(raw: string): Record<string, unknown> {
+export function parseJsonRecord(raw: string): ProviderJsonRecord {
   const trimmed = raw.trim();
 
   if (!trimmed) {
@@ -297,7 +341,8 @@ export function parseJsonRecord(raw: string): Record<string, unknown> {
   }
 
   try {
-    const parsed = JSON.parse(trimmed) as unknown;
+    const parsed = JSON.parse(trimmed);
+
     return readRecord(parsed);
   } catch {
     return {};
@@ -319,6 +364,7 @@ export function mergePendingToolCall(
   }
 ): void {
   const index = toolDelta.index ?? 0;
+
   const current = pending.get(index) ?? {
     arguments: "",
     id: "",
@@ -361,10 +407,13 @@ export function finalizePendingToolCalls(
     });
 }
 
-export function readRecord(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+export function readRecord<Value>(value: Value): ProviderJsonRecord {
+  if (!(value instanceof Object) || Array.isArray(value)) {
+    return {};
+  }
+
+  // SAFETY: Provider records come from JSON or SDK-decoded JSON payloads.
+  return value as ProviderJsonRecord;
 }
 
 export function normalizeThinkingEffort(
@@ -393,29 +442,21 @@ export function formatHttpErrorBody(
   }
 
   try {
-    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    const parsed = parseJsonRecord(trimmed);
     const nested = parsed.error;
 
-    if (
-      typeof nested === "object" &&
-      nested !== null &&
-      !Array.isArray(nested)
-    ) {
-      const record = nested as Record<string, unknown>;
-      const message =
-        typeof record.message === "string" ? record.message.trim() : "";
-      const type = typeof record.type === "string" ? record.type.trim() : "";
-
-      if (message) {
-        return `${label} request failed (${status}${type ? ` ${type}` : ""}): ${message}`;
-      }
-    }
-
-    const message =
-      typeof parsed.message === "string" ? parsed.message.trim() : "";
+    const record = readRecord(nested);
+    const message = readProviderString(record.message)?.trim() ?? "";
+    const type = readProviderString(record.type)?.trim() ?? "";
 
     if (message) {
-      return `${label} request failed (${status}): ${message}`;
+      return `${label} request failed (${status}${type ? ` ${type}` : ""}): ${message}`;
+    }
+
+    const topLevelMessage = readProviderString(parsed.message)?.trim() ?? "";
+
+    if (topLevelMessage) {
+      return `${label} request failed (${status}): ${topLevelMessage}`;
     }
   } catch {
     // fall through to raw body

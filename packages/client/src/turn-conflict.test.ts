@@ -8,10 +8,12 @@ const conflict = new Error(
 
 function createClock() {
   let now = 0;
+
   return {
     now: () => now,
     sleep: (ms: number) => {
       now += ms;
+
       return Promise.resolve();
     },
   };
@@ -27,6 +29,7 @@ describe("retryWhileTurnIsStopping", () => {
     const result = await retryWhileTurnIsStopping(
       () => {
         attempts += 1;
+
         return attempts < 3
           ? Promise.reject(conflict)
           : Promise.resolve("sent");
@@ -45,6 +48,7 @@ describe("retryWhileTurnIsStopping", () => {
     const pending = retryWhileTurnIsStopping(
       () => {
         attempts += 1;
+
         return Promise.reject(conflict);
       },
       { now: clock.now, sleep: clock.sleep }
@@ -63,6 +67,7 @@ describe("retryWhileTurnIsStopping", () => {
     const pending = retryWhileTurnIsStopping(
       () => {
         attempts += 1;
+
         return Promise.reject(conflict);
       },
       { signal: controller.signal }
@@ -77,6 +82,7 @@ describe("retryWhileTurnIsStopping", () => {
 
     const pending = retryWhileTurnIsStopping(() => {
       attempts += 1;
+
       return Promise.reject(new Error("Session not found"));
     });
 
@@ -96,6 +102,7 @@ test("sendStream retries a 409 from a turn that is still stopping", async () => 
   // away; the server only sees the abort once the socket closes, so the new
   // POST can land on a turn that is already dying.
   let attempts = 0;
+
   const client = new NakamaClient({
     baseUrl: "http://localhost:4310",
     fetch: (_input, _init) => {
@@ -129,10 +136,12 @@ test("sendStream retries a 409 from a turn that is still stopping", async () => 
 
 test("sendStream surfaces a 409 that never clears", async () => {
   let attempts = 0;
+
   const client = new NakamaClient({
     baseUrl: "http://localhost:4310",
     fetch: () => {
       attempts += 1;
+
       return Promise.resolve(
         new Response(
           JSON.stringify({

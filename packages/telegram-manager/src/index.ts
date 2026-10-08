@@ -21,7 +21,28 @@ const actionSchema = z.discriminatedUnion("action", [
     pairingId: z.uuid(),
   }),
 ]);
+
 const telegramId = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+
+type JsonValue =
+  | boolean
+  | null
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+type TelegramRequestBody = { [key: string]: JsonValue };
+
+type ResponseJsonValue =
+  | boolean
+  | Date
+  | null
+  | number
+  | string
+  | ResponseJsonValue[]
+  | { [key: string]: ResponseJsonValue };
+
 const updateSchema = z.object({
   managed_bot: z
     .object({
@@ -51,7 +72,7 @@ function digest(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function json(body: unknown, status = 200) {
+function json(body: ResponseJsonValue, status = 200) {
   return Response.json(body, {
     headers: { "Cache-Control": "no-store" },
     status,
@@ -61,11 +82,13 @@ function json(body: unknown, status = 200) {
 async function telegram<T>(
   token: string | undefined,
   method: string,
-  body: Record<string, unknown>
+  body: TelegramRequestBody,
+  resultSchema: z.ZodType<T>
 ) {
   if (!token) {
     throw new Error("Telegram manager is not configured");
   }
+
   const response = await fetch(
     `https://api.telegram.org/bot${token}/${method}`,
     {
@@ -75,11 +98,15 @@ async function telegram<T>(
       signal: AbortSignal.timeout(5000),
     }
   );
-  const payload = (await response.json()) as { ok?: boolean; result?: T };
-  if (!(response.ok && payload.ok) || payload.result === undefined) {
+
+  const payloadSchema = z.object({ ok: z.boolean(), result: resultSchema });
+  const payload = payloadSchema.safeParse(await response.json());
+
+  if (!(response.ok && payload.success && payload.data.ok)) {
     throw new Error("Telegram request failed");
   }
-  return payload.result;
+
+  return payload.data.result;
 }
 
 export async function handleTelegramPairing(
@@ -89,10 +116,13 @@ export async function handleTelegramPairing(
   if (!(options.managerToken && options.webhookSecret)) {
     return json({ error: "Telegram manager is not configured" }, 503);
   }
+
   const parsed = actionSchema.safeParse(await request.json().catch(() => null));
+
   if (!parsed.success) {
     return json({ error: "Invalid pairing request" }, 400);
   }
+
   const action = parsed.data;
 
   try {
@@ -101,6 +131,7 @@ export async function handleTelegramPairing(
       const secret = randomBytes(32).toString("base64url");
       const suggestedUsername = `nakama_${id.replaceAll("-", "").slice(0, 16)}_bot`;
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
       if (
         !(await createTelegramPairing(options.sql, {
           expiresAt,
@@ -111,15 +142,27 @@ export async function handleTelegramPairing(
       ) {
         return json({ error: "Too many pairings. Try again later." }, 429);
       }
+
       try {
         const manager = await telegram<{
           username?: string;
           can_manage_bots?: boolean;
-        }>(options.managerToken, "getMe", {});
+        }>(
+          options.managerToken,
+          "getMe",
+          {},
+          z.object({
+            can_manage_bots: z.boolean().optional(),
+            username: z.string().optional(),
+          })
+        );
+
         if (!(manager.username && manager.can_manage_bots)) {
           throw new Error("Manager permission missing");
         }
+
         const deepLink = `https://t.me/${manager.username}?start=${id}`;
+
         return json({
           deepLink,
           expiresAt,
@@ -137,47 +180,61 @@ export async function handleTelegramPairing(
     const secret = request.headers
       .get("Authorization")
       ?.match(/^Bearer ([A-Za-z0-9_-]{43})$/)?.[1];
+
     if (!secret) {
       return json({ error: "Unauthorized" }, 401);
     }
+
     const secretHash = digest(secret);
+
     const pairing = await getTelegramPairing(
       options.sql,
       action.pairingId,
       secretHash
     );
+
     if (!pairing) {
       return json({ error: "Pairing not found or expired" }, 404);
     }
+
     if (action.action === "cancel") {
       await deleteTelegramPairing(options.sql, pairing.id, secretHash);
+
       return json({ status: "cancelled" });
     }
+
     const status = {
       botUsername: pairing.bot_username,
       ownerUserId: pairing.owner_user_id ? Number(pairing.owner_user_id) : null,
       status: pairing.bot_id ? "ready" : "waiting",
     };
+
     if (action.action === "status") {
       return json(status);
     }
+
     if (!(pairing.bot_id && pairing.owner_user_id)) {
       return json({ error: "Bot is not ready" }, 409);
     }
+
     const token = await telegram<string>(
       options.managerToken,
       "getManagedBotToken",
-      { user_id: Number(pairing.bot_id) }
+      { user_id: Number(pairing.bot_id) },
+      z.string()
     );
+
     // Recheck after the external call: cancellation/ownership changes may race it.
     const current = await getTelegramPairing(
       options.sql,
       pairing.id,
       secretHash
     );
+
     if (!current || current.bot_id !== pairing.bot_id) {
       return json({ error: "Pairing expired" }, 404);
     }
+
     return json({ ...status, token });
   } catch {
     // Never include upstream URLs/errors: Telegram URLs contain the manager token.
@@ -194,6 +251,7 @@ export async function handleTelegramWebhook(
 ) {
   const expected = options.webhookSecret;
   const actual = request.headers.get("X-Telegram-Bot-Api-Secret-Token") ?? "";
+
   if (
     !(
       expected &&
@@ -205,13 +263,17 @@ export async function handleTelegramWebhook(
   ) {
     return json({ error: "Unauthorized" }, 401);
   }
+
   const parsed = updateSchema.safeParse(await request.json().catch(() => null));
+
   if (!parsed.success) {
     return json({ error: "Invalid update" }, 400);
   }
+
   try {
     const { message, managed_bot: managed } = parsed.data;
     const id = message?.text?.match(/^\/start(?:@\w+)? ([0-9a-f-]{36})$/)?.[1];
+
     if (
       id &&
       z.uuid().safeParse(id).success &&
@@ -225,28 +287,37 @@ export async function handleTelegramWebhook(
         id,
         String(message.from.id)
       );
+
       if (pairing) {
         const manager = await telegram<{ username: string }>(
           options.managerToken,
           "getMe",
-          {}
+          {},
+          z.object({ username: z.string() })
         );
-        await telegram(options.managerToken, "sendMessage", {
-          chat_id: message.chat.id,
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: "Create Telegram bot",
-                  url: `https://t.me/newbot/${manager.username}/${pairing.suggested_username}?name=Nakama`,
-                },
+
+        await telegram(
+          options.managerToken,
+          "sendMessage",
+          {
+            chat_id: message.chat.id,
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: "Create Telegram bot",
+                    url: `https://t.me/newbot/${manager.username}/${pairing.suggested_username}?name=Nakama`,
+                  },
+                ],
               ],
-            ],
+            },
+            text: "Create your bot to connect it to the Nakama server where you scanned this QR. Keep the suggested username so we can match it securely.",
           },
-          text: "Create your bot to connect it to the Nakama server where you scanned this QR. Keep the suggested username so we can match it securely.",
-        });
+          z.object({})
+        );
       }
     }
+
     if (managed) {
       await completeTelegramPairing(options.sql, {
         id: String(managed.bot.id),
@@ -254,6 +325,7 @@ export async function handleTelegramWebhook(
         username: managed.bot.username,
       });
     }
+
     return json({ ok: true });
   } catch {
     // Telegram retries failed deliveries; database mutations are idempotent.

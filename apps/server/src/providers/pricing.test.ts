@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { CustomModelEntry } from "@nakama/core";
 import {
   estimateUsageCostUsd,
   getExplicitModelPricing,
@@ -47,6 +48,7 @@ const moonshotInstance = {
   label: "Moonshot Kimi",
   type: "moonshot" as const,
 };
+
 describe("estimateUsageCostUsd", () => {
   test("uses saved Netra rates and counts cached input once", () => {
     const instance = {
@@ -64,6 +66,7 @@ describe("estimateUsageCostUsd", () => {
       label: "Netra Runtime",
       type: "netra" as const,
     };
+
     expect(
       getModelPricing("deepseek/deepseek-v4-flash-0731", {
         providerInstance: instance,
@@ -125,6 +128,7 @@ describe("estimateUsageCostUsd", () => {
       1_000_000,
       1_000_000
     );
+
     expect(cost).toBe(18);
   });
 
@@ -354,7 +358,7 @@ describe("getExplicitModelPricing", () => {
 });
 
 describe("estimateUsageCostUsd with a cached prompt slice", () => {
-  const instanceWith = (model: Record<string, unknown>) => ({
+  const instanceWith = (model: CustomModelEntry) => ({
     providerInstance: {
       apiKey: "k",
       baseUrl: "http://localhost:1/v1",
@@ -379,6 +383,7 @@ describe("estimateUsageCostUsd with a cached prompt slice", () => {
       }),
       400_000
     );
+
     // 600k fresh at $10/1M plus 400k cached at $1/1M.
     expect(priced).toBeCloseTo(6.4, 6);
 
@@ -388,6 +393,7 @@ describe("estimateUsageCostUsd with a cached prompt slice", () => {
       inputPerMillionUsd: 10,
       outputPerMillionUsd: 30,
     });
+
     expect(estimateUsageCostUsd("m", 1_000_000, 0, noCachedRate, 400_000)).toBe(
       estimateUsageCostUsd("m", 1_000_000, 0, noCachedRate)
     );
@@ -400,6 +406,7 @@ describe("estimateUsageCostUsd with a cached prompt slice", () => {
       inputPerMillionUsd: 10,
       outputPerMillionUsd: 30,
     });
+
     // Unclamped this prices 999k tokens of "fresh" input negatively.
     expect(estimateUsageCostUsd("m", 1000, 0, ctx, 999_999)).toBeCloseTo(
       0.001,

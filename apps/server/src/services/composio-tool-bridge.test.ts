@@ -11,12 +11,18 @@ import {
 } from "./composio-tool-bridge";
 import { McpClientManager } from "./mcp-client-manager";
 
+interface EmailActionArguments {
+  action_slug: string;
+  toolkit_slug: string;
+}
+
 describe("composio-tool-bridge", () => {
   const previous = {
     configDir: process.env.NAKAMA_CONFIG_DIR,
     publicUrl: process.env.NAKAMA_PUBLIC_URL,
     webPublicUrl: process.env.NAKAMA_WEB_PUBLIC_URL,
   };
+
   let isolatedConfigDir = "";
 
   beforeEach(() => {
@@ -32,16 +38,19 @@ describe("composio-tool-bridge", () => {
 
   afterEach(() => {
     rmSync(isolatedConfigDir, { force: true, recursive: true });
+
     if (previous.configDir === undefined) {
       delete process.env.NAKAMA_CONFIG_DIR;
     } else {
       process.env.NAKAMA_CONFIG_DIR = previous.configDir;
     }
+
     if (previous.publicUrl === undefined) {
       delete process.env.NAKAMA_PUBLIC_URL;
     } else {
       process.env.NAKAMA_PUBLIC_URL = previous.publicUrl;
     }
+
     if (previous.webPublicUrl === undefined) {
       delete process.env.NAKAMA_WEB_PUBLIC_URL;
     } else {
@@ -56,6 +65,7 @@ describe("composio-tool-bridge", () => {
   });
 
   test("exposes search + invoke meta-tools for connected assignments", async () => {
+    // SAFETY: The test fixture matches the contract used by this test.
     const composioService = {
       async getAssignedToolkitRecords() {
         return [
@@ -109,7 +119,7 @@ describe("composio-tool-bridge", () => {
         };
       },
       isAvailable: async () => true,
-    } as unknown as ComposioService;
+    } as ComposioService;
 
     const manager = new McpClientManager();
     manager.connectHttpEndpoint = async () => [];
@@ -132,6 +142,7 @@ describe("composio-tool-bridge", () => {
     const searchResult = await tools[0]?.run({ query: "send" }, {});
     expect(searchResult).toMatchObject({ count: 1 });
     expect(
+      // SAFETY: The test fixture matches the contract used by this test.
       (searchResult as { actions: Array<{ action_slug: string }> }).actions[0]
     ).toMatchObject({
       action_slug: "GMAIL_SEND_EMAIL",
@@ -140,6 +151,7 @@ describe("composio-tool-bridge", () => {
   });
 
   test("search returns all actions for empty query and filters by toolkit_slug", async () => {
+    // SAFETY: The test fixture matches the contract used by this test.
     const composioService = {
       async getAssignedToolkitRecords() {
         return [
@@ -193,7 +205,7 @@ describe("composio-tool-bridge", () => {
         };
       },
       isAvailable: async () => true,
-    } as unknown as ComposioService;
+    } as ComposioService;
 
     const manager = new McpClientManager();
     manager.connectHttpEndpoint = async () => [];
@@ -209,22 +221,28 @@ describe("composio-tool-bridge", () => {
     );
 
     const allResult = await tools[0]?.run({ query: "" }, {});
+    // SAFETY: The test fixture matches the contract used by this test.
     expect((allResult as { count: number }).count).toBe(2);
 
     const scopedResult = await tools[0]?.run(
       { query: "", toolkit_slug: "gmail" },
       {}
     );
+
+    // SAFETY: The test fixture matches the contract used by this test.
     expect((scopedResult as { count: number }).count).toBe(2);
 
     const noneResult = await tools[0]?.run(
       { query: "", toolkit_slug: "slack" },
       {}
     );
+
+    // SAFETY: The test fixture matches the contract used by this test.
     expect((noneResult as { count: number }).count).toBe(0);
   });
 
   test("invoke rejects actions not in allowedActions", async () => {
+    // SAFETY: The test fixture matches the contract used by this test.
     const composioService = {
       async getAssignedToolkitRecords() {
         return [
@@ -278,7 +296,7 @@ describe("composio-tool-bridge", () => {
         };
       },
       isAvailable: async () => true,
-    } as unknown as ComposioService;
+    } as ComposioService;
 
     const manager = new McpClientManager();
     manager.connectHttpEndpoint = async () => [];
@@ -297,6 +315,7 @@ describe("composio-tool-bridge", () => {
       { action_slug: "GMAIL_SEND_EMAIL", arguments: {}, toolkit_slug: "gmail" },
       {}
     );
+
     expect(allowed).toEqual({ ok: true });
 
     const blocked = await tools[1]?.run(
@@ -307,6 +326,7 @@ describe("composio-tool-bridge", () => {
       },
       {}
     );
+
     expect(blocked).toMatchObject({
       code: "COMPOSIO_POLICY",
       toolkitSlug: "gmail",
@@ -314,6 +334,7 @@ describe("composio-tool-bridge", () => {
   });
 
   test("invoke truncates large tool results", async () => {
+    // SAFETY: The test fixture matches the contract used by this test.
     const composioService = {
       async getAssignedToolkitRecords() {
         return [
@@ -361,7 +382,7 @@ describe("composio-tool-bridge", () => {
         };
       },
       isAvailable: async () => true,
-    } as unknown as ComposioService;
+    } as ComposioService;
 
     const bigPayload = {
       messages: Array.from({ length: 5000 }, (_, i) => ({
@@ -369,6 +390,7 @@ describe("composio-tool-bridge", () => {
         id: i,
       })),
     };
+
     const manager = new McpClientManager();
     manager.connectHttpEndpoint = async () => [];
     manager.isHttpEndpointConnected = () => true;
@@ -382,6 +404,7 @@ describe("composio-tool-bridge", () => {
       manager
     );
 
+    // SAFETY: The test fixture matches the contract used by this test.
     const result = (await tools[1]?.run(
       {
         action_slug: "GMAIL_FETCH_EMAILS",
@@ -396,6 +419,7 @@ describe("composio-tool-bridge", () => {
   });
 
   test("invoke matches action slug case-insensitively", async () => {
+    // SAFETY: The test fixture matches the contract used by this test.
     const composioService = {
       async getAssignedToolkitRecords() {
         return [
@@ -443,7 +467,7 @@ describe("composio-tool-bridge", () => {
         };
       },
       isAvailable: async () => true,
-    } as unknown as ComposioService;
+    } as ComposioService;
 
     const manager = new McpClientManager();
     manager.connectHttpEndpoint = async () => [];
@@ -458,14 +482,17 @@ describe("composio-tool-bridge", () => {
       manager
     );
 
+    // SAFETY: The test fixture matches the contract used by this test.
     const lowerSlug = (await tools[1]?.run(
       { action_slug: "gmail_send_email", arguments: {}, toolkit_slug: "Gmail" },
       {}
     )) as { invoked?: string };
+
     expect(lowerSlug.invoked).toBe("GMAIL_SEND_EMAIL");
   });
 
   test("invoke defaults missing arguments to empty object", async () => {
+    // SAFETY: The test fixture matches the contract used by this test.
     const composioService = {
       async getAssignedToolkitRecords() {
         return [
@@ -513,7 +540,7 @@ describe("composio-tool-bridge", () => {
         };
       },
       isAvailable: async () => true,
-    } as unknown as ComposioService;
+    } as ComposioService;
 
     const manager = new McpClientManager();
     manager.connectHttpEndpoint = async () => [];
@@ -530,17 +557,21 @@ describe("composio-tool-bridge", () => {
       manager
     );
 
-    const result = (await tools[1]?.run(
-      { action_slug: "GMAIL_SEND_EMAIL", toolkit_slug: "gmail" } as Record<
-        string,
-        unknown
-      >,
-      {}
-    )) as { receivedArgs?: Record<string, unknown> };
+    const args = {
+      action_slug: "GMAIL_SEND_EMAIL",
+      toolkit_slug: "gmail",
+    } satisfies EmailActionArguments;
+
+    // SAFETY: The bridge returns the captured invocation args from this fixture.
+    const result = (await tools[1]?.run(args, {})) as {
+      receivedArgs?: Record<string, string>;
+    };
+
     expect(result.receivedArgs).toEqual({});
   });
 
   test("returns no tools when an assigned toolkit is not connected", async () => {
+    // SAFETY: The test fixture matches the contract used by this test.
     const composioService = {
       async getAssignedToolkitRecords() {
         return [
@@ -576,7 +607,7 @@ describe("composio-tool-bridge", () => {
         };
       },
       isAvailable: async () => true,
-    } as unknown as ComposioService;
+    } as ComposioService;
 
     const manager = new McpClientManager();
     manager.connectHttpEndpoint = async () => [];
@@ -597,9 +628,11 @@ describe("composio-tool-bridge", () => {
   });
 
   test("returns no tools when user id is missing", async () => {
+    // SAFETY: The test fixture matches the contract used by this test.
     const composioService = {
       isAvailable: async () => true,
-    } as unknown as ComposioService;
+    } as ComposioService;
+
     const manager = new McpClientManager();
 
     const tools = await buildComposioToolDefinitions(
@@ -614,6 +647,7 @@ describe("composio-tool-bridge", () => {
   });
 
   test("exposes connect tool when assigned toolkit is not connected", async () => {
+    // SAFETY: The test fixture matches the contract used by this test.
     const composioService = {
       async connectToolkit() {
         return { redirectUrl: "https://oauth.example.com/authorize" };
@@ -645,7 +679,7 @@ describe("composio-tool-bridge", () => {
         ];
       },
       isAvailable: async () => true,
-    } as unknown as ComposioService;
+    } as ComposioService;
 
     const tools = await buildComposioConnectTools(
       "org_1",
@@ -661,6 +695,7 @@ describe("composio-tool-bridge", () => {
       { toolkit_slug: "gmail" },
       { clientOrigin: "https://nakama.example.com" }
     );
+
     expect(result).toMatchObject({
       displayName: "Gmail",
       redirectUrl: "https://oauth.example.com/authorize",
@@ -669,6 +704,7 @@ describe("composio-tool-bridge", () => {
   });
 
   test("connect tool rejects loopback callback URLs", async () => {
+    // SAFETY: The test fixture matches the contract used by this test.
     const composioService = {
       async connectToolkit() {
         throw new Error("should not be called");
@@ -693,7 +729,7 @@ describe("composio-tool-bridge", () => {
         ];
       },
       isAvailable: async () => true,
-    } as unknown as ComposioService;
+    } as ComposioService;
 
     const tools = await buildComposioConnectTools(
       "org_1",
@@ -711,6 +747,7 @@ describe("composio-tool-bridge", () => {
       code: "COMPOSIO_POLICY",
       toolkitSlug: "gmail",
     });
+    // SAFETY: The test fixture matches the contract used by this test.
     expect(String((result as { error?: string }).error)).toContain("localhost");
   });
 

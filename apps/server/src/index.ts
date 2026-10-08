@@ -12,13 +12,16 @@ import { ensureProcessPath } from "./lib/ensure-process-path";
 import { createPluginAgentHost } from "./services/plugin-agent-host";
 
 ensureProcessPath();
+
 if (process.env.NAKAMA_DESKTOP === "1") {
   if (!process.connected) {
     process.exit(0);
   }
+
   // Also covers losing Electron while the database is still initializing.
   process.on("disconnect", () => process.emit("SIGTERM", "SIGTERM"));
 }
+
 // Position is cosmetic: ESM evaluates every import above before this line runs, so a throw
 // inside @nakama/db or @nakama/agent module init is already past. Everything after is covered.
 installErrorHandlers("server");
@@ -101,10 +104,13 @@ import { createSessionTools } from "./tools/session-tools";
 import { createSubAgentTool } from "./tools/sub-agent-tool";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
+
 let workerRecovery: Promise<void> = Promise.resolve();
 
 const host = process.env.NAKAMA_HOST ?? DEFAULT_SERVER_HOST;
+
 const requestedPort = parsePort(process.env.NAKAMA_PORT);
+
 const canFallbackToNextPort = process.env.NAKAMA_PORT == null;
 
 const existingServerUrl = await findRunningNakamaServerUrl(host, requestedPort);
@@ -120,7 +126,9 @@ if (existingServerUrl) {
 }
 
 const { provider, userConfig } = await ensureProviderConfigured();
+
 const config = loadConfig();
+
 const database = await createDatabase(config.databaseUrl, {
   baseDir: getUserConfigDir(),
 });
@@ -139,9 +147,11 @@ await retireAppUserData(
 // ponytail: correct while this is a single process; two servers would mean one
 // boot settling the other's live runs, which needs a heartbeat to tell apart.
 const interruptedRuns = await database.adapter.failInterruptedRuns();
+
 if (interruptedRuns > 0) {
   console.log(`Settled ${interruptedRuns} run(s) interrupted by a restart`);
 }
+
 // Automation runs continue from their last saved tool step instead; one that
 // was already resumed twice is failed here.
 const resumableAutomationRuns =
@@ -153,20 +163,24 @@ const resumableAutomationRuns =
 // config can only belong to that org, so claim it once before any scope-exact
 // read reports the org as unconfigured.
 const organizations = await database.adapter.listOrganizations();
+
 const authService = new AuthService();
 
 const llmUsageTracker = new LlmUsageTracker(database.adapter);
+
 const agent = new AgentService(
   userConfig,
   provider,
   database.adapter,
   llmUsageTracker
 );
+
 const googleMeetService = new GoogleMeetService(
   database.adapter,
   getUserConfigDir(),
   (request, signal) => agent.transcribeAudio(request, signal)
 );
+
 agent.setServerTools({
   generateImage: createGenerateImageTool({
     db: database.adapter,
@@ -189,25 +203,37 @@ agent.setServerTools({
   session: createSessionTools(agent),
   subAgent: createSubAgentTool(agent),
 });
+
 await agent.ensureVisionSettingsLoaded();
+
 await agent.ensureTranscriptionSettingsLoaded();
+
 await agent.ensureImageGenerationSettingsLoaded();
+
 // A restart drops the cognito session map, so whatever it was holding can no
 // longer be reached, let alone cleaned up on close.
 const sweptAttachments = await agent.sweepEphemeralAttachments();
+
 if (sweptAttachments > 0) {
   console.info(
     `[cognito] swept ${sweptAttachments} attachment(s) left by a previous run`
   );
 }
+
 const mcpClientManager = new McpClientManager();
+
 const mcpService = new McpService(database.adapter, mcpClientManager);
+
 const composioService = new ComposioService(database.adapter, authService);
+
 const skillsService = new SkillsService(database.adapter);
 
 agent.setMcpClientManager(mcpClientManager);
+
 agent.setMcpService(mcpService);
+
 agent.setComposioService(composioService);
+
 agent.setSkillsService(skillsService);
 
 const automationService = new AutomationService(database.adapter, {
@@ -215,12 +241,14 @@ const automationService = new AutomationService(database.adapter, {
     hasAutomationEmailDeliveryPath(database.adapter, profileId),
   getUserTimezone: () => agent.getUserTimezone(),
 });
+
 const automationDeliveryService = new AutomationDeliveryService(
   automationService,
   {
     email: createMcpAwareEmailOutboundAdapter(database.adapter, mcpService),
   }
 );
+
 const automationRunner = new AutomationRunner(
   automationService,
   agent,
@@ -230,10 +258,13 @@ const automationRunner = new AutomationRunner(
 agent.setAutomationTools(
   createAutomationTools(automationService, automationRunner)
 );
+
 agent.setAutomationRunHistoryTools(
   createAutomationRunHistoryTools(automationService)
 );
+
 agent.setAutomationRunner(automationRunner);
+
 if (resumableAutomationRuns.length > 0) {
   console.log(
     `Resuming ${resumableAutomationRuns.length} automation run(s) interrupted by a restart`
@@ -247,6 +278,7 @@ const workerManager = new WorkerManagerService(
   (providerType) => {
     const userConfig = agent.getUserConfig();
     const active = getActiveProviderInstance(userConfig);
+
     const configured = providerType
       ? active?.type === providerType && active.apiKey.trim()
         ? active
@@ -255,9 +287,11 @@ const workerManager = new WorkerManagerService(
               provider.type === providerType && provider.apiKey.trim()
           )
       : active;
+
     if (!configured) {
       return null;
     }
+
     return {
       apiKey: configured.apiKey,
       baseUrl: configured.baseUrl,
@@ -268,8 +302,10 @@ const workerManager = new WorkerManagerService(
 );
 
 agent.channelWorkers = workerManager;
+
 workerManager.channelOwnerAvailable = async ({ orgId, profileId }) => {
   const org = await database.adapter.getOrganizationById(orgId);
+
   return Boolean(
     org &&
       !org.archivedAt &&
@@ -278,24 +314,31 @@ workerManager.channelOwnerAvailable = async ({ orgId, profileId }) => {
       )
   );
 };
+
 try {
   await workerManager.migrateAgentChannels(database.adapter);
 } catch (error) {
   console.warn("Channel migration requires attention:", error);
 }
+
 agent.setChannelOwnerCleanup((orgId, profileId) =>
   workerManager.disableProfileChannels({ orgId, profileId }, true)
 );
+
 const orgService = new OrgService(database.adapter, authService);
+
 orgService.beforeArchiveChannels = async (orgId) => {
   const releaseMeet = googleMeetService.pauseOrganization(orgId);
   const owners: Array<{ orgId: string; profileId: string }> = [];
+
   const release = () => {
     releaseMeet();
+
     for (const owner of owners) {
       workerManager.allowProfileChannels(owner);
     }
   };
+
   try {
     owners.push(
       ...(await database.adapter.listProfilesForOrg(orgId)).map((profile) => ({
@@ -304,6 +347,7 @@ orgService.beforeArchiveChannels = async (orgId) => {
       }))
     );
     await googleMeetService.stopOrganization(orgId);
+
     for (const owner of owners) {
       await workerManager.disableProfileChannels(owner);
     }
@@ -311,6 +355,7 @@ orgService.beforeArchiveChannels = async (orgId) => {
     release();
     throw error;
   }
+
   return release;
 };
 
@@ -319,19 +364,26 @@ const pluginService = new PluginService(database.adapter, getUserConfigDir(), {
   onHostRequest: createPluginAgentHost(database.adapter, agent),
   workerManager,
 });
+
 await googleMeetService.initialize();
+
 try {
   await pluginService.recoverInterruptedPluginOperations();
 } catch (error) {
   console.warn("Could not recover plugin operations:", error);
 }
+
 skillsService.setPluginService(pluginService);
+
 agent.setPluginService(pluginService);
+
 const orgMemoryService = new OrgMemoryService(database.adapter);
+
 const skillProposalService = new SkillProposalService(
   database.adapter,
   skillsService
 );
+
 const skillCuratorService = new SkillCuratorService(
   database.adapter,
   skillsService,
@@ -339,25 +391,32 @@ const skillCuratorService = new SkillCuratorService(
   {
     generateMarkdown: async (input) => {
       const userConfig = agent.getUserConfig();
+
       if (!userConfig) {
         return null;
       }
+
       const profile = await database.adapter.getProfile(input.profileId);
+
       if (!profile) {
         return null;
       }
+
       const selection = resolveProfileProviderSelection({
         defaultProviderId: userConfig.defaultProviderId,
         profileModel: profile.model,
         providers: userConfig.providers,
       });
+
       if (!selection) {
         return null;
       }
+
       const provider = createProviderForInstance(
         selection.instance,
         selection.model
       );
+
       return generateSkillConsolidateMarkdown({
         losers: input.losers,
         mode: input.mode,
@@ -367,12 +426,15 @@ const skillCuratorService = new SkillCuratorService(
     },
   }
 );
+
 agent.setSkillProposalService(skillProposalService);
+
 const skillSuggestionService = new SkillSuggestionService(
   database.adapter,
   skillsService,
   skillProposalService
 );
+
 agent.setSkillSuggestionService(skillSuggestionService);
 
 await runFirstBootSeed({
@@ -391,6 +453,7 @@ const systemStatus = new SystemStatusService(
 );
 
 const webDistDir = resolveWebDistDir(projectRoot);
+
 const app = createHonoApp({
   agent,
   authService,
@@ -403,6 +466,7 @@ const app = createHonoApp({
   onBeforeDataRestore: async () => {
     await workerManager.pauseDataWorkers();
     await googleMeetService.close();
+
     if (process.platform === "win32") {
       database.release();
     }
@@ -431,6 +495,7 @@ const server = startServer({
   host,
   preferredPort: requestedPort,
 });
+
 const serverUrl = writeRuntimeServerUrl(
   `http://${server.hostname}:${server.port}`
 );
@@ -442,6 +507,7 @@ const shutdownRuntime = registerRuntimeCleanup(
   mcpClientManager,
   googleMeetService
 );
+
 // Stop before recovering workers if Electron disappeared during initialization.
 if (process.env.NAKAMA_DESKTOP === "1" && !process.connected) {
   await shutdownRuntime();
@@ -452,6 +518,7 @@ if (server.port !== requestedPort) {
 }
 
 console.log(`Nakama server listening on ${serverUrl}`);
+
 console.log(`Nakama database ready at ${config.databaseUrl}`);
 
 void initializeOptionalServices({
@@ -476,11 +543,13 @@ if (webDistDir) {
 }
 
 const humanUserCount = await database.adapter.countHumanUsers();
+
 if (humanUserCount > 0 && !agent.providerConfigured) {
   console.warn(
     `Provider not configured — complete the setup wizard at ${serverUrl}/setup to enable chat and automations.`
   );
 }
+
 if (process.env.NAKAMA_DESKTOP === "1") {
   process.send?.({ type: "nakama-ready", url: serverUrl });
 }
@@ -543,6 +612,7 @@ function startServer(options: {
   const lastPort = options.canFallbackToNextPort
     ? Math.min(options.preferredPort + 2000, 65_535)
     : options.preferredPort;
+
   let lastError: unknown;
 
   for (let port = options.preferredPort; port <= lastPort; port += 1) {
@@ -552,6 +622,7 @@ function startServer(options: {
           disableBunIdleTimeoutForLongHeldRequest(request, server);
           const response = await options.fetch(request, server);
           disableBunIdleTimeoutForSse(request, response, server);
+
           return response;
         },
         hostname: options.host,
@@ -560,7 +631,13 @@ function startServer(options: {
         port,
       });
     } catch (error) {
-      if (!(isAddressInUseError(error) && options.canFallbackToNextPort)) {
+      if (
+        !(
+          error instanceof Error &&
+          isAddressInUseError(error) &&
+          options.canFallbackToNextPort
+        )
+      ) {
         throw error;
       }
 
@@ -573,13 +650,8 @@ function startServer(options: {
   );
 }
 
-function isAddressInUseError(error: unknown): error is { code: string } {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "EADDRINUSE"
-  );
+function isAddressInUseError(error: Error): boolean {
+  return "code" in error && error.code === "EADDRINUSE";
 }
 
 /**
@@ -589,20 +661,24 @@ function isAddressInUseError(error: unknown): error is { code: string } {
  */
 function killLeftoverPm2Daemon(pidPath: string): void {
   let pid: number;
+
   try {
     pid = Number.parseInt(readFileSync(pidPath, "utf8"), 10);
   } catch {
     return;
   }
+
   if (!(Number.isInteger(pid) && pid > 0)) {
     return;
   }
+
   // Guard against a reused pid: only a bun process can be our daemon.
   const task = spawnSync(
     "tasklist",
     ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"],
     { encoding: "utf8", windowsHide: true }
   );
+
   if (
     !task.stdout
       ?.toLowerCase()
@@ -610,6 +686,7 @@ function killLeftoverPm2Daemon(pidPath: string): void {
   ) {
     return;
   }
+
   spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], {
     stdio: "ignore",
     windowsHide: true,
@@ -640,16 +717,20 @@ function registerRuntimeCleanup(
   process.on("exit", cleanup);
 
   let stopping = false;
+
   const shutdown = async () => {
     if (stopping) {
       return;
     }
+
     stopping = true;
     await googleMeetService.close();
+
     if (process.env.NAKAMA_DESKTOP === "1") {
       // A quit during startup must not race workers being recreated after shutdown.
       await workerRecovery.catch(() => {});
     }
+
     // Desktop owns a private PM2 home; never stop a normal server's daemon.
     if (
       process.env.NAKAMA_DESKTOP === "1" &&
@@ -664,12 +745,15 @@ function registerRuntimeCleanup(
           resolve,
           process.platform === "win32" ? 5000 : 3000
         );
+
         pm2.connect((error) => {
           if (error) {
             clearTimeout(timeout);
             resolve();
+
             return;
           }
+
           pm2.killDaemon(() => {
             clearTimeout(timeout);
             pm2.disconnect();
@@ -677,10 +761,12 @@ function registerRuntimeCleanup(
           });
         });
       });
+
       if (process.platform === "win32") {
         killLeftoverPm2Daemon(join(process.env.PM2_HOME, "pm2.pid"));
       }
     }
+
     if (process.env.NAKAMA_DESKTOP === "1") {
       await Promise.race([
         Promise.allSettled([
@@ -690,15 +776,18 @@ function registerRuntimeCleanup(
         new Promise((resolve) => setTimeout(resolve, 2000)),
       ]);
     }
+
     cleanup();
     server.stop(true);
     process.exit(0);
   };
+
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
     process.on(signal, () => {
       void shutdown();
     });
   }
+
   return shutdown;
 }
 
@@ -719,10 +808,12 @@ async function findRunningNakamaServerUrl(
       return null;
     }
 
+    // SAFETY: The local health route returns these optional fields on success.
     const payload = (await response.json()) as {
       ok?: boolean;
       apiVersion?: number;
     };
+
     return payload.ok === true && payload.apiVersion === NAKAMA_API_VERSION
       ? serverUrl
       : null;

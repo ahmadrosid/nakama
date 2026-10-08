@@ -9,8 +9,10 @@ import {
   getModelsForProviderInstance,
   inferRemoteModelVision,
 } from "./compatible-models";
+import { asTestFetch } from "./test-helpers";
 
 let mockServer: ReturnType<typeof serve> | undefined;
+
 const originalFetch = globalThis.fetch;
 
 afterEach(() => {
@@ -20,20 +22,21 @@ afterEach(() => {
 });
 
 test("Netra discovery keeps only the documented tool-capable model", async () => {
-  globalThis.fetch = mock(
-    async (input: RequestInfo | URL, init?: RequestInit) => {
+  globalThis.fetch = asTestFetch(
+    mock(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe("https://api.netraruntime.com/v1/models");
       expect(new Headers(init?.headers).get("Authorization")).toBe(
         "Bearer test-key"
       );
+
       return Response.json({
         data: [
           { id: "deepseek/deepseek-v4.1-flash" },
           { id: "deepseek/deepseek-v4-flash-0731" },
         ],
       });
-    }
-  ) as unknown as typeof fetch;
+    })
+  );
 
   expect(await fetchNetraModels("test-key")).toEqual([
     {
@@ -57,6 +60,7 @@ test("Netra agent catalog excludes models without a tool-turn check", () => {
     label: "Netra Runtime",
     type: "netra",
   });
+
   expect(models.map((model) => model.id)).toEqual([
     "deepseek/deepseek-v4-flash-0731",
   ]);
@@ -78,6 +82,7 @@ test.each([
     label: type,
     type,
   });
+
   expect(models.map((entry) => entry.id)).toEqual([model]);
   expect(models[0]?.providerId).toBe(type);
 });
@@ -103,7 +108,9 @@ test.each([
       label: type,
       type,
     });
+
     expect(models.length).toBeGreaterThan(1);
+
     for (const id of expected) {
       expect(models.some((model) => model.id === id)).toBe(true);
     }
@@ -272,9 +279,13 @@ for (const status of [401, 403, 503] as const) {
       expect.unreachable("expected discovery to fail");
     } catch (error) {
       expect(error).toBeInstanceOf(NakamaApiError);
+      // SAFETY: The test reaches this branch with the named error type from the provider contract.
       expect((error as NakamaApiError).status).toBe(status === 503 ? 502 : 400);
+      // SAFETY: The test reaches this branch with the named error type from the provider contract.
       expect((error as NakamaApiError).message).not.toContain(upstreamBody);
+
       if (status !== 503) {
+        // SAFETY: The test reaches this branch with the named error type from the provider contract.
         expect((error as NakamaApiError).message).toContain("API key");
       }
     } finally {

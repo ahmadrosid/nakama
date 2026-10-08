@@ -2,18 +2,27 @@ import { randomUUID } from "node:crypto";
 import type { ChatgptOAuthCredentials, CustomModelEntry } from "@nakama/core";
 import { NakamaApiError } from "@nakama/core";
 import type { ChatgptOAuthDeviceStartResponse } from "@nakama/core/contract";
+import { z } from "zod";
 
 const CHATGPT_CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
+
 export const CHATGPT_CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
+
 const CHATGPT_OAUTH_TOKEN_URL = "https://auth.openai.com/oauth/token";
+
 const CHATGPT_DEVICE_USER_CODE_URL =
   "https://auth.openai.com/api/accounts/deviceauth/usercode";
+
 const CHATGPT_DEVICE_TOKEN_URL =
   "https://auth.openai.com/api/accounts/deviceauth/token";
+
 const CHATGPT_DEVICE_VERIFICATION_URI = "https://auth.openai.com/codex/device";
+
 const CHATGPT_DEVICE_REDIRECT_URI =
   "https://auth.openai.com/deviceauth/callback";
+
 export const CHATGPT_JWT_CLAIM_PATH = "https://api.openai.com/auth";
+
 const CHATGPT_DEVICE_CODE_TIMEOUT_MS = 15 * 60 * 1000;
 
 export interface ChatgptDeviceAuthSession {
@@ -27,17 +36,49 @@ type DeviceTokenSuccess = {
   codeVerifier: string;
 };
 
-type TokenResponseJson = {
-  access_token?: string;
-  expires_in?: number;
-  refresh_token?: string;
-};
+const jwtPayloadSchema = z.object({
+  [CHATGPT_JWT_CLAIM_PATH]: z
+    .object({
+      chatgpt_account_id: z.string().optional(),
+    })
+    .optional(),
+});
 
-type JwtPayload = {
-  [CHATGPT_JWT_CLAIM_PATH]?: {
-    chatgpt_account_id?: string;
-  };
-};
+const tokenResponseSchema = z.object({
+  access_token: z.string().optional(),
+  expires_in: z.number().finite().positive().optional(),
+  refresh_token: z.string().optional(),
+});
+
+const deviceAuthResponseSchema = z.object({
+  device_auth_id: z.string().min(1),
+  interval: z.union([z.number(), z.string()]),
+  user_code: z.string().min(1),
+});
+
+const deviceTokenResponseSchema = z.object({
+  authorization_code: z.string().min(1),
+  code_verifier: z.string().min(1),
+});
+
+const deviceErrorResponseSchema = z.object({
+  error: z
+    .union([z.string(), z.object({ code: z.string().optional() })])
+    .optional(),
+});
+
+const codexModelsResponseSchema = z.object({
+  models: z
+    .array(
+      z.object({
+        display_name: z.string().optional(),
+        id: z.string().optional(),
+        slug: z.string().optional(),
+        supported_in_api: z.boolean().optional(),
+      })
+    )
+    .optional(),
+});
 
 function decodeJwtPayload(token: string): JwtPayload | null {
   try {
@@ -49,12 +90,17 @@ function decodeJwtPayload(token: string): JwtPayload | null {
 
     const payload = parts[1] ?? "";
     const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+
     const padded = normalized.padEnd(
       normalized.length + ((4 - (normalized.length % 4)) % 4),
       "="
     );
+
     const decoded = Buffer.from(padded, "base64").toString("utf8");
-    return JSON.parse(decoded) as JwtPayload;
+
+    const parsed = jwtPayloadSchema.safeParse(JSON.parse(decoded));
+
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }
@@ -65,9 +111,8 @@ export function readChatgptAccountIdFromAccessToken(
 ): string | null {
   const payload = decodeJwtPayload(accessToken);
   const accountId = payload?.[CHATGPT_JWT_CLAIM_PATH]?.chatgpt_account_id;
-  return typeof accountId === "string" && accountId.length > 0
-    ? accountId
-    : null;
+
+  return accountId && accountId.length > 0 ? accountId : null;
 }
 
 async function readTokenResponse(
@@ -83,11 +128,12 @@ async function readTokenResponse(
     );
   }
 
-  const json = (await response.json()) as TokenResponseJson;
+  const parsed = tokenResponseSchema.safeParse(await response.json());
+  const json = parsed.success ? parsed.data : null;
 
   if (
-    !(json.access_token && json.refresh_token) ||
-    typeof json.expires_in !== "number"
+    !(json?.access_token && json.refresh_token) ||
+    json.expires_in === undefined
   ) {
     throw new Error(
       `ChatGPT OAuth token ${operation} response missing fields.`
@@ -124,20 +170,22 @@ async function startChatgptDeviceAuth(): Promise<ChatgptDeviceAuthSession> {
     );
   }
 
-  const json = (await response.json()) as {
-    device_auth_id?: string;
-    interval?: number | string;
-    user_code?: string;
-  };
-  const intervalSeconds =
-    typeof json.interval === "string"
-      ? Number(json.interval.trim())
-      : json.interval;
+  const parsed = deviceAuthResponseSchema.safeParse(await response.json());
+
+  if (!parsed.success) {
+    throw new Error("ChatGPT device auth returned an invalid response.");
+  }
+
+  const json = parsed.data;
+
+  const intervalSeconds = Number(json.interval);
 
   if (
-    !(json.device_auth_id && json.user_code) ||
-    typeof intervalSeconds !== "number" ||
-    !Number.isFinite(intervalSeconds) ||
+    !(
+      json.device_auth_id &&
+      json.user_code &&
+      Number.isFinite(intervalSeconds)
+    ) ||
     intervalSeconds < 0
   ) {
     throw new Error("ChatGPT device auth returned an invalid response.");
@@ -168,12 +216,9 @@ async function pollChatgptDeviceAuthOnce(
   });
 
   if (response.ok) {
-    const json = (await response.json()) as {
-      authorization_code?: string;
-      code_verifier?: string;
-    };
+    const parsed = deviceTokenResponseSchema.safeParse(await response.json());
 
-    if (!(json.authorization_code && json.code_verifier)) {
+    if (!parsed.success) {
       return {
         message: "ChatGPT device auth returned an incomplete token response.",
         status: "failed",
@@ -183,8 +228,8 @@ async function pollChatgptDeviceAuthOnce(
     return {
       status: "complete",
       value: {
-        authorizationCode: json.authorization_code,
-        codeVerifier: json.code_verifier,
+        authorizationCode: parsed.data.authorization_code,
+        codeVerifier: parsed.data.code_verifier,
       },
     };
   }
@@ -197,11 +242,15 @@ async function pollChatgptDeviceAuthOnce(
   let errorCode: unknown;
 
   try {
-    const json = JSON.parse(responseBody) as {
-      error?: string | { code?: string };
-    };
-    const error = json.error;
-    errorCode = typeof error === "object" ? error?.code : error;
+    const parsed = deviceErrorResponseSchema.safeParse(
+      JSON.parse(responseBody)
+    );
+
+    if (parsed.success) {
+      const error = parsed.data.error;
+      errorCode =
+        error instanceof Object && "code" in error ? error.code : error;
+    }
   } catch {
     errorCode = undefined;
   }
@@ -242,37 +291,24 @@ async function exchangeChatgptAuthorizationCode(
   return readTokenResponse(response, "exchange");
 }
 
-export function parseChatgptCodexModelsPayload(
-  payload: unknown
+export function parseChatgptCodexModelsPayload<Value>(
+  payload: Value
 ): CustomModelEntry[] {
-  if (!payload || typeof payload !== "object") {
+  const parsed = codexModelsResponseSchema.safeParse(payload);
+
+  if (!parsed.success) {
     return [];
   }
 
-  const record = payload as { models?: unknown };
-  const rows = Array.isArray(record.models) ? record.models : [];
+  const rows = parsed.data.models ?? [];
   const unique = new Map<string, CustomModelEntry>();
 
   for (const row of rows) {
-    if (!row || typeof row !== "object") {
+    if (row.supported_in_api === false) {
       continue;
     }
 
-    const item = row as {
-      display_name?: unknown;
-      id?: unknown;
-      slug?: unknown;
-      supported_in_api?: unknown;
-    };
-
-    if (item.supported_in_api === false) {
-      continue;
-    }
-
-    const id =
-      (typeof item.slug === "string" && item.slug.trim()) ||
-      (typeof item.id === "string" && item.id.trim()) ||
-      "";
+    const id = row.slug?.trim() || row.id?.trim() || "";
 
     if (!id || unique.has(id)) {
       continue;
@@ -280,10 +316,7 @@ export function parseChatgptCodexModelsPayload(
 
     unique.set(id, {
       id,
-      name:
-        typeof item.display_name === "string" && item.display_name.trim()
-          ? item.display_name.trim()
-          : id,
+      name: row.display_name?.trim() ? row.display_name.trim() : id,
       supportsVision: true,
     });
   }
@@ -305,6 +338,7 @@ export async function fetchChatgptCodexModels(
         originator: "codex_cli_rs",
       },
     });
+
   let response = await fetchModels(oauth);
 
   // The upstream can reject a token before its stored expiry. Refresh once,
@@ -312,6 +346,7 @@ export async function fetchChatgptCodexModels(
   if (response.status === 401 && onTokenRefresh) {
     await response.body?.cancel();
     let refreshed: ChatgptOAuthCredentials;
+
     try {
       refreshed = await refreshChatgptOAuthToken(oauth.refreshToken);
     } catch {
@@ -320,6 +355,7 @@ export async function fetchChatgptCodexModels(
         400
       );
     }
+
     await onTokenRefresh(refreshed);
     response = await fetchModels(refreshed);
   }
