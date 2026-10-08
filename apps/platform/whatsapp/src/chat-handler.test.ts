@@ -138,7 +138,14 @@ describe("createChatHandler", () => {
         pairedJid: PAIRED_JID,
         phoneNumber: "1234567890",
       });
-      const { calls, handler: handle, sent } = await createTestHandler(homeDir);
+      const {
+        calls,
+        handler: handle,
+        sent,
+      } = await createTestHandler(homeDir, {
+        config: { phoneNumber: "1234567890", profileId: "default" },
+        whatsappContextToken: "worker-secret",
+      });
       const download = spyOn(
         baileys,
         "downloadContentFromMessage"
@@ -216,6 +223,16 @@ describe("createChatHandler", () => {
             message: "import this",
           },
         ]);
+        expect(calls.streamOptions[0]).toMatchObject({
+          whatsappContextToken: "worker-secret",
+          whatsappMessage: {
+            chatJid: PAIRED_JID,
+            fromMe: false,
+            isGroup: false,
+            senderJid: PAIRED_JID,
+            senderJids: [PAIRED_JID],
+          },
+        });
 
         await handle({
           jid: PAIRED_JID,

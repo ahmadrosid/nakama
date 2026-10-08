@@ -107,9 +107,10 @@ async function withCurrentChatContext(
   }
   validateImageAttachments(images);
 
-  if (images.length) {
+  if (images.length || context.whatsappMessage) {
     args.nakamaContext = {
-      images,
+      ...(images.length ? { images } : {}),
+      ...(context.whatsappMessage ? { whatsapp: context.whatsappMessage } : {}),
     };
   }
   return args;

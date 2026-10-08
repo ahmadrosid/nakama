@@ -82,6 +82,16 @@ describe("WorkerManagerService", () => {
     await service.startWorker("whatsapp", first);
     await service.startWorker("whatsapp", second);
     const calls = (pm2.start as ReturnType<typeof mock>).mock.calls;
+    const token = await service.getWhatsAppContextToken();
+    expect(
+      await new WorkerManagerService(
+        projectRoot,
+        createMockPm2()
+      ).getWhatsAppContextToken()
+    ).toBe(token);
+    expect(calls[0][0].env.NAKAMA_WHATSAPP_CONTEXT_TOKEN).toBe(token);
+    expect(await service.verifyWhatsAppContextToken(token)).toBe(true);
+    expect(await service.verifyWhatsAppContextToken("forged")).toBe(false);
     expect(calls[0][0].name).not.toBe(calls[1][0].name);
     expect(calls[0][0].env.NAKAMA_CHANNEL_PROFILE_ID).toBe(first.profileId);
     await service.stopWorker("whatsapp", first);

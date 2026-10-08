@@ -21,7 +21,10 @@ import {
 } from "@nakama/core/channel-org";
 import type { ChannelSessionStore } from "@nakama/core/channel-session-store";
 import { createTypingLoop } from "@nakama/core/channel-typing-loop";
-import type { SendMessageInput } from "@nakama/core/contract";
+import type {
+  SendMessageInput,
+  SendMessageRequest,
+} from "@nakama/core/contract";
 import {
   MAX_DOCUMENT_BYTES,
   MAX_IMAGE_BYTES,
@@ -89,10 +92,19 @@ export interface ChatHandlerDeps {
   getSocket: () => WASocket | null;
   orgStore: ChannelOrgStore;
   sessionStore: ChannelSessionStore;
+  whatsappContextToken?: string;
 }
 
 export function createChatHandler(deps: ChatHandlerDeps) {
-  const { client, config, authStore, sessionStore, orgStore, getSocket } = deps;
+  const {
+    client,
+    config,
+    authStore,
+    sessionStore,
+    orgStore,
+    getSocket,
+    whatsappContextToken,
+  } = deps;
   if (config.orgId) {
     client.setOrgId(config.orgId);
   }
@@ -311,13 +323,24 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         return;
       }
 
-      await handleChatMessage(conversationKey, jid, {
-        message: withGroupContext(
-          withQuotedContext(attachUserText, inbound.quotedText),
-          isGroup
-        ),
-        ...mediaInput?.input,
-      });
+      await handleChatMessage(
+        conversationKey,
+        jid,
+        {
+          message: withGroupContext(
+            withQuotedContext(attachUserText, inbound.quotedText),
+            isGroup
+          ),
+          ...mediaInput?.input,
+        },
+        {
+          chatJid: jid,
+          fromMe: inbound.fromMe,
+          isGroup,
+          senderJid: inbound.senderJid,
+          senderJids: inbound.senderJids,
+        }
+      );
     });
   };
 
@@ -476,7 +499,8 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   async function handleChatMessage(
     conversationKey: string,
     jid: string,
-    input: SendMessageInput
+    input: SendMessageInput,
+    whatsappMessage: NonNullable<SendMessageRequest["whatsappMessage"]>
   ): Promise<void> {
     const deliveryClient = client.forOrg(
       config.owner?.orgId ??
@@ -546,7 +570,12 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             },
             onToolStart: () => typingLoop.ping(),
           },
-          { signal }
+          {
+            signal,
+            ...(whatsappContextToken
+              ? { whatsappContextToken, whatsappMessage }
+              : {}),
+          }
         );
         if (signal.aborted) {
           throw new DOMException("Stopped", "AbortError");

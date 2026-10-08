@@ -1824,12 +1824,23 @@ export class NakamaClient {
         const handlers = normalizeStreamHandlers(handler);
         const body = {
           ...resolveSendMessageBody(input, this.clientOrigin ?? undefined),
+          ...(options?.whatsappMessage
+            ? { whatsappMessage: options.whatsappMessage }
+            : {}),
           stream: true,
         };
-        const headers = this.buildHeaders("POST", {
-          Accept: "text/event-stream",
-          "Content-Type": "application/json",
-        });
+        const headers = new Headers(
+          this.buildHeaders("POST", {
+            Accept: "text/event-stream",
+            "Content-Type": "application/json",
+          })
+        );
+        if (options?.whatsappContextToken) {
+          headers.set(
+            "X-Nakama-WhatsApp-Context-Token",
+            options.whatsappContextToken
+          );
+        }
         const response = await retryWhileTurnIsStopping(
           async () => {
             const attempt = await this.fetchImpl(

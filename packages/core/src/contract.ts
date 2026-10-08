@@ -1224,6 +1224,7 @@ export interface SendMessageRequest {
   images?: ImageAttachment[];
   message: string;
   stream?: boolean;
+  whatsappMessage?: ToolContext["whatsappMessage"];
 }
 
 export interface SendMessageResponse {
@@ -2996,6 +2997,14 @@ export interface ToolContext {
    */
   trackEphemeralAttachment?: (attachmentId: string) => void;
   userId?: string;
+  /** Verified WhatsApp identity for the current inbound message. */
+  whatsappMessage?: {
+    chatJid: string;
+    fromMe: boolean;
+    isGroup: boolean;
+    senderJid: string;
+    senderJids: string[];
+  };
   workflowId?: string;
   workflowRunId?: string;
   /** Profile workspace root (~/.nakama/orgs/{orgId}/profiles/{profileId}/). */

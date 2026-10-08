@@ -136,6 +136,7 @@ try {
       socketHandle ? ((socketHandle as any).socket ?? null) : null,
     orgStore,
     sessionStore,
+    whatsappContextToken: process.env.NAKAMA_WHATSAPP_CONTEXT_TOKEN,
   });
 
   const socket = await createWhatsAppSocket({

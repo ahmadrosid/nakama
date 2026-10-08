@@ -267,6 +267,13 @@ describe("mcp tool bridge", () => {
           bytes: Buffer.from("image"),
           mediaType: "image/png",
         }),
+        whatsappMessage: {
+          chatJid: "chat@g.us",
+          fromMe: false,
+          isGroup: true,
+          senderJid: "sender@s.whatsapp.net",
+          senderJids: ["sender@s.whatsapp.net"],
+        },
       }
     );
 
@@ -279,6 +286,13 @@ describe("mcp tool bridge", () => {
               mediaType: "image/png",
             },
           ],
+          whatsapp: {
+            chatJid: "chat@g.us",
+            fromMe: false,
+            isGroup: true,
+            senderJid: "sender@s.whatsapp.net",
+            senderJids: ["sender@s.whatsapp.net"],
+          },
         },
         query: "read it",
       },

@@ -61,6 +61,7 @@ export function createMockClient(
     sendStream: 0,
     setOrgId: 0,
     streamInputs: [] as unknown[],
+    streamOptions: [] as unknown[],
   };
   const orgIds: string[] = [];
 
@@ -69,10 +70,15 @@ export function createMockClient(
   const sendStream = async (
     _input: unknown,
     handlers: unknown,
-    streamOptions?: { signal?: AbortSignal }
+    streamOptions?: {
+      signal?: AbortSignal;
+      whatsappContextToken?: string;
+      whatsappMessage?: unknown;
+    }
   ) => {
     calls.sendStream += 1;
     calls.streamInputs.push(_input);
+    calls.streamOptions.push(streamOptions);
 
     const streamHandlers = handlers as StreamHandlers;
     if (!options.streaming) {

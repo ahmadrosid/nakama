@@ -7,6 +7,7 @@ import type {
   ChatUsage,
   CompactionResponse,
   SendMessageInput,
+  SendMessageRequest,
 } from "@nakama/core/contract";
 
 export interface NakamaClientOptions {
@@ -59,6 +60,8 @@ export type SendMessageArg = string | SendMessageInput;
 
 export interface SendStreamOptions {
   signal?: AbortSignal;
+  whatsappContextToken?: string;
+  whatsappMessage?: SendMessageRequest["whatsappMessage"];
 }
 
 export interface RemoteChatSession {
