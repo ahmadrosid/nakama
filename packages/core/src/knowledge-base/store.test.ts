@@ -9,6 +9,7 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { composeKnowledgeBaseCatalog } from "./catalog";
 import {
   getKnowledgeBaseDir,
   getKnowledgeBaseExtractedPath,
@@ -59,6 +60,86 @@ describe("knowledge base store", () => {
       })
     );
   }
+
+  test("bounds the catalog and searches documents without listing their names", async () => {
+    const profileId = "profile_kb_catalog";
+    await setupProfile(profileId);
+    const uploaded = await uploadKnowledgeBaseDocument(ORG_ID, profileId, {
+      data: Buffer.from("invoice due date").toString("base64"),
+      filename: "catalog-source.txt",
+      mediaType: "text/plain",
+    });
+    const before = await composeKnowledgeBaseCatalog(ORG_ID, profileId);
+    const manifestPath = getKnowledgeBaseManifestPath(
+      getKnowledgeBaseDir(ORG_ID, profileId)
+    );
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.documents.push(
+      ...Array.from({ length: 199 }, (_, index) => ({
+        ...uploaded.document,
+        filename: `extra-document-${index}.txt`,
+        id: `kb_catalog_${index}`,
+      })),
+      { ...uploaded.document, id: "kb_failed", status: "failed" }
+    );
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    const after = await composeKnowledgeBaseCatalog(ORG_ID, profileId);
+    expect(after.match(/\b(\d+) ready documents\b/)?.[1]).toBe("200");
+    expect(Buffer.byteLength(after) - Buffer.byteLength(before)).toBe(2);
+    expect(after).not.toContain(uploaded.document.filename);
+    const { runKnowledgeBaseSearch } = await import(
+      "../tools/knowledge-base-search"
+    );
+    const result = await runKnowledgeBaseSearch(
+      { query: "date invoice" },
+      { orgId: ORG_ID, profileId }
+    );
+    expect(result.matchCount).toBe(1);
+    expect(result.matches[0]?.text).toContain("invoice due date");
+  });
+
+  test("counts only current ready documents in the profile's scope", async () => {
+    const profileId = "profile_kb_catalog_scope";
+    await setupProfile(profileId);
+    const source = {
+      data: Buffer.from("scope check").toString("base64"),
+      filename: "scope.txt",
+      mediaType: "text/plain",
+    };
+    const profile = await uploadKnowledgeBaseDocument(
+      ORG_ID,
+      profileId,
+      source
+    );
+    await uploadKnowledgeBaseDocument(ORG_ID, "other_profile", source);
+    const shared = await uploadOrganizationKnowledgeBaseDocument(
+      ORG_ID,
+      source
+    );
+    await uploadOrganizationKnowledgeBaseDocument(ORG_ID, {
+      ...source,
+      data: Buffer.from("unattached content").toString("base64"),
+      filename: "unattached.txt",
+    });
+    await uploadOrganizationKnowledgeBaseDocument("other_org", source);
+    await attachSharedKnowledgeBaseDocument(
+      ORG_ID,
+      profileId,
+      shared.document.id
+    );
+    const attached = await composeKnowledgeBaseCatalog(ORG_ID, profileId);
+    expect(attached.match(/\b(\d+) ready documents\b/)?.[1]).toBe("2");
+    await detachSharedKnowledgeBaseDocument(
+      ORG_ID,
+      profileId,
+      shared.document.id
+    );
+    const detached = await composeKnowledgeBaseCatalog(ORG_ID, profileId);
+    expect(detached.match(/\b(\d+) ready documents\b/)?.[1]).toBe("1");
+    await deleteKnowledgeBaseDocument(ORG_ID, profileId, profile.document.id);
+    const empty = await composeKnowledgeBaseCatalog(ORG_ID, profileId);
+    expect(empty.match(/\b(\d+) ready documents\b/)).toBeNull();
+  });
 
   test.each(["profile", "organization"] as const)(
     "preserves every concurrent %s upload",
