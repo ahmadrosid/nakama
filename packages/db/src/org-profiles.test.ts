@@ -81,6 +81,7 @@ describe("seedOrgDefaultProfile", () => {
     await upsertSkill(db, "create-profile");
 
     const profile = await seedOrgDefaultProfile(db, "org_a");
+
     const skillNames = (await db.listSkillsForProfile(profile.id)).map(
       (skill) => skill.name
     );
@@ -117,6 +118,7 @@ describe("seedOrgSuperBotProfile", () => {
     const db = createInMemoryDatabaseAdapter();
     await ensureBuiltinToolDefinitions(db);
     const profile = await seedOrgSuperBotProfile(db, "org_a");
+
     const toolIds = (await db.listToolsForProfile(profile.id)).map(
       (tool) => tool.id
     );
@@ -140,6 +142,7 @@ describe("seedOrgSuperBotProfile", () => {
     await ensureBuiltinToolDefinitions(db);
     const superBot = await seedOrgSuperBotProfile(db, "org_a");
     const defaultBot = await seedOrgDefaultProfile(db, "org_a");
+
     const toolIdsOf = async (profileId: string) =>
       (await db.listToolsForProfile(profileId)).map((tool) => tool.id);
 
@@ -182,6 +185,7 @@ describe("seedOrgSuperBotProfile", () => {
     await upsertSkill(db, "agent-browser");
 
     const profile = await seedOrgSuperBotProfile(db, "org_a");
+
     const skillNames = (await db.listSkillsForProfile(profile.id)).map(
       (skill) => skill.name
     );
@@ -214,6 +218,7 @@ describe("seedOrgSuperBotProfile", () => {
     const skillNames = (await db.listSkillsForProfile(profile.id)).map(
       (skill) => skill.name
     );
+
     expect(skillNames).toContain("update-profile-memory");
     expect(skillNames).toContain("archive-profile-memory");
     expect(skillNames).toContain("save-artifact");
@@ -230,6 +235,7 @@ describe("seedOrgSuperBotProfile", () => {
     const skillNames = (await db.listSkillsForProfile(profile.id)).map(
       (skill) => skill.name
     );
+
     expect(skillNames).toContain("create-profile");
   });
 });
@@ -248,6 +254,7 @@ describe("ensureBundledSkillsAssigned", () => {
     const skillNames = (await db.listSkillsForProfile(profile.id)).map(
       (skill) => skill.name
     );
+
     expect(skillNames).toContain("create-automation");
     expect(skillNames).not.toContain("create-profile");
     expect(skillNames).not.toContain("agent-browser");
@@ -288,6 +295,7 @@ test("shared listing is seeded and assigned to fresh profiles, without restoring
   expect((await db.getTool(BUILTIN_TOOL_IDS.list_artifacts))?.handlerType).toBe(
     "builtin"
   );
+
   for (const seed of [seedOrgDefaultProfile, seedOrgSuperBotProfile]) {
     const profile = await seed(db, "org_listing");
     expect(

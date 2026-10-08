@@ -5,6 +5,7 @@ import {
 import type { DatabaseAdapter } from "./types";
 
 const SALT_ROUNDS = 10;
+
 const PLACEHOLDER_HASH = "unused";
 
 async function hashPassword(password: string): Promise<string> {
@@ -47,6 +48,7 @@ export async function ensureLocalClientAccess(
 
   for (const org of await db.listOrganizations()) {
     const member = await db.getOrgMember(org.id, user.id);
+
     if (member) {
       continue;
     }

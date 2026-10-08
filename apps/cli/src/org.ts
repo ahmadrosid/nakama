@@ -15,10 +15,13 @@ export async function switchChatOrg(
 ) {
   if (!orgRef) {
     const { orgs } = await client.listUserOrgs();
+
     for (const org of orgs) {
       write(`${org.slug}  ${org.name}`);
     }
+
     write("Use /org <slug> to switch.");
+
     return;
   }
 
@@ -26,15 +29,20 @@ export async function switchChatOrg(
   // Prepare an independent scope so failed switches leave the current chat intact.
   const nextClient = client.forOrg(orgId);
   const { profiles } = await nextClient.listProfiles();
+
   const profile =
     profiles.find((entry) => entry.isSuper) ?? pickProfileForOrg(profiles);
+
   const health = await nextClient.health();
+
   const session = await nextClient.createSession(channel, {
     codingWorkspaceRoot,
     profileId: profile.id,
   });
+
   await saveCliProfileId(profile.id);
   await saveCliOrgId(orgId);
+
   return {
     client: nextClient,
     offline: !health.providerConfigured,
@@ -57,7 +65,9 @@ export class InvalidOrgArgError extends Error {
 
 /** Org ids (`org_…`) plus slugs resolved by `assertOrgMembership`. */
 const ORG_ID_PATTERN = /^org_[A-Za-z0-9]+$/;
+
 const ORG_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/i;
+
 const MAX_ORG_REF_LENGTH = 128;
 
 function assertOrgRef(value: string): string {
@@ -84,11 +94,13 @@ export function parseCliOrgArgs(argv = process.argv.slice(2)): CliOrgOptions {
 
     if (arg === "--org" || arg === "-o") {
       const raw = argv[index + 1]?.trim();
+
       if (!raw || raw.startsWith("-")) {
         throw new InvalidOrgArgError(
           "Missing value for --org. Use --org org_<id> or a slug."
         );
       }
+
       orgId = assertOrgRef(raw);
       index += 1;
       continue;
@@ -96,11 +108,13 @@ export function parseCliOrgArgs(argv = process.argv.slice(2)): CliOrgOptions {
 
     if (arg.startsWith("--org=")) {
       const raw = arg.slice("--org=".length).trim();
+
       if (!raw) {
         throw new InvalidOrgArgError(
           "Missing value for --org. Use --org=org_<id> or a slug."
         );
       }
+
       orgId = assertOrgRef(raw);
     }
   }
@@ -121,6 +135,7 @@ export async function resolveCliOrgId(
     const orgId = await assertOrgMembership(client, explicitOrgId);
     client.setOrgId(orgId);
     await saveCliOrgId(orgId);
+
     return orgId;
   }
 
@@ -129,6 +144,7 @@ export async function resolveCliOrgId(
   if (me.activeOrgId?.trim()) {
     client.setOrgId(me.activeOrgId);
     await saveCliOrgId(me.activeOrgId);
+
     return me.activeOrgId;
   }
 
@@ -142,6 +158,7 @@ export async function resolveCliOrgId(
   if (orgs.length === 1) {
     client.setOrgId(onlyOrg.id);
     await saveCliOrgId(onlyOrg.id);
+
     return onlyOrg.id;
   }
 
@@ -161,6 +178,7 @@ async function assertOrgMembership(
 ): Promise<string> {
   const { orgs } = await client.listUserOrgs();
   const normalized = orgRef.trim().toLowerCase();
+
   const match = orgs.find(
     (org) => org.id === orgRef || org.slug.toLowerCase() === normalized
   );

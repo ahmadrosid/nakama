@@ -13,6 +13,7 @@ export async function sendStreamCancellable(
 ): Promise<{ aborted: boolean }> {
   try {
     await session.sendStream(input, handlers, options);
+
     return { aborted: false };
   } catch (error) {
     if (isAbortError(error)) {

@@ -145,6 +145,7 @@ describe("organization archive persistence", () => {
     const db = database.adapter;
     const createdAt = "2026-01-01T00:00:00.000Z";
     const archivedAt = "2026-06-15T12:00:00.000Z";
+
     try {
       await seedTwoActiveOrgs(db, createdAt);
 

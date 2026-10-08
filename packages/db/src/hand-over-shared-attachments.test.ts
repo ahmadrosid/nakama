@@ -6,6 +6,7 @@ const NOW = "2026-01-01T00:00:00.000Z";
 test("a purged session's attachments move only to a session that can still read them", async () => {
   const database = await createSqliteDatabase(":memory:");
   const db = database.adapter;
+
   try {
     for (const [orgId, profileIds] of [
       ["org_a", ["profile_a", "profile_a2"]],
@@ -18,6 +19,7 @@ test("a purged session's attachments move only to a session that can still read 
         slug: orgId,
         updatedAt: NOW,
       });
+
       for (const id of profileIds) {
         await db.upsertProfile({
           createdAt: NOW,
@@ -32,6 +34,7 @@ test("a purged session's attachments move only to a session that can still read 
         });
       }
     }
+
     // Each session's one message names the attachment ids listed for it.
     const sessions: [id: string, profileId: string, content: unknown][] = [
       [
@@ -47,6 +50,7 @@ test("a purged session's attachments move only to a session that can still read 
       ["source_b", "profile_b", ""],
       ["branch_b", "profile_b", [{ attachmentId: "att_wrong_org" }]],
     ];
+
     for (const [id, profileId, content] of sessions) {
       await db.upsertSession({
         agentQuestionnaire: null,
@@ -69,6 +73,7 @@ test("a purged session's attachments move only to a session that can still read 
         },
       ]);
     }
+
     const attachments: [id: string, orgId: string, owner: string][] = [
       ["att_branch", "org_a", "source"],
       ["att_other_org", "org_a", "source"],
@@ -78,6 +83,7 @@ test("a purged session's attachments move only to a session that can still read 
       // Filed under org_a while its profile and both sessions are in org_b.
       ["att_wrong_org", "org_a", "source_b"],
     ];
+
     for (const [id, orgId, sessionId] of attachments) {
       await db.insertAttachment({
         channel: "web",
@@ -94,6 +100,7 @@ test("a purged session's attachments move only to a session that can still read 
         storagePath: id,
       });
     }
+
     const owners = async () =>
       Object.fromEntries(
         await Promise.all(
@@ -103,6 +110,7 @@ test("a purged session's attachments move only to a session that can still read 
           ])
         )
       );
+
     const before = await owners();
 
     await db.handOverSharedAttachments("source", "org_b");

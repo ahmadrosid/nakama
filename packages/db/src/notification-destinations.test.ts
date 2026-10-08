@@ -5,6 +5,7 @@ import type { StoredNotificationDestinationRecord } from "./types";
 describe("notification destinations", () => {
   test("round trips Discord and WhatsApp config with organization isolation", async () => {
     const db = createInMemoryDatabaseAdapter();
+
     const configs = [
       {
         channel: "discord",
@@ -12,6 +13,7 @@ describe("notification destinations", () => {
       },
       { channel: "whatsapp", config: { profileId: "agent_1" } },
     ] as const;
+
     for (const configured of configs) {
       const record: StoredNotificationDestinationRecord = {
         ...configured,
@@ -22,9 +24,11 @@ describe("notification destinations", () => {
         secretHash: "hash",
         updatedAt: "2026-10-03T00:00:00.000Z",
       };
+
       await db.upsertNotificationDestination(record);
       expect(await db.getNotificationDestination(record.id)).toEqual(record);
     }
+
     expect(await db.listNotificationDestinationsForOrg("org_1")).toHaveLength(
       2
     );

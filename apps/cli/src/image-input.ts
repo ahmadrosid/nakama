@@ -6,13 +6,13 @@ import { getUserConfigDir, MAX_IMAGE_BYTES } from "@nakama/core";
 
 const IMAGE_PATH_PATTERN = /^@(\S+)(?:\s+([\s\S]*))?$/;
 
-const EXTENSION_MEDIA_TYPES: Record<string, string> = {
+const EXTENSION_MEDIA_TYPES = {
   ".gif": "image/gif",
   ".jpeg": "image/jpeg",
   ".jpg": "image/jpeg",
   ".png": "image/png",
   ".webp": "image/webp",
-};
+} satisfies Record<string, string>;
 
 /**
  * Resolve `@path` image reads to an allowlisted absolute path.
@@ -30,6 +30,7 @@ export function resolveAllowedImagePath(filePath: string): string {
   const allowedRoots = resolveAllowedRoots();
 
   let realPath: string;
+
   try {
     realPath = realpathSync(absolute);
   } catch {
@@ -49,14 +50,17 @@ function expandHome(filePath: string): string {
   if (filePath === "~") {
     return process.env.HOME ?? homedir();
   }
+
   if (filePath.startsWith("~/")) {
     return path.join(process.env.HOME ?? homedir(), filePath.slice(2));
   }
+
   return filePath;
 }
 
 function resolveAllowedRoots(): string[] {
   const roots = [process.cwd(), getUserConfigDir()];
+
   return roots.map((root) => {
     try {
       return realpathSync(root);
@@ -71,13 +75,16 @@ function isWithinRoots(target: string, roots: string[]): boolean {
     if (target === root) {
       return true;
     }
+
     // Compare target against `root + sep`, not `target + sep` against `root +
     // sep` — otherwise cwd `/tmp/fo` would falsely allow `/tmp/foo/secret`.
     const prefix = root.endsWith(path.sep) ? root : root + path.sep;
+
     if (target.startsWith(prefix)) {
       return true;
     }
   }
+
   return false;
 }
 
@@ -110,6 +117,7 @@ export async function parseImageLine(
   const extension = resolvedPath
     .slice(resolvedPath.lastIndexOf("."))
     .toLowerCase();
+
   const mediaType = EXTENSION_MEDIA_TYPES[extension];
 
   if (!mediaType) {
