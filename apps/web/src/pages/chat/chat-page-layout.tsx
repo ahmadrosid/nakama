@@ -51,6 +51,7 @@ export function ChatPageColumn({
 function greeting(): string {
   const hour = new Date().getHours();
   const partOfDay = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+
   return `Hi, good ${partOfDay}!`;
 }
 

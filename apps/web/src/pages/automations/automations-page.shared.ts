@@ -9,11 +9,13 @@ export function automationRunMessages(
   run: AutomationRunRecord
 ): ChatListItem[] {
   const running = run.status === "running";
+
   const transcript = run.progress?.length
     ? run.progress
     : run.output
       ? [{ content: run.output, role: "assistant" as const }]
       : [];
+
   const messages: ChatListItem[] = chatMessagesToListItems(transcript).map(
     (message) => ({
       ...message,
@@ -33,6 +35,7 @@ export function automationRunMessages(
           : message.toolStatus,
     })
   );
+
   if (running && (!messages.length || messages.at(-1)?.role === "user")) {
     messages.push({
       content: "",
@@ -44,6 +47,7 @@ export function automationRunMessages(
       toolStatus: undefined,
     });
   }
+
   if (run.error) {
     return [
       ...messages,
@@ -55,6 +59,7 @@ export function automationRunMessages(
       },
     ];
   }
+
   return messages;
 }
 
@@ -92,6 +97,7 @@ export function groupRunsByDay(
   for (const run of runs) {
     const label = formatRunDayLabel(run.startedAt);
     const bucket = buckets.get(label);
+
     if (bucket) {
       bucket.push(run);
     } else {
@@ -118,11 +124,13 @@ function formatRunDayLabel(value: string): string {
     date.getMonth(),
     date.getDate()
   ).getTime();
+
   const startOfToday = new Date(
     now.getFullYear(),
     now.getMonth(),
     now.getDate()
   ).getTime();
+
   const diffDays = Math.round((startOfToday - startOfDate) / 86_400_000);
 
   if (diffDays === 0) {

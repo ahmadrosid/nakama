@@ -14,6 +14,7 @@ test.each([
     expected
   );
 });
+
 test("org admins cannot use the legacy link to reach MCP", () => {
   expect(legacySystemDestination(new URLSearchParams("tab=mcp"), false)).toBe(
     "/customize/tools"

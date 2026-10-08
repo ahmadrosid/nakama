@@ -13,6 +13,7 @@ function useProfilesPageLayoutMeta(state: ProfilesPageState) {
   const canPack = isOrgAdmin || canCreateProfile;
   const { navigateToNewChat } = useAppNavigation();
   const superBotProfileId = resolveSuperBotChatProfileId(profiles);
+
   const onAskSuperBot = superBotProfileId
     ? () => navigateToNewChat(superBotProfileId)
     : undefined;
@@ -119,6 +120,7 @@ function ProfilesMainSection({
 
 export function ProfilesPageLayout(state: ProfilesPageState) {
   const { profiles, profilesLoading, error, selectedId, refetchDetail } = state;
+
   const { canCreateProfile, canPack, onAskSuperBot } =
     useProfilesPageLayoutMeta(state);
 

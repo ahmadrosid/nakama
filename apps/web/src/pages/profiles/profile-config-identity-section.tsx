@@ -74,6 +74,7 @@ export function ProfileConfigIdentitySection({
     handleAvatarSelected,
     handleAvatarRemove,
   } = state;
+
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
 
   if (!detail) {
@@ -185,6 +186,7 @@ export function ProfileConfigIdentitySection({
                           group.providerId,
                           model.id
                         );
+
                         return (
                           <CommandItem
                             data-checked={modelSelectionValue === value}

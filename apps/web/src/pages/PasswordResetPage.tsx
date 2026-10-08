@@ -26,6 +26,7 @@ export function PasswordResetPage() {
 
     try {
       const response = await client.requestPasswordReset({ email });
+
       if (response.token) {
         setToken(response.token);
         setEnteringToken(true);
@@ -55,6 +56,7 @@ export function PasswordResetPage() {
   }
 
   let heading = "Reset password";
+
   if (requested) {
     heading = "Check your email";
   } else if (completed) {

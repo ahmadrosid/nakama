@@ -65,12 +65,16 @@ function buildChangeRows(event: ProfileChangeEvent) {
   const rows = buildFileDiffRows(event.beforeValue, event.afterValue, {
     formatJson: ["tools", "skills", "mcp", "pack_import"].includes(event.field),
   });
+
   if (!event.assignmentNames) {
     return rows;
   }
+
   const names = new Map(Object.entries(event.assignmentNames));
+
   const unavailable =
     event.field === "skills" ? "Unavailable skill" : "Unavailable tool";
+
   return rows.map((row) => ({
     ...row,
     text: row.text.replace(/"(?:[^"\\]|\\.)*"/g, (value) =>
@@ -81,9 +85,11 @@ function buildChangeRows(event: ProfileChangeEvent) {
 
 function AssignmentChangeSummary({ event }: { event: ProfileChangeEvent }) {
   const changes = event.assignmentChanges;
+
   if (!changes) {
     return null;
   }
+
   return (
     <div className="space-y-3 px-4 py-2 sm:px-5">
       {(["added", "removed"] as const).map((kind) =>
@@ -194,6 +200,7 @@ function HistoryChangeDialog({
 
 export function ProfileHistoryTab({ profileId }: { profileId: string }) {
   const [openEventId, setOpenEventId] = useState<string | null>(null);
+
   const { data, error, isLoading, refetch } = useQuery({
     queryFn: () => client.listProfileChangeHistory(profileId, { limit: 100 }),
     queryKey: queryKeys.profiles.history(profileId),
@@ -244,9 +251,11 @@ export function ProfileHistoryTab({ profileId }: { profileId: string }) {
         {events.map((event) => {
           const actor = formatActorLabel(event);
           const rows = event.assignmentChanges ? [] : buildChangeRows(event);
+
           const added =
             event.assignmentChanges?.added.length ??
             rows.filter((row) => row.type === "add").length;
+
           const removed =
             event.assignmentChanges?.removed.length ??
             rows.filter((row) => row.type === "del").length;
