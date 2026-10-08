@@ -1,5 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
+  "ignore": ["tools/oxlint/anti-slop/**"],
   // First-run baseline: teach the graph, then ignore leftovers instead of deleting unused code.
   "workspaces": {
     "packages/telegram-manager": {
