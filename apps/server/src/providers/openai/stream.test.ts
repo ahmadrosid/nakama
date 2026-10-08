@@ -222,6 +222,35 @@ describe("OpenAI provider streaming", () => {
     expect(result.content).toBe("Hi");
   });
 
+  test("accepts null error, incomplete_details, and usage in lifecycle events", async () => {
+    globalThis.fetch = mock(
+      async () =>
+        new Response(
+          streamFromChunks([
+            'data:{"type":"response.created","response":{"error":null,"incomplete_details":null,"usage":null,"output":[]}}\r\n\r\n',
+            'data:{"type":"response.output_text.delta","delta":"Hi"}\r\n\r\n',
+            'data:{"type":"response.completed","response":{"error":null,"incomplete_details":null,"output":[],"usage":{"input_tokens":3,"output_tokens":1,"total_tokens":4}}}\r\n\r\n',
+          ]),
+          { status: 200 }
+        )
+    );
+
+    const result = await createOpenAIProvider({
+      apiKey: "sk-test",
+      model: "gpt-6.1-sol",
+    }).streamChat(
+      {
+        messages: [{ content: "Say hi", role: "user" }],
+        providerOptions: { thinking: { enabled: true } },
+        system: "Be brief.",
+      },
+      { onChunk: () => {} }
+    );
+
+    expect(result.content).toBe("Hi");
+    expect(result.usage?.totalTokens).toBe(4);
+  });
+
   test("uses completed response output when item events are absent", async () => {
     globalThis.fetch = mock(
       async () =>
