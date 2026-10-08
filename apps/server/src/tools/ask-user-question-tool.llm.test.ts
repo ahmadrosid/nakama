@@ -145,6 +145,7 @@ test("ask_user_question schema is callable by a real OpenAI model", async () => 
     const stored = await tool.run(parsedArgs.data, {
       sessionId: "session_llm",
     });
+
     expect(stored.questionnaire.title).toBe(parsedArgs.data.title);
   });
 });
