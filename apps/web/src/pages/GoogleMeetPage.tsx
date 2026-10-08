@@ -1,6 +1,7 @@
 import {
   formatTranscript,
   type MeetAction,
+  type MeetActionInput,
   type MeetActionResults,
   type Meeting,
   type MeetOverview as Overview,
@@ -29,18 +30,9 @@ import * as React from "react";
 import { useAuth } from "@/context/use-auth";
 import { client, formatError } from "@/lib/client";
 
-type MeetCallInput = {
-  after?: number;
-  apiKey?: string;
-  content?: string;
-  enabled?: boolean;
-  filename?: string;
-  meetingId?: string;
-};
-
 type MeetCall = <Action extends MeetAction>(
   action: Action,
-  input?: MeetCallInput
+  input?: MeetActionInput
 ) => Promise<MeetActionResults[Action]>;
 
 function meetingStatus(meeting: Meeting) {
@@ -567,7 +559,7 @@ function useExtensionBridge(
           ? eventData.input
           : {};
 
-      const input: MeetCallInput = {
+      const input: MeetActionInput = {
         after: "after" in incoming ? Number(incoming.after) : undefined,
         apiKey: "apiKey" in incoming ? String(incoming.apiKey) : undefined,
         content: "content" in incoming ? String(incoming.content) : undefined,
@@ -684,7 +676,7 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
     };
   }, [call, signal]);
 
-  async function action(name: MeetAction, input: MeetCallInput) {
+  async function action(name: MeetAction, input: MeetActionInput) {
     setBusy(true);
     setError("");
 
@@ -884,7 +876,7 @@ function OrganizationMeetPage({ orgId }: { orgId: string }) {
     setScope({
       call: async <Action extends MeetAction>(
         action: Action,
-        input?: MeetCallInput
+        input?: MeetActionInput
       ): Promise<MeetActionResults[Action]> => {
         abort.signal.throwIfAborted();
 

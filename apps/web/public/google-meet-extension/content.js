@@ -1,25 +1,39 @@
 /* global chrome */
 
 const chrome = globalThis.chrome;
+
 const isMeet = location.hostname === "meet.google.com";
+
 const isMeeting =
   isMeet && /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}\/?$/.test(location.pathname);
+
 const isNakamaMeetPage = () => location.pathname === "/plugins/google-meet";
+
 const pending = new Map();
+
 let transcriptPanel;
+
 let transcriptList;
+
 let transcriptTimer;
+
 let transcriptCursor = 0;
+
 let transcriptMeeting;
+
 let transcriptRunning = false;
+
 const captionRows = new WeakMap();
+
 let captionObserver;
 
 function sendCaption(row, speakerName, text) {
   const state = captionRows.get(row) || {};
+
   if (state.sentText === text && state.sentSpeakerName === speakerName) {
     return;
   }
+
   clearTimeout(state.timer);
   state.timer = setTimeout(() => {
     if (state.text === text && state.speakerName === speakerName) {
@@ -37,9 +51,11 @@ function sendCaption(row, speakerName, text) {
       });
     }
   }, 1200);
+
   if (state.text !== text || state.speakerName !== speakerName) {
     state.startedAt = Date.now();
   }
+
   state.speakerName = speakerName;
   state.text = text;
   state.startedAt ||= Date.now();
@@ -47,25 +63,31 @@ function sendCaption(row, speakerName, text) {
 }
 
 let captionSequence = 0;
+
 function captureMeetCaptions() {
   if (!isMeeting || captionObserver) {
     return;
   }
+
   const scan = () => {
     const region = document.querySelector(
       '[role="region"][aria-label*="caption" i]'
     );
+
     if (!region) {
       return;
     }
+
     for (const row of region.querySelectorAll(".nMcdL, [class*='nMcdL']")) {
       const speakerName = row.querySelector(".NWpY1d")?.textContent?.trim();
       const text = row.querySelector(".ygicle")?.textContent?.trim();
+
       if (speakerName && text) {
         sendCaption(row, speakerName, text);
       }
     }
   };
+
   captionObserver = new MutationObserver(scan);
   captionObserver.observe(document.documentElement, {
     characterData: true,
@@ -79,6 +101,7 @@ function createTranscriptPanel() {
   if (!isMeeting || transcriptPanel) {
     return;
   }
+
   transcriptPanel = document.createElement("aside");
   transcriptPanel.setAttribute("aria-label", "Nakama live transcript");
   const shadow = transcriptPanel.attachShadow({ mode: "open" });
@@ -114,9 +137,11 @@ function hideTranscript() {
 
 function showTranscript() {
   createTranscriptPanel();
+
   if (!transcriptPanel || transcriptTimer) {
     return;
   }
+
   transcriptCursor = 0;
   transcriptMeeting = undefined;
   transcriptRunning = false;
@@ -128,35 +153,45 @@ async function refreshTranscript() {
   if (!transcriptPanel || transcriptRunning) {
     return;
   }
+
   transcriptRunning = true;
+
   try {
     const result = await chrome.runtime.sendMessage({
       after: transcriptCursor,
       type: "MEET_TRANSCRIPT",
     });
+
     if (!(result && transcriptPanel)) {
       hideTranscript();
+
       return;
     }
+
     if (transcriptMeeting !== result.meeting.id) {
       transcriptMeeting = result.meeting.id;
       transcriptCursor = 0;
       transcriptList.replaceChildren();
     }
+
     const atBottom =
       transcriptList.scrollTop + transcriptList.clientHeight >=
       transcriptList.scrollHeight - 24;
+
     for (const segment of result.segments) {
       if (transcriptList.firstElementChild?.id === "empty") {
         transcriptList.firstElementChild.remove();
       }
+
       const turn = document.createElement("p");
       const speaker = document.createElement("span");
       speaker.textContent = segment.speakerName || "Unknown speaker";
       turn.append(speaker, document.createTextNode(segment.text));
       transcriptList.append(turn);
     }
+
     transcriptCursor = result.nextCursor;
+
     if (atBottom) {
       transcriptList.scrollTop = transcriptList.scrollHeight;
     }
@@ -178,6 +213,7 @@ if (isMeeting) {
     })
     .catch(() => undefined);
 }
+
 window.addEventListener("message", async (event) => {
   if (
     !isNakamaMeetPage() ||
@@ -186,8 +222,10 @@ window.addEventListener("message", async (event) => {
   ) {
     return;
   }
+
   if (event.data?.type === "NAKAMA_MEET_PING") {
     let result = null;
+
     try {
       if (chrome.runtime?.id) {
         result = await chrome.runtime.sendMessage({ type: "BRIDGE_STATE" });
@@ -195,6 +233,7 @@ window.addEventListener("message", async (event) => {
     } catch {
       // Reloading the extension invalidates scripts in tabs until they refresh.
     }
+
     window.postMessage(
       {
         connected: result?.connected === true,
@@ -203,39 +242,49 @@ window.addEventListener("message", async (event) => {
       location.origin
     );
   }
+
   if (event.data?.type === "NAKAMA_MEET_RESULT") {
     pending.get(event.data.id)?.(event.data);
   }
 });
+
 const badge = isMeeting ? document.createElement("div") : undefined;
+
 if (badge) {
   badge.textContent = "Nakama transcription active";
   badge.style.cssText =
     "display:none;position:fixed;z-index:2147483647;top:12px;right:12px;padding:6px 10px;border-radius:6px;background:#dc2626;color:white;font:12px system-ui";
   document.documentElement.append(badge);
 }
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id) {
     return;
   }
+
   if (message.type === "NAKAMA_MEET_ACTION" && isNakamaMeetPage()) {
     const id = crypto.randomUUID();
+
     const timer = setTimeout(() => {
       pending.delete(id);
       sendResponse({ error: "Open Google Meet in Nakama and try again." });
     }, 15_000);
+
     pending.set(id, (response) => {
       clearTimeout(timer);
       pending.delete(id);
       sendResponse({ error: response.error, result: response.result });
     });
     window.postMessage({ ...message, id }, location.origin);
+
     return true;
   }
+
   if (message.type === "CAPTURE_STARTED" && badge) {
     badge.style.display = "block";
     showTranscript();
   }
+
   if (message.type === "CAPTURE_STOPPED" && badge) {
     badge.style.display = "none";
     hideTranscript();

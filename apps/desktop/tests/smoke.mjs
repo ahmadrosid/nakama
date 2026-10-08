@@ -24,6 +24,7 @@ const timeout = setTimeout(
   },
   process.argv.includes("--runtime-test") ? 120_000 : 20_000
 );
+
 async function run() {
   app.setPath("userData", await mkdtemp(join(tmpdir(), "nakama-wrapper-")));
   await app.whenReady();
@@ -37,15 +38,19 @@ async function run() {
   const prompts = [];
   updater.checkForUpdates = async () => {
     checks += 1;
+
     if (checkError) {
       throw checkError;
     }
+
     return {
       isUpdateAvailable: updateAvailable,
       updateInfo: { version: "0.2.0" },
     };
   };
+
   updater.quitAndInstall = () => order.push("install");
+
   const cancelUpdates = configureUpdates(
     updater,
     async () => {
@@ -53,18 +58,23 @@ async function run() {
       await new Promise((resolve) => {
         finishStop = resolve;
       });
+
       return true;
     },
     async (options) => {
       prompts.push(options);
+
       return { response: choice };
     }
   );
+
   assert.equal(checks, 1);
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(prompts.length, 0);
+
   const updateItem =
     Menu.getApplicationMenu().getMenuItemById("check-for-updates");
+
   assert.ok(updateItem);
   updateItem.click();
   assert.equal(updateItem.enabled, false);
@@ -94,14 +104,17 @@ async function run() {
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(order, ["stop", "install"]);
   cancelUpdates();
+
   if (process.argv.includes("--updates-test")) {
     clearTimeout(timeout);
     console.log(
       "Passed: update menu, manual checks, failure recovery, and restart installation."
     );
     app.exit(0);
+
     return;
   }
+
   for (const value of [
     "file:///etc/passwd",
     "javascript:alert(1)",
@@ -110,7 +123,9 @@ async function run() {
   ]) {
     assert.throws(() => serverUrl(value));
   }
+
   assert.equal(serverUrl(), "http://localhost:4310/chat");
+
   const server = createServer((_request, response) => {
     response.setHeader("Content-Type", "text/html");
     response.setHeader(
@@ -121,6 +136,7 @@ async function run() {
       '<!doctype html><title>Nakama fixture</title><h1>Existing web app</h1><input type="file"><textarea aria-label="Message"></textarea>'
     );
   });
+
   await new Promise((done) => server.listen(0, "127.0.0.1", done));
   await app.whenReady();
   const url = `http://127.0.0.1:${server.address().port}/chat`;
@@ -143,16 +159,20 @@ async function run() {
     "localStorage.setItem('test', 'saved')"
   );
   await window.loadURL(url);
+
   for (const theme of ["dark", "system", "light", "system", "dark"]) {
     await window.webContents.executeJavaScript(
       `localStorage.setItem('nakama-theme', '${theme}'); document.documentElement.dataset.theme = '${theme}'`
     );
     const deadline = Date.now() + 2000;
+
     while (nativeTheme.themeSource !== theme && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
+
     assert.equal(nativeTheme.themeSource, theme);
   }
+
   await window.reload();
   await new Promise((resolve) =>
     window.webContents.once("did-finish-load", resolve)
@@ -173,11 +193,14 @@ async function run() {
   window.destroy();
   nativeTheme.themeSource = "system";
   server.close();
+
   if (process.argv.includes("--runtime-test")) {
     const data = await mkdtemp(join(tmpdir(), "nakama-server-test-"));
+
     const runtime =
       process.env.NAKAMA_DESKTOP_TEST_RUNTIME ??
       join(import.meta.dirname, "../dist/runtime");
+
     await assert.rejects(startLocalServer(join(data, "missing"), data));
     const previousPath = process.env.PATH;
     process.env.PATH =
@@ -185,6 +208,7 @@ async function run() {
         ? join(process.env.SystemRoot ?? "C:\\Windows", "System32")
         : "/usr/bin:/bin";
     let local;
+
     try {
       local = await startLocalServer(runtime, data);
       assert.equal(
@@ -192,6 +216,7 @@ async function run() {
         true
       );
       assert.match(await (await fetch(`${local.url}/chat`)).text(), /<html/);
+
       const setup = await fetch(`${local.url}/v1/auth/setup`, {
         body: JSON.stringify({
           admin: {
@@ -206,10 +231,12 @@ async function run() {
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
+
       assert.equal(setup.ok, true);
       await local.stop();
       await assert.rejects(fetch(`${local.url}/health`));
       local = await startLocalServer(runtime, data);
+
       const login = await fetch(`${local.url}/v1/auth/login`, {
         body: JSON.stringify({
           email: "desktop@example.test",
@@ -218,13 +245,16 @@ async function run() {
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
+
       assert.equal(login.ok, true);
+
       // The relaunch took a new port while setup saved the old origin, and a
       // send from the new window must still pass the origin check (#1026).
       const cookie = login.headers
         .getSetCookie()
         .map((entry) => entry.split(";")[0])
         .join("; ");
+
       const headers = {
         "Content-Type": "application/json",
         Cookie: cookie,
@@ -233,9 +263,11 @@ async function run() {
           cookie.match(/nakama_csrf=([^;]+)/)?.[1] ?? ""
         ),
       };
+
       const { profiles } = await (
         await fetch(`${local.url}/v1/profiles`, { headers })
       ).json();
+
       const created = await fetch(`${local.url}/v1/sessions`, {
         body: JSON.stringify({
           channel: "web",
@@ -244,12 +276,16 @@ async function run() {
         headers,
         method: "POST",
       });
+
       const { sessionId } = await created.json();
+
       const sent = await fetch(
         `${local.url}/v1/sessions/${sessionId}/messages`,
         { body: JSON.stringify({ message: "hi" }), headers, method: "POST" }
       );
+
       assert.equal(sent.status, 200, await sent.text());
+
       const worker = await promisify(execFile)(
         join(runtime, "bin", process.platform === "win32" ? "bun.exe" : "bun"),
         [
@@ -274,22 +310,28 @@ async function run() {
           timeout: 15_000,
         }
       );
+
       const workerPid = Number(worker.stdout.match(/WORKER_PID=(\d+)/)?.[1]);
       assert.ok(workerPid > 0);
+
       const pm2Pid = await readFile(join(data, "pm2/pm2.pid"), "utf8").catch(
         () => null
       );
+
       const exited = new Promise((resolve) =>
         local.child.once("exit", resolve)
       );
+
       local.child.disconnect();
       await exited;
       await assert.rejects(fetch(`${local.url}/health`));
       // PM2 acknowledges daemon shutdown before its process finishes exiting.
       await new Promise((resolve) => setTimeout(resolve, 500));
+
       if (pm2Pid) {
         assert.throws(() => process.kill(Number(pm2Pid.trim()), 0));
       }
+
       assert.throws(() => process.kill(workerPid, 0));
       console.log(
         "Passed: bundled runtime, first setup, persistent account, chat after relaunch, shutdown, and parent disconnect cleanup."
@@ -299,12 +341,14 @@ async function run() {
       await local?.stop();
     }
   }
+
   clearTimeout(timeout);
   console.log(
     "Passed: existing page loads, renderer has no native bridge, HTTP-only session cookies and browser storage work."
   );
   app.exit(0);
 }
+
 run().catch((error) => {
   console.error(error);
   clearTimeout(timeout);

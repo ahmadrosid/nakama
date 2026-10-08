@@ -37,13 +37,16 @@ function clamp(value: number): number {
 
 function ensureFrameSize(frame: Frame, rows: number, cols: number): Frame {
   const result: Frame = [];
+
   for (let r = 0; r < rows; r++) {
     const row = frame[r] || [];
     result.push([]);
+
     for (let c = 0; c < cols; c++) {
       result[r][c] = row[c] ?? 0;
     }
   }
+
   return result;
 }
 
@@ -55,7 +58,7 @@ function useAnimation(
     loop: boolean;
     onFrame?: (index: number) => void;
   }
-): { frameIndex: number } {
+) {
   const [frameIndex, setFrameIndex] = useState(0);
   const isPlayingRef = useRef(options.autoplay);
   const frameIndexRef = useRef(0);
@@ -153,6 +156,7 @@ export const Matrix = React.forwardRef<HTMLDivElement, MatrixProps>(
     ref
   ) => {
     const shouldAnimate = Boolean(!pattern && frames && frames.length > 0);
+
     const animationKey = shouldAnimate
       ? `${autoplay}-${frames?.length ?? 0}-${rows}x${cols}`
       : "static";
@@ -245,6 +249,7 @@ const MatrixDisplay = React.forwardRef<HTMLDivElement, MatrixDisplayProps>(
 
       for (let row = 0; row < rows; row++) {
         positions[row] = [];
+
         for (let col = 0; col < cols; col++) {
           positions[row][col] = {
             x: col * (size + gap),
@@ -272,6 +277,7 @@ const MatrixDisplay = React.forwardRef<HTMLDivElement, MatrixDisplayProps>(
         ref={ref}
         role="img"
         style={
+          // SAFETY: Matrix custom properties match the variables read by its styles.
           {
             "--matrix-gap": `${gap}px`,
             "--matrix-off": palette.off,
@@ -325,12 +331,14 @@ const MatrixDisplay = React.forwardRef<HTMLDivElement, MatrixDisplayProps>(
           {currentFrame.map((row, rowIndex) =>
             row.map((value, colIndex) => {
               const pos = cellPositions[rowIndex]?.[colIndex];
+
               if (!pos) {
                 return null;
               }
 
               const opacity = clamp(brightness * value);
               const isOn = opacity > 0.05;
+
               const fill = isOn
                 ? `url(#${onGradientId})`
                 : `url(#${offGradientId})`;

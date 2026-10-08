@@ -60,6 +60,7 @@ function ExpandableTextarea({
 
       try {
         const result = await onSave();
+
         if (result === false) {
           return;
         }

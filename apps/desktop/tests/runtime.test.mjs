@@ -11,11 +11,15 @@ mock.module("electron", () => ({
   nativeTheme: {},
   shell: {},
 }));
+
 process.argv.push("--smoke-test");
+
 const { startLocalServer } = await import("../main.mjs");
+
 process.argv.pop();
 
 const root = await mkdtemp(join(tmpdir(), "nakama-desktop-runtime-"));
+
 afterAll(() => rm(root, { force: true, recursive: true }));
 
 test("stopping the local server disconnects IPC and waits for cleanup", async () => {
@@ -41,6 +45,7 @@ test("stopping the local server disconnects IPC and waits for cleanup", async ()
   `
   );
   const local = await startLocalServer(runtime, data);
+
   try {
     expect(local.url).toBe("http://127.0.0.1:12345");
     await local.stop();
