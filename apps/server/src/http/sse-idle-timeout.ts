@@ -12,6 +12,7 @@
  */
 export function isSseResponse(response: Response): boolean {
   const contentType = response.headers.get("Content-Type") ?? "";
+
   return contentType.startsWith("text/event-stream");
 }
 
@@ -36,6 +37,7 @@ export function isLongHeldAutomationRunRequest(request: Request): boolean {
   }
 
   const pathname = new URL(request.url).pathname;
+
   return /\/v1\/(?:internal\/)?automations\/[^/]+\/run\/?$/.test(pathname);
 }
 
@@ -48,6 +50,7 @@ export function disableBunIdleTimeoutForLongHeldRequest(
     /^\/v1\/plugins\/(?:[^/]+\/actions\/[^/]+|official\/[^/]+\/install)\/?$/.test(
       new URL(request.url).pathname
     );
+
   if (isLongHeldAutomationRunRequest(request) || pluginRequest) {
     server.timeout(request, 0);
   }
