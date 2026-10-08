@@ -748,13 +748,19 @@ export function profileModelLabel(
 
 export function effectiveProfileModelSelection(
   profileModel: string | null | undefined,
-  groups: ReturnType<typeof groupModelsByProvider>
+  groups: ReturnType<typeof groupModelsByProvider>,
+  defaultProviderId?: string | null
 ): string | null {
-  if (!profileModel) {
-    return null;
+  if (profileModel) {
+    return profileModelSelectionValue(profileModel, groups);
   }
 
-  return profileModelSelectionValue(profileModel, groups);
+  const active = groups.find((group) => group.providerId === defaultProviderId);
+  const model =
+    active?.models.find((entry) => entry.default) ?? active?.models[0];
+  return model && active
+    ? encodeModelSelection(active.providerId, model.id)
+    : null;
 }
 
 export function resolveModelThinkingSupport(
