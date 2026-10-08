@@ -12,6 +12,7 @@ import {
 import { startWhatsAppOutboundServer } from "./outbound-server";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
+
 let configDir = "";
 
 afterEach(async () => {
@@ -41,6 +42,7 @@ async function startPairedServer(port: number) {
   );
 
   const sent: string[] = [];
+
   const server = await startWhatsAppOutboundServer({
     getSendHandle: () => ({
       sendMessage: async (_jid, content) => {
@@ -66,6 +68,7 @@ describe("whatsapp outbound server", () => {
     process.env.NAKAMA_CONFIG_DIR = configDir;
     const sent: string[] = [];
     const servers: Array<{ port: number; stop: () => void }> = [];
+
     try {
       for (const [orgId, phone] of [
         ["org_a", "628111111111"],
@@ -87,19 +90,25 @@ describe("whatsapp outbound server", () => {
           })
         );
       }
+
       expect(servers[0].port).not.toBe(servers[1].port);
+
       const a = await loadWhatsAppConfigFile({
         orgId: "org_a",
         profileId: "agent",
       });
+
       const b = await loadWhatsAppConfigFile({
         orgId: "org_b",
         profileId: "agent",
       });
+
       expect(a?.outboundToken).not.toBe(b?.outboundToken);
+
       const crossed = await post(servers[1].port, {
         [WHATSAPP_OUTBOUND_TOKEN_HEADER]: a!.outboundToken!,
       });
+
       expect(crossed.status).toBe(401);
       const adapter = createWhatsAppOutboundAdapter();
       expect(
@@ -143,6 +152,7 @@ describe("whatsapp outbound server", () => {
 
     try {
       const anonymous = await post(server.port, {});
+
       const wrongToken = await post(server.port, {
         [WHATSAPP_OUTBOUND_TOKEN_HEADER]: "a".repeat(64),
       });

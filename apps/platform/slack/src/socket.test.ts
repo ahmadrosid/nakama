@@ -10,12 +10,14 @@ afterEach(() => {
 test("acks envelopes, drops redelivered events, and reconnects on disconnect", async () => {
   const acks: string[] = [];
   let connections = 0;
+
   const server = Bun.serve({
     fetch: (request, srv) =>
       srv.upgrade(request) ? undefined : new Response("no", { status: 400 }),
     port: 0,
     websocket: {
       message: (_socket, raw) => {
+        // SAFETY: The test server sends only serialized ack envelopes here.
         acks.push(
           (JSON.parse(String(raw)) as { envelope_id: string }).envelope_id
         );
@@ -23,9 +25,11 @@ test("acks envelopes, drops redelivered events, and reconnects on disconnect", a
       open: (socket) => {
         connections += 1;
         socket.send(JSON.stringify({ type: "hello" }));
+
         if (connections > 1) {
           return;
         }
+
         const envelope = {
           envelope_id: "env-1",
           payload: {
@@ -34,6 +38,7 @@ test("acks envelopes, drops redelivered events, and reconnects on disconnect", a
           },
           type: "events_api",
         };
+
         socket.send(JSON.stringify(envelope));
         socket.send(JSON.stringify({ ...envelope, envelope_id: "env-2" }));
         socket.send(
@@ -42,14 +47,18 @@ test("acks envelopes, drops redelivered events, and reconnects on disconnect", a
       },
     },
   });
+
   let opens = 0;
+  // SAFETY: The mock ignores request arguments and returns a valid fetch response.
   globalThis.fetch = (async () => {
     opens += 1;
+
     return Response.json({ ok: true, url: `ws://localhost:${server.port}` });
-  }) as unknown as typeof fetch;
+  }) as typeof fetch;
 
   const events: SlackMessageEvent[] = [];
   const statuses: boolean[] = [];
+
   const socket = connectSlackSocket({
     appToken: "xapp-test",
     onEvent: (event) => events.push(event),
@@ -57,9 +66,11 @@ test("acks envelopes, drops redelivered events, and reconnects on disconnect", a
   });
 
   const deadline = Date.now() + 5000;
+
   while (statuses.length < 3 && Date.now() < deadline) {
     await Bun.sleep(20);
   }
+
   socket.close();
   server.stop(true);
 

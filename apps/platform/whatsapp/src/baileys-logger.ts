@@ -6,7 +6,9 @@ interface MutableConsoleTarget {
 }
 
 const INIT_QUERY_ERROR = "unexpected error in 'init queries'";
+
 const CLOSING_SIGNAL_SESSION = "Closing session:";
+
 const CLOSED_SIGNAL_SESSION = "Session already closed";
 
 export function installBaileysConsoleRedaction(
@@ -14,17 +16,21 @@ export function installBaileysConsoleRedaction(
 ): () => void {
   const originalInfo = target.info;
   const originalWarn = target.warn;
+
   const redactedInfo: ErrorWriter = (...args) => {
     if (args[0] === CLOSING_SIGNAL_SESSION) {
       originalInfo.call(target, "Closing Signal session.");
+
       return;
     }
 
     originalInfo.apply(target, args);
   };
+
   const redactedWarn: ErrorWriter = (...args) => {
     if (args[0] === CLOSED_SIGNAL_SESSION) {
       originalWarn.call(target, "Signal session already closed.");
+
       return;
     }
 
@@ -38,6 +44,7 @@ export function installBaileysConsoleRedaction(
     if (target.info === redactedInfo) {
       target.info = originalInfo;
     }
+
     if (target.warn === redactedWarn) {
       target.warn = originalWarn;
     }
@@ -48,12 +55,24 @@ export function createBaileysLogger(
   writeError: ErrorWriter = console.error.bind(console)
 ) {
   const noop = () => {};
+
   const logger = {
     child: () => logger,
     debug: noop,
     error: (...args: unknown[]) => {
       const [context, message] = args;
-      if (isInitQueryTimeout(context, message)) {
+
+      const error =
+        context instanceof Object && "err" in context ? context.err : null;
+
+      if (
+        message === INIT_QUERY_ERROR &&
+        error instanceof Object &&
+        "isBoom" in error &&
+        error.isBoom === true &&
+        "message" in error &&
+        error.message === "Timed Out"
+      ) {
         return;
       }
 
@@ -67,25 +86,4 @@ export function createBaileysLogger(
   };
 
   return logger;
-}
-
-function isInitQueryTimeout(context: unknown, message: unknown): boolean {
-  if (
-    message !== INIT_QUERY_ERROR ||
-    typeof context !== "object" ||
-    context === null ||
-    !("err" in context)
-  ) {
-    return false;
-  }
-
-  const error = context.err;
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "isBoom" in error &&
-    error.isBoom === true &&
-    "message" in error &&
-    error.message === "Timed Out"
-  );
 }

@@ -86,6 +86,7 @@ describe("inbound message routing", () => {
   });
 
   test("extracts text from ephemeral wrapped messages", () => {
+    // SAFETY: The fixture contains a Baileys ephemeral message wrapper.
     expect(
       extractInboundText({
         ephemeralMessage: {
@@ -133,6 +134,7 @@ describe("inbound message routing", () => {
         },
       },
     };
+
     expect(shouldHandleInboundMessage(groupPhoto, ME)).toBe(true);
     expect(
       shouldHandleInboundMessage(
@@ -162,6 +164,7 @@ describe("inbound message routing", () => {
       },
     };
 
+    // SAFETY: This fixture's `toJSON` output matches the protobuf message shape.
     expect(extractInboundText(payload as any)).toBe("hi from toJSON");
   });
 

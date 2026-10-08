@@ -40,6 +40,7 @@ function buildTelegramFileDownloadUrl(token: string, filePath: string): URL {
   const path = ["file", `bot${token}`, ...filePath.split("/").filter(Boolean)]
     .map(encodeURIComponent)
     .join("/");
+
   return new URL(path, "https://api.telegram.org/");
 }
 
@@ -79,6 +80,7 @@ async function readResponseBodyCapped(
   maxBytes: number
 ): Promise<ArrayBuffer> {
   const reader = response.body?.getReader();
+
   if (!reader) {
     return new ArrayBuffer(0);
   }
@@ -88,27 +90,33 @@ async function readResponseBodyCapped(
 
   while (true) {
     const { done, value } = await reader.read();
+
     if (done) {
       break;
     }
+
     if (!value || value.byteLength === 0) {
       continue;
     }
 
     total += value.byteLength;
+
     if (total > maxBytes) {
       await reader.cancel().catch(() => undefined);
       throw new OversizedTelegramFileError();
     }
+
     chunks.push(value);
   }
 
   const merged = new Uint8Array(total);
   let offset = 0;
+
   for (const chunk of chunks) {
     merged.set(chunk, offset);
     offset += chunk.byteLength;
   }
+
   return merged.buffer;
 }
 
@@ -131,6 +139,7 @@ export async function buildTelegramDocumentInput(
   }
 
   const filename = document.file_name?.trim() || "document";
+
   const mediaType = normalizeDocumentMediaType(
     document.mime_type ?? "",
     filename

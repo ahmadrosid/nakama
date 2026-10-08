@@ -16,11 +16,13 @@ export async function loadConfig(
 ): Promise<WhatsAppBridgeConfig> {
   const owner = channelOwnerFromEnv(env);
   const config = await loadWhatsAppConfigFile(owner);
+
   if (!config) {
     throw new Error(
       "Configure this agent's WhatsApp connection before starting its worker."
     );
   }
+
   return {
     orgId: owner.orgId,
     owner,

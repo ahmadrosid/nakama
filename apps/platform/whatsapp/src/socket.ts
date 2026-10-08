@@ -42,6 +42,13 @@ export interface WhatsAppSocketHandle {
   stop: () => Promise<void>;
 }
 
+interface DisconnectDiagnostic {
+  code?: string;
+  message?: string;
+}
+
+type DisconnectDiagnosticValue = DisconnectDiagnostic | string;
+
 export async function createWhatsAppSocket(
   deps: WhatsAppSocketDeps
 ): Promise<WhatsAppSocketHandle> {
@@ -71,7 +78,7 @@ export async function createWhatsAppSocket(
 
       const next = makeWASocket({
         auth: state,
-        browser: ["Nakama", "Chrome", "4.0.0"] as [string, string, string],
+        browser: ["Nakama", "Chrome", "4.0.0"],
         connectTimeoutMs: 30_000,
         logger: baileysLogger,
         makeSignalRepository(auth, logger, pnToLIDFunc) {
@@ -80,6 +87,7 @@ export async function createWhatsAppSocket(
             logger,
             pnToLIDFunc
           );
+
           const decrypt = repository.decryptMessage.bind(repository);
           const recovered = new Map<string, string>();
           // Retry stale sessions using only our own trusted identity pair.
@@ -87,6 +95,7 @@ export async function createWhatsAppSocket(
             const sender = jidDecode(message.jid);
             const pn = jidDecode(state.creds.me?.id);
             const lid = jidDecode(state.creds.me?.lid);
+
             const alternate =
               sender?.server === "lid" && sender.user === lid?.user
                 ? pn
@@ -94,15 +103,19 @@ export async function createWhatsAppSocket(
                     sender.user === pn?.user
                   ? lid
                   : undefined;
+
             if (!(sender && alternate)) {
               return decrypt(message);
             }
+
             const alternateJid = jidEncode(
               alternate.user,
               alternate.server,
               sender.device
             );
+
             const primary = recovered.get(message.jid) ?? message.jid;
+
             try {
               return await decrypt({ ...message, jid: primary });
             } catch (error) {
@@ -112,17 +125,21 @@ export async function createWhatsAppSocket(
               ) {
                 throw error;
               }
+
               const fallback =
                 primary === message.jid ? alternateJid : message.jid;
+
               try {
                 const plaintext = await decrypt({ ...message, jid: fallback });
                 recovered.set(message.jid, fallback);
+
                 return plaintext;
               } catch {
                 throw error;
               }
             }
           };
+
           return repository;
         },
         markOnlineOnConnect: false,
@@ -141,6 +158,7 @@ export async function createWhatsAppSocket(
 
       if (myGen !== generation || stopped) {
         void retireSocket(next);
+
         return;
       }
 
@@ -162,15 +180,18 @@ export async function createWhatsAppSocket(
         if (connection === "open") {
           reconnectAttempt = 0;
           const me = state.creds.me;
+
           if (me?.id) {
             try {
               await syncWhatsAppOwnerPairing(
                 { ownerJid: me.id, ownerLid: me.lid },
                 deps.orgId
               );
+
               if (myGen !== generation || stopped) {
                 return;
               }
+
               identityAccepted = true;
               deps.onConnected?.({ id: me.id, lid: me.lid ?? null });
             } catch (error) {
@@ -189,21 +210,25 @@ export async function createWhatsAppSocket(
           // socket cannot dispatch after the next generation is bound.
           next.ev.destroy();
           deps.onDisconnected?.();
+
+          // SAFETY: Baileys supplies its documented disconnect error shape here.
           const error = lastDisconnect?.error as
             | {
                 output?: { statusCode?: number };
-                cause?: unknown;
-                data?: unknown;
+                cause?: DisconnectDiagnosticValue;
+                data?: DisconnectDiagnosticValue;
               }
             | undefined;
+
           const statusCode = error?.output?.statusCode;
+
           const shouldReconnect =
             statusCode !== DisconnectReason.loggedOut && !stopped;
 
           console.log(
             `WhatsApp disconnected ${JSON.stringify({
               cause: safeDisconnectReason(error?.cause ?? error?.data),
-              code: typeof statusCode === "number" ? statusCode : null,
+              code: statusCode ?? null,
               message: safeDisconnectReason(error),
               reconnect: shouldReconnect,
               timestamp: new Date().toISOString(),
@@ -218,10 +243,12 @@ export async function createWhatsAppSocket(
             30_000,
             1000 * 2 ** Math.min(reconnectAttempt, 5)
           );
+
           reconnectAttempt += 1;
           await new Promise<void>((resolve) => {
             setTimeout(resolve, waitMs);
           });
+
           if (stopped) {
             return;
           }
@@ -252,9 +279,11 @@ export async function createWhatsAppSocket(
         if (!identityAccepted) {
           return;
         }
+
         for (const msg of m.messages) {
           const remoteJid = msg.key.remoteJid ?? null;
           const text = extractInboundText(msg.message);
+
           // Let the chat handler apply the live mention setting.
           const inbound = parseInboundWhatsAppMessage(msg, me, {
             requireGroupMention: false,
@@ -273,6 +302,7 @@ export async function createWhatsAppSocket(
             isPrivateWhatsAppChat(remoteJid)
           ) {
             loggedMissingTextPayload = true;
+
             if (isChannelDebugEnabled()) {
               console.log(
                 "WhatsApp missing-text payload:",
@@ -327,43 +357,50 @@ export async function createWhatsAppSocket(
   return handle;
 }
 
-function safeDisconnectReason(error: unknown): string | null {
+function safeDisconnectReason(
+  error: DisconnectDiagnosticValue | null | undefined
+): string | null {
   if (error == null) {
     return null;
   }
-  const { message, code } =
-    typeof error === "object"
-      ? (error as { message?: unknown; code?: unknown })
-      : { code: undefined, message: error };
+
+  const diagnostic: DisconnectDiagnostic =
+    error instanceof Object ? error : { message: error };
+
+  const message = String(diagnostic.message ?? "");
+  const code = String(diagnostic.code ?? "");
+
   // Only known diagnostics can leave the worker: arbitrary error text/data
   // can contain QR payloads, credentials, message content, or remote addresses.
   if (
-    typeof message === "string" &&
     /^(QR refs attempts ended|Timed Out|Connection was lost|Connection Closed|Connection Terminated|Connection Terminated by Server|Connection Failure|Logged Out|Intentional Logout|Restart Required|Pre-key upload timeout|Multi-device beta not joined|Stream Errored \((conflict|restart required|connection failure)\))$/.test(
       message
     )
   ) {
     return message;
   }
+
   if (
-    typeof code === "string" &&
     /^(ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|EPIPE|ENETUNREACH|EHOSTUNREACH)$/.test(
       code
     )
   ) {
     return code;
   }
+
   return "[redacted]";
 }
 
 function wrapSocketSendMessage(target: WASocket): void {
-  if (typeof target.sendMessage !== "function") {
+  if (!target.sendMessage) {
     return;
   }
 
   const sendMessage = target.sendMessage.bind(target);
+  // SAFETY: The wrapper preserves Baileys' arguments and result unchanged.
   target.sendMessage = ((jid, content, options) => {
     const text = outboundTextFromContent(content);
+
     if (text) {
       rememberWhatsAppOutbound({ jid, text });
     }
@@ -371,31 +408,26 @@ function wrapSocketSendMessage(target: WASocket): void {
     return Promise.resolve(sendMessage(jid, content, options)).then(
       (result) => {
         rememberWhatsAppOutbound({
-          id:
-            result && typeof result === "object"
-              ? ((result as { key?: { id?: string | null } }).key?.id ?? null)
-              : null,
+          id: result?.key?.id ?? null,
           jid,
           text,
         });
+
         return result;
       }
     );
   }) as WASocket["sendMessage"];
 }
 
-function outboundTextFromContent(content: unknown): string {
-  if (!content || typeof content !== "object") {
-    return "";
+function outboundTextFromContent(
+  content: Parameters<WASocket["sendMessage"]>[1]
+): string {
+  if ("text" in content && content.text?.trim()) {
+    return content.text;
   }
 
-  const record = content as { caption?: unknown; text?: unknown };
-  if (typeof record.text === "string" && record.text.trim()) {
-    return record.text;
-  }
-
-  if (typeof record.caption === "string") {
-    return record.caption;
+  if ("caption" in content && content.caption) {
+    return content.caption;
   }
 
   return "";
@@ -408,6 +440,7 @@ function retireSocket(target: WASocket | null | undefined): Promise<void> {
 
   // Strip listeners first so end()'s close emit cannot re-enter reconnect.
   target.ev.destroy();
+
   return Promise.resolve(target.end(undefined));
 }
 
@@ -423,13 +456,17 @@ export function summarizeMissingTextPayload(msg: {
     id?: string | null;
   };
   message?: proto.IMessage | null;
-  messageStubType?: unknown;
+  messageStubType?: number;
 }): string {
-  const extracted = extractMessageContent(msg.message as any);
+  const extracted = msg.message
+    ? extractMessageContent(msg.message)
+    : undefined;
+
   const serializedMessage = JSON.stringify(msg.message ?? null);
+
   const summary = {
     extractedKeys: extracted ? Object.keys(extracted).slice(0, 10) : [],
-    extractedType: getContentType(extracted as any) ?? null,
+    extractedType: getContentType(extracted) ?? null,
     key: {
       fromMe: msg.key.fromMe ?? null,
       id: msg.key.id ?? null,
@@ -437,10 +474,9 @@ export function summarizeMissingTextPayload(msg: {
       remoteJid: maskWhatsAppJid(msg.key.remoteJid),
     },
     messageBytes: Buffer.byteLength(serializedMessage, "utf8"),
-    messageStubType:
-      typeof msg.messageStubType === "number" ? msg.messageStubType : null,
+    messageStubType: msg.messageStubType ?? null,
     topLevelKeys: msg.message ? Object.keys(msg.message).slice(0, 10) : [],
-    topLevelType: getContentType(msg.message as any) ?? null,
+    topLevelType: getContentType(msg.message ?? undefined) ?? null,
   };
 
   return JSON.stringify(summary);

@@ -91,6 +91,7 @@ function isSameWhatsAppAddress(left: string, right: string): boolean {
   const rightUser = right.split("@")[0]?.split(":")[0];
   const leftServer = left.split("@")[1];
   const rightServer = right.split("@")[1];
+
   return Boolean(
     leftUser &&
       leftUser === rightUser &&

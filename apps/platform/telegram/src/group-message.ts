@@ -40,6 +40,7 @@ export function resolveConversationKey(
   }
 
   const topicId = getTelegramTopicId(ctx);
+
   return topicId === undefined ? chatId : `g:${chatId}:t:${topicId}`;
 }
 
@@ -48,10 +49,9 @@ export function isTelegramTopicMessage(ctx: Context): boolean {
 }
 
 function getTelegramTopicId(ctx: Context): number | undefined {
-  const value = (ctx.message as { message_thread_id?: unknown } | undefined)
-    ?.message_thread_id;
+  const value = ctx.message?.message_thread_id;
 
-  return typeof value === "number" && Number.isFinite(value)
+  return value !== undefined && Number.isFinite(value)
     ? value
     : undefined;
 }
@@ -114,6 +114,7 @@ export function stripBotMention(
   }
 
   const mention = `@${username.trim()}`;
+
   const pattern = new RegExp(
     mention.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
     "gi"
@@ -135,6 +136,7 @@ function hasBotMention(ctx: Context, botInfo: TelegramBotInfo): boolean {
 
   if (username) {
     const mention = `@${username}`;
+
     const mentionPattern = new RegExp(
       `@${username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\b|$)`,
       "i"

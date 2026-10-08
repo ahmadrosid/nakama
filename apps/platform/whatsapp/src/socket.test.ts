@@ -21,16 +21,21 @@ const sockets: Array<{
   end: ReturnType<typeof mock>;
   ev: EventEmitter;
 }> = [];
+
 const delays: number[] = [];
+
 const endOrder: string[] = [];
+
 let endResolvers: Array<() => void> = [];
 
 const createSocket = mock((_config: baileys.UserFacingSocketConfig) => {
   const ev = new EventEmitter();
   let endResolve: (() => void) | null = null;
+
   const endPromise = new Promise<void>((resolve) => {
     endResolve = resolve;
   });
+
   endResolvers.push(() => {
     endResolve?.();
   });
@@ -44,11 +49,14 @@ const createSocket = mock((_config: baileys.UserFacingSocketConfig) => {
           error: { message: "ended", output: { statusCode: 428 } },
         },
       });
+
       return endPromise;
     }),
     ev: Object.assign(ev, { destroy: () => ev.removeAllListeners() }),
   };
+
   sockets.push(socket);
+
   return socket;
 });
 
@@ -70,23 +78,27 @@ test.each([null, undefined, "request-123"])(
     const del = mock((key: string) => {
       key.toString();
     });
+
     const creds = baileys.initAuthCreds();
     creds.me = { id: "123@s.whatsapp.net", name: "Test" };
     const logger = createBaileysLogger();
     const ev = baileys.makeEventBuffer(logger);
     const onMessage = mock();
     ev.on("messages.upsert", onMessage);
+
     const keyStore: baileys.SignalKeyStoreWithTransaction = {
       get: () => ({}),
       isInTransaction: () => false,
       set: () => {},
       transaction: (exec) => exec(),
     };
+
     const signalRepository =
       baileys.DEFAULT_CONNECTION_CONFIG.makeSignalRepository(
         { creds, keys: keyStore },
         logger
       );
+
     const recoveredMessage = {
       key: { id: "message-123", remoteJid: creds.me.id },
       message: { conversation: "recovered message" },
@@ -198,8 +210,12 @@ describe("WhatsApp socket reconnect", () => {
     timeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(
       (fn, ms) => {
         delays.push(Number(ms));
+
+        // SAFETY: This test schedules only callback functions.
         queueMicrotask(() => (fn as () => void)());
-        return 0 as unknown as ReturnType<typeof setTimeout>;
+
+        // SAFETY: This opaque timer handle is never passed to a real timer API.
+        return 0 as ReturnType<typeof setTimeout>;
       }
     );
   });
@@ -207,11 +223,13 @@ describe("WhatsApp socket reconnect", () => {
   afterEach(async () => {
     logSpy.mockRestore();
     timeoutSpy.mockRestore();
+
     if (previousConfigDir === undefined) {
       delete process.env.NAKAMA_CONFIG_DIR;
     } else {
       process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
     }
+
     await rm(tempConfigDir, { force: true, recursive: true });
   });
 
@@ -244,6 +262,7 @@ describe("WhatsApp socket reconnect", () => {
       baileys.DEFAULT_CONNECTION_CONFIG.transactionOpts
     );
     const repository = config.makeSignalRepository!(auth, logger);
+
     try {
       for (const syncType of [
         types.INITIAL_BOOTSTRAP,
@@ -289,8 +308,10 @@ describe("WhatsApp socket reconnect", () => {
           },
           {
             creds: auth.creds,
-            ev: sockets[0]!.ev as unknown as baileys.BaileysEventEmitter,
+            // SAFETY: This test event emitter implements the Baileys methods used here.
+            ev: sockets[0]!.ev as baileys.BaileysEventEmitter,
             getMessage: async () => undefined,
+            // SAFETY: The auth state supplies the key store expected by Baileys.
             keyStore: auth.keys as baileys.SignalKeyStoreWithTransaction,
             options: {},
             shouldProcessHistoryMsg: config.shouldSyncHistoryMessage!({
@@ -308,10 +329,13 @@ describe("WhatsApp socket reconnect", () => {
     } finally {
       repository.close?.();
     }
+
     expect(onMessage).not.toHaveBeenCalled();
     await sockets[0]!.ev.listeners("connection.update")[0]!(TIMEOUT_CLOSE);
+
     for (const [socketConfig] of createSocket.mock.calls) {
       expect(socketConfig.syncFullHistory).toBe(false);
+
       for (const syncType of [
         types.FULL,
         types.ON_DEMAND,
@@ -323,12 +347,14 @@ describe("WhatsApp socket reconnect", () => {
           false
         );
       }
+
       expect(
         socketConfig.shouldSyncHistoryMessage!({
           syncType: types.INITIAL_BOOTSTRAP,
         })
       ).toBe(true);
     }
+
     await sockets[1]!.ev.listeners("connection.update")[0]!({
       connection: "open",
     });
@@ -346,10 +372,12 @@ describe("WhatsApp socket reconnect", () => {
     "reports safe disconnect diagnostics for %s",
     async (message, code, reconnect) => {
       const onDisconnected = mock();
+
       const handle = await createWhatsAppSocket({
         onDisconnected,
         onMessage: async () => {},
       });
+
       await handle.start();
       emit(0, {
         connection: "close",
@@ -374,8 +402,10 @@ describe("WhatsApp socket reconnect", () => {
   test("redacts arbitrary error payloads but preserves safe transport causes", async () => {
     const handle = await createWhatsAppSocket({ onMessage: async () => {} });
     await handle.start();
+
     const secret =
       "qr-payload auth-token private-message 123@s.whatsapp.net\nforged-log";
+
     for (const field of ["cause", "data"]) {
       emit(sockets.length - 1, {
         connection: "close",
@@ -389,6 +419,7 @@ describe("WhatsApp socket reconnect", () => {
       });
       await flush();
     }
+
     emit(sockets.length - 1, {
       connection: "close",
       lastDisconnect: {
@@ -398,6 +429,7 @@ describe("WhatsApp socket reconnect", () => {
     await flush();
     const lines = logSpy.mock.calls.map(([line]) => String(line));
     expect(lines).toHaveLength(3);
+
     for (const line of lines) {
       const diagnostic = JSON.parse(line.slice(line.indexOf("{")));
       expect(diagnostic.message).toBe("[redacted]");
@@ -456,10 +488,13 @@ describe("WhatsApp socket reconnect", () => {
       const config = createSocket.mock.calls[0]![0];
       const receiver = config.auth!;
       receiver.creds.me = { id: "123:9@s.whatsapp.net", lid: "456:9@lid" };
+
       const { state: sender } = await usePrivateMultiFileAuthState(
         join(tempConfigDir, "sender")
       );
+
       const logger = createBaileysLogger();
+
       for (const state of [sender, receiver]) {
         state.keys = baileys.addTransactionCapability(
           state.keys,
@@ -467,8 +502,10 @@ describe("WhatsApp socket reconnect", () => {
           baileys.DEFAULT_CONNECTION_CONFIG.transactionOpts
         );
       }
+
       const makeRepository =
         baileys.DEFAULT_CONNECTION_CONFIG.makeSignalRepository;
+
       const sending = makeRepository(sender, logger);
       const receiving = config.makeSignalRepository!(receiver, logger);
       const destination = "123:9@s.whatsapp.net";
@@ -495,21 +532,26 @@ describe("WhatsApp socket reconnect", () => {
           },
         },
       });
+
       const first = await sending.encryptMessage({
         data: Buffer.from("first"),
         jid: destination,
       });
+
       await receiving.decryptMessage({ jid: originalJid, ...first });
+
       const ack = await receiving.encryptMessage({
         data: Buffer.from("ack"),
         jid: originalJid,
       });
+
       await sending.decryptMessage({ jid: destination, ...ack });
 
       // A stale session at the new address fails MAC verification; the original still works.
       const stale = await sender.keys.get("session", [
         sending.jidToSignalProtocolAddress(destination),
       ]);
+
       await receiver.keys.set({
         session: {
           [receiving.jidToSignalProtocolAddress(migratedJid)]:
@@ -517,11 +559,13 @@ describe("WhatsApp socket reconnect", () => {
         },
       });
       const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+
       try {
         const message = await sending.encryptMessage({
           data: Buffer.from("after migration"),
           jid: destination,
         });
+
         expect(message.type).toBe("msg");
         await expect(
           receiving.decryptMessage({ jid: "456:3@lid", ...message })
@@ -538,16 +582,20 @@ describe("WhatsApp socket reconnect", () => {
             jid: migratedJid,
           })
         ).rejects.toThrow();
+
         const plaintext = await receiving.decryptMessage({
           jid: migratedJid,
           ...message,
         });
+
         expect(Buffer.from(plaintext).toString()).toBe("after migration");
         const errorsAfterRecovery = errorSpy.mock.calls.length;
+
         const next = await sending.encryptMessage({
           data: Buffer.from("next"),
           jid: destination,
         });
+
         expect(
           Buffer.from(
             await receiving.decryptMessage({ jid: migratedJid, ...next })
@@ -568,11 +616,13 @@ describe("WhatsApp socket reconnect", () => {
 
   test("clears old-socket listeners on reconnect so upserts cannot leak", async () => {
     const received: string[] = [];
+
     const handle = await createWhatsAppSocket({
       onMessage: async (data) => {
         received.push(data.text);
       },
     });
+
     await handle.start();
 
     const oldSocket = sockets[0];
@@ -602,6 +652,7 @@ describe("WhatsApp socket reconnect", () => {
     expect(endResolvers).toHaveLength(1);
 
     let stopDone = false;
+
     const stopPromise = handle.stop().then(() => {
       stopDone = true;
       endOrder.push("stop-done");
@@ -623,7 +674,20 @@ describe("WhatsApp socket reconnect", () => {
   });
 });
 
-function emit(index: number, update: object) {
+type TestConnectionUpdate = {
+  connection?: "close" | "connecting" | "open";
+  lastDisconnect?: {
+    error?: {
+      cause?: unknown;
+      data?: unknown;
+      message?: string;
+      output?: { payload?: string; statusCode?: number };
+    };
+  };
+  qr?: string;
+};
+
+function emit(index: number, update: TestConnectionUpdate) {
   sockets[index]?.ev.emit("connection.update", update);
 }
 
@@ -638,6 +702,7 @@ describe("summarizeMissingTextPayload", () => {
     const privateMessage = "private contact card";
     const remoteJid = "6281379292556@s.whatsapp.net";
     const participant = "6281111111111@s.whatsapp.net";
+
     const summary = summarizeMissingTextPayload({
       key: {
         fromMe: false,

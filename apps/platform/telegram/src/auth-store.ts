@@ -15,6 +15,7 @@ export class TelegramAuthStore {
 
   async reload(): Promise<TelegramConfigFile | null> {
     this.config = await loadTelegramConfigFile(this.orgId);
+
     return this.config;
   }
 
@@ -39,7 +40,9 @@ export class TelegramAuthStore {
       handshakeInput,
       userId
     );
+
     await this.reload();
+
     return result;
   }
 }

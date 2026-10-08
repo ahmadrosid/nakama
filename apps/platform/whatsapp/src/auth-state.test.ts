@@ -5,11 +5,14 @@ import { join } from "node:path";
 import { usePrivateMultiFileAuthState } from "./auth-state";
 
 const POSIX = process.platform !== "win32";
+
 const temporaryDirectories: string[] = [];
+
 const PRE_KEY = {
   private: Buffer.from([1, 2, 3]),
   public: Buffer.from([4, 5, 6]),
 };
+
 let previousUmask: number | null = null;
 
 beforeEach(() => {
@@ -23,6 +26,7 @@ afterEach(async () => {
     process.umask(previousUmask);
     previousUmask = null;
   }
+
   for (const directory of temporaryDirectories.splice(0)) {
     await rm(directory, { force: true, recursive: true });
   }
@@ -31,6 +35,7 @@ afterEach(async () => {
 async function createAuthDirectory(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "nakama-whatsapp-auth-state-"));
   temporaryDirectories.push(root);
+
   return join(root, "auth");
 }
 
@@ -44,6 +49,7 @@ async function expectPrivate(
   files: string[]
 ): Promise<void> {
   expect(await modeOf(directory)).toBe(0o700);
+
   for (const file of files) {
     expect(await modeOf(file)).toBe(0o600);
   }
@@ -52,8 +58,10 @@ async function expectPrivate(
 describe("private WhatsApp auth state", () => {
   test("persists Baileys 7 identity mappings, devices, and tokens across reloads", async () => {
     const authDirectory = await createAuthDirectory();
+
     const { saveCreds, state } =
       await usePrivateMultiFileAuthState(authDirectory);
+
     const token = { timestamp: "123", token: Buffer.from([1, 2, 3]) };
     await saveCreds();
     await state.keys.set({
@@ -81,6 +89,7 @@ describe("private WhatsApp auth state", () => {
     "creates fresh credentials and Signal keys privately",
     async () => {
       const authDirectory = await createAuthDirectory();
+
       const { saveCreds, state } =
         await usePrivateMultiFileAuthState(authDirectory);
 
@@ -132,8 +141,10 @@ describe("private WhatsApp auth state", () => {
       const credentialsPath = join(authDirectory, "creds.json");
       const keyPath = join(authDirectory, "pre-key-1.json");
       const files = [credentialsPath, keyPath];
+
       const { saveCreds, state } =
         await usePrivateMultiFileAuthState(authDirectory);
+
       await saveCreds();
       await state.keys.set({ "pre-key": { "1": PRE_KEY } });
 
