@@ -288,6 +288,7 @@ const openAICompletionPayloadSchema = z.object({
         delta: z
           .object({
             content: z.string().nullable().optional(),
+            reasoning: z.string().nullable().optional(),
             reasoning_content: z.string().nullable().optional(),
             tool_calls: z
               .array(
@@ -308,6 +309,7 @@ const openAICompletionPayloadSchema = z.object({
         message: z
           .object({
             content: z.string().nullable().optional(),
+            reasoning: z.string().nullable().optional(),
             reasoning_content: z.string().nullable().optional(),
             tool_calls: z
               .array(
