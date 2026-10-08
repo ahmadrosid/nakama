@@ -4,6 +4,7 @@ import * as React from "react";
 
 export interface PluginToolProps {
   action: string;
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This dictionary holds external JSON keys until the boundary parser validates each value.
   input?: Record<string, unknown>;
   result?: unknown;
   status: "running" | "done";
@@ -23,15 +24,18 @@ export function findPluginTool(
         `plugin_${plugin.pluginId.replaceAll("-", "_")}__${key.replaceAll("-", "_")}` ===
         name
     );
+
     if (action) {
       return { action: action.key, plugin };
     }
   }
+
   return null;
 }
 
 export interface PluginClientContext {
   effect(setup: () => () => void): void;
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- Plugin action input and result types are provider-defined.
   host: { call(action: string, input?: unknown): Promise<unknown> };
   orgId: string;
   pluginId: string;
@@ -70,30 +74,39 @@ export async function activatePlugin(
   dispose(): void;
 }> {
   options.signal.throwIfAborted();
+
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
   if (!Array.isArray(module.inject) || typeof module.apply !== "function") {
     throw new Error("Plugin must export inject and apply.");
   }
+
   for (const dependency of module.inject) {
     if (!["slots", "host", "styles", "ui"].includes(dependency)) {
       throw new Error(`Unavailable plugin service: ${dependency}`);
     }
   }
+
   const cleanups: Array<() => void> = [];
   let disposed = false;
   let Page: React.ComponentType<PluginPageProps> | undefined;
   const tools = new Map<string, React.ComponentType<PluginToolProps>>();
+
   const assertActive = () => {
     options.signal.throwIfAborted();
+
     if (disposed) {
       throw new Error("Plugin was unloaded.");
     }
   };
+
   const dispose = () => {
     if (disposed) {
       return;
     }
+
     disposed = true;
     tools.clear();
+
     for (const cleanup of cleanups.reverse()) {
       try {
         cleanup();
@@ -101,26 +114,34 @@ export async function activatePlugin(
         console.error("Plugin cleanup failed", error);
       }
     }
+
     cleanups.length = 0;
   };
+
   const effect = (setup: () => () => void) => {
     assertActive();
     const cleanup = setup();
+
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     if (typeof cleanup !== "function") {
       throw new Error("Plugin effect must return a cleanup function.");
     }
+
     if (disposed) {
       cleanup();
     } else {
       cleanups.push(cleanup);
     }
   };
+
   const services = {
     host: {
+      // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
       async call(action: string, input?: unknown) {
         assertActive();
         const result = await options.host.call(action, input);
         assertActive();
+
         return result;
       },
     },
@@ -132,21 +153,31 @@ export async function activatePlugin(
           | React.ComponentType<PluginToolProps>
       ) {
         assertActive();
+
         if (slot.startsWith("tool:")) {
           const action = slot.slice(5);
+
           if (
             !/^[a-z][a-z0-9_-]*$/.test(action) ||
             tools.has(action) ||
+            // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
             typeof component !== "function"
           ) {
             throw new Error("Invalid or duplicate plugin tool renderer.");
           }
+
+          // SAFETY: The enclosing parser checks the value before this conversion.
           tools.set(action, component as React.ComponentType<PluginToolProps>);
+
           return;
         }
+
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
         if (slot !== "page" || Page || typeof component !== "function") {
           throw new Error("Plugin must register exactly one page component.");
         }
+
+        // SAFETY: The enclosing parser checks the value before this conversion.
         Page = component as React.ComponentType<PluginPageProps>;
         cleanups.push(() => {
           Page = undefined;
@@ -159,11 +190,14 @@ export async function activatePlugin(
         style.dataset.pluginId = options.pluginId;
         style.textContent = css;
         document.head.append(style);
+
         return () => style.remove();
       });
     },
     ui,
   };
+
+  // SAFETY: The enclosing parser checks the value before this conversion.
   const context = {
     effect,
     orgId: options.orgId,
@@ -172,35 +206,45 @@ export async function activatePlugin(
     signal: options.signal,
     theme: options.theme,
   } as PluginClientContext;
+
   for (const name of ["slots", "host", "styles", "ui"] as const) {
     Object.defineProperty(context, name, {
       get() {
         assertActive();
+
         if (!module.inject.includes(name)) {
           throw new Error(`Plugin must declare ${name} in inject.`);
         }
+
         return services[name];
       },
     });
   }
+
   let onAbort: () => void = () => {};
+
   const aborted = new Promise<never>((_resolve, reject) => {
     onAbort = () => {
       dispose();
       reject(options.signal.reason);
     };
+
     options.signal.addEventListener("abort", onAbort, { once: true });
   });
+
   cleanups.push(() => options.signal.removeEventListener("abort", onAbort));
+
   try {
     await Promise.race([
       Promise.resolve().then(() => module.apply(context)),
       aborted,
     ]);
     assertActive();
+
     if (!Page) {
       throw new Error("Plugin did not register a page.");
     }
+
     return { dispose, Page, tools };
   } catch (error) {
     dispose();

@@ -34,15 +34,19 @@ import {
 } from "./use-resource-mutations";
 
 const revoke = spyOn(client, "revokeProfileArtifactShare");
+
 const publish = spyOn(client, "publishProfileArtifactShare");
+
 const queryClient = new QueryClient({
   defaultOptions: { mutations: { retry: false } },
 });
+
 const variables = {
   path: "report.html",
   profileId: "profile",
   shareId: "old-share",
 };
+
 const queryKey = queryKeys.artifacts.shareStatus(
   variables.profileId,
   variables.path
@@ -121,10 +125,13 @@ afterAll(() => {
 
 function renderMutation() {
   let mutation: ReturnType<typeof useRevokeArtifactShareMutation>;
+
   function Probe() {
     mutation = useRevokeArtifactShareMutation();
+
     return null;
   }
+
   renderToString(
     createElement(
       QueryClientProvider,
@@ -132,6 +139,7 @@ function renderMutation() {
       createElement(Probe)
     )
   );
+
   return () => mutation.mutateAsync(variables);
 }
 
@@ -139,6 +147,7 @@ test.each([200, 404])(
   "revoke completes and invalidates stale share status on HTTP %s",
   async (status) => {
     queryClient.setQueryData(queryKey, { active: true, id: variables.shareId });
+
     if (status === 404) {
       revoke.mockRejectedValue(new NakamaApiError("Not found", 404));
     } else {
@@ -167,6 +176,7 @@ test("revoke preserves HTTP 403 failures rather than allowing rotation to contin
 
 describe("artifact share controls with a stale share ID", () => {
   const unusedAuthAction = mock(async () => {});
+
   const auth: AuthContextValue = {
     activeOrg: {
       createdAt: "2026-09-06T00:00:00Z",
@@ -192,12 +202,14 @@ describe("artifact share controls with a stale share ID", () => {
     updateOrg: unusedAuthAction,
     user: { email: "admin@example.com", id: "admin", isPlatformAdmin: false },
   };
+
   const storageKey = artifactShareStorageKey(
     "admin",
     "org",
     variables.profileId,
     variables.path
   );
+
   const store = new Map<string, string>();
   let previousLocalStorage: Storage;
 
@@ -231,13 +243,16 @@ describe("artifact share controls with a stale share ID", () => {
 
   function renderControls() {
     let controls: ReturnType<typeof useArtifactShareControls>;
+
     function Probe() {
       controls = useArtifactShareControls({
         artifactPath: variables.path,
         profileId: variables.profileId,
       });
+
       return null;
     }
+
     renderToString(
       createElement(
         QueryClientProvider,
@@ -249,6 +264,7 @@ describe("artifact share controls with a stale share ID", () => {
         )
       )
     );
+
     return {
       revoke: () => controls.handleRevoke(),
       rotate: () => controls.handleRotateLink(),
@@ -261,6 +277,7 @@ describe("artifact share controls with a stale share ID", () => {
       const replacement = { active: true, id: "replacement-share" };
       revoke.mockImplementation(() => {
         queryClient.setQueryData(queryKey, replacement);
+
         return Promise.reject(new NakamaApiError("Not found", 404));
       });
       publish.mockResolvedValue({
@@ -318,12 +335,14 @@ describe("artifact share controls with a stale share ID", () => {
   test("does not recover account A share after logout and account B login", async () => {
     const accountA = { ...auth, user: { ...auth.user!, id: "account-a" } };
     const accountB = { ...auth, user: { ...auth.user!, id: "account-b" } };
+
     const accountAStorageKey = artifactShareStorageKey(
       "account-a",
       "org",
       variables.profileId,
       variables.path
     );
+
     store.set(
       accountAStorageKey,
       JSON.stringify({
@@ -337,14 +356,17 @@ describe("artifact share controls with a stale share ID", () => {
     const root = createRoot(container);
     let controls: ReturnType<typeof useArtifactShareControls>;
     const observedShares: boolean[] = [];
+
     function Probe() {
       controls = useArtifactShareControls({
         artifactPath: variables.path,
         profileId: variables.profileId,
       });
       observedShares.push(controls.isShared);
+
       return null;
     }
+
     const render = (value: AuthContextValue) =>
       root.render(
         createElement(
@@ -385,15 +407,19 @@ test.each(["assign", "unassign"])(
       mode === "assign"
         ? spyOn(client, "assignTool")
         : spyOn(client, "unassignTool");
+
     let release!: (value: never) => void;
     let started!: () => void;
+
     const waiting = new Promise<void>((resolve) => {
       started = resolve;
     });
+
     const error = new Error("One action was rejected");
     spy.mockRejectedValueOnce(error);
     spy.mockImplementationOnce(() => {
       started();
+
       return new Promise((resolve) => {
         release = resolve;
       });
@@ -401,12 +427,15 @@ test.each(["assign", "unassign"])(
     const key = queryKeys.profiles.detail("profile");
     queryClient.setQueryData(key, { id: "profile" });
     let mutation!: ReturnType<typeof useAssignToolMutation>;
+
     function Probe() {
       const assign = useAssignToolMutation();
       const unassign = useUnassignToolMutation();
       mutation = mode === "assign" ? assign : unassign;
+
       return null;
     }
+
     renderToString(
       createElement(
         QueryClientProvider,
@@ -414,16 +443,21 @@ test.each(["assign", "unassign"])(
         createElement(Probe)
       )
     );
+
     try {
       let settled = false;
+
       const result = mutation
         .mutateAsync({ profileId: "profile", toolId: ["first", "second"] })
         .catch((failure) => {
           settled = true;
+
           return failure;
         });
+
       await waiting;
       expect(settled).toBe(false);
+      // SAFETY: The test controls this fixture or mock and asserts the resulting behavior.
       release({} as never);
       expect(await result).toBe(error);
       expect(spy).toHaveBeenCalledTimes(2);
@@ -440,16 +474,21 @@ test("useArtifactsExist hides only the artifacts the server reports missing", as
       if (path === "gone.md") {
         return false;
       }
+
       if (path === "flaky.md") {
         throw new NakamaApiError("Bad gateway", 502);
       }
+
       return true;
     }
   );
+
   const existsClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+
   let result: boolean[] = [];
+
   function Probe() {
     result = useArtifactsExist(
       [
@@ -461,8 +500,10 @@ test("useArtifactsExist hides only the artifacts the server reports missing", as
       "profile",
       true
     );
+
     return null;
   }
+
   const render = () =>
     renderToString(
       createElement(

@@ -7,9 +7,12 @@ export type SwStrategy = "immutable" | "passthrough" | "revalidate" | "shell";
 
 /** Mirrors `API_PREFIXES` in `apps/server/src/static-web.ts`. */
 const API_PATHS = new Set(["/docs", "/health", "/openapi.json"]);
+
 const API_PREFIXES = ["/v1/", "/docs/"];
+
 /** Vite content-hashes everything under here, so a hit can never be stale. */
 const IMMUTABLE_PREFIX = "/assets/";
+
 /** Unhashed but cacheable: icons, logos, fonts, the manifest itself. */
 const REVALIDATE_EXTENSIONS = [
   ".css",
@@ -19,6 +22,7 @@ const REVALIDATE_EXTENSIONS = [
   ".svg",
   ".webmanifest",
 ];
+
 const CACHE_PREFIX = "nakama-v-";
 
 export function classifyRequest(
@@ -30,11 +34,13 @@ export function classifyRequest(
   }
 
   const url = new URL(request.url);
+
   if (url.origin !== origin) {
     return "passthrough";
   }
 
   const { pathname } = url;
+
   if (isApiPath(pathname)) {
     return "passthrough";
   }
@@ -85,6 +91,7 @@ export function cacheNameFor(version: string): string {
 
 export function staleCacheNames(names: string[], version: string): string[] {
   const current = cacheNameFor(version);
+
   return names.filter(
     (name) => name.startsWith(CACHE_PREFIX) && name !== current
   );

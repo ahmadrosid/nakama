@@ -25,6 +25,7 @@ describe("buildCreateProviderRequest", () => {
       requireParameters: true,
       zdr: false,
     } as const;
+
     expect(
       buildCreateProviderRequest({
         apiKey: "key",
@@ -70,11 +71,14 @@ describe("buildCreateProviderRequest", () => {
           customModels,
           provider,
         });
+
         const include =
           customModels && (customModels.length ? populated : empty);
+
         expect(request).toEqual({
           apiKey: "key",
           type: provider,
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
           ...(include ? { customModels } : {}),
         });
       }
@@ -135,12 +139,15 @@ function group(
           id: "model-1",
           name: "Model 1",
           provider,
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
           ...(flags?.supportsThinking === undefined
             ? {}
             : { supportsThinking: flags.supportsThinking }),
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
           ...(flags?.supportsVision === undefined
             ? {}
             : { supportsVision: flags.supportsVision }),
+          // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
           ...(flags?.contextWindow === undefined
             ? {}
             : { contextWindow: flags.contextWindow }),

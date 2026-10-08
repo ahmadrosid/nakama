@@ -35,6 +35,7 @@ export function useSystemStatusQuery() {
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id ?? null;
   const api = client.forOrg(orgId);
+
   return useQuery({
     queryFn: async () =>
       normalizeSystemStatus(await api.getSystemStatus(profileId)),

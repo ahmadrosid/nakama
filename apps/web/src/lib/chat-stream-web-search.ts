@@ -26,6 +26,7 @@ export function isWebSearchTool(tool: string | undefined): boolean {
   return MCP_EXA_WEB_SEARCH_TOOL_PATTERN.test(tool);
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
 export function parseWebSearchQuery(input: unknown): string | null {
   const record = readRecord(input);
 
@@ -34,14 +35,17 @@ export function parseWebSearchQuery(input: unknown): string | null {
   }
 
   const directQuery = readString(record.query);
+
   if (directQuery) {
     return directQuery;
   }
 
   const queries = record.queries;
+
   if (Array.isArray(queries)) {
     for (const entry of queries) {
       const query = readString(entry);
+
       if (query) {
         return query;
       }
@@ -52,15 +56,18 @@ export function parseWebSearchQuery(input: unknown): string | null {
 }
 
 function sourceFromRecord(
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This dictionary holds external JSON keys until the boundary parser validates each value.
   record: Record<string, unknown>
 ): WebSearchSource | null {
   const url =
     readString(record.url) ?? readString(record.uri) ?? readString(record.link);
+
   if (!url) {
     return null;
   }
 
   const normalized = normalizeSourceUrl(url);
+
   const title =
     readString(record.title) ??
     readString(record.name) ??
@@ -74,6 +81,7 @@ function sourceFromRecord(
   };
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
 function parseSourcesFromContentArray(content: unknown): WebSearchSource[] {
   if (!Array.isArray(content)) {
     return [];
@@ -83,6 +91,7 @@ function parseSourcesFromContentArray(content: unknown): WebSearchSource[] {
 
   for (const entry of content) {
     const record = readRecord(entry);
+
     if (!record) {
       continue;
     }
@@ -96,6 +105,7 @@ function parseSourcesFromContentArray(content: unknown): WebSearchSource[] {
       !type
     ) {
       const source = sourceFromRecord(record);
+
       if (source) {
         sources.push(source);
       }
@@ -105,6 +115,7 @@ function parseSourcesFromContentArray(content: unknown): WebSearchSource[] {
   return dedupeSources(sources);
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
 function parseMcpTextContent(content: unknown): string | null {
   if (!Array.isArray(content)) {
     return null;
@@ -114,8 +125,10 @@ function parseMcpTextContent(content: unknown): string | null {
 
   for (const entry of content) {
     const record = readRecord(entry);
+
     if (
       record?.type === "text" &&
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
       typeof record.text === "string" &&
       record.text.trim()
     ) {
@@ -129,6 +142,7 @@ function parseMcpTextContent(content: unknown): string | null {
 /** Parse Exa MCP `web_search_exa` formatted text blocks (Title/URL fields separated by ---). */
 function parseExaWebSearchTextResult(text: string): WebSearchSource[] {
   const trimmed = text.trim();
+
   if (!trimmed || /^no search results found/i.test(trimmed)) {
     return [];
   }
@@ -158,6 +172,7 @@ function parseExaWebSearchTextResult(text: string): WebSearchSource[] {
   return dedupeSources(sources);
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
 function parseExaStructuredResults(results: unknown): WebSearchSource[] {
   if (!Array.isArray(results)) {
     return [];
@@ -167,11 +182,13 @@ function parseExaStructuredResults(results: unknown): WebSearchSource[] {
 
   for (const entry of results) {
     const record = readRecord(entry);
+
     if (!record) {
       continue;
     }
 
     const source = sourceFromRecord(record);
+
     if (source) {
       sources.push(source);
     }
@@ -181,6 +198,7 @@ function parseExaStructuredResults(results: unknown): WebSearchSource[] {
 }
 
 export function parseWebSearchSourcesFromResult(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
   result: unknown
 ): WebSearchSource[] {
   if (result == null) {
@@ -192,7 +210,9 @@ export function parseWebSearchSourcesFromResult(
   }
 
   const record = readRecord(result);
+
   if (!record) {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     if (typeof result === "string") {
       return parseExaWebSearchTextResult(result);
     }
@@ -201,6 +221,7 @@ export function parseWebSearchSourcesFromResult(
   }
 
   const exaResults = parseExaStructuredResults(record.results);
+
   if (exaResults.length > 0) {
     return exaResults;
   }
@@ -210,35 +231,42 @@ export function parseWebSearchSourcesFromResult(
 
   if (textResult) {
     const exaSources = parseExaWebSearchTextResult(textResult);
+
     if (exaSources.length > 0) {
       return exaSources;
     }
   }
 
   const directSources = parseSourcesFromContentArray(record.sources);
+
   if (directSources.length > 0) {
     return directSources;
   }
 
   const resultsSources = parseSourcesFromContentArray(record.results);
+
   if (resultsSources.length > 0) {
     return resultsSources;
   }
 
   const contentSources = parseSourcesFromContentArray(record.content);
+
   if (contentSources.length > 0) {
     return contentSources;
   }
 
   const action = readRecord(record.action);
+
   if (action) {
     const actionSources = parseWebSearchSourcesFromResult(action);
+
     if (actionSources.length > 0) {
       return actionSources;
     }
   }
 
   const single = sourceFromRecord(record);
+
   return single ? [single] : [];
 }
 
@@ -249,6 +277,7 @@ export interface ExtractedWebSearchBlock {
 }
 
 export function extractWebSearchBlocksFromProviderContent(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
   providerContent: unknown
 ): ExtractedWebSearchBlock[] {
   if (!Array.isArray(providerContent)) {
@@ -260,6 +289,7 @@ export function extractWebSearchBlocksFromProviderContent(
 
   for (const block of providerContent) {
     const record = readRecord(block);
+
     if (!record) {
       continue;
     }
@@ -278,6 +308,7 @@ export function extractWebSearchBlocksFromProviderContent(
         query: parseWebSearchQuery(record.input),
         toolCallId,
       };
+
       pending.set(toolCallId, entry);
       ordered.push(entry);
       continue;
@@ -285,6 +316,7 @@ export function extractWebSearchBlocksFromProviderContent(
 
     if (type === "web_search_tool_result") {
       const toolCallId = readString(record.tool_use_id);
+
       if (!toolCallId) {
         continue;
       }
@@ -296,11 +328,13 @@ export function extractWebSearchBlocksFromProviderContent(
       if (!ordered.some((entry) => entry.toolCallId === toolCallId)) {
         ordered.push(existing);
       }
+
       continue;
     }
 
     if (type === "web_search_call") {
       const toolCallId = readString(record.id);
+
       if (!toolCallId) {
         continue;
       }
@@ -321,10 +355,12 @@ export function buildWebSearchToolState(
   item: ChatListItem
 ): WebSearchToolState {
   const status = item.toolStatus === "running" ? "running" : "done";
+
   const query =
     parseWebSearchQuery(item.toolInput) ??
     parseWebSearchQuery(readRecord(item.toolResult)?.action) ??
     null;
+
   const sources =
     status === "done" ? parseWebSearchSourcesFromResult(item.toolResult) : [];
 
@@ -341,6 +377,7 @@ export function shouldRenderWebSearchToolRow(message: ChatListItem): boolean {
   }
 
   const state = buildWebSearchToolState(message);
+
   if (state.status === "running") {
     return true;
   }

@@ -17,6 +17,7 @@ export function isKnowledgeBaseZipFile(file: File): boolean {
 
 export async function fileToZipBase64(file: File): Promise<string> {
   const dataUrl = await readFileAsDataUrl(file);
+
   return dataUrl.slice(dataUrl.indexOf(",") + 1);
 }
 

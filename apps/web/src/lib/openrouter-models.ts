@@ -74,6 +74,7 @@ function isOpenRouterModelFree(
 
   const prompt = Number.parseFloat(pricing.prompt ?? "1");
   const completion = Number.parseFloat(pricing.completion ?? "1");
+
   return prompt === 0 && completion === 0;
 }
 
@@ -88,6 +89,7 @@ function isOpenRouterModelDeprecated(
   }
 
   const year = Number.parseInt(expirationDate.slice(0, 4), 10);
+
   return Number.isFinite(year) && year < OPENROUTER_SENTINEL_EXPIRATION_YEAR;
 }
 
@@ -118,6 +120,7 @@ export function normalizeOpenRouterModels(
   apiJson: OpenRouterModelsApiResponse
 ): OpenRouterModelRow[] {
   const data = apiJson.data ?? [];
+
   return data.map(normalizeOpenRouterModel).sort(compareOpenRouterModelRows);
 }
 
@@ -134,6 +137,7 @@ function compareOpenRouterModelRows(
 
 function truncateDescription(text: string, maxLength = 120): string {
   const trimmed = text.trim();
+
   if (trimmed.length <= maxLength) {
     return trimmed;
   }

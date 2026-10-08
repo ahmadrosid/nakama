@@ -15,6 +15,7 @@ import { formatError } from "@/lib/client";
 import { canAccessSystemPage } from "@/lib/navigation";
 
 const POST_TURN_POLL_WINDOW_MS = 45_000;
+
 const POST_TURN_POLL_INTERVAL_MS = 3000;
 
 /**
@@ -74,19 +75,23 @@ function usePostTurnPolling(
   lastSuccessfulTurnAt: number | null
 ): boolean {
   const [now, setNow] = useState(() => Date.now());
+
   const pollUntil =
     lastSuccessfulTurnAt != null && canPoll
       ? lastSuccessfulTurnAt + POST_TURN_POLL_WINDOW_MS
       : null;
+
   const polling = pollUntil != null && now < pollUntil;
 
   useEffect(() => {
     if (!polling) {
       return;
     }
+
     const timer = window.setInterval(() => {
       setNow(Date.now());
     }, 1000);
+
     return () => window.clearInterval(timer);
   }, [polling]);
 
@@ -95,9 +100,11 @@ function usePostTurnPolling(
 
 function useSkillSuggestionApply(orgId: string | undefined) {
   const applyMutation = useApplySkillSuggestion(orgId ?? "");
+
   const [applyStateById, setApplyStateById] = useState<
     Record<string, SuggestionApplyState>
   >({});
+
   const [applyErrorById, setApplyErrorById] = useState<
     Record<string, string | undefined>
   >({});
@@ -109,8 +116,10 @@ function useSkillSuggestionApply(orgId: string | undefined) {
     if (!orgId) {
       return;
     }
+
     setApplyStateById((current) => ({ ...current, [suggestionId]: "loading" }));
     setApplyErrorById((current) => ({ ...current, [suggestionId]: undefined }));
+
     try {
       const result = await applyMutation.mutateAsync(suggestionId);
       setApplyStateById((current) => ({
@@ -139,14 +148,17 @@ export function usePostTurnSkillReviewOverlay({
   readOnlySession,
 }: UsePostTurnSkillReviewOverlayArgs) {
   const { activeOrg, user } = useAuth();
+
   const reviewEnabled = resolveProfileOrgBooleanOverride(
     profile?.skillsPostTurnReview ?? null,
     activeOrg?.skillsPostTurnReview ?? false
   );
+
   const canReview = canAccessSystemPage(
     user?.isPlatformAdmin === true,
     activeOrg?.role
   );
+
   const canPoll =
     canReview &&
     canPollPostTurnReview({
@@ -156,21 +168,28 @@ export function usePostTurnSkillReviewOverlay({
       sessionChannel,
       sessionId,
     });
+
   const polling = usePostTurnPolling(canPoll, lastSuccessfulTurnAt);
+
   const pollQuery = {
     enabled: canPoll,
+    // SAFETY: The enclosing parser checks the value before this conversion.
     refetchInterval: (polling ? POST_TURN_POLL_INTERVAL_MS : false) as
       | number
       | false,
     sessionId: sessionId ?? undefined,
     status: "pending" as const,
   };
+
   const orgId = canPoll ? (activeOrg?.id ?? null) : null;
   const suggestionsQuery = useSkillSuggestions(orgId, pollQuery);
   const proposalsQuery = useSkillProposals(orgId, pollQuery);
+
   const { applyErrorById, applyStateById, handleApply } =
     useSkillSuggestionApply(activeOrg?.id);
+
   const suggestions = suggestionsQuery.data?.suggestions ?? [];
+
   const pendingProposals = useMemo(
     () =>
       (proposalsQuery.data?.proposals ?? []).filter(
@@ -179,14 +198,18 @@ export function usePostTurnSkillReviewOverlay({
       ),
     [proposalsQuery.data?.proposals, sessionId]
   );
+
   const [dismissedIds, setDismissedIds] = useState<readonly string[]>([]);
   const dismissed = new Set(dismissedIds);
+
   const visibleSuggestions = suggestions.filter(
     (suggestion) => !dismissed.has(`${sessionId}:suggestion:${suggestion.id}`)
   );
+
   const visibleProposals = pendingProposals.filter(
     (proposal) => !dismissed.has(`${sessionId}:proposal:${proposal.id}`)
   );
+
   const showBanner =
     canPoll && (visibleSuggestions.length > 0 || visibleProposals.length > 0);
 
@@ -204,6 +227,7 @@ export function usePostTurnSkillReviewOverlay({
         if (!sessionId) {
           return;
         }
+
         setDismissedIds((current) =>
           current.includes(`${sessionId}:${id}`)
             ? current

@@ -49,6 +49,7 @@ describe("canPreviewWorkspaceEntry", () => {
     isWordDocument: false,
     sizeBytes: 1024,
   };
+
   const OVER_CAP = 12 * 1024 * 1024;
 
   test("a Word document is not capped, because the payload is the conversion", () => {

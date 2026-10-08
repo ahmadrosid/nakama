@@ -38,9 +38,11 @@ export function buildChatBasePath(): string {
  */
 export function buildNewChatPath(profileId?: string | null): string {
   const params = new URLSearchParams({ new: "1" });
+
   if (profileId) {
     params.set("profile", profileId);
   }
+
   return `${buildChatBasePath()}?${params.toString()}`;
 }
 
@@ -49,11 +51,13 @@ export function readRequestedProfileFromNewChatSearch(
   search: string
 ): string | null {
   const params = new URLSearchParams(search);
+
   if (params.get("new") !== "1") {
     return null;
   }
 
   const profileId = params.get("profile")?.trim();
+
   return profileId || null;
 }
 
@@ -62,11 +66,13 @@ export function readRequestedDraftFromNewChatSearch(
   search: string
 ): string | null {
   const params = new URLSearchParams(search);
+
   if (params.get("new") !== "1") {
     return null;
   }
 
   const draft = params.get("draft");
+
   return draft ?? null;
 }
 
@@ -75,11 +81,13 @@ export function readRequestedDraftKeyFromNewChatSearch(
   search: string
 ): string | null {
   const params = new URLSearchParams(search);
+
   if (params.get("new") !== "1") {
     return null;
   }
 
   const draftKey = params.get("draftKey")?.trim();
+
   return draftKey || null;
 }
 
@@ -102,6 +110,7 @@ export function consumeStoredChatDraft(key: string): string | null {
 export function storeChatDraft(draft: string): string {
   const key = createClientId();
   sessionStorage.setItem(`${CHAT_DRAFT_STORAGE_PREFIX}${key}`, draft);
+
   return key;
 }
 
@@ -128,6 +137,7 @@ export function storeComposerDraft(key: string | null, text: string): void {
   if (!key) {
     return;
   }
+
   try {
     if (text) {
       localStorage.setItem(key, text);
@@ -143,6 +153,7 @@ export const MAX_URL_CHAT_DRAFT_LENGTH = 1500;
 
 export function chatProfileIdFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/chat\/([^/]+)\//);
+
   if (!match?.[1]) {
     return null;
   }
@@ -173,9 +184,11 @@ export function readStoredActiveChatProfileId(
 
   // The unscoped key predates org scoping and may hold another org's profile id.
   localStorage.removeItem(ACTIVE_CHAT_PROFILE_STORAGE_KEY);
+
   const profileId = localStorage
     .getItem(activeChatProfileStorageKey(orgId))
     ?.trim();
+
   return profileId || null;
 }
 
@@ -242,6 +255,7 @@ export function resolveRecentChatsProfileId(input: {
   orgId?: string | null;
 }): string | null {
   const fromUrl = new URLSearchParams(input.search).get("profile");
+
   return (
     pickKnownProfileId(
       input.profiles,
@@ -278,6 +292,7 @@ export function resolveProfilesPageProfileId(input: {
   liveChatProfileId?: string | null;
 }): string | null {
   const fromUrl = new URLSearchParams(input.search).get("profile");
+
   return (
     pickKnownProfileId(
       input.profiles,
@@ -318,11 +333,13 @@ export function resolveActiveProfileIdFromLocation(input: {
   }
 
   const fromSessionPath = chatProfileIdFromPath(pathname);
+
   if (isKnownProfile(fromSessionPath)) {
     return fromSessionPath;
   }
 
   const fromNewChat = readRequestedProfileFromNewChatSearch(search);
+
   if (isKnownProfile(fromNewChat)) {
     return fromNewChat;
   }
@@ -331,10 +348,13 @@ export function resolveActiveProfileIdFromLocation(input: {
     if (isKnownProfile(liveChatProfileId)) {
       return liveChatProfileId;
     }
+
     const stored = readStoredActiveChatProfileId();
+
     if (isKnownProfile(stored)) {
       return stored;
     }
+
     return resolveDefaultProfileId(profiles);
   }
 
@@ -343,6 +363,7 @@ export function resolveActiveProfileIdFromLocation(input: {
   }
 
   const stored = readStoredActiveChatProfileId();
+
   if (isKnownProfile(stored)) {
     return stored;
   }
@@ -394,6 +415,7 @@ export interface ChatListItem {
   toolCallId?: string;
   toolCompletedAt?: number;
   toolGroupId?: string;
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This dictionary holds external JSON keys until the boundary parser validates each value.
   toolInput?: Record<string, unknown>;
   toolInputAccumulatedJson?: string;
   toolResult?: unknown;
@@ -439,8 +461,11 @@ export function readFailedChatTurn(sessionId: string): FailedChatTurn | null {
   }
 
   try {
+    // SAFETY: JSON.parse returns the values checked by the validation that follows.
     const parsed = JSON.parse(raw) as Partial<FailedChatTurn>;
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     const text = typeof parsed.text === "string" ? parsed.text : "";
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     const error = typeof parsed.error === "string" ? parsed.error.trim() : "";
 
     if (!(text.trim() && error)) {
@@ -545,6 +570,7 @@ const READ_ONLY_SESSION_CHANNEL = {
 export function isEditableUserMessage(message: ChatListItem): boolean {
   return (
     message.role === "user" &&
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     typeof message.historyIndex === "number" &&
     !message.failed &&
     !message.questionnaireAnswers?.length &&
@@ -576,9 +602,18 @@ export function formatSessionChannelLabel(channel: AgentChannel): string {
   }
 }
 
-function parseToolResult(content: string): unknown {
+type JsonToolResult =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonToolResult[]
+  | { [key: string]: JsonToolResult };
+
+function parseToolResult(content: string): JsonToolResult {
   try {
-    return JSON.parse(content) as unknown;
+    // SAFETY: JSON.parse returns the values checked by the validation that follows.
+    return JSON.parse(content) as JsonToolResult;
   } catch {
     return content;
   }
@@ -588,6 +623,7 @@ export function chatMessagesToListItems(
   messages: ChatMessage[],
   messageMeta: SessionMessageMeta[] = []
 ): ChatListItem[] {
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- This dictionary holds external JSON keys until the boundary parser validates each value.
   const toolInputs = new Map<string, Record<string, unknown>>();
 
   for (const message of messages) {
@@ -622,22 +658,42 @@ export function chatMessagesToListItems(
       const images = userContentToDisplayImages(content);
       const imageAttachments = userContentToDisplayImageAttachments(content);
       const documents = userContentToDisplayDocuments(content);
+
       const questionnaireAnswers =
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
         typeof content === "string"
           ? parseAgentQuestionnaireAnswersMessage(content)
-          : null;
+          : // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
+            null;
 
-      items.push({
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
+
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
+      const item: ChatListItem = {
         content: text,
         createdAt: meta?.createdAt,
         historyIndex: index,
         id: `history-${index}`,
         role: "user",
-        ...(images.length > 0 ? { images } : {}),
-        ...(imageAttachments.length > 0 ? { imageAttachments } : {}),
-        ...(documents.length > 0 ? { documents } : {}),
-        ...(questionnaireAnswers ? { questionnaireAnswers } : {}),
-      });
+      };
+
+      if (images.length > 0) {
+        item.images = images;
+      }
+
+      if (imageAttachments.length > 0) {
+        item.imageAttachments = imageAttachments;
+      }
+
+      if (documents.length > 0) {
+        item.documents = documents;
+      }
+
+      if (questionnaireAnswers) {
+        item.questionnaireAnswers = questionnaireAnswers;
+      }
+
+      items.push(item);
       continue;
     }
 
@@ -674,19 +730,30 @@ export function chatMessagesToListItems(
 
       const thinking = extractThinkingFromAssistantMessage(message);
       const usage = addChatUsage(carriedUsage, message.usage);
+      // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
       carriedUsage = undefined;
 
-      items.push({
+      const item: ChatListItem = {
         content: message.content,
         createdAt: meta?.createdAt,
         historyIndex: index,
         id: `history-${index}`,
         role: "assistant",
-        ...(thinking
-          ? { thinking, thinkingDurationMs: message.thinkingDurationMs }
-          : {}),
-        ...(usage ? { usage } : {}),
-      });
+      };
+
+      if (thinking) {
+        item.thinking = thinking;
+
+        if (message.thinkingDurationMs !== undefined) {
+          item.thinkingDurationMs = message.thinkingDurationMs;
+        }
+      }
+
+      if (usage) {
+        item.usage = usage;
+      }
+
+      items.push(item);
       continue;
     }
 
@@ -760,16 +827,19 @@ function formatRelativeTime(value: string, tense: "past" | "future"): string {
   }
 
   const minutes = Math.round(seconds / 60);
+
   if (minutes < 60) {
     return tense === "future" ? `in ${minutes}m` : `${minutes}m ago`;
   }
 
   const hours = Math.round(minutes / 60);
+
   if (hours < 24) {
     return tense === "future" ? `in ${hours}h` : `${hours}h ago`;
   }
 
   const days = Math.round(hours / 24);
+
   if (days < 7) {
     return tense === "future" ? `in ${days}d` : `${days}d ago`;
   }

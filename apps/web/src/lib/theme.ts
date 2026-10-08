@@ -11,6 +11,7 @@ export function isTheme(value: string | null | undefined): value is Theme {
 function getStoredTheme(): Theme | null {
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
+
     return isTheme(stored) ? stored : null;
   } catch {
     return null;
@@ -55,10 +56,13 @@ export function ditherLogoSrc(resolvedTheme: ResolvedTheme): string {
 
 function applyFavicon(resolved: ResolvedTheme): void {
   const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+
   if (!favicon) {
     return;
   }
+
   const href = ditherLogoSrc(resolved);
+
   if (favicon.getAttribute("href") !== href) {
     favicon.setAttribute("href", href);
   }

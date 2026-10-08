@@ -279,6 +279,7 @@ describe("buildStreamHandlers web_search lifecycle", () => {
     let messages: ChatListItem[] = [];
 
     const handlers = buildStreamHandlers((updater) => {
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This test updater supports both direct values and React state updater functions.
       messages = typeof updater === "function" ? updater(messages) : updater;
     });
 
@@ -321,6 +322,7 @@ describe("buildStreamHandlers web_search lifecycle", () => {
     let messages: ChatListItem[] = [];
 
     const handlers = buildStreamHandlers((updater) => {
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This test updater supports both direct values and React state updater functions.
       messages = typeof updater === "function" ? updater(messages) : updater;
     });
 

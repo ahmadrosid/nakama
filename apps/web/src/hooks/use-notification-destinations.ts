@@ -32,6 +32,7 @@ export function useNotificationWhatsAppSettings(
 ) {
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id ?? null;
+
   return useQuery({
     enabled: enabled && !!orgId && !!profileId,
     queryFn: () => client.forOrg(orgId).getWhatsAppSettings(profileId),

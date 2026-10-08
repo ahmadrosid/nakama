@@ -1,11 +1,13 @@
 import { toArtifactsRelativePath } from "@/lib/chat-artifacts";
 
 const ARTIFACT_META_SUFFIX = ".nakama-meta.json";
+
 /**
  * Shortest distinctive prefix of the meta suffix we reject while the path is
  * still streaming (e.g. `report.md.nak` before `.nakama-meta.json` completes).
  */
 const ARTIFACT_META_PREFIX = ".nak";
+
 const ARTIFACT_WRITE_TOOLS = new Set(["write_file", "write_docx"]);
 
 export interface StreamingArtifactToolInput {
@@ -122,6 +124,7 @@ function findJsonStringValue(
           index += 4;
           break;
         }
+
         default:
           value += escaped;
           break;
@@ -176,6 +179,7 @@ export function parseStreamingArtifactToolInput(
   }
 
   const rawPath = findJsonStringValue(accumulatedJson, "path");
+
   const content =
     findJsonStringValue(accumulatedJson, contentField)?.value ?? null;
 

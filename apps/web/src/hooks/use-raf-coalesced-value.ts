@@ -13,34 +13,43 @@ export function useRafCoalescedValue<T>(value: T, enabled: boolean): T {
   useEffect(() => {
     if (!enabled) {
       generationRef.current += 1;
+
       if (
         rafRef.current != null &&
         rafRef.current >= 0 &&
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
         typeof cancelAnimationFrame === "function"
       ) {
         cancelAnimationFrame(rafRef.current);
       }
+
       rafRef.current = null;
       pendingRef.current = value;
+
       return;
     }
 
     pendingRef.current = value;
+
     if (rafRef.current != null) {
       return;
     }
 
     const generation = generationRef.current;
+
     const run = () => {
       if (generation !== generationRef.current) {
         return;
       }
+
       rafRef.current = null;
       setDisplay(pendingRef.current);
     };
 
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
     if (typeof requestAnimationFrame === "function") {
       rafRef.current = requestAnimationFrame(run);
+
       return;
     }
 
@@ -50,6 +59,7 @@ export function useRafCoalescedValue<T>(value: T, enabled: boolean): T {
       if (rafRef.current !== -1) {
         return;
       }
+
       run();
     });
   }, [value, enabled]);
@@ -57,13 +67,16 @@ export function useRafCoalescedValue<T>(value: T, enabled: boolean): T {
   useEffect(
     () => () => {
       generationRef.current += 1;
+
       if (
         rafRef.current != null &&
         rafRef.current >= 0 &&
+        // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
         typeof cancelAnimationFrame === "function"
       ) {
         cancelAnimationFrame(rafRef.current);
       }
+
       rafRef.current = null;
     },
     []

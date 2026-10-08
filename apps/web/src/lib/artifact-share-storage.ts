@@ -24,11 +24,14 @@ export function readStoredArtifactShare(input: {
         input.artifactPath
       )
     );
+
     if (!raw) {
       return null;
     }
 
+    // SAFETY: JSON.parse returns the values checked by the validation that follows.
     const parsed = JSON.parse(raw) as { shareId?: string; shareUrl?: string };
+
     if (!(parsed.shareId && parsed.shareUrl)) {
       return null;
     }

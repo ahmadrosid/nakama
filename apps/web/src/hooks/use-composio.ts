@@ -20,10 +20,13 @@ import { queryKeys } from "@/lib/query-keys";
 export function isAllowedComposioRedirectUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
+
     if (parsed.protocol !== "https:") {
       return false;
     }
+
     const host = parsed.hostname.toLowerCase();
+
     return host === "composio.dev" || host.endsWith(".composio.dev");
   } catch {
     return false;
@@ -98,8 +101,10 @@ export function useConnectComposioToolkit() {
       // /integrations through our OAuth callback.
       if (!isAllowedComposioRedirectUrl(response.redirectUrl)) {
         toast("Blocked an unexpected Composio redirect URL.");
+
         return;
       }
+
       window.location.href = response.redirectUrl;
     },
   });

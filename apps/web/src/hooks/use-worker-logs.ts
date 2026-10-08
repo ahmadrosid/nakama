@@ -14,6 +14,7 @@ export function useWorkerLogs(
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id ?? null;
   const api = client.forOrg(orgId);
+
   return useQuery({
     enabled,
     queryFn: () => api.getWorkerLogs(workerName, lines, profileId),
@@ -32,12 +33,14 @@ export function useClearWorkerLogs(workerName: string) {
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id ?? null;
   const api = client.forOrg(orgId);
+
   const queryKey = [
     ...queryKeys.workerLogs,
     workerName,
     orgId,
     ...(profileId ? [profileId] : []),
   ];
+
   const queryClient = useQueryClient();
 
   return useMutation({

@@ -33,12 +33,16 @@ async function loadPublicArtifactShare(
     throw new Error("This share link is unavailable.");
   }
 
+  // SAFETY: The enclosing parser checks the value before this conversion.
   const metadata = (await metaResponse.json()) as PublicShareMetadata;
+
   const resolvedMime = resolveArtifactMimeType(
     metadata.mimeType,
     metadata.filename
   );
+
   const previewAsHtml = isHtmlArtifactMimeType(resolvedMime);
+
   // Binary media uses the public share URL as <img>/<video> src — no need to buffer bytes here.
   const previewAsBinaryMedia =
     isImageArtifactMimeType(resolvedMime) ||
@@ -61,6 +65,7 @@ async function loadPublicArtifactShare(
   }
 
   const bytes = new Uint8Array(await contentResponse.arrayBuffer());
+
   const contentType = resolveArtifactMimeType(
     contentResponse.headers.get("Content-Type") ?? metadata.mimeType,
     metadata.filename

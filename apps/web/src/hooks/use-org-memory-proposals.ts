@@ -31,6 +31,7 @@ function invalidateProposalQueries(
 
 export function useApproveOrgMemoryProposal(orgId: string) {
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: ({
       proposalId,
@@ -45,6 +46,7 @@ export function useApproveOrgMemoryProposal(orgId: string) {
 
 export function useRejectOrgMemoryProposal(orgId: string) {
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (proposalId: string) =>
       client.rejectOrgMemoryProposal(orgId, proposalId),

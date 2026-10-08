@@ -89,6 +89,7 @@ describe("visibleNavGroups", () => {
       isPlatformAdmin: false,
       orgRole: "viewer",
     });
+
     expect(groups.every((group) => group.items.length > 0)).toBe(true);
   });
 });
@@ -108,6 +109,7 @@ describe("workers navigation", () => {
 
 test("Customize is reachable for every organization role", () => {
   expect(pageIdFromPath("/customize")).toBe("customize");
+
   for (const role of ["admin", "member", "viewer"]) {
     expect(pageIdsFor(false, role)).toContain("customize");
   }

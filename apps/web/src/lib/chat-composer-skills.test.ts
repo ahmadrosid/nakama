@@ -126,6 +126,7 @@ describe("filterComposerSlashSuggestions", () => {
     const commands = filterComposerSlashSuggestions([], query, {
       enableAddCommands: true,
     }).filter((item) => item.kind === "command");
+
     expect(commands.map((item) => item.command.name)).toEqual([name]);
     expect(filterComposerSlashSuggestions([], query)).toEqual([]);
   });
@@ -141,6 +142,7 @@ describe("filterComposerSlashSuggestions", () => {
       description: "",
       name,
     }));
+
     expect(
       filterReservedSlashCommands("atl", commands).map((c) => c.name)
     ).toEqual(["atlas", "add-tool"]);
@@ -170,6 +172,7 @@ describe("filterComposerSlashSuggestions", () => {
       [manageSkillsSkill, weatherSkill, deploySkill],
       "lea"
     );
+
     expect(
       suggestions.map((item) => item.kind === "command" && item.command.name)
     ).toEqual(["learn", "enable-learning-loop"]);

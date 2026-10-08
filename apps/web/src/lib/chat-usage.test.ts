@@ -15,6 +15,7 @@ describe("chat usage", () => {
       { costUsd: 0.001, inputTokens: 100, outputTokens: 10, totalTokens: 110 },
       { costUsd: 0.002, inputTokens: 200, outputTokens: 20, totalTokens: 220 }
     );
+
     expect(priced).toEqual({
       costUsd: 0.003,
       inputTokens: 300,
@@ -28,6 +29,7 @@ describe("chat usage", () => {
       outputTokens: 1,
       totalTokens: 2,
     });
+
     expect(unpriced).toEqual({
       estimated: true,
       inputTokens: 301,

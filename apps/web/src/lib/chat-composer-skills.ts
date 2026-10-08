@@ -40,6 +40,7 @@ export type ComposerSuggestion =
   | { kind: "mention"; mention: ReservedSlashCommand };
 
 const EXPLICIT_SKILL_TOKEN_PATTERN = /(?:^|\s)\/skill\s+([a-z0-9-]+)\b/g;
+
 const HIDDEN_SLASH_SKILL_NAMES = new Set<string>([
   "create-automation",
   "manage-skills",
@@ -113,11 +114,13 @@ export function findActiveSkillSlashRange(
   }
 
   const previous = slashIndex > 0 ? value[slashIndex - 1] : "";
+
   if (previous && !/\s/.test(previous)) {
     return null;
   }
 
   const query = value.slice(slashIndex + 1, boundedCursor);
+
   if (/\s/.test(query)) {
     return null;
   }
@@ -141,15 +144,19 @@ export function filterReservedSlashCommands(
 
   // Search names only: description matches can steal focus from commands.
   const needle = normalized.replace(/[-_]/g, "");
+
   if (!needle) {
     return [];
   }
+
   const [indices, info, order] = commandSearch.search(
     commands.map((command) => command.name.toLowerCase().replace(/[-_]/g, "")),
     needle
   );
+
   const matches =
     info && order ? order.map((index) => info.idx[index]) : indices;
+
   return (matches ?? []).map((index) => commands[index]);
 }
 
@@ -165,9 +172,11 @@ export function matchComposerAddCommand(
   text: string
 ): ComposerAddCommandAction | null {
   const token = text.trim();
+
   const command = COMPOSER_ADD_SLASH_COMMANDS.find(
     (item) => `/${item.name}` === token
   );
+
   return command?.action ?? null;
 }
 
@@ -186,6 +195,7 @@ export function filterSkillsForSlashQuery(
   const visibleSkills = skills.filter(
     (skill) => !HIDDEN_SLASH_SKILL_NAMES.has(skill.name)
   );
+
   const normalized = query.trim().toLowerCase();
 
   if (!normalized) {
@@ -195,6 +205,7 @@ export function filterSkillsForSlashQuery(
   return visibleSkills.filter((skill) => {
     const name = skill.name.toLowerCase();
     const description = skill.description.toLowerCase();
+
     return name.includes(normalized) || description.includes(normalized);
   });
 }
@@ -212,12 +223,14 @@ export function filterComposerSlashSuggestions(
         })
       )
     : [];
+
   const learnCommands = profileCanUseLearnCommand(skills)
     ? filterReservedSlashCommands(query).map((command) => ({
         command,
         kind: "command" as const,
       }))
     : [];
+
   const skillSuggestions = filterSkillsForSlashQuery(skills, query).map(
     (skill) => ({
       kind: "skill" as const,
@@ -236,6 +249,7 @@ export function replaceSlashRangeWithSkillInvocation(
   const invocation = `/skill ${skill.name} `;
   const nextValue = `${value.slice(0, range.start)}${invocation}${value.slice(range.end)}`;
 
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
   return {
     cursorIndex: range.start + invocation.length,
     value: nextValue,
@@ -251,6 +265,7 @@ export function replaceSlashRangeWithReservedCommand(
   const insertion = `${trigger}${command.name} `;
   const nextValue = `${value.slice(0, range.start)}${insertion}${value.slice(range.end)}`;
 
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
   return {
     cursorIndex: range.start + insertion.length,
     value: nextValue,
@@ -285,6 +300,7 @@ export function getSkillTokenRanges(value: string): SkillTokenRange[] {
 const RESERVED_COMMAND_NAMES = RESERVED_COMPOSER_SLASH_COMMANDS.map(
   (command) => command.name
 ).join("|");
+
 const LEADING_RESERVED_COMMAND_PATTERN = new RegExp(
   String.raw`^(\s*)(/(?:` + RESERVED_COMMAND_NAMES + String.raw`))(?=\s|$)`
 );
@@ -306,6 +322,7 @@ export function getReservedCommandTokenRanges(
   }
 
   const start = match[1]?.length ?? 0;
+
   return [
     {
       end: start + token.length,
@@ -320,6 +337,7 @@ export function getMentionTokenRanges(value: string): SkillTokenRange[] {
   return [...value.matchAll(MENTION_TOKEN_PATTERN)].map((match) => {
     const start = (match.index ?? 0) + (match[1]?.length ?? 0);
     const token = match[2] ?? "";
+
     return { end: start + token.length, name: token.slice(1), start };
   });
 }

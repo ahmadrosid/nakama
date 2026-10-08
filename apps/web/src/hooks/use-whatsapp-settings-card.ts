@@ -17,23 +17,28 @@ function formatAllowedPhoneSummary(count: number): string {
   if (count === 0) {
     return "None";
   }
+
   return `${count} number${count === 1 ? "" : "s"}`;
 }
 
 function resolveWhatsAppStatusLine(
   hint: string | null,
   formError: string | null,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Error causes may come from browser or network code and are narrowed by this handler.
   loadError: unknown
 ): string | null {
   if (hint) {
     return hint;
   }
+
   if (formError) {
     return formError;
   }
+
   if (loadError) {
     return formatError(loadError);
   }
+
   return null;
 }
 
@@ -60,6 +65,7 @@ function resolveWhatsAppLinkingState({
 }) {
   const useQrLinking = !pairingCode;
   const showQr = configured && running && Boolean(qrCode) && useQrLinking;
+
   const awaitingQr =
     configured &&
     !paired &&
@@ -68,8 +74,10 @@ function resolveWhatsAppLinkingState({
     !qrCode &&
     !qrWasVisible &&
     useQrLinking;
+
   const bridgeStarting =
     configured && !paired && running && !connected && Boolean(pairingCode);
+
   const linkingAfterScan =
     configured &&
     !paired &&
@@ -95,12 +103,15 @@ function hintForSavedSettings(
   if (saved.pairedJid) {
     return "Saved.";
   }
+
   if (saved.pairingCode) {
     return "Saved. Use the pairing code in WhatsApp.";
   }
+
   if (configured) {
     return "Saved.";
   }
+
   return "WhatsApp enabled. Preparing the QR code.";
 }
 
@@ -116,6 +127,7 @@ function resolveWhatsAppStatusCopy(input: {
   showQr: boolean;
 }): { headerSubtitle: string; statusBadge: string } {
   if (!input.configured) {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
     return {
       headerSubtitle: "Connect WhatsApp to let this agent receive messages",
       statusBadge: "Not set up",
@@ -123,6 +135,7 @@ function resolveWhatsAppStatusCopy(input: {
   }
 
   if (input.paired && input.running && input.connected && !input.showQr) {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
     return {
       headerSubtitle: "Connected",
       statusBadge: "Connected",
@@ -130,6 +143,7 @@ function resolveWhatsAppStatusCopy(input: {
   }
 
   if (input.paired && !(input.running && input.connected)) {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
     return {
       headerSubtitle:
         "WhatsApp is offline. Use the connection controls to reconnect.",
@@ -138,6 +152,7 @@ function resolveWhatsAppStatusCopy(input: {
   }
 
   if (input.showQr) {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
     return {
       headerSubtitle: "Scan the QR code with WhatsApp to link your device",
       statusBadge: "Awaiting scan",
@@ -145,6 +160,7 @@ function resolveWhatsAppStatusCopy(input: {
   }
 
   if (input.linkingAfterScan) {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
     return {
       headerSubtitle: "Linking your WhatsApp account…",
       statusBadge: "Linking",
@@ -152,6 +168,7 @@ function resolveWhatsAppStatusCopy(input: {
   }
 
   if (input.bridgeStarting) {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
     return {
       headerSubtitle: "Connecting — enter the code in WhatsApp",
       statusBadge: "Starting…",
@@ -159,6 +176,7 @@ function resolveWhatsAppStatusCopy(input: {
   }
 
   if (input.awaitingQr) {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
     return {
       headerSubtitle: "Preparing QR code…",
       statusBadge: "Starting…",
@@ -166,12 +184,14 @@ function resolveWhatsAppStatusCopy(input: {
   }
 
   if (input.pairingCode) {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
     return {
       headerSubtitle: "Enter the pairing code in WhatsApp",
       statusBadge: "Awaiting link",
     };
   }
 
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
   return {
     headerSubtitle: "Scan the QR code, or generate a pairing code",
     statusBadge: "Not linked",
@@ -203,6 +223,7 @@ export function useWhatsAppSettingsCard({
   const [allowedPhones, setAllowedPhones] = useState<string[]>([]);
   const [allowedPhonesOpen, setAllowedPhonesOpen] = useState(false);
   const [requireGroupMention, setRequireGroupMention] = useState(true);
+
   const [allowUnpairedGroupMembers, setAllowUnpairedGroupMembers] =
     useState(false);
 
@@ -248,6 +269,7 @@ export function useWhatsAppSettingsCard({
     if (qrCode) {
       setQrWasVisible(true);
     }
+
     if (paired) {
       setQrWasVisible(false);
     }
@@ -256,6 +278,7 @@ export function useWhatsAppSettingsCard({
   useEffect(() => {
     if (worker?.paired && !settings?.pairedJid) {
       void invalidateQueries(queryClient, queryKeys.whatsapp.settings);
+
       return;
     }
 
@@ -290,6 +313,7 @@ export function useWhatsAppSettingsCard({
     running,
     settingsProfileId,
   });
+
   const { headerSubtitle, statusBadge } = resolveWhatsAppStatusCopy({
     awaitingQr: linking.awaitingQr,
     bridgeStarting: linking.bridgeStarting,
@@ -310,9 +334,11 @@ export function useWhatsAppSettingsCard({
     try {
       await navigator.clipboard.writeText(pairingCode);
       setCopiedCode(pairingCode);
+
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current);
       }
+
       copyTimeoutRef.current = setTimeout(() => {
         setCopiedCode(null);
         copyTimeoutRef.current = null;
@@ -339,6 +365,7 @@ export function useWhatsAppSettingsCard({
           if (configured || running) {
             setHint(hintForSavedSettings(saved, configured));
             onSaveSuccess?.();
+
             return;
           }
 

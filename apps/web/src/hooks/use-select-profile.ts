@@ -11,8 +11,10 @@ import { resolveProfileSwitch } from "@/lib/profile-switch";
 /** One agent switch for every picker, so the rail and Cmd+K agree per page. */
 export function useSelectProfile() {
   const { data: profiles = [] } = useProfilesQuery();
+
   const { profileId: liveChatProfileId, setProfileId: setLiveChatProfileId } =
     useActiveChatProfile();
+
   const navigate = useNavigate();
   const { pathname, search } = useLocation();
 
@@ -31,11 +33,13 @@ export function useSelectProfile() {
       profileId,
       search,
     });
+
     if (next.kind === "stay") {
       return;
     }
 
     setLiveChatProfileId(profileId);
+
     if (next.kind === "navigate") {
       navigate(next.to, { replace: next.replace });
     }

@@ -36,10 +36,12 @@ export function useNotifications(): {
 
   const { data: automationsData, isLoading: automationsLoading } =
     useAutomationsQuery();
+
   const { data: proposalsData, isLoading: proposalsLoading } =
     useOrgMemoryProposals(isOrgAdmin ? orgId : null, "pending", {
       refetchInterval: 30_000,
     });
+
   const { data: skillProposalsData, isLoading: skillProposalsLoading } =
     useSkillProposals(isOrgAdmin ? orgId : null, {
       refetchInterval: 30_000,
@@ -53,11 +55,13 @@ export function useNotifications(): {
       const skillProposalItems: NotificationItem[] = [];
 
       const automations = automationsData?.automations ?? [];
+
       const unreadByAutomationId =
         automationsData?.unread?.byAutomationId ?? {};
 
       for (const automation of automations) {
         const count = unreadByAutomationId[automation.id] ?? 0;
+
         if (count <= 0) {
           continue;
         }
@@ -117,12 +121,14 @@ export function useNotifications(): {
     ]);
 
   const totalCount = items.reduce((sum, item) => sum + item.count, 0);
+
   const isLoading =
     authLoading ||
     !isAuthenticated ||
     automationsLoading ||
     (isOrgAdmin && (proposalsLoading || skillProposalsLoading));
 
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
   return {
     automationItems,
     isLoading,

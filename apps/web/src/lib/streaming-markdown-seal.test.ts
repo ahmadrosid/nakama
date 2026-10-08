@@ -29,6 +29,7 @@ describe("splitStreamingMarkdown", () => {
   test("seals after a closed fence when a later blank line appears", () => {
     const content =
       "Intro\n\n```js\nconst a = 1;\n\nconst b = 2;\n```\n\nAfter";
+
     expect(splitStreamingMarkdown(content)).toEqual({
       sealed: "Intro\n\n```js\nconst a = 1;\n\nconst b = 2;\n```\n\n",
       tail: "After",

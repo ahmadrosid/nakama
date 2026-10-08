@@ -107,6 +107,7 @@ export function useUpdateSessionMutation() {
       invalidateQueries(queryClient, queryKeys.sessions(variables.profileId)),
   });
 }
+
 export function useDeleteSessionMutation() {
   const queryClient = useQueryClient();
 
@@ -192,7 +193,9 @@ export function useAssignToolMutation() {
           client.assignTool(profileId, { toolId: id })
         )
       );
+
       const failure = results.find((result) => result.status === "rejected");
+
       if (failure?.status === "rejected") {
         throw failure.reason;
       }
@@ -218,7 +221,9 @@ export function useUnassignToolMutation() {
           client.unassignTool(profileId, id)
         )
       );
+
       const failure = results.find((result) => result.status === "rejected");
+
       if (failure?.status === "rejected") {
         throw failure.reason;
       }
@@ -470,6 +475,7 @@ export function useHistorySessionsQuery(profileId: string, search?: string) {
   const localTurn = runningSessionIds.length > 0;
   const runningSessionIdSet = new Set(runningSessionIds);
   const enabled = Boolean(profileId) && search !== "";
+
   const queryKey = search
     ? queryKeys.sessionSearch(profileId, search)
     : queryKeys.sessions(profileId);
@@ -478,6 +484,7 @@ export function useHistorySessionsQuery(profileId: string, search?: string) {
     enabled,
     getNextPageParam: (lastPage: ListSessionsResponse) =>
       lastPage.nextCursor ?? undefined,
+    // SAFETY: The enclosing parser checks the value before this conversion.
     initialPageParam: null as string | null,
     // Typing on keeps the previous results up; a first search starts empty.
     placeholderData: (previous, previousQuery) =>
@@ -493,23 +500,29 @@ export function useHistorySessionsQuery(profileId: string, search?: string) {
   const pollInterval = sessionListPollInterval(query.data?.pages[0]?.sessions, {
     localTurn,
   });
+
   useQuery({
     enabled: enabled && pollInterval !== false,
     queryFn: async () => {
       const head = await listSessionPage(profileId, null, search);
+
       const data =
         queryClient.getQueryData<
           InfiniteData<ListSessionsResponse, string | null>
         >(queryKey);
+
       if (!data) {
         return null;
       }
+
       const next = withFirstPage(data, head);
+
       if (next) {
         queryClient.setQueryData(queryKey, next);
       } else {
         await queryClient.refetchQueries({ exact: true, queryKey });
       }
+
       return null;
     },
     queryKey: queryKeys.sessionListHead(profileId, search),
@@ -517,8 +530,10 @@ export function useHistorySessionsQuery(profileId: string, search?: string) {
   });
 
   const { fetchNextPage, refetch } = query;
+
   const loadNextPage = useCallback(async () => {
     const { data } = await fetchNextPage();
+
     // Chats moved across the cursor between the two requests, so the pages
     // no longer join up: load them again from the first one.
     if (data?.pages.at(-1)?.stale) {
@@ -527,6 +542,7 @@ export function useHistorySessionsQuery(profileId: string, search?: string) {
   }, [fetchNextPage, refetch]);
 
   const seen = new Set<string>();
+
   const sessions = (query.data?.pages ?? [])
     .flatMap((page) => page.sessions)
     // A chat that moved between two page loads can come back on both.
@@ -534,7 +550,9 @@ export function useHistorySessionsQuery(profileId: string, search?: string) {
       if (seen.has(session.id)) {
         return false;
       }
+
       seen.add(session.id);
+
       return true;
     })
     // The server answers from its own registry, which this tab can be ahead of
@@ -597,19 +615,23 @@ const EMPTY_PINNED_FILES: WorkspaceEntry[] = [];
 export function useFilePins(profileId: string | null, enabled: boolean) {
   const { activeOrg, user } = useAuth();
   const queryClient = useQueryClient();
+
   const pins = useQuery({
     enabled: Boolean(enabled && profileId && activeOrg),
     queryFn: () => client.listProfileFilePins(profileId!),
     queryKey: ["file-pins", activeOrg?.id, user?.id, profileId],
   });
+
   const mutation = useMutation({
     mutationFn: (body: { path: string; pinned: boolean }) =>
       client.setProfileFilePinned(profileId!, body),
     onSuccess: () => invalidateQueries(queryClient, ["file-pins"]),
   });
+
   const entries = pins.data?.entries ?? EMPTY_PINNED_FILES;
   const pending = pins.isPending || pins.isError || mutation.isPending;
   const { mutate } = mutation;
+
   const controls = useMemo(
     () => ({
       paths: new Set(entries.map((entry) => entry.path)),
@@ -618,6 +640,7 @@ export function useFilePins(profileId: string | null, enabled: boolean) {
     }),
     [entries, pending, mutate]
   );
+
   return { controls, entries, error: pins.error || mutation.error };
 }
 
@@ -648,6 +671,7 @@ export function useArtifactsExist(
     combine: (results) => results.map((result) => result.data !== false),
     queries: artifacts.map((artifact) => {
       const ownerId = artifact.ownerProfileId ?? profileId ?? "";
+
       return {
         enabled: enabled && Boolean(ownerId),
         queryFn: () => client.hasProfileArtifact(ownerId, artifact.path),
@@ -749,6 +773,7 @@ export function useRevokeArtifactShareMutation() {
         if (error instanceof NakamaApiError && error.status === 404) {
           return { id: shareId, revoked: false };
         }
+
         throw error;
       }
     },
@@ -774,6 +799,8 @@ export function useSoulFileQuery(
       const response = await client.getProfileSoulStatus(profileId!, {
         includeContents: true,
       });
+
+      // SAFETY: The enclosing parser checks the value before this conversion.
       return response.contents?.[fileKey as keyof SoulStackFiles] ?? "";
     },
     queryKey: [

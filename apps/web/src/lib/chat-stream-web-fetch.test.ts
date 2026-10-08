@@ -24,6 +24,7 @@ test.each([
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
+
     const message: ChatListItem = {
       content: "",
       id: "tool-call",
@@ -32,6 +33,7 @@ test.each([
       toolInput: { query: "example", url: "https://example.com" },
       toolStatus: "running",
     };
+
     const toggle = () => container.querySelector("button")!;
 
     try {
@@ -201,6 +203,7 @@ describe("buildStreamHandlers web_fetch lifecycle", () => {
     let messages: ChatListItem[] = [];
 
     const handlers = buildStreamHandlers((updater) => {
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This test updater supports both direct values and React state updater functions.
       messages = typeof updater === "function" ? updater(messages) : updater;
     });
 

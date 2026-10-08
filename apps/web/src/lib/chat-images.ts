@@ -49,6 +49,7 @@ export function isDocumentFilePart(file: FileUIPart): boolean {
 
   const filename = file.filename ?? "";
   const mediaType = normalizeDocumentMediaType(file.mediaType ?? "", filename);
+
   return DOCUMENT_MEDIA_TYPES.has(mediaType);
 }
 
@@ -96,6 +97,7 @@ export function filePartsToDocumentAttachments(
 export function userContentToDisplayImages(
   content: string | MessageContentPart[]
 ): Array<{ url: string; mediaType: string }> {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
   if (typeof content === "string") {
     return [];
   }
@@ -126,6 +128,7 @@ export function userContentToDisplayImageAttachments(
 ): DisplayImageAttachment[] {
   const attachments: DisplayImageAttachment[] = [];
 
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
   if (typeof content === "string") {
     if (isImageDescriptionText(content)) {
       attachments.push({
@@ -161,6 +164,7 @@ export function userContentToDisplayImageAttachments(
 export function stripImageDescriptionsFromDisplayText(
   content: string | MessageContentPart[]
 ): string {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
   if (typeof content === "string") {
     return isImageDescriptionText(content) ? "" : content;
   }
@@ -194,6 +198,7 @@ export function filePartsToDisplayDocuments(
 export function userContentToDisplayDocuments(
   content: string | MessageContentPart[]
 ): DisplayDocument[] {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard validates decoded external data before the caller uses the domain value.
   if (typeof content === "string") {
     return [];
   }
