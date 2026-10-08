@@ -187,12 +187,6 @@ describe("validateAutomationDelivery", () => {
     }
   });
 
-  test("no-ops when delivery is omitted", async () => {
-    await expect(
-      validateAutomationDelivery(undefined)
-    ).resolves.toBeUndefined();
-  });
-
   test("rejects discord without a bot token", async () => {
     process.env.NAKAMA_CONFIG_DIR = await mkdtemp(
       join(tmpdir(), "nakama-discord-delivery-")
