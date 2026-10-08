@@ -31,6 +31,36 @@ type SqliteValue = string | number | bigint | boolean | null | Uint8Array;
 
 type SqliteRow = Record<string, SqliteValue>;
 
+const SqliteRowSchema = z.record(
+  z.string(),
+  z.union([
+    z.string(),
+    z.number().finite(),
+    z.bigint(),
+    z.boolean(),
+    z.null(),
+    z.instanceof(Uint8Array),
+  ])
+);
+
+const JsonValueSchema = z.json();
+
+function toJsonSqliteValue(value: SqliteValue): z.infer<typeof JsonValueSchema> {
+  const integer = z.bigint().safeParse(value);
+
+  if (integer.success) {
+    return integer.data.toString();
+  }
+
+  const bytes = z.instanceof(Uint8Array).safeParse(value);
+
+  if (bytes.success) {
+    return Array.from(bytes.data);
+  }
+
+  return JsonValueSchema.parse(value);
+}
+
 interface SqliteRowsResult {
   columns: string[];
   rows: SqliteRow[];
@@ -222,8 +252,16 @@ function previewWorkflowSqliteTable(
 
   return {
     columns: statement.columnNames,
-    // SAFETY: SQLite query rows contain only SQLite cell values under this statement API.
-    rows: statement.all() as SqliteRow[],
+    rows: statement.all().map((row) => {
+      const parsed = SqliteRowSchema.parse(row);
+
+      return Object.fromEntries(
+        Object.entries(parsed).map(([key, value]) => [
+          key,
+          toJsonSqliteValue(value),
+        ])
+      );
+    }),
     table,
     total,
   };

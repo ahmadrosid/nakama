@@ -3,12 +3,12 @@ import { z } from "zod";
 
 const MailAddressSchema = z.union([
   z.string(),
-  z.object({ address: z.string(), name: z.string().optional() }).passthrough(),
+  z.object({ address: z.string().optional(), name: z.string().optional() }),
 ]);
 
 export type MailAddressInput =
   | string
-  | { address: string; name?: string }
+  | { address?: string; name?: string }
   | null
   | undefined;
 
@@ -89,14 +89,28 @@ export function formatMailAddress(value: MailAddressInput): string {
     return "";
   }
 
-  if ("address" in parsed.data === false) {
-    return parsed.data.trim();
+  const text = z.string().safeParse(parsed.data);
+
+  if (text.success) {
+    return text.data.trim();
   }
 
-  const entry = parsed.data;
-  const name = entry.name?.trim();
+  const entry = z
+    .object({ address: z.string().optional(), name: z.string().optional() })
+    .passthrough()
+    .safeParse(parsed.data);
 
-  return name ? `${name} <${entry.address}>` : entry.address;
+  if (!entry.success) {
+    return "";
+  }
+
+  if (!entry.data.address) {
+    return "";
+  }
+
+  const name = entry.data.name?.trim();
+
+  return name ? `${name} <${entry.data.address}>` : entry.data.address;
 }
 
 export function truncateMailBody(

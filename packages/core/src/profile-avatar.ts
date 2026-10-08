@@ -43,7 +43,9 @@ export function getProfileAvatarPath(
     return join(directory, AVATAR_BASENAME);
   }
 
-  const extension = MEDIA_TYPE_TO_EXTENSION[mediaType];
+  const extension = Object.entries(MEDIA_TYPE_TO_EXTENSION).find(
+    ([type]) => type === mediaType
+  )?.[1];
 
   if (!extension) {
     throw new Error(`Unsupported avatar media type: ${mediaType}`);
@@ -91,7 +93,10 @@ export async function readProfileAvatar(
   }
 
   const extension = filePath.slice(filePath.lastIndexOf(".") + 1).toLowerCase();
-  const mediaType = EXTENSION_TO_MEDIA_TYPE[extension];
+
+  const mediaType = Object.entries(EXTENSION_TO_MEDIA_TYPE).find(
+    ([candidate]) => candidate === extension
+  )?.[1];
 
   if (!mediaType) {
     return null;
@@ -136,7 +141,11 @@ async function findProfileAvatarFile(
 
     const extension = entry.slice(entry.lastIndexOf(".") + 1).toLowerCase();
 
-    if (EXTENSION_TO_MEDIA_TYPE[extension]) {
+    if (
+      Object.entries(EXTENSION_TO_MEDIA_TYPE).some(
+        ([candidate]) => candidate === extension
+      )
+    ) {
       return join(directory, entry);
     }
   }

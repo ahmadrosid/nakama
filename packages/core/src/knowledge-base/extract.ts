@@ -27,7 +27,10 @@ export function normalizeKnowledgeBaseMediaType(
 ): string {
   const trimmed = mediaType.trim().toLowerCase();
   const extension = filename.slice(filename.lastIndexOf(".")).toLowerCase();
-  const fromExtension = KB_EXTENSION_MEDIA_TYPES[extension];
+
+  const fromExtension = Object.entries(KB_EXTENSION_MEDIA_TYPES).find(
+    ([candidate]) => candidate === extension
+  )?.[1];
 
   if (fromExtension) {
     return fromExtension;

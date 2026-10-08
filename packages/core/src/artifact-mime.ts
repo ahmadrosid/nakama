@@ -83,7 +83,11 @@ function fileExtension(filename: string): string {
 
 /** Best-effort MIME type for an artifact that has no `.nakama-meta.json` sidecar. */
 export function inferArtifactMimeType(filename: string): string {
-  return MIME_TYPE_BY_EXTENSION[fileExtension(filename)] ?? UNKNOWN_MIME_TYPE;
+  return (
+    Object.entries(MIME_TYPE_BY_EXTENSION).find(
+      ([extension]) => extension === fileExtension(filename)
+    )?.[1] ?? UNKNOWN_MIME_TYPE
+  );
 }
 
 /** Strip parameters (`text/markdown; charset=utf-8`) and normalize casing. */
@@ -218,7 +222,11 @@ const CODE_LANGUAGE_BY_EXTENSION = {
  * (`.txt`, `.log`, `.csv`) that reads better unhighlighted.
  */
 export function artifactCodeLanguage(filename: string): string | null {
-  return CODE_LANGUAGE_BY_EXTENSION[fileExtension(filename)] ?? null;
+  return (
+    Object.entries(CODE_LANGUAGE_BY_EXTENSION).find(
+      ([extension]) => extension === fileExtension(filename)
+    )?.[1] ?? null
+  );
 }
 
 /**

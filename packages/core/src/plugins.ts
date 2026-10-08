@@ -325,18 +325,17 @@ export function validatePluginJsonSchema(
 }
 
 export function validatePluginJsonInstance(
-  schemaInput: JsonValue,
+  schemaInput: PluginJsonSchema,
   rawInput: JsonValue
 ): PluginInstanceValidationResult {
   const schemaResult = JsonSchemaValue.safeParse(schemaInput);
-  const inputResult = JsonValueSchema.safeParse(rawInput);
 
-  if (!(schemaResult.success && inputResult.success)) {
+  if (!schemaResult.success) {
     return { code: "invalid_input", ok: false };
   }
 
   const schema = schemaResult.data;
-  const input = inputResult.data;
+  const input = rawInput;
 
   if (!matchesSchemaType(schema.type, input)) {
     return { code: "invalid_input", ok: false };
@@ -385,7 +384,7 @@ export function validatePluginJsonInstance(
     }
   }
 
-  const array = z.array(z.unknown()).safeParse(input);
+  const array = z.array(JsonValueSchema).safeParse(input);
 
   if (array.success) {
     if (
@@ -404,7 +403,7 @@ export function validatePluginJsonInstance(
     }
   }
 
-  const object = z.record(z.string(), z.unknown()).safeParse(input);
+  const object = z.record(z.string(), JsonValueSchema).safeParse(input);
 
   if (object.success && matchesObjectType(schema.type)) {
     if (schema.required !== undefined) {
@@ -435,7 +434,11 @@ export function validatePluginJsonInstance(
       return { code: "invalid_input", ok: false };
     }
 
-    if (isRecord(schema.additionalProperties)) {
+    if (
+      schema.additionalProperties !== undefined &&
+      schema.additionalProperties !== true &&
+      schema.additionalProperties !== false
+    ) {
       for (const key of extraKeys) {
         if (
           !validatePluginJsonInstance(
@@ -718,7 +721,12 @@ function parseActions(
       return fail("invalid_path");
     }
 
-    if (!validatePluginJsonSchema(item.inputSchema).ok) {
+    const inputSchema = JsonValueSchema.safeParse(item.inputSchema);
+
+    if (
+      !inputSchema.success ||
+      !validatePluginJsonSchema(inputSchema.data).ok
+    ) {
       return fail("unsupported_schema");
     }
 
@@ -845,7 +853,7 @@ function parseDatabase(
 }
 
 function fail(code: PluginManifestValidationCode) {
-  return { code, ok: false };
+  return { code, ok: false } satisfies PluginValidationResult;
 }
 
 function isRecord(value: JsonValue): value is Record<string, JsonValue> {
@@ -856,10 +864,6 @@ function isNonEmptyString(value: JsonValue): value is string {
   const parsed = z.string().trim().min(1).safeParse(value);
 
   return parsed.success;
-}
-
-function isOptionalFiniteNumber(value: JsonValue | undefined): boolean {
-  return value === undefined || z.number().finite().safeParse(value).success;
 }
 
 function schemaTypes(type: PluginJsonSchema["type"]): string[] | null {

@@ -67,7 +67,7 @@ export async function loadSkillTool(
       name: module.name?.trim() || skill.name,
       parameters: module.parameters ?? permissiveObjectSchema(),
       async run(input, context) {
-        return module.run(input, context);
+        return module.run(JsonValueSchema.parse(input), context);
       },
     };
   } catch (error) {

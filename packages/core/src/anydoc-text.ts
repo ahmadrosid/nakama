@@ -192,8 +192,12 @@ export function resolveAnydocFormat(
 ): AnydocFormat | null {
   const normalizedMedia = mediaType?.trim().toLowerCase() ?? "";
 
-  if (normalizedMedia && MEDIA_TYPE_TO_FORMAT[normalizedMedia]) {
-    return MEDIA_TYPE_TO_FORMAT[normalizedMedia];
+  const mediaFormat = Object.entries(MEDIA_TYPE_TO_FORMAT).find(
+    ([media]) => media === normalizedMedia
+  )?.[1];
+
+  if (mediaFormat) {
+    return mediaFormat;
   }
 
   const extension = filename?.includes(".")

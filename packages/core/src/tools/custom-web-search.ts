@@ -95,7 +95,7 @@ function buildRequest(
         numResults: MAX_RESULTS,
         query,
       }),
-      headers,
+      headers: { ...headers },
     };
   }
 
@@ -211,7 +211,7 @@ export async function runCustomWebSearch(
     config.endpoint,
     withDisabledFetchIdle({
       body,
-      headers,
+      headers: new Headers(Object.entries(headers)),
       method: "POST",
       signal: resolveSignal(context),
     })

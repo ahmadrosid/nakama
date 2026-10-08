@@ -208,7 +208,11 @@ export function normalizeDocumentMediaType(
 
   const extension = filename.slice(filename.lastIndexOf(".")).toLowerCase();
 
-  return DOCUMENT_EXTENSION_MEDIA_TYPES[extension] ?? trimmed;
+  return (
+    Object.entries(DOCUMENT_EXTENSION_MEDIA_TYPES).find(
+      ([candidate]) => candidate === extension
+    )?.[1] ?? trimmed
+  );
 }
 
 function validateAttachmentBytes(

@@ -414,9 +414,13 @@ export function extractPairedTurnArtifacts(
       continue;
     }
 
-    const meta = parseArtifactMeta(
-      metaContentFromSidecarWrite(message, toolInputs)
-    );
+    const metaContent = metaContentFromSidecarWrite(message, toolInputs);
+
+    if (metaContent === null) {
+      continue;
+    }
+
+    const meta = parseArtifactMeta(metaContent);
 
     if (!meta) {
       continue;

@@ -43,7 +43,8 @@ function extractReasoningSummaryTexts(
   if (!summary.success) return [];
 
   return summary.data.flatMap(({ text }) => {
-    const trimmed = text.trim();
+    const parsedText = z.string().safeParse(text);
+    const trimmed = parsedText.success ? parsedText.data.trim() : "";
 
     return trimmed ? [trimmed] : [];
   });

@@ -1,5 +1,6 @@
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
+import { z } from "zod";
 import { MAX_DOCUMENT_BYTES } from "../message-content";
 import type { MailboxConfig } from "./types";
 import {
@@ -244,7 +245,7 @@ export function createImapReader(config: MailboxConfig): MailReader {
           const parsed = await simpleParser(source);
           const textBody = parsed.text?.trim() ?? "";
 
-          const htmlBody = parsed.html?.trim() || "";
+          const htmlBody = z.string().safeParse(parsed.html).data?.trim() ?? "";
 
           const preferred = textBody || htmlBody;
 

@@ -236,8 +236,14 @@ export async function distillToolResult(
   result: JsonValue,
   context: ToolContext
 ): Promise<JsonValue> {
-  const omniName = OMNI_TOOL_NAMES[toolName];
-  const accessor = TEXT_ACCESSOR[toolName];
+  const omniName = Object.entries(OMNI_TOOL_NAMES).find(
+    ([name]) => name === toolName
+  )?.[1];
+
+  const accessor = Object.entries(TEXT_ACCESSOR).find(
+    ([name]) => name === toolName
+  )?.[1];
+
   const orgId = context.orgId?.trim();
   // Automation runs carry no sessionId, only a run id, and that run is exactly
   // one conversation. Scoping by anything broader would let the ledger claim a

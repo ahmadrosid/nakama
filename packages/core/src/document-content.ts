@@ -131,7 +131,9 @@ export async function resolveDocumentPartForProvider(
     return part;
   }
 
-  const parser = BUILTIN_DOCUMENT_TEXT_PARSERS[part.mediaType];
+  const parser = Object.entries(BUILTIN_DOCUMENT_TEXT_PARSERS).find(
+    ([mediaType]) => mediaType === part.mediaType
+  )?.[1];
 
   if (parser) {
     const text = await parser({

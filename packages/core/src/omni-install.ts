@@ -53,7 +53,11 @@ export function omniTarget(
   platform: string = process.platform,
   arch: string = process.arch
 ): string | null {
-  return TARGETS[`${platform}-${arch}`] ?? null;
+  return (
+    Object.entries(TARGETS).find(
+      ([target]) => target === `${platform}-${arch}`
+    )?.[1] ?? null
+  );
 }
 
 export function omniVersion(): string {
