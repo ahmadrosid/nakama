@@ -144,6 +144,7 @@ describe("readStreamEvents", () => {
   test("aborts an open stream without reporting a missing reply", async () => {
     const controller = new AbortController();
     const encoder = new TextEncoder();
+
     const stream = new ReadableStream<Uint8Array>({
       start(streamController) {
         streamController.enqueue(
@@ -157,6 +158,7 @@ describe("readStreamEvents", () => {
       { onChunk: () => {} },
       controller.signal
     );
+
     await Promise.resolve();
     controller.abort();
 
@@ -166,6 +168,7 @@ describe("readStreamEvents", () => {
   test("stops buffered events when a chunk callback aborts", async () => {
     const controller = new AbortController();
     const callbacks: string[] = [];
+
     const stream = streamFromChunks([
       [
         { delta: "first", type: "chunk" },
@@ -255,12 +258,14 @@ test("agent-browser install stops buffered events after cancellation", async () 
 
 test("terminal done callback does not authorize partial EOF, abort, or error streams", async () => {
   let done = 0;
+
   const handlers = {
     onChunk: () => {},
     onDone: () => {
       done += 1;
     },
   };
+
   expect(
     await readStreamEvents(
       streamFromChunks(['data: {"type":"chunk","delta":"partial"}\n\n']),
