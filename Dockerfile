@@ -113,9 +113,14 @@ COPY --chown=1000:1000 --from=build-assets /app/apps/platform/discord/dist apps/
 COPY --chown=1000:1000 --from=build-assets /app/apps/platform/slack/dist apps/platform/slack/dist
 COPY --chown=1000:1000 --from=runtime-deps /runtime-deps/node_modules node_modules
 
+# Use the installed QMD CLI through Bun; its upstream launcher expects Node.
+RUN printf '#!/bin/sh\nexec bun /app/node_modules/@tobilu/qmd/dist/cli/qmd.js "$@"\n' > /usr/local/bin/qmd \
+  && chmod 755 /usr/local/bin/qmd
+
 RUN test -f apps/server/src/services/javascript-tool-runner.js \
   && test -f apps/server/src/services/plugin-runner.js \
-  && test -f node_modules/pm2/bin/pm2-runtime
+  && test -f node_modules/pm2/bin/pm2-runtime \
+  && qmd --version
 
 ENV NODE_ENV=production \
     NAKAMA_HOST=0.0.0.0 \
