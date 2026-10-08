@@ -29,6 +29,7 @@ import {
 } from "@/hooks/use-resource-mutations";
 import { client, formatError } from "@/lib/client";
 import { canAccessSystemPage, skillDetailBackTarget } from "@/lib/navigation";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 const sectionClass = "rounded-md border border-border bg-card";
@@ -544,12 +545,11 @@ function SkillVersionHistory({
     onError: (error) => toast(formatError(error)),
     onSuccess: async () => {
       setOpenId(null);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.skills.all }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.skills.detail(skillId),
-        }),
-      ]);
+      await invalidateQueries(
+        queryClient,
+        queryKeys.skills.all,
+        queryKeys.skills.detail(skillId)
+      );
     },
   });
   const versions = versionsQuery.data?.versions ?? [];

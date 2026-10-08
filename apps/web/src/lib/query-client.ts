@@ -1,5 +1,9 @@
 import { NakamaApiError } from "@nakama/core/api-error";
-import { type QueryCacheNotifyEvent, QueryClient } from "@tanstack/react-query";
+import {
+  type QueryCacheNotifyEvent,
+  QueryClient,
+  type QueryKey,
+} from "@tanstack/react-query";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -9,6 +13,15 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+export async function invalidateQueries(
+  client: QueryClient,
+  ...queryKeys: QueryKey[]
+): Promise<void> {
+  await Promise.all(
+    queryKeys.map((queryKey) => client.invalidateQueries({ queryKey }))
+  );
+}
 
 export function onGlobalQueryError(event: QueryCacheNotifyEvent) {
   const error = event.query?.state?.error;

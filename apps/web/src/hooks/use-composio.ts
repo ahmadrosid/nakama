@@ -10,6 +10,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { client } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 /**
@@ -46,12 +47,11 @@ export function useSaveComposioSettings() {
       client.setComposioSettings(request),
     onSuccess: async (saved) => {
       queryClient.setQueryData(queryKeys.composio.settings, saved);
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.composio.toolkits,
-        }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.health }),
-      ]);
+      await invalidateQueries(
+        queryClient,
+        queryKeys.composio.toolkits,
+        queryKeys.health
+      );
     },
   });
 }
@@ -72,7 +72,7 @@ export function useEnableComposioToolkit() {
     mutationFn: (toolkitSlug: string) =>
       client.enableComposioToolkit(toolkitSlug),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.composio.toolkits });
+      invalidateQueries(queryClient, queryKeys.composio.toolkits);
     },
   });
 }
@@ -84,7 +84,7 @@ export function useDisableComposioToolkit() {
     mutationFn: (toolkitSlug: string) =>
       client.disableComposioToolkit(toolkitSlug),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.composio.toolkits });
+      invalidateQueries(queryClient, queryKeys.composio.toolkits);
     },
   });
 }
@@ -112,7 +112,7 @@ export function useDisconnectComposioToolkit() {
     mutationFn: (toolkitSlug: string) =>
       client.disconnectComposioToolkit(toolkitSlug),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.composio.toolkits });
+      invalidateQueries(queryClient, queryKeys.composio.toolkits);
     },
   });
 }
@@ -124,7 +124,7 @@ export function useSyncComposioToolkit() {
     mutationFn: (toolkitSlug: string) =>
       client.syncComposioToolkit(toolkitSlug),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.composio.toolkits });
+      invalidateQueries(queryClient, queryKeys.composio.toolkits);
     },
   });
 }
@@ -152,10 +152,10 @@ export function useUpdateProfileComposioToolkitsMutation() {
       profileId: string;
       assignments: UpdateProfileComposioToolkitsRequest["assignments"];
     }) => client.updateProfileComposioToolkits(profileId, { assignments }),
-    onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.composio.profileToolkits(variables.profileId),
-      });
-    },
+    onSuccess: (_data, variables) =>
+      invalidateQueries(
+        queryClient,
+        queryKeys.composio.profileToolkits(variables.profileId)
+      ),
   });
 }

@@ -10,6 +10,7 @@ import {
 import { useSystemStatusQuery } from "@/hooks/use-system-status";
 import { useStartWorker } from "@/hooks/use-worker-actions";
 import { formatError } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 function formatAllowedPhoneSummary(count: number): string {
@@ -254,16 +255,12 @@ export function useWhatsAppSettingsCard({
 
   useEffect(() => {
     if (worker?.paired && !settings?.pairedJid) {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.whatsapp.settings,
-      });
+      void invalidateQueries(queryClient, queryKeys.whatsapp.settings);
       return;
     }
 
     if (worker?.connected && !paired) {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.whatsapp.settings,
-      });
+      void invalidateQueries(queryClient, queryKeys.whatsapp.settings);
     }
   }, [
     worker?.paired,

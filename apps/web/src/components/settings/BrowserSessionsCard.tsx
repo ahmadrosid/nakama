@@ -9,6 +9,7 @@ import {
   formatSessionRelativeTime,
 } from "@/lib/chat-history";
 import { client, formatError } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 function describeSession(session: BrowserSessionSummary): string {
@@ -33,9 +34,7 @@ export function BrowserSessionsCard() {
     onError: (mutationError) => setError(formatError(mutationError)),
     onSuccess: async () => {
       setError(null);
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.browserSessions,
-      });
+      await invalidateQueries(queryClient, queryKeys.browserSessions);
     },
   });
 

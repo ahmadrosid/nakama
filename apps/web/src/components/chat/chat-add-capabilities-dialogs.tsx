@@ -42,6 +42,7 @@ import {
 } from "@/hooks/use-resource-mutations";
 import { client, formatError } from "@/lib/client";
 import { toolPlaygroundPath } from "@/lib/navigation";
+import { invalidateQueries } from "@/lib/query-client";
 
 export function ToolCredentialCard({
   result,
@@ -191,7 +192,7 @@ function ToolSetupCard({
           form.reset();
           await onContinue(setupId);
           await queryClient.invalidateQueries({ queryKey });
-          await queryClient.invalidateQueries({ queryKey: ["profiles"] });
+          await invalidateQueries(queryClient, ["profiles"]);
         } catch (error) {
           setError(formatError(error));
         } finally {

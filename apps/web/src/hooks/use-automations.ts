@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/use-auth";
 import { automationsQueryOptions } from "@/hooks/use-app-queries";
 import { client } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 export function useAutomationsQuery(refetchInterval = 30_000) {
@@ -35,20 +36,25 @@ export function useAutomationRunsQuery(automationId: string | null) {
   });
 }
 
+function invalidateAutomationQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  automationId: string
+) {
+  return invalidateQueries(
+    queryClient,
+    queryKeys.automations.all,
+    queryKeys.automations.runs(automationId)
+  );
+}
+
 export function useMarkAutomationRunsReadMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (automationId: string) =>
       client.markAutomationRunsRead(automationId),
-    onSuccess: async (_readThroughAt, automationId) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.automations.all }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.automations.runs(automationId),
-        }),
-      ]);
-    },
+    onSuccess: (_readThroughAt, automationId) =>
+      invalidateAutomationQueries(queryClient, automationId),
   });
 }
 
@@ -63,14 +69,8 @@ export function useDeleteAutomationRunMutation() {
       automationId: string;
       runId: string;
     }) => client.deleteAutomationRun(automationId, runId),
-    onSuccess: async (_data, variables) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.automations.all }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.automations.runs(variables.automationId),
-        }),
-      ]);
-    },
+    onSuccess: (_data, variables) =>
+      invalidateAutomationQueries(queryClient, variables.automationId),
   });
 }
 
@@ -85,14 +85,8 @@ export function useUpdateAutomationMutation() {
       automationId: string;
       input: UpdateAutomationRequest;
     }) => client.updateAutomation(automationId, input),
-    onSuccess: async (_data, variables) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.automations.all }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.automations.runs(variables.automationId),
-        }),
-      ]);
-    },
+    onSuccess: (_data, variables) =>
+      invalidateAutomationQueries(queryClient, variables.automationId),
   });
 }
 
@@ -101,11 +95,7 @@ export function useDeleteAutomationMutation() {
 
   return useMutation({
     mutationFn: (automationId: string) => client.deleteAutomation(automationId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.automations.all,
-      });
-    },
+    onSuccess: () => invalidateQueries(queryClient, queryKeys.automations.all),
   });
 }
 
@@ -114,13 +104,7 @@ export function useRunAutomationMutation() {
 
   return useMutation({
     mutationFn: (automationId: string) => client.runAutomation(automationId),
-    onSuccess: async (_data, automationId) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.automations.all }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.automations.runs(automationId),
-        }),
-      ]);
-    },
+    onSuccess: (_data, automationId) =>
+      invalidateAutomationQueries(queryClient, automationId),
   });
 }
