@@ -1,6 +1,8 @@
 import { Database } from "bun:sqlite";
 import { chmod } from "node:fs/promises";
 import { join } from "node:path";
+import { z } from "zod";
+import type { JsonValue } from "./contract";
 import {
   ensureDir,
   pathExists,
@@ -10,7 +12,15 @@ import {
 } from "./fs";
 
 const DEFAULT_WORKER_HEARTBEAT_MAX_AGE_MS = 45_000;
+
 const HEARTBEAT_FILENAME = "worker-heartbeat.json";
+
+const WorkerHeartbeatSchema = z
+  .object({
+    pid: z.number().int(),
+    updatedAt: z.string(),
+  })
+  .catchall(z.json());
 
 export type WorkerHeartbeatBase = {
   pid: number;
@@ -24,6 +34,7 @@ export function isProcessAlive(pid: number): boolean {
 
   try {
     process.kill(pid, 0);
+
     return true;
   } catch {
     return false;
@@ -57,7 +68,7 @@ export function createWorkerHeartbeatStore<
   getDir: () => string;
   /** Shape/validate after base pid + updatedAt pass. Return null to reject. */
   parse?: (
-    value: Record<string, unknown>,
+    value: Record<string, JsonValue>,
     base: WorkerHeartbeatBase
   ) => T | null;
   /** Extra alive check (e.g. automation `running`). */
@@ -70,12 +81,15 @@ export function createWorkerHeartbeatStore<
   // SQLite's OS file lock is released on process death, including SIGKILL.
   const acquire = async (): Promise<void> => {
     usesLease = true;
+
     if (lease) {
       throw new Error("Worker already owns this connection");
     }
+
     await ensureDir(options.getDir());
     const path = join(options.getDir(), "worker-lock.sqlite");
     const candidate = new Database(path, { create: true });
+
     try {
       await chmod(path, 0o600);
       candidate.exec("BEGIN EXCLUSIVE");
@@ -88,27 +102,18 @@ export function createWorkerHeartbeatStore<
 
   const parse = (raw: string): T | null => {
     try {
-      const parsed = JSON.parse(raw) as unknown;
+      const parsed = WorkerHeartbeatSchema.safeParse(JSON.parse(raw));
 
-      if (
-        typeof parsed !== "object" ||
-        parsed === null ||
-        typeof (parsed as WorkerHeartbeatBase).pid !== "number" ||
-        typeof (parsed as WorkerHeartbeatBase).updatedAt !== "string"
-      ) {
+      if (!parsed.success) {
         return null;
       }
 
-      const base: WorkerHeartbeatBase = {
-        pid: (parsed as WorkerHeartbeatBase).pid,
-        updatedAt: (parsed as WorkerHeartbeatBase).updatedAt,
-      };
-
       if (!options.parse) {
-        return base as T;
+        // SAFETY: Without a custom parser, T is the base heartbeat type at call sites.
+        return parsed.data as T;
       }
 
-      return options.parse(parsed as Record<string, unknown>, base);
+      return options.parse(parsed.data, parsed.data);
     } catch {
       return null;
     }
@@ -118,6 +123,7 @@ export function createWorkerHeartbeatStore<
     if (usesLease && !lease) {
       return;
     }
+
     await writeTextFile(getPath(), `${JSON.stringify(payload)}\n`, {
       ensureDir: options.getDir(),
     });
@@ -127,9 +133,12 @@ export function createWorkerHeartbeatStore<
     if (usesLease && !lease) {
       return;
     }
+
     const path = getPath();
+
     try {
       const existing = await readTextOrNull(path);
+
       if (
         existing &&
         parse(existing)?.pid === process.pid &&
@@ -157,11 +166,11 @@ export function createWorkerHeartbeatStore<
     heartbeat: T | null,
     maxAgeMs = DEFAULT_WORKER_HEARTBEAT_MAX_AGE_MS
   ): boolean => {
-    if (!isHeartbeatAlive(heartbeat, maxAgeMs)) {
+    if (!(heartbeat && isHeartbeatAlive(heartbeat, maxAgeMs))) {
       return false;
     }
 
-    return options.isAliveExtra ? options.isAliveExtra(heartbeat as T) : true;
+    return options.isAliveExtra ? options.isAliveExtra(heartbeat) : true;
   };
 
   const isRunning = async (

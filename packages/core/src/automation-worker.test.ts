@@ -17,6 +17,7 @@ let configDir: string | null = null;
 async function useTempConfigDir(): Promise<string> {
   configDir = await mkdtemp(join(tmpdir(), "nakama-automation-worker-"));
   process.env.NAKAMA_CONFIG_DIR = configDir;
+
   return configDir;
 }
 
@@ -25,6 +26,7 @@ async function cleanupTempConfigDir(): Promise<void> {
     await rm(configDir, { force: true, recursive: true });
     configDir = null;
   }
+
   delete process.env.NAKAMA_CONFIG_DIR;
 }
 

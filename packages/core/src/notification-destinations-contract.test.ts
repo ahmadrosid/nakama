@@ -80,6 +80,7 @@ test("rejects invalid Discord IDs and channel/config mismatches", () => {
       })
     ).toThrow();
   }
+
   expect(() =>
     normalizeCreateNotificationDestinationRequest({
       channel: "whatsapp",

@@ -6,6 +6,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
  * exactly once, and every failure spends part of a small attempt budget.
  */
 const PAIRING_CODE_BYTES = 16;
+
 export const PAIRING_CODE_LENGTH = PAIRING_CODE_BYTES * 2;
 
 /** Long enough to copy a code out of the dashboard, short enough to be useless later. */
@@ -74,17 +75,21 @@ export function isPairingCodeActive(
 }
 
 const MAX_PAIRING_FAILURES = 5;
+
 const attempts = new Map<string, { fingerprint: string; failures: number }>();
 
 /** Keep the five-guess limit with the active code in each worker process. */
 export function getPairingAttemptBudget(scope: string, code: string) {
   const fingerprint = createHash("sha256").update(code).digest("hex");
   const current = attempts.get(scope);
+
   if (current?.fingerprint === fingerprint) {
     return current;
   }
+
   const fresh = { failures: 0, fingerprint };
   attempts.set(scope, fresh);
+
   return fresh;
 }
 
@@ -94,6 +99,7 @@ export function isPairingAttemptBlocked(budget: { failures: number }): boolean {
 
 export function recordPairingFailure(budget: { failures: number }): boolean {
   budget.failures += 1;
+
   return isPairingAttemptBlocked(budget);
 }
 

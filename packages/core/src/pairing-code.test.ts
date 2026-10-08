@@ -84,6 +84,7 @@ describe("getPairingAttemptBudget", () => {
     for (let i = 0; i < 4; i += 1) {
       expect(recordPairingFailure(budget)).toBe(false);
     }
+
     expect(recordPairingFailure(budget)).toBe(true);
     expect(isPairingAttemptBlocked(budget)).toBe(true);
   });
@@ -91,6 +92,7 @@ describe("getPairingAttemptBudget", () => {
   test("starts a new budget when another process issues a new code", () => {
     const scope = `scope-${crypto.randomUUID()}`;
     const old = getPairingAttemptBudget(scope, "A".repeat(32));
+
     for (let i = 0; i < 5; i += 1) {
       recordPairingFailure(old);
     }

@@ -39,6 +39,7 @@ test("parseUserContext keeps unknown lines as extra", () => {
 
 Ships on Fridays.
 `);
+
   expect(parsed.answers.role).toBe("Backend engineer");
   expect(parsed.extra).toBe("## Notes\n\nShips on Fridays.");
 });
@@ -53,6 +54,7 @@ test("parse and render round-trip hand-written extra content", () => {
 
 Ships on Fridays.
 `;
+
   const parsed = parseUserContext(original);
   expect(renderUserContext(parsed.answers, parsed.extra)).toBe(original);
 });
@@ -61,6 +63,7 @@ test("parse and render preserve every field and extra notes", () => {
   const answers = Object.fromEntries(
     USER_CONTEXT_FIELDS.map((field) => [field.key, field.key])
   );
+
   const rendered = renderUserContext(answers, "On call every other week.");
   expect(parseUserContext(rendered)).toEqual({
     answers,
@@ -83,6 +86,7 @@ test("parseUserContext keeps a repeated bullet instead of overwriting it", () =>
 - Always: Answer in English
 - Always: Use metric units
 `);
+
   expect(parsed.answers.always).toBe("Answer in English");
   expect(parsed.extra).toBe("- Always: Use metric units");
 
@@ -109,11 +113,14 @@ test("saving optional help preserves existing preferences and an introduction", 
     { name: "Rosid", never: "Use emojis", role: "Software engineer" },
     "I build my own product.\nI work with a small team."
   );
+
   const { answers, extra } = parseUserContext(original);
+
   const saved = renderUserContext(
     { ...answers, help: "Writing code, Product decisions" },
     extra
   );
+
   expect(parseUserContext(saved)).toEqual({
     answers: { ...answers, help: "Writing code, Product decisions" },
     extra,

@@ -7,15 +7,18 @@ mock.module("node:dns/promises", () => ({
     if (hostname === "stalled.test") {
       return new Promise(() => {});
     }
+
     if (hostname === "localhost") {
       return Promise.resolve([{ address: "127.0.0.1" }]);
     }
+
     if (hostname === "github-pages.test") {
       return Promise.resolve([
         { address: "185.199.111.153" },
         { address: "fd00:aa:bb:2250::b9c7:6f99" },
       ]);
     }
+
     if (hostname === "dual.test") {
       // Two public records, IPv6 first — the shape most real names have.
       return Promise.resolve([
@@ -23,15 +26,18 @@ mock.module("node:dns/promises", () => ({
         { address: "185.199.111.153" },
       ]);
     }
+
     if (hostname === "private-alias.test") {
       return Promise.resolve([{ address: "fd00:aa:bb:2250::0a00:0001" }]);
     }
+
     // Any other hostname "resolves" to a public example.com address.
     return Promise.resolve([{ address: "93.184.216.34" }]);
   },
 }));
 
 const webFetchModule = await import("./web-fetch");
+
 const {
   convertHtmlToMarkdown,
   fetchRemoteImage,
@@ -44,12 +50,16 @@ import type { ToolContext } from "../contract";
 const CTX: ToolContext = {};
 
 type FetchImpl = typeof fetch;
+
 const originalFetch = globalThis.fetch;
 
 function stubFetch(
   impl: (req: Request | string | URL, init?: RequestInit) => Promise<Response>
 ): void {
-  globalThis.fetch = mock(impl) as unknown as FetchImpl;
+  const testFetch = mock(impl);
+
+  // SAFETY: The test mock accepts the same request and response values used by fetch.
+  globalThis.fetch = testFetch as FetchImpl;
 }
 
 function htmlResponse(
@@ -119,6 +129,7 @@ describe("web_fetch tool metadata", () => {
 
 describe("web_fetch tool validation errors", () => {
   test("throws on missing url, non-http url, and unknown keys", async () => {
+    // SAFETY: This call deliberately supplies invalid input to test runtime validation.
     await expect(webFetchTool.run({} as never, CTX)).rejects.toThrow(
       /invalid parameter at url/
     );
@@ -126,6 +137,7 @@ describe("web_fetch tool validation errors", () => {
       webFetchTool.run({ url: "file:///etc/passwd" }, CTX)
     ).rejects.toThrow(/http: or https:/);
     await expect(
+      // SAFETY: This call deliberately supplies an unknown key to test runtime validation.
       webFetchTool.run({ extra: 1, url: "https://example.com" } as never, CTX)
     ).rejects.toThrow(/Unrecognized key/);
   });
@@ -180,6 +192,7 @@ describe("web_fetch SSRF guard", () => {
     let fetchInit: RequestInit | undefined;
     stubFetch(async (_input, init) => {
       fetchInit = init;
+
       return htmlResponse("<p>ok</p>");
     });
 
@@ -190,6 +203,7 @@ describe("web_fetch SSRF guard", () => {
 
     expect(out.status).toBe(200);
     expect(out.content).toContain("ok");
+    // SAFETY: The test fetch captures the idleTimeout field Bun adds to its request init.
     expect(
       (fetchInit as RequestInit & { idleTimeout?: number }).idleTimeout
     ).toBe(0);
@@ -223,6 +237,7 @@ describe("web_fetch pins the address it verified", () => {
     const inputs: string[] = [];
     stubFetch(async (input) => {
       inputs.push(String(input));
+
       return htmlResponse("<p>ok</p>");
     });
 
@@ -235,21 +250,25 @@ describe("web_fetch pins the address it verified", () => {
   test("sends the hostname as Host and as the TLS server name", async () => {
     let init: (RequestInit & { tls?: { serverName: string } }) | undefined;
     stubFetch(async (_input, requestInit) => {
+      // SAFETY: This test inspects Bun's TLS override on the captured request.
       init = requestInit as typeof init;
+
       return htmlResponse("<p>ok</p>");
     });
 
     await webFetchTool.run({ url: "https://github-pages.test/" }, CTX);
 
-    const headers = init?.headers as Record<string, string>;
-    expect(headers.host).toBe("github-pages.test");
+    const headers = new Headers(init?.headers);
+    expect(headers.get("host")).toBe("github-pages.test");
     expect(init?.tls?.serverName).toBe("github-pages.test");
   });
 
   test("leaves the TLS override off for plain http", async () => {
     let init: (RequestInit & { tls?: { serverName: string } }) | undefined;
     stubFetch(async (_input, requestInit) => {
+      // SAFETY: This test inspects Bun's TLS override on the captured request.
       init = requestInit as typeof init;
+
       return htmlResponse("<p>ok</p>");
     });
 
@@ -262,6 +281,7 @@ describe("web_fetch pins the address it verified", () => {
     const inputs: string[] = [];
     stubFetch(async (input) => {
       inputs.push(String(input));
+
       return htmlResponse("<p>ok</p>");
     });
 
@@ -274,9 +294,11 @@ describe("web_fetch pins the address it verified", () => {
     const inputs: string[] = [];
     stubFetch(async (input) => {
       inputs.push(String(input));
+
       if (inputs.length === 1) {
         throw new Error("connect ECONNREFUSED");
       }
+
       return htmlResponse("<p>ok</p>");
     });
 
@@ -293,15 +315,17 @@ describe("web_fetch pins the address it verified", () => {
     const inputs: string[] = [];
     const hosts: string[] = [];
     stubFetch(async (input, requestInit) => {
-      const headers = (requestInit?.headers ?? {}) as Record<string, string>;
+      const headers = new Headers(requestInit?.headers);
       inputs.push(String(input));
-      hosts.push(headers.host);
+      hosts.push(headers.get("host") ?? "");
+
       if (inputs.length === 1) {
         return new Response(null, {
           headers: { location: "https://github-pages.test/fin" },
           status: 302,
         });
       }
+
       return htmlResponse("<p>final</p>");
     });
 
@@ -325,6 +349,7 @@ describe("web_fetch happy path", () => {
     let requests = 0;
     stubFetch(async () => {
       requests += 1;
+
       return htmlResponse("<h1>Title</h1><p>Hello <b>world</b></p>");
     });
 
@@ -347,16 +372,19 @@ describe("web_fetch happy path", () => {
     const requests: string[] = [];
     stubFetch(async (input) => {
       requests.push(String(input));
+
       if (String(input).endsWith("/robots.txt")) {
         return new Response("User-agent: *\nDisallow: /private/", {
           headers: { "content-type": "text/plain" },
         });
       }
+
       if (String(input).includes("/media_school.jpg")) {
         return new Response(Buffer.from("ffd8ff00", "hex"), {
           headers: { "content-type": "image/jpeg" },
         });
       }
+
       return htmlResponse(`<!doctype html><html><head>
         <title>Chatswood High School</title>
         <meta content="https://chatswood-h.schools.nsw.gov.au/media_school.jpg?width=1200&#x26;format=pjpg" property="og:image">
@@ -391,6 +419,7 @@ describe("web_fetch happy path", () => {
             })
           : htmlResponse(`<html><head>${meta}</head><body>School</body></html>`)
       );
+
       const out = await webFetchTool.run(
         {
           imageMetadata: true,
@@ -398,6 +427,7 @@ describe("web_fetch happy path", () => {
         },
         CTX
       );
+
       expect(out.imageUrl).toBeNull();
       expect(out.images).toBeUndefined();
     }
@@ -407,6 +437,7 @@ describe("web_fetch happy path", () => {
     let requests = 0;
     stubFetch(async (input) => {
       requests += 1;
+
       return String(input).endsWith("/robots.txt")
         ? new Response("User-agent: *\nAllow: /", {
             headers: { "content-type": "text/plain" },
@@ -432,6 +463,7 @@ describe("web_fetch happy path", () => {
     const requests: string[] = [];
     stubFetch(async (input) => {
       requests.push(String(input));
+
       return new Response("User-agent: *\nDisallow: /", {
         headers: { "content-type": "text/plain" },
       });
@@ -452,14 +484,17 @@ describe("web_fetch happy path", () => {
     stubFetch(async (input) => {
       const path = new URL(String(input)).pathname;
       requests.push(path);
+
       return path === "/robots.txt"
         ? new Response(null, { status: 404 })
         : htmlResponse("<h1>School with no image</h1>");
     });
+
     const out = await webFetchTool.run(
       { imageMetadata: true, url: "https://example.com/" },
       CTX
     );
+
     expect(out.imageUrl).toBeNull();
     expect(requests).toEqual(["/robots.txt", "/"]);
   });
@@ -476,6 +511,7 @@ describe("web_fetch happy path", () => {
       const requests: string[] = [];
       stubFetch(async (input) => {
         requests.push(new URL(String(input)).pathname);
+
         return robotsResponse;
       });
       await expect(
@@ -490,6 +526,7 @@ describe("web_fetch happy path", () => {
 
   test("robots denial and inaccessible images return null without trusting og:image", async () => {
     const page = "https://example.com/";
+
     for (const imageResponse of [
       null,
       new Response("unavailable", { status: 404 }),
@@ -505,23 +542,28 @@ describe("web_fetch happy path", () => {
       stubFetch(async (input) => {
         const path = new URL(String(input)).pathname;
         requests.push(path);
+
         if (path === "/robots.txt") {
           return new Response(
             `User-agent: *\n${imageResponse ? "Allow: /" : "Disallow: /*.jpg$"}`,
             { headers: { "content-type": "text/plain" } }
           );
         }
+
         if (path === "/") {
           return htmlResponse(
             '<meta property="og:image" content="https://example.com/pic.jpg">'
           );
         }
+
         return imageResponse ?? new Response("unexpected image request");
       });
+
       const out = await webFetchTool.run(
         { imageMetadata: true, url: page },
         CTX
       );
+
       expect(out.imageUrl).toBeNull();
       expect(out.images).toBeUndefined();
       expect(requests).toEqual(
@@ -535,16 +577,19 @@ describe("web_fetch happy path", () => {
     stubFetch(async (input) => {
       const path = new URL(String(input)).pathname;
       requests.push(path);
+
       if (path === "/robots.txt") {
         return new Response("User-agent: *\nAllow: /", {
           headers: { "content-type": "text/plain" },
         });
       }
+
       if (path === "/") {
         return htmlResponse(
           '<meta property="og:image" content="https://example.com/photo.jpg">'
         );
       }
+
       return path === "/photo.jpg"
         ? new Response(null, {
             headers: { location: "https://example.com/final.jpg" },
@@ -554,10 +599,12 @@ describe("web_fetch happy path", () => {
             headers: { "content-type": "image/jpeg" },
           });
     });
+
     const out = await webFetchTool.run(
       { imageMetadata: true, url: "https://example.com/" },
       CTX
     );
+
     expect(out.imageUrl).toBeNull();
     expect(requests).toEqual(["/robots.txt", "/", "/photo.jpg"]);
   });
@@ -600,12 +647,14 @@ describe("web_fetch happy path", () => {
     let calls = 0;
     stubFetch(async () => {
       calls += 1;
+
       if (calls === 1) {
         return new Response(null, {
           headers: { location: "https://target.example.com/fin" },
           status: 302,
         });
       }
+
       return htmlResponse("<p>final</p>");
     });
 
@@ -640,6 +689,7 @@ describe("convertHtmlToMarkdown", () => {
     const md = await convertHtmlToMarkdown(
       "<h2>Sub</h2><p>a <strong>b</strong></p>"
     );
+
     expect(md).toContain("## Sub");
     expect(md).toContain("**b**");
   });
@@ -711,8 +761,10 @@ describe("remote chat images", () => {
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII=",
     "base64"
   );
+
   const image = () =>
     new Response(png, { headers: { "Content-Type": "image/png" } });
+
   const load = (url = "https://github-pages.test/image.png") =>
     fetchRemoteImage(url, AbortSignal.timeout(1000));
 
@@ -722,6 +774,7 @@ describe("remote chat images", () => {
     stubFetch(async (input, init) => {
       inputs.push(String(input));
       headers.push(new Headers(init?.headers));
+
       return inputs.length === 1
         ? new Response(null, {
             headers: { location: "https://other.test/final" },
@@ -740,6 +793,7 @@ describe("remote chat images", () => {
       "github-pages.test",
       "other.test",
     ]);
+
     for (const h of headers) {
       expect(h.has("cookie")).toBe(false);
       expect(h.has("authorization")).toBe(false);
@@ -767,16 +821,19 @@ describe("remote chat images", () => {
       "https://[5f00:ffff:ffff:ffff:ffff:ffff:ffff:ffff]/",
       "file:///image.png",
     ];
+
     for (const target of blocked) {
       let calls = 0;
       stubFetch(async () => {
         calls++;
+
         return image();
       });
       await expect(load(target)).rejects.toThrow();
       expect(calls).toBe(0);
       stubFetch(async () => {
         calls++;
+
         return new Response(null, {
           headers: { location: target },
           status: 302,
@@ -819,11 +876,18 @@ describe("remote chat images", () => {
 
   test("enforces the byte limit with and without Content-Length and cancels oversized streams", async () => {
     const limit = 5 * 1024 * 1024;
+
     for (const size of [limit, limit + 1]) {
       for (const declared of [false, true]) {
         let cancelled = false;
         const body = Buffer.alloc(size);
         png.copy(body);
+        const headers = new Headers({ "content-type": "image/png" });
+
+        if (declared) {
+          headers.set("content-length", String(size));
+        }
+
         stubFetch(
           async () =>
             new Response(
@@ -833,19 +897,16 @@ describe("remote chat images", () => {
                 },
                 start(controller) {
                   controller.enqueue(body);
+
                   if (size === limit) {
                     controller.close();
                   }
                 },
               }),
-              {
-                headers: {
-                  "content-type": "image/png",
-                  ...(declared ? { "content-length": String(size) } : {}),
-                },
-              }
+              { headers }
             )
         );
+
         if (size === limit) {
           expect((await load()).bytes.length).toBe(limit);
         } else {

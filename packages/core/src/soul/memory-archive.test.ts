@@ -12,6 +12,7 @@ import {
 import { getMemoryArchiveFilePath } from "./memory-paths";
 
 const PROFILE = { orgId: "org_test", profileId: "profile_test" };
+
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
 describe("memory archive", () => {
@@ -22,6 +23,7 @@ describe("memory archive", () => {
       await rm(tempDir, { force: true, recursive: true });
       tempDir = "";
     }
+
     if (originalConfigDir === undefined) {
       delete process.env.NAKAMA_CONFIG_DIR;
     } else {
@@ -31,6 +33,7 @@ describe("memory archive", () => {
 
   async function setupProfileMemory(content: string): Promise<string> {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-memory-archive-"));
+
     const soulDir = path.join(
       tempDir,
       "orgs",
@@ -38,9 +41,11 @@ describe("memory archive", () => {
       "profiles",
       PROFILE.profileId
     );
+
     await mkdir(soulDir, { recursive: true });
     await writeFile(path.join(soulDir, "MEMORY.md"), content, "utf8");
     process.env.NAKAMA_CONFIG_DIR = tempDir;
+
     return soulDir;
   }
 
@@ -145,6 +150,7 @@ describe("memory archive", () => {
 `);
 
     const archivedAt = new Date("2026-06-29T15:00:00.000Z");
+
     const result = await archiveProfileMemoryBullets(
       PROFILE.orgId,
       PROFILE.profileId,
@@ -169,6 +175,7 @@ describe("memory archive", () => {
       ),
       "utf8"
     );
+
     expect(active).not.toContain("User prefers dark mode.");
     expect(active).toContain("- User lives in Jakarta.");
 
@@ -194,6 +201,7 @@ describe("memory archive", () => {
       PROFILE.profileId,
       "2026-06"
     );
+
     await mkdir(path.dirname(archivePath), { recursive: true });
     await writeFile(
       archivePath,
@@ -240,6 +248,7 @@ describe("memory archive", () => {
 
 - Move this.
 `);
+
     const legacyArchiveDir = path.join(soulDir, "data", "memory-archive");
     await mkdir(legacyArchiveDir, { recursive: true });
     await writeFile(

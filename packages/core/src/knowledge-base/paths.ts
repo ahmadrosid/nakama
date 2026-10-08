@@ -3,7 +3,9 @@ import { assertConfigPathSegment, getProfileSoulDir } from "../soul/resolve";
 import { getOrgConfigDir } from "../user-config";
 
 export const KNOWLEDGE_BASE_RELATIVE_DIR = "knowledge-base";
+
 export const KNOWLEDGE_BASE_MANIFEST_FILE = "manifest.json";
+
 export const KNOWLEDGE_BASE_EXTRACTED_SUFFIX = ".extracted.txt";
 
 /** Root for documents shared by profiles in an organization. */
@@ -27,6 +29,7 @@ export function getKnowledgeBaseStoredDocumentPath(
 ): string {
   const base = filename.split(/[/\\]/).pop()?.trim() ?? "document";
   const sanitized = base.replace(/[^\w.\-() ]+/g, "_") || "document";
+
   return join(
     dir,
     `${assertConfigPathSegment(documentId, "documentId")}--${sanitized}`

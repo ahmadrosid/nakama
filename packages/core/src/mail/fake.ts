@@ -31,9 +31,11 @@ export function createFakeMailReader(
       const message = store.find(
         (entry) => entry.folder === folder && entry.uid === uid
       );
+
       const attachment = message?.attachments?.find(
         (entry) => entry.id === attachmentId
       );
+
       if (!attachment) {
         return null;
       }
@@ -49,6 +51,7 @@ export function createFakeMailReader(
       const message = store.find(
         (entry) => entry.folder === folder && entry.uid === uid
       );
+
       return message ? { ...message } : null;
     },
     async searchMessages(folder, query, limit) {
@@ -80,6 +83,7 @@ export function createFakeMailSender(): MailSender & {
   return {
     async send(input) {
       sent.push(input);
+
       return { messageId: "fake-message-id" };
     },
     sent,

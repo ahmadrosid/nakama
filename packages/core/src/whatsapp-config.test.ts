@@ -191,18 +191,21 @@ describe("saveWhatsAppConfig", () => {
       await saveWhatsAppConfig({ phoneNumber: "+1234567890" });
       const first = await loadWhatsAppConfigFile();
 
-      const configWithJid: Record<string, string> = {
+      const configWithJid = {
         paired_jid: "1234567890@s.whatsapp.net",
         pairing_code: first!.pairingCode!,
         phone_number: first!.phoneNumber,
         profile_id: first!.profileId,
       };
+
       const dir = path.join(tempHome, ".nakama", "whatsapp");
+
       const lines = [
         "# Nakama WhatsApp bridge",
         ...Object.entries(configWithJid).map(([k, v]) => `${k}=${v}`),
         "",
       ];
+
       await mkdir(dir, { recursive: true });
       await writeFile(path.join(dir, "config.ini"), lines.join("\n"), "utf8");
 
@@ -238,6 +241,7 @@ describe("saveWhatsAppConfig", () => {
       const updated = await saveWhatsAppConfig({
         requireGroupMention: false,
       });
+
       expect(updated.requireGroupMention).toBe(false);
       expect((await loadWhatsAppConfigFile())?.requireGroupMention).toBe(false);
 
@@ -298,12 +302,14 @@ describe("resetWhatsAppSessionForReconnect", () => {
       await writeFile(path.join(dir, "worker-qr.txt"), "qr-string", "utf8");
 
       const first = await loadWhatsAppConfigFile();
-      const configWithJid: Record<string, string> = {
+
+      const configWithJid = {
         paired_jid: "1234567890@s.whatsapp.net",
         paired_lid: "999@lid",
         phone_number: first!.phoneNumber,
         profile_id: first!.profileId,
       };
+
       await writeFile(
         path.join(dir, "config.ini"),
         [

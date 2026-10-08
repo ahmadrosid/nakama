@@ -69,6 +69,7 @@ export class AutomationScheduler {
 
       const timezone =
         automation.timezone ?? defaultTimezone ?? DEFAULT_TIMEZONE;
+
       jobs.set(
         automation.id,
         // Paused, so a throw on a later entry leaves nothing ticking. No name:
@@ -96,6 +97,7 @@ export class AutomationScheduler {
     }
 
     const now = this.now();
+
     for (const automation of automations) {
       if (automation.runAt) {
         this.scheduleRunAt(automation, now);
@@ -113,24 +115,27 @@ export class AutomationScheduler {
           );
         }
       })
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
+      .catch(<Failure>(cause: Failure) => {
+        const message = cause instanceof Error ? cause.message : String(cause);
         console.error(`Automation ${automation.id} run failed:`, message);
       });
   }
 
   private scheduleRunAt(automation: AutomationSchedule, now: number): void {
     const at = Date.parse(automation.runAt ?? "");
+
     if (!Number.isFinite(at)) {
       return;
     }
 
     const dispatchKey = `${automation.id}:${automation.runAt}`;
+
     if (this.dispatchedRunAt.has(dispatchKey)) {
       return;
     }
 
     const delay = at - now;
+
     if (delay > MAX_TIMEOUT_MS) {
       return;
     }
@@ -142,6 +147,7 @@ export class AutomationScheduler {
 
       this.dispatchedRunAt.add(dispatchKey);
       this.dispatch(automation);
+
       return;
     }
 

@@ -113,6 +113,7 @@ export async function saveComposioConfig(
   input: UpdateComposioSettingsInput
 ): Promise<ComposioSettingsPublic> {
   const existing = await loadComposioConfigFile();
+
   const apiKey =
     input.apiKey === undefined ? (existing?.apiKey ?? "") : input.apiKey.trim();
 
@@ -121,5 +122,6 @@ export async function saveComposioConfig(
   }
 
   await writeComposioConfigFile({ apiKey });
+
   return toComposioSettingsPublic({ apiKey });
 }

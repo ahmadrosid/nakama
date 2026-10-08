@@ -10,6 +10,7 @@ const DEPENDENCY_SETS = {
 } as const;
 
 type Manifest = { dependencies?: Record<string, string> };
+
 type Lockfile = {
   workspaces: Record<string, Manifest>;
   packages: Record<string, string[]>;
@@ -24,6 +25,8 @@ async function readCommittedJsonc<T>(relativePath: string): Promise<T> {
   ).toBe(true);
   // bun.lock is JSONC: the same tree bun writes, minus its trailing commas.
   const text = await file.text();
+
+  // SAFETY: Callers supply a type whose fields are checked against committed fixture data.
   return JSON.parse(text.replaceAll(/,(\s*[}\]])/g, "$1")) as T;
 }
 
@@ -36,6 +39,7 @@ function dockerStage(dockerfile: string, stage: string): string {
   // Skip the stage's own FROM line so the next stage is the only cut point.
   const body = dockerfile.slice(dockerfile.indexOf("\n", start));
   const nextStage = body.search(/^FROM /m);
+
   return nextStage === -1 ? body : body.slice(0, nextStage);
 }
 
@@ -79,9 +83,11 @@ describe("production image dependency sets", () => {
       const manifest = await readCommittedJsonc<Manifest>(
         `${directory}/package.json`
       );
+
       const lockfile = await readCommittedJsonc<Lockfile>(
         `${directory}/bun.lock`
       );
+
       const declared = manifest.dependencies ?? {};
 
       expect(Object.keys(declared).length).toBeGreaterThan(0);

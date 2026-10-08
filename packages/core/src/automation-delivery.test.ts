@@ -2,7 +2,6 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { NakamaApiError } from "./api-error";
 import {
   normalizeAutomationDelivery,
   shouldDeliverForRun,
@@ -133,6 +132,7 @@ describe("shouldDeliverForRun", () => {
       channel: "telegram" as const,
       notifyOn: "both" as const,
     };
+
     expect(shouldDeliverForRun(delivery, "completed")).toBe(true);
     expect(shouldDeliverForRun(delivery, "failed")).toBe(true);
   });
@@ -156,6 +156,7 @@ describe("validateAutomationDelivery", () => {
   test("validates only the owning organization's WhatsApp connection", async () => {
     const configDir = await mkdtemp(join(tmpdir(), "nakama-wa-delivery-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
+
     try {
       await saveWhatsAppConfig({ profileId: "agent_a" }, owner);
       await syncWhatsAppOwnerPairing(
@@ -247,16 +248,15 @@ describe("validateAutomationDelivery", () => {
       "utf8"
     );
 
-    const error = await validateAutomationDelivery(
-      {
-        channel: "discord",
-        channelId: "123456789012345679",
-      },
-      { ...owner, access: { orgRole: "member" } }
-    ).catch((thrown: unknown) => thrown);
-
-    expect(error).toBeInstanceOf(NakamaApiError);
-    expect((error as NakamaApiError).status).toBe(403);
+    await expect(
+      validateAutomationDelivery(
+        {
+          channel: "discord",
+          channelId: "123456789012345679",
+        },
+        { ...owner, access: { orgRole: "member" } }
+      )
+    ).rejects.toMatchObject({ status: 403 });
 
     await rm(configDir, { force: true, recursive: true });
   });

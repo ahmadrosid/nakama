@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { z } from "zod";
 import type { EmailConfigFile } from "../email-config";
 import { builtinTools } from "./builtin";
 import {
@@ -28,7 +29,8 @@ const completeConfig: EmailConfigFile = {
 describe("email tool", () => {
   test("exposes an OpenAI-compatible object parameters schema", () => {
     const parameters = emailParameters();
-    const schema = parameters as Record<string, unknown>;
+    // SAFETY: This test inspects arbitrary properties on the generated JSON Schema.
+    const schema = z.record(z.string(), z.json()).parse(parameters);
 
     expect(parameters.type).toBe("object");
     expect(schema.oneOf).toBeUndefined();
@@ -46,7 +48,11 @@ describe("email tool", () => {
       expect(tool.parameters?.type, `${tool.name} parameters.type`).toBe(
         "object"
       );
-      const schema = tool.parameters as Record<string, unknown> | undefined;
+
+      const schema = tool.parameters
+        ? z.record(z.string(), z.json()).parse(tool.parameters)
+        : undefined;
+
       expect(schema?.oneOf, `${tool.name} oneOf`).toBeUndefined();
       expect(schema?.anyOf, `${tool.name} anyOf`).toBeUndefined();
     }

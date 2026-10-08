@@ -4,8 +4,11 @@ import type {
 } from "../contract";
 
 const TELEGRAM_MAX_LENGTH = 4096;
+
 const WHATSAPP_MAX_LENGTH = 4096;
+
 const DISCORD_MAX_LENGTH = 2000;
+
 const EMAIL_BODY_MAX_LENGTH = 100_000;
 
 export function truncateForChannel(
@@ -26,6 +29,7 @@ export function truncateForChannel(
   }
 
   const suffix = "\n\n… (truncated)";
+
   return `${text.slice(0, max - suffix.length)}${suffix}`;
 }
 
@@ -34,9 +38,10 @@ export function formatAutomationDeliveryMessage(options: {
   status: AutomationRunStatus;
   completedAt: string;
   body: string;
-}): { subject: string; text: string } {
+}): AutomationDeliveryMessage {
   const label = options.status === "failed" ? "failed" : "completed";
   const subject = `[Nakama] ${options.automationName} — ${label}`;
+
   const text = [
     subject,
     options.completedAt,
@@ -45,6 +50,11 @@ export function formatAutomationDeliveryMessage(options: {
   ].join("\n");
 
   return { subject, text };
+}
+
+interface AutomationDeliveryMessage {
+  subject: string;
+  text: string;
 }
 
 export function splitTelegramChunks(

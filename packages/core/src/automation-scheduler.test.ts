@@ -32,12 +32,14 @@ function schedule(
 describe("AutomationScheduler", () => {
   test("start loads schedules and registers cron jobs", async () => {
     const runs: string[] = [];
+
     const delegate = createDelegate({
       listScheduledAutomations: async () => [
         schedule({ cron: "* * * * *", id: "a1" }),
       ],
       runAutomation: async (id) => {
         runs.push(id);
+
         return { ok: true };
       },
     });
@@ -51,6 +53,7 @@ describe("AutomationScheduler", () => {
 
   test("reload stops old jobs and registers current schedules", async () => {
     let automations: AutomationSchedule[] = [schedule({ id: "a1" })];
+
     const delegate = createDelegate({
       listScheduledAutomations: async () => automations,
     });
@@ -80,6 +83,7 @@ describe("AutomationScheduler", () => {
 
   test("registers runAt schedules as timers", async () => {
     const at = new Date(Date.now() + 60_000).toISOString();
+
     const delegate = createDelegate({
       listScheduledAutomations: async () => [
         schedule({ cron: undefined, id: "a1", runAt: at }),
@@ -97,9 +101,11 @@ describe("AutomationScheduler", () => {
     let now = Date.parse("2026-09-25T12:00:00.000Z");
     const runAt = new Date(now + 10).toISOString();
     const runs: string[] = [];
+
     const delegate = createDelegate({
       getDefaultTimezone: async () => {
         now = Date.parse(runAt);
+
         return "UTC";
       },
       listScheduledAutomations: async () => [
@@ -107,6 +113,7 @@ describe("AutomationScheduler", () => {
       ],
       runAutomation: async (id) => {
         runs.push(id);
+
         return { ok: true };
       },
     });
@@ -122,6 +129,7 @@ describe("AutomationScheduler", () => {
 
   test("a failed reload keeps the last good schedules, and the next good one still replaces them", async () => {
     let next: () => AutomationSchedule[] = () => [schedule({ id: "a1" })];
+
     const scheduler = new AutomationScheduler(
       createDelegate({ listScheduledAutomations: async () => next() })
     );
@@ -135,6 +143,7 @@ describe("AutomationScheduler", () => {
       next = () => {
         throw new Error("temporary network failure");
       };
+
       await expect(scheduler.reload()).rejects.toThrow();
       expect(scheduler.getStatus().scheduledJobs).toBe(1);
 
@@ -156,6 +165,7 @@ describe("AutomationScheduler", () => {
 
   test("a cron job replaced on reload fires, and only once per tick", async () => {
     const firedAt: number[] = [];
+
     const scheduler = new AutomationScheduler(
       createDelegate({
         listScheduledAutomations: async () => [
@@ -163,6 +173,7 @@ describe("AutomationScheduler", () => {
         ],
         runAutomation: async () => {
           firedAt.push(Date.now());
+
           return { ok: true };
         },
       })
@@ -186,12 +197,14 @@ describe("AutomationScheduler", () => {
     const now = Date.parse("2026-10-04T00:00:00.000Z");
     const runs: string[] = [];
     let failing = false;
+
     const scheduler = new AutomationScheduler(
       createDelegate({
         listScheduledAutomations: async () => {
           if (failing) {
             throw new Error("temporary network failure");
           }
+
           return [
             schedule({
               cron: undefined,
@@ -202,6 +215,7 @@ describe("AutomationScheduler", () => {
         },
         runAutomation: async (id) => {
           runs.push(id);
+
           return { ok: true };
         },
       }),
@@ -228,12 +242,14 @@ describe("AutomationScheduler", () => {
   test("run delegate receives the schedule's org id", async () => {
     const at = new Date(Date.now() + 20).toISOString();
     const runs: Array<{ id: string; orgId: string }> = [];
+
     const delegate = createDelegate({
       listScheduledAutomations: async () => [
         schedule({ cron: undefined, id: "a1", orgId: "org_1", runAt: at }),
       ],
       runAutomation: async (id, orgId) => {
         runs.push({ id, orgId });
+
         return { ok: true };
       },
     });
@@ -242,6 +258,7 @@ describe("AutomationScheduler", () => {
     await scheduler.start();
 
     const deadline = Date.now() + 2000;
+
     while (runs.length === 0 && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
@@ -254,6 +271,7 @@ describe("AutomationScheduler", () => {
     const at = new Date(Date.now() + 20).toISOString();
     const errors: string[] = [];
     const originalError = console.error;
+    // SAFETY: console.error accepts variadic values and this spy preserves that call shape.
     console.error = ((...args: unknown[]) => {
       errors.push(args.join(" "));
     }) as typeof console.error;
@@ -273,6 +291,7 @@ describe("AutomationScheduler", () => {
       await scheduler.start();
 
       const deadline = Date.now() + 2000;
+
       while (errors.length === 0 && Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 10));
       }

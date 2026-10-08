@@ -174,10 +174,12 @@ export function resolveProvider(
 
   const providersWithEnvKeys = USER_PROVIDER_NAMES.filter((provider) => {
     const envVar = apiKeyEnvVarForProvider(provider);
+
     return envVar && readEnvValue(env, envVar);
   });
 
   const [onlyProvider] = providersWithEnvKeys;
+
   if (providersWithEnvKeys.length === 1 && onlyProvider) {
     return onlyProvider;
   }

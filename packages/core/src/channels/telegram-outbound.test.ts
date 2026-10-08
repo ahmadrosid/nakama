@@ -2,10 +2,20 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
+import { z } from "zod";
+import type { JsonValue } from "../contract";
 import { saveTelegramConfig } from "../telegram-config";
 import { createTelegramOutboundAdapter } from "./telegram-outbound";
 
 const owner = { orgId: "org_test", profileId: "agent_test" };
+
+type JsonObject = Record<string, JsonValue>;
+
+const JsonObjectSchema = z.record(z.string(), z.json());
+
+function parseJsonObject(text: string): JsonObject {
+  return JsonObjectSchema.parse(JSON.parse(text));
+}
 
 describe("createTelegramOutboundAdapter", () => {
   let tempHome = "";
@@ -30,13 +40,15 @@ describe("createTelegramOutboundAdapter", () => {
 
   test("sends to a plain chat", async () => {
     await useTempHome(async () => {
-      const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+      const calls: Array<{ url: string; body: JsonObject }> = [];
+
       const adapter = createTelegramOutboundAdapter({
         fetchImpl: async (input, init) => {
           calls.push({
-            body: JSON.parse(String(init?.body)),
+            body: parseJsonObject(String(init?.body)),
             url: String(input),
           });
+
           return new Response("ok", { status: 200 });
         },
       });
@@ -52,10 +64,12 @@ describe("createTelegramOutboundAdapter", () => {
 
   test("sends to a topic when topicId is provided", async () => {
     await useTempHome(async () => {
-      const calls: Array<Record<string, unknown>> = [];
+      const calls: JsonObject[] = [];
+
       const adapter = createTelegramOutboundAdapter({
         fetchImpl: async (_input, init) => {
-          calls.push(JSON.parse(String(init?.body)));
+          calls.push(parseJsonObject(String(init?.body)));
+
           return new Response("ok", { status: 200 });
         },
       });
@@ -73,10 +87,12 @@ describe("createTelegramOutboundAdapter", () => {
 
   test("renders markdown as Telegram HTML when parse mode is requested", async () => {
     await useTempHome(async () => {
-      const calls: Array<Record<string, unknown>> = [];
+      const calls: JsonObject[] = [];
+
       const adapter = createTelegramOutboundAdapter({
         fetchImpl: async (_input, init) => {
-          calls.push(JSON.parse(String(init?.body)));
+          calls.push(parseJsonObject(String(init?.body)));
+
           return new Response("ok", { status: 200 });
         },
       });

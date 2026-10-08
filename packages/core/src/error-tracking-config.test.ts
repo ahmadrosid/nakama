@@ -13,6 +13,7 @@ import {
 const DSN = "https://key@errors.example.com/7";
 
 let configDir = "";
+
 let previousConfigDir: string | undefined;
 
 beforeEach(async () => {
@@ -52,6 +53,7 @@ test("the config file is written private, and readable as ini", async () => {
 
   const path = getErrorTrackingConfigPath();
   expect(await readFile(path, "utf8")).toContain(`dsn=${DSN}`);
+
   if (process.platform !== "win32") {
     expect((await stat(path)).mode.toString(8).slice(-3)).toBe("600");
   }

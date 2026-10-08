@@ -27,6 +27,7 @@ import {
 import { buildToolExecutionContext } from "./context";
 
 const PROFILE_CONTEXT = { orgId: "org_test", profileId: "profile_test" };
+
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
 describe("file builtin tools", () => {
@@ -38,15 +39,18 @@ describe("file builtin tools", () => {
       await rm(tempDir, { force: true, recursive: true });
       tempDir = "";
     }
+
     if (configDir) {
       await rm(configDir, { force: true, recursive: true });
       configDir = "";
     }
+
     if (originalConfigDir === undefined) {
       delete process.env.NAKAMA_CONFIG_DIR;
     } else {
       process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     }
+
     setDefaultFileGuardOptions({});
   });
 
@@ -68,6 +72,7 @@ describe("file builtin tools", () => {
   test("write_file preserves indentation and boundary whitespace", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-write-"));
     const content = "    caf\u00e9\r\n    second line\r\n\r\n";
+
     const result = await runWriteFile(
       { content, path: "snippet.md" },
       PROFILE_CONTEXT,
@@ -89,6 +94,7 @@ describe("file builtin tools", () => {
 
   test("write_file resolves relative paths from profile workspace", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-write-"));
+
     const result = await runWriteFile(
       { content: "relative", path: "notes.txt" },
       PROFILE_CONTEXT,
@@ -168,6 +174,7 @@ describe("file builtin tools", () => {
     await mkdir(toolsDir, { recursive: true });
 
     const targetPath = path.join(toolsDir, "echo.js");
+
     const result = await runWriteFile(
       {
         content: "export async function run() { return null; }",
@@ -511,11 +518,13 @@ describe("file builtin tools", () => {
       tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-image-"));
       const bytes = Buffer.from(hex, "hex");
       await writeFile(path.join(tempDir, "image.bin"), bytes);
+
       const result = await runReadFile(
         { limit: 1, offset: 100, path: "image.bin" },
         PROFILE_CONTEXT,
         { workspaceRoot: tempDir }
       );
+
       expect(result.images).toEqual([
         { data: bytes.toString("base64"), mediaType },
       ]);
@@ -596,6 +605,7 @@ describe("file builtin tools", () => {
       "nested\n",
       "utf8"
     );
+
     const context = {
       ...PROFILE_CONTEXT,
       forbidProfileSkillMarkdownWrites: true,
@@ -751,6 +761,7 @@ describe("file builtin tools", () => {
           })
         ).rejects.toThrow(/cognito/i);
       }
+
       expect(await readdir(tempDir)).toEqual([]);
 
       await runWriteFile(
@@ -850,6 +861,7 @@ describe("file builtin tools", () => {
           )
         ).rejects.toMatchObject({ code: "SPECIAL_FILE" });
       }
+
       await expect(
         runWriteFile(
           { content: "learned", path: "MEMORY.md::$DATA" },
@@ -907,6 +919,7 @@ describe("file builtin tools", () => {
       PROFILE_CONTEXT,
       { workspaceRoot: tempDir }
     );
+
     const second = await runWriteDocx(
       { markdown: "# Kedua", path: "artifacts/laporan.docx" },
       PROFILE_CONTEXT,
@@ -1026,6 +1039,7 @@ describe("file builtin tools", () => {
     const outsidePath = path.join(configDir, "private.txt");
     await writeFile(outsidePath, "private");
     await symlink(outsidePath, path.join(skillDir, "escape.md"));
+
     for (const target of [
       outsidePath,
       path.join(skillDir, "escape.md"),
@@ -1185,10 +1199,12 @@ describe("file builtin tools", () => {
   test("a session with no app user writes artifacts where it always did", async () => {
     configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-appuser-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
+
     const profileRoot = getProfileSoulDir(
       PROFILE_CONTEXT.orgId,
       PROFILE_CONTEXT.profileId
     );
+
     const context = buildToolExecutionContext(PROFILE_CONTEXT);
 
     const result = await runWriteDocx(

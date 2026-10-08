@@ -65,6 +65,7 @@ const SPENT_PAIRING_SECRET = {
   pairingCode: null,
   pairingCodeExpiresAt: null,
 };
+
 export const DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION = true;
 
 export interface WhatsAppConfigFile {
@@ -112,10 +113,12 @@ export function getWhatsAppConfigPath(
   orgId: WhatsAppConfigScope = null
 ): string {
   const path = join(getWhatsAppConfigDir(orgId), "config.ini");
+
   if (isChannelOwner(orgId)) {
     assertChannelPath(path);
     assertChannelPath(`${path}.tmp`);
   }
+
   return path;
 }
 
@@ -151,6 +154,7 @@ function maskPhoneNumberFromJid(jid: string | null): string | null {
   }
 
   const digits = whatsAppUserDigits(jid);
+
   return digits ? maskPhoneNumber(digits) : null;
 }
 
@@ -187,6 +191,7 @@ function isSameWhatsAppUserJid(left: string, right: string): boolean {
 
   const leftDigits = whatsAppUserDigits(left);
   const rightDigits = whatsAppUserDigits(right);
+
   return Boolean(leftDigits && leftDigits === rightDigits);
 }
 
@@ -196,7 +201,7 @@ export function isWhatsAppUserAuthorized(
     allowedPhones?: string[];
   }
 ): boolean {
-  const jids = typeof jid === "string" ? [jid] : jid;
+  const jids = Array.isArray(jid) ? jid : [jid];
   const allowedPhones = config.allowedPhones ?? [];
 
   return jids.some((entry) => {
@@ -215,6 +220,7 @@ export function isWhatsAppUserAuthorized(
     }
 
     const digits = whatsAppUserDigits(entry);
+
     return Boolean(digits && allowedPhones.includes(digits));
   });
 }
@@ -241,13 +247,16 @@ export async function rememberWhatsAppPairedIdentities(
   const phoneJid = jids.find(
     (jid) => whatsAppJidServer(jid) === "s.whatsapp.net"
   );
+
   const lidJid = jids.find((jid) => whatsAppJidServer(jid) === "lid");
+
   const nextPairedJid =
     phoneJid &&
     config.pairedJid &&
     isSameWhatsAppUserJid(phoneJid, config.pairedJid)
       ? phoneJid
       : config.pairedJid;
+
   const nextPairedLid = lidJid ?? config.pairedLid;
 
   if (
@@ -285,6 +294,7 @@ export async function loadWhatsAppConfigFile(
   const pairedLid = values.paired_lid?.trim() || null;
   const outboundPort = values.outbound_port?.trim() || null;
   const outboundToken = values.outbound_token?.trim() || null;
+
   const requireGroupMention = parseIniBoolean(
     values.require_group_mention,
     DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION
@@ -427,10 +437,15 @@ function resolveProfileId(
   );
 }
 
+interface PairingSecret {
+  pairingCode: string | null;
+  pairingCodeExpiresAt: string | null;
+}
+
 function resolvePairingSecret(
   existing: WhatsAppConfigFile | null,
   pairedJid: string | null
-): { pairingCode: string | null; pairingCodeExpiresAt: string | null } {
+): PairingSecret {
   if (pairedJid) {
     return SPENT_PAIRING_SECRET;
   }
@@ -443,6 +458,7 @@ function resolvePairingSecret(
   }
 
   const { code, expiresAt } = createPairingCodeSecret();
+
   return { pairingCode: code, pairingCodeExpiresAt: expiresAt };
 }
 
@@ -494,10 +510,13 @@ export async function saveWhatsAppConfig(
 ): Promise<WhatsAppSettingsPublic> {
   const existing = await loadWhatsAppConfigFile(orgId);
   const next = buildSavedWhatsAppConfig(input, existing);
+
   if (isChannelOwner(orgId)) {
     next.profileId = orgId.profileId;
   }
+
   await writeWhatsAppConfigFile(next, orgId);
+
   return toWhatsAppSettingsPublic(next);
 }
 
@@ -526,6 +545,7 @@ export async function resetWhatsAppSessionForReconnect(
   }
 
   const qrPath = getWhatsAppQrCodePath(orgId);
+
   if (await pathExists(qrPath)) {
     await removeFile(qrPath);
   }
@@ -534,6 +554,7 @@ export async function resetWhatsAppSessionForReconnect(
     await resetChannelConversationState("whatsapp", orgId);
     await releaseChannelClaims("whatsapp", orgId);
   }
+
   const next: WhatsAppConfigFile = {
     ...existing,
     outboundPort: null,
@@ -544,6 +565,7 @@ export async function resetWhatsAppSessionForReconnect(
   };
 
   await writeWhatsAppConfigFile(next, orgId);
+
   return toWhatsAppSettingsPublic(next);
 }
 
@@ -559,6 +581,7 @@ export async function regenerateWhatsAppPairingCode(
   }
 
   const { code, expiresAt } = createPairingCodeSecret();
+
   const next: WhatsAppConfigFile = {
     ...existing,
     pairingCode: code,
@@ -566,6 +589,7 @@ export async function regenerateWhatsAppPairingCode(
   };
 
   await writeWhatsAppConfigFile(next, orgId);
+
   return toWhatsAppSettingsPublic(next);
 }
 
@@ -580,6 +604,7 @@ export async function verifyAndPairWhatsAppUser(
   orgId: WhatsAppConfigScope = null
 ): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
   const configDir = getWhatsAppConfigDir(orgId);
+
   const failure = {
     message: pairingFailureMessage("WhatsApp"),
     ok: false,
@@ -597,7 +622,12 @@ export async function verifyAndPairWhatsAppUser(
         return { message: "This number is already linked.", ok: true };
       }
 
-      const expected = config.pairingCode as string;
+      const expected = config.pairingCode;
+
+      if (!expected) {
+        return failure;
+      }
+
       const budget = getPairingAttemptBudget(configDir, expected);
 
       if (isPairingAttemptBlocked(budget)) {
@@ -613,12 +643,14 @@ export async function verifyAndPairWhatsAppUser(
             orgId
           );
         }
+
         return failure;
       }
 
       const isLid = jid.endsWith("@lid");
       const phoneFromJid = isLid ? "" : whatsAppUserDigits(jid);
       const pairedLid = isLid ? jid : config.pairedLid;
+
       const pairedJid = isLid
         ? (config.pairedJid ??
           (config.phoneNumber ? phoneToWhatsAppJid(config.phoneNumber) : null))
@@ -644,6 +676,7 @@ export async function verifyAndPairWhatsAppUser(
     if (error instanceof ChannelConfigBusyError) {
       return failure;
     }
+
     throw error;
   }
 }
@@ -669,9 +702,11 @@ export async function syncWhatsAppOwnerPairing(
       normalizeWhatsAppUserJid(options.ownerJid)
     );
   }
+
   const isPhoneJid = whatsAppJidServer(options.ownerJid) === "s.whatsapp.net";
   const ownerPhone = isPhoneJid ? whatsAppUserDigits(options.ownerJid) : "";
   const ownerLid = options.ownerLid?.trim() || null;
+
   const next: WhatsAppConfigFile = {
     ...config,
     pairedJid: config.pairedJid ?? options.ownerJid,
@@ -757,6 +792,7 @@ function parseIniBoolean(
 /** Configured orgs are enumerated for worker recovery; credentials never fall back across orgs. */
 export async function listWhatsAppConfigOrgIds(): Promise<string[]> {
   const configured: string[] = [];
+
   for (const orgId of await readDirectoryOrEmpty(
     join(getUserConfigDir(), "orgs")
   )) {
@@ -764,6 +800,7 @@ export async function listWhatsAppConfigOrgIds(): Promise<string[]> {
       configured.push(orgId);
     }
   }
+
   return configured;
 }
 
@@ -773,6 +810,7 @@ export async function saveWhatsAppOutboundPort(
   orgId: WhatsAppConfigScope = null
 ): Promise<void> {
   const config = await loadWhatsAppConfigFile(orgId);
+
   if (config) {
     await writeWhatsAppConfigFile(
       { ...config, outboundPort: String(port) },
