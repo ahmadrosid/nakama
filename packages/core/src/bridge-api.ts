@@ -20,6 +20,9 @@ const BridgeOrganizationSchema = z.object({
 
 const BridgeProfileSchema = z.object({
   id: z.string(),
+  isDefault: z.boolean().optional(),
+  isSuper: z.boolean().optional(),
+  model: z.string().nullable().optional(),
   name: z.string(),
 });
 
@@ -35,7 +38,11 @@ export interface BridgeUserOrgSummary
   extends Pick<UserOrgSummary, "id" | "name" | "role" | "slug"> {}
 
 export interface BridgeProfileSummary
-  extends Pick<ProfileSummary, "id" | "name"> {}
+  extends Pick<ProfileSummary, "id" | "name"> {
+  isDefault?: boolean;
+  isSuper?: boolean;
+  model?: string | null;
+}
 
 export interface BridgeUserOrgsResponse {
   orgs: BridgeUserOrgSummary[];
