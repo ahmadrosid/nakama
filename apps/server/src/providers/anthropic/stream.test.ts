@@ -12,7 +12,7 @@ describe("Anthropic provider streaming", () => {
   test("streams Sonnet 5.5 with adaptive binding controls", async () => {
     const provider = createAnthropicProvider({
       apiKey: "sk-ant-test",
-      fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
         expect(new Headers(init?.headers).get("anthropic-beta")).toBe(
           "thinking-binding-controls-2026-08-01"
         );
@@ -24,6 +24,7 @@ describe("Anthropic provider streaming", () => {
             type: "adaptive",
           },
         });
+
         return new Response(
           streamFromChunks([
             'event: message_start\r\ndata:{"type":"message_start","message":{"usage":{"input_tokens":4}}}\r\n\r\n',
@@ -32,7 +33,7 @@ describe("Anthropic provider streaming", () => {
           ]),
           { headers: { "Content-Type": "text/event-stream" } }
         );
-      }) as typeof fetch,
+      },
       model: "claude-sonnet-5-5",
     });
 
@@ -49,7 +50,7 @@ describe("Anthropic provider streaming", () => {
   test("sends Opus 5.5 binding controls on streamed requests", async () => {
     const provider = createAnthropicProvider({
       apiKey: "sk-ant-test",
-      fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
         expect(new Headers(init?.headers).get("anthropic-beta")).toBe(
           "thinking-binding-controls-2026-08-01"
         );
@@ -57,6 +58,7 @@ describe("Anthropic provider streaming", () => {
           block_binding: { prefix_mismatch_behavior: "drop_block" },
           type: "adaptive",
         });
+
         return new Response(
           streamFromChunks([
             'event: message_start\r\ndata:{"type":"message_start","message":{"usage":{"input_tokens":4}}}\r\n\r\n',
@@ -65,13 +67,15 @@ describe("Anthropic provider streaming", () => {
           ]),
           { headers: { "Content-Type": "text/event-stream" } }
         );
-      }) as typeof fetch,
+      },
       model: "claude-opus-5-5",
     });
+
     const result = await provider.streamChat(
       { messages: [{ content: "Hello", role: "user" }], system: "Be helpful." },
       { onChunk: () => undefined }
     );
+
     expect(result.content).toBe("OK");
   });
 
@@ -91,7 +95,7 @@ describe("Anthropic provider streaming", () => {
       );
     });
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = fetchMock;
 
     const provider = createAnthropicProvider({
       apiKey: "sk-ant-test",
@@ -99,6 +103,7 @@ describe("Anthropic provider streaming", () => {
     });
 
     const chunks: string[] = [];
+
     const result = await provider.streamChat(
       {
         messages: [{ content: "Say hello", role: "user" }],
@@ -135,7 +140,7 @@ describe("Anthropic cache buckets", () => {
         )
     );
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = fetchMock;
 
     const provider = createAnthropicProvider({
       apiKey: "sk-ant-test",

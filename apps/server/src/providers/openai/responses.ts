@@ -5,6 +5,7 @@ import type {
   GenerateChatInput,
   LlmToolDefinition,
   StreamChatHandlers,
+  ThinkingEffort,
   ToolCall,
 } from "@nakama/core";
 import {
@@ -13,6 +14,7 @@ import {
   toOpenAIResponsesUserContent,
   WEB_SEARCH_TOOL_NAME,
 } from "@nakama/core";
+import { z } from "zod";
 import {
   buildTokenUsage,
   formatHttpErrorBody,
@@ -23,7 +25,90 @@ import {
 } from "../shared";
 import { openAIModelSupportsThinking } from "./thinking";
 
-type ResponseItem = Record<string, unknown>;
+const responseContentPartSchema = z
+  .object({
+    text: z.string().optional(),
+    type: z.string().optional(),
+  })
+  .passthrough();
+
+const responseItemSchema = z
+  .object({
+    action: z.unknown().optional(),
+    arguments: z.string().optional(),
+    call_id: z.string().optional(),
+    content: z.array(responseContentPartSchema).optional(),
+    id: z.string().optional(),
+    name: z.string().optional(),
+    summary: z.array(responseContentPartSchema).optional(),
+    type: z.string(),
+  })
+  .passthrough();
+
+const responsePayloadSchema = z.object({
+  output: z.array(responseItemSchema).optional(),
+  usage: z
+    .object({
+      input_tokens: z.number().optional(),
+      output_tokens: z.number().optional(),
+      total_tokens: z.number().optional(),
+    })
+    .optional(),
+});
+
+const responseEventSchema = z.object({
+  delta: z.string().optional(),
+  item: responseItemSchema.optional(),
+  response: z
+    .object({
+      error: z.object({ message: z.unknown().optional() }).optional(),
+      incomplete_details: z
+        .object({ reason: z.unknown().optional() })
+        .optional(),
+      output: z.array(responseItemSchema).optional(),
+      usage: responsePayloadSchema.shape.usage,
+    })
+    .optional(),
+  type: z.string(),
+});
+
+type ResponseItem = z.infer<typeof responseItemSchema>;
+
+type ResponsesContentPart =
+  | { text: string; type: "input_text" }
+  | { image_url: string; type: "input_image" }
+  | { file_data: string; filename: string; type: "input_file" };
+
+type ResponsesInputItem =
+  | { content: string | ResponsesContentPart[]; role: "user"; type?: "message" }
+  | {
+      content: Array<{ text: string; type: "output_text" }>;
+      role: "assistant";
+      type: "message";
+    }
+  | { arguments: string; call_id: string; name: string; type: "function_call" }
+  | { call_id: string; output: string; type: "function_call_output" }
+  | ResponseItem;
+
+type ResponsesTool =
+  | { type: "web_search" }
+  | {
+      description: string;
+      name: string;
+      parameters: LlmToolDefinition["parameters"];
+      type: "function";
+    };
+
+type OpenAIResponsesRequestBody = {
+  input: ResponsesInputItem[];
+  instructions: string;
+  model: string;
+  store: false;
+  tools?: ResponsesTool[];
+  reasoning?: { effort: ThinkingEffort; summary: "auto" };
+  text?: { format: { type: "json_object" } };
+  stream?: true;
+};
 
 const DEFAULT_OPENAI_RESPONSES_BASE_URL = "https://api.openai.com/v1";
 
@@ -49,6 +134,7 @@ export async function generateOpenAIResponsesChat(options: {
 }): Promise<ChatCompletionResult> {
   const label = options.label ?? "OpenAI";
   const baseUrl = options.baseUrl ?? DEFAULT_OPENAI_RESPONSES_BASE_URL;
+
   const body = await buildResponsesRequestBody(
     options.model,
     options.input,
@@ -57,6 +143,7 @@ export async function generateOpenAIResponsesChat(options: {
     options.supportsThinking,
     options.jsonOutput
   );
+
   const response = await fetchWithoutIdleTimeout(`${baseUrl}/responses`, {
     body: JSON.stringify(body),
     headers: {
@@ -82,14 +169,8 @@ export async function generateOpenAIResponsesChat(options: {
     return readOpenAIResponsesStream(response.body, options.handlers);
   }
 
-  const payload = (await response.json()) as {
-    output?: ResponseItem[];
-    usage?: {
-      input_tokens?: number;
-      output_tokens?: number;
-      total_tokens?: number;
-    };
-  };
+  const payload = responsePayloadSchema.parse(await response.json());
+
   return parseResponsesOutput(
     payload.output ?? [],
     options.handlers,
@@ -104,27 +185,43 @@ async function buildResponsesRequestBody(
   customModels?: CustomModelEntry[],
   supportsThinking?: boolean,
   jsonOutput?: boolean
-) {
+): Promise<OpenAIResponsesRequestBody> {
   const tools = buildResponsesTools(
     input.tools,
     input.providerOptions?.webSearch ?? false
   );
 
-  return {
+  const body: OpenAIResponsesRequestBody = {
     input: await toResponsesInput(input.messages),
     instructions: input.system,
     model,
     store: false,
-    ...(tools.length > 0 ? { tools } : {}),
-    ...buildOpenAIReasoningRequest(
-      model,
-      input,
-      customModels,
-      supportsThinking
-    ),
-    ...(jsonOutput ? { text: { format: { type: "json_object" } } } : {}),
-    ...(stream ? { stream: true } : {}),
   };
+
+  if (tools.length > 0) {
+    body.tools = tools;
+  }
+
+  const reasoning = buildOpenAIReasoningRequest(
+    model,
+    input,
+    customModels,
+    supportsThinking
+  );
+
+  if (reasoning) {
+    body.reasoning = reasoning;
+  }
+
+  if (jsonOutput) {
+    body.text = { format: { type: "json_object" } };
+  }
+
+  if (stream) {
+    body.stream = true;
+  }
+
+  return body;
 }
 
 function buildOpenAIReasoningRequest(
@@ -132,28 +229,29 @@ function buildOpenAIReasoningRequest(
   input: GenerateChatInput,
   customModels?: CustomModelEntry[],
   supportsThinking?: boolean
-): Record<string, unknown> {
+): { effort: ThinkingEffort; summary: "auto" } | undefined {
   const modelSupportsThinking =
     supportsThinking ?? openAIModelSupportsThinking(model, customModels);
 
   if (!(input.providerOptions?.thinking?.enabled && modelSupportsThinking)) {
-    return {};
+    return;
   }
 
   return {
-    reasoning: {
-      effort: normalizeThinkingEffort(input.providerOptions.thinking.effort),
-      summary: "auto",
-    },
+    effort: normalizeThinkingEffort(input.providerOptions.thinking.effort),
+    summary: "auto",
   };
 }
 
 function buildResponsesTools(
   tools: LlmToolDefinition[] | undefined,
   webSearch: boolean
-) {
-  const hostedTools = webSearch ? [{ type: "web_search" }] : [];
-  const functionTools = (tools ?? []).map((tool) => ({
+): ResponsesTool[] {
+  const hostedTools: ResponsesTool[] = webSearch
+    ? [{ type: "web_search" }]
+    : [];
+
+  const functionTools: ResponsesTool[] = (tools ?? []).map((tool) => ({
     description: tool.description,
     name: tool.name,
     parameters: tool.parameters,
@@ -165,8 +263,8 @@ function buildResponsesTools(
 
 export async function toResponsesInput(
   messages: ChatMessage[]
-): Promise<unknown[]> {
-  const input: unknown[] = [];
+): Promise<ResponsesInputItem[]> {
+  const input: ResponsesInputItem[] = [];
 
   for (const message of messages) {
     if (message.role === "user") {
@@ -187,8 +285,10 @@ export async function toResponsesInput(
 
 async function toResponsesUserInput(
   message: Extract<ChatMessage, { role: "user" }>
-): Promise<unknown> {
-  const content = await toOpenAIResponsesUserContent(message.content);
+): Promise<Extract<ResponsesInputItem, { role: "user" }>> {
+  const convertedContent = await toOpenAIResponsesUserContent(message.content);
+  // SAFETY: Core emits only input_text, input_image, and input_file parts here.
+  const content = convertedContent as string | ResponsesContentPart[];
 
   if (isMessageContentPartArray(message.content)) {
     return {
@@ -206,17 +306,22 @@ async function toResponsesUserInput(
 
 function toResponsesAssistantInput(
   message: Extract<ChatMessage, { role: "assistant" }>
-): unknown[] {
-  const input: unknown[] = [];
-  const providerContent = message.providerContent?.filter(
-    (part) => typeof readRecord(part).type === "string"
-  );
+): ResponsesInputItem[] {
+  const input: ResponsesInputItem[] = [];
+
+  const providerContent = message.providerContent?.flatMap((part) => {
+    const parsed = responseItemSchema.safeParse(part);
+
+    return parsed.success ? [parsed.data] : [];
+  });
 
   if (message.toolCalls?.length) {
     if (providerContent?.length) {
       // providerContent already carries the assistant message item; pushing
       // message.content as well would replay the same text twice.
-      input.push(...providerContent.filter(isNonFunctionCallProviderItem));
+      input.push(
+        ...providerContent.filter((item) => item.type !== "function_call")
+      );
     } else if (message.content.trim()) {
       input.push(toResponsesAssistantTextMessage(message.content));
     }
@@ -235,6 +340,7 @@ function toResponsesAssistantInput(
 
   if (providerContent?.length) {
     input.push(...providerContent);
+
     return input;
   }
 
@@ -245,7 +351,9 @@ function toResponsesAssistantInput(
   return input;
 }
 
-function toResponsesAssistantTextMessage(content: string) {
+function toResponsesAssistantTextMessage(
+  content: string
+): Extract<ResponsesInputItem, { role: "assistant" }> {
   return {
     content: [{ text: content, type: "output_text" }],
     role: "assistant",
@@ -253,14 +361,9 @@ function toResponsesAssistantTextMessage(content: string) {
   };
 }
 
-function isNonFunctionCallProviderItem(item: unknown): item is ResponseItem {
-  const record = readRecord(item);
-  return "type" in record && record.type !== "function_call";
-}
-
 function toResponsesToolOutput(
   message: Extract<ChatMessage, { role: "tool" }>
-) {
+): Extract<ResponsesInputItem, { type: "function_call_output" }> {
   return {
     call_id: message.toolCallId,
     output: message.content,
@@ -294,19 +397,9 @@ function parseResponsesOutput(
     }
 
     if (item.type === "message") {
-      const content = item.content;
-
-      if (Array.isArray(content)) {
-        for (const block of content) {
-          if (
-            typeof block === "object" &&
-            block !== null &&
-            "type" in block &&
-            block.type === "output_text" &&
-            typeof block.text === "string"
-          ) {
-            textParts.push(block.text);
-          }
+      for (const block of item.content ?? []) {
+        if (block.type === "output_text" && block.text) {
+          textParts.push(block.text);
         }
       }
     }
@@ -327,6 +420,7 @@ function parseResponsesOutput(
   const content = textParts.join("").trim();
   const thinking = thinkingParts.join("\n\n").trim();
   const providerContent = output.length > 0 ? output : undefined;
+
   const normalizedUsage = buildTokenUsage({
     inputTokens: usage?.input_tokens,
     outputTokens: usage?.output_tokens,
@@ -341,37 +435,44 @@ function parseResponsesOutput(
     throw new Error("OpenAI returned an empty response.");
   }
 
-  return {
-    assistantMessage: {
-      content,
-      role: "assistant",
-      ...(thinking ? { thinking } : {}),
-      ...(toolCalls.length > 0 ? { toolCalls } : {}),
-      ...(providerContent ? { providerContent } : {}),
-    },
+  const assistantMessage: Extract<ChatMessage, { role: "assistant" }> = {
+    content,
+    role: "assistant",
+  };
+
+  if (thinking) {
+    assistantMessage.thinking = thinking;
+  }
+
+  if (toolCalls.length > 0) {
+    assistantMessage.toolCalls = toolCalls;
+  }
+
+  if (providerContent) {
+    assistantMessage.providerContent = providerContent;
+  }
+
+  const result: ChatCompletionResult = {
+    assistantMessage,
     content,
     toolCalls,
-    ...(normalizedUsage ? { usage: normalizedUsage } : {}),
   };
+
+  if (normalizedUsage) {
+    result.usage = normalizedUsage;
+  }
+
+  return result;
 }
 
 function extractReasoningSummaryText(item: ResponseItem): string | undefined {
-  const summary = item.summary;
-
-  if (!Array.isArray(summary)) {
-    return;
-  }
+  const summary = item.summary ?? [];
 
   const parts: string[] = [];
 
   for (const entry of summary) {
-    if (
-      typeof entry === "object" &&
-      entry !== null &&
-      "text" in entry &&
-      typeof (entry as { text?: unknown }).text === "string"
-    ) {
-      const text = (entry as { text: string }).text.trim();
+    if (entry.text) {
+      const text = entry.text.trim();
 
       if (text) {
         parts.push(text);
@@ -380,6 +481,7 @@ function extractReasoningSummaryText(item: ResponseItem): string | undefined {
   }
 
   const combined = parts.join("\n\n").trim();
+
   return combined || undefined;
 }
 
@@ -413,37 +515,35 @@ async function readOpenAIResponsesStream(
   const outputIndex = new Map<string, ResponseItem>();
 
   await readSseEvents(body, ({ data }) => {
-    const payload = JSON.parse(data) as Record<string, unknown>;
-    const type = String(payload.type ?? "");
-    const responseRecord = readRecord(payload.response);
+    const payload = responseEventSchema.parse(JSON.parse(data));
+    const type = payload.type;
+    const responseRecord = payload.response;
+
     if (type === "response.failed") {
       throw new Error(
-        String(
-          readRecord(responseRecord.error).message ?? "OpenAI response failed."
-        )
+        String(responseRecord?.error?.message ?? "OpenAI response failed.")
       );
     }
+
     if (type === "response.incomplete") {
       throw new Error(
-        `OpenAI response incomplete: ${String(readRecord(responseRecord.incomplete_details).reason ?? "unknown reason")}`
+        `OpenAI response incomplete: ${String(responseRecord?.incomplete_details?.reason ?? "unknown reason")}`
       );
     }
+
     if (
       type === "response.completed" &&
       output.length === 0 &&
-      Array.isArray(responseRecord.output)
+      responseRecord?.output
     ) {
       output.push(...responseRecord.output);
     }
+
     usage =
       buildTokenUsage({
-        inputTokens:
-          responseRecord.usage && readRecord(responseRecord.usage).input_tokens,
-        outputTokens:
-          responseRecord.usage &&
-          readRecord(responseRecord.usage).output_tokens,
-        totalTokens:
-          responseRecord.usage && readRecord(responseRecord.usage).total_tokens,
+        inputTokens: responseRecord?.usage?.input_tokens,
+        outputTokens: responseRecord?.usage?.output_tokens,
+        totalTokens: responseRecord?.usage?.total_tokens,
       }) ?? usage;
 
     if (type === "response.output_text.delta") {
@@ -459,7 +559,12 @@ async function readOpenAIResponsesStream(
     }
 
     if (type === "response.output_item.added") {
-      const item = readRecord(payload.item);
+      const item = payload.item;
+
+      if (!item) {
+        return;
+      }
+
       const itemId = String(item.id ?? "");
 
       if (itemId) {
@@ -468,7 +573,12 @@ async function readOpenAIResponsesStream(
     }
 
     if (type === "response.output_item.done") {
-      const item = readRecord(payload.item);
+      const item = payload.item;
+
+      if (!item) {
+        return;
+      }
+
       const itemId = String(item.id ?? "");
       output.push(item);
 
@@ -489,15 +599,26 @@ async function readOpenAIResponsesStream(
   const parsed = parseResponsesOutput(output, handlers, undefined, content);
 
   const thinkingText = thinking.trim() || parsed.assistantMessage.thinking;
+  const streamContent = content.trim() || parsed.content;
 
-  return {
-    ...parsed,
-    content: content.trim() || parsed.content,
-    ...(usage ? { usage } : {}),
-    assistantMessage: {
-      ...parsed.assistantMessage,
-      content: content.trim() || parsed.content,
-      ...(thinkingText ? { thinking: thinkingText } : {}),
-    },
+  const assistantMessage: Extract<ChatMessage, { role: "assistant" }> = {
+    ...parsed.assistantMessage,
+    content: streamContent,
   };
+
+  if (thinkingText) {
+    assistantMessage.thinking = thinkingText;
+  }
+
+  const result: ChatCompletionResult = {
+    ...parsed,
+    assistantMessage,
+    content: streamContent,
+  };
+
+  if (usage) {
+    result.usage = usage;
+  }
+
+  return result;
 }
