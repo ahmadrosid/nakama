@@ -3,12 +3,14 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "./actions";
+import { parseWorkflowRecord } from "./workflow-ops";
 import { WorkflowService } from "./workflow-service";
 
 test("save action finishes updating before closing its database", async () => {
   const dir = await mkdtemp(join(tmpdir(), "workflow-save-"));
   const databasePath = join(dir, "data.sqlite");
   const service = new WorkflowService(databasePath, "org_a");
+
   try {
     service.db.exec(
       await readFile(
@@ -16,20 +18,32 @@ test("save action finishes updating before closing its database", async () => {
         "utf8"
       )
     );
+
     const context = {
       actionKey: "create_workflow",
+      actor: { id: "admin", role: "admin" as const },
+      apiVersion: 1 as const,
       databasePath,
-      host: async ({ op }: Record<string, unknown>) =>
+      dataDir: dir,
+      host: async ({ op }: { op: string }) =>
         op === "profiles" ? [{ id: "profile", isDefault: true }] : [],
+      invocationId: "test",
       orgId: "org_a",
-    } as Parameters<typeof run>[1];
-    const created = (await run(
-      {
-        name: "Original",
-        steps: [{ id: "summary", kind: "summarize", prompt: "Summarize" }],
-      },
-      context
-    )) as { id: string };
+      pluginId: "workflows",
+      pluginVersion: "1.0.1",
+    };
+
+    // SAFETY: The mock returns the profile and empty tool list used by both tested actions.
+    const created = parseWorkflowRecord(
+      await run(
+        {
+          name: "Original",
+          steps: [{ id: "summary", kind: "summarize", prompt: "Summarize" }],
+        },
+        context
+      )
+    );
+
     await run(
       { name: "Updated", workflowId: created.id },
       {
@@ -55,6 +69,7 @@ test("database prevents overlapping subprocess runs and imports transactionally"
     )
   );
   const second = new WorkflowService(join(dir, "data.sqlite"), "org_a");
+
   try {
     const workflow = await first.create(
       {
@@ -64,6 +79,7 @@ test("database prevents overlapping subprocess runs and imports transactionally"
       "profile",
       new Set()
     );
+
     const run = await first.createRun(workflow.id, {});
     await expect(second.createRun(workflow.id, {})).rejects.toThrow();
     await expect(second.delete(workflow.id)).rejects.toThrow();
@@ -107,11 +123,13 @@ test("create and update reject malformed tool inputs without persisting changes"
     )
   );
   const allowedTools = new Set(["web_fetch"]);
+
   const summary = {
     id: "summary",
     kind: "summarize",
     prompt: "Summarize",
   } as const;
+
   const validSteps = [
     {
       id: "fetch",
@@ -121,6 +139,7 @@ test("create and update reject malformed tool inputs without persisting changes"
     } as const,
     summary,
   ];
+
   try {
     for (const fields of [
       { args: { url: "https://example.com" } },
@@ -131,25 +150,30 @@ test("create and update reject malformed tool inputs without persisting changes"
       { input: 42 },
       { input: false },
     ]) {
+      // SAFETY: Fixed malformed fixtures exercise service.create's runtime validator.
       const steps = [
         { id: "fetch", kind: "tool", tool: "web_fetch", ...fields },
         summary,
       ] as never;
+
       await expect(
         service.create({ name: "Invalid", steps }, "profile", allowedTools)
       ).rejects.toThrow();
       expect(await service.listForOrg()).toEqual([]);
+
       const workflow = await service.create(
         { name: "Valid", steps: validSteps },
         "profile",
         allowedTools
       );
+
       await expect(
         service.update(workflow.id, { steps }, allowedTools)
       ).rejects.toThrow();
       expect((await service.get(workflow.id))?.steps).toEqual(validSteps);
       await service.delete(workflow.id);
     }
+
     const workflow = await service.create(
       {
         name: "No arguments",
@@ -161,6 +185,7 @@ test("create and update reject malformed tool inputs without persisting changes"
       "profile",
       allowedTools
     );
+
     expect((await service.get(workflow.id))?.steps[0]).toEqual({
       id: "fetch",
       input: {},

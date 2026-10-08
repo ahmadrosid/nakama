@@ -1,5 +1,13 @@
 import type * as ReactType from "react";
-import { type Context, errorText, type Item } from "./ui-context";
+import {
+  type Context,
+  errorText,
+  type Item,
+  readItem,
+  readItemAction,
+  readItemList,
+} from "./ui-context";
+
 export function useCollection(
   ctx: Context,
   agentId: string,
@@ -7,6 +15,7 @@ export function useCollection(
 ) {
   const React = ctx.React;
   const memory = kind === "memory";
+
   const actions = memory
     ? {
         list: "list_memories",
@@ -22,15 +31,19 @@ export function useCollection(
         save: "add_document",
         search: "search_knowledge",
       };
+
   const [visible, setVisible] = React.useState(
     typeof document === "undefined" || !document.hidden
   );
+
   React.useEffect(() => {
     if (typeof document === "undefined") {
       return;
     }
+
     const changed = () => setVisible(!document.hidden);
     document.addEventListener("visibilitychange", changed);
+
     return () => document.removeEventListener("visibilitychange", changed);
   }, []);
   const [items, setItems] = React.useState<Item[]>([]);
@@ -52,6 +65,7 @@ export function useCollection(
   const [readingFile, setReadingFile] = React.useState(false);
   React.useEffect(() => {
     alive.current = true;
+
     return () => {
       alive.current = false;
     };
@@ -69,13 +83,16 @@ export function useCollection(
         if (!current || ctx.signal.aborted) {
           return;
         }
-        const result = value as { items: Item[]; hasMore?: boolean };
+
+        const result = readItemList(value);
         setItems(result.items);
         setHasMore(!!result.hasMore);
       })
       .catch((reason) => {
         if (current) {
-          setError(errorText(reason));
+          setError(
+            errorText(reason instanceof Error ? reason : "Request failed")
+          );
           setItems([]);
         }
       })
@@ -84,6 +101,7 @@ export function useCollection(
           setLoading(false);
         }
       });
+
     return () => {
       current = false;
     };
@@ -92,22 +110,30 @@ export function useCollection(
     if (!visible || memory || activeQuery || error || busy || loading) {
       return;
     }
+
     const pending = items.find((item) =>
       ["pending", "submitting"].includes(item.state)
     );
+
     if (!pending) {
       return;
     }
+
     let current = true;
+
     const timer = setTimeout(async () => {
       if (ctx.signal.aborted) {
         return;
       }
+
       try {
-        const item = (await ctx.host.call("get_document", {
-          agentId,
-          id: pending.id,
-        })) as Item;
+        const item = readItem(
+          await ctx.host.call("get_document", {
+            agentId,
+            id: pending.id,
+          })
+        );
+
         if (current) {
           setItems((previous) =>
             previous.map((row) => (row.id === item.id ? item : row))
@@ -119,35 +145,46 @@ export function useCollection(
         }
       }
     }, 5000);
+
     return () => {
       current = false;
       clearTimeout(timer);
     };
   }, [items, agentId, memory, activeQuery, error, busy, loading, visible]);
+
   async function save(event: ReactType.FormEvent) {
     event.preventDefault();
+
     if (busy || readingFile) {
       return;
     }
+
     setBusy(true);
     setError("");
+
     const payload = JSON.stringify({
       agentId,
       content,
       source: source || undefined,
       title: memory ? undefined : title,
     });
+
     if (submission.current.payload !== payload) {
       submission.current = { key: crypto.randomUUID(), payload };
     }
+
     try {
-      const result = (await ctx.host.call(actions.save, {
-        ...JSON.parse(payload),
-        submissionKey: submission.current.key,
-      })) as Item;
+      const result = readItem(
+        await ctx.host.call(actions.save, {
+          ...JSON.parse(payload),
+          submissionKey: submission.current.key,
+        })
+      );
+
       if (!alive.current || ctx.signal.aborted) {
         return;
       }
+
       if (["unknown", "submitting"].includes(result.state)) {
         setError(
           result.message ??
@@ -160,13 +197,16 @@ export function useCollection(
         setSource("");
         submission.current = { key: "", payload: "" };
       }
+
       setActiveQuery("");
       setQuery("");
       setPage(1);
       setRevision((value) => value + 1);
     } catch (reason) {
       if (alive.current) {
-        setError(errorText(reason));
+        setError(
+          errorText(reason instanceof Error ? reason : "Request failed")
+        );
       }
     } finally {
       if (alive.current) {
@@ -174,22 +214,35 @@ export function useCollection(
       }
     }
   }
+
   async function act(item: Item, remove: boolean) {
     if (busy || readingFile) {
       return;
     }
+
     setBusy(true);
     setError("");
+
     try {
       const action = remove ? actions.remove : actions.refresh;
-      const result = (await ctx.host.call(action, {
-        agentId,
-        id: item.id,
-      })) as Item & { items?: Item[] };
+
+      const result = readItemAction(
+        await ctx.host.call(action, {
+          agentId,
+          id: item.id,
+        })
+      );
+
       if (!alive.current || ctx.signal.aborted) {
         return;
       }
-      const updated = result.items?.[0] ?? result;
+
+      const updated = result.items?.[0] ?? result.item;
+
+      if (!updated) {
+        throw new Error("The action returned no item.");
+      }
+
       setItems((previous) =>
         previous.flatMap((row) =>
           row.id === item.id
@@ -199,12 +252,15 @@ export function useCollection(
             : [row]
         )
       );
+
       if (updated.message) {
         setError(updated.message);
       }
     } catch (reason) {
       if (alive.current) {
-        setError(errorText(reason));
+        setError(
+          errorText(reason instanceof Error ? reason : "Request failed")
+        );
       }
     } finally {
       if (alive.current) {
@@ -212,20 +268,27 @@ export function useCollection(
       }
     }
   }
+
   async function readFile(file?: File) {
     const generation = ++fileRead.current;
+
     if (!file) {
       setReadingFile(false);
+
       return;
     }
+
     setReadingFile(true);
+
     try {
       if (!/\.(txt|md)$/i.test(file.name) || file.size > 262_144) {
         throw new Error("Choose a .txt or .md file up to 256 KiB");
       }
+
       const text = new TextDecoder("utf-8", { fatal: true }).decode(
         await file.arrayBuffer()
       );
+
       if (alive.current && generation === fileRead.current) {
         setContent(text);
         setTitle(file.name);
@@ -240,6 +303,7 @@ export function useCollection(
       }
     }
   }
+
   return {
     act,
     activeQuery,
@@ -270,4 +334,5 @@ export function useCollection(
     title,
   };
 }
+
 export type CollectionModel = ReturnType<typeof useCollection>;
