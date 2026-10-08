@@ -126,6 +126,69 @@ function delayedTool(
 }
 
 describe("agent chat tool loop", () => {
+  test("sets current turn image references and clears them on the next turn", async () => {
+    const contexts: unknown[] = [];
+    const responses = [
+      toolTurn([{ arguments: {}, id: "first", name: "sample" }]),
+      textReply("Done"),
+      toolTurn([{ arguments: {}, id: "second", name: "sample" }]),
+      textReply("Done"),
+    ];
+    let callIndex = 0;
+    const provider: ProviderClient = {
+      generateChat() {
+        return Promise.resolve(responses[callIndex++]!);
+      },
+      generateText() {
+        return Promise.resolve({ content: "unused" });
+      },
+      name: "openai",
+      streamChat(_input, handlers) {
+        const result = responses[callIndex++]!;
+        if (result.content) {
+          handlers.onChunk(result.content);
+        }
+        return Promise.resolve(result);
+      },
+    };
+    const tool: ToolDefinition = {
+      ...sampleTool,
+      async run(_input, context) {
+        contexts.push(context.currentChatImages);
+        return { ok: true };
+      },
+    };
+    const session = createAgentChatSession(
+      {
+        provider,
+      },
+      {
+        preprocessUserContent: async (content) =>
+          typeof content === "string"
+            ? content
+            : [
+                {
+                  attachmentId: "image_1",
+                  mediaType: "image/png",
+                  type: "image_ref",
+                },
+              ],
+        tools: [tool],
+      }
+    );
+
+    await session.send({
+      images: [{ data: "aW1hZ2U=", mediaType: "image/png" }],
+      message: "Look",
+    });
+    await session.send("Continue");
+
+    expect(contexts).toEqual([
+      [{ attachmentId: "image_1", mediaType: "image/png" }],
+      [],
+    ]);
+  });
+
   test.each([false, true])(
     "delivers read_file images after all tool results (stream: %s)",
     async (stream) => {

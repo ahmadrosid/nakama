@@ -202,6 +202,15 @@ export function registerSessionRoutes(
       images: z.array(z.object({}).passthrough()).optional(),
       message: z.string(),
       stream: z.boolean().optional(),
+      whatsappMessage: z
+        .object({
+          chatJid: z.string(),
+          fromMe: z.boolean(),
+          isGroup: z.boolean(),
+          senderJid: z.string(),
+          senderJids: z.array(z.string()),
+        })
+        .optional(),
     })
     .openapi("SendMessageRequest");
 
@@ -950,6 +959,19 @@ export function registerSessionRoutes(
       throw error;
     }
 
+    if (
+      body.whatsappMessage &&
+      !(await options.workerManager.verifyWhatsAppContextToken(
+        c.req.header("X-Nakama-WhatsApp-Context-Token") ?? null
+      ))
+    ) {
+      sessionTurnRegistry.cancelTurn(sessionId);
+      return errorResponse(
+        "WhatsApp context requires worker authentication.",
+        403
+      );
+    }
+
     const clientOrigin = resolveRequestClientOrigin(
       c.req.raw,
       body.clientOrigin
@@ -979,12 +1001,20 @@ export function registerSessionRoutes(
             agent.schedulePostTurnSkillReview(sessionId);
           }
         },
-        c.req.raw.signal
+        c.req.raw.signal,
+        undefined,
+        undefined,
+        body.whatsappMessage
       );
     }
 
     try {
-      const reply = await session.send(input);
+      const reply = await session.send(
+        input,
+        body.whatsappMessage
+          ? { whatsappMessage: body.whatsappMessage }
+          : undefined
+      );
       const contextUsage = session.getContextUsage() ?? undefined;
       const usage = session.getTurnUsage() ?? undefined;
       sessionTurnRegistry.endTurn(sessionId, {

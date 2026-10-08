@@ -136,6 +136,7 @@ interface SendStreamOptions {
   onUserMessage?: () => Promise<void>;
   /** Cancels the turn: stops the tool loop and asks running tools to abort. */
   signal?: AbortSignal;
+  whatsappMessage?: ToolContext["whatsappMessage"];
 }
 
 interface ResolvePromptContextInput {
@@ -479,6 +480,7 @@ export function createAgentChatSession(
           runCompaction,
           signal: sendOptions?.signal,
           toolContext,
+          whatsappMessage: sendOptions?.whatsappMessage,
         }
       );
     },
@@ -505,6 +507,7 @@ export function createAgentChatSession(
           runCompaction,
           signal: streamOptions?.signal,
           toolContext,
+          whatsappMessage: streamOptions?.whatsappMessage,
         }
       );
     },
@@ -543,6 +546,7 @@ async function sendMessage(
       messages: readonly ChatMessage[]
     ) => Promise<ChatMessage[]>;
     signal?: AbortSignal;
+    whatsappMessage?: ToolContext["whatsappMessage"];
   }
 ): Promise<string> {
   let userContent = normalizeUserContent(
@@ -636,10 +640,19 @@ async function sendMessage(
       : input.clientOrigin?.trim()
         ? { clientOrigin: input.clientOrigin.trim() }
         : options.toolContext;
-
-  const effectiveToolContext = options.signal
-    ? { ...baseToolContext, signal: options.signal }
-    : baseToolContext;
+  const effectiveToolContext = {
+    ...baseToolContext,
+    currentChatImages:
+      typeof userContent === "string"
+        ? []
+        : userContent.flatMap((part) =>
+            part.type === "image_ref"
+              ? [{ attachmentId: part.attachmentId, mediaType: part.mediaType }]
+              : []
+          ),
+    ...(options.signal ? { signal: options.signal } : {}),
+    whatsappMessage: options.whatsappMessage,
+  };
 
   try {
     const reply = await runConversation(

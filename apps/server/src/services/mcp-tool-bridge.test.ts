@@ -214,4 +214,144 @@ describe("mcp tool bridge", () => {
     expect(result).toEqual({ error: expect.any(String) });
     expect(calls).toEqual([]);
   });
+
+  test("adds validated current chat images only for opted-in MCP tools", async () => {
+    const calls: unknown[] = [];
+    const server: StoredMcpServerRecord = {
+      cachedTools: [
+        {
+          description: "Inspect",
+          inputSchema: {
+            properties: {
+              nakamaContext: {
+                properties: {},
+                type: "object",
+                "x-nakama-context": "current-chat",
+              },
+              query: { type: "string" },
+            },
+            type: "object",
+          },
+          name: "inspect",
+        },
+      ],
+      config: { url: "https://example.com/mcp" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      enabled: true,
+      id: "mcp_1",
+      lastError: null,
+      name: "images",
+      status: "connected",
+      transport: "http",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const tool = buildMcpToolDefinitions(
+      [server],
+      {
+        async callTool(_server, _name, args) {
+          calls.push(args);
+          return { ok: true };
+        },
+      },
+      serverLookup([server]),
+      "org_test",
+      "profile_test"
+    )[0]!;
+
+    expect(tool.parameters.properties).not.toHaveProperty("nakamaContext");
+    await tool.run(
+      { nakamaContext: { images: [] }, query: "read it" },
+      {
+        currentChatImages: [{ attachmentId: "att_1", mediaType: "image/png" }],
+        loadAttachment: async () => ({
+          bytes: Buffer.from("image"),
+          mediaType: "image/png",
+        }),
+        whatsappMessage: {
+          chatJid: "chat@g.us",
+          fromMe: false,
+          isGroup: true,
+          senderJid: "sender@s.whatsapp.net",
+          senderJids: ["sender@s.whatsapp.net"],
+        },
+      }
+    );
+
+    expect(calls).toEqual([
+      {
+        nakamaContext: {
+          images: [
+            {
+              data: Buffer.from("image").toString("base64"),
+              mediaType: "image/png",
+            },
+          ],
+          whatsapp: {
+            chatJid: "chat@g.us",
+            fromMe: false,
+            isGroup: true,
+            senderJid: "sender@s.whatsapp.net",
+            senderJids: ["sender@s.whatsapp.net"],
+          },
+        },
+        query: "read it",
+      },
+    ]);
+  });
+
+  test("returns an error and skips MCP call for an invalid current image", async () => {
+    let called = false;
+    const server: StoredMcpServerRecord = {
+      cachedTools: [
+        {
+          description: "Inspect",
+          inputSchema: {
+            properties: {
+              nakamaContext: {
+                type: "object",
+                "x-nakama-context": "current-chat",
+              },
+            },
+            type: "object",
+          },
+          name: "inspect",
+        },
+      ],
+      config: { url: "https://example.com/mcp" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      enabled: true,
+      id: "mcp_1",
+      lastError: null,
+      name: "images",
+      status: "connected",
+      transport: "http",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const tool = buildMcpToolDefinitions(
+      [server],
+      {
+        async callTool() {
+          called = true;
+          return {};
+        },
+      },
+      serverLookup([server]),
+      "org_test",
+      "profile_test"
+    )[0]!;
+
+    const result = await tool.run(
+      {},
+      {
+        currentChatImages: [{ attachmentId: "att_1", mediaType: "image/png" }],
+        loadAttachment: async () => ({
+          bytes: Buffer.from("bad"),
+          mediaType: "text/plain",
+        }),
+      }
+    );
+
+    expect(result).toEqual({ error: expect.any(String) });
+    expect(called).toBe(false);
+  });
 });

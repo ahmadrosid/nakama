@@ -3,6 +3,7 @@ import type { CreateSessionRequest, GenerateChatInput } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AgentService } from "../../services/agent-service";
 import { createDefaultProfile } from "../../services/agent-service-test-fixtures";
+import { WorkerManagerService } from "../../services/worker-manager-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { loginUserSession, seedOrgAdmin } from "../test-session-helpers";
@@ -33,7 +34,12 @@ async function createScenario() {
       },
     }),
   });
-  const { app } = createMinimalHonoApp({ agent, databaseAdapter });
+  const workerManager = new WorkerManagerService("/tmp/test-project");
+  const { app } = createMinimalHonoApp({
+    agent,
+    databaseAdapter,
+    workerManager,
+  });
 
   await seedOrgAdmin(databaseAdapter, {
     email: "owner@example.com",
@@ -50,7 +56,7 @@ async function createScenario() {
     ORG_ID
   );
 
-  return { app, databaseAdapter, session };
+  return { app, databaseAdapter, session, workerManager };
 }
 
 async function createSessionOverHttp(
@@ -97,6 +103,41 @@ async function sendOverHttp(
 }
 
 describe("POST /v1/sessions with cognito", () => {
+  test("accepts WhatsApp sender context only from the WhatsApp worker", async () => {
+    const { app, session, workerManager } = await createScenario();
+    const sessionId = await createSessionOverHttp(app, session, {
+      channel: "whatsapp",
+    });
+    const whatsappMessage = {
+      chatJid: "chat@s.whatsapp.net",
+      fromMe: false,
+      isGroup: false,
+      senderJid: "sender@s.whatsapp.net",
+      senderJids: ["sender@s.whatsapp.net"],
+    };
+    const request = (token?: string) =>
+      app.fetch(
+        new Request(`http://localhost:4310/v1/sessions/${sessionId}/messages`, {
+          body: JSON.stringify({
+            message: "hello",
+            stream: true,
+            whatsappMessage,
+          }),
+          headers: session.headers({
+            "Content-Type": "application/json",
+            "X-CSRF-Token": session.csrfToken,
+            ...(token ? { "X-Nakama-WhatsApp-Context-Token": token } : {}),
+          }),
+          method: "POST",
+        })
+      );
+
+    expect((await request("forged-token")).status).toBe(403);
+    expect(
+      (await request(await workerManager.getWhatsAppContextToken())).status
+    ).toBe(200);
+  });
+
   test("a full turn leaves nothing in the database", async () => {
     const { app, databaseAdapter, session } = await createScenario();
 
