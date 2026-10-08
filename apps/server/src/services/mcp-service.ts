@@ -707,16 +707,24 @@ function resolveMcpConfig<T>(
   const record = readUnknownRecord(config);
 
   if (transport === "http") {
-    return {
-      headers: readStringRecord(record?.headers),
-      url: readString(record?.url) ?? "",
+    const resolved: StoredMcpHttpConfig = {
+      headers: readStringRecord(record?.get("headers")),
+      url: readString(record?.get("url")) ?? "",
     };
+
+    const grant = readMcpOAuthGrant(config);
+
+    if (grant) {
+      resolved.oauth = grant;
+    }
+
+    return resolved;
   }
 
   return {
-    args: readStringArray(record?.args),
-    command: readString(record?.command) ?? "",
-    env: readStringRecord(record?.env),
+    args: readStringArray(record?.get("args")),
+    command: readString(record?.get("command")) ?? "",
+    env: readStringRecord(record?.get("env")),
   };
 }
 

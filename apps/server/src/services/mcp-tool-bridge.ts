@@ -1,7 +1,6 @@
 import type { JsonSchema, ToolContext, ToolDefinition } from "@nakama/core";
 import { emptyObjectSchema, validateImageAttachments } from "@nakama/core";
 import type { DatabaseAdapter, StoredMcpServerRecord } from "@nakama/db";
-import { isJsonSchema } from "./custom-tool-shared";
 import type { McpToolArguments } from "./mcp-client-manager";
 import { parseMcpToolArguments } from "./mcp-client-manager";
 import type { McpService } from "./mcp-service";
@@ -171,4 +170,8 @@ function uniqueLlmToolName(base: string, usedNames: Set<string>): string {
 
 function toJsonSchema<T>(inputSchema: T): JsonSchema {
   return isJsonSchema(inputSchema) ? inputSchema : emptyObjectSchema();
+}
+
+function isJsonSchema<T>(value: T): value is T & JsonSchema {
+  return value instanceof Object && !Array.isArray(value);
 }

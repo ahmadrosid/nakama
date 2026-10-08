@@ -4,15 +4,19 @@ import { fileURLToPath } from "node:url";
 import type { ToolContext, ToolDefinition } from "@nakama/core";
 import { pathExists } from "@nakama/core";
 import type { StoredToolRecord } from "@nakama/db";
+import { z } from "zod";
 import {
   loadCustomSubprocessTool,
-  parseCustomToolJsonValue,
   readOptionalString,
   resolveCustomToolModulePath,
 } from "./custom-tool-shared";
 import { spawnJsonTool } from "./custom-tool-subprocess";
 
 const BUN_BIN = process.env.NAKAMA_BUN_BIN ?? "bun";
+
+const customToolJsonValueSchema = z.json();
+
+type CustomToolJsonValue = z.infer<typeof customToolJsonValueSchema>;
 
 const RUNNER_PATH = fileURLToPath(
   new URL("./javascript-tool-runner.js", import.meta.url)
@@ -57,7 +61,7 @@ async function runJavascriptTool<T>(
   input: T,
   context: ToolContext,
   env?: Record<string, string>
-): Promise<import("./custom-tool-shared").CustomToolJsonValue> {
+): Promise<CustomToolJsonValue> {
   // No try/catch here on purpose: a failed spawn must reject so the retry
   // policy in withToolRetries can retry explicitly opt-in transient failures
   // (RetryableToolError / exit 75). executeToolCall converts the throw into
@@ -68,10 +72,10 @@ async function runJavascriptTool<T>(
     context,
     cwd: path.dirname(modulePath),
     env,
-    input: parseCustomToolJsonValue(input),
+    input: customToolJsonValueSchema.parse(input),
     label: "JavaScript tool",
     workspaceRoot: readOptionalString(context?.workspaceRoot),
   });
 
-  return parseCustomToolJsonValue(result);
+  return customToolJsonValueSchema.parse(result);
 }

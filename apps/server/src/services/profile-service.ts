@@ -88,7 +88,7 @@ import {
   getCustomToolHandler,
   isCustomToolType,
 } from "./custom-tool-handlers";
-import { isJsonSchema, parseToolEnvDeclarations } from "./custom-tool-shared";
+import { parseToolEnvDeclarations } from "./custom-tool-shared";
 import { toMcpServerSummaries } from "./mcp-service";
 import { MemoryBackendService } from "./memory-backend-service";
 import {
@@ -1531,6 +1531,10 @@ interface ParsedCustomToolHandlerConfig {
   requiresApiKey?: boolean;
 }
 
+function isJsonSchema<T>(value: T): value is T & JsonSchema {
+  return value instanceof Object && !Array.isArray(value);
+}
+
 interface RawCustomToolHandlerConfig {
   env?: unknown;
   modulePath?: unknown;
@@ -1574,7 +1578,7 @@ function readCustomToolHandlerConfig(
     );
   }
 
-  const rawEnv = z.json().optional().parse(handlerConfig.env);
+  const rawEnv = z.array(z.json()).optional().parse(handlerConfig.env);
 
   const env = parseToolEnvDeclarations(rawEnv);
 
