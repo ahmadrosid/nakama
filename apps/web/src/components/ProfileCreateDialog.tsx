@@ -245,14 +245,12 @@ function ProfileCreateDialogContent({
         }
       }
 
-      await Promise.all(
-        form.toolIds.map((toolId) =>
-          assignToolMutation.mutateAsync({
-            profileId: response.profile.id,
-            toolId,
-          })
-        )
-      );
+      if (form.toolIds.length > 0) {
+        await assignToolMutation.mutateAsync({
+          profileId: response.profile.id,
+          toolId: form.toolIds,
+        });
+      }
 
       onOpenChange(false);
       onCreated(response.profile.id);
