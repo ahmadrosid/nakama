@@ -56,6 +56,29 @@ export class AutomationScheduler {
   }
 
   async reload(): Promise<void> {
+    // Load and build before clearing anything. A failed list call or one bad
+    // cron expression must leave the last good schedules running.
+    const automations = await this.delegate.listScheduledAutomations();
+    const defaultTimezone = await this.delegate.getDefaultTimezone();
+    const jobs = new Map<string, Cron>();
+
+    for (const automation of automations) {
+      if (automation.runAt || !automation.cron) {
+        continue;
+      }
+
+      const timezone =
+        automation.timezone ?? defaultTimezone ?? DEFAULT_TIMEZONE;
+      jobs.set(
+        automation.id,
+        // Paused, so a throw on a later entry leaves nothing ticking. No name:
+        // croner refuses a name that is still running, and the old job is.
+        new Cron(automation.cron, { paused: true, timezone }, () =>
+          this.dispatch(automation)
+        )
+      );
+    }
+
     for (const job of this.jobs.values()) {
       job.stop();
     }
@@ -66,36 +89,17 @@ export class AutomationScheduler {
 
     this.jobs.clear();
     this.timers.clear();
-    await this.reloadSchedules();
-  }
 
-  private async reloadSchedules(): Promise<void> {
-    const automations = await this.delegate.listScheduledAutomations();
-    const defaultTimezone = await this.delegate.getDefaultTimezone();
+    for (const [id, job] of jobs) {
+      job.resume();
+      this.jobs.set(id, job);
+    }
 
     const now = this.now();
     for (const automation of automations) {
       if (automation.runAt) {
         this.scheduleRunAt(automation, now);
-        continue;
       }
-
-      if (!automation.cron) {
-        continue;
-      }
-
-      const timezone =
-        automation.timezone ?? defaultTimezone ?? DEFAULT_TIMEZONE;
-      const job = new Cron(
-        automation.cron,
-        {
-          name: automation.id,
-          timezone,
-        },
-        () => this.dispatch(automation)
-      );
-
-      this.jobs.set(automation.id, job);
     }
   }
 
