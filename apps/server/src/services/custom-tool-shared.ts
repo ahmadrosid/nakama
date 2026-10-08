@@ -253,8 +253,13 @@ export async function loadToolEnv(
 
 let credentialWrite: Promise<void> = Promise.resolve();
 
-function validateApiKey(value: string): string {
-  if (!value.trim() || value.length > 8192 || /[\r\n\0]/.test(value)) {
+function validateApiKey(value: string | undefined): string {
+  if (
+    value === undefined ||
+    !value.trim() ||
+    value.length > 8192 ||
+    /[\r\n\0]/.test(value)
+  ) {
     throw new NakamaApiError("Enter a valid API key.", 400);
   }
 
