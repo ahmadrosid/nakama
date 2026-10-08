@@ -39,7 +39,7 @@ describe("chat-stream-workflow", () => {
               input === undefined
                 ? { id: "fetch", kind: "tool", tool: "web_fetch" }
                 : { id: "fetch", input, kind: "tool", tool: "web_fetch" }
-            ) as WorkflowStep,
+            ) as unknown as WorkflowStep,
           ],
         },
       });
