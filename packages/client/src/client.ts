@@ -329,7 +329,7 @@ export class NakamaClient {
 
   constructor(options: NakamaClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? resolveServerUrl()).replace(/\/$/, "");
-    const fetchFn = options.fetch ?? fetch;
+    const fetchFn = options.fetch ?? globalThis.fetch.bind(globalThis);
     this.fetchImpl = fetchFn;
     this.credentials = options.credentials ?? "include";
     this.clientOrigin = options.clientOrigin?.trim().replace(/\/$/, "") || null;
