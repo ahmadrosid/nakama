@@ -20,7 +20,7 @@ export interface WebFetchToolState {
   status: "running" | "done";
 }
 
-export type JsonValue =
+type JsonValue =
   | string
   | number
   | boolean
