@@ -3,6 +3,7 @@ import { createSqliteDatabase } from "./adapters/sqlite";
 import { LLM_USAGE_STATS_ID } from "./constants";
 
 const ORG_A = "org_a";
+
 const ORG_B = "org_b";
 
 describe("llm usage stats persistence", () => {

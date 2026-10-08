@@ -4,6 +4,7 @@ import { createSqliteDatabase } from "./adapters/sqlite";
 describe("replaceProfileComposioToolkits atomicity", () => {
   test("sqlite restores prior assignments when a replacement batch fails", async () => {
     const database = await createSqliteDatabase(":memory:");
+
     try {
       const now = "2020-01-01T00:00:00.000Z";
       await database.adapter.upsertOrganization({

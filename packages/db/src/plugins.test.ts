@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import { createInMemoryDatabaseAdapter } from "./index";
 import { migrateDatabase } from "./migrate";
@@ -71,6 +71,7 @@ function createLegacyHostDatabase(): Database {
     INSERT INTO profile_tools (profile_id, tool_id) VALUES ('default', 'tool_bash');
     INSERT INTO profile_skills (profile_id, skill_id) VALUES ('default', 'skill_test');
   `);
+
   return db;
 }
 
@@ -149,38 +150,50 @@ describe("plugin metadata migration", () => {
       migrateDatabase(db);
 
       const profile = db
-        .prepare("SELECT id, name FROM profiles WHERE id = 'default'")
-        .get() as { id: string; name: string };
+        .prepare<{ id: string; name: string }, SQLQueryBindings[]>(
+          "SELECT id, name FROM profiles WHERE id = 'default'"
+        )
+        .get();
+
       const skill = db
-        .prepare(
+        .prepare<
+          {
+            id: string;
+            name: string;
+            plugin_id: string | null;
+            plugin_key: string | null;
+          },
+          SQLQueryBindings[]
+        >(
           "SELECT id, name, plugin_id, plugin_key FROM skills WHERE id = 'skill_test'"
         )
-        .get() as {
-        id: string;
-        name: string;
-        plugin_id: string | null;
-        plugin_key: string | null;
-      };
+        .get();
+
       const tool = db
-        .prepare(
+        .prepare<
+          {
+            id: string;
+            name: string;
+            plugin_id: string | null;
+            plugin_key: string | null;
+          },
+          SQLQueryBindings[]
+        >(
           "SELECT id, name, plugin_id, plugin_key FROM tools WHERE id = 'tool_bash'"
         )
-        .get() as {
-        id: string;
-        name: string;
-        plugin_id: string | null;
-        plugin_key: string | null;
-      };
+        .get();
+
       const assignments = db
-        .prepare(
+        .prepare<{ profile_id: string; tool_id: string }, SQLQueryBindings[]>(
           "SELECT profile_id, tool_id FROM profile_tools UNION ALL SELECT profile_id, skill_id FROM profile_skills"
         )
-        .all() as Array<{ profile_id: string; tool_id: string }>;
+        .all();
+
       const pluginTables = db
-        .prepare(
+        .prepare<{ name: string }, SQLQueryBindings[]>(
           "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('plugin_releases', 'org_plugins') ORDER BY name"
         )
-        .all() as Array<{ name: string }>;
+        .all();
 
       expect(profile).toEqual({ id: "default", name: "Buddy" });
       expect(skill).toEqual({
@@ -200,9 +213,13 @@ describe("plugin metadata migration", () => {
         "org_plugins",
         "plugin_releases",
       ]);
+
       const releaseColumns = db
-        .prepare("PRAGMA table_info(plugin_releases)")
-        .all() as Array<{ name: string }>;
+        .prepare<{ name: string }, SQLQueryBindings[]>(
+          "PRAGMA table_info(plugin_releases)"
+        )
+        .all();
+
       expect(releaseColumns.map((column) => column.name)).toContain("digest");
     } finally {
       db.close();
@@ -234,6 +251,7 @@ describe("plugin ownership adapter", () => {
       pluginId: "notes",
       selectedVersion: "1.0.0",
     });
+
     const second = await db.publishOrgPluginRelease({
       contributions: {
         skills: [skillContribution("org_b", { id: "skill_b" })],
@@ -266,6 +284,7 @@ describe("plugin ownership adapter", () => {
     const skills = (await db.listSkills()).filter(
       (skill) => skill.pluginId === "notes"
     );
+
     const tools = (await db.listTools()).filter(
       (tool) => tool.pluginId === "notes"
     );
@@ -316,7 +335,9 @@ describe("plugin ownership adapter", () => {
       pluginId: "notes",
       selectedVersion: "1.0.0",
     });
+
     expect(created.ok).toBe(true);
+
     if (!created.ok) {
       return;
     }
@@ -346,12 +367,15 @@ describe("plugin ownership adapter", () => {
     });
 
     expect(updated.ok).toBe(true);
+
     const skills = (await db.listSkills()).filter(
       (skill) => skill.orgId === "org_a" && skill.pluginId === "notes"
     );
+
     const tools = (await db.listTools()).filter(
       (tool) => tool.orgId === "org_a" && tool.pluginId === "notes"
     );
+
     const installation = await db.getOrgPlugin("org_a", "notes");
 
     expect(skills).toHaveLength(1);
@@ -394,6 +418,7 @@ describe("plugin ownership adapter", () => {
       pluginId: "notes",
       selectedVersion: "1.0.0",
     });
+
     const stale = await db.publishOrgPluginRelease({
       contributions: {
         skills: [skillContribution("org_a")],
@@ -407,6 +432,7 @@ describe("plugin ownership adapter", () => {
       pluginId: "notes",
       selectedVersion: "1.1.0",
     });
+
     const next = first.ok
       ? await db.publishOrgPluginRelease({
           contributions: {
@@ -517,6 +543,7 @@ describe("plugin ownership adapter", () => {
 
   test("reinstalling the same digest is idempotent and a different digest conflicts", async () => {
     const db = createInMemoryDatabaseAdapter();
+
     const first = await db.upsertPluginRelease({
       createdAt: now,
       digest: "sha256:same",
@@ -524,6 +551,7 @@ describe("plugin ownership adapter", () => {
       pluginId: "notes",
       version: "1.0.0",
     });
+
     const same = await db.upsertPluginRelease({
       createdAt: now,
       digest: "sha256:same",
@@ -531,6 +559,7 @@ describe("plugin ownership adapter", () => {
       pluginId: "notes",
       version: "1.0.0",
     });
+
     const conflict = await db.upsertPluginRelease({
       createdAt: now,
       digest: "sha256:other",
@@ -557,6 +586,7 @@ describe("plugin ownership adapter", () => {
       pluginId: "notes",
       version: "1.0.0",
     });
+
     const created = await db.publishOrgPluginRelease({
       contributions: {
         skills: [skillContribution("org_a")],
@@ -570,7 +600,9 @@ describe("plugin ownership adapter", () => {
       pluginId: "notes",
       selectedVersion: "1.0.0",
     });
+
     expect(created.ok).toBe(true);
+
     if (!created.ok) {
       return;
     }
@@ -585,6 +617,7 @@ describe("plugin ownership adapter", () => {
       pluginId: "notes",
       selectedVersion: "1.0.0",
     });
+
     const stale = await db.compareAndSetOrgPluginState({
       databaseGeneration: "gen_1",
       expectedRevision: created.revision,
@@ -619,6 +652,7 @@ describe("plugin ownership adapter", () => {
       pluginId: "notes",
       version: "1.0.0",
     });
+
     const created = await db.publishOrgPluginRelease({
       contributions: {
         skills: [skillContribution("org_a")],
@@ -632,7 +666,9 @@ describe("plugin ownership adapter", () => {
       pluginId: "notes",
       selectedVersion: "1.0.0",
     });
+
     expect(created.ok).toBe(true);
+
     if (!created.ok) {
       return;
     }

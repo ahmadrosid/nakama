@@ -127,6 +127,7 @@ describe("claimInterruptedAutomationRuns", () => {
       updatedAt: now,
       version: 1,
     });
+
     for (const [id, status] of [
       ["arun_live", "running"],
       ["arun_done", "completed"],
@@ -141,6 +142,7 @@ describe("claimInterruptedAutomationRuns", () => {
         status,
       });
     }
+
     return db;
   }
 
@@ -163,6 +165,7 @@ describe("claimInterruptedAutomationRuns", () => {
   test("keeps tool steps in order and records results", async () => {
     const db = await setup();
     const now = new Date().toISOString();
+
     const step = (toolCallId: string, position: number) => ({
       args: "{}",
       completedAt: null,

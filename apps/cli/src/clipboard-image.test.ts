@@ -22,6 +22,7 @@ test("recognizes terminal image paths without treating prose as a path", () => {
   ]) {
     expect(pastedImagePath(input)).toBe("/tmp/screen shot.png");
   }
+
   expect(pastedImagePath("describe /tmp/image.png")).toBeNull();
   expect(pastedImagePath("/tmp/notes.txt")).toBeNull();
   expect(pastedImagePath("/tmp/a.png\n/tmp/b.png")).toBeNull();
@@ -43,9 +44,11 @@ test.each([
     const filePath = join(dir, "screen shot.png");
     const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     const hasFiles = spyOn(nativeClipboard, "hasFiles").mockReturnValue(true);
+
     const getFiles = spyOn(nativeClipboard, "getFiles").mockResolvedValue([
       filePath,
     ]);
+
     try {
       await writeFile(filePath, bytes);
       const image = { data: bytes.toString("base64"), mediaType: "image/png" };

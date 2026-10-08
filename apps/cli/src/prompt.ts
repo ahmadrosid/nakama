@@ -24,12 +24,14 @@ export async function promptLine(
   output: NodeJS.WritableStream = process.stdout
 ): Promise<PromptLineResult> {
   const rl = readline.createInterface({ input, output });
+
   const closed = new Promise<never>((_, reject) => {
     rl.once("close", () => reject(new PromptCancelledError()));
   });
 
   try {
     const answer = await Promise.race([rl.question(prefix), closed]);
+
     return { text: answer.trimEnd() };
   } finally {
     rl.close();

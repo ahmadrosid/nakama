@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,14 +12,22 @@ import {
   resolveSchemaPath,
 } from "./migrate";
 
+interface PluginCleanupRow {
+  plugin_id?: string;
+  skill_id?: string;
+  tool_id?: string;
+}
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 test.each(["normal upgrade", "retry after failed cleanup"])(
   "removes legacy Google Meet plugin records: %s",
   (scenario) => {
     const db = new Database(":memory:");
+
     try {
       migrateDatabase(db);
+
       for (const orgId of ["org-a", "org-b"]) {
         db.query(
           "INSERT INTO organizations (id, name, slug, created_at, updated_at) VALUES (?, ?, ?, 'now', 'now')"
@@ -27,6 +35,7 @@ test.each(["normal upgrade", "retry after failed cleanup"])(
         db.query(
           "INSERT INTO profiles (id, name, org_id, created_at, updated_at) VALUES (?, ?, ?, 'now', 'now')"
         ).run(orgId, orgId, orgId);
+
         for (const pluginId of ["google-meet", "notes"]) {
           const id = `${orgId}-${pluginId}`;
           db.query(
@@ -42,6 +51,7 @@ test.each(["normal upgrade", "retry after failed cleanup"])(
           db.query("INSERT INTO profile_skills VALUES (?, ?)").run(orgId, id);
         }
       }
+
       for (const pluginId of ["google-meet", "notes"]) {
         for (const version of ["1.0.0", "2.0.0"]) {
           db.query(
@@ -49,6 +59,7 @@ test.each(["normal upgrade", "retry after failed cleanup"])(
           ).run(pluginId, version);
         }
       }
+
       db.exec(`
         UPDATE profiles SET is_default = 1 WHERE id = 'org-a';
         INSERT INTO tools (id, name, description, handler_type, org_id, created_at, updated_at)
@@ -58,6 +69,7 @@ test.each(["normal upgrade", "retry after failed cleanup"])(
         INSERT INTO profile_tools VALUES ('org-a', 'builtin-meet');
         INSERT INTO profile_skills VALUES ('org-a', 'bundled-meet');
       `);
+
       const tables = [
         "tools",
         "skills",
@@ -68,9 +80,13 @@ test.each(["normal upgrade", "retry after failed cleanup"])(
         "profiles",
         "organizations",
       ];
+
       const before = tables.map((table) =>
-        db.query(`SELECT * FROM ${table}`).all()
+        db
+          .query<PluginCleanupRow, SQLQueryBindings[]>(`SELECT * FROM ${table}`)
+          .all()
       );
+
       if (scenario === "retry after failed cleanup") {
         db.exec(`
           CREATE TRIGGER fail_meet_cleanup BEFORE DELETE ON plugin_releases
@@ -79,24 +95,30 @@ test.each(["normal upgrade", "retry after failed cleanup"])(
         `);
         expect(() => migrateDatabase(db)).toThrow();
         expect(
-          tables.map((table) => db.query(`SELECT * FROM ${table}`).all())
+          tables.map((table) =>
+            db
+              .query<PluginCleanupRow, SQLQueryBindings[]>(
+                `SELECT * FROM ${table}`
+              )
+              .all()
+          )
         ).toEqual(before);
         db.exec("DROP TRIGGER fail_meet_cleanup");
       }
+
       migrateDatabase(db);
       migrateDatabase(db);
+
       for (const [index, table] of tables.entries()) {
-        const retained = before[index].filter((row) => {
-          const record = row as Record<string, unknown>;
-          return (
-            record.plugin_id !== "google-meet" &&
-            !String(record.tool_id ?? record.skill_id ?? "").endsWith(
-              "-google-meet"
-            )
-          );
-        });
+        const retained = before[index].filter(
+          (row) =>
+            row.plugin_id !== "google-meet" &&
+            !String(row.tool_id ?? row.skill_id ?? "").endsWith("-google-meet")
+        );
+
         expect(db.query(`SELECT * FROM ${table}`).all()).toEqual(retained);
       }
+
       expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
     } finally {
       db.close();
@@ -106,14 +128,19 @@ test.each(["normal upgrade", "retry after failed cleanup"])(
 
 test("adds automation transcripts to existing databases idempotently", () => {
   const db = new Database(":memory:");
+
   try {
     migrateDatabase(db);
     db.exec("ALTER TABLE automation_runs DROP COLUMN progress");
     migrateDatabase(db);
     migrateDatabase(db);
+
     const columns = db
-      .query("PRAGMA table_info(automation_runs)")
-      .all() as Array<{ name: string }>;
+      .query<{ name: string }, SQLQueryBindings[]>(
+        "PRAGMA table_info(automation_runs)"
+      )
+      .all();
+
     expect(columns.filter((column) => column.name === "progress")).toHaveLength(
       1
     );
@@ -248,27 +275,44 @@ describe("legacy profile id migration", () => {
       migrateDatabase(db);
 
       const profiles = db
-        .prepare("SELECT id FROM profiles ORDER BY id")
-        .all() as Array<{
-        id: string;
-      }>;
+        .prepare<
+          {
+            id: string;
+          },
+          SQLQueryBindings[]
+        >("SELECT id FROM profiles ORDER BY id")
+        .all();
+
       const profileTools = db
-        .prepare("SELECT profile_id FROM profile_tools ORDER BY profile_id")
-        .all() as Array<{ profile_id: string }>;
+        .prepare<{ profile_id: string }, SQLQueryBindings[]>(
+          "SELECT profile_id FROM profile_tools ORDER BY profile_id"
+        )
+        .all();
+
       const profileMcpServers = db
-        .prepare(
+        .prepare<{ profile_id: string }, SQLQueryBindings[]>(
           "SELECT profile_id FROM profile_mcp_servers ORDER BY profile_id"
         )
-        .all() as Array<{ profile_id: string }>;
+        .all();
+
       const profileSkills = db
-        .prepare("SELECT profile_id FROM profile_skills ORDER BY profile_id")
-        .all() as Array<{ profile_id: string }>;
+        .prepare<{ profile_id: string }, SQLQueryBindings[]>(
+          "SELECT profile_id FROM profile_skills ORDER BY profile_id"
+        )
+        .all();
+
       const sessions = db
-        .prepare("SELECT profile_id FROM sessions ORDER BY id")
-        .all() as Array<{ profile_id: string }>;
+        .prepare<{ profile_id: string }, SQLQueryBindings[]>(
+          "SELECT profile_id FROM sessions ORDER BY id"
+        )
+        .all();
+
       const automations = db
-        .prepare("SELECT profile_id FROM automations ORDER BY id")
-        .all() as Array<{ profile_id: string }>;
+        .prepare<{ profile_id: string }, SQLQueryBindings[]>(
+          "SELECT profile_id FROM automations ORDER BY id"
+        )
+        .all();
+
       const foreignKeyViolations = db.prepare("PRAGMA foreign_key_check").all();
 
       expect(profiles.map((row) => row.id)).toEqual(["default", "super_bot"]);
@@ -333,8 +377,10 @@ describe("coding-delegation skill rename migration", () => {
       migrateCodingDelegationSkillName(db);
 
       const skill = db
-        .prepare("SELECT name, source_path FROM skills WHERE id = ?")
-        .get("skill_coding") as { name: string; source_path: string };
+        .prepare<{ name: string; source_path: string }, SQLQueryBindings[]>(
+          "SELECT name, source_path FROM skills WHERE id = ?"
+        )
+        .get("skill_coding");
 
       expect(skill.name).toBe("coding-agent");
       expect(skill.source_path).toBe(
@@ -396,13 +442,16 @@ describe("coding-delegation skill rename migration", () => {
       migrateCodingDelegationSkillName(db);
 
       const skills = db
-        .prepare(
+        .prepare<{ id: string; name: string }, SQLQueryBindings[]>(
           "SELECT id, name FROM skills WHERE name LIKE 'coding%' ORDER BY name"
         )
-        .all() as Array<{ id: string; name: string }>;
+        .all();
+
       const assignment = db
-        .prepare("SELECT skill_id FROM profile_skills WHERE profile_id = ?")
-        .get("super_bot") as { skill_id: string };
+        .prepare<{ skill_id: string }, SQLQueryBindings[]>(
+          "SELECT skill_id FROM profile_skills WHERE profile_id = ?"
+        )
+        .get("super_bot");
 
       expect(skills).toEqual([{ id: "skill_canonical", name: "coding-agent" }]);
       expect(assignment.skill_id).toBe("skill_canonical");
@@ -442,10 +491,11 @@ describe("coding-delegation skill rename migration", () => {
       expect(() => migrateDatabase(db)).toThrow();
 
       const remaining = db
-        .prepare(
+        .prepare<{ id: string }, SQLQueryBindings[]>(
           "SELECT id FROM skills WHERE name = 'coding-delegation' ORDER BY id"
         )
-        .all() as Array<{ id: string }>;
+        .all();
+
       expect(remaining).toEqual([
         { id: "skill_legacy_a" },
         { id: "skill_legacy_b" },
@@ -547,8 +597,10 @@ describe("skill org id backfill", () => {
       migrateDatabase(db);
 
       const rows = db
-        .prepare("SELECT id, org_id FROM skills ORDER BY id")
-        .all() as { id: string; org_id: string | null }[];
+        .prepare<{ id: string; org_id: string | null }, SQLQueryBindings[]>(
+          "SELECT id, org_id FROM skills ORDER BY id"
+        )
+        .all();
 
       expect(rows).toEqual([
         { id: "skill_global", org_id: null },
@@ -616,20 +668,31 @@ describe("schema bootstrap version", () => {
           "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'artifact_shares'"
         )
         .get();
+
       const attachmentsTable = db
         .prepare(
           "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'attachments'"
         )
         .get();
+
       expect(artifactSharesTable).toBeNull();
       expect(attachmentsTable).toEqual({ name: "attachments" });
 
       const schemaVersion = db
-        .prepare("SELECT version FROM schema_version")
-        .get() as { version: number };
-      const foreignKeys = db.prepare("PRAGMA foreign_keys").get() as {
-        foreign_keys: number;
-      };
+        .prepare<{ version: number }, SQLQueryBindings[]>(
+          "SELECT version FROM schema_version"
+        )
+        .get();
+
+      const foreignKeys = db
+        .prepare<
+          {
+            foreign_keys: number;
+          },
+          SQLQueryBindings[]
+        >("PRAGMA foreign_keys")
+        .get();
+
       expect(schemaVersion.version).toBe(1);
       expect(foreignKeys.foreign_keys).toBe(1);
     } finally {
@@ -654,9 +717,15 @@ describe("chat session schema", () => {
 
       migrateDatabase(db);
 
-      const columns = db.prepare("PRAGMA table_info(sessions)").all() as Array<{
-        name: string;
-      }>;
+      const columns = db
+        .prepare<
+          {
+            name: string;
+          },
+          SQLQueryBindings[]
+        >("PRAGMA table_info(sessions)")
+        .all();
+
       expect(columns.some((column) => column.name === "model")).toBe(true);
       expect(columns.some((column) => column.name === "updated_at")).toBe(true);
     } finally {
@@ -673,15 +742,22 @@ describe("browser session schema", () => {
       migrateDatabase(db);
 
       const columns = db
-        .prepare("PRAGMA table_info(browser_sessions)")
-        .all() as Array<{
-        name: string;
-      }>;
+        .prepare<
+          {
+            name: string;
+          },
+          SQLQueryBindings[]
+        >("PRAGMA table_info(browser_sessions)")
+        .all();
+
       const indexes = db
-        .prepare("PRAGMA index_list(browser_sessions)")
-        .all() as Array<{
-        name: string;
-      }>;
+        .prepare<
+          {
+            name: string;
+          },
+          SQLQueryBindings[]
+        >("PRAGMA index_list(browser_sessions)")
+        .all();
 
       expect(columns.map((column) => column.name)).toEqual([
         "id",
@@ -713,11 +789,16 @@ describe("password reset schema", () => {
       migrateDatabase(db);
 
       const columns = db
-        .prepare("PRAGMA table_info(password_reset_tokens)")
-        .all() as Array<{ name: string }>;
+        .prepare<{ name: string }, SQLQueryBindings[]>(
+          "PRAGMA table_info(password_reset_tokens)"
+        )
+        .all();
+
       const indexes = db
-        .prepare("PRAGMA index_list(password_reset_tokens)")
-        .all() as Array<{ name: string }>;
+        .prepare<{ name: string }, SQLQueryBindings[]>(
+          "PRAGMA index_list(password_reset_tokens)"
+        )
+        .all();
 
       expect(columns.map((column) => column.name)).toEqual([
         "id",
@@ -769,13 +850,17 @@ describe("organization schema migration", () => {
       expect(fkCheck).toEqual([]);
 
       const member = db
-        .prepare(
+        .prepare<
+          {
+            role: string;
+            user_context: string | null;
+          },
+          SQLQueryBindings[]
+        >(
           "SELECT role, user_context FROM org_members WHERE org_id = ? AND user_id = ?"
         )
-        .get("org_acme", "user_admin") as {
-        role: string;
-        user_context: string | null;
-      };
+        .get("org_acme", "user_admin");
+
       expect(member.role).toBe("admin");
       expect(member.user_context).toBeNull();
     } finally {
@@ -814,10 +899,10 @@ describe("organization schema migration", () => {
       migrateDatabase(db);
 
       const member = db
-        .prepare(
+        .prepare<{ user_context: string | null }, SQLQueryBindings[]>(
           "SELECT user_context FROM org_members WHERE org_id = ? AND user_id = ?"
         )
-        .get("org_acme", "user_legacy") as { user_context: string | null };
+        .get("org_acme", "user_legacy");
 
       expect(member.user_context).toBe("# From users table");
     } finally {
@@ -892,6 +977,7 @@ describe("organization schema migration", () => {
       );
 
       let error: unknown;
+
       try {
         db.prepare(`
           INSERT INTO organizations (
@@ -935,6 +1021,7 @@ describe("organization schema migration", () => {
       );
 
       let error: unknown;
+
       try {
         db.prepare(`
           INSERT INTO org_members (org_id, user_id, role, created_at) VALUES (?, ?, ?, ?)
@@ -966,9 +1053,15 @@ describe("organization schema migration", () => {
 
       migrateDatabase(db);
 
-      const columns = db.prepare("PRAGMA table_info(users)").all() as Array<{
-        name: string;
-      }>;
+      const columns = db
+        .prepare<
+          {
+            name: string;
+          },
+          SQLQueryBindings[]
+        >("PRAGMA table_info(users)")
+        .all();
+
       expect(columns.map((column) => column.name)).toContain(
         "is_platform_admin"
       );
@@ -998,25 +1091,29 @@ describe("organization schema migration", () => {
       migrateDatabase(db);
 
       const columns = db
-        .prepare("PRAGMA table_info(organizations)")
-        .all() as Array<{ name: string }>;
+        .prepare<{ name: string }, SQLQueryBindings[]>(
+          "PRAGMA table_info(organizations)"
+        )
+        .all();
+
       expect(columns.map((column) => column.name)).toContain("archived_at");
       expect(columns.map((column) => column.name)).toContain(
         "allowed_invite_domains"
       );
 
       const row = db
-        .prepare("SELECT archived_at FROM organizations WHERE id = ?")
-        .get("org_legacy") as { archived_at: string | null };
+        .prepare<{ archived_at: string | null }, SQLQueryBindings[]>(
+          "SELECT archived_at FROM organizations WHERE id = ?"
+        )
+        .get("org_legacy");
+
       expect(row.archived_at).toBeNull();
       expect(
-        (
-          db
-            .prepare(
-              "SELECT allowed_invite_domains FROM organizations WHERE id = ?"
-            )
-            .get("org_legacy") as { allowed_invite_domains: string }
-        ).allowed_invite_domains
+        db
+          .prepare<{ allowed_invite_domains: string }, SQLQueryBindings[]>(
+            "SELECT allowed_invite_domains FROM organizations WHERE id = ?"
+          )
+          .get("org_legacy").allowed_invite_domains
       ).toBe("[]");
     } finally {
       db.close();
@@ -1040,14 +1137,20 @@ describe("organization schema migration", () => {
         "workspace_settings",
       ]) {
         const columns = db
-          .prepare(`PRAGMA table_info(${tableName})`)
-          .all() as Array<{ name: string }>;
+          .prepare<{ name: string }, SQLQueryBindings[]>(
+            `PRAGMA table_info(${tableName})`
+          )
+          .all();
+
         expect(columns.map((column) => column.name)).toContain("org_id");
       }
 
       const toolIndexes = db
-        .prepare("PRAGMA index_list(tools)")
-        .all() as Array<{ name: string }>;
+        .prepare<{ name: string }, SQLQueryBindings[]>(
+          "PRAGMA index_list(tools)"
+        )
+        .all();
+
       expect(
         toolIndexes.some((index) => index.name === "tools_org_name_unique")
       ).toBe(true);
@@ -1151,7 +1254,7 @@ describe("migration SQL hardening", () => {
         moveProfileJoinReferences(
           db,
           "profile_tools",
-          "tool_id; ATTACH DATABASE '/tmp/ignored.sqlite' AS injected; --" as "tool_id",
+          "tool_id; ATTACH DATABASE '/tmp/ignored.sqlite' AS injected; --",
           "legacy",
           "canonical"
         )
@@ -1168,11 +1271,13 @@ describe("llm usage org scope", () => {
   function legacyUsageDatabase(orgIds: string[]): Database {
     const db = new Database(":memory:");
     migrateDatabase(db);
+
     for (const orgId of orgIds) {
       db.query(
         "INSERT INTO organizations (id, name, slug, created_at, updated_at) VALUES (?, ?, ?, 'now', 'now')"
       ).run(orgId, orgId, orgId);
     }
+
     db.exec(`
       DROP TABLE llm_usage_stats;
       DROP TABLE llm_usage_model_stats;
@@ -1199,6 +1304,7 @@ describe("llm usage org scope", () => {
       INSERT INTO llm_usage_model_stats VALUES ('gpt-4o', 5, 700, 200, 1, '2026-01-01', '2026-02-01');
       INSERT INTO llm_usage_model_stats VALUES ('gpt-4o-mini', 2, 200, 100, 0.25, '2026-01-02', '2026-02-01');
     `);
+
     return db;
   }
 
@@ -1213,6 +1319,7 @@ describe("llm usage org scope", () => {
 
   test("keeps the history under the only org", () => {
     const db = legacyUsageDatabase(["org-solo"]);
+
     try {
       migrateDatabase(db);
 
@@ -1243,6 +1350,7 @@ describe("llm usage org scope", () => {
 
   test("resets the history when more than one org could own it", () => {
     const db = legacyUsageDatabase(["org-a", "org-b"]);
+
     try {
       migrateDatabase(db);
       expect(usageRows(db)).toEqual({ byModel: [], totals: [] });
@@ -1266,6 +1374,7 @@ describe("llm usage org scope", () => {
 describe("llm usage by agent and user", () => {
   test("moves existing org totals into the unattributed group once", () => {
     const db = new Database(":memory:");
+
     try {
       migrateDatabase(db);
       // The ledger as it was before usage had an agent or user.
@@ -1280,12 +1389,14 @@ describe("llm usage by agent and user", () => {
       `);
 
       migrateDatabase(db);
+
       const rows = () =>
         db
           .query(
             "SELECT org_id, profile_id, user_id, request_count, input_tokens, output_tokens, estimated_cost_usd FROM llm_usage_actor_stats ORDER BY org_id"
           )
           .all();
+
       const migrated = rows();
       expect(migrated).toEqual([
         {
@@ -1318,6 +1429,7 @@ describe("llm usage by agent and user", () => {
 
 test("upgrading skill proposals preserves pending content and adds supporting files once", () => {
   const db = new Database(":memory:");
+
   try {
     migrateDatabase(db);
     db.exec("ALTER TABLE skill_proposals DROP COLUMN supporting_files");
@@ -1370,13 +1482,19 @@ describe("ephemeral attachment marking", () => {
       migrateDatabase(db);
 
       const columns = db
-        .prepare("PRAGMA table_info(attachments)")
-        .all() as Array<{ name: string }>;
+        .prepare<{ name: string }, SQLQueryBindings[]>(
+          "PRAGMA table_info(attachments)"
+        )
+        .all();
+
       expect(columns.some((column) => column.name === "ephemeral")).toBe(true);
 
       const existing = db
-        .prepare("SELECT ephemeral FROM attachments WHERE id = 'att_old'")
-        .get() as { ephemeral: number };
+        .prepare<{ ephemeral: number }, SQLQueryBindings[]>(
+          "SELECT ephemeral FROM attachments WHERE id = 'att_old'"
+        )
+        .get();
+
       expect(existing.ephemeral).toBe(0);
     } finally {
       db.close();
@@ -1386,6 +1504,7 @@ describe("ephemeral attachment marking", () => {
 
 test("pre-org profile retention: legacy profiles and their history survive until an organization adopts them", () => {
   const db = new Database(":memory:");
+
   const snapshot = () =>
     [
       "profiles",
@@ -1462,6 +1581,7 @@ test("file pins migrate existing databases, survive reopen and cascade with prof
   const directory = mkdtempSync(join(tmpdir(), "nakama-file-pins-"));
   const filename = join(directory, "pins.sqlite");
   let db = new Database(filename);
+
   try {
     migrateDatabase(db);
     db.exec("DROP TABLE file_pins");
@@ -1488,6 +1608,7 @@ test("file pins migrate existing databases, survive reopen and cascade with prof
 
 test("llm quota reservations: an upgrade drops the old counter table and its false exhaustion", () => {
   const db = new Database(":memory:");
+
   try {
     migrateDatabase(db);
     db.exec(`
@@ -1514,6 +1635,7 @@ test("llm quota reservations: an upgrade drops the old counter table and its fal
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'org_llm_%quota%' ORDER BY name"
       )
       .all();
+
     expect(tables).toEqual([{ name: "org_llm_quota_reservations" }]);
     expect(
       db.query("SELECT COUNT(*) AS held FROM org_llm_quota_reservations").get()

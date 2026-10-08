@@ -42,6 +42,7 @@ describe("upsertProfile default atomicity", () => {
     const now = "2020-01-01T00:00:00.000Z";
 
     const database = await createSqliteDatabase(databaseUrl);
+
     try {
       await database.adapter.upsertOrganization({
         createdAt: now,
@@ -72,6 +73,7 @@ describe("upsertProfile default atomicity", () => {
     raw.close();
 
     const databaseWithTrigger = await createSqliteDatabase(databaseUrl);
+
     try {
       await expect(
         databaseWithTrigger.adapter.upsertProfile(
@@ -82,6 +84,7 @@ describe("upsertProfile default atomicity", () => {
       const defaults = (
         await databaseWithTrigger.adapter.listProfilesForOrg("org_test")
       ).filter((row) => row.isDefault);
+
       expect(defaults.map((row) => row.id)).toEqual(["profile_a"]);
     } finally {
       databaseWithTrigger.close();
@@ -95,6 +98,7 @@ describe("upsertProfile default atomicity", () => {
     const now = "2020-01-01T00:00:00.000Z";
 
     const seed = await createSqliteDatabase(databaseUrl);
+
     try {
       await seed.adapter.upsertOrganization({
         createdAt: now,
@@ -115,6 +119,7 @@ describe("upsertProfile default atomicity", () => {
 
     const left = await createSqliteDatabase(databaseUrl);
     const right = await createSqliteDatabase(databaseUrl);
+
     try {
       await Promise.all([
         left.adapter.upsertProfile(profile("profile_a", "org_test", true, now)),
@@ -126,6 +131,7 @@ describe("upsertProfile default atomicity", () => {
       const defaults = (
         await left.adapter.listProfilesForOrg("org_test")
       ).filter((row) => row.isDefault);
+
       expect(defaults).toHaveLength(1);
       expect(["profile_a", "profile_b"]).toContain(defaults[0]!.id);
     } finally {

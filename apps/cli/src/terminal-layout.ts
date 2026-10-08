@@ -45,6 +45,7 @@ function getVisiblePinnedInputRows(
 ): number {
   const rows = Math.max(1, inputRows);
   const maxVisibleRows = terminalRows > 1 ? terminalRows - 1 : 1;
+
   return Math.min(rows, maxVisibleRows);
 }
 
@@ -94,18 +95,22 @@ export class TerminalLayout {
     this.resizeHandler = () => {
       this.render();
     };
+
     process.stdout.on("resize", this.resizeHandler);
+
     return true;
   }
 
   async anchorFromCursor(): Promise<void> {
     const row = await this.terminalInput?.requestCursorRow();
+
     if (row !== null && row > 0) {
       this.anchorRow = row;
     } else {
       // Fall back to a compact inline start near the bottom when cursor probing fails.
       this.anchorRow = getTerminalRows();
     }
+
     this.viewportTopRow = this.anchorRow;
     this.anchored = true;
     this.render();
@@ -172,9 +177,11 @@ export class TerminalLayout {
     this.previousFrame = null;
     this.tui.resetRenderState();
     this.hasPainted = false;
+
     if (this.enabled) {
       process.stdout.write("\x1b[2J\x1b[3J\x1b[H");
     }
+
     this.render();
   }
 
@@ -202,9 +209,11 @@ export class TerminalLayout {
   beginStream(): void {
     this.streamBuffer = "";
     this.statusLine = null;
+
     if (this.followOutput) {
       this.historyOffset = 0;
     }
+
     this.render();
   }
 
@@ -215,11 +224,14 @@ export class TerminalLayout {
     if (this.streamBuffer && this.messages.messageCount > 0) {
       this.streamBuffer = `\n${this.streamBuffer}`;
     }
+
     this.flushStreamBuffer();
     this.statusLine = null;
+
     if (this.followOutput) {
       this.historyOffset = 0;
     }
+
     this.render();
   }
 
@@ -228,6 +240,7 @@ export class TerminalLayout {
       process.stdout.write(
         `\r\x1b[K${styledLineText(normalizeStyledLine(text))}`
       );
+
       return;
     }
 
@@ -254,13 +267,16 @@ export class TerminalLayout {
 
     if (!(this.enabled && this.anchored)) {
       process.stdout.write(plain);
+
       return;
     }
 
     this.streamBuffer += plain;
+
     if (this.followOutput) {
       this.historyOffset = 0;
     }
+
     this.render();
   }
 
@@ -270,14 +286,17 @@ export class TerminalLayout {
 
     if (!(this.enabled && this.anchored)) {
       process.stdout.write(`${plain}\n`);
+
       return;
     }
 
     this.flushStreamBuffer();
     this.messages.appendLine(plain);
+
     if (this.followOutput) {
       this.historyOffset = 0;
     }
+
     this.render();
   }
 
@@ -337,6 +356,7 @@ export class TerminalLayout {
     }
 
     const lines = renderMarkdownLines(this.streamBuffer, getTerminalColumns());
+
     return this.messages.messageCount > 0 ? [plainLine(""), ...lines] : lines;
   }
 
@@ -354,16 +374,20 @@ export class TerminalLayout {
     const statusLeadingGapRows = this.statusLine && fullLength > 0 ? 1 : 0;
     const statusRows = this.statusLine ? statusLeadingGapRows + 1 : 0;
     const debugRows = this.debugOverlay ? 1 : 0;
+
     const neededRows = Math.max(
       1,
       fullLength + statusRows + GAP_ROWS + this.reservedRows + debugRows
     );
+
     const anchor = Math.min(rows, Math.max(1, this.anchorRow));
     const initialViewportRows = Math.max(1, rows - anchor + 1);
+
     const targetViewportRows = Math.min(
       rows,
       Math.max(initialViewportRows, neededRows)
     );
+
     const desiredTop = Math.max(1, rows - targetViewportRows + 1);
     // Keep viewport growth monotonic within a session: once grown upward, do not shrink down.
     this.viewportTopRow = Math.max(
@@ -372,44 +396,56 @@ export class TerminalLayout {
     );
     const viewportTop = this.viewportTopRow;
     const viewportRows = Math.max(1, rows - viewportTop + 1);
+
     const visibleInputRows = getVisiblePinnedInputRows(
       this.reservedRows,
       viewportRows
     );
+
     const visibleInput = this.inputLines.slice(-visibleInputRows);
+
     const pinned =
       fullLength + statusRows + GAP_ROWS + debugRows + visibleInput.length >
       viewportRows;
+
     const contentCapacity = pinned
       ? Math.max(
           0,
           viewportRows - visibleInput.length - statusRows - GAP_ROWS - debugRows
         )
       : fullLength;
+
     this.contentWindowRows = Math.max(1, contentCapacity);
     const maxOffset = Math.max(0, fullLength - contentCapacity);
     this.historyOffset = Math.max(0, Math.min(maxOffset, this.historyOffset));
+
     if (this.historyOffset === 0) {
       this.followOutput = true;
     }
+
     const endExclusive = Math.max(0, fullLength - this.historyOffset);
     const startInclusive = Math.max(0, endExclusive - contentCapacity);
+
     const visibleTranscript = this.messages.getLines(
       startInclusive,
       Math.min(endExclusive, transcriptCount),
       cols
     );
+
     const streamStart = Math.max(0, startInclusive - transcriptCount);
+
     const streamEnd = Math.max(
       0,
       Math.min(endExclusive - transcriptCount, streamContent.length)
     );
+
     const visibleStream = streamContent.slice(streamStart, streamEnd);
     const visibleContent = [...visibleTranscript, ...visibleStream];
 
     const lines: StyledLine[] = Array.from({ length: viewportRows }, () =>
       plainLine("")
     );
+
     let row = 0;
 
     if (this.debugOverlay && viewportRows > 0) {
@@ -419,6 +455,7 @@ export class TerminalLayout {
         `msgs:${this.messages.messageCount} ` +
         `follow:${this.followOutput ? "1" : "0"} pin:${pinned ? "1" : "0"} dtop:${desiredTop} ` +
         `sr:${viewportTop}-${pinned ? Math.max(viewportTop, rows - visibleInput.length) : rows}`;
+
       lines[0] = styledLine(debugText.slice(0, Math.max(1, cols)), {
         color: "yellow",
         dim: true,
@@ -430,6 +467,7 @@ export class TerminalLayout {
       if (row >= viewportRows) {
         break;
       }
+
       lines[row] = line;
       row += 1;
     }
@@ -438,6 +476,7 @@ export class TerminalLayout {
       const statusRow = pinned
         ? Math.max(0, viewportRows - visibleInput.length - 1 - GAP_ROWS)
         : Math.min(viewportRows - 1, row + statusLeadingGapRows);
+
       lines[statusRow] = this.statusLine;
     }
 
@@ -447,6 +486,7 @@ export class TerminalLayout {
           viewportRows - visibleInput.length,
           row + statusRows + GAP_ROWS
         );
+
     for (let index = 0; index < visibleInput.length; index += 1) {
       lines[inputStart + index] = visibleInput[index] ?? plainLine("");
     }
@@ -455,12 +495,15 @@ export class TerminalLayout {
       lines,
       topRow: viewportTop,
     };
+
     this.previousFrame = frame;
     const renderedLines = lines.map(serializeStyledLine);
     const cursorLine = inputStart + visibleInput.length - 2;
+
     if (cursorLine >= 0 && cursorLine < renderedLines.length) {
       const cursorText = styledLineText(lines[cursorLine]).trimEnd();
       const cursorTextStart = renderedLines[cursorLine]?.indexOf(cursorText);
+
       if (cursorTextStart !== undefined && cursorTextStart >= 0) {
         const cursorEnd = cursorTextStart + cursorText.length;
         renderedLines[cursorLine] =
@@ -469,11 +512,14 @@ export class TerminalLayout {
           renderedLines[cursorLine].slice(cursorEnd);
       }
     }
+
     this.frameComponent.setLines(renderedLines);
+
     if (!this.hasPainted) {
       this.tui.terminal.write(`\x1b[${viewportTop};1H`);
       this.hasPainted = true;
     }
+
     this.tui.renderNow();
   }
 }

@@ -8,6 +8,7 @@ import {
 } from "@nakama/core";
 
 const CLI_CONFIG_KEYS = new Set(["org_id", "profile_id", "server_url"]);
+
 let configScope = "";
 
 export function setCliConfigScope(serverUrl?: string, userId?: string): void {
@@ -25,6 +26,7 @@ export function getCliConfigPath(): string {
 
 export async function loadSavedCliServerUrl(): Promise<string | null> {
   const values = await readCliConfigValues(join(getUserConfigDir(), "cli.ini"));
+
   return values.server_url || null;
 }
 
@@ -55,6 +57,7 @@ export async function saveCliOrgId(orgId: string): Promise<void> {
 async function loadCliConfigValue(key: string): Promise<string | null> {
   const values = await readCliConfigValues();
   const value = values[key]?.trim();
+
   return value || null;
 }
 
@@ -96,6 +99,7 @@ async function writeCliConfig(
 
   for (const key of CLI_CONFIG_KEYS) {
     const value = values[key]?.trim();
+
     if (value) {
       lines.push(`${key}=${value}`);
     }

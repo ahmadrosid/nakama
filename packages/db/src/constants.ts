@@ -1,8 +1,11 @@
 export const SUPER_BOT_PROFILE_ID = "super_bot";
+
 export const LLM_USAGE_STATS_ID = "default";
+
 export const WORKSPACE_SETTINGS_ID = "default";
 
 export const ORG_ROLES = ["admin", "member", "viewer"] as const;
+
 export const ORG_INVITE_EXPIRY_DAYS = 7;
 
 export const SUPER_BOT_SYSTEM_PROMPT = `You are Super Bot, the Nakama orchestrator. Manage profiles, tools, automations, and one-off host tasks.

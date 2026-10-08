@@ -2,6 +2,7 @@ import type {
   AgentQuestionnaire,
   AgentTodo,
   ChatMessage,
+  JsonSchema,
   OrgPluginLifecycleState,
   OrgPluginSummary,
   OrgRole,
@@ -10,6 +11,7 @@ import type {
 } from "@nakama/core";
 
 export type { OrgRole } from "@nakama/core";
+
 export type ChannelType = "telegram" | "whatsapp";
 
 export type AutomationRunStatus = "running" | "completed" | "failed";
@@ -304,7 +306,7 @@ export interface StoredComposioToolkitRecord {
     slug: string;
     name: string;
     description: string;
-    inputSchema: Record<string, unknown>;
+    inputSchema: JsonSchema;
   }>;
   createdAt: string;
   displayName: string;
@@ -400,6 +402,7 @@ export type McpServerStatus =
   | "disconnected"
   | "error"
   | "needs_auth";
+
 export type McpTransport = "http" | "stdio";
 
 export interface CachedMcpTool {
@@ -665,6 +668,7 @@ export interface StoredOrgMemoryProposal {
 }
 
 export type SkillProposalStatus = "pending" | "approved" | "rejected";
+
 export type SkillProposalAction =
   | "create"
   | "patch"
@@ -695,6 +699,7 @@ export interface StoredSkillProposal {
 }
 
 export type SkillSuggestionStatus = "pending" | "applied";
+
 export type SkillSuggestionAction = "create" | "patch";
 
 export interface StoredSkillSuggestion {

@@ -39,6 +39,7 @@ describe("composio user connections", () => {
       "org_a",
       "usr_a"
     );
+
     expect(listed).toHaveLength(1);
   });
 

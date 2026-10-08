@@ -44,6 +44,7 @@ describe("consumeTerminalInput", () => {
 
   test("keeps Kitty key events intact across chunk boundaries", () => {
     const sequence = "\x1b[104:72;2:1u";
+
     for (let split = 1; split < sequence.length; split++) {
       const first = consumeTerminalInput(sequence.slice(0, split));
       expect(first.events).toEqual([]);
