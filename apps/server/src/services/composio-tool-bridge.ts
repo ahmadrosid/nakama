@@ -3,6 +3,7 @@ import type {
   ToolContext,
   ToolDefinition,
 } from "@nakama/core";
+import { z } from "zod";
 import {
   isLoopbackComposioCallbackBaseUrl,
   resolveComposioCallbackBaseUrl,
@@ -11,10 +12,13 @@ import type { ComposioService } from "./composio-service";
 import type { McpClientManager } from "./mcp-client-manager";
 
 const COMPOSIO_META_TOOL_PATTERN = /^COMPOSIO_(MANAGE|WAIT|SEARCH|MULTI)/;
+
 const composioSessionUrls = new Map<string, string>();
 
 const MAX_SEARCH_DESCRIPTION_CHARS = 120;
+
 const TRUNCATION_MARKER = "\n...[truncated]";
+
 const MAX_COMPOSIO_TOOL_RESULT_CHARS = 16_000;
 
 async function ensureComposioMcpConnection(
@@ -35,6 +39,7 @@ async function ensureComposioMcpConnection(
       session.headers
     );
     composioSessionUrls.set(connectionKey, session.url);
+
     return;
   }
 
@@ -86,15 +91,36 @@ interface ComposioSearchActionsInput {
 
 interface ComposioInvokeActionInput {
   action_slug: string;
-  arguments: Record<string, unknown>;
+  arguments: Record<string, JsonValue>;
   toolkit_slug: string;
 }
 
+type JsonValue =
+  | boolean
+  | JsonValue[]
+  | { [key: string]: JsonValue }
+  | null
+  | number
+  | string;
+
+const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(JsonValueSchema),
+    z.record(z.string(), JsonValueSchema),
+  ])
+);
+
 function trimDescription(value: string | null | undefined): string {
   const text = (value ?? "").trim();
+
   if (text.length <= MAX_SEARCH_DESCRIPTION_CHARS) {
     return text;
   }
+
   return `${text.slice(0, MAX_SEARCH_DESCRIPTION_CHARS - 1)}…`;
 }
 
@@ -114,9 +140,11 @@ function buildSearchableActions(
       if (isBlockedComposioMetaTool(cachedTool.slug)) {
         continue;
       }
+
       if (allowedActions && !allowedActions.includes(cachedTool.slug)) {
         continue;
       }
+
       actions.push({
         description: trimDescription(cachedTool.description),
         name: cachedTool.name,
@@ -131,9 +159,11 @@ function buildSearchableActions(
 
 function actionMatchesQuery(action: SearchableAction, query: string): boolean {
   const needle = query.trim().toLowerCase();
+
   if (needle === "") {
     return true;
   }
+
   return (
     action.slug.toLowerCase().includes(needle) ||
     action.name.toLowerCase().includes(needle) ||
@@ -153,15 +183,18 @@ function findSearchableAction(
   );
 }
 
-function truncateComposioToolResult(result: unknown): unknown {
-  const text = typeof result === "string" ? result : JSON.stringify(result);
+function truncateComposioToolResult(result: JsonValue): JsonValue {
+  const text = JSON.stringify(result) ?? "";
+
   if (text.length <= MAX_COMPOSIO_TOOL_RESULT_CHARS) {
     return result;
   }
+
   const keep = Math.max(
     0,
     MAX_COMPOSIO_TOOL_RESULT_CHARS - TRUNCATION_MARKER.length
   );
+
   return {
     content: `${text.slice(0, keep)}${TRUNCATION_MARKER}`,
     truncated: true,
@@ -187,6 +220,7 @@ export async function buildComposioConnectTools(
     userId,
     profileId
   );
+
   const needsConnection = assigned.filter(
     ({ orgToolkit, userConnection }) =>
       orgToolkit.status === "enabled" && userConnection?.status !== "connected"
@@ -199,6 +233,7 @@ export async function buildComposioConnectTools(
   const allowedSlugs = needsConnection.map(
     ({ orgToolkit }) => orgToolkit.toolkitSlug
   );
+
   const slugList = allowedSlugs.join(", ");
 
   return [
@@ -216,13 +251,13 @@ export async function buildComposioConnectTools(
         type: "object",
       },
       async run(input, context: ToolContext) {
-        const toolkitSlug =
-          typeof input === "object" &&
-          input &&
-          typeof (input as ComposioConnectAccountInput).toolkit_slug ===
-            "string"
-            ? (input as ComposioConnectAccountInput).toolkit_slug.toLowerCase()
-            : null;
+        const parsedInput = z
+          .object({ toolkit_slug: z.string() })
+          .safeParse(input);
+
+        const toolkitSlug = parsedInput.success
+          ? parsedInput.data.toolkit_slug.toLowerCase()
+          : null;
 
         if (!(toolkitSlug && allowedSlugs.includes(toolkitSlug))) {
           return {
@@ -300,6 +335,7 @@ export async function buildComposioToolDefinitions(
     userId,
     profileId
   );
+
   if (assigned.length === 0) {
     return [];
   }
@@ -320,6 +356,7 @@ export async function buildComposioToolDefinitions(
     userId,
     profileId
   );
+
   if (!session) {
     return [];
   }
@@ -329,6 +366,7 @@ export async function buildComposioToolDefinitions(
   await ensureComposioMcpConnection(mcpClientManager, connectionKey, session);
 
   const searchableActions = buildSearchableActions(connectedAssignments);
+
   if (searchableActions.length === 0) {
     return [];
   }
@@ -336,6 +374,7 @@ export async function buildComposioToolDefinitions(
   const toolkitSlugs = [
     ...new Set(searchableActions.map((action) => action.toolkitSlug)),
   ];
+
   const toolkitList = toolkitSlugs.join(", ");
 
   const searchTool: ToolDefinition = {
@@ -357,12 +396,18 @@ export async function buildComposioToolDefinitions(
       type: "object",
     },
     async run(input) {
-      const parsed = input as ComposioSearchActionsInput;
-      const query = typeof parsed?.query === "string" ? parsed.query : "";
-      const toolkitSlug =
-        typeof parsed?.toolkit_slug === "string"
-          ? parsed.toolkit_slug.toLowerCase()
-          : undefined;
+      const parsed = z
+        .object({
+          query: z.string().optional(),
+          toolkit_slug: z.string().optional(),
+        })
+        .safeParse(input);
+
+      const query = parsed.success ? (parsed.data.query ?? "") : "";
+
+      const toolkitSlug = parsed.success
+        ? parsed.data.toolkit_slug?.toLowerCase()
+        : undefined;
 
       const matches = searchableActions.filter(
         (action) =>
@@ -407,21 +452,26 @@ export async function buildComposioToolDefinitions(
       type: "object",
     },
     async run(input) {
-      const parsed = input as ComposioInvokeActionInput;
-      const toolkitSlug =
-        typeof parsed?.toolkit_slug === "string"
-          ? parsed.toolkit_slug.toLowerCase()
-          : null;
-      const actionSlug =
-        typeof parsed?.action_slug === "string"
-          ? parsed.action_slug.toUpperCase()
-          : null;
-      const args =
-        parsed?.arguments &&
-        typeof parsed.arguments === "object" &&
-        !Array.isArray(parsed.arguments)
-          ? (parsed.arguments as Record<string, unknown>)
-          : {};
+      const parsed = z
+        .object({
+          action_slug: z.string(),
+          arguments: z
+            .record(z.string(), JsonValueSchema)
+            .optional()
+            .default({}),
+          toolkit_slug: z.string(),
+        })
+        .safeParse(input);
+
+      const toolkitSlug = parsed.success
+        ? parsed.data.toolkit_slug.toLowerCase()
+        : null;
+
+      const actionSlug = parsed.success
+        ? parsed.data.action_slug.toUpperCase()
+        : null;
+
+      const args = parsed.success ? parsed.data.arguments : {};
 
       if (!(toolkitSlug && actionSlug)) {
         return {
@@ -435,6 +485,7 @@ export async function buildComposioToolDefinitions(
         toolkitSlug,
         actionSlug
       );
+
       if (!action) {
         return {
           code: "COMPOSIO_POLICY",
@@ -446,7 +497,9 @@ export async function buildComposioToolDefinitions(
       const assignment = connectedAssignments.find(
         ({ orgToolkit }) => orgToolkit.toolkitSlug === action.toolkitSlug
       );
+
       const userConnection = assignment?.userConnection;
+
       if (userConnection?.status !== "connected") {
         return notConnectedError(action.toolkitSlug);
       }
@@ -464,7 +517,7 @@ export async function buildComposioToolDefinitions(
           args
         );
 
-        return truncateComposioToolResult(result);
+        return truncateComposioToolResult(JsonValueSchema.parse(result));
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
 
