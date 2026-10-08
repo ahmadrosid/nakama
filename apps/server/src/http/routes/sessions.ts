@@ -966,6 +966,7 @@ export function registerSessionRoutes(
       ))
     ) {
       sessionTurnRegistry.cancelTurn(sessionId);
+
       return errorResponse(
         "WhatsApp context requires worker authentication.",
         403
@@ -1015,6 +1016,7 @@ export function registerSessionRoutes(
           ? { whatsappMessage: body.whatsappMessage }
           : undefined
       );
+
       const contextUsage = session.getContextUsage() ?? undefined;
       const usage = session.getTurnUsage() ?? undefined;
       sessionTurnRegistry.endTurn(sessionId, {

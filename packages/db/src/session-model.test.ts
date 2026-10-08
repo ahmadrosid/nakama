@@ -5,6 +5,7 @@ describe("SQLite session model persistence", () => {
   test("stores code-mode child calls only in the session organization and deletes them with the session", async () => {
     const database = await createSqliteDatabase(":memory:");
     const now = new Date().toISOString();
+
     try {
       await database.adapter.upsertOrganization({
         createdAt: now,
@@ -35,6 +36,7 @@ describe("SQLite session model persistence", () => {
         title: null,
         userId: null,
       });
+
       const begin = {
         id: "child_1",
         input: '{"query":"a"}',
@@ -44,6 +46,7 @@ describe("SQLite session model persistence", () => {
         startedAt: now,
         toolName: "search_files",
       };
+
       await expect(
         database.adapter.beginCodeModeChildCall({ ...begin, orgId: "wrong" })
       ).rejects.toThrow();
