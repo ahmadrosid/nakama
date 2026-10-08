@@ -1,13 +1,11 @@
-import type { ToolDetail } from "@nakama/core/contract";
+import type { JsonValue, ToolDetail } from "@nakama/core/contract";
 import { useState } from "react";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { client, formatError } from "@/lib/client";
 import { buildSuperBotFixDraft } from "@/lib/tool-playground-draft";
 import { buildExampleParametersJson } from "@/lib/tool-playground-params";
 
-type JsonValue = string | number | boolean | null | JsonValue[] | JsonRecord;
-
-type JsonRecord = { [key: string]: JsonValue };
+type JsonRecord = Record<string, JsonValue>;
 
 type ToolPlaygroundRunState =
   | { status: "idle" }
@@ -35,7 +33,8 @@ function parseParametersJson(raw: string): JsonRecord | null {
     const parsed: unknown = JSON.parse(raw);
 
     if (isJsonRecord(parsed)) {
-      return parsed;
+      // SAFETY: JSON.parse creates JSON values, and this guard confirms a non-null, non-array object with valid values.
+      return parsed as Record<string, JsonValue>;
     }
   } catch {
     return null;
@@ -44,7 +43,8 @@ function parseParametersJson(raw: string): JsonRecord | null {
   return null;
 }
 
-function isJsonRecord(value: unknown): value is JsonRecord {
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This boundary guard checks parsed JSON before the cast.
+function isJsonRecord(value: unknown): boolean {
   return (
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- JSON.parse output needs a record check.
     typeof value === "object" &&

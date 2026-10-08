@@ -114,7 +114,12 @@ function normalizeSpreadsheetRows(rows: SpreadsheetRows): SpreadsheetRows {
   return normalized.length > 0 ? normalized : [[""]];
 }
 
-export { normalizeSpreadsheetRows as "normalizeSpreadsheetShape" };
+// oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- The spreadsheet editor imports this public helper.
+export function normalizeSpreadsheetShape(
+  rows: SpreadsheetRows
+): SpreadsheetRows {
+  return normalizeSpreadsheetRows(rows);
+}
 
 /** 0 → A, 25 → Z, 26 → AA */
 export function columnIndexToLetter(index: number): string {
