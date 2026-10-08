@@ -11,6 +11,7 @@ async function flushTypingChain(): Promise<void> {
 
 function createFakeMessenger() {
   const calls: string[] = [];
+
   const messenger: DiscordMessenger = {
     async edit() {},
     async send() {
@@ -20,12 +21,14 @@ function createFakeMessenger() {
       calls.push("typing");
     },
   };
+
   return { calls, messenger };
 }
 
 function createBlockingMessenger() {
   const releases: Array<() => void> = [];
   let sendCount = 0;
+
   const messenger: DiscordMessenger = {
     async edit() {},
     async send() {
@@ -53,6 +56,7 @@ function createBlockingMessenger() {
 describe("createTypingLoop", () => {
   test("stop prevents later ping from sending typing", async () => {
     const { messenger, calls } = createFakeMessenger();
+
     const loop = createTypingLoop(() => messenger.sendTyping(), {
       refreshMs: 8000,
     });
@@ -70,6 +74,7 @@ describe("createTypingLoop", () => {
 
   test("start replaces a previous interval without leaking", async () => {
     const { messenger, calls } = createFakeMessenger();
+
     const loop = createTypingLoop(() => messenger.sendTyping(), {
       refreshMs: 8000,
     });
@@ -88,6 +93,7 @@ describe("createTypingLoop", () => {
 
   test("stop drops queued typing sends that have not started yet", async () => {
     const { getSendCount, messenger, releaseAll } = createBlockingMessenger();
+
     const loop = createTypingLoop(() => messenger.sendTyping(), {
       refreshMs: 8000,
     });

@@ -6,7 +6,7 @@ import {
   resetActiveStreamsForTests,
 } from "@nakama/core/channel-active-stream";
 import { ChannelSessionStore as SessionStore } from "@nakama/core/channel-session-store";
-import type { ChatMessage } from "@nakama/core/contract";
+import type { ChatMessage, SendMessageInput } from "@nakama/core/contract";
 import { loadDiscordConfigFile } from "@nakama/core/discord-config";
 import type {
   ButtonInteraction,
@@ -45,24 +45,34 @@ function createPickerInteraction(
     inThread: true,
     userId,
   });
+
   const { commandName: _commandName, ...interaction } = mock.interaction;
+
+  const pickerInteraction = {
+    ...interaction,
+    customId,
+    message: {
+      components:
+        payload?.components.map((row) => ({
+          components: row.components.map(({ custom_id, ...component }) => ({
+            ...component,
+            customId: custom_id,
+          })),
+          type: 1,
+        })) ?? [],
+    },
+  };
+
+  if (values) {
+    Object.assign(pickerInteraction, { values });
+  }
+
+  // SAFETY: The fixture supplies the interaction fields read by these handler tests.
   return {
     ...mock,
-    interaction: {
-      ...interaction,
-      customId,
-      message: {
-        components:
-          payload?.components.map((row) => ({
-            components: row.components.map(({ custom_id, ...component }) => ({
-              ...component,
-              customId: custom_id,
-            })),
-            type: 1,
-          })) ?? [],
-      },
-      ...(values ? { values } : {}),
-    } as unknown as StringSelectMenuInteraction | ButtonInteraction,
+    interaction: pickerInteraction as
+      | StringSelectMenuInteraction
+      | ButtonInteraction,
   };
 }
 
@@ -73,8 +83,10 @@ function readPickerPayload(
     | StringSelectMenuInteraction
 ) {
   const edit = spyOn(interaction, "editReply");
-  return () =>
-    JSON.parse(JSON.stringify(edit.mock.calls.at(-1)?.[0])) as {
+
+  return () => {
+    // SAFETY: The handler creates these components before editReply is called.
+    return JSON.parse(JSON.stringify(edit.mock.calls.at(-1)?.[0])) as {
       components: Array<{
         components: Array<{
           custom_id: string;
@@ -85,6 +97,7 @@ function readPickerPayload(
         }>;
       }>;
     };
+  };
 }
 
 async function selectAndApply(
@@ -95,9 +108,11 @@ async function selectAndApply(
   const pick = createPickerInteraction(customId, [value]);
   const preview = readPickerPayload(pick.interaction);
   await handler.handleSelectionInteraction(pick.interaction);
+
   const apply = preview()
     .components.flatMap((row) => row.components)
     .find((button) => button.label === "Apply")!;
+
   expect(apply.disabled).toBe(false);
   await handler.handleSelectionInteraction(
     createPickerInteraction(apply.custom_id, undefined, undefined, preview())
@@ -157,16 +172,21 @@ async function createPairedHandler(
   const mockClient = createMockClient(options);
   const { calls, createdSessionProfileIds } = mockClient;
   const client = options.apiClient ?? mockClient.client;
+
   const sessionStore = new SessionStore(
     path.join(homeDir, ".nakama", "discord", "chat-sessions.json")
   );
+
   await sessionStore.load();
+
   const threadStore = new ThreadStore(
     path.join(homeDir, ".nakama", "discord", "chat-threads.json")
   );
+
   await threadStore.load();
   const orgStore = createTestOrgStore(homeDir);
   await orgStore.load();
+
   const handlers = createChatHandler({
     authStore,
     client,
@@ -194,20 +214,25 @@ describe("createChatHandler logging", () => {
   test("numeric chat replies preserve the selected org and session", async () => {
     await withTempHome(async (homeDir) => {
       const inputs: unknown[] = [];
+
       const { handleMessage, orgStore, calls } = await createPairedHandler(
         homeDir,
         {
           onSendStream: async (input) => {
             inputs.push(input);
+
             return "ok";
           },
           orgs: createMultiTestOrgs(),
         }
       );
+
       orgStore.set("u:424242424242424242", "org_a");
+
       for (const content of ["hello", "2", "continue"]) {
         await handleMessage(createDmMessage({ content }).message);
       }
+
       expect(inputs).toHaveLength(3);
       expect(orgStore.get("u:424242424242424242")?.orgId).toBe("org_a");
       expect(calls.createSession).toBe(1);
@@ -229,12 +254,14 @@ describe("createChatHandler logging", () => {
         const output = log.mock.calls
           .map((args) => args.map(String).join(" "))
           .join("\n");
+
         expect(output).toContain(
           `textBytes=${Buffer.byteLength(privateMessage, "utf8")}`
         );
         expect(output).not.toContain(privateMessage);
       } finally {
         log.mockRestore();
+
         if (previousDebug === undefined) {
           delete process.env.NAKAMA_CH_DEBUG;
         } else {
@@ -259,6 +286,7 @@ describe("createChatHandler logging", () => {
         expect(log.mock.calls).toEqual([]);
       } finally {
         log.mockRestore();
+
         if (previousDebug === undefined) {
           delete process.env.NAKAMA_CH_DEBUG;
         } else {
@@ -275,6 +303,7 @@ describe("Discord selection pickers", () => {
       const handler = await createPairedHandler(homeDir, {
         orgs: createMultiTestOrgs(),
       });
+
       const key = "g:guild_channel_1:t:thread_1";
       handler.orgStore.set(key, "org_a");
       handler.threadStore.add("thread_1");
@@ -286,10 +315,12 @@ describe("Discord selection pickers", () => {
         }).message
       );
       const session = handler.sessionStore.get(key);
+
       const command = createSlashInteraction({
         commandName: "org",
         inThread: true,
       });
+
       const initial = readPickerPayload(command.interaction);
       await handler.handleSlashCommand(command.interaction);
       expect(
@@ -297,18 +328,24 @@ describe("Discord selection pickers", () => {
           .components.flatMap((row) => row.components)
           .find((button) => button.label === "Apply")?.disabled
       ).toBe(true);
+
       const pick = createPickerInteraction("nakama:org:424242424242424242:0", [
         "org_b",
       ]);
+
+      // SAFETY: The picker fixture models the select interaction used here.
       const preview = readPickerPayload(
-        pick.interaction as unknown as typeof command.interaction
+        pick.interaction as typeof command.interaction
       );
+
       await handler.handleSelectionInteraction(pick.interaction);
       expect(handler.orgStore.get(key)?.orgId).toBe("org_a");
       expect(handler.sessionStore.get(key)).toEqual(session);
+
       const cancel = preview()
         .components.flatMap((row) => row.components)
         .find((button) => button.label === "Cancel")!;
+
       await handler.handleSelectionInteraction(
         createPickerInteraction(
           cancel.custom_id,
@@ -326,6 +363,7 @@ describe("Discord selection pickers", () => {
       const handler = await createPairedHandler(homeDir, {
         orgs: createMultiTestOrgs(),
       });
+
       const key = "g:guild_channel_1:t:thread_1";
       handler.orgStore.set(key, "org_a");
       handler.threadStore.add("thread_1");
@@ -336,10 +374,13 @@ describe("Discord selection pickers", () => {
           threadId: "thread_1",
         }).message
       );
+
       const save = spyOn(handler.orgStore, "save").mockRejectedValueOnce(
         new Error("disk unavailable")
       );
+
       const log = spyOn(console, "error").mockImplementation(() => {});
+
       try {
         await selectAndApply(
           handler,
@@ -359,62 +400,81 @@ describe("Discord selection pickers", () => {
       const sessionOrgs = new Map<string, string>();
       const sent: Array<{ sessionId: string; orgId: string | null }> = [];
       let releaseFirst!: () => void;
+
       const gate = new Promise<void>((resolve) => {
         releaseFirst = resolve;
       });
+
       let firstStarted = false;
+
       const apiClient = new NakamaClient({
         baseUrl: "http://discord-test.invalid",
+        // SAFETY: NakamaClient calls fetch with the standard Request input shape.
         fetch: (async (input, init) => {
           const request = new Request(input, init);
           const pathname = new URL(request.url).pathname;
           const orgId = request.headers.get("X-Org-Id");
+
           if (pathname === "/v1/auth/orgs") {
             return Response.json({ orgs: createMultiTestOrgs() });
           }
+
           if (pathname === "/v1/profiles") {
             return Response.json({
               profiles: [{ id: "default", name: "Default" }],
             });
           }
+
           if (pathname === "/v1/sessions") {
             const sessionId = `session_${sessionOrgs.size}`;
             sessionOrgs.set(sessionId, orgId!);
+
             return Response.json({ sessionId });
           }
+
           const sessionId = pathname.split("/")[3]!;
+
           if (pathname.endsWith("/messages") && request.method === "POST") {
             sent.push({ orgId, sessionId });
+
             if (sent.length === 1) {
               firstStarted = true;
               await gate;
             }
+
             if (sessionOrgs.get(sessionId) !== orgId) {
               return Response.json(
                 { error: "Session not found" },
                 { status: 404 }
               );
             }
+
             return new Response('data: {"type":"done","reply":"ok"}\n\n', {
               headers: { "Content-Type": "text/event-stream" },
             });
           }
+
           if (pathname.endsWith("/messages")) {
             return Response.json({ messages: [] });
           }
+
           throw new Error(`Unexpected request: ${pathname}`);
         }) as typeof fetch,
       });
+
       const handler = await createPairedHandler(homeDir, { apiClient });
       handler.orgStore.set("g:guild_channel_1", "org_a");
       handler.orgStore.set("g:guild_channel_1:t:thread_2", "org_b");
       handler.threadStore.add("thread_1");
       handler.threadStore.add("thread_2");
+
       const send = (threadId: string, content: string) =>
         handler.handleMessage(
           createGuildChatMessage({ content, inThread: true, threadId }).message
         );
+
       const first = send("thread_1", "hello");
+
       try {
         await waitForCondition(
           () => firstStarted,
@@ -424,6 +484,7 @@ describe("Discord selection pickers", () => {
       } finally {
         releaseFirst();
       }
+
       await first;
       await send("thread_1", "2");
       expect(sent.map((entry) => entry.orgId)).toEqual([
@@ -445,19 +506,25 @@ describe("Discord selection pickers", () => {
         id: `org_${index}`,
         name: `Org ${index}`,
       }));
+
       const handler = await createPairedHandler(homeDir, { orgs });
+
       const command = createSlashInteraction({
         commandName: "org",
         inThread: true,
       });
+
       const payload = readPickerPayload(command.interaction);
       await handler.handleSlashCommand(command.interaction);
       expect(payload().components[0]?.components[0]?.options).toHaveLength(25);
       const nextId = payload().components[1]!.components[1]!.custom_id;
       const next = createPickerInteraction(nextId);
+
+      // SAFETY: The picker fixture models the select interaction used here.
       const nextPayload = readPickerPayload(
-        next.interaction as unknown as typeof command.interaction
+        next.interaction as typeof command.interaction
       );
+
       await handler.handleSelectionInteraction(next.interaction);
       expect(
         nextPayload().components[0]?.components[0]?.options?.map(
@@ -480,7 +547,9 @@ describe("Discord selection pickers", () => {
       const handler = await createPairedHandler(homeDir, {
         orgs: createMultiTestOrgs(),
       });
+
       handler.orgStore.set("g:guild_channel_1", "org_a");
+
       for (const threadId of ["thread_1", "thread_2"]) {
         handler.threadStore.add(threadId);
         await handler.handleMessage(
@@ -488,10 +557,13 @@ describe("Discord selection pickers", () => {
             .message
         );
       }
+
       const key = "g:guild_channel_1:t:thread_1";
       const siblingKey = "g:guild_channel_1:t:thread_2";
+
       const sibling =
         handler.sessionStore.getHotSession<RemoteChatSession>(siblingKey);
+
       await selectAndApply(handler, "nakama:org:424242424242424242:0", "org_a");
       expect(handler.sessionStore.getHotSession(key)).toBeDefined();
       await selectAndApply(handler, "nakama:org:424242424242424242:0", "org_b");
@@ -523,11 +595,14 @@ describe("Discord selection pickers", () => {
           { id: "super", isSuper: true },
         ],
       });
+
       handler.orgStore.set("g:guild_channel_1", "org_a");
+
       const command = createSlashInteraction({
         commandName: "profile",
         inThread: true,
       });
+
       const payload = readPickerPayload(command.interaction);
       await handler.handleSlashCommand(command.interaction);
       const menu = payload().components[0]!.components[0]!;
@@ -543,9 +618,11 @@ describe("Discord selection pickers", () => {
       const preview = readPickerPayload(pick.interaction);
       await handler.handleSelectionInteraction(pick.interaction);
       expect(handler.createdSessionProfileIds).toEqual([]);
+
       const apply = preview()
         .components.flatMap((row) => row.components)
         .find((button) => button.label === "Apply")!;
+
       await handler.handleSelectionInteraction(
         createPickerInteraction(
           apply.custom_id,
@@ -574,13 +651,16 @@ describe("Discord selection pickers", () => {
         allowedUserIds: ["999999999999999999"],
         orgs: createMultiTestOrgs(),
       });
+
       const id = "nakama:org:424242424242424242:0";
       const pick = createPickerInteraction(id, ["org_b"]);
       const preview = readPickerPayload(pick.interaction);
       await handler.handleSelectionInteraction(pick.interaction);
+
       const applyId = preview()
         .components.flatMap((row) => row.components)
         .find((button) => button.label === "Apply")!.custom_id;
+
       await handler.handleSelectionInteraction(
         createPickerInteraction(
           applyId,
@@ -589,12 +669,15 @@ describe("Discord selection pickers", () => {
           preview()
         ).interaction
       );
+
+      // SAFETY: This JSON clone preserves the component payload shape from preview().
       const unauthorizedPayload = JSON.parse(
         JSON.stringify(preview()).replaceAll(
           "424242424242424242",
           "888888888888888888"
         )
       ) as ReturnType<typeof preview>;
+
       await handler.handleSelectionInteraction(
         createPickerInteraction(
           "nakama:org:888888888888888888:apply",
@@ -667,6 +750,7 @@ describe("createChatHandler artifact delivery", () => {
           messages: artifactMessages,
         }
       );
+
       sessionStore.set("dm_channel_1", {
         profileId: "default",
         sessionId: "session_test",
@@ -678,6 +762,7 @@ describe("createChatHandler artifact delivery", () => {
         content: "thanks",
         userId: "424242424242424242",
       });
+
       await handleMessage(dm.message);
 
       expect(calls.publishProfileArtifactShare).toBe(1);
@@ -698,6 +783,7 @@ describe("createChatHandler artifact delivery", () => {
         savedAt: "2026-07-13T10:00:00.000Z",
         sizeBytes: 270_000,
       });
+
       const pdfMessages: ChatMessage[] = [
         { content: "save pitch deck", role: "user" },
         {
@@ -750,6 +836,7 @@ describe("createChatHandler artifact delivery", () => {
           messages: pdfMessages,
         }
       );
+
       sessionStore.set("dm_channel_1", {
         profileId: "default",
         sessionId: "session_test",
@@ -761,6 +848,7 @@ describe("createChatHandler artifact delivery", () => {
         content: "thanks",
         userId: "424242424242424242",
       });
+
       await handleMessage(dm.message);
 
       expect(calls.publishProfileArtifactShare).toBe(1);
@@ -776,6 +864,7 @@ describe("createChatHandler artifact delivery", () => {
         savedAt: "2026-07-13T10:00:00.000Z",
         sizeBytes: 24,
       });
+
       const csvMessages: ChatMessage[] = [
         { content: "export csv", role: "user" },
         {
@@ -828,6 +917,7 @@ describe("createChatHandler artifact delivery", () => {
           messages: csvMessages,
         }
       );
+
       sessionStore.set("dm_channel_1", {
         profileId: "default",
         sessionId: "session_test",
@@ -839,6 +929,7 @@ describe("createChatHandler artifact delivery", () => {
         content: "thanks",
         userId: "424242424242424242",
       });
+
       await handleMessage(dm.message);
 
       expect(calls.publishProfileArtifactShare).toBe(1);
@@ -854,6 +945,7 @@ describe("createChatHandler artifact delivery", () => {
         savedAt: "2026-07-13T10:00:00.000Z",
         sizeBytes: 9 * 1024 * 1024,
       });
+
       const oversizedMessages: ChatMessage[] = [
         { content: "save video", role: "user" },
         {
@@ -902,6 +994,7 @@ describe("createChatHandler artifact delivery", () => {
           messages: oversizedMessages,
         }
       );
+
       sessionStore.set("dm_channel_1", {
         profileId: "default",
         sessionId: "session_test",
@@ -913,6 +1006,7 @@ describe("createChatHandler artifact delivery", () => {
         content: "thanks",
         userId: "424242424242424242",
       });
+
       await handleMessage(dm.message);
 
       expect(calls.publishProfileArtifactShare).toBe(1);
@@ -956,6 +1050,7 @@ describe("createChatHandler artifact delivery", () => {
           ],
         }
       );
+
       sessionStore.set("dm_channel_1", {
         profileId: "default",
         sessionId: "session_test",
@@ -967,6 +1062,7 @@ describe("createChatHandler artifact delivery", () => {
         content: "thanks",
         userId: "424242424242424242",
       });
+
       await handleMessage(message);
 
       expect(calls.publishProfileArtifactShare).toBe(1);
@@ -998,10 +1094,12 @@ describe("createChatHandler artifact delivery", () => {
               toolCallId: "tool_1",
             });
             handlers?.onChunk?.("Here's the pitch deck.");
+
             return "Here's the pitch deck.";
           },
         }
       );
+
       sessionStore.set("dm_channel_1", {
         profileId: "default",
         sessionId: "session_test",
@@ -1013,6 +1111,7 @@ describe("createChatHandler artifact delivery", () => {
         content: "can you send the pitch deck pdf file to me",
         userId: "424242424242424242",
       });
+
       await handleMessage(dm.message);
 
       expect(calls.sendStream).toBe(1);
@@ -1039,6 +1138,7 @@ describe("createChatHandler artifact delivery", () => {
           ],
         }
       );
+
       sessionStore.set("dm_channel_1", {
         profileId: "default",
         sessionId: "session_test",
@@ -1050,6 +1150,7 @@ describe("createChatHandler artifact delivery", () => {
         content: "/attach",
         userId: "424242424242424242",
       });
+
       await handleMessage(dm.message);
 
       expect(dm.fileSendCalls).toBe(1);
@@ -1067,6 +1168,7 @@ describe("createChatHandler artifact delivery", () => {
     await withTempHome(async (homeDir) => {
       const { handleMessage, sessionStore } =
         await createPairedHandler(homeDir);
+
       sessionStore.set("dm_channel_1", {
         profileId: "default",
         sessionId: "session_test",
@@ -1078,6 +1180,7 @@ describe("createChatHandler artifact delivery", () => {
         content: "/attach",
         userId: "424242424242424242",
       });
+
       await handleMessage(dm.message);
 
       expect(dm.fileSendCalls).toBe(0);
@@ -1097,6 +1200,7 @@ describe("createChatHandler artifact delivery", () => {
           artifactContentBytes: new Uint8Array([0x4d, 0x5a]),
         }
       );
+
       sessionStore.set("dm_channel_1", {
         deliverableArtifacts: [
           {
@@ -1119,6 +1223,7 @@ describe("createChatHandler artifact delivery", () => {
         content: "/attach",
         userId: "424242424242424242",
       });
+
       await handleMessage(dm.message);
 
       expect(dm.fileSendCalls).toBe(0);
@@ -1128,6 +1233,7 @@ describe("createChatHandler artifact delivery", () => {
     });
   });
 });
+
 describe("createChatHandler early ack", () => {
   async function setupAckHandler(
     homeDir: string,
@@ -1143,9 +1249,11 @@ describe("createChatHandler early ack", () => {
     const authStore = new DiscordAuthStore();
     await authStore.reload();
     const { client } = createMockClient({ onSendStream });
+
     const sessionStore = new SessionStore(
       path.join(homeDir, ".nakama", "discord", "chat-sessions.json")
     );
+
     await sessionStore.load();
     sessionStore.set("dm_channel_1", {
       profileId: "default",
@@ -1155,6 +1263,7 @@ describe("createChatHandler early ack", () => {
     await sessionStore.save();
     const orgStore = createTestOrgStore(homeDir);
     await orgStore.load();
+
     return createChatHandler({
       authStore,
       client,
@@ -1181,6 +1290,7 @@ describe("createChatHandler early ack", () => {
             toolCallId: "tool_1",
           });
           handlers?.onChunk("Done — branch is clean.");
+
           return "Done — branch is clean.";
         }
       );
@@ -1189,6 +1299,7 @@ describe("createChatHandler early ack", () => {
         content: "check the repo",
         userId: "424242424242424242",
       });
+
       await handleMessage(dm.message);
 
       expect(dm.sentMessages[0]).toBe("Checking the repo first.");
@@ -1212,6 +1323,7 @@ describe("createChatHandler early ack", () => {
             tool: "bash",
             toolCallId: "tool_1",
           });
+
           return "All set.";
         }
       );
@@ -1220,6 +1332,7 @@ describe("createChatHandler early ack", () => {
         content: "do the thing",
         userId: "424242424242424242",
       });
+
       await handleMessage(dm.message);
 
       expect(dm.sentMessages[0]).toBe("On it.");
@@ -1233,6 +1346,7 @@ describe("createChatHandler early ack", () => {
         homeDir,
         async (_input, handlers) => {
           handlers?.onChunk("Hello.");
+
           return "Hello.";
         }
       );
@@ -1241,6 +1355,7 @@ describe("createChatHandler early ack", () => {
         content: "hi",
         userId: "424242424242424242",
       });
+
       await handleMessage(dm.message);
 
       expect(dm.sentMessages).toEqual(["Hello."]);
@@ -1270,13 +1385,16 @@ describe("createChatHandler questionnaire delivery", () => {
       const { handleMessage } = await createPairedHandler(homeDir, {
         onSendStream: async (_input, handlers) => {
           handlers?.onQuestionnaireUpdated?.(questionnaire);
+
           return "";
         },
       });
+
       const { message, sentMessages } = createDmMessage({
         content: "help me ship this",
         userId: "424242424242424242",
       });
+
       await handleMessage(message);
 
       expect(sentMessages.some((reply) => reply.includes("Need input"))).toBe(
@@ -1293,17 +1411,20 @@ describe("createChatHandler questionnaire delivery", () => {
 
   test("forwards the next Discord reply to the agent without parsing questionnaire answers", async () => {
     await withTempHome(async (homeDir) => {
-      const streamedInputs: unknown[] = [];
+      const streamedInputs: SendMessageInput[] = [];
+
       const { handleMessage, sessionStore } = await createPairedHandler(
         homeDir,
         {
           onSendStream: async (input) => {
             streamedInputs.push(input);
+
             return "Got it.";
           },
           questionnaire,
         }
       );
+
       sessionStore.set("dm_channel_1", {
         profileId: "default",
         sessionId: "session_test",
@@ -1315,6 +1436,7 @@ describe("createChatHandler questionnaire delivery", () => {
         content: "a",
         userId: "424242424242424242",
       });
+
       await handleMessage(message);
 
       expect(streamedInputs[0]).toEqual({ message: "a" });
@@ -1332,6 +1454,7 @@ describe("createChatHandler guild auth silence", () => {
       const { handleMessage, calls } = await createPairedHandler(homeDir, {
         pairedUserIds: [],
       });
+
       const mention = createGuildChatMessage({
         content: "<@bot_id> hello",
         mentionsBot: true,
@@ -1350,6 +1473,7 @@ describe("createChatHandler guild auth silence", () => {
       const { handleSlashCommand } = await createPairedHandler(homeDir, {
         pairedUserIds: [],
       });
+
       const statusCmd = createSlashInteraction({
         commandName: "status",
         userId: "555555555555555555",
@@ -1366,11 +1490,13 @@ describe("createChatHandler guild thread routing", () => {
   test("mention in a guild channel creates a thread and replies inside it", async () => {
     await withTempHome(async (homeDir) => {
       const streamedInputs: unknown[] = [];
+
       const { handleMessage, threadStore } = await createPairedHandler(
         homeDir,
         {
           onSendStream: async (input) => {
             streamedInputs.push(input);
+
             return "Thread reply";
           },
         }
@@ -1380,6 +1506,7 @@ describe("createChatHandler guild thread routing", () => {
         content: "<@bot_id> summarize this",
         mentionsBot: true,
       });
+
       await handleMessage(guild.message);
 
       expect(guild.startThreadCalls).toBe(1);
@@ -1394,22 +1521,26 @@ describe("createChatHandler guild thread routing", () => {
   test("role mention of a role the bot holds creates a thread", async () => {
     await withTempHome(async (homeDir) => {
       const streamedInputs: unknown[] = [];
+
       const { handleMessage, threadStore } = await createPairedHandler(
         homeDir,
         {
           onSendStream: async (input) => {
             streamedInputs.push(input);
+
             return "Role mention reply";
           },
         }
       );
 
       const roleId = "1525964112708894884";
+
       const guild = createGuildChatMessage({
         botHeldRoleIds: [roleId],
         content: `<@&${roleId}> pull the latest main branch`,
         mentionedRoleIds: [roleId],
       });
+
       await handleMessage(guild.message);
 
       expect(guild.startThreadCalls).toBe(1);
@@ -1435,6 +1566,7 @@ describe("createChatHandler guild thread routing", () => {
         content: "<@bot_id> first question",
         mentionsBot: true,
       });
+
       await handleMessage(first.message);
       const firstThreadId = first.createdThreadId;
       expect(firstThreadId).toBeTruthy();
@@ -1445,6 +1577,7 @@ describe("createChatHandler guild thread routing", () => {
         content: "<@bot_id> follow up topic",
         mentionsBot: true,
       });
+
       await handleMessage(second.message);
 
       expect(second.startThreadCalls).toBe(1);
@@ -1461,12 +1594,12 @@ describe("createChatHandler guild thread routing", () => {
   test("first thread stays independent after a second mention creates another thread", async () => {
     await withTempHome(async (homeDir) => {
       const streamedByThread: string[] = [];
+
       const { handleMessage, threadStore, sessionStore } =
         await createPairedHandler(homeDir, {
           onSendStream: async (input) => {
-            streamedByThread.push(
-              String((input as { message?: string }).message ?? "")
-            );
+            streamedByThread.push(String(input.message ?? ""));
+
             return "ok";
           },
         });
@@ -1475,6 +1608,7 @@ describe("createChatHandler guild thread routing", () => {
         content: "<@bot_id> topic one",
         mentionsBot: true,
       });
+
       await handleMessage(first.message);
       const firstThreadId = first.createdThreadId!;
 
@@ -1482,6 +1616,7 @@ describe("createChatHandler guild thread routing", () => {
         content: "<@bot_id> topic two",
         mentionsBot: true,
       });
+
       await handleMessage(second.message);
 
       const followUp = createGuildChatMessage({
@@ -1490,6 +1625,7 @@ describe("createChatHandler guild thread routing", () => {
         parentId: "guild_channel_1",
         threadId: firstThreadId,
       });
+
       await handleMessage(followUp.message);
 
       expect(followUp.startThreadCalls).toBe(0);
@@ -1505,9 +1641,11 @@ describe("createChatHandler guild thread routing", () => {
   test("overlapping parent mentions run agent turns concurrently", async () => {
     await withTempHome(async (homeDir) => {
       let releaseFirst!: () => void;
+
       const firstGate = new Promise<void>((resolve) => {
         releaseFirst = resolve;
       });
+
       let entered = 0;
       let maxInFlight = 0;
       let inFlight = 0;
@@ -1517,10 +1655,13 @@ describe("createChatHandler guild thread routing", () => {
           entered += 1;
           inFlight += 1;
           maxInFlight = Math.max(maxInFlight, inFlight);
+
           if (entered === 1) {
             await firstGate;
           }
+
           inFlight -= 1;
+
           return "done";
         },
       });
@@ -1529,6 +1670,7 @@ describe("createChatHandler guild thread routing", () => {
         content: "<@bot_id> slow",
         mentionsBot: true,
       });
+
       const second = createGuildChatMessage({
         content: "<@bot_id> fast",
         mentionsBot: true,
@@ -1556,11 +1698,13 @@ describe("createChatHandler guild thread routing", () => {
   test("thread message without mention is answered in a bot-owned thread", async () => {
     await withTempHome(async (homeDir) => {
       const streamedInputs: unknown[] = [];
+
       const { handleMessage, threadStore } = await createPairedHandler(
         homeDir,
         {
           onSendStream: async (input) => {
             streamedInputs.push(input);
+
             return "In-thread answer";
           },
         }
@@ -1575,6 +1719,7 @@ describe("createChatHandler guild thread routing", () => {
         parentId: "guild_channel_1",
         threadId: "thread_42",
       });
+
       await handleMessage(guild.message);
 
       expect(guild.startThreadCalls).toBe(0);
@@ -1586,9 +1731,11 @@ describe("createChatHandler guild thread routing", () => {
   test("ignores unmentioned messages in threads the agent did not start", async () => {
     await withTempHome(async (homeDir) => {
       const streamedInputs: unknown[] = [];
+
       const { handleMessage } = await createPairedHandler(homeDir, {
         onSendStream: async (input) => {
           streamedInputs.push(input);
+
           return "Should not reply";
         },
       });
@@ -1599,6 +1746,7 @@ describe("createChatHandler guild thread routing", () => {
         parentId: "guild_channel_1",
         threadId: "user_thread_9",
       });
+
       await handleMessage(guild.message);
 
       expect(guild.startThreadCalls).toBe(0);
@@ -1626,6 +1774,7 @@ describe("createChatHandler guild thread routing", () => {
         parentId: "guild_channel_1",
         threadId: "user_thread_9",
       });
+
       await handleMessage(guild.message);
 
       expect(guild.startThreadCalls).toBe(0);
@@ -1639,6 +1788,7 @@ describe("createChatHandler guild thread routing", () => {
         parentId: "guild_channel_1",
         threadId: "user_thread_9",
       });
+
       await handleMessage(followUp.message);
 
       expect(followUp.threadSentMessages.length).toBeGreaterThan(0);
@@ -1648,10 +1798,12 @@ describe("createChatHandler guild thread routing", () => {
   test("thread messages reuse the parent channel org selection", async () => {
     await withTempHome(async (homeDir) => {
       const streamedInputs: unknown[] = [];
+
       const { handleMessage, orgStore, threadStore } =
         await createPairedHandler(homeDir, {
           onSendStream: async (input) => {
             streamedInputs.push(input);
+
             return "In-thread answer";
           },
           orgs: createMultiTestOrgs(),
@@ -1668,6 +1820,7 @@ describe("createChatHandler guild thread routing", () => {
         parentId: "guild_channel_1",
         threadId: "thread_42",
       });
+
       await handleMessage(guild.message);
 
       expect(
@@ -1705,6 +1858,7 @@ describe("createChatHandler guild thread routing", () => {
         content: "<@bot_id> help a customer",
         mentionsBot: true,
       });
+
       await handleMessage(guild.message);
 
       const threadId = guild.createdThreadId;
@@ -1749,6 +1903,7 @@ describe("createChatHandler guild thread routing", () => {
         parentId: "guild_channel_1",
         threadId: "thread_42",
       });
+
       await handleMessage(switchProfile.message);
 
       expect(sessionStore.get("g:guild_channel_1:t:thread_42")?.profileId).toBe(
@@ -1777,6 +1932,7 @@ describe("createChatHandler guild thread routing", () => {
         parentId: "guild_channel_1",
         threadId: "thread_1",
       });
+
       await handleSlashCommand(clearCmd.interaction);
 
       expect(
@@ -1796,6 +1952,7 @@ describe("createChatHandler guild thread routing", () => {
             message:
               "[Discord channel — your reply is visible to everyone in this channel.]\nhello",
           });
+
           return "Channel fallback";
         },
       });
@@ -1805,6 +1962,7 @@ describe("createChatHandler guild thread routing", () => {
         mentionsBot: true,
         startThreadError: new Error("Missing Permissions"),
       });
+
       await handleMessage(guild.message);
 
       expect(guild.startThreadCalls).toBe(1);
@@ -1817,6 +1975,7 @@ describe("createChatHandler guild thread routing", () => {
     await withTempHome(async (homeDir) => {
       const { handleSlashCommand, sessionStore } =
         await createPairedHandler(homeDir);
+
       const conversationKey = "g:guild_channel_1:t:thread_1";
       sessionStore.set(conversationKey, {
         profileId: "default",
@@ -1831,6 +1990,7 @@ describe("createChatHandler guild thread routing", () => {
         parentId: "guild_channel_1",
         threadId: "thread_1",
       });
+
       await handleSlashCommand(clearCmd.interaction);
       expect(clearCmd.replies).toContain("History cleared.");
 
@@ -1840,6 +2000,7 @@ describe("createChatHandler guild thread routing", () => {
         parentId: "guild_channel_1",
         threadId: "thread_1",
       });
+
       await handleSlashCommand(newCmd.interaction);
       expect(newCmd.replies).toContain("Started a new conversation.");
 
@@ -1849,6 +2010,7 @@ describe("createChatHandler guild thread routing", () => {
         parentId: "guild_channel_1",
         threadId: "thread_1",
       });
+
       await handleSlashCommand(stopCmd.interaction);
       expect(stopCmd.replies).toContain("Nothing to stop.");
     });
@@ -1858,24 +2020,31 @@ describe("createChatHandler guild thread routing", () => {
     test(`/${commandName} is refused while a turn is running`, async () => {
       await withTempHome(async (homeDir) => {
         let turnStarted!: () => void;
+
         const started = new Promise<void>((resolve) => {
           turnStarted = resolve;
         });
+
         let releaseTurn!: () => void;
+
         const hold = new Promise<void>((resolve) => {
           releaseTurn = resolve;
         });
+
         const { calls, client, handleMessage, handleSlashCommand } =
           await createPairedHandler(homeDir, {
             onSendStream: async () => {
               turnStarted();
               await hold;
+
               return "done";
             },
           });
+
         const session = client.createChatSession("session_test", "discord");
         const clear = spyOn(session, "clear");
         const compact = spyOn(session, "compact");
+
         const mutations = () =>
           calls.createSession +
           clear.mock.calls.length +
@@ -1890,6 +2059,7 @@ describe("createChatHandler guild thread routing", () => {
           channelId: dm.message.channel.id,
           commandName,
         });
+
         await handleSlashCommand(refused.interaction);
         expect(mutations()).toBe(before);
         expect(refused.replies).toHaveLength(1);
@@ -1902,6 +2072,7 @@ describe("createChatHandler guild thread routing", () => {
           channelId: dm.message.channel.id,
           commandName,
         });
+
         await handleSlashCommand(allowed.interaction);
         expect(mutations()).toBe(before + 1);
       });
@@ -1912,6 +2083,7 @@ describe("createChatHandler guild thread routing", () => {
     await withTempHome(async (homeDir) => {
       const { handleSlashCommand, threadStore, handleMessage } =
         await createPairedHandler(homeDir);
+
       threadStore.add("thread_1");
       threadStore.add("thread_sibling");
       await threadStore.save();
@@ -1922,10 +2094,12 @@ describe("createChatHandler guild thread routing", () => {
         parentId: "guild_channel_1",
         threadId: "thread_1",
       });
+
       await handleSlashCommand(closeCmd.interaction);
 
       expect(closeCmd.replies).toContain("Thread closed.");
       expect(
+        // SAFETY: This mock thread records setArchived() on its channel object.
         (closeCmd.interaction.channel as { archived?: boolean }).archived
       ).toBe(true);
       expect(threadStore.hasThreadId("thread_1")).toBe(false);
@@ -1937,6 +2111,7 @@ describe("createChatHandler guild thread routing", () => {
         parentId: "guild_channel_1",
         threadId: "thread_sibling",
       });
+
       await handleMessage(sibling.message);
       expect(sibling.threadSentMessages.length).toBeGreaterThan(0);
     });
@@ -1946,6 +2121,7 @@ describe("createChatHandler guild thread routing", () => {
     await withTempHome(async (homeDir) => {
       const { handleSlashCommand, threadStore } =
         await createPairedHandler(homeDir);
+
       threadStore.add("thread_owned");
       await threadStore.save();
 
@@ -1953,6 +2129,7 @@ describe("createChatHandler guild thread routing", () => {
         channelId: "guild_channel_1",
         commandName: "close",
       });
+
       await handleSlashCommand(channelClose.interaction);
       expect(channelClose.replies).toContain(
         "Use /close inside a bot conversation thread."
@@ -1964,6 +2141,7 @@ describe("createChatHandler guild thread routing", () => {
         parentId: "guild_channel_1",
         threadId: "user_thread_9",
       });
+
       await handleSlashCommand(foreignClose.interaction);
       expect(foreignClose.replies).toContain(
         "I can only close threads I started."
@@ -1977,11 +2155,13 @@ describe("createChatHandler guild thread routing", () => {
       const { handleSlashCommand } = await createPairedHandler(homeDir, {
         pairedUserIds: [],
       });
+
       const allowCmd = createSlashInteraction({
         commandName: "allow",
         userId: "555555555555555555",
         userOption: { id: "999999999999999999" },
       });
+
       await handleSlashCommand(allowCmd.interaction);
 
       expect(
@@ -1995,10 +2175,12 @@ describe("createChatHandler guild thread routing", () => {
     await withTempHome(async (homeDir) => {
       const { handleSlashCommand } = await createPairedHandler(homeDir);
       const targetUserId = "777777777777777777";
+
       const allowCmd = createSlashInteraction({
         commandName: "allow",
         userOption: { id: targetUserId, username: "alice" },
       });
+
       await handleSlashCommand(allowCmd.interaction);
 
       expect(
@@ -2013,13 +2195,16 @@ describe("createChatHandler guild thread routing", () => {
   test("reports already-allowed users", async () => {
     await withTempHome(async (homeDir) => {
       const targetUserId = "888888888888888888";
+
       const { handleSlashCommand } = await createPairedHandler(homeDir, {
         allowedUserIds: [targetUserId],
       });
+
       const allowCmd = createSlashInteraction({
         commandName: "allow",
         userOption: { id: targetUserId },
       });
+
       await handleSlashCommand(allowCmd.interaction);
 
       expect(allowCmd.replies.some((reply) => /already/i.test(reply))).toBe(
@@ -2031,11 +2216,13 @@ describe("createChatHandler guild thread routing", () => {
   test("threadStore save failure still tracks the created Discord thread", async () => {
     await withTempHome(async (homeDir) => {
       const streamedInputs: unknown[] = [];
+
       const { handleMessage, threadStore } = await createPairedHandler(
         homeDir,
         {
           onSendStream: async (input) => {
             streamedInputs.push(input);
+
             return "Tracked despite save failure";
           },
         }
@@ -2052,6 +2239,7 @@ describe("createChatHandler guild thread routing", () => {
         content: "<@bot_id> start me",
         mentionsBot: true,
       });
+
       await handleMessage(mention.message);
 
       const threadId = mention.createdThreadId;
@@ -2073,6 +2261,7 @@ describe("createChatHandler guild thread routing", () => {
         parentId: "guild_channel_1",
         threadId: threadId!,
       });
+
       await handleMessage(followUp.message);
 
       expect(followUp.threadSentMessages).toContain(
@@ -2102,6 +2291,7 @@ describe("createChatHandler guild thread routing", () => {
         parentId: "guild_channel_1",
         threadId: "user_thread_claim",
       });
+
       await handleMessage(claim.message);
 
       expect(threadStore.hasThreadId("user_thread_claim")).toBe(true);
@@ -2115,6 +2305,7 @@ describe("createChatHandler guild thread routing", () => {
         parentId: "guild_channel_1",
         threadId: "user_thread_claim",
       });
+
       await handleMessage(followUp.message);
 
       expect(followUp.threadSentMessages.length).toBeGreaterThan(0);
@@ -2124,12 +2315,12 @@ describe("createChatHandler guild thread routing", () => {
   test("partial thread hydrates parentId via channel.fetch so org keys stay correct", async () => {
     await withTempHome(async (homeDir) => {
       const streamedByKey: string[] = [];
+
       const { handleMessage, threadStore, orgStore, sessionStore } =
         await createPairedHandler(homeDir, {
           onSendStream: async (input) => {
-            streamedByKey.push(
-              String((input as { message?: string }).message ?? "")
-            );
+            streamedByKey.push(String(input.message ?? ""));
+
             return "Partial ok";
           },
           orgs: createMultiTestOrgs(),
@@ -2147,6 +2338,7 @@ describe("createChatHandler guild thread routing", () => {
         parentId: null,
         threadId: "thread_partial",
       });
+
       await handleMessage(followUp.message);
 
       expect(followUp.threadSentMessages).toContain("Partial ok");
@@ -2184,6 +2376,7 @@ describe("createChatHandler guild thread routing", () => {
         parentId: null,
         threadId: "thread_partial_slash",
       });
+
       await handleSlashCommand(clearCmd.interaction);
 
       expect(
@@ -2198,11 +2391,13 @@ describe("createChatHandler guild thread routing", () => {
     chatLockOptions.waitMs = 40;
 
     let releaseHang!: () => void;
+
     const hang = new Promise<void>((resolve) => {
       releaseHang = resolve;
     });
 
     const order: string[] = [];
+
     const first = withChatLock("g:channel:t:thread_wedge", async () => {
       order.push("first-start");
       await hang;
@@ -2211,6 +2406,7 @@ describe("createChatHandler guild thread routing", () => {
 
     await Bun.sleep(5);
     const secondStarted = Date.now();
+
     const second = withChatLock("g:channel:t:thread_wedge", async () => {
       order.push("second");
     });
@@ -2229,6 +2425,7 @@ describe("createChatHandler guild thread routing", () => {
     expect(getChatLockCountForTests()).toBe(0);
 
     let releaseHold!: () => void;
+
     const hold = new Promise<void>((resolve) => {
       releaseHold = resolve;
     });
@@ -2274,16 +2471,21 @@ describe("createChatHandler guild thread routing", () => {
       const authStore = new DiscordAuthStore();
       await authStore.reload();
       const { client } = createMockClient();
+
       const sessionStore = new SessionStore(
         path.join(homeDir, ".nakama", "discord", "chat-sessions.json")
       );
+
       await sessionStore.load();
+
       const threadStore = new ThreadStore(
         path.join(homeDir, ".nakama", "discord", "chat-threads.json")
       );
+
       await threadStore.load();
       const orgStore = createTestOrgStore(homeDir);
       await orgStore.load();
+
       const { handleMessage } = createChatHandler({
         authStore,
         client,
@@ -2298,12 +2500,15 @@ describe("createChatHandler guild thread routing", () => {
         content: "A1B2C3D4E5F60718293A4B5C6D7E8F90",
         userId: "999999999999999999",
       });
+
       const conversationKey = dm.message.channel.id;
 
       let releaseHold!: () => void;
+
       const hold = new Promise<void>((resolve) => {
         releaseHold = resolve;
       });
+
       const held = withChatLock(conversationKey, async () => {
         await hold;
       });
@@ -2312,6 +2517,7 @@ describe("createChatHandler guild thread routing", () => {
       const originalReload = authStore.reload.bind(authStore);
       authStore.reload = async () => {
         reloadCalls.push(Date.now());
+
         return originalReload();
       };
 
@@ -2332,6 +2538,7 @@ describe("createChatHandler inbound images", () => {
     await withTempHome(async (homeDir) => {
       const pngBytes = new Uint8Array([137, 80, 78, 71]);
       const streamedInputs: unknown[] = [];
+
       const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
         new Response(pngBytes, { status: 200 })
       );
@@ -2340,6 +2547,7 @@ describe("createChatHandler inbound images", () => {
         const { handleMessage } = await createPairedHandler(homeDir, {
           onSendStream: async (input) => {
             streamedInputs.push(input);
+
             return "Looks like a PNG.";
           },
         });
@@ -2355,6 +2563,7 @@ describe("createChatHandler inbound images", () => {
           content: "",
           userId: "424242424242424242",
         });
+
         await handleMessage(dm.message);
 
         expect(streamedInputs).toEqual([
@@ -2381,10 +2590,12 @@ describe("createChatHandler inbound images", () => {
   test("empty non-image DM still gets Text messages only.", async () => {
     await withTempHome(async (homeDir) => {
       const { handleMessage, calls } = await createPairedHandler(homeDir);
+
       const dm = createDmMessage({
         content: "",
         userId: "424242424242424242",
       });
+
       await handleMessage(dm.message);
 
       expect(calls.sendStream).toBe(0);
@@ -2395,6 +2606,7 @@ describe("createChatHandler inbound images", () => {
   test("pdf-only DM gets unsupported attachment reply", async () => {
     await withTempHome(async (homeDir) => {
       const { handleMessage, calls } = await createPairedHandler(homeDir);
+
       const dm = createDmMessage({
         attachments: [
           {
@@ -2406,6 +2618,7 @@ describe("createChatHandler inbound images", () => {
         content: "",
         userId: "424242424242424242",
       });
+
       await handleMessage(dm.message);
 
       expect(calls.sendStream).toBe(0);
@@ -2421,6 +2634,7 @@ describe("createChatHandler inbound images", () => {
 
       try {
         const { handleMessage, calls } = await createPairedHandler(homeDir);
+
         const dm = createDmMessage({
           attachments: Array.from({ length: 6 }, (_, index) => ({
             contentType: "image/png",
@@ -2431,6 +2645,7 @@ describe("createChatHandler inbound images", () => {
           content: "",
           userId: "424242424242424242",
         });
+
         await handleMessage(dm.message);
 
         expect(calls.sendStream).toBe(0);
@@ -2445,7 +2660,8 @@ describe("createChatHandler inbound images", () => {
   test("guild mention plus image-only reaches the agent", async () => {
     await withTempHome(async (homeDir) => {
       const pngBytes = new Uint8Array([137, 80, 78, 71]);
-      const streamedInputs: unknown[] = [];
+      const streamedInputs: SendMessageInput[] = [];
+
       const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
         new Response(pngBytes, { status: 200 })
       );
@@ -2454,6 +2670,7 @@ describe("createChatHandler inbound images", () => {
         const { handleMessage } = await createPairedHandler(homeDir, {
           onSendStream: async (input) => {
             streamedInputs.push(input);
+
             return "Got the screenshot.";
           },
         });
@@ -2470,12 +2687,11 @@ describe("createChatHandler inbound images", () => {
           mentionsBot: true,
           userId: "424242424242424242",
         });
+
         await handleMessage(guild.message);
 
         expect(streamedInputs.length).toBe(1);
-        expect(
-          (streamedInputs[0] as { images?: unknown[] }).images
-        ).toHaveLength(1);
+        expect(streamedInputs[0]?.images).toHaveLength(1);
         expect(guild.threadSentMessages).toContain("Got the screenshot.");
       } finally {
         fetchSpy.mockRestore();
@@ -2491,6 +2707,7 @@ describe("createChatHandler inbound images", () => {
 
       try {
         const { handleMessage, calls } = await createPairedHandler(homeDir);
+
         const guild = createGuildChatMessage({
           attachments: [
             {
@@ -2503,6 +2720,7 @@ describe("createChatHandler inbound images", () => {
           mentionsBot: false,
           userId: "424242424242424242",
         });
+
         await handleMessage(guild.message);
 
         expect(calls.sendStream).toBe(0);
@@ -2519,6 +2737,7 @@ describe("createChatHandler session hot cache", () => {
     await withTempHome(async (homeDir) => {
       const { handleMessage, calls, sessionStore } =
         await createPairedHandler(homeDir);
+
       sessionStore.set("dm_channel_1", {
         profileId: "default",
         sessionId: "session_test",
@@ -2558,6 +2777,7 @@ describe("stream cleanup", () => {
 
 describe("Discord session history", () => {
   const key = "g:guild_channel_1:t:thread_1";
+
   const summary = (id: string) => ({
     active: false,
     channel: "discord" as const,
@@ -2569,6 +2789,7 @@ describe("Discord session history", () => {
     title: null,
     updatedAt: "2026-09-14T09:30:00.000Z",
   });
+
   const inThread = { inThread: true, parentId: "guild_channel_1" };
 
   test("/sessions offers only this chat's sessions and a pick resumes one", async () => {
@@ -2577,6 +2798,7 @@ describe("Discord session history", () => {
         // sess_other belongs to another Discord chat on the same profile.
         sessions: ["sess_a", "session_test", "sess_other"].map(summary),
       });
+
       handler.sessionStore.set(key, {
         profileId: "default",
         sessionId: "sess_a",
@@ -2590,6 +2812,7 @@ describe("Discord session history", () => {
         commandName: "sessions",
         ...inThread,
       });
+
       const payload = readPickerPayload(list.interaction);
       await handler.handleSlashCommand(list.interaction);
       expect(
@@ -2619,18 +2842,21 @@ describe("Discord session history", () => {
       const handler = await createPairedHandler(homeDir, {
         sessions: ["sess_a1234567", "sess_b", "sess_other"].map(summary),
       });
+
       handler.sessionStore.set(key, {
         profileId: "default",
         sessionId: "sess_b",
         sessionIds: ["sess_a1234567", "sess_b"],
         updatedAt: new Date().toISOString(),
       });
+
       const resume = (session: string) => {
         const command = createSlashInteraction({
           commandName: "resume",
           ...inThread,
           stringOptions: { session },
         });
+
         return handler
           .handleSlashCommand(command.interaction)
           .then(() => command.replies);

@@ -13,6 +13,7 @@ export class DiscordAuthStore {
 
   async reload(): Promise<DiscordConfigFile | null> {
     this.config = await loadDiscordConfigFile(this.scope);
+
     return this.config;
   }
 
@@ -42,7 +43,9 @@ export class DiscordAuthStore {
       userId,
       this.scope
     );
+
     await this.reload();
+
     return result;
   }
 }
