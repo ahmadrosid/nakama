@@ -55,6 +55,7 @@ describe("knowledge_base_search tool", () => {
   }
 
   async function setupKnowledgeBase(options: {
+    additionalProfileDocuments?: DocumentFixture[];
     attachments?: string[];
     organization?: DocumentFixture[];
     profile: DocumentFixture;
@@ -66,20 +67,23 @@ describe("knowledge_base_search tool", () => {
 
     const profileKnowledgeBaseDir = getKnowledgeBaseDir(ORG_ID, PROFILE_ID);
     await mkdir(profileKnowledgeBaseDir, { recursive: true });
-    await writeFile(
-      getKnowledgeBaseExtractedPath(
-        profileKnowledgeBaseDir,
-        options.profile.id
-      ),
-      extractedContent(options.profile.filename, options.profile.body),
-      "utf8"
-    );
+    const profileDocuments = [
+      options.profile,
+      ...(options.additionalProfileDocuments ?? []),
+    ];
+    for (const document of profileDocuments) {
+      await writeFile(
+        getKnowledgeBaseExtractedPath(profileKnowledgeBaseDir, document.id),
+        extractedContent(document.filename, document.body),
+        "utf8"
+      );
+    }
     await writeFile(
       path.join(profileKnowledgeBaseDir, "manifest.json"),
       JSON.stringify(
         {
           documents: [
-            manifestDocument(options.profile),
+            ...profileDocuments.map(manifestDocument),
             ...(options.unreadable ?? []).map((document) => ({
               error: "unsupported input: PDF has no extractable text",
               filename: document.filename,
@@ -211,6 +215,86 @@ describe("knowledge_base_search tool", () => {
     expect(filteredByUnattachedFilename.matchCount).toBe(0);
   });
 
+  test("finds reordered keywords and preserves readable profile paths", async () => {
+    await setupKnowledgeBase({
+      profile: {
+        body: "alpha project fact\n",
+        filename: "notes.txt",
+        id: PRIVATE_DOCUMENT_ID,
+      },
+    });
+    const result = await runKnowledgeBaseSearch(
+      { query: "fact alpha" },
+      { orgId: ORG_ID, profileId: PROFILE_ID }
+    );
+    expect(result.matchCount).toBe(1);
+    expect(result.matches[0]?.text).toContain("alpha project fact");
+    expect(result.matches[0]?.file).toBe(
+      `knowledge-base/${PRIVATE_DOCUMENT_ID}.extracted.txt`
+    );
+  });
+
+  test("matches regular expressions when explicitly requested", async () => {
+    await setupTwoScopes();
+    const result = await runKnowledgeBaseSearch(
+      { query: "private.*context", regex: true },
+      { orgId: ORG_ID, profileId: PROFILE_ID }
+    );
+    expect(result.matchCount).toBe(1);
+    expect(result.matches[0]?.text).toContain("private alpha context");
+  });
+
+  test("keeps concurrent filename searches in their own scope", async () => {
+    await setupTwoScopes();
+    const results = await Promise.all(
+      ["private.txt", "shared.txt", "private.txt", "shared.txt"].map(
+        (filename) =>
+          runKnowledgeBaseSearch(
+            { filename, query: "alpha" },
+            { orgId: ORG_ID, profileId: PROFILE_ID }
+          )
+      )
+    );
+    for (const [index, result] of results.entries()) {
+      expect(result.matchCount).toBe(1);
+      expect(result.matches[0]?.scope).toBe(
+        index % 2 === 0 ? "profile" : "organization"
+      );
+    }
+  });
+
+  test("searches updated text and excludes removed files", async () => {
+    await setupKnowledgeBase({
+      profile: {
+        body: "alpha project fact\n",
+        filename: "notes.txt",
+        id: PRIVATE_DOCUMENT_ID,
+      },
+    });
+    const context = { orgId: ORG_ID, profileId: PROFILE_ID };
+    expect(
+      (await runKnowledgeBaseSearch({ query: "alpha" }, context)).matchCount
+    ).toBe(1);
+    const source = getKnowledgeBaseExtractedPath(
+      getKnowledgeBaseDir(ORG_ID, PROFILE_ID),
+      PRIVATE_DOCUMENT_ID
+    );
+    await writeFile(
+      source,
+      extractedContent("notes.txt", "gamma project fact\n")
+    );
+    expect(
+      (await runKnowledgeBaseSearch({ query: "alpha" }, context)).matchCount
+    ).toBe(0);
+    expect(
+      (await runKnowledgeBaseSearch({ query: "gamma" }, context)).matchCount
+    ).toBe(1);
+    await rm(source);
+    expect(
+      (await runKnowledgeBaseSearch({ query: "gamma" }, context)).matchCount
+    ).toBe(0);
+  });
+
   test("merges profile and organization matches in one query", async () => {
     await setupTwoScopes();
 
@@ -322,6 +406,9 @@ describe("knowledge_base_search tool", () => {
 
   test("keeps a slot for organization hits when the profile scope fills maxResults", async () => {
     await setupKnowledgeBase({
+      additionalProfileDocuments: [
+        { body: "budget marker four\n", filename: "other.txt", id: "kb_other" },
+      ],
       attachments: [SHARED_DOCUMENT_ID],
       organization: [
         {
@@ -402,6 +489,10 @@ describe("knowledge_base_search tool", () => {
 
   test("reports truncation only when a match is actually dropped", async () => {
     await setupKnowledgeBase({
+      additionalProfileDocuments: [
+        { body: "limit marker two\n", filename: "second.txt", id: "kb_second" },
+        { body: "limit marker three\n", filename: "third.txt", id: "kb_third" },
+      ],
       profile: {
         body: "limit marker one\nlimit marker two\nlimit marker three\n",
         filename: "private.txt",

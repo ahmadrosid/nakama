@@ -1,5 +1,9 @@
+import { realpath } from "node:fs/promises";
+import { basename, dirname, join, relative } from "node:path";
 import { z } from "zod";
+import { createChatLock } from "../channel-chat-lock";
 import type { ToolContext, ToolDefinition } from "../contract";
+import { ensureDir } from "../fs";
 import {
   getKnowledgeBaseDir,
   getKnowledgeBaseExtractedPath,
@@ -18,7 +22,6 @@ import { buildRipgrepArgs, type RipgrepMatch, runRipgrep } from "./ripgrep";
 import {
   jsonSchemaFromZod,
   maxResultsSchema,
-  optionalRegexFlag,
   parseToolInput,
   requiredTrimmedString,
   trimmedOptionalString,
@@ -29,7 +32,7 @@ export const knowledgeBaseSearchInputSchema = z
     filename: trimmedOptionalString,
     maxResults: maxResultsSchema,
     query: requiredTrimmedString("query"),
-    regex: optionalRegexFlag,
+    regex: z.boolean().default(false),
   })
   .strict();
 
@@ -39,6 +42,7 @@ export type KnowledgeBaseSearchInput = z.infer<
 
 type KnowledgeBaseScope = "organization" | "profile";
 type ScopedMatch = RipgrepMatch & { scope: KnowledgeBaseScope };
+const qmdSearchLock = createChatLock();
 
 export interface KnowledgeBaseSearchOutput {
   matchCount: number;
@@ -113,17 +117,21 @@ export async function runKnowledgeBaseSearch(
 
   if (backend) {
     // The memory backend indexes profile documents only, so attached
-    // organization documents always come from the ripgrep pass and are merged
-    // in whenever the backend answers.
+    // organization documents still come from the local knowledge base index.
     const profileMatches = backend.matches.map((match) => ({
       ...match,
       scope: "profile" as const,
     }));
-    const organizationResult = await runSearchTarget(
-      organizationTarget,
-      parsed,
-      organizationRoot
-    );
+    const organizationResult = parsed.regex
+      ? await runSearchTarget(organizationTarget, parsed, organizationRoot)
+      : (
+          await runQmdSearchTargets(
+            getKnowledgeBaseDir(orgId, profileId),
+            [organizationTarget],
+            parsed,
+            workspaceRoot
+          )
+        )[0]!;
     const merged = mergeScopedMatches(
       profileMatches,
       organizationResult.matches,
@@ -141,10 +149,17 @@ export async function runKnowledgeBaseSearch(
   }
 
   await ensureKnowledgeBaseDirs(orgId, profileId);
-  const [profileResult, organizationResult] = await Promise.all([
-    runSearchTarget(profileTarget, parsed, workspaceRoot),
-    runSearchTarget(organizationTarget, parsed, organizationRoot),
-  ]);
+  const [profileResult, organizationResult] = parsed.regex
+    ? await Promise.all([
+        runSearchTarget(profileTarget, parsed, workspaceRoot),
+        runSearchTarget(organizationTarget, parsed, organizationRoot),
+      ])
+    : await runQmdSearchTargets(
+        getKnowledgeBaseDir(orgId, profileId),
+        [profileTarget, organizationTarget],
+        parsed,
+        workspaceRoot
+      );
   const merged = mergeScopedMatches(
     profileResult.matches,
     organizationResult.matches,
@@ -324,4 +339,85 @@ async function runSearchTarget(
     })),
     truncated: result.truncated || result.matches.length > maxResults,
   };
+}
+
+async function runQmdSearchTargets(
+  profileRoot: string,
+  targets: SearchTarget[],
+  parsed: KnowledgeBaseSearchInput,
+  workspaceRoot: string
+): Promise<{ matches: ScopedMatch[]; truncated: boolean }[]> {
+  if (parsed.maxResults <= 0) {
+    return targets.map(() => ({ matches: [], truncated: false }));
+  }
+
+  // Collection masks change with filename filters, so index and query share a lock.
+  return qmdSearchLock.withLock(profileRoot, async () => {
+    await ensureDir(profileRoot);
+    const canonicalProfileRoot = await realpath(profileRoot);
+    // Keep QMD's native packages out of the server and worker bundles.
+    const qmdPackage = "@tobilu/qmd";
+    const { createStore, extractSnippet } = (await import(
+      qmdPackage
+    )) as typeof import("@tobilu/qmd");
+    const store = await createStore({
+      dbPath: join(canonicalProfileRoot, ".qmd.sqlite"),
+    });
+    try {
+      const collectionNames: string[] = [];
+      for (const target of targets) {
+        if (target.kind === "missing") {
+          await store.removeCollection(target.scope);
+          continue;
+        }
+        const path =
+          target.kind === "file" ? dirname(target.root) : target.root;
+        const pattern =
+          target.kind === "file" ? basename(target.root) : target.glob!;
+        await store.addCollection(target.scope, { path, pattern });
+        collectionNames.push(target.scope);
+      }
+      if (collectionNames.length === 0) {
+        return targets.map(() => ({ matches: [], truncated: false }));
+      }
+      await store.update({ collections: collectionNames });
+
+      return await Promise.all(
+        targets.map(async (target) => {
+          if (target.kind === "missing") {
+            return { matches: [], truncated: false };
+          }
+          const results = await store.searchLex(parsed.query, {
+            collection: target.scope,
+            limit: parsed.maxResults + 1,
+          });
+          return {
+            matches: results.slice(0, parsed.maxResults).map((result) => {
+              const snippet = extractSnippet(
+                result.body ?? "",
+                parsed.query,
+                16_000
+              );
+              const filename = basename(result.filepath);
+              return {
+                file:
+                  target.scope === "profile"
+                    ? relative(
+                        workspaceRoot,
+                        join(canonicalProfileRoot, filename)
+                      )
+                    : filename,
+                line: snippet.line,
+                scope: target.scope,
+                text: snippet.snippet,
+              };
+            }),
+            truncated: results.length > parsed.maxResults,
+          };
+        })
+      );
+    } finally {
+      await store.close();
+    }
+  });
 }
