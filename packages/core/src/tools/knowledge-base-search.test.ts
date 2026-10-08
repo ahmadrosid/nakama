@@ -230,7 +230,7 @@ describe("knowledge_base_search tool", () => {
     expect(result.matchCount).toBe(1);
     expect(result.matches[0]?.text).toContain("alpha project fact");
     expect(result.matches[0]?.file).toBe(
-      `knowledge-base/${PRIVATE_DOCUMENT_ID}.extracted.txt`
+      path.join("knowledge-base", `${PRIVATE_DOCUMENT_ID}.extracted.txt`)
     );
   });
 

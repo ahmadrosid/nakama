@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { realpath } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { z } from "zod";
@@ -417,7 +418,14 @@ async function runQmdSearchTargets(
         })
       );
     } finally {
-      await store.close();
+      try {
+        // Finalize prepared statements so Windows releases the index files.
+        if (store.internal.db instanceof Database) {
+          store.internal.db.close(true);
+        }
+      } finally {
+        await store.close();
+      }
     }
   });
 }
