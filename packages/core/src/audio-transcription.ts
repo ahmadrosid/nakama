@@ -1,6 +1,9 @@
 import { NakamaApiError } from "./api-error";
 import { normalizeBaseUrl } from "./compatible-provider-config";
 import type { ProviderInstance } from "./user-config";
+import { z } from "zod";
+
+const TranscriptionResponseSchema = z.object({ text: z.string() });
 
 export async function transcribeAudio(options: {
   provider: Pick<ProviderInstance, "type" | "apiKey" | "baseUrl">;
@@ -9,6 +12,7 @@ export async function transcribeAudio(options: {
   signal?: AbortSignal;
 }): Promise<string> {
   const { provider, model, audio, signal } = options;
+
   // Self-hosted backends that speak the OpenAI-compatible transcriptions API
   // surface as `openai_compatible` with a baseUrl (e.g. local Whisper),
   // alongside first-party `openai`. Other types are not supported and stay
@@ -22,9 +26,11 @@ export async function transcribeAudio(options: {
       400
     );
   }
+
   const baseUrl = normalizeBaseUrl(
     provider.baseUrl ?? "https://api.openai.com/v1"
   );
+
   const body = new FormData();
   body.append(
     "file",
@@ -32,21 +38,26 @@ export async function transcribeAudio(options: {
     audio.filename
   );
   body.append("model", model);
+
   const response = await fetch(`${baseUrl}/audio/transcriptions`, {
     body,
     headers: { Authorization: `Bearer ${provider.apiKey}` },
     method: "POST",
     signal,
   });
+
   if (!response.ok) {
     throw new NakamaApiError(
       `Audio transcription failed (${response.status}).`,
       502
     );
   }
-  const payload = (await response.json()) as { text?: unknown };
-  if (typeof payload.text !== "string" || !payload.text.trim()) {
+
+  const payload = TranscriptionResponseSchema.safeParse(await response.json());
+
+  if (!payload.success || !payload.data.text.trim()) {
     throw new NakamaApiError("Audio transcription returned empty text.", 502);
   }
-  return payload.text.trim();
+
+  return payload.data.text.trim();
 }

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
+import { z } from "zod";
 import { NakamaApiError } from "./api-error";
 import {
   isValidBaseUrl,
@@ -37,6 +38,7 @@ import {
 } from "./provider-resolution";
 
 export type { UserProviderName } from "./provider-resolution";
+
 export {
   apiKeyEnvVarForProvider,
   isDiscoveryModelProvider,
@@ -63,6 +65,18 @@ export interface ProviderInstance {
   xaiTokenExpiresAt?: string;
 }
 
+interface UserConfigGlobalValues extends Record<string, string | undefined> {}
+
+interface ProviderSectionValues extends Record<string, string> {}
+
+const OpenRouterRoutingSchema = z.record(z.string(), z.json().optional());
+
+const XaiOAuthSchema = z.object({
+  accessToken: z.string().trim().min(1),
+  expiresAt: z.string().refine((value) => Number.isFinite(Date.parse(value))),
+  refreshToken: z.string().trim().min(1),
+});
+
 export interface UserConfig {
   defaultProviderId: string | null;
   imageModel?: string | null;
@@ -77,7 +91,9 @@ export interface UserConfig {
 }
 
 export const DEFAULT_TIMEZONE = "UTC";
+
 export const DEFAULT_THINKING_ENABLED = true;
+
 export const DEFAULT_THINKING_EFFORT: ThinkingEffort = "medium";
 
 const PROVIDER_SECTION_PREFIX = "provider.";
@@ -125,6 +141,7 @@ export function defaultProviderLabel(
 ): string {
   if (type === "ollama" && options?.hostMode) {
     const base = defaultOllamaLabel(options.hostMode);
+
     const sameMode = existing.filter(
       (entry) =>
         entry.type === "ollama" &&
@@ -212,6 +229,7 @@ export function isProviderConfigured(
       }
 
       const envVar = apiKeyEnvVarForProvider(active.type);
+
       return Boolean(envVar && readEnvValue(env, envVar));
     }
 
@@ -223,12 +241,14 @@ export function isProviderConfigured(
   }
 
   const envVar = apiKeyEnvVarForProvider(active.type);
+
   return Boolean(envVar && readEnvValue(env, envVar));
 }
 
 export function isValidTimezone(timezone: string): boolean {
   try {
     Intl.DateTimeFormat(undefined, { timeZone: timezone });
+
     return true;
   } catch {
     return false;
@@ -269,6 +289,7 @@ export function getUserConfigDir(): string {
         "NAKAMA_CONFIG_DIR must be an absolute path; relative paths resolve against process.cwd() and break profile isolation."
       );
     }
+
     return override;
   }
 
@@ -282,6 +303,7 @@ export function getUserConfigPath(): string {
 export async function ensureUserConfigDir(): Promise<string> {
   const dir = getUserConfigDir();
   await ensureDir(dir);
+
   return dir;
 }
 
@@ -297,22 +319,29 @@ export async function loadUserConfig(): Promise<UserConfig | null> {
   const timezone = readTimezone(parsed.global);
   const providers = loadProvidersFromSections(parsed.sections);
 
-  return {
+  const config: UserConfig = {
     defaultProviderId: parsed.global.default_provider_id?.trim() || null,
-    providers,
-    ...(timezone ? { timezone } : {}),
     imageModel: readImageModel(parsed.global),
+    providers,
     thinkingEffort: thinking.effort,
     thinkingEnabled: thinking.enabled,
     transcriptionModel: readTranscriptionModel(parsed.global),
     visionModel: readVisionModel(parsed.global),
-    ...(parsed.global.local_auth_token_hash?.trim()
-      ? { localAuthTokenHash: parsed.global.local_auth_token_hash.trim() }
-      : {}),
-    ...(parsed.global.local_auth_token?.trim()
-      ? { localAuthToken: parsed.global.local_auth_token.trim() }
-      : {}),
   };
+
+  if (timezone) {
+    config.timezone = timezone;
+  }
+
+  if (parsed.global.local_auth_token_hash?.trim()) {
+    config.localAuthTokenHash = parsed.global.local_auth_token_hash.trim();
+  }
+
+  if (parsed.global.local_auth_token?.trim()) {
+    config.localAuthToken = parsed.global.local_auth_token.trim();
+  }
+
+  return config;
 }
 
 export async function loadUserTimezone(): Promise<string> {
@@ -327,16 +356,19 @@ export async function loadUserTimezone(): Promise<string> {
 
 function readVisionModel(global: Record<string, string>): string | null {
   const trimmed = global.vision_model?.trim();
+
   return trimmed ? trimmed : null;
 }
 
 function readTranscriptionModel(global: Record<string, string>): string | null {
   const trimmed = global.transcription_model?.trim();
+
   return trimmed ? trimmed : null;
 }
 
 function readImageModel(global: Record<string, string>): string | null {
   const trimmed = global.image_model?.trim();
+
   return trimmed ? trimmed : null;
 }
 
@@ -386,12 +418,15 @@ export async function saveUserThinkingSettings(
       thinkingEffort: effort,
       thinkingEnabled: enabled,
     });
+
     return;
   }
 
   const raw = await readTextOrNull(getUserConfigPath());
+
   const parsed =
     raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
+
   const lines = buildConfigIniLines(parsed.global, parsed.sections, {
     thinking: enabled ? "on" : "off",
     thinking_effort: effort,
@@ -436,12 +471,15 @@ export async function saveUserTimezone(
 
   if (existing) {
     await saveUserConfig({ ...existing, timezone: trimmed });
+
     return trimmed;
   }
 
   const raw = await readTextOrNull(getUserConfigPath());
+
   const parsed =
     raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
+
   const lines = buildConfigIniLines(parsed.global, parsed.sections, {
     timezone: trimmed,
   });
@@ -455,6 +493,7 @@ export async function saveUserTimezone(
 
 function readWebPublicUrl(values: Record<string, string>): string | undefined {
   const trimmed = values.web_public_url?.trim();
+
   return trimmed && isValidBaseUrl(trimmed)
     ? normalizeBaseUrl(trimmed)
     : undefined;
@@ -463,6 +502,7 @@ function readWebPublicUrl(values: Record<string, string>): string | undefined {
 export function readUserWebPublicUrlSync(): string | null {
   try {
     const raw = readFileSync(getUserConfigPath(), "utf8");
+
     return readWebPublicUrl(parseIniWithSections(raw).global) ?? null;
   } catch {
     return null;
@@ -493,17 +533,22 @@ export async function saveUserWebPublicUrl(
 
   if (existing) {
     const raw = await readTextOrNull(getUserConfigPath());
+
     const parsed =
       raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
+
     await writeParsedConfigIni(parsed.global, parsed.sections, {
       web_public_url: normalized,
     });
+
     return normalized;
   }
 
   const raw = await readTextOrNull(getUserConfigPath());
+
   const parsed =
     raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
+
   const lines = buildConfigIniLines(parsed.global, parsed.sections, {
     web_public_url: normalized,
   });
@@ -517,6 +562,7 @@ export async function saveUserWebPublicUrl(
 
 export async function saveUserConfig(config: UserConfig): Promise<void> {
   const raw = await readTextOrNull(getUserConfigPath());
+
   const existingParsed =
     raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
 
@@ -525,7 +571,7 @@ export async function saveUserConfig(config: UserConfig): Promise<void> {
     thinking_effort: config.thinkingEffort ?? DEFAULT_THINKING_EFFORT,
   });
 
-  const global: Record<string, string | undefined> = {
+  const global: UserConfigGlobalValues = {
     ...existingParsed.global,
     default_provider_id: config.defaultProviderId ?? "",
     image_model: config.imageModel ?? "",
@@ -538,6 +584,7 @@ export async function saveUserConfig(config: UserConfig): Promise<void> {
   };
 
   const sections: Record<string, Record<string, string>> = {};
+
   for (const [sectionName, values] of Object.entries(existingParsed.sections)) {
     if (!sectionName.startsWith(PROVIDER_SECTION_PREFIX)) {
       sections[sectionName] = { ...values };
@@ -616,27 +663,32 @@ export function parseIniWithSections(raw: string): ParsedIniFile {
   return { global, sections };
 }
 
-export function validateOpenRouterRoutingSettings(
-  value: unknown
+export function validateOpenRouterRoutingSettings<Value>(
+  value: Value
 ): OpenRouterRoutingSettings {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  const parsed = OpenRouterRoutingSchema.safeParse(value);
+
+  if (!parsed.success) {
     throw new NakamaApiError("OpenRouter routing must be an object.", 400);
   }
+
   const settings: OpenRouterRoutingSettings = {};
-  for (const [key, entry] of Object.entries(value)) {
+
+  for (const [key, entry] of Object.entries(parsed.data)) {
     if (entry === undefined) {
       continue;
     }
+
+    const booleanSetting = z.boolean().safeParse(entry);
+    const collectionSetting = z.enum(["allow", "deny"]).safeParse(entry);
+
     if (
       (key === "zdr" || key === "requireParameters") &&
-      typeof entry === "boolean"
+      booleanSetting.success
     ) {
-      settings[key] = entry;
-    } else if (
-      key === "dataCollection" &&
-      (entry === "allow" || entry === "deny")
-    ) {
-      settings.dataCollection = entry;
+      settings[key] = booleanSetting.data;
+    } else if (key === "dataCollection" && collectionSetting.success) {
+      settings.dataCollection = collectionSetting.data;
     } else {
       throw new NakamaApiError(
         `Invalid OpenRouter routing setting: ${key}`,
@@ -644,6 +696,7 @@ export function validateOpenRouterRoutingSettings(
       );
     }
   }
+
   return settings;
 }
 
@@ -666,59 +719,84 @@ function loadProvidersFromSections(
 
     const label = normalizeProviderInstanceLabel(type, values.label, providers);
     const apiKey = values.api_key ?? "";
+
     const baseUrl = values.base_url?.trim()
       ? normalizeBaseUrl(values.base_url)
       : undefined;
+
     // Writer persists models_json for every type that has a shortlist/catalog
     // override; load any present JSON so restarts keep shortlists.
     const customModels = parseCustomModelsJson(values.models_json);
+
     const hostMode =
       type === "ollama"
         ? (parseOllamaHostMode(values.host_mode) ?? undefined)
         : undefined;
+
     const wireApi =
       type === "openai_compatible" ? parseWireApi(values.wire_api) : undefined;
+
     const createdAt = values.created_at?.trim() || new Date(0).toISOString();
 
-    providers.push({
+    const provider: ProviderInstance = {
       apiKey,
+      createdAt,
       id,
       label,
       type,
-      ...(values.xai_access_token?.trim()
-        ? { xaiAccessToken: values.xai_access_token.trim() }
-        : {}),
-      ...(values.chatgpt_access_token?.trim()
-        ? { chatgptAccessToken: values.chatgpt_access_token.trim() }
-        : {}),
-      ...(values.xai_refresh_token?.trim()
-        ? { xaiRefreshToken: values.xai_refresh_token.trim() }
-        : {}),
-      ...(values.chatgpt_refresh_token?.trim()
-        ? { chatgptRefreshToken: values.chatgpt_refresh_token.trim() }
-        : {}),
-      ...(values.chatgpt_account_id?.trim()
-        ? { chatgptAccountId: values.chatgpt_account_id.trim() }
-        : {}),
-      ...(values.xai_token_expires_at?.trim()
-        ? { xaiTokenExpiresAt: values.xai_token_expires_at.trim() }
-        : {}),
-      ...(values.chatgpt_token_expires_at?.trim()
-        ? { chatgptTokenExpiresAt: values.chatgpt_token_expires_at.trim() }
-        : {}),
-      ...(baseUrl ? { baseUrl } : {}),
-      ...(hostMode ? { hostMode } : {}),
-      ...(wireApi ? { wireApi } : {}),
-      ...(customModels ? { customModels } : {}),
-      ...(type === "openrouter" && values.openrouter_routing_json
-        ? {
-            openRouterRouting: validateOpenRouterRoutingSettings(
-              JSON.parse(values.openrouter_routing_json)
-            ),
-          }
-        : {}),
-      createdAt,
-    });
+    };
+
+    if (values.xai_access_token?.trim()) {
+      provider.xaiAccessToken = values.xai_access_token.trim();
+    }
+
+    if (values.chatgpt_access_token?.trim()) {
+      provider.chatgptAccessToken = values.chatgpt_access_token.trim();
+    }
+
+    if (values.xai_refresh_token?.trim()) {
+      provider.xaiRefreshToken = values.xai_refresh_token.trim();
+    }
+
+    if (values.chatgpt_refresh_token?.trim()) {
+      provider.chatgptRefreshToken = values.chatgpt_refresh_token.trim();
+    }
+
+    if (values.chatgpt_account_id?.trim()) {
+      provider.chatgptAccountId = values.chatgpt_account_id.trim();
+    }
+
+    if (values.xai_token_expires_at?.trim()) {
+      provider.xaiTokenExpiresAt = values.xai_token_expires_at.trim();
+    }
+
+    if (values.chatgpt_token_expires_at?.trim()) {
+      provider.chatgptTokenExpiresAt = values.chatgpt_token_expires_at.trim();
+    }
+
+    if (baseUrl) {
+      provider.baseUrl = baseUrl;
+    }
+
+    if (hostMode) {
+      provider.hostMode = hostMode;
+    }
+
+    if (wireApi) {
+      provider.wireApi = wireApi;
+    }
+
+    if (customModels) {
+      provider.customModels = customModels;
+    }
+
+    if (type === "openrouter" && values.openrouter_routing_json) {
+      provider.openRouterRouting = validateOpenRouterRoutingSettings(
+        JSON.parse(values.openrouter_routing_json)
+      );
+    }
+
+    providers.push(provider);
   }
 
   return providers.sort((left, right) =>
@@ -728,8 +806,8 @@ function loadProvidersFromSections(
 
 function buildProviderSectionValues(
   provider: ProviderInstance
-): Record<string, string> {
-  const values: Record<string, string> = {
+): ProviderSectionValues {
+  const values: ProviderSectionValues = {
     api_key: provider.apiKey,
     created_at: provider.createdAt,
     label: normalizeProviderInstanceLabel(provider.type, provider.label, []),
@@ -815,11 +893,13 @@ function buildConfigIniLines(
     mergedGlobal.thinking === undefined
       ? DEFAULT_THINKING_ENABLED
       : mergedGlobal.thinking.trim().toLowerCase() !== "off";
+
   lines.push(`thinking=${thinkingEnabled ? "on" : "off"}`);
 
   const effort = validateThinkingEffort(
-    mergedGlobal.thinking_effort?.trim() as ThinkingEffort | undefined
+    mergedGlobal.thinking_effort?.trim()
   );
+
   lines.push(`thinking_effort=${effort}`);
 
   if (mergedGlobal.local_auth_token_hash?.trim()) {
@@ -850,24 +930,22 @@ function readThinkingSettings(
 
   return {
     effort: validateThinkingEffort(
-      values.thinking_effort?.trim() as ThinkingEffort | undefined
+      values.thinking_effort?.trim()
     ),
     enabled: raw === undefined ? DEFAULT_THINKING_ENABLED : raw !== "off",
   };
 }
 
-function validateThinkingEffort(
-  value: ThinkingEffort | undefined
-): ThinkingEffort {
-  if (value === "low" || value === "medium" || value === "high") {
-    return value;
-  }
-
-  return DEFAULT_THINKING_EFFORT;
+function validateThinkingEffort(value: string | undefined): ThinkingEffort {
+  return z
+    .enum(["low", "medium", "high"])
+    .catch(DEFAULT_THINKING_EFFORT)
+    .parse(value);
 }
 
 function readTimezone(values: Record<string, string>): string | undefined {
   const timezone = values.timezone?.trim();
+
   return timezone && isValidTimezone(timezone) ? timezone : undefined;
 }
 
@@ -924,13 +1002,16 @@ export function validateProviderApiKeyFormat(
 
   const hasWrongPrefix =
     rule.prefix !== undefined && !trimmed.startsWith(rule.prefix);
+
   const tooShort = trimmed.length < rule.minLength;
 
   if (hasWrongPrefix || tooShort) {
     const label = PROVIDER_TYPE_LABELS[type] ?? type;
+
     const reason = hasWrongPrefix
       ? ` (expected it to start with "${rule.prefix}")`
       : ` (expected at least ${rule.minLength} characters)`;
+
     throw new NakamaApiError(
       `That doesn't look like a valid ${label} API key${reason}.`,
       400
@@ -1003,9 +1084,11 @@ export function readXaiOAuthFromInstance(
   if (instance?.type !== "xai_oauth") {
     return null;
   }
+
   const accessToken = instance.xaiAccessToken?.trim();
   const refreshToken = instance.xaiRefreshToken?.trim();
   const expiresAt = instance.xaiTokenExpiresAt?.trim();
+
   return accessToken && refreshToken && expiresAt
     ? { accessToken, expiresAt, refreshToken }
     : null;
@@ -1015,22 +1098,22 @@ export function applyXaiOAuthToInstance(
   instance: ProviderInstance,
   oauth: XaiOAuthCredentials
 ): ProviderInstance {
+  const credentials = XaiOAuthSchema.safeParse(oauth);
+
   if (
-    !oauth ||
-    typeof oauth.accessToken !== "string" ||
-    !oauth.accessToken.trim() ||
-    typeof oauth.refreshToken !== "string" ||
-    !oauth.refreshToken.trim() ||
-    typeof oauth.expiresAt !== "string" ||
-    !Number.isFinite(Date.parse(oauth.expiresAt))
+    !(
+      credentials.success &&
+      Number.isFinite(Date.parse(credentials.data.expiresAt))
+    )
   ) {
     throw new Error("Invalid Grok OAuth credentials. Sign in again.");
   }
+
   return {
     ...instance,
     apiKey: "",
-    xaiAccessToken: oauth.accessToken.trim(),
-    xaiRefreshToken: oauth.refreshToken.trim(),
-    xaiTokenExpiresAt: oauth.expiresAt,
+    xaiAccessToken: credentials.data.accessToken,
+    xaiRefreshToken: credentials.data.refreshToken,
+    xaiTokenExpiresAt: credentials.data.expiresAt,
   };
 }

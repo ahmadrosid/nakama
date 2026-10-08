@@ -47,7 +47,7 @@ describe("resolveDiscordApplicationId", () => {
       new Response(JSON.stringify({ id: "1525937133096013954" }), {
         headers: { "Content-Type": "application/json" },
         status: 200,
-      })) as typeof fetch;
+      }));
 
     await expect(resolveDiscordApplicationId("test-token")).resolves.toBe(
       "1525937133096013954"
@@ -59,7 +59,7 @@ describe("resolveDiscordApplicationId", () => {
 
   test("returns null when Discord rejects the token", async () => {
     globalThis.fetch = (async () =>
-      new Response(null, { status: 401 })) as typeof fetch;
+      new Response(null, { status: 401 }));
 
     await expect(resolveDiscordApplicationId("bad-token")).resolves.toBeNull();
   });
@@ -68,7 +68,7 @@ describe("resolveDiscordApplicationId", () => {
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ id: "not-a-snowflake" }), {
         status: 200,
-      })) as typeof fetch;
+      }));
 
     await expect(
       resolveDiscordApplicationId("invalid-id-token")
@@ -76,7 +76,7 @@ describe("resolveDiscordApplicationId", () => {
 
     globalThis.fetch = (async () => {
       throw new Error("network failure");
-    }) as typeof fetch;
+    });
 
     await expect(
       resolveDiscordApplicationId("network-failure-token")
@@ -87,11 +87,12 @@ describe("resolveDiscordApplicationId", () => {
     let requestCount = 0;
     globalThis.fetch = (async () => {
       requestCount += 1;
+
       return new Response(JSON.stringify({ id: "1525937133096013954" }), {
         headers: { "Content-Type": "application/json" },
         status: 200,
       });
-    }) as typeof fetch;
+    });
 
     await expect(resolveDiscordApplicationId("cached-token")).resolves.toBe(
       "1525937133096013954"
@@ -99,8 +100,9 @@ describe("resolveDiscordApplicationId", () => {
 
     globalThis.fetch = (async () => {
       requestCount += 1;
+
       return new Response(null, { status: 401 });
-    }) as typeof fetch;
+    });
 
     await expect(
       resolveDiscordApplicationId("cached-token", { forceRefresh: true })
@@ -108,11 +110,12 @@ describe("resolveDiscordApplicationId", () => {
 
     globalThis.fetch = (async () => {
       requestCount += 1;
+
       return new Response(JSON.stringify({ id: "1525937133096013955" }), {
         headers: { "Content-Type": "application/json" },
         status: 200,
       });
-    }) as typeof fetch;
+    });
 
     await expect(resolveDiscordApplicationId("cached-token")).resolves.toBe(
       "1525937133096013955"
@@ -138,7 +141,7 @@ describe("loadDiscordSettingsPublic", () => {
         new Response(JSON.stringify({ id: "1525937133096013954" }), {
           headers: { "Content-Type": "application/json" },
           status: 200,
-        })) as typeof fetch;
+        }));
 
       const settings = await loadDiscordSettingsPublic();
 
@@ -207,7 +210,7 @@ describe("per-owner Discord config", () => {
         new Response(JSON.stringify({ id: "1525937133096013954" }), {
           headers: { "Content-Type": "application/json" },
           status: 200,
-        })) as typeof fetch;
+        }));
 
       const results = await Promise.allSettled([
         saveDiscordConfig(

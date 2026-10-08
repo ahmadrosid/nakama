@@ -17,7 +17,7 @@ function toIsoDate(value: Date | string | undefined): string {
     return value.toISOString();
   }
 
-  if (typeof value === "string" && value.trim()) {
+  if (value?.trim()) {
     return value;
   }
 
@@ -129,6 +129,7 @@ export function createImapReader(config: MailboxConfig): MailReader {
         const uids = asUidList(
           await client.search({ all: true }, { uid: true })
         );
+
         return await summariesFromUids(folder, uids, limit);
       } finally {
         lock.release();
@@ -144,6 +145,7 @@ export function createImapReader(config: MailboxConfig): MailReader {
           { size: true },
           { uid: true }
         );
+
         if (
           overview &&
           overview.size != null &&
@@ -153,6 +155,7 @@ export function createImapReader(config: MailboxConfig): MailReader {
             `Email message exceeds ${MAX_EMAIL_MESSAGE_BYTES} bytes.`
           );
         }
+
         for await (const message of client.fetch(
           uid,
           { source: true },
@@ -166,26 +169,32 @@ export function createImapReader(config: MailboxConfig): MailReader {
               `Email message exceeds ${MAX_EMAIL_MESSAGE_BYTES} bytes.`
             );
           }
+
           const parsed = await simpleParser(message.source);
           const index = Number.parseInt(attachmentId, 10);
+
           const attachment = Number.isInteger(index)
             ? parsed.attachments[index]
             : undefined;
+
           if (!attachment) {
             return null;
           }
 
           const metadata = attachmentMetadata(attachment, attachmentId);
+
           if (metadata.size > MAX_DOCUMENT_BYTES) {
             throw new Error(
               `Email attachment exceeds ${MAX_DOCUMENT_BYTES} bytes.`
             );
           }
+
           if (attachment.content.length > MAX_DOCUMENT_BYTES) {
             throw new Error(
               `Email attachment exceeds ${MAX_DOCUMENT_BYTES} bytes.`
             );
           }
+
           return { data: attachment.content, metadata };
         }
 
@@ -204,6 +213,7 @@ export function createImapReader(config: MailboxConfig): MailReader {
           { size: true },
           { uid: true }
         );
+
         if (
           overview &&
           overview.size != null &&
@@ -213,6 +223,7 @@ export function createImapReader(config: MailboxConfig): MailReader {
             `Email message exceeds ${MAX_EMAIL_MESSAGE_BYTES} bytes.`
           );
         }
+
         for await (const message of client.fetch(
           uid,
           { envelope: true, internalDate: true, source: true },
@@ -223,6 +234,7 @@ export function createImapReader(config: MailboxConfig): MailReader {
           if (!source) {
             continue;
           }
+
           if (source.length > MAX_EMAIL_MESSAGE_BYTES) {
             throw new Error(
               `Email message exceeds ${MAX_EMAIL_MESSAGE_BYTES} bytes.`
@@ -231,30 +243,40 @@ export function createImapReader(config: MailboxConfig): MailReader {
 
           const parsed = await simpleParser(source);
           const textBody = parsed.text?.trim() ?? "";
-          const htmlBody =
-            typeof parsed.html === "string" ? parsed.html.trim() : "";
+
+          const htmlBody = parsed.html?.trim() || "";
+
           const preferred = textBody || htmlBody;
+
           const truncated = preferred
             ? truncateMailBody(preferred)
             : { text: "", truncated: false };
 
-          return {
+          const result: MailMessage = {
             date: toIsoDate(message.internalDate),
             folder,
             from: formatMailAddress(message.envelope?.from?.[0]),
             subject: message.envelope?.subject?.trim() || "(no subject)",
             uid: message.uid,
-            ...(textBody ? { text: truncated.text } : {}),
-            ...(!textBody && htmlBody ? { html: truncated.text } : {}),
-            ...(truncated.truncated ? { truncated: true } : {}),
-            ...(parsed.attachments.length > 0
-              ? {
-                  attachments: parsed.attachments.map((attachment, index) =>
-                    attachmentMetadata(attachment, String(index))
-                  ),
-                }
-              : {}),
-          } satisfies MailMessage;
+          };
+
+          if (textBody) {
+            result.text = truncated.text;
+          } else if (htmlBody) {
+            result.html = truncated.text;
+          }
+
+          if (truncated.truncated) {
+            result.truncated = true;
+          }
+
+          if (parsed.attachments.length > 0) {
+            result.attachments = parsed.attachments.map((attachment, index) =>
+              attachmentMetadata(attachment, String(index))
+            );
+          }
+
+          return result;
         }
 
         return null;
@@ -281,6 +303,7 @@ export function createImapReader(config: MailboxConfig): MailReader {
             { uid: true }
           )
         );
+
         return await summariesFromUids(folder, uids, limit);
       } finally {
         lock.release();

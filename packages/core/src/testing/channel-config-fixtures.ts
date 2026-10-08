@@ -5,11 +5,13 @@ import path from "node:path";
 
 const HANDSHAKE_CODE_PATTERN = /^[0-9A-F]{32}$/;
 
-/** A code that is still live when the bridge reads it back. */
-function liveHandshakeCode(code = "A".repeat(32)): {
+interface LiveHandshakeCode {
   handshakeCode: string;
   handshakeExpiresAt: string;
-} {
+}
+
+/** A code that is still live when the bridge reads it back. */
+function liveHandshakeCode(code = "A".repeat(32)): LiveHandshakeCode {
   return {
     handshakeCode: code,
     handshakeExpiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
@@ -48,6 +50,7 @@ export async function writeChannelIniConfig(
   await mkdir(dir, { recursive: true });
 
   const label = channel === "telegram" ? "Telegram" : "Discord";
+
   const lines = [
     `# Nakama ${label} bridge`,
     `bot_token=${config.botToken}`,
@@ -227,6 +230,7 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
             botToken: tc.botToken,
             ...liveHandshakeCode(),
           });
+
           const wrong = await tc.verifyAndPair(
             liveHandshakeCode("B".repeat(32)).handshakeCode,
             tc.sampleId
@@ -237,6 +241,7 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
             handshakeCode: liveHandshakeCode("C".repeat(32)).handshakeCode,
             handshakeExpiresAt: new Date(Date.now() - 1000).toISOString(),
           });
+
           const expired = await tc.verifyAndPair(
             liveHandshakeCode("C".repeat(32)).handshakeCode,
             tc.authorize.unauthorized
@@ -277,6 +282,7 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
               (await tc.verifyAndPair("F".repeat(32), tc.sampleId)).ok
             ).toBe(false);
           }
+
           expect((await tc.loadConfigFile())?.handshakeCode).toBe(
             code.handshakeCode
           );
@@ -295,13 +301,19 @@ export function describeSharedChannelConfigTests<TId extends string | number>(
             botToken: tc.botToken,
             ...liveHandshakeCode(),
           });
+
           for (let attempt = 0; attempt < 5; attempt += 1) {
             await tc.verifyAndPair("F".repeat(32), tc.sampleId);
           }
 
           const fresh = await tc.regenerate();
+
+          if (!fresh.handshakeCode) {
+            throw new Error("Expected regenerate to return a handshake code");
+          }
+
           const result = await tc.verifyAndPair(
-            fresh.handshakeCode as string,
+            fresh.handshakeCode,
             tc.sampleId
           );
 

@@ -6,5 +6,6 @@ export function resolveProfileOrgBooleanOverride(
   if (profileValue !== undefined && profileValue !== null) {
     return profileValue;
   }
+
   return orgValue === true;
 }

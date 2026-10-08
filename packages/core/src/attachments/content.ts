@@ -34,7 +34,7 @@ export type LoadAttachmentBytes = (
 export function messageContentHasInlineAttachments(
   content: string | MessageContentPart[]
 ): boolean {
-  if (typeof content === "string") {
+  if (!Array.isArray(content)) {
     return false;
   }
 
@@ -48,7 +48,7 @@ export async function persistInlineAttachmentsInContent(
   save: SaveInlineAttachment
 ): Promise<string | MessageContentPart[]> {
   if (
-    typeof content === "string" ||
+    !Array.isArray(content) ||
     !messageContentHasInlineAttachments(content)
   ) {
     return content;
@@ -62,6 +62,7 @@ export async function persistInlineAttachmentsInContent(
         normalizeAttachmentBase64(part.data, MAX_IMAGE_BYTES, "image"),
         "base64"
       );
+
       const saved = await save({
         bytes,
         kind: "image",
@@ -82,6 +83,7 @@ export async function persistInlineAttachmentsInContent(
         normalizeAttachmentBase64(part.data, MAX_DOCUMENT_BYTES, "document"),
         "base64"
       );
+
       const saved = await save({
         bytes,
         filename: part.filename,
@@ -127,7 +129,7 @@ export async function rehydrateAttachmentRefsInContent(
   load: LoadAttachmentBytes,
   options: RehydrateOptions = {}
 ): Promise<string | MessageContentPart[]> {
-  if (typeof content === "string") {
+  if (!Array.isArray(content)) {
     return content;
   }
 
@@ -195,6 +197,7 @@ export async function rehydrateMessagesForProvider(
     (last, message, index) => (message.role === "user" ? index : last),
     -1
   );
+
   const result: ChatMessage[] = [];
 
   for (const [index, message] of messages.entries()) {

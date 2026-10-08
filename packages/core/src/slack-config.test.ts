@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { writeFile } from "node:fs/promises";
 import { withTempHome } from "./channel-test-helpers";
 import { parseSlackMemberIdInput } from "./contract";
 import {
   isSlackWorkspaceMember,
+  getSlackConfigPath,
   loadSlackSettingsPublic,
   parseSlackUserIds,
   saveSlackConfig,
@@ -56,11 +58,17 @@ describe("slack config", () => {
 
   test("only a real true turns the workspace gate on", async () => {
     await withTempHome("nakama-slack-truthy-", async () => {
-      const saved = await saveSlackConfig(OWNER_AGENT, {
-        allowWorkspace: "false" as unknown as boolean,
+      await saveSlackConfig(OWNER_AGENT, {
         appToken: "xapp-1-A0APPONE-1-secret",
         botToken: "xoxb-one",
       });
+      await writeFile(
+        getSlackConfigPath(OWNER_AGENT),
+        "app_token=xapp-1-A0APPONE-1-secret\nbot_token=xoxb-one\nallow_workspace=false\n"
+      );
+
+      const saved = await loadSlackSettingsPublic(OWNER_AGENT);
+
       expect(saved.allowWorkspace).toBe(false);
     });
   });
@@ -75,6 +83,7 @@ describe("slack config", () => {
   test("workspace gate admits only full members of the bot's team", () => {
     const team = "T0HOME01";
     expect(isSlackWorkspaceMember({ team_id: team }, team)).toBe(true);
+
     for (const member of [
       { team_id: "T0OTHER1" },
       { is_restricted: true, team_id: team },
@@ -99,6 +108,7 @@ describe("slack config", () => {
       pairedUserIds: [],
       profileId: "default",
     };
+
     expect(toSlackSettingsPublic({ ...base, appToken: "" }).configured).toBe(
       false
     );
@@ -117,6 +127,7 @@ describe("slack config", () => {
         appToken: "xapp-1",
         botToken: "xoxb-1",
       });
+
       expect(saved.handshakeCode).toMatch(/^[0-9A-F]{32}$/);
 
       // Paired members are part of the same list: omitting one revokes it.

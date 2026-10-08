@@ -6,6 +6,7 @@ import { dedupeSkillsByName, isGlobalSkillSourcePath } from "./dedupe";
 import { getGlobalSkillsDir, getProfileSkillsDir } from "./paths";
 
 const ORG_ID = "org_test";
+
 const PROFILE_ID = "profile_default";
 
 describe("dedupeSkillsByName", () => {
@@ -22,6 +23,7 @@ describe("dedupeSkillsByName", () => {
 
   test("keeps the global copy when the same skill name exists in multiple directories", () => {
     const globalPath = join(getGlobalSkillsDir(), "coding-backend-claude-code");
+
     const profilePath = join(
       getProfileSkillsDir(ORG_ID, PROFILE_ID),
       "coding-backend-claude-code"

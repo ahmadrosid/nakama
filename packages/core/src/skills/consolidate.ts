@@ -5,9 +5,12 @@ import { isGlobalSkillSourcePath } from "./dedupe";
 export const SKILL_CONSOLIDATE_RECENT_PATCH_MS = 14 * 24 * 60 * 60 * 1000;
 
 export const SKILL_CONSOLIDATE_MAX_CLUSTERS_PER_RUN = 3;
+
 export const SKILL_CONSOLIDATE_MAX_SOLOS_PER_RUN = 3;
+
 /** Minimum Jaccard overlap on name+description tokens to form a cluster. */
 export const SKILL_CONSOLIDATE_MIN_OVERLAP = 0.45;
+
 /** Description+body length above which a non-clustered agent skill is a solo deslopify candidate. */
 export const SKILL_CONSOLIDATE_VERBOSE_CHAR_THRESHOLD = 2500;
 
@@ -55,6 +58,7 @@ export interface BuildConsolidatePlanInput {
 
 function toTimestamp(value: string): number | null {
   const time = Date.parse(value);
+
   return Number.isNaN(time) ? null : time;
 }
 
@@ -63,6 +67,7 @@ function tokenize(text: string): Set<string> {
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter((token) => token.length >= 2);
+
   return new Set(tokens);
 }
 
@@ -74,13 +79,17 @@ export function jaccardOverlap(left: Set<string>, right: Set<string>): number {
   if (left.size === 0 && right.size === 0) {
     return 0;
   }
+
   let intersection = 0;
+
   for (const token of left) {
     if (right.has(token)) {
       intersection += 1;
     }
   }
+
   const union = left.size + right.size - intersection;
+
   return union === 0 ? 0 : intersection / union;
 }
 
@@ -90,9 +99,11 @@ export function isExemptFromConsolidate(
   if (skill.createdBy === "bundled") {
     return true;
   }
+
   if (bundledSkillNames.has(skill.name)) {
     return true;
   }
+
   return isGlobalSkillSourcePath(skill.sourcePath);
 }
 
@@ -105,33 +116,43 @@ export function classifyConsolidateEligibility(input: {
   if (input.hasEnabledAutomation) {
     return "automation_profile";
   }
+
   if (input.skill.createdBy !== "agent") {
     return "not_agent";
   }
+
   if (isExemptFromConsolidate(input.skill)) {
     return bundledSkillNames.has(input.skill.name) ? "bundled" : "global";
   }
+
   if (input.pendingSkillNames?.has(input.skill.name)) {
     return "pending_proposal";
   }
+
   const patchedAt = input.skill.lastPatchedAt;
+
   if (patchedAt) {
     const patchedMs = toTimestamp(patchedAt);
+
     if (patchedMs != null) {
       const now = input.now?.getTime() ?? Date.now();
+
       if (now - patchedMs < SKILL_CONSOLIDATE_RECENT_PATCH_MS) {
         return "recent_patch";
       }
     }
   }
+
   return null;
 }
 
 function rankScore(candidate: ConsolidateCandidateSkill): number {
   const useCount = candidate.useCount ?? 0;
+
   const lastUsed = candidate.lastUsedAt
     ? (toTimestamp(candidate.lastUsedAt) ?? 0)
     : 0;
+
   return useCount * 1_000_000_000_000 + lastUsed;
 }
 
@@ -140,9 +161,11 @@ function compareCandidates(
   right: ConsolidateCandidateSkill
 ): number {
   const scoreDiff = rankScore(right) - rankScore(left);
+
   if (scoreDiff !== 0) {
     return scoreDiff;
   }
+
   return left.name.localeCompare(right.name);
 }
 
@@ -158,6 +181,7 @@ export function buildConsolidatePlan(
   input: BuildConsolidatePlanInput
 ): ConsolidatePlan {
   const skillNames = new Set(input.skills.map((skill) => skill.name));
+
   if (skillNames.size !== input.skills.length) {
     throw new Error("Consolidation candidates must have unique names.");
   }
@@ -172,14 +196,17 @@ export function buildConsolidatePlan(
       pendingSkillNames: input.pendingSkillNames,
       skill: candidate,
     });
+
     if (reason) {
       skippedCount += 1;
       continue;
     }
+
     eligible.push(candidate);
   }
 
   const tokenByName = new Map<string, Set<string>>();
+
   for (const candidate of eligible) {
     tokenByName.set(candidate.name, skillTokenSet(candidate));
   }
@@ -193,27 +220,34 @@ export function buildConsolidatePlan(
     if (assigned.has(seed.name)) {
       continue;
     }
+
     if (clusters.length >= SKILL_CONSOLIDATE_MAX_CLUSTERS_PER_RUN) {
       break;
     }
 
     const seedTokens = tokenByName.get(seed.name);
+
     if (!seedTokens) {
       continue;
     }
 
     const members: ConsolidateCandidateSkill[] = [seed];
+
     for (const other of sorted) {
       if (other.name === seed.name) {
         continue;
       }
+
       if (assigned.has(other.name)) {
         continue;
       }
+
       const otherTokens = tokenByName.get(other.name);
+
       if (!otherTokens) {
         continue;
       }
+
       if (
         jaccardOverlap(seedTokens, otherTokens) >= SKILL_CONSOLIDATE_MIN_OVERLAP
       ) {
@@ -227,13 +261,17 @@ export function buildConsolidatePlan(
 
     members.sort(compareCandidates);
     const winner = members[0];
+
     if (!winner) {
       continue;
     }
+
     const losers = members.slice(1);
+
     for (const member of members) {
       assigned.add(member.name);
     }
+
     clusters.push({ losers, winner });
   }
 
@@ -241,15 +279,18 @@ export function buildConsolidatePlan(
 
   const solos: ConsolidateCandidateSkill[] = [];
   let budgetExhausted = false;
+
   for (const candidate of remaining) {
     if (contentLength(candidate) < SKILL_CONSOLIDATE_VERBOSE_CHAR_THRESHOLD) {
       continue;
     }
+
     if (solos.length >= SKILL_CONSOLIDATE_MAX_SOLOS_PER_RUN) {
       skippedCount += 1;
       budgetExhausted = true;
       continue;
     }
+
     solos.push(candidate);
   }
 

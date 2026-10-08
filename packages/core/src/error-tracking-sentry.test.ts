@@ -82,6 +82,7 @@ test("a test event is sent at a lower level than a crash", () => {
   const crash = toSentryEvent(
     buildErrorReport(new Error("x"), { kind: "crash" })
   );
+
   const testEvent = toSentryEvent(
     buildErrorReport(new Error("x"), { kind: "test" })
   );
@@ -106,6 +107,7 @@ test("sendSentryEvent posts an envelope with the auth header the ingest expects"
         contentType: request.headers.get("content-type"),
         method: request.method,
       };
+
       return new Response("{}", { status: 200 });
     },
     port: 0,
@@ -115,6 +117,7 @@ test("sendSentryEvent posts an envelope with the auth header the ingest expects"
     const dsn = parseSentryDsn(
       `http://pubkey@${server.hostname}:${server.port}/42`
     );
+
     const event = toSentryEvent(sampleReport());
     const ok = await sendSentryEvent(dsn!, event);
 
@@ -158,6 +161,7 @@ async function countSinkHits(env: Record<string, string>): Promise<number> {
   const server = Bun.serve({
     fetch() {
       hits += 1;
+
       return new Response("{}", { status: 200 });
     },
     port: 0,
@@ -171,6 +175,7 @@ async function countSinkHits(env: Record<string, string>): Promise<number> {
     }
 
     await createErrorTrackingSink()(sampleReport());
+
     return hits;
   } finally {
     server.stop(true);
@@ -195,6 +200,7 @@ test("the sink delivers to the configured DSN", async () => {
   const server = Bun.serve({
     fetch() {
       hits += 1;
+
       return new Response("{}", { status: 200 });
     },
     port: 0,

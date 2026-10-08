@@ -109,9 +109,12 @@ export function renderUserContext(
   answers: UserContextAnswers,
   extra?: string | null
 ): string {
-  const bullets = USER_CONTEXT_FIELDS.filter(
-    (field) => (answers[field.key] ?? "").trim() !== ""
-  ).map((field) => `${bulletPrefix(field)} ${answers[field.key]}`);
+  const bullets = USER_CONTEXT_FIELDS.flatMap((field) => {
+    const answer = answers[field.key] ?? "";
+
+    return answer.trim() ? [`${bulletPrefix(field)} ${answer}`] : [];
+  });
+
   const rest = extra?.trim() ?? "";
 
   if (bullets.length === 0 && rest === "") {
@@ -124,6 +127,7 @@ export function renderUserContext(
     if (bullets.length > 0) {
       sections.push("");
     }
+
     sections.push(rest);
   }
 
@@ -134,16 +138,19 @@ export function normalizeUserContextContent(
   raw: string | null | undefined
 ): string | undefined {
   const trimmed = raw?.trim();
+
   return trimmed ? trimmed : undefined;
+}
+
+export interface UserContextStatus {
+  active: boolean;
+  content?: string;
 }
 
 export function buildUserContextStatus(
   raw: string | null | undefined,
   includeContent: boolean
-): {
-  active: boolean;
-  content?: string;
-} {
+): UserContextStatus {
   const content = normalizeUserContextContent(raw);
 
   if (!includeContent) {
@@ -152,8 +159,11 @@ export function buildUserContextStatus(
     };
   }
 
-  return {
+  const status: UserContextStatus = {
     active: content !== undefined,
-    ...(content === undefined ? {} : { content }),
   };
+
+  if (content !== undefined) status.content = content;
+
+  return status;
 }

@@ -26,6 +26,7 @@ async function createExistingFile(mode: number): Promise<string> {
   const path = join(directory, "config.txt");
   await writeFile(path, "old", { mode });
   await chmod(path, mode);
+
   return path;
 }
 

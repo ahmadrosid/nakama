@@ -1,6 +1,19 @@
 import type { toMailboxConfig } from "../email-config";
+import { z } from "zod";
+
+const MailAddressSchema = z.union([
+  z.string(),
+  z.object({ address: z.string(), name: z.string().optional() }).passthrough(),
+]);
+
+export type MailAddressInput =
+  | string
+  | { address: string; name?: string }
+  | null
+  | undefined;
 
 export const MAX_EMAIL_BODY_BYTES = 256 * 1024;
+
 export const MAX_EMAIL_MESSAGE_BYTES = 10 * 1024 * 1024;
 
 export interface MailAttachment {
@@ -60,32 +73,36 @@ export interface MailSender {
 
 export type MailboxConfig = ReturnType<typeof toMailboxConfig>;
 
-export function formatMailAddress(value: unknown): string {
-  if (typeof value === "string") {
-    return value.trim();
+export interface MailBodyPreview {
+  text: string;
+  truncated: boolean;
+}
+
+export function formatMailAddress(value: MailAddressInput): string {
+  if (value == null) {
+    return "";
   }
 
-  if (
-    typeof value === "object" &&
-    value !== null &&
-    "address" in value &&
-    typeof (value as { address?: unknown }).address === "string"
-  ) {
-    const entry = value as { name?: string; address: string };
-    const name = entry.name?.trim();
-    return name ? `${name} <${entry.address}>` : entry.address;
+  const parsed = MailAddressSchema.safeParse(value);
+
+  if (!parsed.success) {
+    return "";
   }
 
-  return "";
+  if ("address" in parsed.data === false) {
+    return parsed.data.trim();
+  }
+
+  const entry = parsed.data;
+  const name = entry.name?.trim();
+
+  return name ? `${name} <${entry.address}>` : entry.address;
 }
 
 export function truncateMailBody(
   value: string,
   maxBytes = MAX_EMAIL_BODY_BYTES
-): {
-  text: string;
-  truncated: boolean;
-} {
+): MailBodyPreview {
   const bytes = Buffer.byteLength(value, "utf8");
 
   if (bytes <= maxBytes) {

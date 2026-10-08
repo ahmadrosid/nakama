@@ -1,13 +1,36 @@
+import { z } from "zod";
 import { inferArtifactMimeType } from "./artifact-mime";
 import type { ChatMessage } from "./contract";
 
 const ARTIFACT_META_SUFFIX = ".nakama-meta.json";
+
 const ARTIFACTS_SEGMENT = "/artifacts/";
+
 const ARTIFACTS_PREFIX = "artifacts/";
+
+const JsonValueSchema = z.json();
+
+const JsonObjectSchema = z.record(z.string(), JsonValueSchema);
+
+const WriteFileResultSchema = z.object({
+  bytesWritten: z.number().optional(),
+  error: z.string().optional(),
+  path: z.string().optional(),
+});
+
+const GenerateImageResultSchema = z.object({
+  error: z.string().optional(),
+  mimeType: z.string().optional(),
+  path: z.string().optional(),
+  sizeBytes: z.number().optional(),
+});
+
+type JsonObject = z.infer<typeof JsonObjectSchema>;
 
 /** Filenames that look like agent scratch, never user-facing deliverables. */
 export function isScratchArtifactPath(relativePath: string): boolean {
   const filename = relativePath.split("/").pop() ?? relativePath;
+
   return (
     filename.startsWith(".") ||
     filename.startsWith("_") ||
@@ -27,22 +50,15 @@ export interface ChannelArtifactRef {
   sizeBytes: number;
 }
 
-interface WriteFileResult {
-  bytesWritten?: number;
-  error?: string;
-  path?: string;
-}
+type WriteFileResult = z.infer<typeof WriteFileResultSchema>;
 
-interface GenerateImageResult {
-  error?: string;
-  mimeType?: string;
-  path?: string;
-  sizeBytes?: number;
-}
+type GenerateImageResult = z.infer<typeof GenerateImageResultSchema>;
 
-function parseToolResult(content: string): unknown {
+function parseToolResult(content: string): JsonObject | null {
   try {
-    return JSON.parse(content) as unknown;
+    const parsed = JsonObjectSchema.safeParse(JSON.parse(content));
+
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }
@@ -61,21 +77,18 @@ function getWriteFileResult(
 ): WriteFileResult | null {
   const parsed = parseToolResult(message.content);
 
-  if (typeof parsed !== "object" || parsed === null) {
-    return null;
-  }
+  const result = WriteFileResultSchema.safeParse(parsed);
 
-  return parsed as WriteFileResult;
+  return result.success ? result.data : null;
 }
 
 function isSuccessfulWrite(
   message: Extract<ChatMessage, { role: "tool" }>
 ): boolean {
   const result = getWriteFileResult(message);
+
   return (
-    result != null &&
-    typeof result.error !== "string" &&
-    typeof result.path === "string"
+    result !== null && result.error === undefined && result.path !== undefined
   );
 }
 
@@ -83,11 +96,8 @@ function resolvedWritePath(
   message: Extract<ChatMessage, { role: "tool" }>
 ): string | null {
   const result = getWriteFileResult(message);
-  if (
-    !result ||
-    typeof result.error === "string" ||
-    typeof result.path !== "string"
-  ) {
+
+  if (!result || result.error !== undefined || result.path === undefined) {
     return null;
   }
 
@@ -119,11 +129,13 @@ function isArtifactMetaResolvedPath(resolvedPath: string): boolean {
 
 export function toArtifactsRelativePath(resolvedPath: string): string | null {
   const markerIndex = resolvedPath.indexOf(ARTIFACTS_SEGMENT);
+
   if (markerIndex !== -1) {
     return resolvedPath.slice(markerIndex + ARTIFACTS_SEGMENT.length);
   }
 
   const windowsMarker = resolvedPath.toLowerCase().indexOf("\\artifacts\\");
+
   if (windowsMarker !== -1) {
     return resolvedPath
       .slice(windowsMarker + "\\artifacts\\".length)
@@ -146,41 +158,37 @@ function siblingContentPath(metaResolvedPath: string): string | null {
 }
 
 function parseArtifactMeta(
-  content: unknown
+  content: string
 ): Pick<ChannelArtifactRef, "mimeType" | "sizeBytes" | "savedAt"> | null {
-  if (typeof content !== "string" || !content.trim()) {
+  if (!content.trim()) {
     return null;
   }
 
-  let parsed: unknown;
+  let parsed: JsonObject;
 
   try {
-    parsed = JSON.parse(content);
+    parsed = JsonObjectSchema.parse(JSON.parse(content));
   } catch {
     return null;
   }
 
-  if (typeof parsed !== "object" || parsed === null) {
-    return null;
-  }
-
-  const record = parsed as Record<string, unknown>;
-  const mimeType =
-    typeof record.mimeType === "string" ? record.mimeType.trim() : "";
-  const savedAt =
-    typeof record.savedAt === "string" ? record.savedAt.trim() : "";
-  const sizeBytes = record.sizeBytes;
+  const mimeType = z.string().safeParse(parsed.mimeType).data?.trim() ?? "";
+  const savedAt = z.string().safeParse(parsed.savedAt).data?.trim() ?? "";
+  const sizeBytes = z.number().safeParse(parsed.sizeBytes);
 
   if (
-    !(mimeType && savedAt) ||
-    typeof sizeBytes !== "number" ||
-    !Number.isInteger(sizeBytes) ||
-    sizeBytes < 0
+    !(
+      mimeType &&
+      savedAt &&
+      sizeBytes.success &&
+      Number.isInteger(sizeBytes.data) &&
+      sizeBytes.data >= 0
+    )
   ) {
     return null;
   }
 
-  return { mimeType, savedAt, sizeBytes };
+  return { mimeType, savedAt, sizeBytes: sizeBytes.data };
 }
 
 function buildArtifactRef(
@@ -188,6 +196,7 @@ function buildArtifactRef(
   meta: Pick<ChannelArtifactRef, "mimeType" | "sizeBytes" | "savedAt">
 ): ChannelArtifactRef {
   const filename = relativePath.split("/").pop() ?? relativePath;
+
   return {
     filename,
     mimeType: meta.mimeType,
@@ -199,42 +208,45 @@ function buildArtifactRef(
 
 function relativePathFromWriteMessage(
   message: Extract<ChatMessage, { role: "tool" }>,
-  toolInputs: Map<string, Record<string, unknown>>
+  toolInputs: Map<string, JsonObject>
 ): string | null {
   const resolvedPath = resolvedWritePath(message);
+
   if (resolvedPath) {
     const fromResolved = toArtifactsRelativePath(resolvedPath);
+
     if (fromResolved) {
       return fromResolved;
     }
   }
 
   const input = toolInputs.get(message.toolCallId);
-  const inputPath = typeof input?.path === "string" ? input.path : null;
+  const inputPath = z.string().safeParse(input?.path).data ?? null;
+
   if (!inputPath) {
     return null;
   }
 
   const normalized = inputPath.replace(/^\.\//, "");
+
   return toArtifactsRelativePath(normalized);
 }
 
 function metaContentFromSidecarWrite(
   message: Extract<ChatMessage, { role: "tool" }>,
-  toolInputs: Map<string, Record<string, unknown>>
+  toolInputs: Map<string, JsonObject>
 ): string | null {
   const input = toolInputs.get(message.toolCallId);
-  if (!input || typeof input.content !== "string") {
+
+  if (!input) {
     return null;
   }
 
-  return input.content;
+  return z.string().safeParse(input.content).data ?? null;
 }
 
-function buildToolInputMap(
-  messages: ChatMessage[]
-): Map<string, Record<string, unknown>> {
-  const toolInputs = new Map<string, Record<string, unknown>>();
+function buildToolInputMap(messages: ChatMessage[]): Map<string, JsonObject> {
+  const toolInputs = new Map<string, JsonObject>();
 
   for (const message of messages) {
     if (message.role !== "assistant") {
@@ -242,7 +254,11 @@ function buildToolInputMap(
     }
 
     for (const call of message.toolCalls ?? []) {
-      toolInputs.set(call.id, call.arguments);
+      const args = JsonObjectSchema.safeParse(call.arguments);
+
+      if (args.success) {
+        toolInputs.set(call.id, args.data);
+      }
     }
   }
 
@@ -254,11 +270,9 @@ function getGenerateImageResult(
 ): GenerateImageResult | null {
   const parsed = parseToolResult(message.content);
 
-  if (typeof parsed !== "object" || parsed === null) {
-    return null;
-  }
+  const result = GenerateImageResultSchema.safeParse(parsed);
 
-  return parsed as GenerateImageResult;
+  return result.success ? result.data : null;
 }
 
 function artifactRefFromGenerateImage(
@@ -269,22 +283,23 @@ function artifactRefFromGenerateImage(
   }
 
   const result = getGenerateImageResult(message);
-  if (!result || typeof result.error === "string") {
+
+  if (!result || result.error !== undefined) {
     return null;
   }
 
-  if (typeof result.path !== "string" || !result.path.trim()) {
+  if (!result.path?.trim()) {
     return null;
   }
 
-  const mimeType =
-    typeof result.mimeType === "string" ? result.mimeType.trim() : "";
+  const mimeType = result.mimeType?.trim() ?? "";
+
   if (!mimeType) {
     return null;
   }
 
   if (
-    typeof result.sizeBytes !== "number" ||
+    result.sizeBytes === undefined ||
     !Number.isInteger(result.sizeBytes) ||
     result.sizeBytes < 0
   ) {
@@ -292,6 +307,7 @@ function artifactRefFromGenerateImage(
   }
 
   const relativePath = toArtifactsRelativePath(result.path.trim());
+
   if (!relativePath || isArtifactMetaRelativePath(relativePath)) {
     return null;
   }
@@ -345,22 +361,21 @@ export function extractPairedTurnArtifacts(
     }
 
     const resolvedPath = resolvedWritePath(message);
+
     if (!resolvedPath || isArtifactMetaResolvedPath(resolvedPath)) {
       continue;
     }
 
     const relativePath = relativePathFromWriteMessage(message, toolInputs);
+
     if (!relativePath || isArtifactMetaRelativePath(relativePath)) {
       continue;
     }
 
     contentWrites.set(resolvedPath, { relativePath });
     const sizeBytes = getWriteFileResult(message)?.bytesWritten;
-    if (
-      typeof sizeBytes === "number" &&
-      Number.isInteger(sizeBytes) &&
-      sizeBytes >= 0
-    ) {
+
+    if (sizeBytes !== undefined && Number.isInteger(sizeBytes) && sizeBytes >= 0) {
       artifactsByPath.set(
         relativePath,
         buildArtifactRef(relativePath, {
@@ -382,16 +397,19 @@ export function extractPairedTurnArtifacts(
     }
 
     const resolvedPath = resolvedWritePath(message);
+
     if (!(resolvedPath && isArtifactMetaResolvedPath(resolvedPath))) {
       continue;
     }
 
     const siblingPath = siblingContentPath(resolvedPath);
+
     if (!siblingPath) {
       continue;
     }
 
     const contentWrite = contentWrites.get(siblingPath);
+
     if (!contentWrite) {
       continue;
     }
@@ -399,6 +417,7 @@ export function extractPairedTurnArtifacts(
     const meta = parseArtifactMeta(
       metaContentFromSidecarWrite(message, toolInputs)
     );
+
     if (!meta) {
       continue;
     }
@@ -415,6 +434,7 @@ export function extractPairedTurnArtifacts(
     }
 
     const generated = artifactRefFromGenerateImage(message);
+
     if (!generated) {
       continue;
     }

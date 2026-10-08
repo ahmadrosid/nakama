@@ -26,9 +26,13 @@ export function createDiscordWorkerHeartbeat(scope: ChannelConfigScope = null) {
     }),
   });
 }
+
 const store = createDiscordWorkerHeartbeat();
+
 export const parseDiscordWorkerHeartbeat = store.parse;
+
 export const readDiscordWorkerHeartbeat = store.read;
+
 export const clearDiscordWorkerHeartbeat = store.clear;
 
 export function resolveDiscordWorkerStatus(
@@ -48,11 +52,16 @@ export async function writeDiscordWorkerHeartbeat(
   updatedAt = new Date().toISOString(),
   connected?: boolean
 ): Promise<void> {
-  await store.write({
+  const heartbeat: DiscordWorkerHeartbeat = {
     pid,
     updatedAt,
-    ...(connected === undefined ? {} : { connected }),
-  });
+  };
+
+  if (connected !== undefined) {
+    heartbeat.connected = connected;
+  }
+
+  await store.write(heartbeat);
 }
 
 export async function getDiscordWorkerStatus(

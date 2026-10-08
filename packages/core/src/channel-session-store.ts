@@ -1,4 +1,5 @@
 import { dirname } from "node:path";
+import { z } from "zod";
 import type { DeliverableChannelArtifact } from "./channel-artifact-delivery";
 import { createChatLock } from "./channel-chat-lock";
 import { readTextOrNull, writeTextFile } from "./fs";
@@ -15,6 +16,25 @@ export interface ChatSessionRecord {
 
 type ChatSessionMap = Record<string, ChatSessionRecord>;
 
+const ChatSessionRecordSchema = z.object({
+  artifactShareUrls: z.record(z.string(), z.string()).optional(),
+  deliverableArtifacts: z.array(z.object({
+    filename: z.string(),
+    mimeType: z.string(),
+    path: z.string(),
+    savedAt: z.string(),
+    sharePath: z.string().nullable(),
+    shareUrl: z.string().nullable(),
+    sizeBytes: z.number(),
+  })).optional(),
+  profileId: z.string(),
+  sessionId: z.string(),
+  sessionIds: z.array(z.string()).optional(),
+  updatedAt: z.string(),
+});
+
+const ChatSessionMapSchema = z.record(z.string(), ChatSessionRecordSchema);
+
 // Each save rewrites the whole map. Unserialized, an older snapshot can be
 // renamed into place after a newer one and undo it on the next restart.
 const saveLock = createChatLock();
@@ -23,7 +43,7 @@ const saveLock = createChatLock();
 export class ChannelSessionStore {
   private map: ChatSessionMap = {};
   /** In-memory RemoteChatSession wrappers — not persisted. */
-  private readonly hotSessions = new Map<string, unknown>();
+  private readonly hotSessions = new Map<string, object>();
 
   constructor(private readonly path: string) {}
 
@@ -33,21 +53,12 @@ export class ChannelSessionStore {
 
     if (raw === null) {
       this.map = {};
+
       return;
     }
 
-    const parsed = JSON.parse(raw) as unknown;
-
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      Array.isArray(parsed)
-    ) {
-      this.map = {};
-      return;
-    }
-
-    this.map = parsed as ChatSessionMap;
+    const parsed = ChatSessionMapSchema.safeParse(JSON.parse(raw));
+    this.map = parsed.success ? parsed.data : {};
   }
 
   get(chatId: string): ChatSessionRecord | undefined {
@@ -57,6 +68,7 @@ export class ChannelSessionStore {
   set(chatId: string, record: ChatSessionRecord): void {
     const previous = this.map[chatId];
     this.map[chatId] = record;
+
     if (previous && previous.sessionId !== record.sessionId) {
       this.hotSessions.delete(chatId);
     }
@@ -68,14 +80,15 @@ export class ChannelSessionStore {
   }
 
   getHotSession<T>(chatId: string): T | undefined {
+    // SAFETY: The caller uses the same chat key and session type passed to setHotSession.
     return this.hotSessions.get(chatId) as T | undefined;
   }
 
-  setHotSession(chatId: string, session: unknown): void {
+  setHotSession<T extends object>(chatId: string, session: T): void {
     this.hotSessions.set(chatId, session);
   }
 
-  getArtifactShareUrls(chatId: string): Record<string, string> {
+  getArtifactShareUrls(chatId: string) {
     return { ...(this.get(chatId)?.artifactShareUrls ?? {}) };
   }
 
@@ -91,6 +104,7 @@ export class ChannelSessionStore {
     }
   ): void {
     const existing = this.get(chatId);
+
     if (!existing) {
       return;
     }

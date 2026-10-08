@@ -28,6 +28,7 @@ export {
   looksLikePairingCode,
   maskBotToken,
 } from "./channel-config-shared";
+
 export { generatePairingCode } from "./pairing-code";
 
 export const DEFAULT_TELEGRAM_PROFILE_ID = "default";
@@ -70,10 +71,12 @@ export function getTelegramConfigDir(orgId: TelegramConfigScope): string {
 
 export function getTelegramConfigPath(orgId: TelegramConfigScope): string {
   const path = join(getTelegramConfigDir(orgId), "config.ini");
+
   if (isChannelOwner(orgId)) {
     assertChannelPath(path);
     assertChannelPath(`${path}.tmp`);
   }
+
   return path;
 }
 
@@ -141,6 +144,7 @@ export async function resolveTelegramScopeForOrg(
   if (isChannelOwner(orgId)) {
     return orgId;
   }
+
   if (orgId === null) {
     return null;
   }
@@ -170,6 +174,7 @@ export async function claimLegacyTelegramConfig(
 
   await ensureDir(dirname(targetDir));
   await rename(legacyDir, targetDir);
+
   return true;
 }
 
@@ -260,6 +265,7 @@ function buildSavedTelegramConfig(
   }
 
   const allowedUserIds = resolveAllowedUserIdsInput(input, existing);
+
   const pairedUserIds =
     input.pairedUserIds === undefined
       ? (existing?.pairedUserIds ?? [])
@@ -279,15 +285,20 @@ export async function saveTelegramConfig(
   input: UpdateTelegramSettingsInput
 ): Promise<TelegramSettingsPublic> {
   const existing = await loadTelegramConfigFile(orgId);
+
   const changed =
     existing &&
     input.botToken !== undefined &&
     existing.botToken !== input.botToken.trim();
+
   const next = buildSavedTelegramConfig(input, changed ? null : existing);
+
   if (isChannelOwner(orgId)) {
     next.profileId = orgId.profileId;
   }
+
   await assertTelegramTokenUnclaimed(orgId, next.botToken);
+
   const rollback = isChannelOwner(orgId)
     ? await claimChannelIdentity(
         "telegram",
@@ -295,18 +306,22 @@ export async function saveTelegramConfig(
         next.botToken.split(":")[0]!
       )
     : async () => {};
+
   try {
     if (changed && isChannelOwner(orgId)) {
       await resetChannelConversationState("telegram", orgId);
     }
+
     await writeTelegramConfigFile(orgId, next);
   } catch (error) {
     await rollback();
     throw error;
   }
+
   if (isChannelOwner(orgId)) {
     await releaseChannelClaims("telegram", orgId, next.botToken.split(":")[0]!);
   }
+
   return toTelegramSettingsPublic(next);
 }
 
@@ -349,6 +364,7 @@ export async function regenerateTelegramHandshake(
   }
 
   const { code, expiresAt } = createPairingCodeSecret();
+
   const next: TelegramConfigFile = {
     ...existing,
     handshakeCode: code,
@@ -356,6 +372,7 @@ export async function regenerateTelegramHandshake(
   };
 
   await writeTelegramConfigFile(orgId, next);
+
   return toTelegramSettingsPublic(next);
 }
 
@@ -381,6 +398,7 @@ export function resolveTelegramConfigFromSources(options: {
 }): TelegramConfigFile | null {
   const env = options.env ?? process.env;
   const file = options.file ?? null;
+
   const botToken =
     readEnvValue(env, "TELEGRAM_BOT_TOKEN") || file?.botToken?.trim() || "";
 

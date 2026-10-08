@@ -10,10 +10,15 @@ import {
 import { runKnowledgeBaseSearch } from "./knowledge-base-search";
 
 const ORG_ID = "org_test";
+
 const PROFILE_ID = "profile_kb_search";
+
 const PRIVATE_DOCUMENT_ID = "kb_private";
+
 const SHARED_DOCUMENT_ID = "kb_shared";
+
 const UNSHARED_DOCUMENT_ID = "kb_unshared";
+
 const UPLOADED_AT = "2026-06-13T00:00:00.000Z";
 
 interface DocumentFixture {
@@ -67,10 +72,12 @@ describe("knowledge_base_search tool", () => {
 
     const profileKnowledgeBaseDir = getKnowledgeBaseDir(ORG_ID, PROFILE_ID);
     await mkdir(profileKnowledgeBaseDir, { recursive: true });
+
     const profileDocuments = [
       options.profile,
       ...(options.additionalProfileDocuments ?? []),
     ];
+
     for (const document of profileDocuments) {
       await writeFile(
         getKnowledgeBaseExtractedPath(profileKnowledgeBaseDir, document.id),
@@ -78,35 +85,36 @@ describe("knowledge_base_search tool", () => {
         "utf8"
       );
     }
+
+    const manifest = {
+      documents: [
+        ...profileDocuments.map(manifestDocument),
+        ...(options.unreadable ?? []).map((document) => ({
+          error: "unsupported input: PDF has no extractable text",
+          filename: document.filename,
+          id: document.id,
+          mediaType: "application/pdf",
+          sizeBytes: 1024,
+          status: "failed" as const,
+          uploadedAt: UPLOADED_AT,
+        })),
+      ],
+    };
+
+    if (options.attachments) {
+      Object.assign(manifest, { sharedDocumentIds: options.attachments });
+    }
+
     await writeFile(
       path.join(profileKnowledgeBaseDir, "manifest.json"),
-      JSON.stringify(
-        {
-          documents: [
-            ...profileDocuments.map(manifestDocument),
-            ...(options.unreadable ?? []).map((document) => ({
-              error: "unsupported input: PDF has no extractable text",
-              filename: document.filename,
-              id: document.id,
-              mediaType: "application/pdf",
-              sizeBytes: 1024,
-              status: "failed" as const,
-              uploadedAt: UPLOADED_AT,
-            })),
-          ],
-          ...(options.attachments
-            ? { sharedDocumentIds: options.attachments }
-            : {}),
-        },
-        null,
-        2
-      ),
+      JSON.stringify(manifest, null, 2),
       "utf8"
     );
 
     const organizationKnowledgeBaseDir = getOrgKnowledgeBaseDir(ORG_ID);
     await mkdir(organizationKnowledgeBaseDir, { recursive: true });
     const organization = options.organization ?? [];
+
     if (organization.length > 0) {
       await writeFile(
         path.join(organizationKnowledgeBaseDir, "manifest.json"),
@@ -118,6 +126,7 @@ describe("knowledge_base_search tool", () => {
         "utf8"
       );
     }
+
     for (const document of organization) {
       await writeFile(
         getKnowledgeBaseExtractedPath(
@@ -163,6 +172,7 @@ describe("knowledge_base_search tool", () => {
         id: "kb_test_doc",
       },
     });
+
     await writeFile(
       path.join(profileDir, "SOUL.md"),
       "alpha soul content\n",
@@ -182,6 +192,7 @@ describe("knowledge_base_search tool", () => {
       { query: "soul content" },
       { orgId: ORG_ID, profileId: PROFILE_ID }
     );
+
     expect(soulOnly.matchCount).toBe(0);
   });
 
@@ -192,6 +203,7 @@ describe("knowledge_base_search tool", () => {
       { query: "shared alpha" },
       { orgId: ORG_ID, profileId: PROFILE_ID }
     );
+
     expect(shared.matchCount).toBe(1);
     expect(shared.matches[0]?.scope).toBe("organization");
 
@@ -199,12 +211,14 @@ describe("knowledge_base_search tool", () => {
       { query: "secret-unattached-token" },
       { orgId: ORG_ID, profileId: PROFILE_ID }
     );
+
     expect(unattached.matchCount).toBe(0);
 
     const filteredBySharedFilename = await runKnowledgeBaseSearch(
       { filename: "shared.txt", query: "alpha" },
       { orgId: ORG_ID, profileId: PROFILE_ID }
     );
+
     expect(filteredBySharedFilename.matchCount).toBe(1);
     expect(filteredBySharedFilename.matches[0]?.scope).toBe("organization");
 
@@ -212,6 +226,7 @@ describe("knowledge_base_search tool", () => {
       { filename: "unshared.txt", query: "alpha" },
       { orgId: ORG_ID, profileId: PROFILE_ID }
     );
+
     expect(filteredByUnattachedFilename.matchCount).toBe(0);
   });
 
@@ -223,10 +238,12 @@ describe("knowledge_base_search tool", () => {
         id: PRIVATE_DOCUMENT_ID,
       },
     });
+
     const result = await runKnowledgeBaseSearch(
       { query: "fact alpha" },
       { orgId: ORG_ID, profileId: PROFILE_ID }
     );
+
     expect(result.matchCount).toBe(1);
     expect(result.matches[0]?.text).toContain("alpha project fact");
     expect(result.matches[0]?.file).toBe(
@@ -236,16 +253,19 @@ describe("knowledge_base_search tool", () => {
 
   test("matches regular expressions when explicitly requested", async () => {
     await setupTwoScopes();
+
     const result = await runKnowledgeBaseSearch(
       { query: "private.*context", regex: true },
       { orgId: ORG_ID, profileId: PROFILE_ID }
     );
+
     expect(result.matchCount).toBe(1);
     expect(result.matches[0]?.text).toContain("private alpha context");
   });
 
   test("keeps concurrent filename searches in their own scope", async () => {
     await setupTwoScopes();
+
     const results = await Promise.all(
       ["private.txt", "shared.txt", "private.txt", "shared.txt"].map(
         (filename) =>
@@ -255,6 +275,7 @@ describe("knowledge_base_search tool", () => {
           )
       )
     );
+
     for (const [index, result] of results.entries()) {
       expect(result.matchCount).toBe(1);
       expect(result.matches[0]?.scope).toBe(
@@ -275,10 +296,12 @@ describe("knowledge_base_search tool", () => {
     expect(
       (await runKnowledgeBaseSearch({ query: "alpha" }, context)).matchCount
     ).toBe(1);
+
     const source = getKnowledgeBaseExtractedPath(
       getKnowledgeBaseDir(ORG_ID, PROFILE_ID),
       PRIVATE_DOCUMENT_ID
     );
+
     await writeFile(
       source,
       extractedContent("notes.txt", "gamma project fact\n")
@@ -326,6 +349,7 @@ describe("knowledge_base_search tool", () => {
         text: "private alpha context",
       },
     ];
+
     const withBackend = await runKnowledgeBaseSearch(
       { query: "alpha" },
       {
@@ -356,6 +380,7 @@ describe("knowledge_base_search tool", () => {
         }),
       }
     );
+
     expect(unattachedWithBackend.matchCount).toBe(0);
   });
 
@@ -383,12 +408,14 @@ describe("knowledge_base_search tool", () => {
       { filename: "missing.txt", query: "unique-token" },
       { orgId: ORG_ID, profileId: PROFILE_ID }
     );
+
     expect(missing.matchCount).toBe(0);
 
     const found = await runKnowledgeBaseSearch(
       { filename: "notes.txt", query: "unique-token" },
       { orgId: ORG_ID, profileId: PROFILE_ID }
     );
+
     expect(found.matchCount).toBe(1);
   });
 
@@ -504,6 +531,7 @@ describe("knowledge_base_search tool", () => {
       { maxResults: 3, query: "limit marker" },
       { orgId: ORG_ID, profileId: PROFILE_ID }
     );
+
     expect(exact.matchCount).toBe(3);
     expect(exact.truncated).toBe(false);
 
@@ -511,6 +539,7 @@ describe("knowledge_base_search tool", () => {
       { maxResults: 2, query: "limit marker" },
       { orgId: ORG_ID, profileId: PROFILE_ID }
     );
+
     expect(dropped.matchCount).toBe(2);
     expect(dropped.truncated).toBe(true);
   });

@@ -7,6 +7,14 @@ import type {
 } from "./plugins";
 import type { SkillScriptIssue } from "./skills/script-tools";
 
+export type JsonValue =
+  | boolean
+  | null
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
 export type AutomationTrigger =
   | { type: "manual" }
   | { type: "schedule"; cron: string; timezone?: string }
@@ -14,7 +22,7 @@ export type AutomationTrigger =
 
 export interface AutomationStep {
   id: string;
-  input: Record<string, unknown>;
+  input: Record<string, JsonValue>;
   tool: string;
 }
 
@@ -104,9 +112,7 @@ export type AgentChannel = (typeof AGENT_CHANNELS)[number];
  * value means: `null`, never a silent pass.
  */
 export function parseAgentChannel(value: string): AgentChannel | null {
-  return AGENT_CHANNELS.includes(value as AgentChannel)
-    ? (value as AgentChannel)
-    : null;
+  return AGENT_CHANNELS.find((channel) => channel === value) ?? null;
 }
 
 export const NAKAMA_API_VERSION = 1;
@@ -544,26 +550,29 @@ export interface MfaTotpVerifyResponse {
   backupCodes: string[];
   enabled: boolean;
 }
+
 export interface MfaBackupCodesResponse {
   backupCodes: string[];
 }
+
 export interface PasskeyVerificationResponse {
   backupCodes: string[];
   enabled: boolean;
 }
+
 export interface PasskeyRegistrationOptionsResponse {
   challenge: string;
-  options: Record<string, unknown>;
+  options: Record<string, JsonValue>;
 }
 
 export interface PasskeyAuthenticationOptionsResponse {
   challenge: string;
-  options: Record<string, unknown>;
+  options: Record<string, JsonValue>;
 }
 
 export interface PasskeyCredentialResponse {
   authenticatorAttachment?: string;
-  clientExtensionResults: Record<string, unknown>;
+  clientExtensionResults: Record<string, JsonValue>;
   id: string;
   rawId: string;
   response: {
@@ -585,6 +594,7 @@ export interface UpdateAuthProfileRequest {
 }
 
 export type OrgRole = "admin" | "member" | "viewer";
+
 export type ChannelType = "telegram" | "whatsapp" | "discord";
 
 export interface OrganizationSummary {
@@ -903,6 +913,7 @@ export interface OrgMemoryProposalResponse {
 }
 
 export type SkillProposalStatus = "pending" | "approved" | "rejected";
+
 export type SkillProposalAction =
   | "create"
   | "patch"
@@ -943,6 +954,7 @@ export interface SkillProposalResponse {
 }
 
 export type SkillSuggestionStatus = "pending" | "applied";
+
 export type SkillSuggestionAction = "create" | "patch";
 
 export interface SkillSuggestion {
@@ -1250,7 +1262,7 @@ export type StreamEvent =
       toolGroupId?: string;
       toolCallId: string;
       tool: string;
-      input: Record<string, unknown>;
+      input: Record<string, JsonValue>;
     }
   | {
       type: "tool_end";
@@ -1336,7 +1348,7 @@ export type WorkflowCompareOp = "eq" | "near" | "contains";
 
 export interface WorkflowToolStep {
   id: string;
-  input: Record<string, unknown>;
+  input: Record<string, JsonValue>;
   kind: "tool";
   tool: string;
 }
@@ -1403,8 +1415,8 @@ export type WorkflowRunStepStatus =
   | "skipped";
 
 export interface WorkflowReceiptBag {
-  input: Record<string, unknown>;
-  steps: Record<string, unknown>;
+  input: Record<string, JsonValue>;
+  steps: Record<string, JsonValue>;
 }
 
 export interface WorkflowRunStepRecord {
@@ -1424,7 +1436,7 @@ export interface WorkflowRunRecord {
   completedAt: string | null;
   error: string | null;
   id: string;
-  input: Record<string, unknown> | null;
+  input: Record<string, JsonValue> | null;
   output: string | null;
   startedAt: string;
   status: WorkflowRunStatus;
@@ -1453,7 +1465,7 @@ export interface UpdateWorkflowRequest {
 }
 
 export interface RunWorkflowRequest {
-  input?: Record<string, unknown>;
+  input?: Record<string, JsonValue>;
 }
 
 export interface RunWorkflowResponse {
@@ -1475,7 +1487,7 @@ export interface WorkflowSqliteTableInfo {
 
 export interface WorkflowSqlitePreview {
   columns: string[];
-  rows: Record<string, unknown>[];
+  rows: Record<string, JsonValue>[];
   table: string;
   total: number;
 }
@@ -1606,6 +1618,7 @@ export interface UpdateTelegramSettingsRequest {
   pairedUserIds?: string;
   profileId?: string;
 }
+
 export interface StartTelegramPairingRequest {
   profileId: string;
 }
@@ -1663,18 +1676,22 @@ export interface SlackSettingsResponse {
  * valid IDs and the pieces that are not IDs. Shared by the dashboard input
  * and the server so both accept exactly the same values.
  */
-export function parseSlackMemberIdInput(raw: string): {
+export interface SlackMemberIdInput {
   ids: string[];
   invalid: string[];
-} {
+}
+
+export function parseSlackMemberIdInput(raw: string): SlackMemberIdInput {
   const ids = new Set<string>();
   const invalid: string[] = [];
 
   for (const part of raw.split(/[\s,]+/)) {
     const id = part.trim().toUpperCase();
+
     if (!id) {
       continue;
     }
+
     if (/^[UW][A-Z0-9]{6,}$/.test(id)) {
       ids.add(id);
     } else {
@@ -2170,6 +2187,7 @@ export type McpServerStatus =
   | "error"
   /** Waiting for someone to approve the server's OAuth sign-in in a browser. */
   | "needs_auth";
+
 export type McpTransport = "http" | "stdio";
 
 export interface McpHttpConfig {
@@ -2427,7 +2445,7 @@ export interface AssignToolRequest {
 }
 
 export interface RunToolRequest {
-  parameters: Record<string, unknown>;
+  parameters: Record<string, JsonValue>;
 }
 
 export interface RunToolResponse {
@@ -2441,7 +2459,7 @@ export interface SuggestToolParamsRequest {
 }
 
 export interface SuggestToolParamsResponse {
-  parameters: Record<string, unknown>;
+  parameters: Record<string, JsonValue>;
 }
 
 import type { SoulFileStatus, SoulStackFiles } from "./soul/types";
@@ -2758,7 +2776,7 @@ export interface LlmToolDefinition {
 }
 
 export interface ToolCall {
-  arguments: Record<string, unknown>;
+  arguments: Record<string, JsonValue>;
   id: string;
   name: string;
 }
@@ -2882,7 +2900,7 @@ export interface StreamChatHandlers {
   onToolStart?: (event: {
     toolCallId: string;
     tool: string;
-    input: Record<string, unknown>;
+    input: Record<string, JsonValue>;
   }) => void;
 }
 
@@ -3044,7 +3062,7 @@ export type ComposioToolErrorCode =
 
 export interface ComposioCachedToolSummary {
   description: string;
-  inputSchema: Record<string, unknown>;
+  inputSchema: Record<string, JsonValue>;
   name: string;
   slug: string;
 }
@@ -3250,7 +3268,9 @@ export interface XaiOAuthCredentials {
 }
 
 export type XaiOAuthDeviceStartResponse = ChatgptOAuthDeviceStartResponse;
+
 export type XaiOAuthDeviceCompleteRequest = ChatgptOAuthDeviceCompleteRequest;
+
 export interface XaiOAuthDeviceCompleteResponse {
   models?: CustomModelEntry[];
   xaiOAuth: XaiOAuthCredentials;

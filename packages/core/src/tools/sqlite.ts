@@ -25,6 +25,24 @@ export const sqliteInputSchema = z
   .partial({ params: true })
   .strict();
 
+type SqliteInput = z.infer<typeof sqliteInputSchema>;
+
+type SqliteValue = string | number | bigint | boolean | null | Uint8Array;
+
+type SqliteRow = Record<string, SqliteValue>;
+
+interface SqliteRowsResult {
+  columns: string[];
+  rows: SqliteRow[];
+}
+
+interface SqliteRunResult {
+  changes: number;
+  lastInsertRowid: number;
+}
+
+export type SqliteToolOutput = SqliteRowsResult | SqliteRunResult;
+
 export function getOrgWorkflowSqlitePath(orgId: string): string {
   return join(
     getUserConfigDir(),
@@ -43,19 +61,22 @@ export const sqliteTool: ToolDefinition = {
 };
 
 export async function runSqliteTool(
-  input: unknown,
+  input: SqliteInput,
   context: ToolContext,
   options: { databasePath?: string } = {}
-): Promise<unknown> {
+): Promise<SqliteToolOutput> {
   const parsed = parseToolInput(sqliteInputSchema, input);
   const sql = assertSafeSql(parsed.sql);
   const params = parsed.params ?? [];
   let databasePath = options.databasePath;
+
   if (!databasePath) {
     const orgId = context.orgId?.trim();
+
     if (!orgId) {
       throw new Error("orgId is required.");
     }
+
     databasePath = getOrgWorkflowSqlitePath(orgId);
   }
 
@@ -64,17 +85,22 @@ export async function runSqliteTool(
   }
 
   const db = new Database(databasePath);
+
   try {
     const statement = db.query(sql);
+
     if (isRowsStatement(sql)) {
+      // SAFETY: SQLite query rows contain only SQLite cell values under this statement API.
       const rows = (
         params.length > 0 ? statement.all(...params) : statement.all()
-      ) as Record<string, unknown>[];
+      ) as SqliteRow[];
+
       return { columns: statement.columnNames, rows };
     }
 
     const result =
       params.length > 0 ? statement.run(...params) : statement.run();
+
     return {
       changes: result.changes,
       lastInsertRowid: Number(result.lastInsertRowid),
@@ -86,12 +112,15 @@ export async function runSqliteTool(
 
 function assertSafeSql(sql: string): string {
   const body = sql.trim().replace(/;$/, "").trimEnd();
+
   if (/\bATTACH\b/i.test(body)) {
     throw new Error("ATTACH is not allowed.");
   }
+
   if (body.includes(";")) {
     throw new Error("Only one SQL statement is allowed.");
   }
+
   return body;
 }
 
@@ -100,6 +129,7 @@ function isRowsStatement(sql: string): boolean {
 }
 
 const WORKFLOW_SQLITE_TABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 const WORKFLOW_SQLITE_PREVIEW_LIMIT = 50;
 
 export async function inspectWorkflowSqlite(
@@ -107,10 +137,12 @@ export async function inspectWorkflowSqlite(
   options: { databasePath?: string; limit?: number; table?: string } = {}
 ): Promise<WorkflowSqliteInspectResponse> {
   const databasePath = options.databasePath ?? getOrgWorkflowSqlitePath(orgId);
+
   if (databasePath !== ":memory:" && !(await pathExists(databasePath))) {
     if (options.table) {
       throw new Error("Table not found.");
     }
+
     return { preview: null, tables: [] };
   }
 
@@ -118,15 +150,19 @@ export async function inspectWorkflowSqlite(
     databasePath === ":memory:"
       ? new Database(databasePath)
       : new Database(databasePath, { readonly: true });
+
   try {
     const tables = listWorkflowSqliteTables(db);
     const requested = options.table?.trim();
+
     if (!requested) {
       return { preview: null, tables };
     }
+
     if (!tables.some((entry) => entry.name === requested)) {
       throw new Error("Table not found.");
     }
+
     return {
       preview: previewWorkflowSqliteTable(db, requested, options.limit),
       tables,
@@ -137,14 +173,17 @@ export async function inspectWorkflowSqlite(
 }
 
 function listWorkflowSqliteTables(db: Database): WorkflowSqliteTableInfo[] {
+  // SAFETY: This query selects only the `name` column from sqlite_master.
   const names = db
     .query(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
     )
     .all() as Array<{ name: string }>;
+
   return names.map((entry) => ({
     name: entry.name,
     rowCount: Number(
+      // SAFETY: COUNT(*) AS count returns one numeric `count` column.
       (
         db
           .query(
@@ -164,6 +203,8 @@ function previewWorkflowSqliteTable(
   limit = WORKFLOW_SQLITE_PREVIEW_LIMIT
 ): WorkflowSqlitePreview {
   const ident = quoteSqliteIdent(table);
+
+  // SAFETY: COUNT(*) AS count returns one numeric `count` column.
   const total = Number(
     (
       db.query(`SELECT COUNT(*) AS count FROM ${ident}`).get() as {
@@ -171,14 +212,18 @@ function previewWorkflowSqliteTable(
       }
     ).count
   );
+
   const capped = Math.min(
     Math.max(1, Math.trunc(limit)),
     WORKFLOW_SQLITE_PREVIEW_LIMIT
   );
+
   const statement = db.query(`SELECT * FROM ${ident} LIMIT ${capped}`);
+
   return {
     columns: statement.columnNames,
-    rows: statement.all() as Record<string, unknown>[],
+    // SAFETY: SQLite query rows contain only SQLite cell values under this statement API.
+    rows: statement.all() as SqliteRow[],
     table,
     total,
   };
@@ -188,5 +233,6 @@ function quoteSqliteIdent(name: string): string {
   if (!WORKFLOW_SQLITE_TABLE_NAME.test(name)) {
     throw new Error("Table not found.");
   }
+
   return `"${name}"`;
 }

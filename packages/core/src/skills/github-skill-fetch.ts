@@ -8,11 +8,14 @@ import { withDisabledFetchIdle } from "../fetch-idle";
 import { resolveGitHubSkillRawUrl } from "./github-skill-url";
 
 const RAW_HOST = "raw.githubusercontent.com";
+
 const MAX_SKILL_BYTES = 512 * 1024;
+
 const FETCH_TIMEOUT_MS = 15_000;
 
 export async function fetchGitHubSkillMarkdown(url: string): Promise<string> {
   let rawUrl: string;
+
   try {
     rawUrl = resolveGitHubSkillRawUrl(url);
   } catch (error) {
@@ -23,6 +26,7 @@ export async function fetchGitHubSkillMarkdown(url: string): Promise<string> {
   }
 
   let parsed: URL;
+
   try {
     parsed = new URL(rawUrl);
   } catch {
@@ -40,6 +44,7 @@ export async function fetchGitHubSkillMarkdown(url: string): Promise<string> {
   }
 
   let response: Response;
+
   try {
     response = await fetch(
       rawUrl,
@@ -69,8 +74,10 @@ export async function fetchGitHubSkillMarkdown(url: string): Promise<string> {
   }
 
   const contentLength = response.headers.get("content-length");
+
   if (contentLength) {
     const declaredSize = Number(contentLength);
+
     if (Number.isFinite(declaredSize) && declaredSize > MAX_SKILL_BYTES) {
       throw new NakamaApiError(
         `Skill file is too large (max ${MAX_SKILL_BYTES} bytes).`,
@@ -80,6 +87,7 @@ export async function fetchGitHubSkillMarkdown(url: string): Promise<string> {
   }
 
   const bytes = await readResponseBodyCapped(response, MAX_SKILL_BYTES);
+
   return new TextDecoder().decode(bytes);
 }
 
@@ -98,6 +106,7 @@ export async function fetchGitHubSkillBundle(
     if (error instanceof NakamaApiError) {
       throw error;
     }
+
     throw new NakamaApiError(
       error instanceof Error
         ? error.message
@@ -112,6 +121,7 @@ async function downloadGitHubSkillBundle(
 ): Promise<GitHubSkillBundle> {
   const input = new URL(url);
   const parts = input.pathname.split("/").filter(Boolean);
+
   if (
     ["github.com", "www.github.com"].includes(input.hostname) &&
     parts.length === 2
@@ -120,9 +130,11 @@ async function downloadGitHubSkillBundle(
     input.pathname += `${input.pathname.endsWith("/") ? "" : "/"}tree/HEAD`;
     url = input.href;
   }
+
   const raw = new URL(resolveGitHubSkillRawUrl(url));
   const [owner, repo, ref, ...fileParts] = raw.pathname.slice(1).split("/");
   const directory = fileParts.slice(0, -1).map(decodeURIComponent).join("/");
+
   const response = await fetch(
     `https://codeload.github.com/${owner}/${repo}/zip/${ref}`,
     withDisabledFetchIdle({
@@ -131,6 +143,7 @@ async function downloadGitHubSkillBundle(
       signal: AbortSignal.timeout(60_000),
     })
   );
+
   if (response.ok) {
     // Large repositories can still contain small skills. Only the archive
     // download cap falls back; invalid or oversized skill entries must fail.
@@ -141,14 +154,18 @@ async function downloadGitHubSkillBundle(
       if (error instanceof NakamaApiError) {
         return null;
       }
+
       throw error;
     });
+
     const bundle = archive ? readSkillZip(archive, directory) : null;
+
     if (bundle) {
       return bundle;
     }
   } else {
     await response.body?.cancel();
+
     if (![401, 403, 404, 429].includes(response.status)) {
       throw new NakamaApiError(
         `Failed to download skill archive (HTTP ${response.status}).`,
@@ -156,6 +173,7 @@ async function downloadGitHubSkillBundle(
       );
     }
   }
+
   return downloadSkillWithGit(
     `https://github.com/${owner}/${repo}.git`,
     decodeURIComponent(ref!),
@@ -189,7 +207,9 @@ function checkSkillSize(
   if (count > 500) {
     throw new NakamaApiError("Skill contains too many files (max 500).", 400);
   }
+
   const limit = path === "SKILL.md" ? MAX_SKILL_BYTES : 5 * 1024 * 1024;
+
   if (size > limit || total > 10 * 1024 * 1024) {
     throw new NakamaApiError("Skill file or directory is too large.", 400);
   }
@@ -197,9 +217,11 @@ function checkSkillSize(
 
 function skillBundle(files: GitHubSkillBundle["files"]): GitHubSkillBundle {
   const markdown = files.find((file) => file.path === "SKILL.md");
+
   if (!markdown) {
     throw new NakamaApiError("Skill directory does not contain SKILL.md.", 400);
   }
+
   return {
     content: new TextDecoder().decode(markdown.content),
     files: files.filter((file) => file !== markdown),
@@ -214,6 +236,7 @@ function readSkillZip(
   // decompressing so symlinks cannot be installed as ordinary supporting files.
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let end = bytes.length - 22;
+
   while (end >= Math.max(0, bytes.length - 65_557)) {
     if (
       view.getUint32(end, true) === 0x06_05_4b_50 &&
@@ -221,107 +244,137 @@ function readSkillZip(
     ) {
       break;
     }
+
     end -= 1;
   }
+
   if (end < Math.max(0, bytes.length - 65_557)) {
     throw new Error("Invalid ZIP archive.");
   }
+
   const count = view.getUint16(end + 10, true);
+
   // ZIP64 and submodule metadata use Git, which can enumerate their real entries.
   if (count === 65_535) {
     return null;
   }
+
   if (
     view.getUint32(end + 4, true) !== 0 ||
     view.getUint16(end + 8, true) !== count
   ) {
     throw new Error("Invalid ZIP archive.");
   }
+
   let offset = view.getUint32(end + 16, true);
+
   if (offset + view.getUint32(end + 12, true) !== end) {
     throw new Error("Invalid ZIP archive.");
   }
+
   const selected = new Map<string, string>();
   const directories: string[] = [];
   let detectedDirectory = directory;
   let root: string | undefined = directory === undefined ? "" : undefined;
   let total = 0;
   let needsGit = false;
+
   for (let index = 0; index < count; index += 1) {
     if (offset + 46 > end || view.getUint32(offset, true) !== 0x02_01_4b_50) {
       throw new Error("Invalid ZIP archive.");
     }
+
     const length = view.getUint16(offset + 28, true);
+
     const next =
       offset +
       46 +
       length +
       view.getUint16(offset + 30, true) +
       view.getUint16(offset + 32, true);
+
     if (next > end) {
       throw new Error("Invalid ZIP archive.");
     }
+
     const name = new TextDecoder().decode(
       bytes.subarray(offset + 46, offset + 46 + length)
     );
+
     const fileType = Math.floor(view.getUint16(offset + 40, true) / 4096);
     const size = view.getUint32(offset + 24, true);
     offset = next;
     assertSkillPath(name.endsWith("/") ? name.slice(0, -1) : name);
     root ??= name.split("/")[0];
+
     if (root && !name.startsWith(`${root}/`)) {
       throw new Error("Invalid ZIP archive root.");
     }
+
     if (name.endsWith("/.gitmodules")) {
       needsGit = true;
     }
+
     if (!detectedDirectory && name.endsWith("/SKILL.md")) {
       detectedDirectory = name.slice(
         root ? root.length + 1 : 0,
         -"/SKILL.md".length
       );
     }
+
     const prefix = `${root ? `${root}/` : ""}${detectedDirectory ? `${detectedDirectory}/` : ""}`;
+
     if (!name.startsWith(prefix)) {
       // A symlink in place of the selected directory is also invalid.
       if (name === prefix.slice(0, -1)) {
         throw new Error("Skill directory is not a directory.");
       }
+
       continue;
     }
+
     if (![0, 4, 8].includes(fileType)) {
       throw new NakamaApiError(
         "Skill symlinks and special files are not supported.",
         400
       );
     }
+
     if (name.endsWith("/")) {
       directories.push(name);
       continue;
     }
+
     const path = name.slice(prefix.length);
+
     if (selected.has(name)) {
       throw new Error("Duplicate skill file in ZIP archive.");
     }
+
     total += size;
     checkSkillSize(path, size, total, selected.size + 1);
     selected.set(name, path);
   }
+
   if (offset !== end) {
     throw new Error("Invalid ZIP archive.");
   }
+
   // Git archives represent submodules as empty directories, even without
   // .gitmodules. Ask Git to identify them rather than silently omitting them.
   const names = [...selected.keys()];
+
   if (
     needsGit ||
     directories.some((dir) => !names.some((name) => name.startsWith(dir)))
   ) {
     return null;
   }
+
   const extracted = unzipSync(bytes, {
     filter: (file) => selected.has(file.name),
   });
+
   return skillBundle(
     Object.entries(extracted).map(([name, content]) => ({
       content,
@@ -333,9 +386,11 @@ function readSkillZip(
 /** Read a user-uploaded ZIP containing one skill directory. */
 export function readUploadedSkillBundle(bytes: Uint8Array): GitHubSkillBundle {
   const bundle = readSkillZip(bytes);
+
   if (!bundle) {
     throw new NakamaApiError("Could not read the uploaded skill ZIP.", 400);
   }
+
   return bundle;
 }
 
@@ -346,6 +401,7 @@ async function downloadSkillWithGit(
 ): Promise<GitHubSkillBundle> {
   const temp = await mkdtemp(join(tmpdir(), "nakama-skill-"));
   const signal = AbortSignal.timeout(60_000);
+
   const run = async (
     args: string[],
     maxBuffer = 512 * 1024
@@ -380,6 +436,7 @@ async function downloadSkillWithGit(
       );
     }
   };
+
   try {
     // Read blobs without checkout: no hooks, filters, or downloaded scripts run.
     await run(["init", "--bare", "--template="]);
@@ -394,6 +451,7 @@ async function downloadSkillWithGit(
       "origin",
       ref,
     ]);
+
     const listing = await run([
       "ls-tree",
       "-r",
@@ -403,13 +461,16 @@ async function downloadSkillWithGit(
       "--",
       directory || ".",
     ]);
+
     const files: GitHubSkillBundle["files"] = [];
     const prefix = directory ? `${directory}/` : "";
     let total = 0;
+
     for (const entry of listing.toString("utf8").split("\0").filter(Boolean)) {
       const match = /^(\d+) (\w+) ([a-f0-9]{40}) +([\d-]+)\t([\s\S]+)$/.exec(
         entry
       );
+
       if (
         !(match && ["100644", "100755"].includes(match[1]!)) ||
         match[2] !== "blob"
@@ -419,24 +480,31 @@ async function downloadSkillWithGit(
           400
         );
       }
+
       const path = match[5]!;
+
       if (!path.startsWith(prefix)) {
         throw new Error("Invalid skill file path.");
       }
+
       const relativePath = path.slice(prefix.length);
       assertSkillPath(relativePath);
       const size = Number(match[4]);
       total += size;
       checkSkillSize(relativePath, size, total, files.length + 1);
+
       const content = await run(
         ["cat-file", "blob", match[3]!],
         Math.max(size, 64 * 1024)
       );
+
       if (content.length !== size) {
         throw new Error("Incomplete Git skill file.");
       }
+
       files.push({ content, path: relativePath });
     }
+
     return skillBundle(files);
   } finally {
     await rm(temp, { force: true, recursive: true });
@@ -449,12 +517,14 @@ async function readResponseBodyCapped(
 ): Promise<Uint8Array> {
   if (!response.body) {
     const buffer = await response.arrayBuffer();
+
     if (buffer.byteLength > maxBytes) {
       throw new NakamaApiError(
         `Skill file is too large (max ${maxBytes} bytes).`,
         400
       );
     }
+
     return new Uint8Array(buffer);
   }
 
@@ -464,14 +534,17 @@ async function readResponseBodyCapped(
 
   while (true) {
     const { done, value } = await reader.read();
+
     if (done) {
       break;
     }
+
     if (!value || value.byteLength === 0) {
       continue;
     }
 
     total += value.byteLength;
+
     if (total > maxBytes) {
       await reader.cancel().catch(() => undefined);
       throw new NakamaApiError(
@@ -479,14 +552,17 @@ async function readResponseBodyCapped(
         400
       );
     }
+
     chunks.push(value);
   }
 
   const merged = new Uint8Array(total);
   let offset = 0;
+
   for (const chunk of chunks) {
     merged.set(chunk, offset);
     offset += chunk.byteLength;
   }
+
   return merged;
 }

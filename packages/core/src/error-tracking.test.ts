@@ -22,10 +22,13 @@ import {
 const DSN = "https://key@errors.example.com/7";
 
 let configDir = "";
+
 let previousConfigDir: string | undefined;
+
 // reportError logs straight to console.error, so the capture lives here in the
 // test rather than as an injection point in the module under test.
 let consoleErrorCalls: unknown[][] = [];
+
 const realConsoleError = console.error;
 
 beforeEach(async () => {
@@ -63,6 +66,7 @@ test("the same bug fingerprints the same across ids and line numbers", () => {
     "profile prof_01JABCDEF23 not found",
     "TypeError\n    at resolveProfile (~/src/profiles.ts:12:3)"
   );
+
   const second = fingerprintError(
     "TypeError",
     "profile prof_01JXYZGHI45 not found",
@@ -74,11 +78,13 @@ test("the same bug fingerprints the same across ids and line numbers", () => {
 
 test("a uuid in the message does not fragment the fingerprint", () => {
   const stack = "Error\n    at runAutomation (~/src/automation.ts:20:5)";
+
   const first = fingerprintError(
     "Error",
     "run 3f2504e0-4f89-11d3-9a0c-0305e82c3301 timed out after 30000ms",
     stack
   );
+
   const second = fingerprintError(
     "Error",
     "run 7c9e6679-7425-40de-944b-e07fc1f90ae7 timed out after 45000ms",
@@ -94,6 +100,7 @@ test("different bugs fingerprint differently", () => {
     "a is undefined",
     "TypeError\n    at a (~/a.ts:1:1)"
   );
+
   const second = fingerprintError(
     "RangeError",
     "b is out of range",
@@ -107,6 +114,7 @@ test("the report scrubs the message and stack", () => {
   const error = new Error(
     "auth failed with sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345"
   );
+
   const report = buildErrorReport(error, { source: "server" });
 
   expect(report.message).not.toContain("sk-ant-api03");
@@ -125,11 +133,16 @@ test("a non-Error rejection still produces a report", () => {
 });
 
 test("a circular rejection reports rather than throwing, at a shared fingerprint", () => {
-  const circular: { self?: unknown } = {};
+  interface CircularFailure {
+    self?: unknown;
+    kind?: string;
+  }
+
+  const circular: CircularFailure = {};
   circular.self = circular;
 
   const report = buildErrorReport(circular, { source: "worker:discord" });
-  const other: { self?: unknown; kind?: string } = { kind: "different" };
+  const other: CircularFailure = { kind: "different" };
   other.self = other;
 
   expect(report.fingerprint).toHaveLength(16);
@@ -150,6 +163,7 @@ test("the sink receives the report", async () => {
   const delivered: ErrorReport[] = [];
   setErrorSink((report) => {
     delivered.push(report);
+
     return true;
   });
 
@@ -186,6 +200,7 @@ test("the queue is written before the send, which is what survives a hard exit",
   let queuedWhenSinkRan = 0;
   setErrorSink(() => {
     queuedWhenSinkRan = readPendingErrorReports().length;
+
     return true;
   });
 
@@ -204,6 +219,7 @@ test("flushPendingErrorReports drains what the last process left behind", async 
   const delivered: ErrorReport[] = [];
   setErrorSink((report) => {
     delivered.push(report);
+
     return true;
   });
 

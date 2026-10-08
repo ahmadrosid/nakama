@@ -6,6 +6,7 @@ import {
 } from "./script-trust";
 
 const ORG_ID = "org_a";
+
 const PROFILE_ID = "profile_a";
 
 function policy(directory: string, memberAuthoredCodeApproved = false) {
@@ -71,6 +72,7 @@ describe("createBlockedSkillCodeTool", () => {
     });
 
     expect(tool.name).toBe("notes");
+    // SAFETY: The blocked tool ignores context and rejects before reading its arguments.
     expect(await tool.run({}, {} as never)).toEqual({ error: "not approved" });
   });
 });

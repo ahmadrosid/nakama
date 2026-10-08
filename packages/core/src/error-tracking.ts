@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { z } from "zod";
 import { NAKAMA_API_VERSION } from "./contract";
 import { isErrorTrackingEnabled } from "./error-tracking-config";
 import {
@@ -31,6 +32,22 @@ export interface ErrorReport {
   stack?: string;
 }
 
+interface ThrownRecord {
+  [key: string]: ThrownValue;
+}
+
+type ThrownValue =
+  | Error
+  | string
+  | number
+  | boolean
+  | bigint
+  | symbol
+  | ThrownRecord
+  | ThrownValue[]
+  | null
+  | undefined;
+
 /**
  * Returns whether the report actually reached the ingest. A sink with nowhere to
  * send returns false rather than resolving quietly, so "not delivered" can never
@@ -47,6 +64,7 @@ let enabled = false;
  */
 export async function refreshErrorTrackingEnabled(): Promise<boolean> {
   enabled = await isErrorTrackingEnabled();
+
   return enabled;
 }
 
@@ -106,27 +124,38 @@ export function fingerprintError(
   stack: string | undefined
 ): string {
   const parts = [name, normalizeMessage(message), topApplicationFrame(stack)];
+
   return createHash("sha256")
     .update(parts.join("|"))
     .digest("hex")
     .slice(0, 16);
 }
 
-function errorToParts(error: unknown): {
+interface ErrorParts {
   name: string;
   message: string;
   stack?: string;
-} {
+}
+
+// SAFETY: JavaScript throws and rejection reasons can hold any value; this boundary normalizes them before reporting.
+function errorToParts(error: ThrownValue): ErrorParts {
   if (error instanceof Error) {
-    return {
+    const parts: ErrorParts = {
       message: error.message || String(error),
       name: error.name || "Error",
-      ...(error.stack ? { stack: error.stack } : {}),
     };
+
+    if (error.stack) {
+      parts.stack = error.stack;
+    }
+
+    return parts;
   }
 
-  if (typeof error === "string") {
-    return { message: error, name: "NonError" };
+  const stringError = z.string().safeParse(error);
+
+  if (stringError.success) {
+    return { message: stringError.data, name: "NonError" };
   }
 
   try {
@@ -148,19 +177,18 @@ export interface ReportErrorOptions {
 }
 
 export function buildErrorReport(
-  error: unknown,
+  error: ThrownValue,
   options: ReportErrorOptions = {}
 ): ErrorReport {
   const parts = errorToParts(error);
   const stack = parts.stack ? scrubText(parts.stack) : undefined;
 
-  return {
+  const report: ErrorReport = {
     fingerprint: fingerprintError(parts.name, parts.message, parts.stack),
     id: randomUUID(),
     kind: options.kind ?? "crash",
     message: scrubText(parts.message),
     name: parts.name,
-    ...(stack ? { stack } : {}),
     at: new Date().toISOString(),
     runtime: {
       apiVersion: NAKAMA_API_VERSION,
@@ -170,6 +198,12 @@ export function buildErrorReport(
     },
     source: options.source ?? "unknown",
   };
+
+  if (stack) {
+    report.stack = stack;
+  }
+
+  return report;
 }
 
 let sink: ErrorSink | null = null;
@@ -185,7 +219,7 @@ export function setErrorSink(next: ErrorSink | null): void {
  * await still leaves the report somewhere recoverable.
  */
 export async function reportError(
-  error: unknown,
+  error: ThrownValue,
   options: ReportErrorOptions = {}
 ): Promise<ErrorReport> {
   const report = buildErrorReport(error, options);
@@ -260,11 +294,11 @@ export async function flushPendingErrorReports(): Promise<number> {
  * default exit(1), so the exit is re-applied by hand below.
  */
 export function installErrorHandlers(source: string): () => void {
-  const onUncaught = (error: unknown) => {
+  const onUncaught = (error: ThrownValue) => {
     void reportError(error, { source });
   };
 
-  const onRejection = (reason: unknown) => {
+  const onRejection = (reason: ThrownValue) => {
     void reportError(reason, { source }).finally(() => {
       process.exit(1);
     });

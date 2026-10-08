@@ -21,6 +21,7 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
     TableCell,
     WidthType,
   } = await import("docx");
+
   const { marked } = await import("marked");
 
   const HEADING_BY_DEPTH = [
@@ -42,6 +43,7 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
     for (const token of tokens ?? []) {
       switch (token.type) {
         case "strong":
+          // SAFETY: Marked's `strong` discriminator guarantees Tokens.Strong.
           runs.push(
             ...toRuns((token as Tokens.Strong).tokens, {
               ...inherited,
@@ -50,6 +52,7 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
           );
           break;
         case "em":
+          // SAFETY: Marked's `em` discriminator guarantees Tokens.Em.
           runs.push(
             ...toRuns((token as Tokens.Em).tokens, {
               ...inherited,
@@ -58,6 +61,7 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
           );
           break;
         case "del":
+          // SAFETY: Marked's `del` discriminator guarantees Tokens.Del.
           runs.push(
             ...toRuns((token as Tokens.Del).tokens, {
               ...inherited,
@@ -66,6 +70,7 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
           );
           break;
         case "link":
+          // SAFETY: Marked's `link` discriminator guarantees Tokens.Link.
           runs.push(
             ...toRuns((token as Tokens.Link).tokens, {
               ...inherited,
@@ -74,6 +79,7 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
           );
           break;
         case "codespan":
+          // SAFETY: Marked's `codespan` discriminator guarantees Tokens.Codespan.
           runs.push(
             new TextRun({
               ...inherited,
@@ -90,16 +96,20 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
           // own `tokens`, so the emphasis sits one level down. Reading `text`
           // here handed Word the markdown source. A table cell arrives with
           // `strong` at the top level, which is why it looked fixed already.
+          // SAFETY: Nested inline tokens have a `tokens` array across Marked token types.
           const nested = (token as { tokens?: Token[] }).tokens;
+
           if (nested?.length) {
             runs.push(...toRuns(nested, inherited));
             break;
           }
 
+          // SAFETY: Marked's text-bearing token variants expose a string `text`.
           const text =
             "text" in token
               ? String((token as { text: unknown }).text ?? "")
               : "";
+
           if (text) {
             runs.push(new TextRun({ ...inherited, text }));
           }
@@ -115,6 +125,7 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
     options: IParagraphOptions = {}
   ) {
     const children = toRuns(tokens);
+
     return new Paragraph({
       ...options,
       children: children.length > 0 ? children : undefined,
@@ -150,6 +161,7 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
     for (const token of tokens) {
       switch (token.type) {
         case "heading": {
+          // SAFETY: Marked's `heading` discriminator guarantees Tokens.Heading.
           const heading = token as Tokens.Heading;
           blocks.push(
             paragraph(heading.tokens, {
@@ -158,10 +170,13 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
           );
           break;
         }
+
         case "paragraph":
+          // SAFETY: Marked's `paragraph` discriminator guarantees Tokens.Paragraph.
           blocks.push(paragraph((token as Tokens.Paragraph).tokens));
           break;
         case "blockquote":
+          // SAFETY: Marked's `blockquote` discriminator guarantees Tokens.Blockquote.
           blocks.push(
             ...blocksFrom((token as Tokens.Blockquote).tokens).map((block) =>
               block instanceof Paragraph ? block : block
@@ -169,6 +184,7 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
           );
           break;
         case "list": {
+          // SAFETY: Marked's `list` discriminator guarantees Tokens.List.
           const list = token as Tokens.List;
           list.items.forEach((item) => {
             blocks.push(
@@ -182,7 +198,9 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
           });
           break;
         }
+
         case "table": {
+          // SAFETY: Marked's `table` discriminator guarantees Tokens.Table.
           const table = token as Tokens.Table;
           blocks.push(
             new Table({
@@ -202,7 +220,9 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
           );
           break;
         }
+
         case "code":
+          // SAFETY: Marked's `code` discriminator guarantees Tokens.Code.
           for (const line of (token as Tokens.Code).text.split("\n")) {
             blocks.push(
               new Paragraph({
@@ -210,6 +230,7 @@ export async function markdownToDocx(markdown: string): Promise<Buffer> {
               })
             );
           }
+
           break;
         case "hr":
           blocks.push(

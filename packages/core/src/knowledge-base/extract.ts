@@ -12,14 +12,14 @@ const KB_ALLOWED_MEDIA_TYPES = new Set([
   "text/markdown",
 ]);
 
-const KB_EXTENSION_MEDIA_TYPES: Record<string, string> = {
+const KB_EXTENSION_MEDIA_TYPES = {
   ".csv": "text/csv",
   ".doc": LEGACY_DOC_MEDIA_TYPE,
   ".docx": DOCX_MEDIA_TYPE,
   ".md": "text/markdown",
   ".pdf": "application/pdf",
   ".txt": "text/plain",
-};
+} satisfies Record<string, string>;
 
 export function normalizeKnowledgeBaseMediaType(
   mediaType: string,
@@ -45,6 +45,7 @@ export function isSupportedKnowledgeBaseMediaType(
   filename: string
 ): boolean {
   const normalized = normalizeKnowledgeBaseMediaType(mediaType, filename);
+
   return KB_ALLOWED_MEDIA_TYPES.has(normalized);
 }
 
@@ -73,6 +74,7 @@ export async function extractText(
       format: "pdf",
       mediaType: normalized,
     });
+
     return text;
   }
 

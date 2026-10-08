@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type {
   ToolContext,
   ToolDefinition,
@@ -17,11 +18,22 @@ import {
 } from "./web-search";
 
 const REQUEST_TIMEOUT_MS = 30_000;
+
 /** Fixed until a settings control needs to vary it; five hits is Exa's own default. */
 const MAX_RESULTS = 5;
+
 /** Snippets are context, not documents; web_fetch is the escape hatch for full text. */
 const MAX_SNIPPET_CHARS = 800;
+
 const MAX_ERROR_BODY_CHARS = 300;
+
+const JsonObjectSchema = z.record(z.string(), z.json());
+
+const JsonValueSchema = z.json();
+
+type JsonObject = z.infer<typeof JsonObjectSchema>;
+
+type JsonValue = z.infer<typeof JsonValueSchema>;
 
 export interface CustomWebSearchResult {
   publishedDate?: string;
@@ -37,31 +49,46 @@ export interface CustomWebSearchOutput {
   results: CustomWebSearchResult[];
 }
 
-function readRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
+function readRecord(value: JsonValue): JsonObject | null {
+  const parsed = JsonObjectSchema.safeParse(value);
+
+  return parsed.success ? parsed.data : null;
 }
 
-function readString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+function readString(value: JsonValue | undefined): string | undefined {
+  const parsed = z.string().safeParse(value);
+
+  return parsed.success && parsed.data.trim() ? parsed.data.trim() : undefined;
 }
 
 function truncate(value: string, maxChars: number): string {
   return value.length > maxChars ? `${value.slice(0, maxChars)}…` : value;
 }
 
+interface SearchRequestHeaders {
+  accept: string;
+  authorization?: string;
+  "content-type": string;
+  "x-api-key"?: string;
+}
+
+interface SearchRequest {
+  body: string;
+  headers: SearchRequestHeaders;
+}
+
 function buildRequest(
   config: WebSearchConfigFile,
   query: string
-): { body: string; headers: Record<string, string> } {
-  const headers: Record<string, string> = {
+): SearchRequest {
+  const headers: SearchRequestHeaders = {
     accept: "application/json",
     "content-type": "application/json",
   };
 
   if (config.provider === "exa") {
     headers["x-api-key"] = config.apiKey;
+
     return {
       body: JSON.stringify({
         contents: { text: { maxCharacters: MAX_SNIPPET_CHARS } },
@@ -81,7 +108,7 @@ function buildRequest(
 }
 
 /** Exa puts hits on `results`; Firecrawl on `data.web`. */
-function findResultArray(payload: unknown): unknown[] {
+function findResultArray(payload: JsonValue): JsonValue[] {
   const record = readRecord(payload);
 
   if (!record) {
@@ -101,7 +128,7 @@ function findResultArray(payload: unknown): unknown[] {
   return data === undefined ? [] : findResultArray(data);
 }
 
-function toResult(entry: unknown): CustomWebSearchResult | null {
+function toResult(entry: JsonValue): CustomWebSearchResult | null {
   const record = readRecord(entry);
 
   if (!record) {
@@ -122,18 +149,26 @@ function toResult(entry: unknown): CustomWebSearchResult | null {
     readString(record.markdown) ??
     readString(record.content);
 
-  return {
+  const result: CustomWebSearchResult = {
     title: readString(record.title) ?? readString(record.name) ?? url,
     url,
-    ...(snippet ? { snippet: truncate(snippet, MAX_SNIPPET_CHARS) } : {}),
-    ...(readString(record.publishedDate)
-      ? { publishedDate: readString(record.publishedDate) }
-      : {}),
   };
+
+  if (snippet) {
+    result.snippet = truncate(snippet, MAX_SNIPPET_CHARS);
+  }
+
+  const publishedDate = readString(record.publishedDate);
+
+  if (publishedDate) {
+    result.publishedDate = publishedDate;
+  }
+
+  return result;
 }
 
 export function parseCustomWebSearchResults(
-  payload: unknown
+  payload: JsonValue
 ): CustomWebSearchResult[] {
   const results: CustomWebSearchResult[] = [];
   const seen = new Set<string>();
@@ -171,6 +206,7 @@ export async function runCustomWebSearch(
 ): Promise<CustomWebSearchOutput> {
   const { query } = webSearchInputSchema.parse(input);
   const { body, headers } = buildRequest(config, query);
+
   const response = await fetch(
     config.endpoint,
     withDisabledFetchIdle({
@@ -192,10 +228,10 @@ export async function runCustomWebSearch(
     );
   }
 
-  let payload: unknown;
+  let payload: JsonValue;
 
   try {
-    payload = await response.json();
+    payload = JsonValueSchema.parse(await response.json());
   } catch {
     throw new Error("web_search: search endpoint returned invalid JSON.");
   }

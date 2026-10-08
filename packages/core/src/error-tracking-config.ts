@@ -59,6 +59,7 @@ export async function saveErrorTrackingDsn(
   dsn: string | null
 ): Promise<ErrorTrackingConfig> {
   const next: ErrorTrackingConfig = { dsn: dsn?.trim() || null };
+
   const lines = [
     "# Nakama error tracking",
     "# dsn = a Sentry-compatible DSN (Sentry, GlitchTip, Bugsink, Rustrak, self-hosted).",
@@ -70,6 +71,7 @@ export async function saveErrorTrackingDsn(
   await writeTextFile(getErrorTrackingConfigPath(), lines.join("\n"), {
     ensureDir: getErrorTrackingConfigDir(),
   });
+
   return next;
 }
 

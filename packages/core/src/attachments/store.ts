@@ -28,6 +28,7 @@ export async function saveAttachmentBytes(
   const path = getAttachmentFilePath(orgId, profileId, attachmentId);
   await ensureDir(getAttachmentDir(orgId, profileId));
   await writePrivateBytesFile(path, bytes);
+
   return path;
 }
 

@@ -5,15 +5,23 @@ import {
 } from "../discord-config";
 import { splitTelegramChunks } from "./message-format";
 import type { ChannelSendResult, DiscordOutboundAdapter } from "./types";
+import { z } from "zod";
 
 const DISCORD_MESSAGE_MAX_LENGTH = 2000;
-const DISCORD_ALLOWED_MENTIONS = { parse: [] as string[] };
+
+interface DiscordAllowedMentions {
+  parse: string[];
+}
+
+const DISCORD_ALLOWED_MENTIONS: DiscordAllowedMentions = { parse: [] };
+
+const DiscordDmChannelResponseSchema = z.object({ id: z.string().min(1) });
 
 export interface DiscordOutboundOptions {
   fetchImpl?: typeof fetch;
 }
 
-function discordHeaders(token: string): Record<string, string> {
+function discordHeaders(token: string) {
   return {
     Authorization: `Bot ${token}`,
     "Content-Type": "application/json",
@@ -35,6 +43,7 @@ export function createDiscordOutboundAdapter(
             ok: false,
           };
         }
+
         const owner = { orgId: input.orgId, profileId: input.profileId };
         const config = await loadDiscordConfigFile(owner);
         const token = config?.botToken.trim();
@@ -86,6 +95,7 @@ export function createDiscordOutboundAdapter(
         return { ok: true };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+
         return { error: message, ok: false };
       }
     },
@@ -108,22 +118,23 @@ async function openDmChannel(
 
   if (!response.ok) {
     const body = await response.text();
+
     return {
       error: `Discord API error (${response.status}): ${body.slice(0, 200)}`,
       ok: false,
     };
   }
 
-  const payload = (await response.json()) as { id?: unknown };
+  const payload = DiscordDmChannelResponseSchema.safeParse(await response.json());
 
-  if (typeof payload.id !== "string" || !payload.id) {
+  if (!payload.success) {
     return {
       error: "Discord DM channel response was missing an id.",
       ok: false,
     };
   }
 
-  return { channelId: payload.id, ok: true };
+  return { channelId: payload.data.id, ok: true };
 }
 
 async function sendChunksToChannel(
@@ -147,6 +158,7 @@ async function sendChunksToChannel(
 
     if (!response.ok) {
       const body = await response.text();
+
       return {
         error: `Discord API error (${response.status}): ${body.slice(0, 200)}`,
         ok: false,

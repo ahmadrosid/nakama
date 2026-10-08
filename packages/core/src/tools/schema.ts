@@ -37,16 +37,22 @@ export function toLlmToolDefinitions(
 
 export function jsonSchemaFromZod(schema: z.ZodType): JsonSchema {
   const { $schema, ...jsonSchema } = schema.toJSONSchema();
+
+  // SAFETY: Zod emits a valid JSON Schema object before this owner contract narrows its type.
   return jsonSchema as JsonSchema;
 }
 
-export function parseToolInput<T>(schema: z.ZodType<T>, input: unknown): T {
+export function parseToolInput<T, Input>(
+  schema: z.ZodType<T>,
+  input: Input
+): T {
   try {
     return schema.parse(input);
   } catch (err) {
     if (err instanceof z.ZodError) {
       throw new Error(err.issues[0]?.message ?? "Invalid tool input.");
     }
+
     throw err;
   }
 }
@@ -58,47 +64,37 @@ export function requiredTrimmedString(field: string) {
     .min(1, `${field} is required.`);
 }
 
-export const trimmedOptionalString = z.preprocess(
-  (value) =>
-    typeof value === "string" && value.trim() ? value.trim() : undefined,
-  z.string().optional()
-);
+export const trimmedOptionalString = z
+  .string()
+  .trim()
+  .min(1)
+  .optional()
+  .catch(undefined);
 
-export const maxResultsSchema = z.preprocess((value) => {
-  if (value === undefined) {
-    return DEFAULT_MAX_RESULTS;
-  }
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return DEFAULT_MAX_RESULTS;
-  }
-  const normalized = Math.floor(value);
-  if (normalized <= 0) {
-    return DEFAULT_MAX_RESULTS;
-  }
-  return Math.min(normalized, MAX_RESULTS_LIMIT);
-}, z.number().int().positive().max(MAX_RESULTS_LIMIT));
+export const maxResultsSchema = z
+  .number()
+  .finite()
+  .transform(Math.floor)
+  .pipe(z.number().int().positive().max(MAX_RESULTS_LIMIT))
+  .catch(DEFAULT_MAX_RESULTS)
+  .default(DEFAULT_MAX_RESULTS);
 
-export const optionalRegexFlag = z.preprocess(
-  (value) => (typeof value === "boolean" ? value : undefined),
-  z.boolean().optional().default(true)
-);
+export const optionalRegexFlag = z
+  .boolean()
+  .optional()
+  .default(true)
+  .catch(true);
 
-export const readFileOffsetSchema = z.preprocess((value) => {
-  if (value === undefined) {
-    return 1;
-  }
-  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
-    return 1;
-  }
-  return value;
-}, z.number().int().positive());
+export const readFileOffsetSchema = z
+  .number()
+  .int()
+  .positive()
+  .catch(1)
+  .default(1);
 
-export const readFileLimitSchema = z.preprocess((value) => {
-  if (value === undefined) {
-    return;
-  }
-  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
-    return;
-  }
-  return value;
-}, z.number().int().positive().optional());
+export const readFileLimitSchema = z
+  .number()
+  .int()
+  .positive()
+  .optional()
+  .catch(undefined);

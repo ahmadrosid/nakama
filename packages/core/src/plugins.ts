@@ -1,18 +1,43 @@
 import { isAbsolute, join, resolve, sep } from "node:path";
+import { z } from "zod";
 import { assertConfigPathSegment } from "./soul/resolve";
 import { getUserConfigDir } from "./user-config";
 
 export const PLUGIN_MANIFEST_API_VERSION = 1;
+
 export const PLUGIN_TOOL_NAME_MAX_LENGTH = 64;
+
 export const PLUGIN_MANIFEST_FILENAME = "nakama.plugin.json";
+
 const PLUGIN_PACKAGES_DIR_NAME = "plugins";
+
 const PLUGIN_STAGING_DIR_NAME = ".staging";
 
 const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
+
 const PLUGIN_ID = /^[a-z][a-z0-9-]*$/;
+
 const CONTRIBUTION_KEY = /^[a-z][a-z0-9_-]*$/;
-const ALLOWED_SCHEMA_TYPES = new Set([
+
+interface PluginJsonSchema {
+  additionalProperties?: boolean | PluginJsonSchema;
+  enum?: Array<boolean | null | number | string>;
+  exclusiveMaximum?: number;
+  exclusiveMinimum?: number;
+  items?: PluginJsonSchema;
+  maxItems?: number;
+  maximum?: number;
+  maxLength?: number;
+  minItems?: number;
+  minimum?: number;
+  minLength?: number;
+  properties?: Record<string, PluginJsonSchema>;
+  required?: string[];
+  type?: z.infer<typeof JsonSchemaType> | Array<z.infer<typeof JsonSchemaType>>;
+}
+
+const JsonSchemaType = z.enum([
   "array",
   "boolean",
   "integer",
@@ -21,25 +46,56 @@ const ALLOWED_SCHEMA_TYPES = new Set([
   "object",
   "string",
 ]);
-const ALLOWED_SCHEMA_KEYS = new Set([
-  "additionalProperties",
-  "enum",
-  "exclusiveMaximum",
-  "exclusiveMinimum",
-  "items",
-  "maxItems",
-  "maxLength",
-  "maximum",
-  "minItems",
-  "minLength",
-  "minimum",
-  "properties",
-  "required",
-  "type",
-]);
+
+const JsonSchemaValue: z.ZodType<PluginJsonSchema> = z.lazy(() =>
+  z
+    .object({
+      additionalProperties: z.union([z.boolean(), JsonSchemaValue]).optional(),
+      enum: z
+        .array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+        .min(1)
+        .optional(),
+      exclusiveMaximum: z.number().finite().optional(),
+      exclusiveMinimum: z.number().finite().optional(),
+      items: JsonSchemaValue.optional(),
+      maxItems: z.number().finite().optional(),
+      maximum: z.number().finite().optional(),
+      maxLength: z.number().finite().optional(),
+      minItems: z.number().finite().optional(),
+      minimum: z.number().finite().optional(),
+      minLength: z.number().finite().optional(),
+      properties: z.record(z.string(), JsonSchemaValue).optional(),
+      required: z.array(z.string()).optional(),
+      type: z
+        .union([JsonSchemaType, z.array(JsonSchemaType).min(1)])
+        .optional(),
+    })
+    .strict()
+);
+
+const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number().finite(),
+    z.boolean(),
+    z.null(),
+    z.array(JsonValueSchema),
+    z.record(z.string(), JsonValueSchema),
+  ])
+);
+
+type JsonValue =
+  | boolean
+  | null
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
 
 export type PluginActionAccess = "admin" | "member";
+
 export type PluginActionEffect = "read" | "write";
+
 export type OrgPluginLifecycleState =
   | "disabled"
   | "disabling"
@@ -145,10 +201,16 @@ export interface PluginExecutionContext {
   workspaceRoot?: string;
 }
 
-export function validatePluginManifest(value: unknown): PluginValidationResult {
-  if (!isRecord(value)) {
+export function validatePluginManifest(
+  input: JsonValue
+): PluginValidationResult {
+  const parsed = z.record(z.string(), JsonValueSchema).safeParse(input);
+
+  if (!parsed.success) {
     return fail("invalid_identity");
   }
+
+  const value = parsed.data;
 
   if (value.apiVersion !== PLUGIN_MANIFEST_API_VERSION) {
     return fail("unsupported_api");
@@ -178,36 +240,42 @@ export function validatePluginManifest(value: unknown): PluginValidationResult {
     return fail("invalid_version");
   }
 
+  const icon = z.string().max(2048).safeParse(value.icon);
+
   if (
     value.icon !== undefined &&
-    (typeof value.icon !== "string" ||
-      value.icon.length > 2048 ||
-      !URL.canParse(value.icon) ||
-      new URL(value.icon).protocol !== "https:")
+    (!(icon.success && URL.canParse(icon.data)) ||
+      new URL(icon.data).protocol !== "https:")
   ) {
     return fail("invalid_identity");
   }
 
   const workersResult = parseWorkers(value.workers);
+
   if (!workersResult.ok) {
     return workersResult;
   }
+
   const skillsResult = parseSkills(value.skills);
+
   if (!skillsResult.ok) {
     return skillsResult;
   }
 
   const actionsResult = parseActions(value.actions);
+
   if (!actionsResult.ok) {
     return actionsResult;
   }
 
   const uiResult = parseUi(value.ui);
+
   if (!uiResult.ok) {
     return uiResult;
   }
 
   const databaseResult = parseDatabase(value.database);
+
   if (!databaseResult.ok) {
     return databaseResult;
   }
@@ -216,179 +284,119 @@ export function validatePluginManifest(value: unknown): PluginValidationResult {
     return fail("unsupported_hooks");
   }
 
-  return {
-    manifest: {
-      actions: actionsResult.actions,
-      ...(workersResult.workers.length
-        ? { workers: workersResult.workers }
-        : {}),
-      apiVersion: PLUGIN_MANIFEST_API_VERSION,
-      author: value.author,
-      ...(databaseResult.database ? { database: databaseResult.database } : {}),
-      description: value.description,
-      ...(typeof value.icon === "string" ? { icon: value.icon } : {}),
-      id: value.id,
-      license: value.license,
-      minNakamaVersion: value.minNakamaVersion,
-      name: value.name,
-      skills: skillsResult.skills,
-      ...(uiResult.ui ? { ui: uiResult.ui } : {}),
-      version: value.version,
-    },
-    ok: true,
+  const manifest: PluginManifest = {
+    actions: actionsResult.actions,
+    apiVersion: PLUGIN_MANIFEST_API_VERSION,
+    author: value.author,
+    description: value.description,
+    id: value.id,
+    license: value.license,
+    minNakamaVersion: value.minNakamaVersion,
+    name: value.name,
+    skills: skillsResult.skills,
+    version: value.version,
   };
+
+  if (workersResult.workers.length) {
+    manifest.workers = workersResult.workers;
+  }
+
+  if (databaseResult.database) {
+    manifest.database = databaseResult.database;
+  }
+
+  if (icon.success && value.icon !== undefined) {
+    manifest.icon = icon.data;
+  }
+
+  if (uiResult.ui) {
+    manifest.ui = uiResult.ui;
+  }
+
+  return { manifest, ok: true };
 }
 
 export function validatePluginJsonSchema(
-  value: unknown
+  input: JsonValue
 ): PluginSchemaValidationResult {
-  if (!isRecord(value)) {
-    return { code: "unsupported_schema", ok: false };
-  }
-
-  for (const key of Object.keys(value)) {
-    if (!ALLOWED_SCHEMA_KEYS.has(key)) {
-      return { code: "unsupported_schema", ok: false };
-    }
-  }
-
-  if (value.type !== undefined) {
-    const types = Array.isArray(value.type) ? value.type : [value.type];
-    if (
-      types.length === 0 ||
-      types.some(
-        (type) => typeof type !== "string" || !ALLOWED_SCHEMA_TYPES.has(type)
-      )
-    ) {
-      return { code: "unsupported_schema", ok: false };
-    }
-  }
-
-  if (value.enum !== undefined) {
-    if (!Array.isArray(value.enum) || value.enum.length === 0) {
-      return { code: "unsupported_schema", ok: false };
-    }
-    if (
-      value.enum.some(
-        (item) =>
-          typeof item !== "string" &&
-          typeof item !== "number" &&
-          typeof item !== "boolean" &&
-          item !== null
-      )
-    ) {
-      return { code: "unsupported_schema", ok: false };
-    }
-  }
-
-  if (
-    value.required !== undefined &&
-    (!Array.isArray(value.required) ||
-      value.required.some((item) => typeof item !== "string"))
-  ) {
-    return { code: "unsupported_schema", ok: false };
-  }
-
-  if (
-    !(
-      isOptionalFiniteNumber(value.minLength) &&
-      isOptionalFiniteNumber(value.maxLength) &&
-      isOptionalFiniteNumber(value.minimum) &&
-      isOptionalFiniteNumber(value.maximum) &&
-      isOptionalFiniteNumber(value.exclusiveMinimum) &&
-      isOptionalFiniteNumber(value.exclusiveMaximum) &&
-      isOptionalFiniteNumber(value.minItems) &&
-      isOptionalFiniteNumber(value.maxItems)
-    )
-  ) {
-    return { code: "unsupported_schema", ok: false };
-  }
-
-  if (value.properties !== undefined) {
-    if (!isRecord(value.properties)) {
-      return { code: "unsupported_schema", ok: false };
-    }
-    for (const property of Object.values(value.properties)) {
-      if (!validatePluginJsonSchema(property).ok) {
-        return { code: "unsupported_schema", ok: false };
-      }
-    }
-  }
-
-  if (value.items !== undefined && !validatePluginJsonSchema(value.items).ok) {
-    return { code: "unsupported_schema", ok: false };
-  }
-
-  if (value.additionalProperties !== undefined) {
-    if (typeof value.additionalProperties === "boolean") {
-      return { ok: true };
-    }
-    if (!validatePluginJsonSchema(value.additionalProperties).ok) {
-      return { code: "unsupported_schema", ok: false };
-    }
-  }
-
-  return { ok: true };
+  return JsonSchemaValue.safeParse(input).success
+    ? { ok: true }
+    : { code: "unsupported_schema", ok: false };
 }
 
 export function validatePluginJsonInstance(
-  schema: unknown,
-  value: unknown
+  schemaInput: JsonValue,
+  rawInput: JsonValue
 ): PluginInstanceValidationResult {
-  if (!(validatePluginJsonSchema(schema).ok && isRecord(schema))) {
+  const schemaResult = JsonSchemaValue.safeParse(schemaInput);
+  const inputResult = JsonValueSchema.safeParse(rawInput);
+
+  if (!(schemaResult.success && inputResult.success)) {
     return { code: "invalid_input", ok: false };
   }
 
-  if (!matchesSchemaType(schema.type, value)) {
-    return { code: "invalid_input", ok: false };
-  }
+  const schema = schemaResult.data;
+  const input = inputResult.data;
 
-  if (schema.enum !== undefined) {
-    const allowed = schema.enum as unknown[];
-    if (!allowed.some((item) => Object.is(item, value))) {
-      return { code: "invalid_input", ok: false };
-    }
+  if (!matchesSchemaType(schema.type, input)) {
+    return { code: "invalid_input", ok: false };
   }
 
   if (
-    typeof value === "string" &&
-    ((typeof schema.minLength === "number" &&
-      value.length < schema.minLength) ||
-      (typeof schema.maxLength === "number" && value.length > schema.maxLength))
+    schema.enum !== undefined &&
+    !schema.enum.some((item) => Object.is(item, input))
   ) {
     return { code: "invalid_input", ok: false };
   }
 
-  if (typeof value === "number" && Number.isFinite(value)) {
-    if (typeof schema.minimum === "number" && value < schema.minimum) {
+  const text = z.string().safeParse(input);
+
+  if (
+    text.success &&
+    ((schema.minLength !== undefined && text.data.length < schema.minLength) ||
+      (schema.maxLength !== undefined && text.data.length > schema.maxLength))
+  ) {
+    return { code: "invalid_input", ok: false };
+  }
+
+  const number = z.number().finite().safeParse(input);
+
+  if (number.success) {
+    if (schema.minimum !== undefined && number.data < schema.minimum) {
       return { code: "invalid_input", ok: false };
     }
-    if (typeof schema.maximum === "number" && value > schema.maximum) {
+
+    if (schema.maximum !== undefined && number.data > schema.maximum) {
       return { code: "invalid_input", ok: false };
     }
+
     if (
-      typeof schema.exclusiveMinimum === "number" &&
-      value <= schema.exclusiveMinimum
+      schema.exclusiveMinimum !== undefined &&
+      number.data <= schema.exclusiveMinimum
     ) {
       return { code: "invalid_input", ok: false };
     }
+
     if (
-      typeof schema.exclusiveMaximum === "number" &&
-      value >= schema.exclusiveMaximum
+      schema.exclusiveMaximum !== undefined &&
+      number.data >= schema.exclusiveMaximum
     ) {
       return { code: "invalid_input", ok: false };
     }
   }
 
-  if (Array.isArray(value)) {
+  const array = z.array(z.unknown()).safeParse(input);
+
+  if (array.success) {
     if (
-      (typeof schema.minItems === "number" && value.length < schema.minItems) ||
-      (typeof schema.maxItems === "number" && value.length > schema.maxItems)
+      (schema.minItems !== undefined && array.data.length < schema.minItems) ||
+      (schema.maxItems !== undefined && array.data.length > schema.maxItems)
     ) {
       return { code: "invalid_input", ok: false };
     }
+
     if (schema.items !== undefined) {
-      for (const item of value) {
+      for (const item of array.data) {
         if (!validatePluginJsonInstance(schema.items, item).ok) {
           return { code: "invalid_input", ok: false };
         }
@@ -396,34 +404,44 @@ export function validatePluginJsonInstance(
     }
   }
 
-  if (isRecord(value) && matchesObjectType(schema.type)) {
+  const object = z.record(z.string(), z.unknown()).safeParse(input);
+
+  if (object.success && matchesObjectType(schema.type)) {
     if (schema.required !== undefined) {
-      for (const key of schema.required as string[]) {
-        if (!Object.hasOwn(value, key)) {
+      for (const key of schema.required) {
+        if (!Object.hasOwn(object.data, key)) {
           return { code: "invalid_input", ok: false };
         }
       }
     }
 
-    const properties = isRecord(schema.properties) ? schema.properties : {};
+    const properties = schema.properties ?? {};
+
     for (const [key, propertySchema] of Object.entries(properties)) {
-      if (!Object.hasOwn(value, key)) {
+      if (!Object.hasOwn(object.data, key)) {
         continue;
       }
-      if (!validatePluginJsonInstance(propertySchema, value[key]).ok) {
+
+      if (!validatePluginJsonInstance(propertySchema, object.data[key]).ok) {
         return { code: "invalid_input", ok: false };
       }
     }
 
-    const extraKeys = Object.keys(value).filter((key) => !(key in properties));
+    const extraKeys = Object.keys(object.data).filter(
+      (key) => !(key in properties)
+    );
+
     if (schema.additionalProperties === false && extraKeys.length > 0) {
       return { code: "invalid_input", ok: false };
     }
+
     if (isRecord(schema.additionalProperties)) {
       for (const key of extraKeys) {
         if (
-          !validatePluginJsonInstance(schema.additionalProperties, value[key])
-            .ok
+          !validatePluginJsonInstance(
+            schema.additionalProperties,
+            object.data[key]
+          ).ok
         ) {
           return { code: "invalid_input", ok: false };
         }
@@ -492,14 +510,18 @@ export function resolvePluginReleaseEntry(
       "releaseDir must be an absolute path; relative paths resolve against process.cwd() and break plugin isolation."
     );
   }
+
   if (!isRelativePluginPath(entry)) {
     throw new Error("plugin entry must stay inside the release root.");
   }
+
   const root = resolve(releaseDir);
   const resolved = resolve(root, entry);
+
   if (resolved !== root && !resolved.startsWith(`${root}${sep}`)) {
     throw new Error("plugin entry must stay inside the release root.");
   }
+
   return resolved;
 }
 
@@ -509,6 +531,7 @@ function assertAbsoluteConfigDir(configDir: string): string {
       "configDir must be an absolute path; relative paths resolve against process.cwd() and break plugin isolation."
     );
   }
+
   return configDir;
 }
 
@@ -518,11 +541,13 @@ export function derivePluginToolName(
 ): string | null {
   const pluginPart = sanitizeToolNamePart(pluginId);
   const actionPart = sanitizeToolNamePart(actionKey);
+
   if (!(pluginPart && actionPart)) {
     return null;
   }
 
   const name = `plugin_${pluginPart}__${actionPart}`;
+
   if (name.length > PLUGIN_TOOL_NAME_MAX_LENGTH) {
     return null;
   }
@@ -531,13 +556,14 @@ export function derivePluginToolName(
 }
 
 function parseSkills(
-  value: unknown
+  value: JsonValue | undefined
 ):
   | { ok: true; skills: PluginSkillContribution[] }
   | { code: PluginManifestValidationCode; ok: false } {
   if (value === undefined) {
     return { ok: true, skills: [] };
   }
+
   if (!Array.isArray(value)) {
     return fail("missing_field");
   }
@@ -549,21 +575,27 @@ function parseSkills(
     if (!isRecord(item)) {
       return fail("missing_field");
     }
+
     if ("entrypoint" in item || "tool" in item || "tools" in item) {
       return fail("undeclared_entrypoint");
     }
+
     if (!(isNonEmptyString(item.key) && CONTRIBUTION_KEY.test(item.key))) {
       return fail("invalid_identity");
     }
+
     if (!isNonEmptyString(item.directory)) {
       return fail("missing_field");
     }
+
     if (!isRelativePluginPath(item.directory)) {
       return fail("invalid_path");
     }
+
     if (keys.has(item.key)) {
       return fail("duplicate_key");
     }
+
     keys.add(item.key);
     skills.push({ directory: item.directory, key: item.key });
   }
@@ -572,18 +604,21 @@ function parseSkills(
 }
 
 function parseWorkers(
-  value: unknown
+  value: JsonValue | undefined
 ):
   | { ok: true; workers: PluginWorkerContribution[] }
   | { ok: false; code: PluginManifestValidationCode } {
   if (value === undefined) {
     return { ok: true, workers: [] };
   }
+
   if (!Array.isArray(value) || value.length > 8) {
     return fail("missing_field");
   }
+
   const workers: PluginWorkerContribution[] = [];
   const keys = new Set<string>();
+
   for (const item of value) {
     if (
       !(
@@ -595,6 +630,7 @@ function parseWorkers(
     ) {
       return fail("invalid_identity");
     }
+
     if (
       !(
         isNonEmptyString(item.entry) &&
@@ -604,31 +640,47 @@ function parseWorkers(
     ) {
       return fail("invalid_path");
     }
-    if (item.useHostLlm !== undefined && typeof item.useHostLlm !== "boolean") {
+
+    if (
+      item.useHostLlm !== undefined &&
+      !z.boolean().safeParse(item.useHostLlm).success
+    ) {
       return fail("missing_field");
     }
+
     if (keys.has(item.key)) {
       return fail("duplicate_key");
     }
+
     keys.add(item.key);
-    workers.push({
+
+    const worker: PluginWorkerContribution = {
       entry: item.entry,
       key: item.key,
       name: item.name,
-      ...(item.useHostLlm === undefined ? {} : { useHostLlm: item.useHostLlm }),
-    });
+    };
+
+    const useHostLlm = z.boolean().safeParse(item.useHostLlm);
+
+    if (useHostLlm.success) {
+      worker.useHostLlm = useHostLlm.data;
+    }
+
+    workers.push(worker);
   }
+
   return { ok: true, workers };
 }
 
 function parseActions(
-  value: unknown
+  value: JsonValue | undefined
 ):
   | { actions: PluginActionContribution[]; ok: true }
   | { code: PluginManifestValidationCode; ok: false } {
   if (value === undefined) {
     return { actions: [], ok: true };
   }
+
   if (!Array.isArray(value)) {
     return fail("missing_field");
   }
@@ -640,9 +692,11 @@ function parseActions(
     if (!isRecord(item)) {
       return fail("missing_field");
     }
+
     if (!(isNonEmptyString(item.key) && CONTRIBUTION_KEY.test(item.key))) {
       return fail("invalid_identity");
     }
+
     if (
       !(isNonEmptyString(item.description) && isNonEmptyString(item.entry)) ||
       item.access === undefined ||
@@ -651,55 +705,70 @@ function parseActions(
     ) {
       return fail("missing_field");
     }
+
     if (item.access !== "member" && item.access !== "admin") {
       return fail("missing_field");
     }
+
     if (item.effect !== "read" && item.effect !== "write") {
       return fail("missing_field");
     }
+
     if (!isRelativePluginPath(item.entry)) {
       return fail("invalid_path");
     }
+
     if (!validatePluginJsonSchema(item.inputSchema).ok) {
       return fail("unsupported_schema");
     }
+
     if (
       item.exposeAsTool !== undefined &&
-      typeof item.exposeAsTool !== "boolean"
+      !z.boolean().safeParse(item.exposeAsTool).success
     ) {
       return fail("missing_field");
     }
+
     if (keys.has(item.key)) {
       return fail("duplicate_key");
     }
+
     keys.add(item.key);
-    actions.push({
+
+    const action: PluginActionContribution = {
       access: item.access,
       description: item.description,
       effect: item.effect,
       entry: item.entry,
-      ...(item.exposeAsTool === undefined
-        ? {}
-        : { exposeAsTool: item.exposeAsTool }),
       inputSchema: item.inputSchema,
       key: item.key,
-    });
+    };
+
+    const exposeAsTool = z.boolean().safeParse(item.exposeAsTool);
+
+    if (exposeAsTool.success) {
+      action.exposeAsTool = exposeAsTool.data;
+    }
+
+    actions.push(action);
   }
 
   return { actions, ok: true };
 }
 
 function parseUi(
-  value: unknown
+  value: JsonValue | undefined
 ):
   | { ok: true; ui?: PluginUiContribution }
   | { code: PluginManifestValidationCode; ok: false } {
   if (value === undefined) {
     return { ok: true };
   }
+
   if (!isRecord(value)) {
     return fail("missing_field");
   }
+
   if (
     !(
       isNonEmptyString(value.pageLabel) &&
@@ -709,6 +778,7 @@ function parseUi(
   ) {
     return fail("missing_field");
   }
+
   if (
     !(
       isRelativePluginPath(value.entryModule) &&
@@ -717,9 +787,11 @@ function parseUi(
   ) {
     return fail("invalid_path");
   }
+
   if (!/\.(?:m?js)$/.test(value.entryModule)) {
     return fail("invalid_path");
   }
+
   return {
     ok: true,
     ui: {
@@ -731,19 +803,21 @@ function parseUi(
 }
 
 function parseDatabase(
-  value: unknown
+  value: JsonValue | undefined
 ):
   | { database?: { migrations: PluginMigrationContribution[] }; ok: true }
   | { code: PluginManifestValidationCode; ok: false } {
   if (value === undefined) {
     return { ok: true };
   }
+
   if (!(isRecord(value) && Array.isArray(value.migrations))) {
     return fail("missing_field");
   }
 
   const migrations: PluginMigrationContribution[] = [];
   const ids = new Set<string>();
+
   for (const item of value.migrations) {
     if (
       !(
@@ -754,12 +828,15 @@ function parseDatabase(
     ) {
       return fail("missing_field");
     }
+
     if (!isRelativePluginPath(item.path)) {
       return fail("invalid_path");
     }
+
     if (ids.has(item.id)) {
       return fail("duplicate_key");
     }
+
     ids.add(item.id);
     migrations.push({ id: item.id, path: item.path });
   }
@@ -767,67 +844,69 @@ function parseDatabase(
   return { database: { migrations }, ok: true };
 }
 
-function fail(code: PluginManifestValidationCode): {
-  code: PluginManifestValidationCode;
-  ok: false;
-} {
+function fail(code: PluginManifestValidationCode) {
   return { code, ok: false };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
+function isRecord(value: JsonValue): value is Record<string, JsonValue> {
+  return z.record(z.string(), JsonValueSchema).safeParse(value).success;
 }
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim() !== "";
+function isNonEmptyString(value: JsonValue): value is string {
+  const parsed = z.string().trim().min(1).safeParse(value);
+
+  return parsed.success;
 }
 
-function isOptionalFiniteNumber(value: unknown): boolean {
-  return (
-    value === undefined || (typeof value === "number" && Number.isFinite(value))
-  );
+function isOptionalFiniteNumber(value: JsonValue | undefined): boolean {
+  return value === undefined || z.number().finite().safeParse(value).success;
 }
 
-function schemaTypes(type: unknown): string[] | null {
+function schemaTypes(type: PluginJsonSchema["type"]): string[] | null {
   if (type === undefined) {
     return null;
   }
-  return Array.isArray(type)
-    ? type.filter((item) => typeof item === "string")
-    : [String(type)];
+
+  return Array.isArray(type) ? type : [type];
 }
 
-function matchesSchemaType(type: unknown, value: unknown): boolean {
+function matchesSchemaType(
+  type: PluginJsonSchema["type"],
+  value: JsonValue
+): boolean {
   const types = schemaTypes(type);
+
   if (!types) {
     return true;
   }
+
   return types.some((item) => matchesSingleType(item, value));
 }
 
-function matchesSingleType(type: string, value: unknown): boolean {
+function matchesSingleType(type: string, value: JsonValue): boolean {
   switch (type) {
     case "array":
       return Array.isArray(value);
     case "boolean":
-      return typeof value === "boolean";
+      return z.boolean().safeParse(value).success;
     case "integer":
-      return typeof value === "number" && Number.isInteger(value);
+      return z.number().int().safeParse(value).success;
     case "null":
       return value === null;
     case "number":
-      return typeof value === "number" && Number.isFinite(value);
+      return z.number().finite().safeParse(value).success;
     case "object":
       return isRecord(value);
     case "string":
-      return typeof value === "string";
+      return z.string().safeParse(value).success;
     default:
       return false;
   }
 }
 
-function matchesObjectType(type: unknown): boolean {
+function matchesObjectType(type: PluginJsonSchema["type"]): boolean {
   const types = schemaTypes(type);
+
   return types === null || types.includes("object");
 }
 
@@ -835,7 +914,9 @@ function isRelativePluginPath(value: string): boolean {
   if (value.startsWith("/") || value.includes("\\") || value.includes(":")) {
     return false;
   }
+
   const parts = value.split("/");
+
   return (
     parts.length > 0 &&
     parts.every((part) => part !== "" && part !== "." && part !== "..")

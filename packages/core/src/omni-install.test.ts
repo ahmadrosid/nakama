@@ -13,7 +13,9 @@ import {
 } from "./omni-install";
 
 const ORIGINAL_CONFIG_DIR = process.env.NAKAMA_CONFIG_DIR;
+
 const ORIGINAL_AUTO = process.env.NAKAMA_OMNI_AUTO_INSTALL;
+
 const ORIGINAL_VERSION = process.env.OMNI_VERSION;
 
 function restore(name: string, value: string | undefined) {
@@ -46,6 +48,7 @@ describe("release target", () => {
 describe("checksum lookup", () => {
   const archive = "omni-v0.7.3-x86_64-unknown-linux-musl.tar.gz";
   const digest = "a".repeat(64);
+
   const sums = [
     `${"b".repeat(64)}  omni-v0.7.3-aarch64-apple-darwin.tar.gz`,
     `${digest}  ${archive}`,
@@ -77,6 +80,7 @@ describe("binary resolution", () => {
   test("falls back to PATH when nothing was installed here", () => {
     const dir = mkdtempSync(join(tmpdir(), "omni-install-"));
     process.env.NAKAMA_CONFIG_DIR = dir;
+
     try {
       expect(omniCommand()).toBe("omni");
     } finally {
@@ -87,6 +91,7 @@ describe("binary resolution", () => {
   test("prefers the managed copy once it exists", () => {
     const dir = mkdtempSync(join(tmpdir(), "omni-install-"));
     process.env.NAKAMA_CONFIG_DIR = dir;
+
     try {
       const path = managedOmniPath();
       mkdirSync(join(dir, "bin"), { recursive: true });
@@ -132,9 +137,11 @@ describe("version", () => {
   // that took the fetch path.
   test("the Dockerfile pin matches the runtime default", async () => {
     delete process.env.OMNI_VERSION;
+
     const dockerfile = await Bun.file(
       join(import.meta.dir, "..", "..", "..", "Dockerfile")
     ).text();
+
     const pinned = dockerfile.match(/^ARG OMNI_VERSION="([^"]+)"/m)?.[1];
 
     expect(

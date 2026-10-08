@@ -82,6 +82,7 @@ describe("prepareChannelOrgContext", () => {
     });
 
     expect(result.status).toBe("prompt");
+
     if (result.status === "prompt") {
       expect(result.message).toBe(formatOrgSelectionPrompt(orgs));
     }
@@ -113,6 +114,7 @@ describe("ChannelOrgStore", () => {
   test("a slow save does not land after a newer one", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "nakama-org-store-"));
     const filePath = path.join(dir, "org-selection.json");
+
     try {
       const store = new ChannelOrgStore(filePath);
       // Big enough that this snapshot is still being written when the next

@@ -133,10 +133,12 @@ describe("search_files tool", () => {
 
   test("truncates based on maxResults", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-search-"));
+
     const lines = Array.from(
       { length: 40 },
       (_, index) => `hit ${index + 1}`
     ).join("\n");
+
     await writeFile(path.join(workspaceRoot, "many.txt"), `${lines}\n`, "utf8");
 
     const result = await runSearchFiles(

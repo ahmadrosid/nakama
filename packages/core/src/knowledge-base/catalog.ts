@@ -15,13 +15,16 @@ export async function composeKnowledgeBaseCatalog(
       getProfileSharedDocumentIds(orgId, profileId),
       listOrganizationKnowledgeBaseDocuments(orgId),
     ]);
+
   const documents = [
     ...profileDocuments,
     ...organizationDocuments.filter((document) =>
       sharedDocumentIds.includes(document.id)
     ),
   ];
+
   const sources = DEFAULT_KNOWLEDGE_SOURCES;
+
   const readyDocuments = documents.filter(
     (document) => document.status === "ready"
   );

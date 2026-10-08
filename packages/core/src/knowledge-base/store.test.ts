@@ -10,6 +10,11 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { composeKnowledgeBaseCatalog } from "./catalog";
+
+interface KnowledgeBaseManifestFixture {
+  documents: Array<{ contentHash?: string }>;
+  sharedDocumentIds?: string[] | string;
+}
 import {
   getKnowledgeBaseDir,
   getKnowledgeBaseExtractedPath,
@@ -146,6 +151,7 @@ describe("knowledge base store", () => {
     async (scope) => {
       const profileId = "profile_concurrent_uploads";
       await setupProfile(profileId);
+
       const uploads = await Promise.allSettled(
         Array.from({ length: 8 }, (_, index) => {
           const attachment = {
@@ -153,18 +159,22 @@ describe("knowledge base store", () => {
             filename: `document-${index}.txt`,
             mediaType: "text/plain",
           };
+
           return scope === "profile"
             ? uploadKnowledgeBaseDocument(ORG_ID, profileId, attachment)
             : uploadOrganizationKnowledgeBaseDocument(ORG_ID, attachment);
         })
       );
+
       expect(uploads.every((upload) => upload.status === "fulfilled")).toBe(
         true
       );
+
       const documents =
         scope === "profile"
           ? await listKnowledgeBaseDocuments(ORG_ID, profileId)
           : await listOrganizationKnowledgeBaseDocuments(ORG_ID);
+
       expect(documents.map((document) => document.filename).sort()).toEqual(
         Array.from({ length: 8 }, (_, index) => `document-${index}.txt`)
       );
@@ -174,23 +184,28 @@ describe("knowledge base store", () => {
   test("preserves concurrent uploads, deletes, attaches, and detaches", async () => {
     const profileId = "profile_concurrent_changes";
     await setupProfile(profileId);
+
     const source = {
       data: Buffer.from("old content").toString("base64"),
       filename: "old.txt",
       mediaType: "text/plain",
     };
+
     const old = await uploadKnowledgeBaseDocument(ORG_ID, profileId, source);
     const first = await uploadOrganizationKnowledgeBaseDocument(ORG_ID, source);
+
     const second = await uploadOrganizationKnowledgeBaseDocument(ORG_ID, {
       ...source,
       data: Buffer.from("second shared content").toString("base64"),
       filename: "second.txt",
     });
+
     await attachSharedKnowledgeBaseDocument(
       ORG_ID,
       profileId,
       first.document.id
     );
+
     const changes = await Promise.allSettled([
       uploadKnowledgeBaseDocument(ORG_ID, profileId, {
         ...source,
@@ -201,6 +216,7 @@ describe("knowledge base store", () => {
       attachSharedKnowledgeBaseDocument(ORG_ID, profileId, second.document.id),
       detachSharedKnowledgeBaseDocument(ORG_ID, profileId, first.document.id),
     ]);
+
     expect(changes.every((change) => change.status === "fulfilled")).toBe(true);
     expect(
       (await listKnowledgeBaseDocuments(ORG_ID, profileId)).map(
@@ -215,25 +231,32 @@ describe("knowledge base store", () => {
   test("enforces duplicate handling and releases the lock after a rejected upload", async () => {
     const profileId = "profile_concurrent_duplicates";
     await setupProfile(profileId);
+
     const source = {
       data: Buffer.from("same content").toString("base64"),
       filename: "same.txt",
       mediaType: "text/plain",
     };
+
     const uploads = await Promise.allSettled([
       uploadKnowledgeBaseDocument(ORG_ID, profileId, source),
       uploadKnowledgeBaseDocument(ORG_ID, profileId, source),
       uploadKnowledgeBaseDocument(ORG_ID, profileId, source, "skip"),
     ]);
+
     expect(uploads[0]?.status).toBe("fulfilled");
     expect(uploads[1]?.status).toBe("rejected");
+
     if (uploads[1]?.status === "rejected") {
       expect(uploads[1].reason).toBeInstanceOf(KnowledgeBaseDuplicateError);
     }
+
     expect(uploads[2]?.status).toBe("fulfilled");
+
     if (uploads[2]?.status === "fulfilled") {
       expect(uploads[2].value.outcome).toBe("skipped");
     }
+
     expect(await listKnowledgeBaseDocuments(ORG_ID, profileId)).toHaveLength(1);
     await uploadKnowledgeBaseDocument(ORG_ID, profileId, {
       ...source,
@@ -250,6 +273,7 @@ describe("knowledge base store", () => {
     const content = Buffer.from("needle in haystack", "utf8").toString(
       "base64"
     );
+
     const uploaded = await uploadKnowledgeBaseDocument(ORG_ID, profileId, {
       data: content,
       filename: "notes.txt",
@@ -272,6 +296,7 @@ describe("knowledge base store", () => {
       ),
       "utf8"
     );
+
     expect(extracted).toContain("# source: notes.txt");
     expect(extracted).toContain("needle in haystack");
 
@@ -279,6 +304,7 @@ describe("knowledge base store", () => {
       getKnowledgeBaseManifestPath(getKnowledgeBaseDir(ORG_ID, profileId)),
       "utf8"
     );
+
     expect(manifest).toContain(uploaded.document.id);
 
     const storedPath = getKnowledgeBaseStoredDocumentPath(
@@ -286,6 +312,7 @@ describe("knowledge base store", () => {
       uploaded.document.id,
       uploaded.document.filename
     );
+
     expect(storedPath).toContain(uploaded.document.id);
     expect(await readFile(storedPath, "utf8")).toContain("needle in haystack");
 
@@ -294,6 +321,7 @@ describe("knowledge base store", () => {
       profileId,
       uploaded.document.id
     );
+
     expect(deleted).toBe(true);
     expect(await listKnowledgeBaseDocuments(ORG_ID, profileId)).toHaveLength(0);
   });
@@ -301,6 +329,7 @@ describe("knowledge base store", () => {
   test("stores shared documents separately and protects attached documents", async () => {
     const profileId = "profile_kb_shared";
     await setupProfile(profileId);
+
     const uploaded = await uploadOrganizationKnowledgeBaseDocument(ORG_ID, {
       data: Buffer.from("shared needle", "utf8").toString("base64"),
       filename: "shared.txt",
@@ -353,6 +382,7 @@ describe("knowledge base store", () => {
       profileId,
       attachment
     );
+
     expect(first.outcome).toBe("created");
 
     await expect(
@@ -365,6 +395,7 @@ describe("knowledge base store", () => {
       attachment,
       "skip"
     );
+
     expect(skipped.outcome).toBe("skipped");
     expect(skipped.document.id).toBe(first.document.id);
     expect(await listKnowledgeBaseDocuments(ORG_ID, profileId)).toHaveLength(1);
@@ -374,6 +405,7 @@ describe("knowledge base store", () => {
       filename: "copy.txt",
       mediaType: "text/plain",
     };
+
     await expect(
       uploadKnowledgeBaseDocument(ORG_ID, profileId, renamedSameBytes)
     ).rejects.toMatchObject({ match: "content_hash" });
@@ -384,6 +416,7 @@ describe("knowledge base store", () => {
       attachment,
       "replace"
     );
+
     expect(replaced.outcome).toBe("replaced");
     expect(replaced.document.id).not.toBe(first.document.id);
 
@@ -405,9 +438,12 @@ describe("knowledge base store", () => {
     const manifestPath = getKnowledgeBaseManifestPath(
       getKnowledgeBaseDir(ORG_ID, profileId)
     );
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
-      documents: Array<Record<string, unknown>>;
-    };
+
+    // SAFETY: This manifest was written by the upload directly above.
+    const manifest = JSON.parse(
+      await readFile(manifestPath, "utf8")
+    ) as KnowledgeBaseManifestFixture;
+
     delete manifest.documents[0]?.contentHash;
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
@@ -448,6 +484,7 @@ describe("knowledge base store", () => {
       "data",
       "knowledge-base"
     );
+
     await mkdir(path.join(legacyDir, "extracted"), { recursive: true });
     await mkdir(path.join(legacyDir, "uploads", "kb_legacy"), {
       recursive: true,
@@ -548,6 +585,7 @@ describe("knowledge base store", () => {
       uploaded.document.id,
       { render: "text" }
     );
+
     expect(preview.contentType).toBe("text/plain");
     expect(preview.filename).toBe("notes.txt");
     expect(preview.bytes.toString("utf8")).toBe("needle in haystack");
@@ -557,6 +595,7 @@ describe("knowledge base store", () => {
       profileId,
       uploaded.document.id
     );
+
     expect(download.contentType).toBe("text/plain");
     expect(download.bytes.toString("utf8")).toBe("needle in haystack");
   });
@@ -585,6 +624,7 @@ describe("knowledge base store", () => {
       "data",
       "knowledge-base"
     );
+
     await mkdir(path.join(legacyDir, "extracted"), { recursive: true });
     await writeFile(
       path.join(legacyDir, "manifest.json"),
@@ -610,11 +650,13 @@ describe("knowledge base store", () => {
   test("ignores leftover profile directories whose profile is gone", async () => {
     const profileId = "profile_kb_orphan";
     await setupProfile(profileId);
+
     const uploaded = await uploadOrganizationKnowledgeBaseDocument(ORG_ID, {
       data: Buffer.from("orphan needle", "utf8").toString("base64"),
       filename: "orphan.txt",
       mediaType: "text/plain",
     });
+
     await attachSharedKnowledgeBaseDocument(
       ORG_ID,
       profileId,
@@ -642,11 +684,13 @@ describe("knowledge base store", () => {
   test("ignores a manifest whose sharedDocumentIds is not an array", async () => {
     const profileId = "profile_kb_malformed";
     await setupProfile(profileId);
+
     const uploaded = await uploadOrganizationKnowledgeBaseDocument(ORG_ID, {
       data: Buffer.from("malformed needle", "utf8").toString("base64"),
       filename: "malformed.txt",
       mediaType: "text/plain",
     });
+
     await attachSharedKnowledgeBaseDocument(
       ORG_ID,
       profileId,
@@ -656,10 +700,12 @@ describe("knowledge base store", () => {
     const manifestPath = getKnowledgeBaseManifestPath(
       getKnowledgeBaseDir(ORG_ID, profileId)
     );
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<
-      string,
-      unknown
-    >;
+
+    // SAFETY: The uploaded document created this manifest before the test corrupts one field.
+    const manifest = JSON.parse(
+      await readFile(manifestPath, "utf8")
+    ) as KnowledgeBaseManifestFixture;
+
     manifest.sharedDocumentIds = uploaded.document.id;
     await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
 

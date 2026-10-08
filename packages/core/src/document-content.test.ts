@@ -7,9 +7,11 @@ import {
 } from "./document-content";
 
 const FIXTURES = join(import.meta.dir, "__fixtures__");
+
 const SAMPLE_PDF_B64 = readFileSync(join(FIXTURES, "sample.pdf")).toString(
   "base64"
 );
+
 const SAMPLE_XLSX_B64 = readFileSync(join(FIXTURES, "sample.xlsx")).toString(
   "base64"
 );

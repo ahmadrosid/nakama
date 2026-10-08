@@ -82,6 +82,7 @@ Use Claude Code guidance.
       "skills",
       "coding-backend-claude-code"
     );
+
     const profileDir = path.join(
       configDir,
       "orgs",

@@ -81,6 +81,7 @@ describe("per-org telegram config", () => {
           { botToken: "111:NEW" }
         ),
       ]);
+
       expect(
         results.filter((result) => result.status === "fulfilled")
       ).toHaveLength(1);

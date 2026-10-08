@@ -16,7 +16,8 @@
 import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { JsonSchema, ToolContext, ToolDefinition } from "./contract";
+import { z } from "zod";
+import type { JsonSchema, JsonValue, ToolContext, ToolDefinition } from "./contract";
 import {
   installOmni,
   type OmniInstallResult,
@@ -33,11 +34,11 @@ import { getOrgMemoryDir } from "./soul/resolve";
  * folding. That failure was silent and scored *better* on bytes while losing
  * content, so mapping explicitly costs nothing and removes the possibility.
  */
-const OMNI_TOOL_NAMES: Record<string, string> = {
+const OMNI_TOOL_NAMES = {
   bash: "Bash",
   knowledge_base_search: "Read",
   read_file: "Read",
-};
+} satisfies Record<string, string>;
 
 /**
  * How each tool's text is read out of its result and written back.
@@ -52,20 +53,21 @@ const OMNI_TOOL_NAMES: Record<string, string> = {
  * shown" would ship the bytes the fold exists to remove; `matchCount` still
  * states how many there were, and the handle expands them.
  */
+type OmniRecord = Record<string, JsonValue>;
+
 type TextAccessor = {
-  read: (record: Record<string, unknown>) => string | undefined;
-  write: (record: Record<string, unknown>, text: string) => object;
+  read: (record: OmniRecord) => string | undefined;
+  write: (record: OmniRecord, text: string) => OmniRecord;
 };
 
 function plainField(field: string): TextAccessor {
   return {
-    read: (record) =>
-      typeof record[field] === "string" ? (record[field] as string) : undefined,
+    read: (record) => z.string().safeParse(record[field]).data,
     write: (record, text) => ({ ...record, [field]: text }),
   };
 }
 
-const TEXT_ACCESSOR: Record<string, TextAccessor> = {
+const TEXT_ACCESSOR = {
   bash: plainField("stdout"),
   knowledge_base_search: {
     read: (record) =>
@@ -75,9 +77,10 @@ const TEXT_ACCESSOR: Record<string, TextAccessor> = {
     write: (record, text) => ({ ...record, matches: [], omniMatches: text }),
   },
   read_file: plainField("content"),
-};
+} satisfies Record<string, TextAccessor>;
 
 const HOOK_TIMEOUT_MS = 5000;
+
 /**
  * A latency guard, not a correctness one: spawning a process to shorten a few
  * hundred characters is not worth the round trip. Correctness is handled below,
@@ -89,8 +92,10 @@ const HOOK_TIMEOUT_MS = 5000;
  * away.
  */
 const MIN_CHARS = 1000;
+
 /** Stored beside every saving, so a second optimiser can be told apart later. */
 export const OPTIMIZER_ID = "omni";
+
 /**
  * The control arm. Recorded when the optimiser is off, or on but declined, with
  * bytesIn equal to bytesOut.
@@ -129,6 +134,7 @@ export function isOmniInstalled(): Promise<boolean> {
   installedProbe ??= runOmni(["--version"], "", {}).then(
     (out) => out !== null && out.trim().length > 0
   );
+
   return installedProbe;
 }
 
@@ -142,10 +148,13 @@ export async function ensureOmniInstalled(): Promise<OmniInstallResult> {
   if (await isOmniInstalled()) {
     return { installed: true };
   }
+
   const result = await installOmni();
+
   if (result.installed) {
     installedProbe = null;
   }
+
   return result;
 }
 
@@ -161,6 +170,7 @@ export function isOmniEnabledFor(context: ToolContext): boolean {
 function omniDbPath(orgId: string): string {
   const dir = getOrgMemoryDir(orgId);
   mkdirSync(dir, { recursive: true });
+
   return join(dir, "omni.db");
 }
 
@@ -172,6 +182,7 @@ function runOmni(
 ): Promise<string | null> {
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn>;
+
     try {
       child = spawn(omniCommand(), args, {
         env: { ...process.env, ...env },
@@ -179,15 +190,18 @@ function runOmni(
       });
     } catch {
       resolve(null);
+
       return;
     }
 
     let out = "";
     let settled = false;
+
     const finish = (value: string | null) => {
       if (settled) {
         return;
       }
+
       settled = true;
       clearTimeout(timer);
       resolve(value);
@@ -219,9 +233,9 @@ function runOmni(
  */
 export async function distillToolResult(
   toolName: string,
-  result: unknown,
+  result: JsonValue,
   context: ToolContext
-): Promise<unknown> {
+): Promise<JsonValue> {
   const omniName = OMNI_TOOL_NAMES[toolName];
   const accessor = TEXT_ACCESSOR[toolName];
   const orgId = context.orgId?.trim();
@@ -234,13 +248,16 @@ export async function distillToolResult(
   if (!(omniName && accessor && orgId && scope)) {
     return result;
   }
-  if (typeof result !== "object" || result === null) {
+
+  const record = z.record(z.string(), z.json()).safeParse(result).data;
+
+  if (!record) {
     return result;
   }
 
-  const record = result as Record<string, unknown>;
   const text = accessor.read(record);
-  if (typeof text !== "string" || text.length === 0) {
+
+  if (!text) {
     return result;
   }
 
@@ -263,6 +280,7 @@ export async function distillToolResult(
   // the comparison is a number against a blank, which measures nothing.
   if (!isOmniEnabledFor(context) || text.length < MIN_CHARS) {
     report(CONTROL_ID, text.length);
+
     return result;
   }
 
@@ -282,26 +300,34 @@ export async function distillToolResult(
   // Empty stdout is OMNI declining to change anything, which is not a failure.
   if (!raw?.trim()) {
     report(CONTROL_ID, text.length);
+
     return result;
   }
 
-  let replacement: unknown;
+  let replacement: string | undefined;
+
   try {
-    replacement =
-      JSON.parse(raw)?.hookSpecificOutput?.updatedToolOutput?.stdout;
+    replacement = z
+      .object({
+        hookSpecificOutput: z.object({
+          updatedToolOutput: z.object({ stdout: z.string() }),
+        }),
+      })
+      .parse(JSON.parse(raw)).hookSpecificOutput.updatedToolOutput.stdout;
   } catch {
     report(CONTROL_ID, text.length);
+
     return result;
   }
 
   // Never accept a "shorter" version that is longer, and never accept an empty
   // one: both mean the contract changed under us.
   if (
-    typeof replacement !== "string" ||
-    replacement.length === 0 ||
+    !replacement ||
     replacement.length >= text.length
   ) {
     report(CONTROL_ID, text.length);
+
     return result;
   }
 
@@ -340,12 +366,13 @@ export const omniRetrieveTool: ToolDefinition<
   parallelSafe: true,
   parameters: retrieveParameters,
   async run(input, context) {
-    const handle = typeof input?.handle === "string" ? input.handle.trim() : "";
+    const handle = input.handle.trim();
     const orgId = context.orgId?.trim();
 
     if (!/^[0-9a-f]{4,64}$/.test(handle)) {
       return { error: "omni_retrieve: handle must be a hex string." };
     }
+
     if (!orgId) {
       return { error: "omni_retrieve: no org context." };
     }
@@ -358,6 +385,7 @@ export const omniRetrieveTool: ToolDefinition<
     if (out === null) {
       return { error: `omni_retrieve: nothing archived under ${handle}.` };
     }
+
     return { content: out };
   },
 };

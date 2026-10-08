@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   DocumentAttachment,
   ImageAttachment,
+  JsonValue,
   MessageContentPart,
   ProviderName,
 } from "./contract";
@@ -13,11 +14,17 @@ import {
 } from "./document-content";
 
 export const MAX_ATTACHMENTS_PER_MESSAGE = 5;
+
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
 export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
+
 export const MAX_KNOWLEDGE_DOCUMENT_BYTES = 20 * 1024 * 1024;
+
 export const MAX_KNOWLEDGE_ZIP_BYTES = 20 * 1024 * 1024;
+
 export const TOKENS_PER_IMAGE_ESTIMATE = 1500;
+
 export const TOKENS_PER_DOCUMENT_ESTIMATE = 2000;
 
 const ALLOWED_IMAGE_MEDIA_TYPES = new Set([
@@ -29,8 +36,11 @@ const ALLOWED_IMAGE_MEDIA_TYPES = new Set([
 
 const XLSX_MEDIA_TYPE =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
 const XLS_MEDIA_TYPE = "application/vnd.ms-excel";
+
 const XLSM_MEDIA_TYPE = "application/vnd.ms-excel.sheet.macroEnabled.12";
+
 const XLSB_MEDIA_TYPE = "application/vnd.ms-excel.sheet.binary.macroEnabled.12";
 
 const ALLOWED_DOCUMENT_MEDIA_TYPES = new Set([
@@ -48,7 +58,7 @@ const ALLOWED_DOCUMENT_MEDIA_TYPES = new Set([
 const CANONICAL_BASE64_PATTERN =
   /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
-const DOCUMENT_EXTENSION_MEDIA_TYPES: Record<string, string> = {
+const DOCUMENT_EXTENSION_MEDIA_TYPES = {
   ".csv": "text/csv",
   ".docx":
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -59,7 +69,7 @@ const DOCUMENT_EXTENSION_MEDIA_TYPES: Record<string, string> = {
   ".xlsb": XLSB_MEDIA_TYPE,
   ".xlsm": XLSM_MEDIA_TYPE,
   ".xlsx": XLSX_MEDIA_TYPE,
-};
+} satisfies Record<string, string>;
 
 export function isMessageContentPartArray(
   content: string | MessageContentPart[]
@@ -197,6 +207,7 @@ export function normalizeDocumentMediaType(
   }
 
   const extension = filename.slice(filename.lastIndexOf(".")).toLowerCase();
+
   return DOCUMENT_EXTENSION_MEDIA_TYPES[extension] ?? trimmed;
 }
 
@@ -241,6 +252,7 @@ export function normalizeAttachmentBase64(
 
   try {
     const decoded = atob(base64);
+
     if (decoded.length !== byteLength || btoa(decoded) !== base64) {
       throw new Error("noncanonical base64");
     }
@@ -253,13 +265,14 @@ export function normalizeAttachmentBase64(
 
 function estimateBase64DecodedLength(base64: string): number {
   const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+
   return Math.floor((base64.length * 3) / 4) - padding;
 }
 
 export function getUserMessageText(
   content: string | MessageContentPart[]
 ): string {
-  if (typeof content === "string") {
+  if (!Array.isArray(content)) {
     return content;
   }
 
@@ -276,7 +289,7 @@ export function getUserMessageText(
 export function countUserImages(
   content: string | MessageContentPart[]
 ): number {
-  if (typeof content === "string") {
+  if (!Array.isArray(content)) {
     return 0;
   }
 
@@ -288,7 +301,7 @@ export function countUserImages(
 export function countUserDocuments(
   content: string | MessageContentPart[]
 ): number {
-  if (typeof content === "string") {
+  if (!Array.isArray(content)) {
     return 0;
   }
 
@@ -333,8 +346,10 @@ export function estimateUserContentTokens(
   const text = getUserMessageText(content);
   const textTokens = Math.ceil(text.length / 4);
   const imageTokens = countUserImages(content) * TOKENS_PER_IMAGE_ESTIMATE;
+
   const documentTokens =
     countUserDocuments(content) * TOKENS_PER_DOCUMENT_ESTIMATE;
+
   return textTokens + imageTokens + documentTokens;
 }
 
@@ -345,7 +360,8 @@ export function stripImagesForCompaction(
     if (message.role === "tool" && message.attachments?.length) {
       return { ...message, attachments: undefined };
     }
-    if (message.role !== "user" || typeof message.content === "string") {
+
+    if (message.role !== "user" || !Array.isArray(message.content)) {
       return message;
     }
 
@@ -415,7 +431,7 @@ export function toDataUrl(mediaType: string, base64: string): string {
   return `data:${mediaType};base64,${base64}`;
 }
 
-type ProviderContentBlock = Record<string, unknown>;
+type ProviderContentBlock = Record<string, JsonValue>;
 
 async function mapResolvedUserContent(
   content: string | MessageContentPart[],
@@ -430,7 +446,7 @@ async function mapResolvedUserContent(
 ): Promise<string | ProviderContentBlock[]> {
   const resolved = await resolveUserContentForProvider(content, provider);
 
-  if (typeof resolved === "string") {
+  if (!Array.isArray(resolved)) {
     return resolved;
   }
 
@@ -448,7 +464,7 @@ async function mapResolvedUserContent(
     }
 
     throw new Error(
-      `Unsupported content part type: ${(part as { type: string }).type}`
+      `Unsupported content part type: ${part.type}`
     );
   });
 }
@@ -456,7 +472,7 @@ async function mapResolvedUserContent(
 export async function toAnthropicUserContent(
   content: string | MessageContentPart[],
   provider: ProviderName = "anthropic"
-): Promise<string | Array<Record<string, unknown>>> {
+): Promise<string | ProviderContentBlock[]> {
   return mapResolvedUserContent(
     content,
     provider,
@@ -476,7 +492,7 @@ export async function toAnthropicUserContent(
 export async function toOpenAIChatUserContent(
   content: string | MessageContentPart[],
   provider: ProviderName = "openai"
-): Promise<string | Array<Record<string, unknown>>> {
+): Promise<string | ProviderContentBlock[]> {
   return mapResolvedUserContent(
     content,
     provider,
@@ -492,7 +508,7 @@ export async function toOpenAIChatUserContent(
 export async function toOpenAIResponsesUserContent(
   content: string | MessageContentPart[],
   provider: ProviderName = "openai"
-): Promise<string | Array<Record<string, unknown>>> {
+): Promise<string | ProviderContentBlock[]> {
   return mapResolvedUserContent(
     content,
     provider,

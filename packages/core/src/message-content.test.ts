@@ -233,6 +233,7 @@ describe("stripImagesForCompaction", () => {
       role: "tool",
       toolCallId: "image",
     };
+
     const [stripped] = stripImagesForCompaction([message]);
     expect(stripped).toEqual({ ...message, attachments: undefined });
     expect(message.attachments).toHaveLength(1);
@@ -283,6 +284,7 @@ describe("parseDocumentDataUrl", () => {
       "data:text/markdown;charset=utf-8;base64,IyBRQSBkb2M=",
       "qa-test.md"
     );
+
     expect(doc).toEqual({
       data: "IyBRQSBkb2M=",
       filename: "qa-test.md",

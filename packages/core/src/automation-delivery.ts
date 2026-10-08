@@ -10,38 +10,50 @@ import type {
   AutomationDelivery,
   AutomationDeliveryNotifyOn,
   AutomationRunStatus,
+  JsonValue,
 } from "./contract";
 import { isDiscordSnowflake, loadDiscordConfigFile } from "./discord-config";
 import { isEmailConfigComplete, loadEmailConfig } from "./email-config";
 import { loadTelegramConfigFile } from "./telegram-config";
 import { loadWhatsAppConfigFile } from "./whatsapp-config";
+import { z } from "zod";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const AutomationDeliveryInputSchema = z.object({
+  channel: z.string(),
+  channelId: z.string().optional(),
+  chatId: z.number().optional(),
+  notifyOn: z.enum(["success", "failure", "both"]).optional(),
+  to: z.string().optional(),
+});
+
 export function normalizeAutomationDelivery(
-  value: unknown
+  value: JsonValue | undefined
 ): AutomationDelivery | undefined {
   if (value === undefined || value === null) {
     return;
   }
 
-  if (typeof value !== "object" || value === null) {
-    throw new Error("delivery must be an object.");
+  const parsed = AutomationDeliveryInputSchema.safeParse(value);
+
+  if (!parsed.success) {
+    throw new Error("delivery must be an object with a valid channel.");
   }
 
-  const record = value as Record<string, unknown>;
-  const channel = record.channel;
+  const record = parsed.data;
 
-  if (
-    channel !== "telegram" &&
-    channel !== "whatsapp" &&
-    channel !== "email" &&
-    channel !== "discord"
-  ) {
+  const channelResult = z
+    .enum(["telegram", "whatsapp", "email", "discord"])
+    .safeParse(record.channel);
+
+  if (!channelResult.success) {
     throw new Error(
       'delivery.channel must be "telegram", "whatsapp", "email", or "discord".'
     );
   }
+
+  const channel = channelResult.data;
 
   const delivery: AutomationDelivery = { channel };
 
@@ -52,7 +64,7 @@ export function normalizeAutomationDelivery(
       );
     }
 
-    if (typeof record.to !== "string" || !record.to.trim()) {
+    if (!record.to?.trim()) {
       throw new Error("delivery.to must be a non-empty string.");
     }
 
@@ -66,11 +78,7 @@ export function normalizeAutomationDelivery(
       );
     }
 
-    if (
-      typeof record.chatId !== "number" ||
-      !Number.isInteger(record.chatId) ||
-      record.chatId <= 0
-    ) {
+    if (!Number.isInteger(record.chatId) || (record.chatId ?? 0) <= 0) {
       throw new Error("delivery.chatId must be a positive integer.");
     }
 
@@ -84,7 +92,7 @@ export function normalizeAutomationDelivery(
       );
     }
 
-    if (typeof record.channelId !== "string" || !record.channelId.trim()) {
+    if (!record.channelId?.trim()) {
       throw new Error("delivery.channelId must be a non-empty string.");
     }
 
@@ -103,16 +111,6 @@ export function normalizeAutomationDelivery(
   }
 
   if (record.notifyOn !== undefined) {
-    if (
-      record.notifyOn !== "success" &&
-      record.notifyOn !== "failure" &&
-      record.notifyOn !== "both"
-    ) {
-      throw new Error(
-        'delivery.notifyOn must be "success", "failure", or "both".'
-      );
-    }
-
     delivery.notifyOn = record.notifyOn;
   }
 
@@ -182,11 +180,14 @@ export async function validateAutomationDelivery(
   if (delivery.channel !== "email" && !options.profileId) {
     throw new Error("Choose an agent connection for delivery.");
   }
+
   const owner = { orgId: options.orgId, profileId: options.profileId! };
   const isApprover = canApproveAutomationDeliveryDestination(options.access);
+
   const mayOverrideDestination =
     isApprover ||
     hasSameDeliveryDestination(delivery, options.previousDelivery);
+
   if (delivery.channel === "telegram") {
     const config = await loadTelegramConfigFile(owner);
     const botToken = config?.botToken.trim();

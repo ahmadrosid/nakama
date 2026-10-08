@@ -70,6 +70,7 @@ export function getOrgMemoryDir(
       "configDir must be an absolute path; relative paths resolve against process.cwd() and break org isolation."
     );
   }
+
   return join(configDir, "orgs", assertConfigPathSegment(orgId, "orgId"));
 }
 
@@ -126,5 +127,6 @@ export async function resolveSoulStackForProfile(
     getProfileSoulDir(orgId, profileId),
     readMemory
   );
+
   return stack.loaded.length > 0 ? stack : null;
 }
