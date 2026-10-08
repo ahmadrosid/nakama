@@ -1,15 +1,32 @@
 import {
   AGENT_CHANNELS,
   type AgentChannel,
+  type JsonValue,
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
+import { z } from "zod";
 import type { AgentService } from "../services/agent-service";
 
 /** Tool-side default when the model omits channel; HTTP list requires an explicit channel. */
 const DEFAULT_CHANNEL: AgentChannel = "web";
+
 const DEFAULT_LIMIT = 50;
+
 const MAX_LIMIT = 200;
+
+const ListSessionsInputSchema = z.object({
+  channel: z.string().optional().catch(undefined),
+  profileId: z.string().optional().catch(undefined),
+});
+
+const ReadSessionInputSchema = z.object({
+  limit: z.number().optional().catch(undefined),
+  offset: z.number().optional().catch(undefined),
+  sessionId: z.string().optional().catch(undefined),
+});
+
+const JsonValueSchema = z.json();
 
 function requireOrgId(context: ToolContext): string {
   const orgId = context.orgId?.trim();
@@ -21,42 +38,26 @@ function requireOrgId(context: ToolContext): string {
   return orgId;
 }
 
-function readString(input: unknown, key: string): string | null {
-  if (typeof input !== "object" || input === null || !(key in input)) {
-    return null;
-  }
-
-  const value = (input as Record<string, unknown>)[key];
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function readChannel(input: unknown): AgentChannel {
-  const value = readString(input, "channel");
-
+function readChannel(value: string | undefined): AgentChannel {
   if (!value) {
     return DEFAULT_CHANNEL;
   }
 
-  if (!AGENT_CHANNELS.includes(value as AgentChannel)) {
+  const channel = z.enum(AGENT_CHANNELS).safeParse(value);
+
+  if (!channel.success) {
     throw new Error(`Unknown channel: ${value}.`);
   }
 
-  return value as AgentChannel;
+  return channel.data;
 }
 
 function readBoundedInteger(
-  input: unknown,
-  key: string,
+  value: number | undefined,
   fallback: number,
   max: number
 ): number {
-  if (typeof input !== "object" || input === null || !(key in input)) {
-    return fallback;
-  }
-
-  const value = (input as Record<string, unknown>)[key];
-
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+  if (value === undefined || !Number.isFinite(value)) {
     return fallback;
   }
 
@@ -68,24 +69,38 @@ function readBoundedInteger(
 // workspace (#1011). Absolute paths already contain /profiles/<id>/ and are left alone.
 const BARE_ARTIFACT_PATH = /(^|[^\w/.-])artifacts\//g;
 
-function qualifyArtifactPaths<T>(value: T, ownerProfileId: string): T {
-  if (typeof value === "string") {
-    return value.replace(
+function qualifyArtifactPaths(
+  value: JsonValue,
+  ownerProfileId: string
+): JsonValue {
+  const stringValue = z.string().safeParse(value);
+
+  if (stringValue.success) {
+    return stringValue.data.replace(
       BARE_ARTIFACT_PATH,
       `$1profiles/${ownerProfileId}/artifacts/`
-    ) as T;
+    );
   }
-  if (Array.isArray(value)) {
-    return value.map((item) => qualifyArtifactPaths(item, ownerProfileId)) as T;
+
+  const arrayValue = z.array(JsonValueSchema).safeParse(value);
+
+  if (arrayValue.success) {
+    return arrayValue.data.map((item) =>
+      qualifyArtifactPaths(item, ownerProfileId)
+    );
   }
-  if (value && typeof value === "object") {
+
+  const objectValue = z.record(z.string(), JsonValueSchema).safeParse(value);
+
+  if (objectValue.success) {
     return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [
+      Object.entries(objectValue.data).map(([key, item]) => [
         key,
         qualifyArtifactPaths(item, ownerProfileId),
       ])
-    ) as T;
+    );
   }
+
   return value;
 }
 
@@ -114,17 +129,23 @@ export function createSessionTools(agent: AgentService): ToolDefinition[] {
         type: "object",
       },
       async run(input, context: ToolContext) {
+        const parsedInput = ListSessionsInputSchema.parse(input);
         const orgId = requireOrgId(context);
-        const profileId = readString(input, "profileId");
+        const profileId = parsedInput.profileId?.trim();
 
         if (!profileId) {
           throw new Error("profileId is required.");
         }
 
-        return await agent.listSessions(orgId, profileId, readChannel(input), {
-          isPlatformAdmin: context.isPlatformAdmin,
-          orgRole: context.orgRole,
-        });
+        return await agent.listSessions(
+          orgId,
+          profileId,
+          readChannel(parsedInput.channel),
+          {
+            isPlatformAdmin: context.isPlatformAdmin,
+            orgRole: context.orgRole,
+          }
+        );
       },
     },
     {
@@ -153,8 +174,9 @@ export function createSessionTools(agent: AgentService): ToolDefinition[] {
         type: "object",
       },
       async run(input, context: ToolContext) {
+        const parsedInput = ReadSessionInputSchema.parse(input);
         const orgId = requireOrgId(context);
-        const sessionId = readString(input, "sessionId");
+        const sessionId = parsedInput.sessionId?.trim();
 
         if (!sessionId) {
           throw new Error("sessionId is required.");
@@ -169,23 +191,27 @@ export function createSessionTools(agent: AgentService): ToolDefinition[] {
         }
 
         const limit = readBoundedInteger(
-          input,
-          "limit",
+          parsedInput.limit,
           DEFAULT_LIMIT,
           MAX_LIMIT
         );
+
         const offset = readBoundedInteger(
-          input,
-          "offset",
+          parsedInput.offset,
           0,
           Number.MAX_SAFE_INTEGER
         );
+
         const page = result.messages.slice(offset, offset + limit);
+
         const messages =
           result.profileId === context.profileId?.trim()
             ? page
             : page.map((message) =>
-                qualifyArtifactPaths(message, result.profileId)
+                qualifyArtifactPaths(
+                  JsonValueSchema.parse(message),
+                  result.profileId
+                )
               );
 
         return {

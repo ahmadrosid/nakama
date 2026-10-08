@@ -21,10 +21,12 @@ describe("org memory tools", () => {
     const service = new OrgMemoryService();
     const spy = spyOnSearch(service, "org_a", "Bun");
     const [searchTool] = createOrgMemoryTools(service);
+
     const result = await searchTool.run(
       { query: "Bun" },
       context("org_a", "member")
     );
+
     expect(result).toEqual({
       matches: [{ bullet: "we use Bun", source: "live", tier: "pinned" }],
       query: "Bun",
@@ -75,6 +77,7 @@ describe("org memory tools", () => {
   test("propose_org_memory as member creates a proposal", async () => {
     const service = new OrgMemoryService(createInMemoryDatabaseAdapter());
     const proposeTool = createOrgMemoryTools(service)[2];
+
     const result = await proposeTool.run(
       { bullet: "standups are at 10am UTC" },
       {
@@ -84,6 +87,7 @@ describe("org memory tools", () => {
         userId: "user_1",
       }
     );
+
     expect(result.outcome).toBe("created");
   });
 
@@ -107,6 +111,7 @@ describe("org memory tools", () => {
       } else {
         process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
       }
+
       if (tempConfigDir) {
         await rm(tempConfigDir, { force: true, recursive: true });
         tempConfigDir = "";
@@ -119,11 +124,13 @@ describe("org memory tools", () => {
       await mkdir(join(tempConfigDir, "orgs", orgId, "profiles", profileId), {
         recursive: true,
       });
+
       const uploaded = await uploadKnowledgeBaseDocument(orgId, profileId, {
         data: Buffer.from("Refunds within 30 days.", "utf8").toString("base64"),
         filename: "refund-policy.txt",
         mediaType: "text/plain",
       });
+
       return uploaded.document.id;
     }
 
@@ -131,6 +138,7 @@ describe("org memory tools", () => {
       const documentId = await setupKb();
       const service = new OrgMemoryService(createInMemoryDatabaseAdapter());
       const proposeTool = createOrgMemoryTools(service)[2];
+
       const result = await proposeTool.run(
         {
           bullet: "refunds are accepted within 30 days",
@@ -148,6 +156,7 @@ describe("org memory tools", () => {
           userId: "user_1",
         }
       );
+
       expect(result.outcome).toBe("created");
       const proposal = await service.getProposal(orgId, result.proposalId!);
       expect(proposal.sourceDocumentIds).toEqual([documentId]);
@@ -155,11 +164,13 @@ describe("org memory tools", () => {
 
     test("keeps attached organization documents when the agent cites them", async () => {
       await setupKb();
+
       const shared = await uploadOrganizationKnowledgeBaseDocument(orgId, {
         data: Buffer.from("Shared handbook body.", "utf8").toString("base64"),
         filename: "shared-handbook.txt",
         mediaType: "text/plain",
       });
+
       await attachSharedKnowledgeBaseDocument(
         orgId,
         profileId,
@@ -168,6 +179,7 @@ describe("org memory tools", () => {
 
       const service = new OrgMemoryService(createInMemoryDatabaseAdapter());
       const proposeTool = createOrgMemoryTools(service)[2];
+
       const result = await proposeTool.run(
         {
           bullet: "the shared handbook is cited by name",
@@ -190,6 +202,7 @@ describe("org memory tools", () => {
       const documentId = await setupKb();
       const service = new OrgMemoryService(createInMemoryDatabaseAdapter());
       const proposeTool = createOrgMemoryTools(service)[2];
+
       const result = await proposeTool.run(
         {
           bullet: "policy comes from the handbook PDF",
@@ -202,6 +215,7 @@ describe("org memory tools", () => {
           userId: "user_1",
         }
       );
+
       expect(result.outcome).toBe("created");
       const proposal = await service.getProposal(orgId, result.proposalId!);
       expect(proposal.sourceDocumentIds).toEqual([documentId]);
@@ -213,11 +227,13 @@ function spyOnSearch(
   service: OrgMemoryService,
   expectedOrgId: string,
   expectedQuery: string
-): { orgId: string; query: string } {
+) {
   const captured = { orgId: "", query: "" };
+  // SAFETY: This spy returns the narrow result shape consumed by the tested tool.
   service.search = (async (orgId: string, query: string) => {
     captured.orgId = orgId;
     captured.query = query;
+
     return {
       matches: [
         { bullet: "we use Bun", source: "live", tier: "pinned" as const },
@@ -227,5 +243,6 @@ function spyOnSearch(
   }) as OrgMemoryService["search"];
   void expectedOrgId;
   void expectedQuery;
+
   return captured;
 }

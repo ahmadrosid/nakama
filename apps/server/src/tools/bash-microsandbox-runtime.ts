@@ -15,17 +15,22 @@ const MAX_OUTPUT_CHARS = 32_000;
 export function createBoundedOutput(limit: number = MAX_OUTPUT_CHARS) {
   let value = "";
   let truncated = false;
+
   return {
     append(chunk: string): void {
       if (truncated) {
         return;
       }
+
       const next = value + chunk;
+
       if (next.length > limit) {
         value = next.slice(0, limit);
         truncated = true;
+
         return;
       }
+
       value = next;
     },
     read(): string {
@@ -36,15 +41,18 @@ export function createBoundedOutput(limit: number = MAX_OUTPUT_CHARS) {
 
 async function connectSandbox(name: string): Promise<Sandbox> {
   const handle = await Sandbox.get(name);
+
   if (handle.status === "running") {
     return handle.connect();
   }
+
   return handle.startDetached();
 }
 
 export class MicrosandboxBashRuntime implements BashSandboxRuntime {
   async ensure(args: BashSandboxEnsureArgs): Promise<void> {
     let installed = false;
+
     try {
       installed = isRuntimeInstalled();
     } catch (error) {
@@ -76,6 +84,7 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
       console.info(`[MicroSandbox] Starting ${args.name} (${args.image})`);
       const creation = await builder.createWithPullProgress();
       const reported = new Map<number, number>();
+
       for await (const event of creation.progress) {
         if (
           event.kind === "layerDownloadProgress" &&
@@ -86,7 +95,9 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
           const percent = Math.floor(
             (event.downloadedBytes / event.totalBytes) * 100
           );
+
           const step = Math.floor(percent / 25) * 25;
+
           if (step > (reported.get(event.layerIndex) ?? 0)) {
             reported.set(event.layerIndex, step);
             console.info(
@@ -95,11 +106,13 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
           }
         }
       }
+
       await creation.awaitSandbox();
       console.info(`[MicroSandbox] ${args.name} ready`);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "sandbox create failed";
+
       throw new Error(
         `MicroSandbox backend unavailable: ${message}. No host fallback.`
       );
@@ -112,11 +125,13 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
     }
 
     let sandbox: Sandbox;
+
     try {
       sandbox = await connectSandbox(args.name);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "sandbox connect failed";
+
       throw new Error(
         `MicroSandbox backend unavailable: ${message}. No host fallback.`
       );
@@ -133,6 +148,7 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
     const onAbort = () => {
       void handle.kill().catch(() => undefined);
     };
+
     args.signal?.addEventListener("abort", onAbort, { once: true });
 
     const stdout = createBoundedOutput();
@@ -151,6 +167,7 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
           exitCode = event.code;
         }
       }
+
       return {
         exitCode,
         stderr: stderr.read(),
@@ -166,9 +183,11 @@ export class MicrosandboxBashRuntime implements BashSandboxRuntime {
           timedOut: true,
         };
       }
+
       if (args.signal?.aborted) {
         throw new Error("The operation was aborted");
       }
+
       throw error;
     } finally {
       args.signal?.removeEventListener("abort", onAbort);

@@ -1,5 +1,25 @@
-import type { AgentTodoStatus, ToolDefinition } from "@nakama/core";
+import type { ToolDefinition } from "@nakama/core";
+import { z } from "zod";
 import type { AgentTodoState } from "../services/agent-todo-state";
+
+const TodoUpdatesSchema = z.array(
+  z.object({
+    content: z
+      .string()
+      .optional()
+      .transform((content) => content?.trim() || undefined),
+    id: z
+      .string()
+      .transform((id) => id.trim())
+      .pipe(z.string().min(1)),
+    status: z.enum(["pending", "in_progress", "completed", "cancelled"]),
+  })
+);
+
+const TodoWriteInputSchema = z.object({
+  merge: z.boolean().optional(),
+  todos: TodoUpdatesSchema.optional(),
+});
 
 export function createTodoTools(todoState: AgentTodoState): ToolDefinition[] {
   return [
@@ -48,78 +68,23 @@ export function createTodoTools(todoState: AgentTodoState): ToolDefinition[] {
           throw new Error("todo_write requires an active chat session.");
         }
 
-        const merge = readBoolean(input, "merge");
-        const todos = readTodoUpdates(input, "todos");
+        const parsedInput = TodoWriteInputSchema.safeParse(input);
 
-        if (merge === null || !todos) {
+        if (
+          !parsedInput.success ||
+          parsedInput.data.merge === undefined ||
+          !parsedInput.data.todos
+        ) {
           throw new Error("merge and todos are required.");
         }
 
-        const result = await todoState.write(sessionId, { merge, todos });
+        const result = await todoState.write(sessionId, {
+          merge: parsedInput.data.merge,
+          todos: parsedInput.data.todos,
+        });
+
         return { todos: result };
       },
     },
   ];
-}
-
-function readBoolean(input: unknown, key: string): boolean | null {
-  if (typeof input !== "object" || input === null || !(key in input)) {
-    return null;
-  }
-
-  const value = (input as Record<string, unknown>)[key];
-  return typeof value === "boolean" ? value : null;
-}
-
-function readTodoUpdates(
-  input: unknown,
-  key: string
-): Array<{ id: string; content?: string; status: AgentTodoStatus }> | null {
-  if (typeof input !== "object" || input === null || !(key in input)) {
-    return null;
-  }
-
-  const value = (input as Record<string, unknown>)[key];
-
-  if (!Array.isArray(value)) {
-    return null;
-  }
-
-  const todos: Array<{
-    id: string;
-    content?: string;
-    status: AgentTodoStatus;
-  }> = [];
-
-  for (const item of value) {
-    if (typeof item !== "object" || item === null) {
-      return null;
-    }
-
-    const record = item as Record<string, unknown>;
-    const id = typeof record.id === "string" ? record.id.trim() : "";
-    const status = record.status;
-
-    if (!id || typeof status !== "string") {
-      return null;
-    }
-
-    if (
-      status !== "pending" &&
-      status !== "in_progress" &&
-      status !== "completed" &&
-      status !== "cancelled"
-    ) {
-      return null;
-    }
-
-    const content =
-      typeof record.content === "string" && record.content.trim()
-        ? record.content.trim()
-        : undefined;
-
-    todos.push({ content, id, status });
-  }
-
-  return todos;
 }

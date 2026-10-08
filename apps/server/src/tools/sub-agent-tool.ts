@@ -1,4 +1,5 @@
 import type { ToolContext, ToolDefinition } from "@nakama/core";
+import { z } from "zod";
 import type { AgentService } from "../services/agent-service";
 import {
   DEFAULT_SUB_AGENT_TIMEOUT_MS,
@@ -10,6 +11,12 @@ import {
 export const SUB_AGENT_TOOL_NAME = "sub_agent";
 
 export type SubAgentToolOutput = SubAgentRunResult;
+
+const SubAgentInputSchema = z.object({
+  context: z.string().optional().catch(undefined),
+  task: z.string().optional().catch(undefined),
+  timeoutMs: z.number().optional().catch(undefined),
+});
 
 export function createSubAgentTool(agentService: AgentService): ToolDefinition {
   return {
@@ -38,13 +45,15 @@ export function createSubAgentTool(agentService: AgentService): ToolDefinition {
       type: "object",
     },
     async run(input, context) {
-      return runSubAgentTool(input, context, agentService);
+      const parsedInput = SubAgentInputSchema.parse(input);
+
+      return runSubAgentTool(parsedInput, context, agentService);
     },
   };
 }
 
 export async function runSubAgentTool(
-  input: unknown,
+  input: z.infer<typeof SubAgentInputSchema>,
   context: ToolContext,
   agentService: AgentService
 ): Promise<SubAgentToolOutput> {
@@ -65,14 +74,14 @@ export async function runSubAgentTool(
     return failSubAgentResult("orgId and profileId are required.");
   }
 
-  const task = readString(input, "task")?.trim();
+  const task = input.task?.trim();
 
   if (!task) {
     return failSubAgentResult("task is required.");
   }
 
-  const scopedContext = readString(input, "context")?.trim();
-  const timeoutMs = readTimeoutMs(readOptionalNumber(input, "timeoutMs"));
+  const scopedContext = input.context?.trim();
+  const timeoutMs = readTimeoutMs(input.timeoutMs ?? null);
 
   try {
     return await agentService.runSubAgentPrompt({
@@ -90,6 +99,7 @@ export async function runSubAgentTool(
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+
     return failSubAgentResult(message);
   }
 }
@@ -100,22 +110,4 @@ function readTimeoutMs(value: number | null): number {
   }
 
   return Math.min(Math.floor(value), MAX_SUB_AGENT_TIMEOUT_MS);
-}
-
-function readString(input: unknown, key: string): string | null {
-  if (typeof input !== "object" || input === null || !(key in input)) {
-    return null;
-  }
-
-  const value = (input as Record<string, unknown>)[key];
-  return typeof value === "string" ? value : null;
-}
-
-function readOptionalNumber(input: unknown, key: string): number | null {
-  if (typeof input !== "object" || input === null || !(key in input)) {
-    return null;
-  }
-
-  const value = (input as Record<string, unknown>)[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
