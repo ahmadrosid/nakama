@@ -5,9 +5,11 @@ import { wrapProviderForNonVision } from "./non-vision-wrap";
 describe("wrapProviderForNonVision", () => {
   test("converts described image parts before generateChat", async () => {
     const seen: unknown[] = [];
+
     const provider: ProviderClient = {
       async generateChat(input) {
         seen.push(input.messages.at(-1)?.content);
+
         return {
           assistantMessage: { content: "ok", role: "assistant" },
           content: "ok",
@@ -21,6 +23,7 @@ describe("wrapProviderForNonVision", () => {
       async streamChat(input, handlers) {
         const result = await this.generateChat(input);
         handlers.onChunk(result.content);
+
         return result;
       },
     };

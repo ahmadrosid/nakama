@@ -6,18 +6,60 @@ import {
   type XaiOAuthCredentials,
   type XaiOAuthDeviceStartResponse,
 } from "@nakama/core";
+import { z } from "zod";
+
+const deviceResponseSchema = z.object({
+  device_code: z.string().min(1),
+  expires_in: z.number().finite().positive(),
+  interval: z.number().finite().nonnegative(),
+  user_code: z.string().min(1),
+  verification_uri: z.string().url(),
+  verification_uri_complete: z.string().url().optional(),
+});
+
+const tokenResponseSchema = z.object({
+  access_token: z.string().optional(),
+  error: z.string().optional(),
+  expires_in: z.number().finite().positive().optional(),
+  refresh_token: z.string().optional(),
+});
+
+const modelResponseSchema = z.object({
+  data: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        model: z.string().optional(),
+        name: z.string().optional(),
+      })
+    )
+    .optional(),
+  models: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        model: z.string().optional(),
+        name: z.string().optional(),
+      })
+    )
+    .optional(),
+});
 
 // xAI's public device client, also used by Hermes. Endpoints are pinned to
 // https://auth.x.ai/.well-known/openid-configuration.
 const CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828";
+
 const TOKEN_URL = "https://auth.x.ai/oauth2/token";
+
 export const XAI_OAUTH_BASE_URL = "https://cli-chat-proxy.grok.com/v1";
+
 export const XAI_OAUTH_HEADERS = {
   "User-Agent": "xai-grok-cli",
   "X-XAI-Token-Auth": "xai-grok-cli",
   "x-grok-client-identifier": "grok-shell",
   "x-grok-client-version": "0.2.103",
 };
+
 const sessions = new Map<
   string,
   { owner: string; deviceCode: string; expiresAt: number; interval: number }
@@ -43,21 +85,24 @@ async function postForm(
 }
 
 function readTokens(
-  payload: Record<string, unknown>,
+  payload: z.infer<typeof tokenResponseSchema>,
   fallbackRefresh?: string
 ): XaiOAuthCredentials {
   const refreshToken = payload.refresh_token ?? fallbackRefresh;
+
   if (
-    typeof payload.access_token !== "string" ||
-    !payload.access_token.trim() ||
-    typeof refreshToken !== "string" ||
-    !refreshToken.trim() ||
-    typeof payload.expires_in !== "number" ||
-    !Number.isFinite(payload.expires_in) ||
+    !(
+      payload.access_token &&
+      payload.access_token.trim() &&
+      refreshToken &&
+      refreshToken.trim()
+    ) ||
+    payload.expires_in === undefined ||
     payload.expires_in <= 0
   ) {
     throw new Error("Grok OAuth returned invalid credentials. Sign in again.");
   }
+
   return {
     accessToken: payload.access_token,
     expiresAt: new Date(Date.now() + payload.expires_in * 1000).toISOString(),
@@ -72,6 +117,7 @@ function authError(status: number): NakamaApiError {
       400
     );
   }
+
   return new NakamaApiError(
     `Grok OAuth failed (${status}). Try signing in again.`,
     400
@@ -86,34 +132,31 @@ export async function startXaiOAuthDeviceSession(
       sessions.delete(id);
     }
   }
+
   const response = await postForm("https://auth.x.ai/oauth2/device/code", {
     scope: "openid profile email offline_access grok-cli:access api:access",
   });
+
   if (!response.ok) {
     throw authError(response.status);
   }
-  const data = (await response.json()) as Record<string, unknown>;
-  if (
-    typeof data.device_code !== "string" ||
-    !data.device_code ||
-    typeof data.user_code !== "string" ||
-    !data.user_code ||
-    typeof data.verification_uri !== "string" ||
-    typeof data.expires_in !== "number" ||
-    !Number.isFinite(data.expires_in) ||
-    data.expires_in <= 0 ||
-    typeof data.interval !== "number" ||
-    !Number.isFinite(data.interval) ||
-    data.interval < 0
-  ) {
+
+  const parsedData = deviceResponseSchema.safeParse(await response.json());
+
+  if (!parsedData.success) {
     throw new Error("Grok device authorization returned an invalid response.");
   }
+
+  const data = parsedData.data;
+
   const uri =
     trustedXaiVerificationUri(data.verification_uri_complete) ??
     trustedXaiVerificationUri(data.verification_uri);
+
   if (!uri) {
     throw new Error("Grok returned an invalid sign-in URL.");
   }
+
   const sessionId = randomUUID();
   const interval = Math.max(0.001, data.interval);
   sessions.set(sessionId, {
@@ -122,6 +165,7 @@ export async function startXaiOAuthDeviceSession(
     interval,
     owner,
   });
+
   return {
     intervalSeconds: interval,
     sessionId,
@@ -130,12 +174,16 @@ export async function startXaiOAuthDeviceSession(
   };
 }
 
-function trustedXaiVerificationUri(value: unknown): string | null {
-  if (typeof value !== "string") {
+function trustedXaiVerificationUri<Value>(value: Value): string | null {
+  const parsedValue = z.string().safeParse(value);
+
+  if (!parsedValue.success) {
     return null;
   }
+
   try {
-    const uri = new URL(value);
+    const uri = new URL(parsedValue.data);
+
     if (
       uri.protocol !== "https:" ||
       !["auth.x.ai", "accounts.x.ai"].includes(uri.hostname) ||
@@ -145,6 +193,7 @@ function trustedXaiVerificationUri(value: unknown): string | null {
     ) {
       return null;
     }
+
     return uri.toString();
   } catch {
     return null;
@@ -158,19 +207,25 @@ export async function completeXaiOAuthDeviceSession(
   options?: { slowDownIncrementMs?: number }
 ): Promise<XaiOAuthCredentials> {
   const session = sessions.get(sessionId);
+
   if (!session || session.owner !== owner || session.expiresAt <= Date.now()) {
     throw new NakamaApiError("Grok sign-in session expired. Start again.", 400);
   }
+
   // Claim once: concurrent completion requests must not redeem the same grant.
   sessions.delete(sessionId);
+
   const deadline = AbortSignal.timeout(
     Math.max(1, session.expiresAt - Date.now())
   );
+
   const pollingSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
   const slowDownIncrementMs = options?.slowDownIncrementMs ?? 5000;
   let interval = session.interval * 1000;
+
   while (!pollingSignal.aborted) {
     await delay(interval, undefined, { signal: pollingSignal });
+
     const response = await postForm(
       TOKEN_URL,
       {
@@ -179,25 +234,33 @@ export async function completeXaiOAuthDeviceSession(
       },
       pollingSignal
     );
-    const payload = (await response.json()) as Record<string, unknown>;
+
+    const payload = tokenResponseSchema.parse(await response.json());
+
     if (response.ok) {
       return readTokens(payload);
     }
+
     if (payload.error === "authorization_pending") {
       continue;
     }
+
     if (payload.error === "slow_down") {
       interval += slowDownIncrementMs;
       continue;
     }
+
     if (payload.error === "access_denied") {
       throw new Error("Grok sign-in was denied.");
     }
+
     if (payload.error === "expired_token") {
       throw new Error("Grok sign-in expired. Start again.");
     }
+
     throw authError(response.status);
   }
+
   throw new Error("Grok sign-in timed out or was cancelled.");
 }
 
@@ -208,11 +271,13 @@ export async function refreshXaiOAuthToken(
     grant_type: "refresh_token",
     refresh_token: refreshToken,
   });
+
   if (!response.ok) {
     throw authError(response.status);
   }
+
   return readTokens(
-    (await response.json()) as Record<string, unknown>,
+    tokenResponseSchema.parse(await response.json()),
     refreshToken
   );
 }
@@ -229,33 +294,32 @@ export async function fetchXaiOAuthModels(
     redirect: "error",
     signal: AbortSignal.timeout(20_000),
   });
+
   if (!response.ok) {
     throw authError(response.status);
   }
-  const payload = (await response.json()) as {
-    data?: { id?: unknown; model?: unknown; name?: unknown }[];
-    models?: { id?: unknown; model?: unknown; name?: unknown }[];
-  };
+
+  const payload = modelResponseSchema.parse(await response.json());
+
   const models = (payload.models ?? payload.data ?? []).flatMap((row) => {
-    const id =
-      typeof row.id === "string"
-        ? row.id.trim()
-        : typeof row.model === "string"
-          ? row.model.trim()
-          : "";
+    const id = row.id?.trim() || row.model?.trim() || "";
+
     if (!id) {
       return [];
     }
-    const name =
-      typeof row.name === "string" && row.name.trim() ? row.name : id;
+
+    const name = row.name?.trim() ? row.name : id;
+
     return [{ id, name, supportsVision: true }];
   });
+
   if (!models.length) {
     throw new NakamaApiError(
       "Grok returned no language models for this account.",
       400
     );
   }
+
   return models;
 }
 
@@ -266,32 +330,43 @@ export async function resolveXaiOAuthCredentials(
   onRefresh: (oauth: XaiOAuthCredentials) => Promise<void>
 ): Promise<XaiOAuthCredentials> {
   const current = getOAuth();
+
   if (!current) {
     throw new Error(
       "Grok is not connected. Reconnect in Settings → LLM providers."
     );
   }
+
   if (Date.parse(current.expiresAt) > Date.now() + 60_000) {
     return current;
   }
+
   const existing = refreshes.get(current.refreshToken);
+
   if (existing) {
     return existing;
   }
+
   // Hold the lock through persistence: xAI refresh tokens are single-use.
   const pending = (async () => {
     const refreshed = await refreshXaiOAuthToken(current.refreshToken);
     const latest = getOAuth();
+
     if (!latest) {
       throw new Error("Grok was disconnected during token refresh.");
     }
+
     if (latest.refreshToken !== current.refreshToken) {
       return latest;
     }
+
     await onRefresh(refreshed);
+
     return refreshed;
   })();
+
   refreshes.set(current.refreshToken, pending);
+
   try {
     return await pending;
   } finally {

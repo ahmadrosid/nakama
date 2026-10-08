@@ -125,6 +125,7 @@ describe("Gemini 2.5 function calls, which carry no id", () => {
     const [call] = parseGeminiFunctionCalls([
       { args: { query: "permit" }, name: "knowledge_base_search" },
     ]);
+
     const messages: ChatMessage[] = [
       { content: "cari", role: "user" },
       { content: "", role: "assistant", toolCalls: [call] },

@@ -16,6 +16,7 @@ import {
   toProviderInstanceSummary,
 } from "../../services/provider-instance-helpers";
 import { createProviderForInstance } from "../create";
+import { type ProviderJsonRecord, parseJsonRecord } from "../shared";
 import { streamFromChunks } from "../test-helpers";
 import { createOpenRouterProvider } from "./index";
 
@@ -23,17 +24,22 @@ function chatCompletionResponse(
   content: string,
   options: { toolCalls?: unknown[]; reasoning?: string } = {}
 ) {
+  const message = { content, role: "assistant" };
+
+  if (options.reasoning) {
+    Object.assign(message, { reasoning: options.reasoning });
+  }
+
+  if (options.toolCalls) {
+    Object.assign(message, { tool_calls: options.toolCalls });
+  }
+
   return JSON.stringify({
     choices: [
       {
         finish_reason: "stop",
         index: 0,
-        message: {
-          content,
-          role: "assistant",
-          ...(options.reasoning ? { reasoning: options.reasoning } : {}),
-          ...(options.toolCalls ? { tool_calls: options.toolCalls } : {}),
-        },
+        message,
       },
     ],
     created: 1_700_000_000,
@@ -44,7 +50,10 @@ function chatCompletionResponse(
   });
 }
 
-function streamChunk(delta: Record<string, unknown>, error?: unknown): string {
+function streamChunk<ErrorValue>(
+  delta: ProviderJsonRecord,
+  error?: ErrorValue
+): string {
   return `data:${JSON.stringify({
     choices: [{ delta, finish_reason: null, index: 0 }],
     created: 1_700_000_000,
@@ -55,7 +64,7 @@ function streamChunk(delta: Record<string, unknown>, error?: unknown): string {
   })}\r\n\r\n`;
 }
 
-function streamError(error: unknown): string {
+function streamError<ErrorValue>(error: ErrorValue): string {
   return `data:${JSON.stringify({
     choices: [],
     created: 1_700_000_000,
@@ -82,12 +91,15 @@ describe("createOpenRouterProvider", () => {
   ] satisfies [OpenRouterRoutingSettings | undefined, unknown][])(
     "serializes routing %j on every dedicated request path",
     async (openRouterRouting, expected) => {
-      const bodies: Record<string, unknown>[] = [];
+      const bodies: ProviderJsonRecord[] = [];
+
       const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
         const request =
           input instanceof Request ? input : new Request(input, init);
-        const body = (await request.json()) as Record<string, unknown>;
+
+        const body = parseJsonRecord(await request.text());
         bodies.push(body);
+
         return body.stream
           ? new Response(
               streamFromChunks([
@@ -100,20 +112,24 @@ describe("createOpenRouterProvider", () => {
               headers: { "Content-Type": "application/json" },
             });
       };
+
       const provider = createOpenRouterProvider({
         apiKey: "test-key",
         fetcher,
         model: "openai/gpt-6-luna",
         openRouterRouting,
       });
+
       const input = {
         messages: [{ content: "hi", role: "user" as const }],
         system: "test",
       };
+
       expect((await provider.generateChat(input)).content).toBe("ok");
       expect((await provider.streamChat(input, { onChunk() {} })).content).toBe(
         "ok"
       );
+
       for (const format of ["text", "json"] as const) {
         expect(
           (
@@ -125,20 +141,24 @@ describe("createOpenRouterProvider", () => {
           ).content
         ).toBe("ok");
       }
+
       expect(bodies.map((body) => body.stream)).toEqual([
         false,
         true,
         false,
         false,
       ]);
+
       for (const body of bodies) {
         expect(body.provider).toEqual(expected);
         expect(body.model).toBe("openai/gpt-6-luna");
         expect(body).not.toHaveProperty("extra_body");
+
         if (expected === undefined) {
           expect(body).not.toHaveProperty("provider");
         }
       }
+
       expect(bodies[3]?.response_format).toEqual({ type: "json_object" });
     }
   );
@@ -146,13 +166,15 @@ describe("createOpenRouterProvider", () => {
   test("create, persist, update and clear routing through the instance factory", async () => {
     const previousDir = process.env.NAKAMA_CONFIG_DIR;
     const directory = await mkdtemp(join(tmpdir(), "nakama-routing-"));
-    const bodies: Record<string, unknown>[] = [];
+    const bodies: ProviderJsonRecord[] = [];
+
     const server = setupServer(
       http.post(
         "https://openrouter.ai/api/v1/chat/completions",
         async ({ request }) => {
-          const body = (await request.json()) as Record<string, unknown>;
+          const body = parseJsonRecord(await request.text());
           bodies.push(body);
+
           return body.stream
             ? new HttpResponse(
                 streamChunk({ content: "ok" }) + "data:[DONE]\r\n\r\n",
@@ -164,14 +186,17 @@ describe("createOpenRouterProvider", () => {
         }
       )
     );
+
     server.listen({ onUnhandledRequest: "error" });
     process.env.NAKAMA_CONFIG_DIR = directory;
+
     try {
       const strict = {
         dataCollection: "deny",
         requireParameters: true,
         zdr: true,
       } as const;
+
       let instance = buildProviderInstanceFromCreateRequest(
         {
           apiKey: `sk-or-${"x".repeat(24)}`,
@@ -180,10 +205,12 @@ describe("createOpenRouterProvider", () => {
         },
         []
       );
+
       const other = buildProviderInstanceFromCreateRequest(
         { apiKey: `sk-or-${"y".repeat(24)}`, type: "openrouter" },
         [instance]
       );
+
       const stages = [
         [
           undefined,
@@ -209,10 +236,12 @@ describe("createOpenRouterProvider", () => {
         [{ openRouterRouting: { zdr: true } }, { zdr: true }, { zdr: true }],
         [{ openRouterRouting: {} }, undefined, undefined],
       ] as const;
+
       for (const [update, saved, wire] of stages) {
         if (update) {
           instance = applyProviderInstanceUpdate(instance, update);
         }
+
         await saveUserConfig({
           defaultProviderId: instance.id,
           providers: [instance, other],
@@ -223,24 +252,31 @@ describe("createOpenRouterProvider", () => {
         expect(
           toProviderInstanceSummary(instance, 0).openRouterRouting
         ).toEqual(saved);
+
         const otherLoaded = loaded!.providers.find(
           (entry) => entry.id === other.id
         )!;
+
         expect(otherLoaded.openRouterRouting).toBeUndefined();
+
         const client = createProviderForInstance(
           instance,
           "openai/gpt-6-luna"
         )!;
+
         const input = {
           messages: [{ content: "hi", role: "user" as const }],
           system: "test",
         };
+
         await client.generateChat(input);
         await client.streamChat(input, { onChunk() {} });
         await client.generateText({ prompt: "hi", system: "test" });
+
         for (const body of bodies.splice(0)) {
           expect(body.provider).toEqual(wire);
         }
+
         await createProviderForInstance(
           otherLoaded,
           "openai/gpt-6-luna"
@@ -251,11 +287,13 @@ describe("createOpenRouterProvider", () => {
       }
     } finally {
       server.close();
+
       if (previousDir === undefined) {
         delete process.env.NAKAMA_CONFIG_DIR;
       } else {
         process.env.NAKAMA_CONFIG_DIR = previousDir;
       }
+
       await rm(directory, { force: true, recursive: true });
     }
   });
@@ -265,6 +303,7 @@ describe("createOpenRouterProvider", () => {
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const request =
           input instanceof Request ? input : new Request(input, init);
+
         expect(request.url).toContain("/chat/completions");
         const headers = request.headers;
         expect(headers.get("Authorization")).toBe("Bearer sk-or-v1-test");
@@ -282,6 +321,7 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "sk-or-v1-test",
+      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
       fetcher: fetchMock as typeof fetch,
       model: "anthropic/claude-sonnet-4-6",
     });
@@ -301,6 +341,8 @@ describe("createOpenRouterProvider", () => {
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const request =
           input instanceof Request ? input : new Request(input, init);
+
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
         const body = (await request.json()) as {
           messages: Array<{ content: unknown; role: string }>;
         };
@@ -324,8 +366,10 @@ describe("createOpenRouterProvider", () => {
         });
       }
     );
+
     const provider = createOpenRouterProvider({
       apiKey: "test-key",
+      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
       fetcher: fetchMock as typeof fetch,
     });
 
@@ -352,6 +396,8 @@ describe("createOpenRouterProvider", () => {
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const request =
           input instanceof Request ? input : new Request(input, init);
+
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
         const body = (await request.json()) as {
           messages: Array<{ content: unknown; role: string }>;
         };
@@ -376,8 +422,10 @@ describe("createOpenRouterProvider", () => {
         });
       }
     );
+
     const provider = createOpenRouterProvider({
       apiKey: "test-key",
+      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
       fetcher: fetchMock as typeof fetch,
     });
 
@@ -419,6 +467,7 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "sk-or-v1-test",
+      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
       fetcher: fetchMock as typeof fetch,
     });
 
@@ -448,6 +497,8 @@ describe("createOpenRouterProvider", () => {
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const request =
           input instanceof Request ? input : new Request(input, init);
+
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
         const body = (await request.json()) as {
           reasoning?: { effort?: string; summary?: string };
         };
@@ -466,6 +517,7 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "sk-or-v1-test",
+      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
       fetcher: fetchMock as typeof fetch,
     });
 
@@ -486,6 +538,8 @@ describe("createOpenRouterProvider", () => {
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const request =
           input instanceof Request ? input : new Request(input, init);
+
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
         const body = (await request.json()) as { reasoning?: unknown };
 
         expect(body.reasoning).toBeUndefined();
@@ -502,6 +556,7 @@ describe("createOpenRouterProvider", () => {
       customModels: [
         { id: "anthropic/claude-sonnet-4-6", supportsThinking: false },
       ],
+      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
       fetcher: fetchMock as typeof fetch,
       model: "anthropic/claude-sonnet-4-6",
     });
@@ -520,6 +575,8 @@ describe("createOpenRouterProvider", () => {
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const request =
           input instanceof Request ? input : new Request(input, init);
+
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
         const body = (await request.json()) as {
           reasoning?: unknown;
           model?: string;
@@ -537,6 +594,7 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "sk-or-v1-test",
+      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
       fetcher: fetchMock as typeof fetch,
       model: "meta-llama/llama-4-maverick",
     });
@@ -557,6 +615,8 @@ describe("createOpenRouterProvider", () => {
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const request =
           input instanceof Request ? input : new Request(input, init);
+
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
         const body = (await request.json()) as {
           stream?: boolean;
           reasoning?: unknown;
@@ -578,11 +638,13 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "sk-or-v1-test",
+      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
       fetcher: fetchMock as typeof fetch,
     });
 
     const chunks: string[] = [];
     const thinking: string[] = [];
+
     const result = await provider.streamChat(
       {
         messages: [{ content: "Think, then answer", role: "user" }],
@@ -606,11 +668,14 @@ describe("createOpenRouterProvider", () => {
   test("retries one streamed 429 before output with the same request", async () => {
     const bodies: string[] = [];
     const cancel = mock(() => {});
+
     const fetchMock = mock(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const request =
           input instanceof Request ? input : new Request(input, init);
+
         bodies.push(await request.text());
+
         if (bodies.length === 1) {
           return new Response(
             new ReadableStream({
@@ -630,15 +695,19 @@ describe("createOpenRouterProvider", () => {
             { headers: { "Content-Type": "text/event-stream" } }
           );
         }
+
         expect(cancel).toHaveBeenCalledTimes(1);
+
         return new Response(
           streamChunk({ content: "recovered" }) + "data:[DONE]\r\n\r\n",
           { headers: { "Content-Type": "text/event-stream" } }
         );
       }
     );
+
     const provider = createOpenRouterProvider({
       apiKey: "test-key",
+      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
       fetcher: fetchMock as typeof fetch,
       model: "openai/gpt-6-luna",
       openRouterRouting: {
@@ -647,6 +716,7 @@ describe("createOpenRouterProvider", () => {
         zdr: true,
       },
     });
+
     const chunks: string[] = [];
 
     const result = await provider.streamChat(
@@ -687,8 +757,10 @@ describe("createOpenRouterProvider", () => {
           { headers: { "Content-Type": "text/event-stream" } }
         )
     );
+
     const provider = createOpenRouterProvider({
       apiKey: "test-key",
+      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
       fetcher: fetchMock as typeof fetch,
     });
 
@@ -736,8 +808,10 @@ describe("createOpenRouterProvider", () => {
             { headers: { "Content-Type": "text/event-stream" } }
           )
       );
+
       const provider = createOpenRouterProvider({
         apiKey: "test-key",
+        // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
         fetcher: fetchMock as typeof fetch,
       });
 
@@ -758,8 +832,10 @@ describe("createOpenRouterProvider", () => {
           headers: { "Content-Type": "text/event-stream" },
         })
     );
+
     const provider = createOpenRouterProvider({
       apiKey: "test-key",
+      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
       fetcher: fetchMock as typeof fetch,
     });
 
@@ -775,6 +851,7 @@ describe("createOpenRouterProvider", () => {
   test("cancels during the streamed 429 retry delay", async () => {
     const controller = new AbortController();
     const cancelled = Promise.withResolvers<void>();
+
     const fetchMock = mock(
       async () =>
         new Response(
@@ -793,10 +870,13 @@ describe("createOpenRouterProvider", () => {
           { headers: { "Content-Type": "text/event-stream" } }
         )
     );
+
     const provider = createOpenRouterProvider({
       apiKey: "test-key",
+      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
       fetcher: fetchMock as typeof fetch,
     });
+
     const promise = provider.streamChat(
       {
         messages: [{ content: "hi", role: "user" }],
@@ -805,6 +885,7 @@ describe("createOpenRouterProvider", () => {
       },
       { onChunk() {} }
     );
+
     await cancelled.promise;
     // The reader has consumed the error; the next task runs during the delay.
     setTimeout(() => controller.abort(), 0);
@@ -817,18 +898,23 @@ describe("createOpenRouterProvider", () => {
     "does not add SDK retries for an HTTP error (after SSE retry: %s)",
     async (afterStreamError) => {
       let requests = 0;
+
       const fetchMock = mock(async () => {
         requests += 1;
+
         if (afterStreamError && requests === 1) {
           return new Response(
             streamError({ code: 429, message: "rate limited" }),
             { headers: { "Content-Type": "text/event-stream" } }
           );
         }
+
         return new Response("upstream unavailable", { status: 503 });
       });
+
       const provider = createOpenRouterProvider({
         apiKey: "test-key",
+        // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
         fetcher: fetchMock as typeof fetch,
       });
 
@@ -856,16 +942,20 @@ describe("createOpenRouterProvider", () => {
       },
       { code: 429, message: "rate limited" }
     );
+
     const fetchMock = mock(
       async () =>
         new Response(chunk, {
           headers: { "Content-Type": "text/event-stream" },
         })
     );
+
     const provider = createOpenRouterProvider({
       apiKey: "test-key",
+      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
       fetcher: fetchMock as typeof fetch,
     });
+
     const onToolInputDelta = mock(() => {});
 
     await expect(
@@ -887,6 +977,7 @@ describe("createOpenRouterProvider", () => {
           { headers: { "Content-Type": "text/event-stream" } }
         ),
     });
+
     const error = await provider
       .streamChat(
         { messages: [{ content: "hi", role: "user" }], system: "test" },
@@ -908,8 +999,10 @@ describe("createOpenRouterProvider", () => {
           { headers: { "Content-Type": "text/event-stream" } }
         )
     );
+
     const provider = createOpenRouterProvider({
       apiKey: "test-key",
+      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
       fetcher: fetchMock as typeof fetch,
     });
 
@@ -929,9 +1022,11 @@ describe("createOpenRouterProvider", () => {
   test("rejects cancellation between buffered chunks without a tool preview", async () => {
     const abort = new AbortController();
     let requests = 0;
+
     const server = Bun.serve({
       fetch() {
         requests += 1;
+
         return new Response(
           streamChunk({ content: "partial" }) +
             streamChunk({
@@ -954,15 +1049,18 @@ describe("createOpenRouterProvider", () => {
       hostname: "127.0.0.1",
       port: 0,
     });
+
     try {
       const provider = createOpenRouterProvider({
         apiKey: "offline-test",
         fetcher: (input, init) => {
           const request =
             input instanceof Request ? input : new Request(input, init);
+
           return fetch(new Request(server.url, request));
         },
       });
+
       const onToolInputDelta = mock(() => {});
       await expect(
         provider.streamChat(
@@ -996,6 +1094,7 @@ describe("createOpenRouterProvider", () => {
     async (abortAt, expectedCallbacks) => {
       const abort = new AbortController();
       const callbacks: string[] = [];
+
       const provider = createOpenRouterProvider({
         apiKey: "offline-test",
         fetcher: async () =>
@@ -1016,6 +1115,7 @@ describe("createOpenRouterProvider", () => {
             { headers: { "Content-Type": "text/event-stream" } }
           ),
       });
+
       const promise = provider.streamChat(
         {
           messages: [{ content: "hi", role: "user" }],
@@ -1025,24 +1125,28 @@ describe("createOpenRouterProvider", () => {
         {
           onChunk() {
             callbacks.push("text");
+
             if (abortAt === "text") {
               abort.abort();
             }
           },
           onThinking() {
             callbacks.push("thinking");
+
             if (abortAt === "thinking") {
               abort.abort();
             }
           },
           onToolInputDelta(event) {
             callbacks.push(event.toolCallId);
+
             if (abortAt === "tool") {
               abort.abort();
             }
           },
         }
       );
+
       if (abortAt) {
         await expect(promise).rejects.toMatchObject({ name: "AbortError" });
       } else {
@@ -1055,6 +1159,7 @@ describe("createOpenRouterProvider", () => {
           ],
         });
       }
+
       expect(callbacks).toEqual(expectedCallbacks);
     }
   );
@@ -1062,16 +1167,19 @@ describe("createOpenRouterProvider", () => {
   test("rejects an already aborted stream before invoking fetch", async () => {
     const abort = new AbortController();
     abort.abort();
+
     const fetcher = mock(
       async () =>
         new Response(streamChunk({ content: "late" }) + "data:[DONE]\r\n\r\n", {
           headers: { "Content-Type": "text/event-stream" },
         })
     );
+
     const provider = createOpenRouterProvider({
       apiKey: "offline-test",
       fetcher,
     });
+
     await expect(
       provider.streamChat(
         {
@@ -1088,10 +1196,12 @@ describe("createOpenRouterProvider", () => {
   test("does not emit a buffered chunk when cancellation arrives with the response", async () => {
     const abort = new AbortController();
     const onChunk = mock(() => {});
+
     const provider = createOpenRouterProvider({
       apiKey: "offline-test",
       fetcher: async () => {
         abort.abort();
+
         return new Response(
           streamChunk({ content: "late" }) + "data:[DONE]\r\n\r\n",
           {
@@ -1100,6 +1210,7 @@ describe("createOpenRouterProvider", () => {
         );
       },
     });
+
     await expect(
       provider.streamChat(
         {
@@ -1117,10 +1228,12 @@ describe("createOpenRouterProvider", () => {
     const abort = new AbortController();
     const delivered = Promise.withResolvers<void>();
     const onToolInputDelta = mock(() => delivered.resolve());
+
     const cancel = mock(async () => {
       await delivered.promise;
       abort.abort();
     });
+
     const provider = createOpenRouterProvider({
       apiKey: "offline-test",
       fetcher: async () =>
@@ -1150,6 +1263,7 @@ describe("createOpenRouterProvider", () => {
           { headers: { "Content-Type": "text/event-stream" } }
         ),
     });
+
     await expect(
       provider.streamChat(
         {
@@ -1167,6 +1281,7 @@ describe("createOpenRouterProvider", () => {
   test("cancelled buffered output never executes a tool through the agent", async () => {
     const abort = new AbortController();
     const run = mock(async () => ({ saved: true }));
+
     const provider = createOpenRouterProvider({
       apiKey: "offline-test",
       fetcher: async () =>
@@ -1189,6 +1304,7 @@ describe("createOpenRouterProvider", () => {
           { headers: { "Content-Type": "text/event-stream" } }
         ),
     });
+
     const tools = [
       {
         description: "Write",
@@ -1197,6 +1313,7 @@ describe("createOpenRouterProvider", () => {
         run,
       },
     ];
+
     const session = createAgentChatSession({ provider, tools }, { tools });
     await expect(
       session.sendStream(
@@ -1223,6 +1340,7 @@ describe("createOpenRouterProvider", () => {
 
     const provider = createOpenRouterProvider({
       apiKey: "sk-or-v1-test",
+      // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
       fetcher: fetchMock as typeof fetch,
     });
 

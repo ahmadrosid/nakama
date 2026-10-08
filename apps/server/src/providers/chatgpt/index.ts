@@ -36,6 +36,7 @@ async function resolveAccessToken(
 
   const refreshed = await refreshChatgptOAuthToken(current.refreshToken);
   await options.onTokenRefresh?.(refreshed);
+
   return refreshed;
 }
 
@@ -50,7 +51,7 @@ export function createChatgptProvider(
   ): Promise<ChatCompletionResult> {
     const oauth = await resolveAccessToken(options);
 
-    return generateOpenAIResponsesChat({
+    const request: Parameters<typeof generateOpenAIResponsesChat>[0] = {
       apiKey: oauth.accessToken,
       baseUrl: CHATGPT_CODEX_BASE_URL,
       extraHeaders: {
@@ -64,9 +65,14 @@ export function createChatgptProvider(
       model,
       // Codex rejects non-streaming /responses calls.
       stream: true,
-      ...(handlers ? { handlers } : {}),
       supportsThinking: true,
-    });
+    };
+
+    if (handlers) {
+      request.handlers = handlers;
+    }
+
+    return generateOpenAIResponsesChat(request);
   }
 
   return {
@@ -75,6 +81,7 @@ export function createChatgptProvider(
     },
     async generateText(input: GenerateTextInput): Promise<GenerateTextResult> {
       const useJson = (input.format ?? "json") === "json";
+
       const system = useJson
         ? `${input.system}\n\nRespond with valid JSON only.`
         : `${input.system}\n\nReturn only the requested text. No JSON, labels, or markdown fences.`;
@@ -83,16 +90,20 @@ export function createChatgptProvider(
         messages: [{ content: input.prompt, role: "user" }],
         system,
       });
+
       const content = result.content.trim();
 
       if (!content) {
         throw new Error("ChatGPT returned an empty response.");
       }
 
-      return {
-        content,
-        ...(result.usage ? { usage: result.usage } : {}),
-      };
+      const textResult: GenerateTextResult = { content };
+
+      if (result.usage) {
+        textResult.usage = result.usage;
+      }
+
+      return textResult;
     },
     name: "chatgpt",
     streamChat(input, handlers) {

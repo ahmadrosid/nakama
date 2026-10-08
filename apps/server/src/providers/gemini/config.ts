@@ -9,7 +9,15 @@ import type {
   ProviderChatOptions,
   ThinkingEffort,
 } from "@nakama/core";
-import { normalizeThinkingEffort } from "../shared";
+import { z } from "zod";
+import {
+  normalizeThinkingEffort,
+  type ProviderJsonRecord,
+  type ProviderJsonValue,
+  readProviderNumber,
+  readProviderString,
+  readRecord,
+} from "../shared";
 
 export function buildGeminiGenerateConfig(options: {
   system: string;
@@ -22,19 +30,29 @@ export function buildGeminiGenerateConfig(options: {
     options.tools,
     options.providerOptions?.webSearch ?? false
   );
+
   const thinkingConfig = buildGeminiThinkingConfig(
     options.model,
     options.providerOptions
   );
 
-  return {
+  const config: GenerateContentConfig = {
     systemInstruction: options.system,
-    ...(options.responseMimeType
-      ? { responseMimeType: options.responseMimeType }
-      : {}),
-    ...(tools ? { tools } : {}),
-    ...(thinkingConfig ? { thinkingConfig } : {}),
   };
+
+  if (options.responseMimeType) {
+    config.responseMimeType = options.responseMimeType;
+  }
+
+  if (tools) {
+    config.tools = tools;
+  }
+
+  if (thinkingConfig) {
+    config.thinkingConfig = thinkingConfig;
+  }
+
+  return config;
 }
 
 // Gemini function declarations accept a subset of JSON Schema: exclusive bounds
@@ -47,40 +65,55 @@ const DROPPED_SCHEMA_KEYS = new Set([
 ]);
 
 function inclusiveBoundFor(
-  schema: Record<string, unknown>,
+  schema: ProviderJsonRecord,
   exclusiveValue: number,
   step: number
 ): number {
-  return schema.type === "integer" ? exclusiveValue + step : exclusiveValue;
+  return readProviderString(schema.type) === "integer"
+    ? exclusiveValue + step
+    : exclusiveValue;
 }
 
 function applyExclusiveBound(
-  target: Record<string, unknown>,
-  source: Record<string, unknown>,
+  target: ProviderJsonRecord,
+  source: ProviderJsonRecord,
   exclusiveKey: "exclusiveMaximum" | "exclusiveMinimum",
   inclusiveKey: "maximum" | "minimum",
   step: number
 ): void {
-  const exclusiveValue = source[exclusiveKey];
+  const exclusiveValue = readProviderNumber(source[exclusiveKey]);
 
-  if (typeof exclusiveValue !== "number" || inclusiveKey in target) {
+  if (exclusiveValue === undefined || inclusiveKey in target) {
     return;
   }
 
   target[inclusiveKey] = inclusiveBoundFor(source, exclusiveValue, step);
 }
 
-function sanitizeSchemaValue(value: unknown): unknown {
+const jsonPrimitiveSchema = z.union([
+  z.string(),
+  z.number().finite(),
+  z.boolean(),
+  z.null(),
+]);
+
+function sanitizeSchemaValue<Value>(value: Value): ProviderJsonValue {
   if (Array.isArray(value)) {
     return value.map(sanitizeSchemaValue);
   }
 
-  if (value === null || typeof value !== "object") {
-    return value;
+  if (value === null) {
+    return null;
   }
 
-  const source = value as Record<string, unknown>;
-  const sanitized: Record<string, unknown> = {};
+  if (!(value instanceof Object)) {
+    const parsed = jsonPrimitiveSchema.safeParse(value);
+
+    return parsed.success ? parsed.data : null;
+  }
+
+  const source = readRecord(value);
+  const sanitized: ProviderJsonRecord = {};
 
   for (const [key, entry] of Object.entries(source)) {
     if (DROPPED_SCHEMA_KEYS.has(key)) {
@@ -99,7 +132,10 @@ function sanitizeSchemaValue(value: unknown): unknown {
 export function sanitizeGeminiToolParameters(
   parameters: LlmToolDefinition["parameters"]
 ): LlmToolDefinition["parameters"] {
-  return sanitizeSchemaValue(parameters) as LlmToolDefinition["parameters"];
+  const sanitized = sanitizeSchemaValue(parameters);
+
+  // SAFETY: The input is the core-owned JSON Schema contract, sanitized recursively above.
+  return sanitized as LlmToolDefinition["parameters"];
 }
 
 function buildGeminiTools(

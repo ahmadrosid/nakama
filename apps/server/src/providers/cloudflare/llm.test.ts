@@ -17,6 +17,7 @@ import {
 import { createCloudflareProvider } from "./index";
 
 const cassetteName = "cloudflare-llama-3-3-70b-chat";
+
 const model = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
 async function resolveApiKey(): Promise<string | null> {
@@ -36,6 +37,7 @@ test("chat completion via Workers AI under cassette replay", async () => {
     console.warn(
       `Skipping ${cassetteName}: no cassette at ${cassettePath} and no Cloudflare API key.`
     );
+
     return;
   }
 
@@ -43,10 +45,12 @@ test("chat completion via Workers AI under cassette replay", async () => {
   // so the intercepted URL matches even when env vars differ.
   let accountId = process.env.CLOUDFLARE_ACCOUNT_ID ?? "replay-account";
   const recordedUrl = existing?.exchanges?.[0]?.request.url;
+
   if (recordedUrl) {
     const parts = new URL(recordedUrl).pathname.split("/");
     // /client/v4/accounts/{accountId}/ai/v1/chat/completions
     const recorded = parts[4];
+
     if (recorded) {
       accountId = recorded;
     }
@@ -86,14 +90,17 @@ test("tool call via Workers AI under cassette replay", async () => {
     console.warn(
       `Skipping ${toolCassetteName}: no cassette at ${cassettePath} and no Cloudflare API key.`
     );
+
     return;
   }
 
   let accountId = process.env.CLOUDFLARE_ACCOUNT_ID ?? "replay-account";
   const recordedUrl = existing?.exchanges?.[0]?.request.url;
+
   if (recordedUrl) {
     const parts = new URL(recordedUrl).pathname.split("/");
     const recorded = parts[4];
+
     if (recorded) {
       accountId = recorded;
     }
@@ -133,6 +140,7 @@ test("tool call via Workers AI under cassette replay", async () => {
   // Either the model returns an OpenAI-shaped tool call (agent loop works)
   // or it falls back to plain text. The cassette documents which one.
   const toolCalls = result.assistantMessage.toolCalls ?? [];
+
   if (toolCalls.length > 0) {
     expect(toolCalls[0]!.name).toBe("get_weather");
     expect(toolCalls[0]!.arguments).toHaveProperty("city");

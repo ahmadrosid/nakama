@@ -4,9 +4,13 @@ import {
   createPartFromText,
   type Part,
 } from "@google/genai";
-import type { ChatMessage } from "@nakama/core";
+import type { ChatMessage, LlmToolDefinition } from "@nakama/core";
 import { resolveUserContentForProvider } from "@nakama/core";
-import { readRecord } from "../shared";
+import {
+  type ProviderJsonRecord,
+  readProviderString,
+  readRecord,
+} from "../shared";
 
 export async function toGeminiContents(
   messages: ChatMessage[]
@@ -69,8 +73,9 @@ async function toGeminiUserParts(
 ): Promise<Part[]> {
   const resolved = await resolveUserContentForProvider(content, "gemini");
 
-  if (typeof resolved === "string") {
+  if (!Array.isArray(resolved)) {
     const trimmed = resolved.trim();
+
     return trimmed ? [createPartFromText(trimmed)] : [];
   }
 
@@ -103,10 +108,12 @@ function toGeminiAssistantParts(
 ): Part[] {
   if (
     message.providerContent?.some(
-      (part) => typeof readRecord(part).thoughtSignature === "string"
+      (part) =>
+        readProviderString(readRecord(part).thoughtSignature) !== undefined
     )
   ) {
-    // Signatures belong to their original parts; do not merge or reconstruct them.
+    // SAFETY: Signatures belong to provider parts from Gemini responses.
+    // Preserve the validated provider parts without rebuilding their signature data.
     return message.providerContent as Part[];
   }
 
@@ -118,19 +125,24 @@ function toGeminiAssistantParts(
   }
 
   for (const call of message.toolCalls ?? []) {
+    const functionCall: NonNullable<Part["functionCall"]> = {
+      args: call.arguments,
+      name: call.name,
+    };
+
+    if (!isLocallyMintedGeminiCallId(call.id)) {
+      functionCall.id = call.id;
+    }
+
     parts.push({
-      functionCall: {
-        args: call.arguments,
-        ...(isLocallyMintedGeminiCallId(call.id) ? {} : { id: call.id }),
-        name: call.name,
-      },
+      functionCall,
     });
   }
 
   return parts;
 }
 
-function parseToolResultContent(content: string): Record<string, unknown> {
+function parseToolResultContent(content: string): ProviderJsonRecord {
   const trimmed = content.trim();
 
   if (!trimmed) {
@@ -138,14 +150,11 @@ function parseToolResultContent(content: string): Record<string, unknown> {
   }
 
   try {
-    const parsed = JSON.parse(trimmed) as unknown;
+    const parsed = JSON.parse(trimmed);
 
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      !Array.isArray(parsed)
-    ) {
-      return parsed as Record<string, unknown>;
+    if (parsed instanceof Object && !Array.isArray(parsed)) {
+      // SAFETY: JSON.parse returns only JSON-compatible object values here.
+      return parsed as ProviderJsonRecord;
     }
   } catch {
     // fall through
@@ -180,7 +189,11 @@ export function localGeminiCallId(name: string): string {
 
 export function parseGeminiFunctionCalls(
   functionCalls:
-    | Array<{ id?: string; name?: string; args?: Record<string, unknown> }>
+    | Array<{
+        id?: string;
+        name?: string;
+        args?: LlmToolDefinition["parameters"];
+      }>
     | undefined
 ): import("@nakama/core").ToolCall[] {
   if (!functionCalls?.length) {
@@ -206,10 +219,14 @@ export function parseGeminiFunctionCalls(
   });
 }
 
-export function extractTextAndThinkingFromParts(parts: Part[] | undefined): {
+interface ExtractedGeminiText {
   content: string;
   thinking?: string;
-} {
+}
+
+export function extractTextAndThinkingFromParts(
+  parts: Part[] | undefined
+): ExtractedGeminiText {
   if (!parts?.length) {
     return { content: "" };
   }
@@ -233,8 +250,13 @@ export function extractTextAndThinkingFromParts(parts: Part[] | undefined): {
 
   const thinking = thinkingParts.join("").trim();
 
-  return {
+  const result: ExtractedGeminiText = {
     content: textParts.join(""),
-    ...(thinking ? { thinking } : {}),
   };
+
+  if (thinking) {
+    result.thinking = thinking;
+  }
+
+  return result;
 }

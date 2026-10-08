@@ -91,6 +91,7 @@ export function estimateToolToken(tool: LlmToolDefinition): ToolTokenEstimate {
 /** Split system prompt on markdown `#` headings for a coarse section cost map. */
 function estimateSystemSections(system: string): SystemSectionEstimate[] {
   const lines = system.split("\n");
+
   const sections: { title: string; body: string[] }[] = [
     { body: [], title: "(preamble)" },
   ];
@@ -108,19 +109,21 @@ function estimateSystemSections(system: string): SystemSectionEstimate[] {
   }
 
   return sections
-    .map((section) => {
+    .flatMap((section) => {
       const text = section.body.join("\n").trim();
+
       if (!text) {
-        return null;
+        return [];
       }
 
-      return {
-        chars: text.length,
-        title: section.title,
-        tokens: estimateTokens(text),
-      };
+      return [
+        {
+          chars: text.length,
+          title: section.title,
+          tokens: estimateTokens(text),
+        },
+      ];
     })
-    .filter((section): section is SystemSectionEstimate => section !== null)
     .sort(
       (left, right) =>
         right.tokens - left.tokens || left.title.localeCompare(right.title)
@@ -133,12 +136,14 @@ export function estimateChatInputBreakdown(
   const systemChars = input.system.length;
   const systemTokens = estimateTokens(input.system);
   const systemSections = estimateSystemSections(input.system);
+
   const toolsBySize = (input.tools ?? [])
     .map(estimateToolToken)
     .sort(
       (left, right) =>
         right.tokens - left.tokens || left.name.localeCompare(right.name)
     );
+
   const toolsJson = input.tools?.length ? JSON.stringify(input.tools) : "";
   const toolsChars = toolsJson.length;
   const toolsTokens = toolsChars > 0 ? estimateTokens(toolsJson) : 0;
@@ -150,6 +155,7 @@ export function estimateChatInputBreakdown(
     tool: 0,
     user: 0,
   };
+
   let messagesTokens = 0;
 
   for (const message of input.messages) {
@@ -197,6 +203,7 @@ function estimateChatOutputTokens(result: ChatCompletionResult): number {
   }
 
   const thinking = result.assistantMessage.thinking;
+
   if (thinking) {
     total += estimateTokens(thinking);
   }
@@ -216,29 +223,43 @@ export function wrapProviderWithUsageTracking(
     result: ChatCompletionResult
   ): ChatCompletionResult {
     const estimated = result.usage?.inputTokens == null;
+
     const inputTokens =
       result.usage?.inputTokens ?? estimateChatInputTokens(input);
+
     const outputTokens =
       result.usage?.outputTokens ?? estimateChatOutputTokens(result);
+
     const cachedInputTokens = result.usage?.cachedInputTokens;
+
     const costUsd = tracker.record(modelId, inputTokens, outputTokens, {
       ...attribution,
       cachedInputTokens: cachedInputTokens ?? 0,
       pricingContext,
     });
 
+    const usage: NonNullable<ChatCompletionResult["usage"]> = {
+      inputTokens,
+      modelId,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+    };
+
+    if (estimated) {
+      usage.estimated = true;
+    }
+
+    if (cachedInputTokens != null) {
+      usage.cachedInputTokens = cachedInputTokens;
+    }
+
+    if (costUsd != null) {
+      usage.costUsd = costUsd;
+    }
+
     return {
       ...result,
-      usage: {
-        inputTokens,
-        // The wrapper is the only layer that knows which model served the call.
-        modelId,
-        outputTokens,
-        totalTokens: inputTokens + outputTokens,
-        ...(estimated ? { estimated: true } : {}),
-        ...(cachedInputTokens == null ? {} : { cachedInputTokens }),
-        ...(costUsd == null ? {} : { costUsd }),
-      },
+      usage,
     };
   }
 
@@ -248,18 +269,23 @@ export function wrapProviderWithUsageTracking(
       input: GenerateChatInput
     ): Promise<ChatCompletionResult> {
       const result = await provider.generateChat(input);
+
       return withRecordedUsage(input, result);
     },
     async generateText(input: GenerateTextInput): Promise<GenerateTextResult> {
       const result = await provider.generateText(input);
+
       const inputTokens =
         result.usage?.inputTokens ?? estimateTextInputTokens(input);
+
       const outputTokens =
         result.usage?.outputTokens ?? estimateTokens(result.content);
+
       tracker.record(modelId, inputTokens, outputTokens, {
         ...attribution,
         pricingContext,
       });
+
       return result;
     },
     async streamChat(
@@ -267,6 +293,7 @@ export function wrapProviderWithUsageTracking(
       handlers: StreamChatHandlers
     ): Promise<ChatCompletionResult> {
       const result = await provider.streamChat(input, handlers);
+
       return withRecordedUsage(input, result);
     },
   };

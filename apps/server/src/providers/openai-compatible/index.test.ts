@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { streamFromChunks } from "../test-helpers";
+import {
+  type ProviderJsonRecord,
+  parseJsonRecord,
+  readRecord,
+} from "../shared";
+import { asTestFetch, streamFromChunks } from "../test-helpers";
 import { createOpenAICompatibleProvider } from "./index";
 
 const originalFetch = globalThis.fetch;
@@ -26,35 +31,39 @@ const netraStream = (chunks: string[]) =>
 
 describe("OpenAI-compatible provider", () => {
   test("Netra text generation asks for JSON without an unsupported response format", async () => {
-    globalThis.fetch = mock(
-      async (_input: RequestInfo | URL, init?: RequestInit) => {
-        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    globalThis.fetch = asTestFetch(
+      mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const body = parseJsonRecord(String(init?.body));
         expect(body.response_format).toBeUndefined();
+
         return Response.json({
           choices: [{ message: { content: '{"ok":true}' } }],
         });
-      }
-    ) as unknown as typeof fetch;
+      })
+    );
+
     const result = await netraProvider().generateText({
       format: "json",
       prompt: "Return JSON",
       system: "Return JSON",
     });
+
     expect(result.content).toBe('{"ok":true}');
   });
 
   test("Netra sends one reasoning control and preserves tool continuation", async () => {
-    const calls: Array<Record<string, unknown>> = [];
-    globalThis.fetch = mock(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
+    const calls: ProviderJsonRecord[] = [];
+    globalThis.fetch = asTestFetch(
+      mock(async (input: RequestInfo | URL, init?: RequestInit) => {
         expect(String(input)).toBe(
           "https://api.netraruntime.com/v1/chat/completions"
         );
         expect(new Headers(init?.headers).get("Authorization")).toBe(
           "Bearer test-key"
         );
-        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        const body = parseJsonRecord(String(init?.body));
         calls.push(body);
+
         if (calls.length === 1) {
           return Response.json({
             choices: [
@@ -81,22 +90,26 @@ describe("OpenAI-compatible provider", () => {
             ],
           });
         }
+
         return Response.json({ choices: [{ message: { content: "Done" } }] });
-      }
-    ) as unknown as typeof fetch;
+      })
+    );
 
     const provider = netraProvider();
+
     const tool = {
       description: "Look up data",
       name: "lookup",
       parameters: { properties: {}, type: "object" },
     };
+
     const first = await provider.generateChat({
       messages: [{ content: "Find data", role: "user" }],
       providerOptions: { thinking: { effort: "medium", enabled: true } },
       system: "Help",
       tools: [tool],
     });
+
     expect(calls[0]?.reasoning).toEqual({ effort: "high" });
     expect(calls[0]?.reasoning_effort).toBeUndefined();
     expect(first.assistantMessage.providerContent).toEqual([
@@ -115,21 +128,23 @@ describe("OpenAI-compatible provider", () => {
       tools: [tool],
     });
     expect(calls[1]?.reasoning).toEqual({ enabled: false });
-    const messages = calls[1]?.messages as Array<Record<string, unknown>>;
-    expect(messages[2]?.reasoning_details).toEqual([
+    const messages = Array.isArray(calls[1]?.messages) ? calls[1].messages : [];
+    expect(readRecord(messages[2]).reasoning_details).toEqual([
       { data: "opaque", signature: "real", type: "reasoning.encrypted" },
     ]);
-    expect(messages[3]?.tool_call_id).toBe("call_1");
+    expect(readRecord(messages[3]).tool_call_id).toBe("call_1");
   });
 
   test("Netra rejects a terminal stream error after partial text", async () => {
-    globalThis.fetch = mock(async () =>
-      netraStream([
-        'data: {"choices":[{"delta":{"content":"Part"}}]}\n\n',
-        'event: error\ndata: {"error":{"message":"balance exhausted"}}\n\n',
-        "data: [DONE]\n\n",
-      ])
-    ) as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      mock(async () =>
+        netraStream([
+          'data: {"choices":[{"delta":{"content":"Part"}}]}\n\n',
+          'event: error\ndata: {"error":{"message":"balance exhausted"}}\n\n',
+          "data: [DONE]\n\n",
+        ])
+      )
+    );
     const provider = netraProvider();
     const chunks: string[] = [];
     await expect(
@@ -142,9 +157,11 @@ describe("OpenAI-compatible provider", () => {
   });
 
   test("Netra rejects a stream that closes before DONE", async () => {
-    globalThis.fetch = mock(async () =>
-      netraStream(['data: {"choices":[{"delta":{"content":"Part"}}]}\n\n'])
-    ) as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      mock(async () =>
+        netraStream(['data: {"choices":[{"delta":{"content":"Part"}}]}\n\n'])
+      )
+    );
     const provider = netraProvider();
     await expect(
       provider.streamChat(
@@ -160,19 +177,19 @@ describe("OpenAI-compatible provider", () => {
         expect(String(input)).toBe(
           "https://api.example.com/v1/chat/completions"
         );
-        const body = JSON.parse(String(init?.body ?? "{}")) as {
-          reasoning?: { effort?: string };
-          reasoning_effort?: string;
-        };
+
+        const body = parseJsonRecord(String(init?.body ?? "{}"));
+
         expect(body.reasoning).toEqual({ effort: "high" });
         expect(body.reasoning_effort).toBe("high");
+
         return Response.json({
           choices: [{ message: { content: "Answer", reasoning: "Plan" } }],
         });
       }
     );
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAICompatibleProvider({
       apiKey: "",
@@ -190,28 +207,30 @@ describe("OpenAI-compatible provider", () => {
 
     expect(result.assistantMessage.thinking).toBe("Plan");
     expect(result.usage).toBeUndefined();
+
+    // SAFETY: fetchWithoutIdleTimeout adds idleTimeout before calling fetch.
     const completionInit = fetchMock.mock.calls[0]?.[1] as
       | (RequestInit & { idleTimeout?: number })
       | undefined;
+
     expect(completionInit?.idleTimeout).toBe(0);
   });
 
   test("omits reasoning config when the model does not support thinking", async () => {
     const fetchMock = mock(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
-        const body = JSON.parse(String(init?.body ?? "{}")) as {
-          reasoning?: unknown;
-          reasoning_effort?: unknown;
-        };
+        const body = parseJsonRecord(String(init?.body ?? "{}"));
+
         expect(body.reasoning).toBeUndefined();
         expect(body.reasoning_effort).toBeUndefined();
+
         return Response.json({
           choices: [{ message: { content: "Answer" } }],
         });
       }
     );
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAICompatibleProvider({
       apiKey: "",
@@ -233,21 +252,19 @@ describe("OpenAI-compatible provider", () => {
   test("sets reasoning_effort to none for gpt-5.6 tools on chat completions", async () => {
     const fetchMock = mock(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
-        const body = JSON.parse(String(init?.body ?? "{}")) as {
-          reasoning?: unknown;
-          reasoning_effort?: string;
-          tools?: unknown[];
-        };
+        const body = parseJsonRecord(String(init?.body ?? "{}"));
+
         expect(body.tools).toHaveLength(1);
         expect(body.reasoning).toBeUndefined();
         expect(body.reasoning_effort).toBe("none");
+
         return Response.json({
           choices: [{ message: { content: "Answer" } }],
         });
       }
     );
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAICompatibleProvider({
       apiKey: "sk-test",
@@ -276,21 +293,19 @@ describe("OpenAI-compatible provider", () => {
   test("forces reasoning_effort none for gpt-5.6 tools even when thinking is off", async () => {
     const fetchMock = mock(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
-        const body = JSON.parse(String(init?.body ?? "{}")) as {
-          reasoning?: unknown;
-          reasoning_effort?: string;
-          tools?: unknown[];
-        };
+        const body = parseJsonRecord(String(init?.body ?? "{}"));
+
         expect(body.tools).toHaveLength(1);
         expect(body.reasoning).toBeUndefined();
         expect(body.reasoning_effort).toBe("none");
+
         return Response.json({
           choices: [{ message: { content: "Answer" } }],
         });
       }
     );
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAICompatibleProvider({
       apiKey: "sk-test",
@@ -317,7 +332,8 @@ describe("OpenAI-compatible provider", () => {
 
   test("does not send Astra tools or reasoning_effort none to a chat-only endpoint", async () => {
     const fetchMock = mock(async () => Response.json({}));
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(fetchMock);
+
     const provider = createOpenAICompatibleProvider({
       apiKey: "sk-test",
       baseUrl: "https://api.example.com/v1",
@@ -325,6 +341,7 @@ describe("OpenAI-compatible provider", () => {
       model: "gpt-6-astra",
       supportsThinking: true,
     });
+
     await expect(
       provider.generateChat({
         messages: [{ content: "Search", role: "user" }],
@@ -344,19 +361,18 @@ describe("OpenAI-compatible provider", () => {
   test("keeps reasoning_effort for non-OpenAI models with tools", async () => {
     const fetchMock = mock(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
-        const body = JSON.parse(String(init?.body ?? "{}")) as {
-          reasoning_effort?: string;
-          tools?: unknown[];
-        };
+        const body = parseJsonRecord(String(init?.body ?? "{}"));
+
         expect(body.tools).toHaveLength(1);
         expect(body.reasoning_effort).toBe("high");
+
         return Response.json({
           choices: [{ message: { content: "Answer" } }],
         });
       }
     );
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAICompatibleProvider({
       apiKey: "",
@@ -397,7 +413,7 @@ describe("OpenAI-compatible provider", () => {
         )
     );
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAICompatibleProvider({
       apiKey: "",
@@ -408,6 +424,7 @@ describe("OpenAI-compatible provider", () => {
     });
 
     const thinking: string[] = [];
+
     const result = await provider.streamChat(
       {
         messages: [{ content: "Think then answer", role: "user" }],
@@ -437,7 +454,7 @@ describe("OpenAI-compatible provider", () => {
         )
     );
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAICompatibleProvider({
       apiKey: "",
@@ -449,6 +466,7 @@ describe("OpenAI-compatible provider", () => {
 
     const thinking: string[] = [];
     const chunks: string[] = [];
+
     const result = await provider.streamChat(
       {
         messages: [{ content: "Think then answer", role: "user" }],
@@ -478,7 +496,7 @@ describe("OpenAI-compatible provider", () => {
       })
     );
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAICompatibleProvider({
       apiKey: "",
@@ -503,9 +521,8 @@ describe("OpenAI-compatible provider", () => {
   test("captures API-reported usage for streaming chat", async () => {
     const fetchMock = mock(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
-        const body = JSON.parse(String(init?.body ?? "{}")) as {
-          stream_options?: { include_usage?: boolean };
-        };
+        const body = parseJsonRecord(String(init?.body ?? "{}"));
+
         expect(body.stream_options).toEqual({ include_usage: true });
 
         return new Response(
@@ -519,7 +536,7 @@ describe("OpenAI-compatible provider", () => {
       }
     );
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAICompatibleProvider({
       apiKey: "",
@@ -559,7 +576,7 @@ describe("OpenAI-compatible provider", () => {
         )
     );
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAICompatibleProvider({
       apiKey: "public",

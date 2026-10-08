@@ -9,14 +9,17 @@ import {
 } from "./oauth";
 
 const originalFetch = globalThis.fetch;
+
 afterEach(() => {
   globalThis.fetch = originalFetch;
 });
+
 const tokenPayload = {
   access_token: "access",
   expires_in: 900,
   refresh_token: "refresh",
 };
+
 const devicePayload = {
   device_code: "secret-device-code",
   expires_in: 60,
@@ -26,14 +29,17 @@ const devicePayload = {
   verification_uri_complete:
     "https://accounts.x.ai/oauth2/device?user_code=CODE",
 };
+
 const credentials = {
   accessToken: "access",
   expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
   refreshToken: "refresh",
 };
+
 function mockFetch(
   handler: (url: string, init?: RequestInit) => Response | Promise<Response>
 ) {
+  // SAFETY: The mock returns a native Response and accepts the standard fetch arguments used by this test.
   globalThis.fetch = ((url, init) =>
     Promise.resolve(handler(String(url), init))) as typeof fetch;
 }
@@ -42,16 +48,20 @@ test("device session is bound to its owner and can only be completed once", asyn
   let polls = 0;
   mockFetch((url, init) => {
     expect(init?.redirect).toBe("error");
+    // SAFETY: The provider sends URLSearchParams in this test request, and the test reads that same body.
     const form = init?.body as URLSearchParams;
     expect(form.get("client_id")).toBe("b1a00492-073a-47ea-816f-4c329264a828");
+
     if (url.endsWith("/device/code")) {
       return Response.json(devicePayload);
     }
+
     polls++;
     expect(form.get("device_code")).toBe("secret-device-code");
     expect(form.get("grant_type")).toBe(
       "urn:ietf:params:oauth:grant-type:device_code"
     );
+
     return Response.json(tokenPayload);
   });
   const start = await startXaiOAuthDeviceSession("alice/org1");
@@ -81,22 +91,28 @@ test("pending and slow_down wait before polling again", async () => {
     if (url.endsWith("/device/code")) {
       return Response.json(devicePayload);
     }
+
     times.push(Date.now());
+
     if (times.length === 1) {
       return Response.json({ error: "authorization_pending" }, { status: 400 });
     }
+
     if (times.length === 2) {
       return Response.json({ error: "slow_down" }, { status: 400 });
     }
+
     return Response.json(tokenPayload);
   });
   const start = await startXaiOAuthDeviceSession("pending");
+
   const result = await completeXaiOAuthDeviceSession(
     start.sessionId,
     "pending",
     undefined,
     { slowDownIncrementMs: 30 }
   );
+
   expect(result.refreshToken).toBe("refresh");
   expect(times[2]! - times[1]!).toBeGreaterThanOrEqual(25);
 }, 2000);
@@ -108,7 +124,9 @@ for (const error of ["access_denied", "expired_token"]) {
       if (url.endsWith("/device/code")) {
         return Response.json(devicePayload);
       }
+
       polls++;
+
       return Response.json({ error }, { status: 400 });
     });
     const start = await startXaiOAuthDeviceSession(error);
@@ -125,7 +143,9 @@ test("expired and cancelled sessions do not reach the token endpoint", async () 
     if (url.endsWith("/device/code")) {
       return Response.json({ ...devicePayload, expires_in: 0.01 });
     }
+
     polls++;
+
     return Response.json(tokenPayload);
   });
   const start = await startXaiOAuthDeviceSession("expired");
@@ -160,9 +180,11 @@ test("rejects untrusted verification URLs and malformed device responses", async
 
 test("refresh keeps a non-rotated grant and rejects incomplete tokens", async () => {
   mockFetch((_url, init) => {
+    // SAFETY: The provider sends URLSearchParams in this test request, and the test reads that same body.
     expect((init?.body as URLSearchParams | undefined)?.get("grant_type")).toBe(
       "refresh_token"
     );
+
     return Response.json({ access_token: "new", expires_in: 900 });
   });
   expect((await refreshXaiOAuthToken("old")).refreshToken).toBe("old");
@@ -181,8 +203,10 @@ test("concurrent refreshes share one exchange and persist before returning", asy
   mockFetch(async () => {
     exchanges++;
     await new Promise((resolve) => setTimeout(resolve, 10));
+
     return Response.json({ ...tokenPayload, refresh_token: "rotated" });
   });
+
   const resolve = () =>
     resolveXaiOAuthCredentials(
       () => current,
@@ -191,6 +215,7 @@ test("concurrent refreshes share one exchange and persist before returning", asy
         current = value;
       }
     );
+
   const results = await Promise.all([resolve(), resolve(), resolve()]);
   expect(exchanges).toBe(1);
   expect(saves).toBe(1);
@@ -205,6 +230,7 @@ test("discovers language models using the subscription bearer", async () => {
     const headers = new Headers(init?.headers);
     expect(headers.get("Authorization")).toBe("Bearer access");
     expect(headers.get("X-XAI-Token-Auth")).toBe("xai-grok-cli");
+
     return Response.json({ models: [{ id: "grok-4.6" }] });
   });
   expect(await fetchXaiOAuthModels(credentials)).toEqual([
@@ -222,6 +248,7 @@ test("subscription inference uses Responses API with tool calls and usage", asyn
     const body = JSON.parse(String(init?.body));
     expect(body.tools[0].name).toBe("lookup");
     expect(body.store).toBe(false);
+
     return Response.json({
       output: [
         {
@@ -234,10 +261,12 @@ test("subscription inference uses Responses API with tool calls and usage", asyn
       usage: { input_tokens: 12, output_tokens: 3, total_tokens: 15 },
     });
   });
+
   const provider = createXaiProvider({
     getOAuth: () => credentials,
     model: "grok-4.6",
   });
+
   const result = await provider.generateChat!({
     messages: [{ content: "hello", role: "user" }],
     system: "help",
@@ -249,6 +278,7 @@ test("subscription inference uses Responses API with tool calls and usage", asyn
       },
     ],
   });
+
   expect(result.toolCalls?.[0]?.name).toBe("lookup");
   expect(result.usage?.totalTokens).toBe(15);
 });
@@ -258,17 +288,20 @@ test("an in-flight refresh cannot overwrite a reconnected account", async () => 
   let saves = 0;
   mockFetch(async () => {
     current = { ...credentials, refreshToken: "new-account" };
+
     return Response.json({
       ...tokenPayload,
       refresh_token: "old-account-rotated",
     });
   });
+
   const result = await resolveXaiOAuthCredentials(
     () => current,
     async () => {
       saves++;
     }
   );
+
   expect(result.refreshToken).toBe("new-account");
   expect(saves).toBe(0);
 });

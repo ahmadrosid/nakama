@@ -18,11 +18,13 @@ import {
 import { createProviderForInstance } from "./create";
 
 const cassetteName = "perplexity-sonar-chat";
+
 const chatUrl = "https://api.perplexity.ai/chat/completions";
 
 test("chat completion keeps Sonar citations under cassette replay", async () => {
   const cassettePath = cassetteFilePath(cassetteName);
   const existing = await loadCassette(cassettePath);
+
   const apiKey = existing
     ? "cassette-replay-key"
     : process.env.PERPLEXITY_API_KEY?.trim();
@@ -31,6 +33,7 @@ test("chat completion keeps Sonar citations under cassette replay", async () => 
     console.warn(
       `Skipping ${cassetteName}: no cassette at ${cassettePath} and no Perplexity API key.`
     );
+
     return;
   }
 
@@ -41,6 +44,7 @@ test("chat completion keeps Sonar citations under cassette replay", async () => 
     label: "Perplexity Sonar",
     type: "perplexity",
   };
+
   const provider = createProviderForInstance(instance, "sonar");
 
   expect(provider).not.toBeNull();
