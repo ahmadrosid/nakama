@@ -530,6 +530,73 @@ function ConfiguredSlackSettings({
   );
 }
 
+function SlackAppSetup({
+  copy,
+}: {
+  copy: (text: string, done: string) => void;
+}) {
+  return (
+    <div className="space-y-3 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-medium text-foreground text-sm">Create the app</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            className={buttonVariants({ size: "sm", variant: "ghost" })}
+            href={SLACK_GUIDE_URL}
+            id="link-slack-guide"
+            rel="noreferrer"
+            target="_blank"
+          >
+            Guide
+          </a>
+          <Button
+            id="btn-copy-slack-manifest"
+            onClick={() => copy(SLACK_APP_MANIFEST, "Manifest copied.")}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Copy manifest
+          </Button>
+        </div>
+      </div>
+      <div className="overflow-hidden rounded-md border border-border">
+        <PairingStepTile
+          className="border-border border-b"
+          description={
+            <>
+              Open{" "}
+              <a
+                className="font-medium text-primary underline-offset-2 hover:underline"
+                href={SLACK_NEW_APP_URL}
+                rel="noreferrer"
+                target="_blank"
+              >
+                Slack apps
+              </a>
+              , choose From a manifest, pick your workspace, and paste the
+              manifest.
+            </>
+          }
+          step={1}
+          title="New app from manifest"
+        />
+        <PairingStepTile
+          className="border-border border-b"
+          description="Install App → Install to Workspace, then copy the Bot User OAuth Token (xoxb-)."
+          step={2}
+          title="Bot token"
+        />
+        <PairingStepTile
+          description="Basic Information → App-Level Tokens → Generate with the connections:write scope (xapp-)."
+          step={3}
+          title="App token"
+        />
+      </div>
+    </div>
+  );
+}
+
 export function SlackSettingsCard({
   embedded = false,
 }: {
@@ -714,64 +781,7 @@ export function SlackSettingsCard({
         running={running}
       />
 
-      <div className="space-y-3 px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="font-medium text-foreground text-sm">Create the app</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <a
-              className={buttonVariants({ size: "sm", variant: "ghost" })}
-              href={SLACK_GUIDE_URL}
-              id="link-slack-guide"
-              rel="noreferrer"
-              target="_blank"
-            >
-              Guide
-            </a>
-            <Button
-              id="btn-copy-slack-manifest"
-              onClick={() => void copy(SLACK_APP_MANIFEST, "Manifest copied.")}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Copy manifest
-            </Button>
-          </div>
-        </div>
-        <div className="overflow-hidden rounded-md border border-border">
-          <PairingStepTile
-            className="border-border border-b"
-            description={
-              <>
-                Open{" "}
-                <a
-                  className="font-medium text-primary underline-offset-2 hover:underline"
-                  href={SLACK_NEW_APP_URL}
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  Slack apps
-                </a>
-                , choose From a manifest, pick your workspace, and paste the
-                manifest.
-              </>
-            }
-            step={1}
-            title="New app from manifest"
-          />
-          <PairingStepTile
-            className="border-border border-b"
-            description="Install App → Install to Workspace, then copy the Bot User OAuth Token (xoxb-)."
-            step={2}
-            title="Bot token"
-          />
-          <PairingStepTile
-            description="Basic Information → App-Level Tokens → Generate with the connections:write scope (xapp-)."
-            step={3}
-            title="App token"
-          />
-        </div>
-      </div>
+      <SlackAppSetup copy={(text, done) => void copy(text, done)} />
 
       <SettingsRow label="Bot token">
         <TokenInput

@@ -39,6 +39,44 @@ interface AgentResult {
   profile: ProfileSummary;
 }
 
+async function searchPlatformAgents(
+  orgs: { id: string; name: string }[],
+  activeOrgId: string | undefined
+) {
+  const items: AgentResult[] = [];
+  let error = false;
+
+  for (let i = 0; i < orgs.length; i += 4) {
+    const batch = orgs.slice(i, i + 4);
+
+    const results = await Promise.allSettled(
+      batch.map((org) => client.listProfiles(org.id))
+    );
+
+    results.forEach((result, index) => {
+      const org = batch[index];
+
+      if (result.status === "fulfilled" && org) {
+        items.push(
+          ...result.value.profiles
+            .filter(
+              (profile) =>
+                !(
+                  profile.isSuper ||
+                  (profile.isDefault && profile.name === "Default Bot")
+                ) || org.id === activeOrgId
+            )
+            .map((profile) => ({ orgId: org.id, orgName: org.name, profile }))
+        );
+      } else {
+        error = true;
+      }
+    });
+  }
+
+  return { error, items };
+}
+
 function fuzzyFilter<T>(
   items: T[],
   query: string,
@@ -131,6 +169,53 @@ function NavigationResults({
   );
 }
 
+function AgentResults({
+  activeOrgId,
+  items,
+  isPlatformAdmin,
+  onSelect,
+  selectionError,
+}: {
+  activeOrgId: string | undefined;
+  items: AgentResult[];
+  isPlatformAdmin: boolean;
+  onSelect: (item: AgentResult) => void;
+  selectionError: string | null;
+}) {
+  return (
+    <>
+      {items.length > 0 ? (
+        <CommandGroup heading="Agents">
+          {items.map((item) => (
+            <CommandItem
+              className="[&>svg:last-child]:hidden"
+              key={`${item.orgId}:${item.profile.id}`}
+              onSelect={() => onSelect(item)}
+              value={`agent ${item.orgId} ${item.profile.id}`}
+            >
+              <ProfileAvatar
+                className="rounded-md"
+                orgId={item.orgId === activeOrgId ? undefined : item.orgId}
+                profile={item.profile}
+                size="xs"
+              />
+              <span className="truncate">{item.profile.name}</span>
+              <span className="ml-auto min-w-0 flex-1 truncate text-right text-muted-foreground text-xs">
+                {isPlatformAdmin ? item.orgName : item.profile.model}
+              </span>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      ) : null}
+      {selectionError ? (
+        <CommandGroup heading="Agents">
+          <CommandItem disabled>{selectionError}</CommandItem>
+        </CommandGroup>
+      ) : null}
+    </>
+  );
+}
+
 /**
  * Cmd+K jumps to any page the sidebar would offer this user, or straight to
  * one of their agents. The destination list comes from visibleNavGroups, the
@@ -165,44 +250,7 @@ export function CommandPalette() {
 
   const search = useQuery({
     enabled: open && isPlatformAdmin && !platformOrgsError,
-    queryFn: async () => {
-      const items: AgentResult[] = [];
-      let error = false;
-
-      for (let i = 0; i < activePlatformOrgs.length; i += 4) {
-        const batch = activePlatformOrgs.slice(i, i + 4);
-
-        const results = await Promise.allSettled(
-          batch.map((org) => client.listProfiles(org.id))
-        );
-
-        results.forEach((result, index) => {
-          const org = batch[index];
-
-          if (result.status === "fulfilled") {
-            items.push(
-              ...result.value.profiles
-                .filter(
-                  (profile) =>
-                    !(
-                      profile.isSuper ||
-                      (profile.isDefault && profile.name === "Default Bot")
-                    ) || org.id === activeOrg?.id
-                )
-                .map((profile) => ({
-                  orgId: org.id,
-                  orgName: org.name,
-                  profile,
-                }))
-            );
-          } else {
-            error = true;
-          }
-        });
-      }
-
-      return { error, items };
-    },
+    queryFn: () => searchPlatformAgents(activePlatformOrgs, activeOrg?.id),
     queryKey: [
       "platform-agent-search",
       user?.id,
@@ -408,36 +456,13 @@ export function CommandPalette() {
               </CommandItem>
             </CommandGroup>
           ) : null}
-          {filteredProfiles.length > 0 ? (
-            <CommandGroup heading="Agents">
-              {filteredProfiles.map((item) => (
-                <CommandItem
-                  className="[&>svg:last-child]:hidden"
-                  key={`${item.orgId}:${item.profile.id}`}
-                  onSelect={() => void goToProfile(item)}
-                  value={`agent ${item.orgId} ${item.profile.id}`}
-                >
-                  <ProfileAvatar
-                    className="rounded-md"
-                    orgId={
-                      item.orgId === activeOrg?.id ? undefined : item.orgId
-                    }
-                    profile={item.profile}
-                    size="xs"
-                  />
-                  <span className="truncate">{item.profile.name}</span>
-                  <span className="ml-auto min-w-0 flex-1 truncate text-right text-muted-foreground text-xs">
-                    {isPlatformAdmin ? item.orgName : item.profile.model}
-                  </span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          ) : null}
-          {selectionError ? (
-            <CommandGroup heading="Agents">
-              <CommandItem disabled>{selectionError}</CommandItem>
-            </CommandGroup>
-          ) : null}
+          <AgentResults
+            activeOrgId={activeOrg?.id}
+            isPlatformAdmin={isPlatformAdmin}
+            items={filteredProfiles}
+            onSelect={(item) => void goToProfile(item)}
+            selectionError={selectionError}
+          />
         </CommandList>
       </Command>
     </CommandDialog>
