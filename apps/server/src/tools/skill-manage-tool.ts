@@ -7,6 +7,7 @@ import {
   type ToolDefinition,
 } from "@nakama/core";
 import type { SkillProposalAction } from "@nakama/db";
+import { z } from "zod";
 import type { SkillProposalService } from "../services/skill-proposal-service";
 import type { SkillsService } from "../services/skills-service";
 
@@ -17,19 +18,56 @@ export interface SkillManageToolDeps {
 
 type SkillManageAction = SkillProposalAction;
 
+interface SkillManageResult {
+  action: SkillManageAction;
+  assigned: boolean;
+  created?: boolean;
+  description?: string;
+  matchHint: string;
+  name: string;
+  path?: string;
+}
+
+interface StagedSkillManageResult {
+  action: SkillManageAction;
+  matchHint: string;
+  message: string;
+  name: string;
+  outcome: "created" | "already_pending";
+  path?: string;
+  proposalId?: string;
+  staged: true;
+}
+
+const SkillManageInputSchema = z.object({
+  action: z.string().optional().catch(undefined),
+  content: z.string().optional().catch(undefined),
+  name: z.string().optional().catch(undefined),
+  new_string: z.string().optional().catch(undefined),
+  old_string: z.string().optional().catch(undefined),
+  path: z.string().optional().catch(undefined),
+  url: z.string().optional().catch(undefined),
+});
+
+type SkillManageInput = z.infer<typeof SkillManageInputSchema>;
+
 function requireOrgId(context: ToolContext): string {
   const orgId = context.orgId?.trim();
+
   if (!orgId) {
     throw new Error("Organization context is required.");
   }
+
   return orgId;
 }
 
 function requireProfileId(context: ToolContext): string {
   const profileId = context.profileId?.trim();
+
   if (!profileId) {
     throw new Error("Profile context is required.");
   }
+
   return profileId;
 }
 
@@ -55,15 +93,13 @@ export const SKILL_MANAGE_CHANNELS = {
  * Deny-by-default role gate for skill_manage. Viewers are blocked; an undefined
  * role also blocks — same pattern as org-memory tools.
  */
-function requireSkillManageAccess(context: ToolContext): {
-  orgId: string;
-  profileId: string;
-} {
+function requireSkillManageAccess(context: ToolContext) {
   if (context.automationId?.trim()) {
     throw new Error("skill_manage is not available during automation runs.");
   }
 
   const channel = context.channel;
+
   if (channel !== undefined && !SKILL_MANAGE_CHANNELS[channel]) {
     throw new Error(
       "skill_manage is only available in interactive web or CLI chat."
@@ -73,38 +109,43 @@ function requireSkillManageAccess(context: ToolContext): {
   const orgId = requireOrgId(context);
   const profileId = requireProfileId(context);
   const role = context.orgRole;
+
   if (role === undefined || role === null) {
     throw new Error("skill_manage requires an organization role.");
   }
+
   if (role === "viewer") {
     throw new Error("Viewers cannot manage skills.");
   }
+
   return { orgId, profileId };
 }
 
-function readRawString(input: unknown, key: string): string | null {
-  if (typeof input !== "object" || input === null || !(key in input)) {
-    return null;
-  }
-  const value = (input as Record<string, unknown>)[key];
-  return typeof value === "string" ? value : null;
+function readRawString(
+  input: SkillManageInput,
+  key: keyof SkillManageInput
+): string | null {
+  return input[key] ?? null;
 }
 
-function readString(input: unknown, key: string): string | null {
-  if (typeof input !== "object" || input === null || !(key in input)) {
-    return null;
-  }
-  const value = (input as Record<string, unknown>)[key];
-  return typeof value === "string" && value.trim() ? value.trim() : null;
+function readString(
+  input: SkillManageInput,
+  key: keyof SkillManageInput
+): string | null {
+  const value = input[key];
+
+  return value?.trim() || null;
 }
 
-function readAction(input: unknown): SkillManageAction {
-  if (typeof input !== "object" || input === null || !("action" in input)) {
+function readAction(input: SkillManageInput): SkillManageAction {
+  if (!input.action) {
     throw new Error(
       "action is required (create | patch | edit | delete | write_file | remove_file | approve_code)."
     );
   }
-  const value = (input as Record<string, unknown>).action;
+
+  const value = input.action;
+
   if (
     value === "create" ||
     value === "patch" ||
@@ -116,6 +157,7 @@ function readAction(input: unknown): SkillManageAction {
   ) {
     return value;
   }
+
   throw new Error(
     "action must be create, patch, edit, delete, write_file, remove_file, or approve_code."
   );
@@ -129,8 +171,9 @@ function skillManageResult(options: {
   description?: string;
   created?: boolean;
   path?: string;
-}) {
+}): SkillManageResult {
   options.context.onSkillCatalogChange?.();
+
   const matchHint =
     options.action === "delete"
       ? "The skill was removed from this profile (disk, assignment, and DB row). Keyword match and /skill will no longer find it."
@@ -138,17 +181,26 @@ function skillManageResult(options: {
         ? "Supporting file change applied under the profile skill directory."
         : "The skill is assigned for this profile. Keyword match and /skill work on later turns; the session skills catalog refreshes before the next turn.";
 
-  return {
+  const result: SkillManageResult = {
     action: options.action,
     assigned: options.assigned,
-    name: options.name,
-    ...(options.description === undefined
-      ? {}
-      : { description: options.description }),
-    ...(options.created === undefined ? {} : { created: options.created }),
-    ...(options.path === undefined ? {} : { path: options.path }),
     matchHint,
+    name: options.name,
   };
+
+  if (options.description !== undefined) {
+    result.description = options.description;
+  }
+
+  if (options.created !== undefined) {
+    result.created = options.created;
+  }
+
+  if (options.path !== undefined) {
+    result.path = options.path;
+  }
+
+  return result;
 }
 
 function stagedSkillManageResult(options: {
@@ -158,18 +210,23 @@ function stagedSkillManageResult(options: {
   outcome: "created" | "already_pending";
   message: string;
   path?: string;
-}) {
-  return {
+}): StagedSkillManageResult {
+  const result: StagedSkillManageResult = {
     action: options.action,
+    matchHint:
+      "The skill change is pending admin approval and is not live yet. It will not match until an org admin approves the proposal.",
     message: options.message,
     name: options.name,
     outcome: options.outcome,
     proposalId: options.proposalId,
     staged: true as const,
-    ...(options.path === undefined ? {} : { path: options.path }),
-    matchHint:
-      "The skill change is pending admin approval and is not live yet. It will not match until an org admin approves the proposal.",
   };
+
+  if (options.path !== undefined) {
+    result.path = options.path;
+  }
+
+  return result;
 }
 
 export function createSkillManageTools(
@@ -236,22 +293,31 @@ export function createSkillManageTools(
         type: "object",
       },
       async run(rawInput, context: ToolContext) {
+        const parsedInput = SkillManageInputSchema.safeParse(rawInput);
+
+        let input: SkillManageInput = parsedInput.success
+          ? parsedInput.data
+          : {};
+
         const { orgId, profileId } = requireSkillManageAccess(context);
-        let input = rawInput;
         let bundle: GitHubSkillBundle | undefined;
+
         // Installation is a create proposal so it uses the same approval,
         // collision protection, assignment, and catalog refresh path.
         if (readString(input, "action") === "install") {
           const url = readString(input, "url");
+
           if (!url) {
             throw new Error("url is required for install.");
           }
+
           bundle = await fetchGitHubSkillBundle(url);
           input = {
             action: "create",
             content: bundle.content,
           };
         }
+
         const action = readAction(input);
 
         if (
@@ -260,6 +326,7 @@ export function createSkillManageTools(
         ) {
           if (action === "create") {
             const content = readRawString(input, "content");
+
             if (!content?.trim()) {
               throw new Error(
                 "content is required for create (full SKILL.md markdown)."
@@ -302,9 +369,11 @@ export function createSkillManageTools(
             if (!name) {
               throw new Error("name is required for patch.");
             }
+
             if (oldString === null || oldString === "") {
               throw new Error("old_string is required for patch.");
             }
+
             if (newString === null) {
               throw new Error("new_string is required for patch.");
             }
@@ -332,9 +401,11 @@ export function createSkillManageTools(
           if (action === "edit") {
             const name = readString(input, "name");
             const content = readRawString(input, "content");
+
             if (!name) {
               throw new Error("name is required for edit.");
             }
+
             if (!content?.trim()) {
               throw new Error(
                 "content is required for edit (full SKILL.md markdown)."
@@ -364,12 +435,15 @@ export function createSkillManageTools(
             const name = readString(input, "name");
             const relativePath = readString(input, "path");
             const content = readRawString(input, "content");
+
             if (!name) {
               throw new Error("name is required for write_file.");
             }
+
             if (!relativePath) {
               throw new Error("path is required for write_file.");
             }
+
             if (content === null) {
               throw new Error("content is required for write_file.");
             }
@@ -385,24 +459,29 @@ export function createSkillManageTools(
               skillName: name,
             });
 
+            const resultPath =
+              staged.relativePath || staged.outcome === "created"
+                ? (staged.relativePath ?? relativePath)
+                : undefined;
+
             return stagedSkillManageResult({
               action: "write_file",
               message: staged.message,
               name,
               outcome: staged.outcome,
+              path: resultPath,
               proposalId: staged.proposalId,
-              ...(staged.relativePath || staged.outcome === "created"
-                ? { path: staged.relativePath ?? relativePath }
-                : {}),
             });
           }
 
           if (action === "remove_file") {
             const name = readString(input, "name");
             const relativePath = readString(input, "path");
+
             if (!name) {
               throw new Error("name is required for remove_file.");
             }
+
             if (!relativePath) {
               throw new Error("path is required for remove_file.");
             }
@@ -417,24 +496,29 @@ export function createSkillManageTools(
               skillName: name,
             });
 
+            const resultPath =
+              staged.relativePath || staged.outcome === "created"
+                ? (staged.relativePath ?? relativePath)
+                : undefined;
+
             return stagedSkillManageResult({
               action: "remove_file",
               message: staged.message,
               name,
               outcome: staged.outcome,
+              path: resultPath,
               proposalId: staged.proposalId,
-              ...(staged.relativePath || staged.outcome === "created"
-                ? { path: staged.relativePath ?? relativePath }
-                : {}),
             });
           }
 
           if (action === "approve_code") {
             const name = readString(input, "name");
             const relativePath = readString(input, "path");
+
             if (!(name && relativePath)) {
               throw new Error("name and path are required for approve_code.");
             }
+
             const staged = await skillProposalService.stageProposal({
               action: "approve_code",
               orgId,
@@ -444,6 +528,7 @@ export function createSkillManageTools(
               sessionId: context.sessionId ?? null,
               skillName: name,
             });
+
             return stagedSkillManageResult({
               action: "approve_code",
               message: staged.message,
@@ -455,6 +540,7 @@ export function createSkillManageTools(
           }
 
           const name = readString(input, "name");
+
           if (!name) {
             throw new Error("name is required for delete.");
           }
@@ -485,6 +571,7 @@ export function createSkillManageTools(
 
         if (action === "create") {
           const content = readRawString(input, "content");
+
           if (!content?.trim()) {
             throw new Error(
               "content is required for create (full SKILL.md markdown)."
@@ -522,9 +609,11 @@ export function createSkillManageTools(
           if (!name) {
             throw new Error("name is required for patch.");
           }
+
           if (oldString === null || oldString === "") {
             throw new Error("old_string is required for patch.");
           }
+
           if (newString === null) {
             throw new Error("new_string is required for patch.");
           }
@@ -553,9 +642,11 @@ export function createSkillManageTools(
         if (action === "edit") {
           const name = readString(input, "name");
           const content = readRawString(input, "content");
+
           if (!name) {
             throw new Error("name is required for edit.");
           }
+
           if (!content?.trim()) {
             throw new Error(
               "content is required for edit (full SKILL.md markdown)."
@@ -586,12 +677,15 @@ export function createSkillManageTools(
           const name = readString(input, "name");
           const relativePath = readString(input, "path");
           const content = readRawString(input, "content");
+
           if (!name) {
             throw new Error("name is required for write_file.");
           }
+
           if (!relativePath) {
             throw new Error("path is required for write_file.");
           }
+
           if (content === null) {
             throw new Error("content is required for write_file.");
           }
@@ -616,9 +710,11 @@ export function createSkillManageTools(
         if (action === "remove_file") {
           const name = readString(input, "name");
           const relativePath = readString(input, "path");
+
           if (!name) {
             throw new Error("name is required for remove_file.");
           }
+
           if (!relativePath) {
             throw new Error("path is required for remove_file.");
           }
@@ -641,6 +737,7 @@ export function createSkillManageTools(
         }
 
         const name = readString(input, "name");
+
         if (!name) {
           throw new Error("name is required for delete.");
         }

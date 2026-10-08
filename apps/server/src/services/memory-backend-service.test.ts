@@ -18,13 +18,16 @@ import { MemoryBackendService } from "./memory-backend-service";
 import { OrgMemoryService } from "./org-memory-service";
 
 const directories: string[] = [];
+
 const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+
 afterEach(async () => {
   if (previousConfigDir === undefined) {
     delete process.env.NAKAMA_CONFIG_DIR;
   } else {
     process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
   }
+
   await Promise.all(
     directories
       .splice(0)
@@ -37,19 +40,33 @@ async function setup() {
   directories.push(configDir);
   process.env.NAKAMA_CONFIG_DIR = configDir;
   const db = createInMemoryDatabaseAdapter();
-  const documents = new Map<string, Record<string, unknown>>();
+
+  const documents = new Map<
+    string,
+    {
+      containerTags: string[];
+      content: string;
+      id: string;
+      metadata: object;
+      status: string;
+    }
+  >();
+
   let unavailable = false;
   let pending = false;
   let loseWriteResponse = false;
   let writes = 0;
   let searchQuery: ((query: string) => boolean) | undefined;
   const queries: string[] = [];
+
   const transport = async (url: string, init: RequestInit) => {
     if (unavailable) {
       return new Response(null, { status: 503 });
     }
+
     const path = new URL(url).pathname;
     const body = init.body ? JSON.parse(String(init.body)) : {};
+
     if (path === "/v3/documents" && init.method === "POST") {
       writes++;
       const id = body.customId;
@@ -59,42 +76,57 @@ async function setup() {
         id,
         status: pending ? "queued" : "done",
       });
+
       if (loseWriteResponse) {
         loseWriteResponse = false;
         throw new Error("Connection lost after save");
       }
+
       return Response.json({ id });
     }
+
     if (path === "/v3/search") {
       queries.push(body.q);
+
       if (searchQuery && !searchQuery(body.q)) {
         return Response.json({ results: [] });
       }
+
       return Response.json({
-        results: [...documents.values()]
-          .filter((doc) =>
-            (doc.containerTags as string[]).includes(body.containerTags[0])
-          )
-          .map((doc) => ({
-            chunks: [{ content: doc.content }],
-            documentId: doc.id,
-            metadata: doc.metadata,
-          })),
+        results: [...documents.values()].flatMap((doc) => {
+          if (!doc.containerTags.includes(body.containerTags[0])) {
+            return [];
+          }
+
+          return [
+            {
+              chunks: [{ content: doc.content }],
+              documentId: doc.id,
+              metadata: doc.metadata,
+            },
+          ];
+        }),
       });
     }
+
     const id = decodeURIComponent(path.slice("/v3/documents/".length));
     const document = documents.get(id);
+
     if (!document) {
       return new Response(null, { status: 404 });
     }
+
     if (init.method === "DELETE" && document.status === "queued") {
       return new Response(null, { status: 409 });
     }
+
     if (init.method === "DELETE") {
       documents.delete(id);
     }
+
     return Response.json(document);
   };
+
   async function enable(
     orgId: string,
     lifecycleState: "enabled" | "disabled" = "enabled"
@@ -116,6 +148,7 @@ async function setup() {
       JSON.stringify({ token: "test", url: "http://127.0.0.1:9999" })
     );
   }
+
   return {
     configDir,
     db,
@@ -151,11 +184,13 @@ test("file tools and prompt loading share memory; failed writes preserve the loc
   const h = await setup();
   await h.enable("org");
   await mkdir(getProfileSoulDir("org", "agent"), { recursive: true });
+
   const context = {
     orgId: "org",
     profileId: "agent",
     ...h.service.toolContext("org", "agent"),
   };
+
   await runWriteFile(
     { content: "# Memory\n- tea", path: "MEMORY.md" },
     context
@@ -168,9 +203,11 @@ test("file tools and prompt loading share memory; failed writes preserve the loc
     "coffee"
   );
   const root = getProfileSoulDir("org", "agent");
+
   const stack = await loadSoulStack(root, (content) =>
     h.service.readMemory("org", "agent", "MEMORY.md", content)
   );
+
   expect(stack.files.memory).toContain("coffee");
   h.setUnavailable(true);
   await expect(
@@ -193,10 +230,12 @@ test("org proposals stay private until approval and undo restores backend conten
     slug: "org",
     updatedAt: now,
   });
+
   const service = new OrgMemoryService(h.db, {
     configDir: h.configDir,
     memoryBackend: h.service,
   });
+
   await service.addFact("org", "existing policy", { pin: true });
   const proposed = await service.propose("org", { bullet: "new policy" });
   expect(
@@ -218,6 +257,7 @@ test("org proposals stay private until approval and undo restores backend conten
 test("knowledge tool migrates uploads and preserves filename scoping and citations", async () => {
   const h = await setup();
   await h.enable("org");
+
   for (const [filename, content] of [
     ["policy.txt", "Paid time off is twenty days."],
     ["other.txt", "Another document."],
@@ -228,6 +268,7 @@ test("knowledge tool migrates uploads and preserves filename scoping and citatio
       mediaType: "text/plain",
     });
   }
+
   const result = await runKnowledgeBaseSearch(
     { filename: "policy.txt", query: "vacation" },
     {
@@ -236,6 +277,7 @@ test("knowledge tool migrates uploads and preserves filename scoping and citatio
       ...h.service.toolContext("org", "agent"),
     }
   );
+
   expect(result.matches).toHaveLength(1);
   expect(result.matches[0]!.file).toStartWith(`knowledge-base${sep}`);
   expect(result.matches[0]!.text).toContain("twenty days");
@@ -262,6 +304,7 @@ test("isolates orgs, agents, and shared org memory", async () => {
   const h = await setup();
   await h.enable("a");
   await h.enable("b");
+
   for (const [org, profile] of [
     ["a", "agent"],
     ["b", "agent"],
@@ -270,6 +313,7 @@ test("isolates orgs, agents, and shared org memory", async () => {
   ] as const) {
     await h.service.readMemory(org, profile, "MEMORY.md", "same content");
   }
+
   expect(h.documents.size).toBe(4);
 });
 
@@ -282,9 +326,11 @@ test("editing while indexing excludes the old version and retries deletion later
     await h.service.readMemory("org", "agent", "MEMORY.md", "new fact")
   ).toBe("new fact");
   expect(h.documents.size).toBe(2);
+
   for (const doc of h.documents.values()) {
     doc.status = "done";
   }
+
   await h.service.readMemory("org", "agent", "MEMORY.md", "new fact");
   expect(h.documents.size).toBe(1);
 });
@@ -312,9 +358,11 @@ test("search rejects incomplete indexing and excludes removed documents", async 
     h.service.search("org", "knowledge:agent", entries, "vacation", 10)
   ).rejects.toThrow();
   h.setPending(false);
+
   for (const document of h.documents.values()) {
     document.status = "done";
   }
+
   expect(
     await h.service.search("org", "knowledge:agent", entries, "vacation", 10)
   ).toEqual([{ id: "one", text: "holiday policy" }]);
@@ -351,14 +399,17 @@ test("undo while indexing keeps the restored version out of deferred cleanup", a
   const h = await setup();
   await h.enable("org");
   h.setPending(true);
+
   for (const text of ["old", "new", "old"]) {
     expect(await h.service.readMemory("org", "agent", "MEMORY.md", text)).toBe(
       text
     );
   }
+
   for (const doc of h.documents.values()) {
     doc.status = "done";
   }
+
   expect(await h.service.readMemory("org", "agent", "MEMORY.md", "old")).toBe(
     "old"
   );
@@ -370,13 +421,16 @@ test("a verified provider revision reindexes existing content once", async () =>
   const h = await setup();
   await h.enable("org");
   await h.service.readMemory("org", "agent", "MEMORY.md", "Remember tea");
+
   for (const document of h.documents.values()) {
     document.status = "failed";
   }
+
   const connectionPath = join(
     getOrgPluginDataDir("org", "supermemory", h.configDir),
     "connection.json"
   );
+
   await writeFile(
     connectionPath,
     JSON.stringify({
@@ -410,6 +464,7 @@ test("knowledge search simplifies an empty query and falls back to scoped docume
     mediaType: "text/plain",
   });
   const search = h.service.toolContext("org", "agent").searchKnowledge!;
+
   const input = {
     filename: "plan.txt",
     maxResults: 10,
@@ -417,6 +472,7 @@ test("knowledge search simplifies an empty query and falls back to scoped docume
       "hackathon plan date schedule activities teams prizes judging submissions timeline responsibilities next steps 2026-09-13 September hackathon",
     regex: false,
   };
+
   h.setSearchQuery((query) => query === "hackathon");
   const result = await search(input);
   expect(h.queries).toEqual([input.query, "hackathon plan", "hackathon"]);
@@ -443,22 +499,27 @@ test("knowledge search simplifies an empty query and falls back to scoped docume
 test("knowledge uploads preserve full documents and use SuperRAG instead of memory extraction", async () => {
   const h = await setup();
   await h.enable("org");
+
   const content =
     "# Hackathon\n" + "Keep this paragraph together. ".repeat(2500);
+
   const upload = await uploadKnowledgeBaseDocument("org", "agent", {
     data: Buffer.from(content).toString("base64"),
     filename: "guide.md",
     mediaType: "text/markdown",
   });
+
   await h.service.syncKnowledge("org", "agent");
   expect(h.writes()).toBe(1);
   const document = [...h.documents.values()][0]!;
   expect(document.taskType).toBe("superrag");
   expect(String(document.content)).toContain(content.trim());
+
   const statePath = join(
     getOrgPluginDataDir("org", "supermemory", h.configDir),
     "memory-backend.json"
   );
+
   const state = JSON.parse(await readFile(statePath, "utf8"));
   const scope = state.scopes["knowledge:agent"];
   expect(Object.keys(scope)).toEqual([upload.document.id]);

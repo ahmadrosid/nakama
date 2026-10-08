@@ -46,6 +46,7 @@ describe("cursor-agent-output", () => {
       subtype: "init",
       type: "system",
     };
+
     const activityEvent = { result: "done", type: "result" };
 
     const invalidStreams = [
@@ -54,6 +55,7 @@ describe("cursor-agent-output", () => {
       [{ ...initEvent, cwd: undefined }, activityEvent],
       [initEvent],
     ];
+
     for (const events of invalidStreams) {
       const stdout = events.map((event) => JSON.stringify(event)).join("\n");
       expect(looksLikeCursorAgentStreamJson(stdout)).toBe(false);
@@ -67,12 +69,15 @@ describe("cursor-agent-output", () => {
       subtype: "init",
       type: "system",
     });
+
     const resultEvent = JSON.stringify({
       result: "done",
       subtype: "success",
       type: "result",
     });
+
     const validData = JSON.stringify({ status: "ordinary" });
+
     const atThreshold = [
       initEvent,
       resultEvent,
@@ -80,6 +85,7 @@ describe("cursor-agent-output", () => {
       validData,
       "not-json",
     ].join("\n");
+
     const belowThreshold = [initEvent, resultEvent, validData, "not-json"].join(
       "\n"
     );
@@ -121,6 +127,7 @@ describe("cursor-agent-output", () => {
 
   test("formatCodingAgentBashStdout appends log path and keep-tails plain text", () => {
     const longText = `${"x".repeat(30_000)}FINAL_ANSWER`;
+
     const formatted = formatCodingAgentBashStdout(longText, {
       exitCode: 0,
       logPath: "artifacts/coding-agent-runs/run.log",

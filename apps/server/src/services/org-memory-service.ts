@@ -34,7 +34,9 @@ import type { DatabaseAdapter, StoredOrgMemoryProposal } from "@nakama/db";
 import { MemoryBackendService } from "./memory-backend-service";
 
 const SUMMARY_BYTE_CAP = 2048;
+
 const MAX_PROPOSAL_BULLET_LENGTH = 500;
+
 const MAX_SOURCE_DOCUMENT_IDS = 20;
 
 function normalizeSourceDocumentIds(
@@ -43,22 +45,29 @@ function normalizeSourceDocumentIds(
   if (!Array.isArray(value)) {
     return [];
   }
+
   const seen = new Set<string>();
   const ids: string[] = [];
+
   for (const entry of value) {
-    if (typeof entry !== "string") {
+    if (!isString(entry)) {
       continue;
     }
+
     const id = entry.trim();
+
     if (!id || seen.has(id)) {
       continue;
     }
+
     seen.add(id);
     ids.push(id);
+
     if (ids.length >= MAX_SOURCE_DOCUMENT_IDS) {
       break;
     }
   }
+
   return ids;
 }
 
@@ -154,25 +163,31 @@ export class OrgMemoryService {
     const existing = await readTextIfExists(
       getOrgMemoryFilePath(orgId, this.options.configDir)
     );
+
     const content = existing?.trim() ? existing : `${ORG_MEMORY_PREAMBLE}\n`;
+
     if (!this.memoryBackend) {
       return content;
     }
+
     const raw = existing
       ? await readText(getOrgMemoryFilePath(orgId, this.options.configDir))
       : content;
+
     const stored = await this.memoryBackend.readMemory(
       orgId,
       null,
       "MEMORY.md",
       raw
     );
+
     return existing ? stored.trim() : stored;
   }
 
   /** Render the `## Org Memory` section injected into profile system prompts. */
   async getSummary(orgId: string): Promise<string> {
     const content = await this.getMemory(orgId);
+
     return composeOrgMemorySummary(content, { byteCap: SUMMARY_BYTE_CAP });
   }
 
@@ -184,16 +199,19 @@ export class OrgMemoryService {
   ): Promise<void> {
     await this.requireActiveOrganization(orgId);
     const trimmed = content.trim();
+
     if (Buffer.byteLength(trimmed, "utf8") > SUMMARY_BYTE_CAP * 4) {
       throw new NakamaApiError(
         "Org memory content exceeds the size limit.",
         400
       );
     }
+
     const normalized =
       trimmed.length > 0
         ? `${trimmed.replace(/\n+$/, "")}\n`
         : `${ORG_MEMORY_PREAMBLE}\n`;
+
     await this.locked(orgId, async () => {
       await this.commitMemory(
         orgId,
@@ -219,11 +237,13 @@ export class OrgMemoryService {
       revisionId,
       this.options.configDir
     );
+
     if (!record) {
       throw new NakamaApiError("Org memory history revision not found.", 404);
     }
 
     const { content, ...change } = record;
+
     return { change, content };
   }
 
@@ -233,11 +253,13 @@ export class OrgMemoryService {
     actorUserId: string
   ): Promise<string> {
     await this.requireActiveOrganization(orgId);
+
     const record = await getOrgMemoryHistoryEntry(
       orgId,
       revisionId,
       this.options.configDir
     );
+
     if (!record) {
       throw new NakamaApiError("Org memory history revision not found.", 404);
     }
@@ -250,23 +272,27 @@ export class OrgMemoryService {
         restoredFromId: revisionId,
       });
     });
+
     return record.content;
   }
 
   async undoLastChange(orgId: string, actorUserId: string): Promise<string> {
     await this.requireActiveOrganization(orgId);
     const currentContent = (await this.getMemory(orgId)).trim();
+
     const history = await listOrgMemoryHistory(
       orgId,
       undefined,
       this.options.configDir
     );
+
     for (const change of history) {
       const record = await getOrgMemoryHistoryEntry(
         orgId,
         change.id,
         this.options.configDir
       );
+
       if (record && record.content.trim() !== currentContent) {
         return this.restoreHistoryRevision(orgId, change.id, actorUserId);
       }
@@ -320,13 +346,16 @@ export class OrgMemoryService {
     await this.locked(orgId, async () => {
       const content = await this.getMemory(orgId);
       const parsedBefore = parseOrgMemoryContent(content);
+
       if (this.bulletExistsInMemory(parsedBefore, text)) {
         return;
       }
+
       const next = applyApprovedOrgMemoryBullet(content, text, {
         dateUtc,
         pin: false,
       });
+
       await this.commitMemory(
         orgId,
         next,
@@ -357,6 +386,7 @@ export class OrgMemoryService {
         const index = section.bullets.findIndex(
           (existing) => existing.trim() === text
         );
+
         if (index !== -1) {
           section.bullets.splice(index, 1);
         }
@@ -388,9 +418,11 @@ export class OrgMemoryService {
       const index = parsed.pinned.findIndex(
         (existing) => existing.trim() === text
       );
+
       if (index === -1) {
         throw new NakamaApiError("Pinned fact not found.", 404);
       }
+
       parsed.pinned.splice(index, 1);
       await this.commitMemory(
         orgId,
@@ -413,9 +445,15 @@ export class OrgMemoryService {
     } = {}
   ) {
     await this.requireActiveOrganization(orgId);
+
     const targets = new Set(
-      entries.map((e) => e.trim().replace(/^-\s+/, "").trim()).filter(Boolean)
+      entries.flatMap((entry) => {
+        const target = entry.trim().replace(/^-\s+/, "").trim();
+
+        return target ? [target] : [];
+      })
     );
+
     if (targets.size === 0) {
       throw new NakamaApiError("No memory entries provided.", 400);
     }
@@ -434,17 +472,20 @@ export class OrgMemoryService {
           kept.push(bullet);
         }
       }
+
       for (const target of targets) {
         if (!archived.some((b) => b.trim() === target)) {
           unmatched.push(target);
         }
       }
+
       if (unmatched.length > 0) {
         throw new NakamaApiError(
           `Memory entries not found: ${unmatched.join(", ")}`,
           404
         );
       }
+
       if (archived.length === 0) {
         throw new NakamaApiError("No matching memory entries found.", 404);
       }
@@ -452,24 +493,31 @@ export class OrgMemoryService {
       const archivedAt = options.archivedAt ?? new Date();
       const yearMonth = `${archivedAt.getFullYear()}-${String(archivedAt.getMonth() + 1).padStart(2, "0")}`;
       const archiveDir = getOrgMemoryArchiveDir(orgId, this.options.configDir);
+
       const archivePath = getOrgMemoryArchiveFilePath(
         orgId,
         yearMonth,
         this.options.configDir
       );
+
       const appendLines = [`<!-- archived: ${archivedAt.toISOString()} -->`];
+
       if (options.reason?.trim()) {
         appendLines.push(
           `<!-- reason: ${options.reason.trim().replace(/-->/g, "")} -->`
         );
       }
+
       appendLines.push("", "## Pinned", "");
+
       for (const bullet of archived) {
         appendLines.push(`- ${bullet}`);
       }
+
       const append = `${appendLines.join("\n")}\n`;
 
       const archiveExists = await pathExists(archivePath);
+
       const archiveContent = archiveExists
         ? `${(await readText(archivePath)).replace(/\n+$/, "")}\n\n${append}`
         : `# Archived Org Memory\n\n---\n\n${append}`;
@@ -479,6 +527,7 @@ export class OrgMemoryService {
         preamble: parsed.preamble,
         sections: parsed.sections,
       });
+
       await writeTextFile(archivePath, archiveContent, {
         ensureDir: archiveDir,
       });
@@ -518,9 +567,11 @@ export class OrgMemoryService {
       orgId,
       proposalId
     );
+
     if (!proposal) {
       throw new NakamaApiError("Org memory proposal not found.", 404);
     }
+
     return proposal;
   }
 
@@ -559,6 +610,7 @@ export class OrgMemoryService {
     }
 
     const pending = await db.getPendingOrgMemoryProposalByBullet(orgId, text);
+
     if (pending) {
       return {
         message: "This fact is already awaiting admin approval.",
@@ -570,7 +622,9 @@ export class OrgMemoryService {
     const sourceDocumentIds = normalizeSourceDocumentIds(
       input.sourceDocumentIds
     );
+
     const now = new Date().toISOString();
+
     const proposal: StoredOrgMemoryProposal = {
       bullet: text,
       createdAt: now,
@@ -585,6 +639,7 @@ export class OrgMemoryService {
       sourceDocumentIds,
       status: "pending",
     };
+
     await db.createOrgMemoryProposal(proposal);
 
     return {
@@ -601,6 +656,7 @@ export class OrgMemoryService {
     options: { pin?: boolean } = {}
   ): Promise<StoredOrgMemoryProposal> {
     const db = this.requireDatabase();
+
     return this.locked(orgId, async () => {
       const proposal = await this.getProposal(orgId, proposalId);
 
@@ -699,11 +755,14 @@ export class OrgMemoryService {
     }
 
     const live = await this.getMemory(orgId);
+
     if (live) {
       const parsed = parseOrgMemoryContent(live);
+
       for (const bullet of parsed.pinned) {
         matches.push({ bullet, source: "live", tier: "pinned" });
       }
+
       for (const section of parsed.sections) {
         for (const bullet of section.bullets) {
           matches.push({
@@ -717,14 +776,18 @@ export class OrgMemoryService {
     }
 
     const archiveDir = getOrgMemoryArchiveDir(orgId, this.options.configDir);
+
     if (await pathExists(archiveDir)) {
       const entries = await readDirectoryEntries(archiveDir);
+
       const files = entries
         .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
         .map((entry) => entry.name)
         .sort();
+
       for (const filename of files) {
         const archiveContent = await readText(join(archiveDir, filename));
+
         for (const bullet of this.collectArchiveBullets(archiveContent)) {
           matches.push({ bullet, source: filename, tier: "archive" });
         }
@@ -741,6 +804,7 @@ export class OrgMemoryService {
       query,
       100
     );
+
     return {
       matches: remote
         ? remote.flatMap((hit) =>
@@ -758,6 +822,7 @@ export class OrgMemoryService {
     text: string
   ): boolean {
     const dedupKey = normalizeOrgMemoryDedupKey(text);
+
     if (
       parsed.pinned.some(
         (bullet) => normalizeOrgMemoryDedupKey(bullet) === dedupKey
@@ -765,6 +830,7 @@ export class OrgMemoryService {
     ) {
       return true;
     }
+
     return parsed.sections.some((section) =>
       section.bullets.some(
         (bullet) => normalizeOrgMemoryDedupKey(bullet) === dedupKey
@@ -774,35 +840,42 @@ export class OrgMemoryService {
 
   private collectArchiveBullets(content: string): string[] {
     const bullets: string[] = [];
+
     for (const line of content.split("\n")) {
       if (line.startsWith("- ")) {
         bullets.push(line.slice(2));
       }
     }
+
     return bullets;
   }
 
   private normalizeBullet(bullet: string): string {
     const text = normalizeOrgMemoryBullet(bullet);
+
     if (text.length === 0) {
       throw new NakamaApiError("Memory bullet must not be empty.", 400);
     }
+
     return text;
   }
 
   private normalizeProposalBullet(bullet: string): string {
     const text = this.normalizeBullet(bullet);
+
     if (text.length > MAX_PROPOSAL_BULLET_LENGTH) {
       throw new NakamaApiError(
         `Memory bullet exceeds the ${MAX_PROPOSAL_BULLET_LENGTH} character limit.`,
         400
       );
     }
+
     // Rejected here and not in normalizeBullet on purpose: this is the path the
     // agent reaches through propose_org_memory, so the content is whatever a
     // document or a message talked it into. An org admin adding a fact through
     // POST /memory/facts is a person who meant it, and still gets through.
     assertNoOrgMemoryInjection(bullet, text);
+
     return text;
   }
 
@@ -817,11 +890,13 @@ export class OrgMemoryService {
     if (!this.database) {
       throw new NakamaApiError("Org memory proposals are not configured.", 500);
     }
+
     return this.database;
   }
 
   private async requireActiveOrganization(orgId: string): Promise<void> {
     const org = await this.requireDatabase().getOrganizationById(orgId);
+
     if (!org || org.archivedAt) {
       throw new NakamaApiError("Not found", 404);
     }
@@ -834,6 +909,7 @@ export class OrgMemoryService {
   ): Promise<void> {
     const current = (await this.getMemory(orgId)).trim();
     const normalized = content.trim();
+
     if (current === normalized) {
       return;
     }
@@ -857,6 +933,7 @@ export class OrgMemoryService {
       orgId,
       restoredFromId: change.restoredFromId ?? null,
     };
+
     await appendOrgMemoryHistory(orgId, entry, content, this.options.configDir);
   }
 }
@@ -867,8 +944,14 @@ function utcDateString(date = new Date()): string {
 
 function truncateLabel(value: string, maxLength = 80): string {
   const trimmed = value.trim();
+
   if (trimmed.length <= maxLength) {
     return trimmed;
   }
+
   return `${trimmed.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function isString<T>(value: T): value is T & string {
+  return Object.prototype.toString.call(value) === "[object String]";
 }

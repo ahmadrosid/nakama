@@ -8,26 +8,33 @@ import {
   canApproveAutomationDeliveryDestination,
   isTelegramDeliveryChatAuthorized,
 } from "./automation-delivery-destination";
+import type { JsonValue } from "./contract";
 import { getDiscordConfigDir, getDiscordConfigPath } from "./discord-config";
 import { getTelegramConfigDir, getTelegramConfigPath } from "./telegram-config";
 
 const owner = { orgId: "org_a", profileId: "agent_a" };
+
 const member = { ...owner, access: { orgRole: "member" as const } };
+
 const orgAdmin = { ...owner, access: { orgRole: "admin" as const } };
 
 const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
 /** Every request the destination check made, so tests can assert no lookup happened. */
-function recordingFetch(handler: (url: string) => Response): {
+interface RecordingFetch {
   calls: string[];
   fetchImpl: typeof fetch;
-} {
+}
+
+function recordingFetch(handler: (url: string) => Response): RecordingFetch {
   const calls: string[] = [];
-  const fetchImpl = (async (input: RequestInfo | URL) => {
-    const url = typeof input === "string" ? input : input.toString();
+
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const url = new Request(input, init).url;
     calls.push(url);
+
     return handler(url);
-  }) as unknown as typeof fetch;
+  };
 
   return { calls, fetchImpl };
 }
@@ -37,6 +44,7 @@ async function writeTelegramConfig(contents: string): Promise<string> {
   process.env.NAKAMA_CONFIG_DIR = configDir;
   await mkdir(getTelegramConfigDir(owner), { recursive: true });
   await writeFile(getTelegramConfigPath(owner), contents, "utf8");
+
   return configDir;
 }
 
@@ -45,10 +53,11 @@ async function writeDiscordConfig(contents: string): Promise<string> {
   process.env.NAKAMA_CONFIG_DIR = configDir;
   await mkdir(getDiscordConfigDir(owner), { recursive: true });
   await writeFile(getDiscordConfigPath(owner), contents, "utf8");
+
   return configDir;
 }
 
-function jsonResponse(body: unknown, status = 200): Response {
+function jsonResponse(body: Record<string, JsonValue>, status = 200): Response {
   return new Response(JSON.stringify(body), {
     headers: { "Content-Type": "application/json" },
     status,
@@ -56,15 +65,19 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 async function captureRejection(
-  run: () => Promise<unknown>
+  run: () => Promise<void>
 ): Promise<NakamaApiError> {
-  const error = await run().then(
-    () => null,
-    (thrown: unknown) => thrown
-  );
+  try {
+    await run();
+  } catch (error) {
+    if (error instanceof NakamaApiError) {
+      return error;
+    }
 
-  expect(error).toBeInstanceOf(NakamaApiError);
-  return error as NakamaApiError;
+    throw error;
+  }
+
+  throw new Error("Expected automation delivery validation to reject");
 }
 
 describe("cross-destination authorization for automation delivery", () => {
@@ -80,6 +93,7 @@ describe("cross-destination authorization for automation delivery", () => {
     const configDir = await writeTelegramConfig(
       "bot_token=test-token\npaired_user_ids=111\n"
     );
+
     const { calls, fetchImpl } = recordingFetch(() =>
       jsonResponse({ ok: true, result: {} })
     );
@@ -103,6 +117,7 @@ describe("cross-destination authorization for automation delivery", () => {
     const configDir = await writeTelegramConfig(
       "bot_token=test-token\npaired_user_ids=111\nallowed_user_ids=222\n"
     );
+
     const { calls, fetchImpl } = recordingFetch(() =>
       jsonResponse({ ok: true, result: {} })
     );
@@ -125,6 +140,7 @@ describe("cross-destination authorization for automation delivery", () => {
     const configDir = await writeDiscordConfig(
       "bot_token=test-token\npaired_user_ids=123456789012345678\n"
     );
+
     const { calls, fetchImpl } = recordingFetch(() =>
       jsonResponse({ id: "999" })
     );
@@ -146,6 +162,7 @@ describe("cross-destination authorization for automation delivery", () => {
     const configDir = await writeTelegramConfig(
       "bot_token=test-token\npaired_user_ids=111\n"
     );
+
     const { calls, fetchImpl } = recordingFetch(() =>
       jsonResponse({
         ok: true,
@@ -170,6 +187,7 @@ describe("cross-destination authorization for automation delivery", () => {
     const configDir = await writeTelegramConfig(
       "bot_token=test-token\npaired_user_ids=111\n"
     );
+
     const { fetchImpl } = recordingFetch(() =>
       jsonResponse({
         ok: true,
@@ -194,6 +212,7 @@ describe("cross-destination authorization for automation delivery", () => {
     const configDir = await writeTelegramConfig(
       "bot_token=test-token\npaired_user_ids=111\n"
     );
+
     const { fetchImpl } = recordingFetch(() =>
       jsonResponse({ description: "Bad Request" }, 400)
     );
@@ -213,6 +232,7 @@ describe("cross-destination authorization for automation delivery", () => {
 
   test("an admin discord override needs view and send permission", async () => {
     const configDir = await writeDiscordConfig("bot_token=test-token\n");
+
     const sendOnly = recordingFetch((url) =>
       url.endsWith("/users/@me")
         ? jsonResponse({ id: "555" })
@@ -251,6 +271,7 @@ describe("cross-destination authorization for automation delivery", () => {
 
   test("an admin discord override is refused when the channel is unreachable", async () => {
     const configDir = await writeDiscordConfig("bot_token=test-token\n");
+
     const { fetchImpl } = recordingFetch((url) =>
       url.endsWith("/users/@me")
         ? jsonResponse({ id: "555" })
@@ -274,6 +295,7 @@ describe("cross-destination authorization for automation delivery", () => {
     const configDir = await writeDiscordConfig(
       "bot_token=test-token\npaired_user_ids=123456789012345678\n"
     );
+
     const { calls, fetchImpl } = recordingFetch(() =>
       jsonResponse({ id: "555" })
     );
@@ -300,6 +322,7 @@ describe("cross-destination authorization for automation delivery", () => {
     const configDir = await writeDiscordConfig(
       "bot_token=test-token\npaired_user_ids=123456789012345678\n"
     );
+
     const { fetchImpl } = recordingFetch(() => jsonResponse({ id: "555" }));
 
     const error = await captureRejection(() =>

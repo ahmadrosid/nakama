@@ -27,7 +27,9 @@ function warnAboutUnrunnableScripts(
   if (issues.length === 0 || warnedSkillDirectories.has(directory)) {
     return;
   }
+
   warnedSkillDirectories.add(directory);
+
   for (const issue of issues) {
     console.warn(
       `[nakama:skills] ${directory}: ${issue.path} ${issue.reason}.`
@@ -101,12 +103,14 @@ export async function discoverSkillDirectory(
     const content = await readFile(skillFilePath, "utf8");
     const parsed = parseSkillMarkdown(content, skillFilePath);
     const toolPath = await findSkillToolPath(directory);
+
     const scripts = await resolveSkillScripts({
       declared: parsed.frontmatter.scripts ?? [],
       directory,
       skillName: parsed.frontmatter.name,
       toolPath,
     });
+
     warnAboutUnrunnableScripts(directory, scripts.issues);
 
     return {
@@ -128,6 +132,7 @@ export async function discoverSkillDirectory(
       `[nakama:skills] Skipping ${skillFilePath}:`,
       error instanceof Error ? error.message : error
     );
+
     return null;
   }
 }

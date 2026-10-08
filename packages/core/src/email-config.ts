@@ -7,9 +7,11 @@ import {
 } from "./user-config";
 
 export const EMAIL_SECTION = "email";
+
 export { REDACTED_SECRET_VALUE };
 
 export const DEFAULT_IMAP_PORT = 993;
+
 export const DEFAULT_SMTP_PORT = 587;
 
 export interface EmailConfigFile {
@@ -131,6 +133,7 @@ export function resolveFromHeader(
   }
 
   const escaped = name.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+
   return `"${escaped}" <${address}>`;
 }
 
@@ -176,9 +179,7 @@ function parseEmailSection(
   };
 }
 
-function buildEmailSectionValues(
-  config: EmailConfigFile
-): Record<string, string> {
+function buildEmailSectionValues(config: EmailConfigFile) {
   return {
     from: resolveFromAddress(config),
     from_name: config.fromName,
@@ -273,17 +274,22 @@ function buildSavedEmailConfig(
     input.imapHost === undefined
       ? (existing?.imapHost ?? "")
       : input.imapHost.trim();
+
   const smtpHost =
     input.smtpHost === undefined
       ? (existing?.smtpHost ?? "")
       : input.smtpHost.trim();
+
   const username =
     input.username === undefined
       ? (existing?.username ?? "")
       : input.username.trim();
+
   const password = resolveEmailPassword(input.password, existing);
+
   const from =
     input.from === undefined ? (existing?.from ?? username) : input.from.trim();
+
   const fromName =
     input.fromName === undefined
       ? (existing?.fromName ?? "")
@@ -313,8 +319,10 @@ export async function saveEmailConfig(
   input: UpdateEmailSettingsInput
 ): Promise<EmailSettingsPublic> {
   const raw = await readTextOrNull(getUserConfigPath());
+
   const parsed =
     raw === null ? { global: {}, sections: {} } : parseIniWithSections(raw);
+
   const existing = await loadEmailConfig();
   const next = buildSavedEmailConfig(input, existing);
 

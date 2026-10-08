@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ProviderInstance } from "@nakama/core";
 import { createProviderForInstance } from "./create";
+import { type ProviderJsonRecord, parseJsonRecord } from "./shared";
 
 describe("createProviderForInstance routing", () => {
   test("blocks Netra models without a verified tool turn", () => {
@@ -12,6 +13,7 @@ describe("createProviderForInstance routing", () => {
       label: "Netra Runtime",
       type: "netra",
     };
+
     expect(() =>
       createProviderForInstance(instance, "deepseek/deepseek-v4.1-flash")
     ).toThrow();
@@ -28,12 +30,16 @@ describe("createProviderForInstance routing", () => {
         const url = new URL(request.url);
         seenPath = url.pathname;
         seenAuth = request.headers.get("authorization") ?? "";
+
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
         const body = (await request.json()) as {
           model?: string;
           thinking?: unknown;
         };
+
         seenModel = body.model ?? "";
         seenThinking = body.thinking;
+
         return Response.json({
           choices: [
             {
@@ -117,8 +123,10 @@ describe("createProviderForInstance routing", () => {
         const url = new URL(request.url);
         seenPath = url.pathname;
         seenAuth = request.headers.get("authorization") ?? "";
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
         const body = (await request.json()) as { model?: string };
         seenModel = body.model ?? "";
+
         return Response.json({
           choices: [
             {
@@ -180,12 +188,16 @@ describe("createProviderForInstance routing", () => {
         const url = new URL(request.url);
         seenPath = url.pathname;
         seenAuth = request.headers.get("authorization") ?? "";
+
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
         const body = (await request.json()) as {
           model?: string;
           reasoning?: unknown;
         };
+
         seenModel = body.model ?? "";
         seenReasoning = body.reasoning;
+
         return Response.json({
           choices: [
             {
@@ -253,8 +265,10 @@ describe("createProviderForInstance routing", () => {
         const url = new URL(request.url);
         seenPath = url.pathname;
         seenAuth = request.headers.get("authorization") ?? "";
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
         const body = (await request.json()) as { model?: string };
         seenModel = body.model ?? "";
+
         return Response.json({
           choices: [
             {
@@ -331,12 +345,16 @@ describe("createProviderForInstance routing", () => {
           const url = new URL(request.url);
           seenPath = url.pathname;
           seenAuth = request.headers.get("authorization") ?? "";
+
+          // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
           const body = (await request.json()) as {
             enable_thinking?: unknown;
             model?: string;
           };
+
           seenModel = body.model ?? "";
           seenEnableThinking = body.enable_thinking;
+
           return Response.json({
             choices: [
               {
@@ -407,14 +425,18 @@ describe("createProviderForInstance routing", () => {
         const url = new URL(request.url);
         seenPath = url.pathname;
         seenAuth = request.headers.get("authorization") ?? "";
+
+        // SAFETY: The provider serializes this request body and the test checks its known fixture shape.
         const body = (await request.json()) as {
           model?: string;
           reasoning_effort?: unknown;
           thinking?: unknown;
         };
+
         seenModel = body.model ?? "";
         seenThinking = body.thinking;
         seenReasoningEffort = body.reasoning_effort;
+
         return Response.json({
           choices: [
             {
@@ -480,13 +502,14 @@ describe("createProviderForInstance routing", () => {
   test("routes perplexity chat and keeps citations while omitting local tools", async () => {
     let seenPath = "";
     let seenAuth = "";
-    const seenBodies: Array<Record<string, unknown>> = [];
+    const seenBodies: ProviderJsonRecord[] = [];
 
     const mock = Bun.serve({
       fetch: async (request) => {
         seenPath = new URL(request.url).pathname;
         seenAuth = request.headers.get("authorization") ?? "";
-        seenBodies.push((await request.json()) as Record<string, unknown>);
+        seenBodies.push(parseJsonRecord(await request.text()));
+
         return Response.json({
           choices: [
             {
@@ -519,6 +542,7 @@ describe("createProviderForInstance routing", () => {
         label: "Perplexity Sonar",
         type: "perplexity",
       };
+
       const client = createProviderForInstance(instance, "sonar");
 
       const result = await client!.generateChat({

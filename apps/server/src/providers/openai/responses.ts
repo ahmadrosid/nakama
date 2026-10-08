@@ -59,14 +59,15 @@ const responsePayloadSchema = z.object({
 const responseEventSchema = z.object({
   delta: z.string().optional(),
   item: responseItemSchema.optional(),
+  // Lifecycle events (response.created, response.in_progress) send these as null.
   response: z
     .object({
-      error: z.object({ message: z.unknown().optional() }).optional(),
+      error: z.object({ message: z.unknown().optional() }).nullish(),
       incomplete_details: z
         .object({ reason: z.unknown().optional() })
-        .optional(),
+        .nullish(),
       output: z.array(responseItemSchema).optional(),
-      usage: responsePayloadSchema.shape.usage,
+      usage: responsePayloadSchema.shape.usage.nullable(),
     })
     .optional(),
   type: z.string(),

@@ -19,21 +19,9 @@ import { parseToolInput } from "./schema";
 
 const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const folderSchema = z.preprocess(
-  (value) =>
-    typeof value === "string" && value.trim() ? value.trim() : undefined,
-  z.string().optional().default("INBOX")
-);
+const folderSchema = z.string().trim().min(1).catch("INBOX").default("INBOX");
 
-const limitSchema = z.preprocess((value) => {
-  if (value === undefined) {
-    return 20;
-  }
-  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
-    return 20;
-  }
-  return Math.min(value, 100);
-}, z.number().int().positive().max(100));
+const limitSchema = z.number().int().positive().max(100).catch(20).default(20);
 
 const emailListInputSchema = z.object({
   action: z.literal("list"),
@@ -73,6 +61,7 @@ export const emailInputSchema = z.discriminatedUnion("action", [
 ]);
 
 export type EmailAction = z.infer<typeof emailInputSchema>["action"];
+
 export type EmailToolInput = z.infer<typeof emailInputSchema>;
 
 /**
@@ -173,12 +162,12 @@ export interface EmailToolDependencies {
   loadConfig?: typeof loadEmailConfig;
 }
 
-function parseEmailToolInput(input: unknown): EmailToolInput {
+function parseEmailToolInput(input: EmailToolInput): EmailToolInput {
   return parseToolInput(emailInputSchema, input);
 }
 
 export async function runEmailTool(
-  input: unknown,
+  input: EmailToolInput,
   dependencies: EmailToolDependencies = {},
   context: ToolContext = {}
 ): Promise<EmailToolResult> {
@@ -207,6 +196,7 @@ export async function runEmailTool(
 
     if (parsed.action === "list") {
       const messages = await reader.listMessages(parsed.folder, parsed.limit);
+
       return { action: parsed.action, messages };
     }
 
@@ -234,6 +224,7 @@ export async function runEmailTool(
       parsed.query,
       parsed.limit
     );
+
     return { action: parsed.action, messages };
   } catch (err) {
     return { error: sanitizeMailError(err) };
@@ -270,6 +261,7 @@ async function sendEmail(
 
   try {
     const result = await sender.send({ html, subject, text, to });
+
     return {
       action: "send",
       sent: {
@@ -299,6 +291,7 @@ function toEmailMessage(
   mailboxId: string
 ): NonNullable<Extract<EmailToolSuccess, { message?: unknown }>["message"]> {
   const { attachments, ...messageWithoutAttachments } = message;
+
   if (!attachments) {
     return messageWithoutAttachments;
   }

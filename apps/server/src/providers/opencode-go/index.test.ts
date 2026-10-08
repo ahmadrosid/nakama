@@ -8,8 +8,10 @@ function mockFetch(
 ): void {
   const mockFn: typeof fetch = (input, init?) => {
     const request = new Request(input, init);
+
     return Promise.resolve(handler(request));
   };
+
   globalThis.fetch = mockFn;
 }
 
@@ -23,6 +25,7 @@ describe("createOpenCodeGoProvider", () => {
 
     mockFetch((request) => {
       capturedUrl = request.url;
+
       return new Response(
         JSON.stringify({
           choices: [{ message: { content: "Hello from OpenCode Go" } }],
@@ -50,6 +53,7 @@ describe("createOpenCodeGoProvider", () => {
 
     mockFetch((request) => {
       capturedUrl = request.url;
+
       return new Response(
         JSON.stringify({
           content: [{ text: "Hello from messages", type: "text" }],

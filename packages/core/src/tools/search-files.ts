@@ -51,12 +51,13 @@ export const searchFilesTool: ToolDefinition<
 };
 
 export async function runSearchFiles(
-  input: unknown,
+  input: SearchFilesInput,
   context: ToolContext,
   options: SearchFilesOptions = {}
 ): Promise<SearchFilesOutput> {
   const orgId = context.orgId?.trim();
   const profileId = context.profileId?.trim();
+
   if (!(orgId && profileId)) {
     throw new Error("orgId and profileId are required.");
   }
@@ -66,10 +67,12 @@ export async function runSearchFiles(
   const workspaceRoot = await resolveWorkspaceRoot(
     options.workspaceRoot ?? getProfileSoulDir(orgId, profileId)
   );
+
   const searchRoot = await resolveSearchRoot(
     workspaceRoot,
     parsed.path ?? null
   );
+
   const args = buildRipgrepArgs({
     glob: parsed.glob ?? null,
     maxResults: parsed.maxResults,
@@ -105,5 +108,6 @@ async function resolveSearchRoot(
     allowedDirs: [workspaceRoot],
     cwd: workspaceRoot,
   });
+
   return guarded.resolved;
 }

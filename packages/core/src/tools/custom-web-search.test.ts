@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { z } from "zod";
 import type { WebSearchConfigFile } from "../web-search-config";
 import {
   createCustomWebSearchTool,
@@ -17,21 +18,24 @@ function stubFetch(
   response: { body: unknown; status?: number },
   captured: CapturedRequest[]
 ): void {
+  // SAFETY: The stub accepts the RequestInfo and RequestInit inputs used by fetch.
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    // SAFETY: The stub records JSON request headers supplied by buildRequest.
     captured.push({
       body: JSON.parse(String(init?.body ?? "{}")),
-      headers: (init?.headers ?? {}) as Record<string, string>,
+      headers: Object.fromEntries(new Headers(init?.headers)),
       url: String(input),
     });
 
     return Promise.resolve(
       new Response(
-        typeof response.body === "string"
-          ? response.body
+        z.string().safeParse(response.body).success
+          ? z.string().parse(response.body)
           : JSON.stringify(response.body),
         { status: response.status ?? 200 }
       )
     );
+    // SAFETY: The stub accepts the RequestInfo and RequestInit inputs used by fetch.
   }) as typeof fetch;
 }
 
@@ -119,6 +123,7 @@ describe("createCustomWebSearchTool", () => {
         provider: "firecrawl",
       })
     );
+
     const output = await tool?.run({ query: "scraping" }, {});
 
     expect(captured[0]?.headers.authorization).toBe("Bearer fc-key");

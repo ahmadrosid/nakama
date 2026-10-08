@@ -2,10 +2,20 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
+import type { JsonValue } from "../contract";
 import { getDiscordConfigDir, getDiscordConfigPath } from "../discord-config";
 import { createDiscordOutboundAdapter } from "./discord-outbound";
 
 const owner = { orgId: "org_test", profileId: "agent_test" };
+
+type JsonObject = Record<string, JsonValue>;
+
+const JsonObjectSchema = z.record(z.string(), z.json());
+
+function parseJsonObject(text: string): JsonObject {
+  return JsonObjectSchema.parse(JSON.parse(text));
+}
 
 describe("createDiscordOutboundAdapter", () => {
   const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
@@ -37,17 +47,19 @@ describe("createDiscordOutboundAdapter", () => {
   test("posts to a guild channel with bot auth and mention suppression", async () => {
     await withDiscordConfig("bot_token=test-bot-token\n", async () => {
       const calls: Array<{
-        body: Record<string, unknown>;
+        body: JsonObject;
         headers: Record<string, string>;
         url: string;
       }> = [];
+
       const adapter = createDiscordOutboundAdapter({
         fetchImpl: async (input, init) => {
           calls.push({
-            body: JSON.parse(String(init?.body)),
+            body: parseJsonObject(String(init?.body)),
             headers: Object.fromEntries(new Headers(init?.headers).entries()),
             url: String(input),
           });
+
           return new Response("{}", { status: 200 });
         },
       });
@@ -77,18 +89,19 @@ describe("createDiscordOutboundAdapter", () => {
     await withDiscordConfig(
       "bot_token=test-bot-token\npaired_user_ids=111111111111111111,222222222222222222\n",
       async () => {
-        const calls: Array<{ body: Record<string, unknown>; url: string }> = [];
+        const calls: Array<{ body: JsonObject; url: string }> = [];
+
         const adapter = createDiscordOutboundAdapter({
           fetchImpl: async (input, init) => {
             const url = String(input);
-            const body = JSON.parse(String(init?.body)) as Record<
-              string,
-              unknown
-            >;
+
+            const body = parseJsonObject(String(init?.body));
+
             calls.push({ body, url });
 
             if (url.endsWith("/users/@me/channels")) {
               const recipient = String(body.recipient_id);
+
               return Response.json({
                 id: `dm-${recipient}`,
               });
@@ -119,10 +132,15 @@ describe("createDiscordOutboundAdapter", () => {
   test("chunks text longer than 2000 into multiple posts", async () => {
     await withDiscordConfig("bot_token=test-bot-token\n", async () => {
       const contents: string[] = [];
+
       const adapter = createDiscordOutboundAdapter({
         fetchImpl: async (_input, init) => {
-          const body = JSON.parse(String(init?.body)) as { content: string };
+          const body = z
+            .object({ content: z.string() })
+            .parse(parseJsonObject(String(init?.body)));
+
           contents.push(body.content);
+
           return new Response("{}", { status: 200 });
         },
       });
@@ -143,9 +161,11 @@ describe("createDiscordOutboundAdapter", () => {
   test("returns without fetch when the bot token is missing", async () => {
     await withDiscordConfig("", async () => {
       let called = false;
+
       const adapter = createDiscordOutboundAdapter({
         fetchImpl: async () => {
           called = true;
+
           return new Response("{}", { status: 200 });
         },
       });
@@ -161,9 +181,11 @@ describe("createDiscordOutboundAdapter", () => {
   test("returns without fetch when no paired users and no channelId", async () => {
     await withDiscordConfig("bot_token=test-bot-token\n", async () => {
       let called = false;
+
       const adapter = createDiscordOutboundAdapter({
         fetchImpl: async () => {
           called = true;
+
           return new Response("{}", { status: 200 });
         },
       });
@@ -181,6 +203,7 @@ describe("createDiscordOutboundAdapter", () => {
       "bot_token=test-bot-token\npaired_user_ids=111111111111111111,222222222222222222\n",
       async () => {
         const urls: string[] = [];
+
         const adapter = createDiscordOutboundAdapter({
           fetchImpl: async (input) => {
             urls.push(String(input));

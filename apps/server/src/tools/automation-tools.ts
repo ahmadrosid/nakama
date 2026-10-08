@@ -5,8 +5,40 @@ import {
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
+import { z } from "zod";
 import type { AutomationRunner } from "../services/automation-runner";
 import type { AutomationService } from "../services/automation-service";
+
+const AutomationTriggerSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("manual") }),
+  z.object({
+    cron: z.string().transform((cron) => cron.trim()),
+    timezone: z
+      .string()
+      .optional()
+      .transform((timezone) => timezone?.trim()),
+    type: z.literal("schedule"),
+  }),
+  z.object({
+    at: z.string().transform((at) => at.trim()),
+    timezone: z
+      .string()
+      .optional()
+      .transform((timezone) => timezone?.trim()),
+    type: z.literal("runAt"),
+  }),
+]);
+
+const AutomationInputSchema = z.object({
+  automationId: z.string().optional().catch(undefined),
+  delivery: z.unknown().optional(),
+  description: z.string().optional().catch(undefined),
+  limit: z.number().optional().catch(undefined),
+  name: z.string().optional().catch(undefined),
+  profileId: z.string().optional().catch(undefined),
+  prompt: z.string().optional().catch(undefined),
+  trigger: AutomationTriggerSchema.optional().catch(undefined),
+});
 
 export function createAutomationTools(
   automationService: AutomationService,
@@ -55,14 +87,16 @@ export function createAutomationTools(
         type: "object",
       },
       async run(input, context) {
+        const parsedInput = AutomationInputSchema.parse(input);
+
         requireToolNotViewer(context);
         const orgId = requireOrgId(context);
-        const name = readString(input, "name");
-        const description = readString(input, "description");
-        const prompt = readString(input, "prompt");
-        const trigger = readTrigger(input, "trigger");
-        const delivery = readDelivery(input);
-        const requestedProfileId = readString(input, "profileId")?.trim();
+        const name = readString(parsedInput, "name");
+        const description = readString(parsedInput, "description");
+        const prompt = readString(parsedInput, "prompt");
+        const trigger = readTrigger(parsedInput.trigger);
+        const delivery = readDelivery(parsedInput);
+        const requestedProfileId = readString(parsedInput, "profileId")?.trim();
 
         if (!(name && description && prompt && trigger)) {
           throw new Error(
@@ -78,15 +112,20 @@ export function createAutomationTools(
           );
         }
 
+        const createInput: Parameters<AutomationService["create"]>[1] = {
+          description,
+          name,
+          prompt,
+          trigger,
+        };
+
+        if (delivery) {
+          createInput.delivery = delivery;
+        }
+
         const automation = await automationService.create(
           orgId,
-          {
-            description,
-            name,
-            prompt,
-            trigger,
-            ...(delivery ? { delivery } : {}),
-          },
+          createInput,
           profileId,
           {
             isPlatformAdmin: context.isPlatformAdmin,
@@ -114,6 +153,7 @@ export function createAutomationTools(
       async run(_input, context) {
         const orgId = requireOrgId(context);
         const { automations } = await automationService.listForOrg(orgId);
+
         return automations.map((automation) => ({
           delivery: automation.delivery ?? null,
           description: automation.description,
@@ -143,9 +183,11 @@ export function createAutomationTools(
         type: "object",
       },
       async run(input, context) {
+        const parsedInput = AutomationInputSchema.parse(input);
+
         requireToolNotViewer(context);
         const orgId = requireOrgId(context);
-        const automationId = readString(input, "automationId");
+        const automationId = readString(parsedInput, "automationId");
 
         if (!automationId) {
           throw new Error("automationId is required.");
@@ -177,9 +219,11 @@ export function createAutomationTools(
         type: "object",
       },
       async run(input, context) {
+        const parsedInput = AutomationInputSchema.parse(input);
+
         requireToolNotViewer(context);
         const orgId = requireOrgId(context);
-        const automationId = readString(input, "automationId");
+        const automationId = readString(parsedInput, "automationId");
 
         if (!automationId) {
           throw new Error("automationId is required.");
@@ -239,6 +283,8 @@ export function createAutomationRunHistoryTools(
         type: "object",
       },
       async run(input, context) {
+        const parsedInput = AutomationInputSchema.parse(input);
+
         const orgId = requireOrgId(context);
         const automationId = context.automationId?.trim();
 
@@ -246,8 +292,9 @@ export function createAutomationRunHistoryTools(
           throw new Error("automationId is required.");
         }
 
-        const limit = readLimit(input);
+        const limit = readLimit(parsedInput.limit);
         const fetchLimit = context.automationRunId ? limit + 1 : limit;
+
         const runs = await automationService.listRuns(
           automationId,
           orgId,
@@ -280,80 +327,33 @@ function requireOrgId(context: ToolContext): string {
   return orgId;
 }
 
-function readString(input: unknown, key: string): string | null {
-  if (!input || typeof input !== "object") {
-    return null;
-  }
+function readString(
+  input: z.infer<typeof AutomationInputSchema>,
+  key: "automationId" | "description" | "name" | "profileId" | "prompt"
+): string | null {
+  const value = input[key];
 
-  const value = (input as Record<string, unknown>)[key];
-  return typeof value === "string" && value.trim() ? value.trim() : null;
+  return value?.trim() || null;
 }
 
-function readLimit(input: unknown): number {
-  const value =
-    input && typeof input === "object"
-      ? (input as Record<string, unknown>).limit
-      : undefined;
-  const limit = typeof value === "number" && Number.isFinite(value) ? value : 5;
+function readLimit(value: number | undefined): number {
+  const limit = value !== undefined && Number.isFinite(value) ? value : 5;
 
   return Math.min(20, Math.max(1, Math.trunc(limit)));
 }
 
 function readTrigger(
-  input: unknown,
-  key: string
+  input: z.infer<typeof AutomationTriggerSchema> | undefined
 ):
   | { type: "manual" }
   | { type: "schedule"; cron: string; timezone?: string }
   | { type: "runAt"; at: string; timezone?: string }
   | null {
-  if (!input || typeof input !== "object") {
-    return null;
-  }
-
-  const value = (input as Record<string, unknown>)[key];
-
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-
-  const trigger = value as Record<string, unknown>;
-
-  if (trigger.type === "manual") {
-    return { type: "manual" };
-  }
-
-  if (trigger.type === "schedule" && typeof trigger.cron === "string") {
-    return {
-      cron: trigger.cron.trim(),
-      timezone:
-        typeof trigger.timezone === "string"
-          ? trigger.timezone.trim()
-          : undefined,
-      type: "schedule",
-    };
-  }
-
-  if (trigger.type === "runAt" && typeof trigger.at === "string") {
-    return {
-      at: trigger.at.trim(),
-      timezone:
-        typeof trigger.timezone === "string"
-          ? trigger.timezone.trim()
-          : undefined,
-      type: "runAt",
-    };
-  }
-
-  return null;
+  return input ?? null;
 }
 
-function readDelivery(input: unknown) {
-  if (!input || typeof input !== "object") {
-    return;
-  }
-
-  const value = (input as Record<string, unknown>).delivery;
+function readDelivery(input: z.infer<typeof AutomationInputSchema>) {
+  const value = input.delivery;
 
   if (value === undefined || value === null) {
     return;

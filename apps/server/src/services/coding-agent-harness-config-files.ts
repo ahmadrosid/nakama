@@ -11,6 +11,21 @@ export interface HarnessConfigDir {
   dir: string;
 }
 
+interface PiProviderConfig {
+  api?: string;
+  apiKey: string;
+  baseUrl: string;
+  models?: Array<{
+    contextWindow: number;
+    id: string;
+    input: string[];
+    maxTokens: number;
+    name: string;
+    reasoning: boolean;
+  }>;
+  name?: string;
+}
+
 export async function createHarnessConfigDir(
   prefix: string
 ): Promise<HarnessConfigDir> {
@@ -33,11 +48,13 @@ export async function writeCodexConfigToml(
   providerType: ProviderName
 ): Promise<string> {
   const configPath = path.join(configDir, "config.toml");
+
   const model = formatModelForHarness(
     harnessKind,
     providerType,
     routing.model ?? "gpt-4.1"
   );
+
   const baseUrl = routing.baseUrl ?? "";
   const apiKey = routing.apiKey ?? "";
 
@@ -59,6 +76,7 @@ export async function writeCodexConfigToml(
   ].join("\n");
 
   await writeFile(configPath, contents, { mode: 0o600 });
+
   return configPath;
 }
 
@@ -72,29 +90,36 @@ export async function writeOpenCodeConfig(
   await mkdir(configDir, { mode: 0o700, recursive: true });
 
   const configPath = path.join(configDir, "opencode.json");
+
   const model = routing.model
     ? formatModelForHarness(harnessKind, providerType, routing.model)
     : null;
 
   const providerKey = resolveOpenCodeProviderKey(providerType);
+
+  const providerConfig = {
+    models: model ? { [model]: { name: model } } : undefined,
+    options: {
+      apiKey: routing.apiKey,
+      baseURL: routing.baseUrl,
+    },
+  };
+
   const config = {
     $schema: "https://opencode.ai/config.json",
+    model: model ? `${providerKey}/${model}` : undefined,
     provider: {
       [providerKey]: {
-        options: {
-          apiKey: routing.apiKey,
-          baseURL: routing.baseUrl,
-        },
-        ...(model ? { models: { [model]: { name: model } } } : {}),
+        ...providerConfig,
       },
     },
-    ...(model ? { model: `${providerKey}/${model}` } : {}),
   };
 
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, {
     mode: 0o600,
   });
   await chmod(configPath, 0o600);
+
   return configPath;
 }
 
@@ -123,24 +148,31 @@ function resolvePiProviderId(providerType: ProviderName): string {
   if (providerType === "anthropic") {
     return "anthropic";
   }
+
   if (providerType === "openai") {
     return "openai";
   }
+
   if (providerType === "openrouter") {
     return "openrouter";
   }
+
   if (providerType === "deepseek") {
     return "deepseek";
   }
+
   if (providerType === "cerebras") {
     return "cerebras";
   }
+
   if (providerType === "fireworks") {
     return "fireworks";
   }
+
   if (providerType === "opencode_go") {
     return "opencode";
   }
+
   return "nakama";
 }
 
@@ -167,10 +199,13 @@ function isDefaultBaseUrl(
   if (!baseUrl) {
     return false;
   }
+
   const defaultUrl = PI_DEFAULT_BASE_URLS[providerType];
+
   if (!defaultUrl) {
     return false;
   }
+
   return baseUrl.replace(/\/+$/, "") === defaultUrl.replace(/\/+$/, "");
 }
 
@@ -198,7 +233,7 @@ export async function writePiModelsJson(
   const baseUrl = routing.baseUrl ?? "";
   const apiKey = routing.apiKey ?? "";
 
-  const providers: Record<string, Record<string, unknown>> = {};
+  const providers: Record<string, PiProviderConfig> = {};
 
   if (isDefaultBaseUrl(providerType, routing.baseUrl)) {
     // Override the built-in provider's baseUrl + apiKey.
@@ -217,6 +252,7 @@ export async function writePiModelsJson(
       providerType,
       routing.model ?? "gpt-4o"
     );
+
     providers["nakama"] = {
       api: "openai-completions",
       apiKey,
@@ -240,5 +276,6 @@ export async function writePiModelsJson(
     mode: 0o600,
   });
   await chmod(configPath, 0o600);
+
   return configPath;
 }

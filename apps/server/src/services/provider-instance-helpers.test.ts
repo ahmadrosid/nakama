@@ -32,7 +32,8 @@ describe("OpenRouter routing validation", () => {
     { extra_body: {} },
     { data_collection: "deny" },
   ])("rejects invalid routing %j on create and update", (value) => {
-    const openRouterRouting = value as unknown as OpenRouterRoutingSettings;
+    // SAFETY: The test fixture matches the contract used by this test.
+    const openRouterRouting = value as OpenRouterRoutingSettings;
     expect(() =>
       buildProviderInstanceFromCreateRequest(
         {
@@ -61,10 +62,12 @@ describe("OpenRouter routing validation", () => {
       requireParameters: true,
       zdr: true,
     } as const;
+
     const instance = buildProviderInstanceFromCreateRequest(
       { apiKey: `sk-${"x".repeat(48)}`, openRouterRouting, type: "openai" },
       []
     );
+
     expect(instance).not.toHaveProperty("openRouterRouting");
     expect(
       applyProviderInstanceUpdate(instance, { openRouterRouting })
@@ -91,6 +94,7 @@ describe("Netra provider setup", () => {
       },
       []
     );
+
     expect(instance.customModels?.[0]?.id).toBe(
       "deepseek/deepseek-v4-flash-0731"
     );
@@ -123,11 +127,13 @@ describe("resolveProfileProviderSelection", () => {
       label: "DeepSeek",
       type: "deepseek",
     });
+
     const active = createProviderInstance({
       id: "openai-1",
       label: "OpenAI",
       type: "openai",
     });
+
     for (const profileModel of [
       "deepseek-v4-flash",
       "deepseek-1::deepseek-v4-flash",
@@ -148,6 +154,7 @@ describe("resolveProfileProviderSelection", () => {
       label: "ChatGPT",
       type: "chatgpt",
     });
+
     const options = { defaultProviderId: instance.id, providers: [instance] };
 
     expect(
@@ -165,6 +172,7 @@ describe("resolveProfileProviderSelection", () => {
       label: "ChatGPT",
       type: "chatgpt",
     });
+
     const openai = createProviderInstance({
       id: "openai-1",
       label: "OpenAI",
@@ -388,6 +396,7 @@ describe("applyProviderInstanceUpdate", () => {
     // unrecognised value falls back to chat rather than being persisted.
     expect(
       applyProviderInstanceUpdate(instance, {
+        // SAFETY: The test fixture matches the contract used by this test.
         wireApi: "nonsense" as never,
       }).wireApi
     ).toBeUndefined();
@@ -534,6 +543,7 @@ describe("buildProviderInstanceFromCreateRequest", () => {
       },
       []
     );
+
     expect(instance.type).toBe("xai_oauth");
     expect(instance.xaiRefreshToken).toBe("refresh");
     expect(instance.apiKey).toBe("");
@@ -570,7 +580,9 @@ describe("buildProviderInstanceFromCreateRequest", () => {
         throw new Error("expected a rejection");
       } catch (error) {
         expect(error).toBeInstanceOf(NakamaApiError);
+        // SAFETY: The test fixture matches the contract used by this test.
         expect((error as NakamaApiError).message).toBe(message);
+        // SAFETY: The test fixture matches the contract used by this test.
         expect((error as NakamaApiError).status).toBe(400);
       }
     }

@@ -56,6 +56,7 @@ describe("formatServerError", () => {
     const error = new Error(
       "SQLITE_CONSTRAINT: UNIQUE constraint failed at /home/nakama/.config/nakama/nakama.db"
     );
+
     expect(formatServerError(error)).toBe(
       "An unexpected server error occurred."
     );

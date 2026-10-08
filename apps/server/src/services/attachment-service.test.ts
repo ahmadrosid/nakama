@@ -10,6 +10,7 @@ import {
 } from "./attachment-service";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
+
 let tempConfigDir = "";
 
 afterEach(() => {
@@ -31,13 +32,16 @@ describe("attachment service", () => {
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
 
     const db = createInMemoryDatabaseAdapter();
+
     const context = {
       channel: "telegram" as const,
       orgId: "org_1",
       profileId: "profile_1",
       sessionId: "session_1",
     };
+
     const save = createAttachmentSaver(db, context);
+
     const load = createAttachmentLoader(db, {
       orgId: context.orgId,
       profileId: context.profileId,
@@ -63,8 +67,10 @@ describe("attachment service", () => {
       },
     ]);
 
+    // SAFETY: The test fixture matches the contract used by this test.
     const attachmentId = (refs as Array<{ attachmentId: string }>)[0]!
       .attachmentId;
+
     const record = await db.getAttachment(attachmentId);
 
     expect(record).toMatchObject({

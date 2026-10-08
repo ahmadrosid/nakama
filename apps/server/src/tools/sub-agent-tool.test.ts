@@ -1,15 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import { canRunToolCallsInParallel } from "@nakama/agent";
+import type { AgentService } from "../services/agent-service";
 import type { SubAgentRunResult } from "./sub-agent-shared";
 import { createSubAgentTool, runSubAgentTool } from "./sub-agent-tool";
 
 const ORG_ID = "org_test";
+
 const PROFILE_ID = "profile_default";
+
 const TOOL_CONTEXT = { agentDepth: 0, orgId: ORG_ID, profileId: PROFILE_ID };
 
 function createMockAgentService(
-  handler: (input: unknown) => Promise<SubAgentRunResult>
+  handler: (
+    input: Parameters<AgentService["runSubAgentPrompt"]>[0]
+  ) => Promise<SubAgentRunResult>
 ) {
+  // SAFETY: Tests implement only runSubAgentPrompt, the sole method used by this tool.
   return {
     runSubAgentPrompt: handler,
   } as never;
@@ -22,6 +28,7 @@ describe("sub_agent tool", () => {
       status: "success",
       summary: "Done",
     }));
+
     const tool = createSubAgentTool(agent);
 
     const result = await tool.run(
@@ -39,6 +46,7 @@ describe("sub_agent tool", () => {
       status: "success",
       summary: "nope",
     }));
+
     const tool = createSubAgentTool(agent);
 
     const result = await tool.run(
@@ -65,10 +73,13 @@ describe("sub_agent tool", () => {
 
   test("clamps timeoutMs before calling runner", async () => {
     let capturedTimeout: number | undefined;
+
     const agent = createMockAgentService(async (input) => {
-      capturedTimeout = (input as { timeoutMs?: number }).timeoutMs;
+      capturedTimeout = input.timeoutMs;
+
       return { output: "ok", status: "success", summary: "ok" };
     });
+
     const tool = createSubAgentTool(agent);
 
     await tool.run({ task: "timed", timeoutMs: 999_999 }, TOOL_CONTEXT);
@@ -79,8 +90,10 @@ describe("sub_agent tool", () => {
   test("inherits the trusted parent role, not a role supplied in tool arguments", async () => {
     for (const orgRole of ["admin", "member", "viewer", undefined] as const) {
       let captured: unknown;
+
       const agent = createMockAgentService(async (input) => {
         captured = input;
+
         return { output: "ok", status: "success", summary: "ok" };
       });
 

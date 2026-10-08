@@ -65,6 +65,7 @@ describe("resolveImageGenerationSelection", () => {
     const resolved = resolveImageGenerationSelection(
       openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION })
     );
+
     expect(resolved?.model).toBe("gpt-image-2");
     expect(resolved?.selection).toBe(IMAGE_GENERATION_SELECTION);
     expect(resolved?.apiKey).toBe("test-key");
@@ -94,6 +95,7 @@ describe("resolveImageGenerationSelection", () => {
         },
       ],
     });
+
     expect(resolved?.instance.type).toBe("openai_compatible");
     expect(resolved?.baseUrl).toBe("http://100.64.0.1:8000/v1");
     expect(resolved?.apiKey).toBe("local-key");
@@ -121,6 +123,7 @@ describe("resolveImageGenerationSelection", () => {
     const resolved = resolveImageGenerationSelection(
       gatewayConfig({ imageModel: "p-gateway::cb/gpt-image-2" })
     );
+
     expect(resolved?.instance.id).toBe("p-gateway");
     expect(resolved?.model).toBe("cb/gpt-image-2");
     expect(resolved?.baseUrl).toBe("https://gateway.example/v1");
@@ -224,8 +227,10 @@ describe("generateImageWithOpenAI", () => {
   test("routes to the configured baseUrl instead of api.openai.com", async () => {
     let requestedUrl = "";
     const originalFetch = globalThis.fetch;
+    // SAFETY: The test fixture matches the contract used by this test.
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       requestedUrl = String(input);
+
       // Return a minimal valid Images API payload.
       return new Response(
         JSON.stringify({
@@ -251,11 +256,13 @@ describe("generateImageWithOpenAI", () => {
   test("sends a custom model id to a custom baseUrl", async () => {
     let requestedModel = "";
     const originalFetch = globalThis.fetch;
+    // SAFETY: The test fixture matches the contract used by this test.
     globalThis.fetch = (async (
       _input: RequestInfo | URL,
       init?: RequestInit
     ) => {
       requestedModel = JSON.parse(String(init?.body)).model;
+
       return new Response(
         JSON.stringify({
           data: [{ b64_json: Buffer.from("png").toString("base64") }],
@@ -271,6 +278,7 @@ describe("generateImageWithOpenAI", () => {
         model: "cb/gpt-image-2",
         prompt: "a cat",
       });
+
       expect(result.model).toBe("cb/gpt-image-2");
     } finally {
       globalThis.fetch = originalFetch;
@@ -283,6 +291,7 @@ describe("generateImageWithOpenAI", () => {
 describe("generateImageWithOpenAI cancellation", () => {
   test("a cancelled turn aborts the provider request", async () => {
     const realFetch = globalThis.fetch;
+    // SAFETY: The test fixture matches the contract used by this test.
     globalThis.fetch = ((_url: string, init: RequestInit) =>
       new Promise((_resolve, reject) => {
         init.signal?.addEventListener("abort", () =>
@@ -292,11 +301,13 @@ describe("generateImageWithOpenAI cancellation", () => {
 
     try {
       const turn = new AbortController();
+
       const pending = generateImageWithOpenAI({
         apiKey: "test-key",
         prompt: "a cat",
         signal: turn.signal,
       });
+
       turn.abort();
       await expect(pending).rejects.toThrow("aborted");
     } finally {
@@ -313,6 +324,7 @@ describe("AgentService image generation settings", () => {
     const saved = await service.setImageGenerationSettings({
       model: IMAGE_GENERATION_SELECTION,
     });
+
     expect(saved).toEqual({
       imageGeneration: { model: IMAGE_GENERATION_SELECTION },
     });
@@ -400,6 +412,7 @@ describe("AgentService image generation usage (AE5)", () => {
   test("successful generate increments gpt-image-2 stats and estimated cost", async () => {
     const db = createInMemoryDatabaseAdapter();
     const tracker = new LlmUsageTracker(db);
+
     const service = new AgentService(
       openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
       null,
@@ -451,6 +464,7 @@ describe("AgentService image generation usage (AE5)", () => {
       ];
       const service = new AgentService(config, null, db, tracker);
       const originalFetch = globalThis.fetch;
+      // SAFETY: The test fixture matches the contract used by this test.
       globalThis.fetch = (async () =>
         new Response(
           JSON.stringify({
@@ -458,7 +472,7 @@ describe("AgentService image generation usage (AE5)", () => {
             usage: { input_tokens: 10, output_tokens: 100 },
           }),
           { headers: { "Content-Type": "application/json" }, status: 200 }
-        )) as unknown as typeof fetch;
+        )) as typeof fetch;
 
       try {
         await service.generateImage({ prompt: "a cat" }, ORG_ID);
@@ -477,6 +491,7 @@ describe("AgentService image generation usage (AE5)", () => {
   test("failed OpenAI response does not increment usage", async () => {
     const db = createInMemoryDatabaseAdapter();
     const tracker = new LlmUsageTracker(db);
+
     const service = new AgentService(
       openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
       null,
@@ -503,6 +518,7 @@ describe("AgentService image generation usage (AE5)", () => {
   test("missing usage object still records fallback tokens so cost moves", async () => {
     const db = createInMemoryDatabaseAdapter();
     const tracker = new LlmUsageTracker(db);
+
     const service = new AgentService(
       openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
       null,

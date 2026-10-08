@@ -50,8 +50,8 @@ export class SystemStatusService {
 
     // Usage is a tenant ledger: read it with the same scope the request
     // already resolved, never install-wide, or one org reads another's spend.
-    const usageOrgId =
-      typeof orgId === "string" ? orgId : (orgId?.orgId ?? null);
+    const usageOrgId = isString(orgId) ? orgId : (orgId?.orgId ?? null);
+
     const [usageStats, usageByModel, usageDaily, usageByActor] =
       await Promise.all([
         this.agent.getLlmUsageStats(usageOrgId),
@@ -66,6 +66,7 @@ export class SystemStatusService {
     const automationProcess = statuses.automation ?? null;
     const automationHeartbeat = await getAutomationWorkerHeartbeatStatus();
     const automationRunning = automationHeartbeat.running;
+
     const automationManagedOnline =
       automationProcess?.managed === true &&
       automationProcess.status === "online";
@@ -75,15 +76,17 @@ export class SystemStatusService {
       this.resolveWorkerStatus("whatsapp", statuses.whatsapp, orgId),
       this.resolveWorkerStatus("discord", statuses.discord, orgId),
     ]);
+
     // Typed on its own so SlackWorkerStatus stays exact; the shared helper
     // returns a union of every channel's status shape.
     const slackProcess = statuses.slack;
-    const slackStatus = {
-      ...(await getSlackWorkerStatus(orgId)),
-      ...(isChannelOwner(orgId) && slackProcess?.managed
-        ? { process: slackProcess, running: slackProcess.status === "online" }
-        : {}),
-    };
+
+    const slackStatus = await getSlackWorkerStatus(orgId);
+
+    if (isChannelOwner(orgId) && slackProcess?.managed) {
+      slackStatus.process = slackProcess;
+      slackStatus.running = slackProcess.status === "online";
+    }
 
     return {
       automationWorker: {
@@ -134,11 +137,13 @@ export class SystemStatusService {
         running: false,
       };
     }
+
     if (pm2Status?.managed) {
       const running = pm2Status.status === "online";
 
       if (name === "telegram") {
         const heartbeat = await getTelegramWorkerStatus(orgId);
+
         return {
           ...heartbeat,
           process: pm2Status,
@@ -148,6 +153,7 @@ export class SystemStatusService {
 
       if (name === "discord") {
         const heartbeat = await getDiscordWorkerStatus(orgId);
+
         return {
           ...heartbeat,
           process: pm2Status,
@@ -156,6 +162,7 @@ export class SystemStatusService {
       }
 
       const heartbeat = await getWhatsAppWorkerStatus(orgId);
+
       return {
         ...heartbeat,
         process: pm2Status,
@@ -212,4 +219,8 @@ export class SystemStatusService {
       version: getNakamaVersion(),
     };
   }
+}
+
+function isString<T>(value: T): value is T & string {
+  return Object.prototype.toString.call(value) === "[object String]";
 }

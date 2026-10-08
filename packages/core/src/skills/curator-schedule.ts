@@ -16,11 +16,13 @@ export function resolveCuratorScheduleAction(input: {
   }
 
   const lastRunAt = Date.parse(input.lastRunAt);
+
   if (Number.isNaN(lastRunAt)) {
     return "seed";
   }
 
   const now = input.now?.getTime() ?? Date.now();
+
   if (now - lastRunAt >= SKILL_CURATOR_INTERVAL_MS) {
     return "schedule";
   }

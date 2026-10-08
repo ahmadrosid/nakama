@@ -2,18 +2,22 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { distillToolResult, isOmniEnabled, omniRetrieveTool } from "./omni";
 
 const CTX = { orgId: "org_test", sessionId: "sess_test" };
+
 const LONG =
   "line of shell output with enough words to be worth folding\n".repeat(200);
 
 const original = process.env.NAKAMA_OMNI;
+
 afterEach(() => {
   if (original === undefined) {
     delete process.env.NAKAMA_OMNI;
   } else {
     process.env.NAKAMA_OMNI = original;
   }
+
   process.env.PATH = REAL_PATH;
 });
+
 const REAL_PATH = process.env.PATH ?? "";
 
 describe("omni gating", () => {
@@ -45,6 +49,7 @@ describe("knowledge_base_search", () => {
 
   function savingsProbe() {
     const seen: { bytesIn: number; bytesOut: number; tool: string }[] = [];
+
     return {
       ctx: {
         ...CTX,
@@ -62,6 +67,7 @@ describe("knowledge_base_search", () => {
   test("measures the matches array, not the envelope", async () => {
     process.env.NAKAMA_OMNI = "1";
     const { ctx, seen } = savingsProbe();
+
     const result = {
       matchCount: longMatches.length,
       matches: longMatches,
@@ -82,6 +88,7 @@ describe("knowledge_base_search", () => {
   test("a result with no hits is left alone entirely", async () => {
     process.env.NAKAMA_OMNI = "1";
     const { ctx, seen } = savingsProbe();
+
     const result = {
       matchCount: 0,
       matches: [],
@@ -114,6 +121,7 @@ describe("knowledge_base_search", () => {
 describe("omni result passthrough", () => {
   test("leaves tools it does not handle alone", async () => {
     process.env.NAKAMA_OMNI = "1";
+
     for (const name of [
       "write_file",
       "edit_file",
@@ -185,6 +193,7 @@ describe("omni fails open", () => {
     process.env.PATH = "/nonexistent";
     const result = { exitCode: 0, stdout: LONG };
 
+    // SAFETY: The input result object must pass through unchanged when omni cannot run.
     const out = (await distillToolResult("bash", result, CTX)) as {
       stdout: string;
     };

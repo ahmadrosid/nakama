@@ -57,12 +57,14 @@ export async function resolveProfileStoredTools(
   const customWebSearch = createCustomWebSearchTool(
     await loadWebSearchConfig()
   );
+
   const tools = await resolveToolsFromStorage(
     records,
     db,
     customWebSearch ? [...builtinOverrides, customWebSearch] : builtinOverrides,
     options
   );
+
   return omitUnavailableBuiltinTools(
     tools,
     isEmailConfigComplete(await loadEmailConfig())
@@ -82,11 +84,13 @@ export async function resolveToolsFromStorage(
       ...(options.serverTools?.googleMeet ?? []),
     ].map((tool) => [tool.name, tool])
   );
+
   const serverTools = buildServerTools(
     db,
     options.userConfig,
     options.serverTools
   );
+
   const resolved: ToolDefinition[] = [];
 
   for (const record of records) {
@@ -175,6 +179,7 @@ function createCodingAgentAwareBashTool(
         context,
         userConfig
       );
+
       return runBash(enriched, context);
     },
   };
@@ -188,6 +193,7 @@ async function loadPluginTool(
   const pluginId = record.pluginId;
   const actionKey = record.pluginKey;
   const orgId = record.orgId;
+
   if (!(pluginService && pluginId && actionKey && orgId)) {
     return null;
   }
@@ -197,9 +203,11 @@ async function loadPluginTool(
     pluginId,
     actionKey
   );
+
   if (!action) {
     return null;
   }
+
   if (actorRole && !actorMayInvoke(action.access, actorRole)) {
     return null;
   }
@@ -214,6 +222,7 @@ async function loadPluginTool(
     async run(input, context) {
       const trustedOrgId = context.orgId?.trim();
       const trustedProfileId = context.profileId?.trim();
+
       if (!(trustedOrgId && trustedProfileId)) {
         throw new PluginHostError("invalid_input");
       }
@@ -229,6 +238,7 @@ async function loadPluginTool(
         sessionId: context.sessionId,
         signal: context.signal,
       });
+
       return invoked.result;
     },
   };
@@ -242,6 +252,7 @@ export function pluginActorFromContext(
     context.channel === "whatsapp" ||
     context.channel === "discord" ||
     context.channel === "slack";
+
   return {
     id: context.userId?.trim() ?? "",
     role: messagingChannel
@@ -256,9 +267,10 @@ function pluginActorRoleFromOrgRole(
   if (role === "admin" || role === "member" || role === "viewer") {
     return role;
   }
+
   return "viewer";
 }
 
-function isJsonSchema(value: unknown): value is JsonSchema {
-  return typeof value === "object" && value !== null;
+function isJsonSchema<T>(value: T): value is T & JsonSchema {
+  return value instanceof Object && !Array.isArray(value);
 }

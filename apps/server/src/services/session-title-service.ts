@@ -37,7 +37,9 @@ export class SessionTitleService {
       }
 
       const storedMessages = await this.db.listMessagesForSession(sessionId);
+
       const messages = storedMessages.map(
+        // SAFETY: The message store only contains ChatMessage payloads.
         (record) => record.payload as ChatMessage
       );
 
@@ -53,6 +55,7 @@ export class SessionTitleService {
 
       if (!provider) {
         await this.db.updateSessionTitle(sessionId, SESSION_TITLE_FALLBACK);
+
         return;
       }
 
@@ -72,6 +75,7 @@ export class SessionTitleService {
 
 function hasCompletedFirstTurn(messages: readonly ChatMessage[]): boolean {
   const hasUser = messages.some((message) => message.role === "user");
+
   const hasAssistant = messages.some(
     (message) =>
       message.role === "assistant" && message.content.trim().length > 0

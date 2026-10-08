@@ -65,6 +65,7 @@ describe("isProviderConfigured", () => {
 
 describe("ensureProviderConfigured", () => {
   let configDir = "";
+
   const envKeys = [
     "NAKAMA_CONFIG_DIR",
     "NAKAMA_PROVIDER",
@@ -77,6 +78,7 @@ describe("ensureProviderConfigured", () => {
     "NETRA_API_KEY_FILE",
     "NETRA_MODEL",
   ] as const;
+
   const previousEnv: Partial<
     Record<(typeof envKeys)[number], string | undefined>
   > = {};

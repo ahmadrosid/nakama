@@ -36,6 +36,7 @@ describe("agent-browser service", () => {
 
   afterEach(async () => {
     process.env.PATH = originalPath;
+
     if (originalDisableFixPath === undefined) {
       delete process.env.NAKAMA_DISABLE_FIX_PATH;
     } else {
@@ -155,17 +156,20 @@ describe("agent-browser settings routes", () => {
 
   afterEach(async () => {
     process.env.PATH = originalPath;
+
     if (originalDisableFixPath === undefined) {
       delete process.env.NAKAMA_DISABLE_FIX_PATH;
     } else {
       process.env.NAKAMA_DISABLE_FIX_PATH = originalDisableFixPath;
     }
+
     delete process.env.NAKAMA_CONFIG_DIR;
 
     if (tempBinDir) {
       await rm(tempBinDir, { force: true, recursive: true });
       tempBinDir = "";
     }
+
     if (configDir) {
       await rm(configDir, { force: true, recursive: true });
       configDir = "";
@@ -177,15 +181,20 @@ describe("agent-browser settings routes", () => {
 
     const databaseAdapter = createInMemoryDatabaseAdapter();
     const authService = new AuthService();
+
     const app = createHonoApp({
       agent: new AgentService(null, null, databaseAdapter),
       authService,
+      // SAFETY: The test fixture matches the contract used by this test.
       automationService: {} as any,
       databaseAdapter,
+      // SAFETY: The test fixture matches the contract used by this test.
       mcpService: {} as any,
       orgService: new OrgService(databaseAdapter, authService),
+      // SAFETY: The test fixture matches the contract used by this test.
       systemStatus: { getStatus: async () => ({ ok: true }) } as any,
       webDistDir: null,
+      // SAFETY: The test fixture matches the contract used by this test.
       workerManager: {} as any,
     });
 
@@ -198,11 +207,14 @@ describe("agent-browser settings routes", () => {
     );
 
     expect(response.status).toBe(200);
+
+    // SAFETY: The test fixture matches the contract used by this test.
     const body = (await response.json()) as {
       installed: boolean;
       ready: boolean;
       version: string | null;
     };
+
     expect(body.installed).toBe(true);
     expect(body.ready).toBe(true);
     expect(body.version).toBe("agent-browser 1.0.0");
@@ -214,15 +226,20 @@ describe("agent-browser settings routes", () => {
 
       const databaseAdapter = createInMemoryDatabaseAdapter();
       const authService = new AuthService();
+
       const app = createHonoApp({
         agent: new AgentService(null, null, databaseAdapter),
         authService,
+        // SAFETY: The test fixture matches the contract used by this test.
         automationService: {} as any,
         databaseAdapter,
+        // SAFETY: The test fixture matches the contract used by this test.
         mcpService: {} as any,
         orgService: new OrgService(databaseAdapter, authService),
+        // SAFETY: The test fixture matches the contract used by this test.
         systemStatus: { getStatus: async () => ({ ok: true }) } as any,
         webDistDir: null,
+        // SAFETY: The test fixture matches the contract used by this test.
         workerManager: {} as any,
       });
 
@@ -236,10 +253,13 @@ describe("agent-browser settings routes", () => {
       );
 
       expect(response.status).toBe(200);
+
+      // SAFETY: The test fixture matches the contract used by this test.
       const body = (await response.json()) as {
         installed: boolean;
         ready: boolean;
       };
+
       expect(body.installed).toBe(false);
       expect(body.ready).toBe(false);
       expect(Date.now() - started).toBeLessThan(2000);
@@ -249,6 +269,7 @@ describe("agent-browser settings routes", () => {
   test("install stream emits progress events", async () => {
     await installFakeBinary(tempBinDir, "npm", "noop");
     await installFakeBinary(tempBinDir, "agent-browser", "installable");
+
     // The pinned hash only matches the real 53 MB tarball, so the download is
     // stubbed here; the hash check has its own tests against a local registry.
     using _download = spyOn(
@@ -261,15 +282,20 @@ describe("agent-browser settings routes", () => {
 
     const databaseAdapter = createInMemoryDatabaseAdapter();
     const authService = new AuthService();
+
     const app = createHonoApp({
       agent: new AgentService(null, null, databaseAdapter),
       authService,
+      // SAFETY: The test fixture matches the contract used by this test.
       automationService: {} as any,
       databaseAdapter,
+      // SAFETY: The test fixture matches the contract used by this test.
       mcpService: {} as any,
       orgService: new OrgService(databaseAdapter, authService),
+      // SAFETY: The test fixture matches the contract used by this test.
       systemStatus: { getStatus: async () => ({ ok: true }) } as any,
       webDistDir: null,
+      // SAFETY: The test fixture matches the contract used by this test.
       workerManager: {} as any,
     });
 
@@ -311,8 +337,10 @@ async function installFakeBinary(
       join(binDir, `${name}.cmd`),
       "@echo off\r\necho agent-browser 1.0.0\r\nexit /b 0\r\n"
     );
+
     return;
   }
+
   const scriptPath = join(binDir, name);
   let script = "";
 

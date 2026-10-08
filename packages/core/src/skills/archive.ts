@@ -17,7 +17,9 @@ function isUnderArchiveDir(
   const archiveRoot = path.resolve(
     getProfileSkillsArchiveDir(orgId, profileId)
   );
+
   const resolved = path.resolve(targetPath);
+
   return (
     resolved === archiveRoot || resolved.startsWith(`${archiveRoot}${path.sep}`)
   );
@@ -34,6 +36,7 @@ export async function archiveSkillDirectory(options: {
     options.profileId,
     options.skillName
   );
+
   // resolveProfileSkillDirectory already assertValidSkillName + assertNotBundledSkillName
   // and keeps liveDirectory inside the profile skills root.
   const skillName = path.basename(liveDirectory);
@@ -50,11 +53,13 @@ export async function archiveSkillDirectory(options: {
     options.orgId,
     options.profileId
   );
+
   await mkdir(archiveRoot, { recursive: true });
 
   // skillName is a single validated segment from resolveProfileSkillDirectory;
   // archiveRoot is getProfileSkillsArchiveDir, so the join stays under .archive.
   let archivedDirectory = path.join(archiveRoot, skillName);
+
   if (await pathExists(archivedDirectory)) {
     const stamp = (options.now ?? new Date()).getTime();
     archivedDirectory = path.join(archiveRoot, `${skillName}-${stamp}`);
@@ -104,5 +109,6 @@ export async function restoreArchivedSkillDirectory(options: {
   }
 
   await rename(options.archivedDirectory, liveDirectory);
+
   return { directory: liveDirectory };
 }

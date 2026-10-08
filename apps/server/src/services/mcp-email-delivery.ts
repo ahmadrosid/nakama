@@ -10,6 +10,7 @@ import type {
   DatabaseAdapter,
   StoredMcpServerRecord,
 } from "@nakama/db";
+import type { JsonValue, McpToolArguments } from "./mcp-client-manager";
 import type { McpService } from "./mcp-service";
 
 interface McpEmailTarget {
@@ -86,6 +87,7 @@ export function createMcpAwareEmailOutboundAdapter(
             text: input.text,
             to: input.to,
           });
+
           return { ok: true };
         }
 
@@ -127,6 +129,7 @@ async function findProfileMcpEmailTarget(
   profileId: string
 ): Promise<McpEmailTarget | null> {
   const servers = await db.listMcpServersForProfile(profileId);
+
   return findBestMcpEmailTarget(servers);
 }
 
@@ -205,11 +208,11 @@ function scoreEmailTool(
 function buildToolArguments(
   tool: CachedMcpTool,
   input: { to: string; subject: string; text: string }
-): Record<string, unknown> {
+): McpToolArguments {
   const properties = readSchemaProperties(tool.inputSchema);
 
   if (properties) {
-    const args: Record<string, unknown> = {};
+    const args: McpToolArguments = {};
 
     assignSchemaValue(args, properties, RECIPIENT_FIELD_ALIASES, input.to);
     assignSchemaValue(args, properties, SUBJECT_FIELD_ALIASES, input.subject);
@@ -227,20 +230,18 @@ function buildToolArguments(
   };
 }
 
-function readSchemaProperties(
-  inputSchema: unknown
-): Record<string, unknown> | null {
-  if (!isRecord(inputSchema)) {
-    return null;
-  }
+function readSchemaProperties<T>(
+  inputSchema: T
+): Map<string, JsonValue> | null {
+  const schema = readJsonObject(inputSchema);
+  const properties = schema?.get("properties");
 
-  const properties = inputSchema.properties;
-  return isRecord(properties) ? properties : null;
+  return properties ? readJsonObject(properties) : null;
 }
 
 function assignSchemaValue(
-  target: Record<string, unknown>,
-  properties: Record<string, unknown>,
+  target: McpToolArguments,
+  properties: Map<string, JsonValue>,
   candidates: string[],
   value: string
 ): void {
@@ -250,36 +251,87 @@ function assignSchemaValue(
     return;
   }
 
-  target[match] = schemaExpectsArray(properties[match]) ? [value] : value;
+  target[match] = schemaExpectsArray(properties.get(match)) ? [value] : value;
 }
 
-function schemaExpectsArray(schema: unknown): boolean {
-  return isRecord(schema) && schema.type === "array";
+function schemaExpectsArray<T>(schema: T): boolean {
+  return readJsonObject(schema)?.get("type") === "array";
 }
 
 function findSchemaKey(
-  properties: Record<string, unknown>,
+  properties: Map<string, JsonValue>,
   candidates: string[]
 ): string | undefined {
   const normalizedCandidates = candidates.map(normalizeKey);
 
-  return Object.keys(properties).find((key) =>
+  return [...properties.keys()].find((key) =>
     normalizedCandidates.includes(normalizeKey(key))
   );
 }
 
-function isErrorResult(value: unknown): value is { error: string } {
-  return (
-    isRecord(value) &&
-    typeof value.error === "string" &&
-    value.error.trim().length > 0
-  );
+function isErrorResult<T>(value: T): value is T & { error: string } {
+  const record = readJsonObject(value);
+  const error = record?.get("error");
+
+  return isString(error) && error.trim().length > 0;
 }
 
-function isRecord(value: unknown): value is Record<string, any> {
-  return typeof value === "object" && value !== null;
+function readJsonObject<T>(value: T): Map<string, JsonValue> | null {
+  if (!(value instanceof Object)) {
+    return null;
+  }
+
+  const entries = Object.entries(value);
+  const parsed: Array<[string, JsonValue]> = [];
+
+  for (const [key, entry] of entries) {
+    const result = parseJsonValue(entry);
+
+    if (result === undefined) {
+      return null;
+    }
+
+    parsed.push([key, result]);
+  }
+
+  return new Map(parsed);
+}
+
+function parseJsonValue<T>(value: T): JsonValue | undefined {
+  if (
+    value === null ||
+    Object.prototype.toString.call(value) === "[object String]" ||
+    Object.prototype.toString.call(value) === "[object Number]" ||
+    Object.prototype.toString.call(value) === "[object Boolean]"
+  ) {
+    // SAFETY: The accepted primitive tags match JsonValue's scalar members.
+    return value as JsonValue;
+  }
+
+  if (Array.isArray(value)) {
+    const values = value.map(parseJsonValue);
+
+    if (values.some((entry) => entry === undefined)) {
+      return;
+    }
+
+    // SAFETY: The check above excludes every undefined parse result.
+    return values as JsonValue[];
+  }
+
+  if (value instanceof Object) {
+    const object = readJsonObject(value);
+
+    return object ? Object.fromEntries(object) : undefined;
+  }
+
+  return undefined;
 }
 
 function normalizeKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isString<T>(value: T): value is T & string {
+  return Object.prototype.toString.call(value) === "[object String]";
 }

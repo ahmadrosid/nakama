@@ -15,13 +15,16 @@ export async function composeKnowledgeBaseCatalog(
       getProfileSharedDocumentIds(orgId, profileId),
       listOrganizationKnowledgeBaseDocuments(orgId),
     ]);
+
   const documents = [
-    ...profileDocuments.map((document) => ({ ...document, scope: "profile" })),
-    ...organizationDocuments
-      .filter((document) => sharedDocumentIds.includes(document.id))
-      .map((document) => ({ ...document, scope: "organization" })),
+    ...profileDocuments,
+    ...organizationDocuments.filter((document) =>
+      sharedDocumentIds.includes(document.id)
+    ),
   ];
+
   const sources = DEFAULT_KNOWLEDGE_SOURCES;
+
   const readyDocuments = documents.filter(
     (document) => document.status === "ready"
   );
@@ -35,11 +38,7 @@ export async function composeKnowledgeBaseCatalog(
   if (readyDocuments.length > 0) {
     sections.push(
       "# Uploaded documents",
-      "Use knowledge_base_search to look up facts from uploaded documents on demand.",
-      ...readyDocuments.map(
-        (document) =>
-          `- [${document.scope}] ${document.filename} (${document.mediaType}) [id: ${document.id}]`
-      )
+      `${readyDocuments.length} ready documents. Use knowledge_base_search to find facts in their contents.`
     );
   }
 

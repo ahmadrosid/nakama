@@ -52,11 +52,15 @@ import { findMcpServerForOrg } from "./mcp-server-access";
 import { recordProfileChangeEvent } from "./profile-change-history";
 
 export const PROFILE_PACK_KIND = "nakama-profile-export" as const;
+
 const PROFILE_PACK_MANIFEST_FILENAME = "nakama-profile-export.json";
+
 const PROFILE_PACK_FORMAT_VERSION = 1;
+
 const CUSTOM_TOOLS_ARCHIVE_DIR = "custom-tools";
 
 export const MAX_PROFILE_PACK_ENTRY_COUNT = 10_000;
+
 /** Only these workspace paths ever leave (export) or enter (import) a pack. */
 const ROOT_ALLOWED_FILES = new Set([
   "SOUL.md",
@@ -64,8 +68,11 @@ const ROOT_ALLOWED_FILES = new Set([
   "INSTRUCTIONS.md",
   "MEMORY.md",
 ]);
+
 const ALLOWED_ROOT_SUBDIRS = new Set(["examples", "knowledge-base", "skills"]);
+
 const AVATAR_BASENAME_PATTERN = /^avatar\.[a-z0-9]+$/i;
+
 /**
  * A skill-local `tool.js`/`tool.ts` is `import()`ed straight into the
  * long-lived server process, so a pack carrying one turns a profile import
@@ -83,18 +90,21 @@ const IN_PROCESS_SKILL_SOURCE_EXTENSIONS = new Set([
   ".ts",
   ".tsx",
 ]);
+
 const IN_PROCESS_SKILL_SOURCE_REASON =
   "Executable JavaScript/TypeScript skill sources run inside the Nakama server process and are never installed from a profile pack.";
 
-const AVATAR_EXTENSION_MEDIA_TYPES: Record<string, string> = {
+const AVATAR_EXTENSION_MEDIA_TYPES = {
   gif: "image/gif",
   jpeg: "image/jpeg",
   jpg: "image/jpeg",
   png: "image/png",
   webp: "image/webp",
-};
+} satisfies Record<string, string>;
+
 const NOT_ALLOWLISTED_REASON =
   "Not part of the profile pack allowlist (secrets and generated data are excluded).";
+
 const PROFILE_ID_ATTEMPTS = 50;
 
 interface ProfilePackFile {
@@ -115,9 +125,17 @@ interface CreatedCustomTool {
 interface ValidPackedCustomTool {
   absolutePath: string;
   definition: ProfilePackCustomTool;
-  handlerConfig: Record<string, unknown>;
+  handlerConfig: ProfilePackCustomTool["handlerConfig"];
   sourcePath: string;
 }
+
+type ProfilePackJsonValue =
+  | boolean
+  | null
+  | number
+  | string
+  | ProfilePackJsonValue[]
+  | { [key: string]: ProfilePackJsonValue };
 
 type ToolAssignmentResolution =
   | { kind: "create"; packed: ValidPackedCustomTool; source: Buffer }
@@ -195,6 +213,7 @@ export async function createProfilePackExport(
       const avatarRelative = basename(
         getProfileAvatarPath(orgId, profileId, avatar.mediaType)
       );
+
       entries[avatarRelative] = avatar.bytes;
     }
   }
@@ -289,6 +308,7 @@ export async function previewProfilePackImport(
   const restorableEntries = entries.filter(
     (entry) => entry.name !== PROFILE_PACK_MANIFEST_FILENAME
   );
+
   const topLevelPaths = Array.from(
     new Set(restorableEntries.map((entry) => entry.name.split("/")[0] ?? ""))
   )
@@ -455,6 +475,7 @@ async function inventoryProfileSoulDir(soulDir: string): Promise<{
       } else {
         skipped.push({ path: relativePath, reason: NOT_ALLOWLISTED_REASON });
       }
+
       continue;
     }
 
@@ -477,6 +498,7 @@ async function inventoryProfileSoulDir(soulDir: string): Promise<{
   }
 
   files.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+
   return { files, skipped };
 }
 
@@ -565,6 +587,7 @@ async function buildProfilePackMeta(
     if (skill.pluginId) {
       continue;
     }
+
     if (isGlobalSkillSourcePath(skill.sourcePath)) {
       bundledSkillNames.push(skill.name);
     } else {
@@ -617,9 +640,10 @@ async function collectPackedCustomTools(
   const tools = await db.listToolsForProfile(profileId);
 
   for (const tool of tools) {
-    if (tool.pluginId) {
+    if (tool.pluginId || !isCustomToolType(tool.handlerType)) {
       continue;
     }
+
     const handler = getCustomToolHandler(tool.handlerType);
 
     if (!handler) {
@@ -675,7 +699,7 @@ async function collectPackedCustomTools(
     packedTools.push({
       description: tool.description,
       handlerConfig,
-      handlerType: tool.handlerType as ProfilePackCustomTool["handlerType"],
+      handlerType: tool.handlerType,
       name: tool.name,
     });
   }
@@ -742,6 +766,7 @@ async function restoreToolAssignments(
 
     const { packed, source } = resolution;
     const now = new Date().toISOString();
+
     const record: StoredToolRecord = {
       createdAt: now,
       description: packed.definition.description,
@@ -807,6 +832,7 @@ async function resolveToolAssignment(
   if (!packed) {
     if (hasPackedCustomToolNamed(manifest, name)) {
       skipped.push(customToolSkip(name, "has invalid metadata"));
+
       return null;
     }
 
@@ -815,6 +841,7 @@ async function resolveToolAssignment(
     }
 
     skipped.push(missingToolSkip(name));
+
     return null;
   }
 
@@ -822,6 +849,7 @@ async function resolveToolAssignment(
 
   if (!sourceEntry) {
     skipped.push(customToolSkip(name, "is missing its packed source file"));
+
     return null;
   }
 
@@ -833,6 +861,7 @@ async function resolveToolAssignment(
     skipped.push(
       customToolSkip(name, "conflicts with an existing tool or module")
     );
+
     return null;
   }
 
@@ -840,11 +869,13 @@ async function resolveToolAssignment(
     skipped.push(
       customToolSkip(name, "requires a platform admin to restore its source")
     );
+
     return null;
   }
 
   if (await pathExists(packed.absolutePath)) {
     skipped.push(customToolSkip(name, "cannot replace an existing module"));
+
     return null;
   }
 
@@ -902,6 +933,7 @@ function hasPackedCustomToolNamed(
   name: string
 ): boolean {
   const definitions: unknown = manifest.meta.customTools;
+
   return (
     Array.isArray(definitions) &&
     definitions.some((entry) => isPlainRecord(entry) && entry.name === name)
@@ -923,11 +955,13 @@ function findPackedCustomTool(
   );
 
   if (
-    !isPlainRecord(value) ||
-    typeof value.description !== "string" ||
-    typeof value.handlerType !== "string" ||
-    !isCustomToolType(value.handlerType) ||
-    !isPlainRecord(value.handlerConfig)
+    !(
+      isPlainRecord(value) &&
+      isString(value.description) &&
+      isString(value.handlerType) &&
+      isCustomToolType(value.handlerType) &&
+      isPlainRecord(value.handlerConfig)
+    )
   ) {
     return null;
   }
@@ -996,8 +1030,123 @@ function missingToolSkip(name: string): ProfilePackSkippedItem {
   };
 }
 
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function isPlainRecord<T>(
+  value: T
+): value is T & Record<string, ProfilePackJsonValue> {
+  if (!(value instanceof Object) || Array.isArray(value)) {
+    return false;
+  }
+
+  return Object.values(value).every(isProfilePackJsonValue);
+}
+
+function isProfilePackManifest<T>(value: T): value is T & ProfilePackManifest {
+  const manifest = readStringKeyedRecord(value);
+  const meta = readStringKeyedRecord(manifest?.get("meta"));
+  const skipped = manifest?.get("skipped");
+  const customTools = meta?.get("customTools");
+
+  return Boolean(
+    manifest &&
+      meta &&
+      manifest.get("apiVersion") === NAKAMA_API_VERSION &&
+      isString(manifest.get("createdAt")) &&
+      manifest.get("kind") === PROFILE_PACK_KIND &&
+      isString(manifest.get("sourceProfileId")) &&
+      isStringArray(manifest.get("topLevelPaths")) &&
+      isNumber(manifest.get("version")) &&
+      Array.isArray(skipped) &&
+      skipped.every(isProfilePackSkippedItem) &&
+      isStringArray(meta.get("bundledSkillNames")) &&
+      isStringArray(meta.get("composioToolkitSlugs")) &&
+      isStringArray(meta.get("mcpServerNames")) &&
+      isNullableString(meta.get("model")) &&
+      isString(meta.get("name")) &&
+      isStringArray(meta.get("profileSkillNames")) &&
+      isNullableBoolean(meta.get("skillsCuratorConsolidateEnabled")) &&
+      isNullableBoolean(meta.get("skillsPostTurnReview")) &&
+      isNullableBoolean(meta.get("skillsWriteApproval")) &&
+      isString(meta.get("systemPrompt")) &&
+      isNullableString(meta.get("thinkingEffort")) &&
+      isNullableBoolean(meta.get("thinkingEnabled")) &&
+      isStringArray(meta.get("toolNames")) &&
+      (customTools === undefined ||
+        (Array.isArray(customTools) &&
+          customTools.every(isProfilePackCustomTool)))
+  );
+}
+
+function isProfilePackSkippedItem<T>(value: T): boolean {
+  const item = readStringKeyedRecord(value);
+
+  return Boolean(
+    item && isString(item.get("path")) && isString(item.get("reason"))
+  );
+}
+
+function isProfilePackCustomTool<T>(value: T): boolean {
+  const tool = readStringKeyedRecord(value);
+
+  return Boolean(
+    tool &&
+      isString(tool.get("description")) &&
+      isProfilePackJsonValue(tool.get("handlerConfig")) &&
+      isCustomToolType(tool.get("handlerType")) &&
+      isString(tool.get("name"))
+  );
+}
+
+function readStringKeyedRecord<T>(
+  value: T
+): Map<string, ProfilePackJsonValue> | undefined {
+  if (!isPlainRecord(value)) {
+    return;
+  }
+
+  return new Map(Object.entries(value));
+}
+
+function isNullableString<T>(value: T): boolean {
+  return value === null || isString(value);
+}
+
+function isNullableBoolean<T>(value: T): boolean {
+  return (
+    value === null ||
+    Object.prototype.toString.call(value) === "[object Boolean]"
+  );
+}
+
+function isNumber<T>(value: T): boolean {
+  return (
+    Object.prototype.toString.call(value) === "[object Number]" &&
+    Number.isFinite(value)
+  );
+}
+
+function isStringArray<T>(value: T): boolean {
+  return Array.isArray(value) && value.every(isString);
+}
+
+function isProfilePackJsonValue<T>(
+  value: T
+): value is T & ProfilePackJsonValue {
+  const tag = Object.prototype.toString.call(value);
+
+  if (
+    value === null ||
+    tag === "[object String]" ||
+    tag === "[object Number]" ||
+    tag === "[object Boolean]"
+  ) {
+    return true;
+  }
+
+  if (Array.isArray(value)) {
+    return value.every(isProfilePackJsonValue);
+  }
+
+  return value instanceof Object && isPlainRecord(value);
 }
 
 async function writePackedWorkspaceFiles(
@@ -1040,6 +1189,7 @@ async function writePackedAvatar(
   const extension = entry.name
     .slice(entry.name.lastIndexOf(".") + 1)
     .toLowerCase();
+
   const mediaType = AVATAR_EXTENSION_MEDIA_TYPES[extension];
 
   if (!mediaType) {
@@ -1097,6 +1247,7 @@ async function recreatePackedSkills(
     }
 
     const now = new Date().toISOString();
+
     const record: StoredSkillRecord = {
       createdAt: now,
       createdBy: "human",
@@ -1188,8 +1339,10 @@ function readSkillNamesFromZip(
         entry.data.toString("utf8"),
         entry.name
       );
+
       results.push({
-        folder: match[1] as string,
+        // SAFETY: The preceding regular expression requires this folder capture.
+        folder: match[1]!,
         name: parsed.frontmatter.name,
       });
     } catch {
@@ -1313,6 +1466,7 @@ function readProfilePackZip(
   // or inflating the entry, so these checks reject bombs from their declarations.
   const admitEntry = (name: string, size: number): boolean => {
     entryCount += 1;
+
     if (entryCount > MAX_PROFILE_PACK_ENTRY_COUNT) {
       throw new NakamaApiError(
         `Profile pack exceeds the ${MAX_PROFILE_PACK_ENTRY_COUNT} entry limit.`,
@@ -1328,6 +1482,7 @@ function readProfilePackZip(
     }
 
     uncompressedTotal += size;
+
     if (uncompressedTotal > MAX_IMPORT_UNCOMPRESSED_BYTES) {
       throw new NakamaApiError(
         `Profile pack exceeds the ${MAX_IMPORT_UNCOMPRESSED_BYTES / (1024 * 1024)} MB uncompressed limit.`,
@@ -1361,12 +1516,15 @@ function readProfilePackZip(
     if (error instanceof NakamaApiError) {
       throw error;
     }
+
     if (error instanceof Error) {
       if (error.message === "invalid zip data") {
         throw new NakamaApiError("Invalid ZIP archive.", 400);
       }
+
       throw error;
     }
+
     throw new NakamaApiError("Invalid ZIP archive.", 400);
   }
 }
@@ -1385,9 +1543,13 @@ function readProfilePackManifest(
   let manifest: ProfilePackManifest;
 
   try {
-    manifest = JSON.parse(
-      manifestEntry.data.toString("utf8")
-    ) as ProfilePackManifest;
+    const parsed: unknown = JSON.parse(manifestEntry.data.toString("utf8"));
+
+    if (!isProfilePackManifest(parsed)) {
+      throw new Error("Invalid profile pack manifest shape.");
+    }
+
+    manifest = parsed;
   } catch {
     throw new Error("Nakama profile pack manifest is not valid JSON.");
   }
@@ -1450,4 +1612,8 @@ function toBuffer(value: Buffer | Uint8Array | ArrayBuffer): Buffer {
   }
 
   return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+}
+
+function isString<T>(value: T): value is T & string {
+  return Object.prototype.toString.call(value) === "[object String]";
 }

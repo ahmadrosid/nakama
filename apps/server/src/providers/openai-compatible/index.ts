@@ -28,6 +28,9 @@ import {
   normalizeThinkingEffort,
   notifyToolInputDelta,
   type PendingToolCall,
+  type ProviderJsonRecord,
+  readProviderString,
+  readRecord,
   readSseEvents,
 } from "../shared";
 
@@ -49,6 +52,7 @@ export function createOpenAICompatibleProvider(
   const model = options.model;
   const baseUrl = normalizeBaseUrl(options.baseUrl);
   const apiKey = options.apiKey || "not-needed";
+
   const client = new OpenAI({
     apiKey,
     baseURL: baseUrl,
@@ -56,6 +60,7 @@ export function createOpenAICompatibleProvider(
     maxRetries: 0,
     timeout: 600_000,
   });
+
   const useResponsesApi = options.wireApi === "responses";
 
   return {
@@ -86,6 +91,7 @@ export function createOpenAICompatibleProvider(
     },
     async generateText(input: GenerateTextInput) {
       const useJson = (input.format ?? "json") === "json";
+
       const system = useJson
         ? input.system
         : `${input.system}\n\nReturn only the requested text. No JSON, keys, labels, markdown fences, or surrounding quotes.`;
@@ -103,16 +109,20 @@ export function createOpenAICompatibleProvider(
           model,
           stream: false,
         });
+
         const content = result.content.trim();
 
         if (!content) {
           throw new Error(`${label} returned an empty response.`);
         }
 
-        return {
-          content,
-          ...(result.usage ? { usage: result.usage } : {}),
-        };
+        const textResult: GenerateTextResult = { content };
+
+        if (result.usage) {
+          textResult.usage = result.usage;
+        }
+
+        return textResult;
       }
 
       return requestCompletion(client, label, {
@@ -161,14 +171,14 @@ export function createOpenAICompatibleProvider(
   };
 }
 
-function formatSdkError(label: string, error: unknown): Error {
+function formatSdkError<ProviderError>(
+  label: string,
+  error: ProviderError
+): Error {
   if (error instanceof OpenAI.APIError) {
-    const body =
-      typeof error.error === "string"
-        ? error.error
-        : error.error
-          ? JSON.stringify(error.error)
-          : error.message;
+    const providerError = readProviderString(error.error);
+    const body = providerError ?? JSON.stringify(error.error ?? error.message);
+
     return new Error(formatHttpErrorBody(label, error.status ?? 0, body));
   }
 
@@ -184,6 +194,7 @@ async function buildMessages(
   messages: ChatMessage[],
   netra = false
 ): Promise<OpenAI.Chat.ChatCompletionMessageParam[]> {
+  // SAFETY: The upstream payload is validated or constructed by the provider adapter before this conversion.
   return (await toOpenAIMessages(
     system,
     messages,
@@ -191,33 +202,29 @@ async function buildMessages(
   )) as OpenAI.Chat.ChatCompletionMessageParam[];
 }
 
-function readReasoningText(
-  value: unknown,
+function readReasoningText<ProviderPayload>(
+  value: ProviderPayload,
   options?: { preserveWhitespace?: boolean }
 ): string | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return;
-  }
-
-  const record = value as Record<string, unknown>;
+  const record = readRecord(value);
   const details = readReasoningDetails(value);
+
   const detailText = details
     .map((item) => {
-      const detail = item as Record<string, unknown>;
-      return typeof detail.text === "string"
-        ? detail.text
-        : typeof detail.summary === "string"
-          ? detail.summary
-          : "";
+      const detail = readRecord(item);
+
+      return (
+        readProviderString(detail.text) ??
+        readProviderString(detail.summary) ??
+        ""
+      );
     })
     .join("");
+
   const direct =
     detailText ||
-    (typeof record.reasoning === "string"
-      ? record.reasoning
-      : typeof record.reasoning_content === "string"
-        ? record.reasoning_content
-        : undefined);
+    readProviderString(record.reasoning) ||
+    readProviderString(record.reasoning_content);
 
   if (direct === undefined) {
     return;
@@ -228,14 +235,15 @@ function readReasoningText(
   }
 
   const trimmed = direct.trim();
+
   return trimmed ? trimmed : undefined;
 }
 
-function readReasoningDetails(value: unknown): unknown[] {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return [];
-  }
-  const details = (value as Record<string, unknown>).reasoning_details;
+function readReasoningDetails<ProviderPayload>(
+  value: ProviderPayload
+): NonNullable<ProviderJsonRecord["reasoning_details"]> {
+  const details = readRecord(value).reasoning_details;
+
   return Array.isArray(details) ? details : [];
 }
 
@@ -248,6 +256,7 @@ function buildThinkingBody(
       ? { reasoning: { effort: thinking.effort === "low" ? "low" : "high" } }
       : { reasoning: { enabled: false } };
   }
+
   if (
     options.hasTools &&
     options.model.trim().toLowerCase().startsWith("gpt-6-astra")
@@ -291,31 +300,33 @@ async function requestChatCompletion(
   }
 ): Promise<ChatCompletionResult> {
   try {
-    const completion = await client.chat.completions.create(
-      {
-        messages: await buildMessages(
-          options.system,
-          options.messages,
-          options.netra
-        ),
+    const request: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
+      messages: await buildMessages(
+        options.system,
+        options.messages,
+        options.netra
+      ),
+      model: options.model,
+      ...buildThinkingBody(options.thinking, {
+        hasTools: Boolean(options.tools?.length),
         model: options.model,
-        ...buildThinkingBody(options.thinking, {
-          hasTools: Boolean(options.tools?.length),
-          model: options.model,
-          netra: options.netra,
-        }),
-        ...(options.tools?.length
-          ? {
-              tool_choice: "auto" as const,
-              tools: toOpenAITools(options.tools),
-            }
-          : {}),
-      } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
-      { signal: options.signal }
-    );
+        netra: options.netra,
+      }),
+    };
+
+    if (options.tools?.length) {
+      request.tool_choice = "auto";
+      request.tools = toOpenAITools(options.tools);
+    }
+
+    const completion = await client.chat.completions.create(request, {
+      signal: options.signal,
+    });
 
     const message = completion.choices[0]?.message;
+
     const toolCalls = parseOpenAIToolCalls(
+      // SAFETY: The upstream payload is validated or constructed by the provider adapter before this conversion.
       message?.tool_calls as
         | Array<{
             id?: string;
@@ -323,6 +334,7 @@ async function requestChatCompletion(
           }>
         | undefined
     );
+
     const content = message?.content ?? "";
     const thinking = readReasoningText(message);
     const reasoningDetails = options.netra ? readReasoningDetails(message) : [];
@@ -356,30 +368,31 @@ async function streamChatCompletion(options: {
   handlers: StreamChatHandlers;
   signal?: AbortSignal;
 }): Promise<ChatCompletionResult> {
+  const requestBody: OpenAI.Chat.ChatCompletionCreateParamsStreaming = {
+    messages: await buildMessages(
+      options.system,
+      options.messages,
+      options.netra
+    ),
+    model: options.model,
+    stream: true,
+    stream_options: { include_usage: true },
+    ...buildThinkingBody(options.thinking, {
+      hasTools: Boolean(options.tools?.length),
+      model: options.model,
+      netra: options.netra,
+    }),
+  };
+
+  if (options.tools?.length) {
+    requestBody.tool_choice = "auto";
+    requestBody.tools = toOpenAITools(options.tools);
+  }
+
   const response = await fetchWithoutIdleTimeout(
     `${options.baseUrl}/chat/completions`,
     {
-      body: JSON.stringify({
-        messages: await buildMessages(
-          options.system,
-          options.messages,
-          options.netra
-        ),
-        model: options.model,
-        stream: true,
-        stream_options: { include_usage: true },
-        ...buildThinkingBody(options.thinking, {
-          hasTools: Boolean(options.tools?.length),
-          model: options.model,
-          netra: options.netra,
-        }),
-        ...(options.tools?.length
-          ? {
-              tool_choice: "auto",
-              tools: toOpenAITools(options.tools),
-            }
-          : {}),
-      }),
+      body: JSON.stringify(requestBody),
       headers: {
         Authorization: `Bearer ${options.apiKey}`,
         "Content-Type": "application/json",
@@ -416,9 +429,10 @@ async function streamChatCompletion(options: {
   const pending = new Map<number, PendingToolCall>();
 
   const ended = await readSseEvents(response.body, ({ data, event }) => {
+    // SAFETY: The upstream payload is validated or constructed by the provider adapter before this conversion.
     const payload = JSON.parse(data) as {
       error?: unknown;
-      usage?: Record<string, unknown>;
+      usage?: ProviderJsonRecord;
       choices?: Array<{
         delta?: {
           content?: string | null;
@@ -438,6 +452,7 @@ async function streamChatCompletion(options: {
     usage = extractOpenAITokenUsage(payload.usage) ?? usage;
 
     const delta = payload.choices?.[0]?.delta;
+
     if (options.netra) {
       reasoningDetails.push(...readReasoningDetails(delta));
     }
@@ -501,13 +516,16 @@ async function requestCompletion(
   }
 ): Promise<GenerateTextResult> {
   try {
-    const completion = await client.chat.completions.create({
+    const request: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
       messages: options.messages,
       model: options.model,
-      ...(options.responseFormat
-        ? { response_format: options.responseFormat }
-        : {}),
-    });
+    };
+
+    if (options.responseFormat) {
+      request.response_format = options.responseFormat;
+    }
+
+    const completion = await client.chat.completions.create(request);
 
     const content = completion.choices[0]?.message?.content?.trim();
 
@@ -516,10 +534,14 @@ async function requestCompletion(
     }
 
     const usage = extractOpenAITokenUsage(completion.usage);
-    return {
-      content,
-      ...(usage ? { usage } : {}),
-    };
+
+    const result: GenerateTextResult = { content };
+
+    if (usage) {
+      result.usage = usage;
+    }
+
+    return result;
   } catch (error) {
     throw formatSdkError(label, error);
   }

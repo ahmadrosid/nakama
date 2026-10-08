@@ -3,7 +3,29 @@ import {
   nanoid,
   type ToolDefinition,
 } from "@nakama/core";
+import { z } from "zod";
 import type { AgentQuestionnaireState } from "../services/agent-questionnaire-state";
+
+const QuestionnaireChoiceSchema = z.union([
+  z.string().transform((label) => ({ label })),
+  z.object({
+    id: z.string().optional().catch(undefined),
+    label: z.string(),
+  }),
+]);
+
+const QuestionnaireInputSchema = z.object({
+  questions: z.array(
+    z.object({
+      allowCustomAnswer: z.boolean().optional().catch(undefined),
+      choices: z.array(QuestionnaireChoiceSchema),
+      id: z.string().optional().catch(undefined),
+      placeholder: z.string().optional().catch(undefined),
+      prompt: z.string(),
+    })
+  ),
+  title: z.string(),
+});
 
 export function createAskUserQuestionTools(
   questionnaireState: AgentQuestionnaireState
@@ -48,6 +70,7 @@ export function createAskUserQuestionTools(
         }
 
         const result = await questionnaireState.write(sessionId, questionnaire);
+
         return { questionnaire: result };
       },
     },
@@ -65,81 +88,36 @@ function slugId(value: string, fallback: string): string {
   return slug || fallback;
 }
 
-function readChoices(
-  input: unknown
-): Array<{ id?: string; label: string }> | null {
-  if (!Array.isArray(input)) {
+function readQuestionnaire(
+  input: z.input<typeof QuestionnaireInputSchema>
+): AgentQuestionnaire | null {
+  const parsedInput = QuestionnaireInputSchema.safeParse(input);
+
+  if (!parsedInput.success) {
     return null;
   }
 
-  const choices: Array<{ id?: string; label: string }> = [];
+  const title = parsedInput.data.title.trim();
 
-  for (const item of input) {
-    if (typeof item === "string") {
-      const label = item.trim();
-      if (!label) {
-        return null;
-      }
-      choices.push({ label });
-      continue;
-    }
-
-    // Tolerate legacy { id, label } payloads from older prompts/cassettes.
-    if (typeof item === "object" && item !== null) {
-      const record = item as Record<string, unknown>;
-      const label = typeof record.label === "string" ? record.label.trim() : "";
-      const id = typeof record.id === "string" ? record.id.trim() : "";
-      if (!label) {
-        return null;
-      }
-      choices.push(id ? { id, label } : { label });
-      continue;
-    }
-
+  if (!title) {
     return null;
   }
 
-  return choices;
-}
+  const parsed = parsedInput.data.questions.map((question, questionIndex) => {
+    const prompt = question.prompt.trim();
 
-function readQuestionnaire(input: unknown): AgentQuestionnaire | null {
-  if (typeof input !== "object" || input === null) {
-    return null;
-  }
+    const rawChoices = question.choices.map((choice) => ({
+      id: "id" in choice ? choice.id?.trim() : undefined,
+      label: choice.label.trim(),
+    }));
 
-  const record = input as Record<string, unknown>;
-  const title = typeof record.title === "string" ? record.title.trim() : "";
-  const questions = Array.isArray(record.questions) ? record.questions : null;
-
-  if (!(title && questions)) {
-    return null;
-  }
-
-  const parsed = questions.map((item, questionIndex) => {
-    if (typeof item !== "object" || item === null) {
+    if (!prompt || rawChoices.some((choice) => !choice.label)) {
       return null;
     }
 
-    const question = item as Record<string, unknown>;
-    const prompt =
-      typeof question.prompt === "string" ? question.prompt.trim() : "";
-    const rawChoices = readChoices(question.choices);
-    const allowCustomAnswer =
-      typeof question.allowCustomAnswer === "boolean"
-        ? question.allowCustomAnswer
-        : false;
-    const placeholder =
-      typeof question.placeholder === "string" && question.placeholder.trim()
-        ? question.placeholder.trim()
-        : undefined;
-    const explicitId =
-      typeof question.id === "string" ? question.id.trim() : "";
+    const questionId =
+      question.id?.trim() || slugId(prompt, `q${questionIndex + 1}`);
 
-    if (!(prompt && rawChoices)) {
-      return null;
-    }
-
-    const questionId = explicitId || slugId(prompt, `q${questionIndex + 1}`);
     const choices = rawChoices.map((choice, choiceIndex) => ({
       id:
         choice.id || slugId(choice.label, `${questionId}_c${choiceIndex + 1}`),
@@ -147,10 +125,10 @@ function readQuestionnaire(input: unknown): AgentQuestionnaire | null {
     }));
 
     return {
-      allowCustomAnswer,
+      allowCustomAnswer: question.allowCustomAnswer ?? false,
       choices,
       id: questionId,
-      placeholder,
+      placeholder: question.placeholder?.trim() || undefined,
       prompt,
     };
   });
@@ -161,7 +139,7 @@ function readQuestionnaire(input: unknown): AgentQuestionnaire | null {
 
   return {
     id: nanoid(),
-    questions: parsed as AgentQuestionnaire["questions"],
+    questions: parsed,
     title,
   };
 }

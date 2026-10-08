@@ -7,6 +7,7 @@ import {
 } from "./coding-agent-test-fixtures";
 
 const anthropicProvider = makeAnthropicProvider();
+
 const openaiProvider = makeOpenAIProvider();
 
 describe("enrichCodingAgentBashInput", () => {
@@ -42,6 +43,7 @@ describe("enrichCodingAgentBashInput", () => {
       updatedAt: new Date().toISOString(),
     });
 
+    // SAFETY: The test fixture matches the contract used by this test.
     const enriched = (await enrichCodingAgentBashInput(
       db,
       { command: "echo hello" },
@@ -96,6 +98,7 @@ describe("enrichCodingAgentBashInput", () => {
       updatedAt: new Date().toISOString(),
     });
 
+    // SAFETY: The test fixture matches the contract used by this test.
     const enriched = (await enrichCodingAgentBashInput(
       db,
       { command: "echo exec task" },
@@ -176,6 +179,7 @@ describe("enrichCodingAgentBashInput", () => {
       updatedAt: new Date().toISOString(),
     });
 
+    // SAFETY: The test fixture matches the contract used by this test.
     const enriched = (await enrichCodingAgentBashInput(
       db,
       {
@@ -227,6 +231,7 @@ describe("enrichCodingAgentBashInput", () => {
       updatedAt: new Date().toISOString(),
     });
 
+    // SAFETY: The test fixture matches the contract used by this test.
     const enriched = (await enrichCodingAgentBashInput(
       db,
       { command: "echo hello" },

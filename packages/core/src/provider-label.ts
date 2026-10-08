@@ -44,6 +44,7 @@ export function formatConfiguredProviderLabel(
 
   if (provider === "openai_compatible") {
     const trimmed = displayName?.trim();
+
     return trimmed || "Custom provider";
   }
 

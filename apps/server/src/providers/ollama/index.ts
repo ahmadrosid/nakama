@@ -15,6 +15,7 @@ function resolveOllamaBaseUrl(
   instance: ProviderInstance | null | undefined
 ): string {
   const trimmed = instance?.baseUrl?.trim();
+
   if (trimmed) {
     return normalizeBaseUrl(trimmed);
   }
@@ -29,6 +30,7 @@ export function createOllamaProvider(options: {
 }): ProviderClient {
   const instance = options.instance;
   const hostMode = resolveOllamaHostMode(instance ?? {});
+
   const apiKey =
     options.apiKey.trim() || (hostMode === "local" ? "not-needed" : "");
 

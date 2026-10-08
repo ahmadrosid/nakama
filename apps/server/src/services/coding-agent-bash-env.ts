@@ -1,5 +1,6 @@
 import type { ToolContext, UserConfig } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
+import type { BashInput } from "../tools/bash";
 import {
   inferCodingAgentHarnessKind,
   isCodingAgentCommand,
@@ -22,25 +23,20 @@ async function resolveProfileModelId(
 
 export async function enrichCodingAgentBashInput(
   db: DatabaseAdapter,
-  input: unknown,
+  input: BashInput,
   context: ToolContext,
   userConfig: UserConfig | null | undefined
-): Promise<unknown> {
-  if (typeof input !== "object" || input === null) {
-    return input;
-  }
-
-  const record = input as Record<string, unknown>;
-  const command =
-    typeof record.command === "string" ? record.command.trim() : "";
+): Promise<BashInput> {
+  const command = input.command.trim();
 
   if (!command) {
     return input;
   }
 
   const workspace = await loadCodingAgentWorkspaceSettings(db);
-  const codingAgentRequested = record.codingAgent === true;
+  const codingAgentRequested = input.codingAgent === true;
   const matchesHarness = isCodingAgentCommand(command, workspace.harnesses);
+
   const inferredKind = inferCodingAgentHarnessKind(
     command,
     workspace.harnesses
@@ -60,6 +56,7 @@ export async function enrichCodingAgentBashInput(
     context.profileId !== undefined && context.profileId.length > 0
       ? await resolveProfileModelId(db, context.profileId)
       : null;
+
   const harness = await resolveCodingAgentHarness(db, inferredKind, {
     profileModel,
     providerPassthroughEnabled: workspace.providerPassthroughEnabled,
@@ -71,7 +68,7 @@ export async function enrichCodingAgentBashInput(
     harness.kind === "cursor_agent"
   ) {
     return {
-      ...record,
+      ...input,
       codingAgent: true,
     };
   }
@@ -81,7 +78,9 @@ export async function enrichCodingAgentBashInput(
     profileModel,
     userConfig,
   });
-  const explicitEnv = readStringRecord(record.env);
+
+  const explicitEnv = input.env;
+
   const mergedEnv = mergeCodingAgentSpawnEnv(process.env, spawn.env, {
     callerEnv: explicitEnv,
     protectCredentialKeys: spawn.env && Object.keys(spawn.env).length > 0,
@@ -91,33 +90,14 @@ export async function enrichCodingAgentBashInput(
     return input;
   }
 
-  const envRecord = Object.fromEntries(
-    Object.entries(mergedEnv).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string"
-    )
-  );
-
-  return {
-    ...record,
+  const enriched: BashInput = {
+    ...input,
     codingAgent: true,
-    ...(Object.keys(envRecord).length > 0 ? { env: envRecord } : {}),
   };
-}
 
-function readStringRecord(value: unknown): Record<string, string> {
-  if (typeof value !== "object" || value === null) {
-    return {};
+  if (Object.keys(mergedEnv).length > 0) {
+    enriched.env = mergedEnv;
   }
 
-  const entries = Object.entries(value as Record<string, unknown>).flatMap(
-    ([key, entry]) => {
-      if (typeof entry !== "string") {
-        return [];
-      }
-
-      return [[key, entry] as const];
-    }
-  );
-
-  return Object.fromEntries(entries);
+  return enriched;
 }

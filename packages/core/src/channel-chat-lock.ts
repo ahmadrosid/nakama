@@ -32,13 +32,16 @@ export function createChatLock(defaults?: {
     async withLock(key, fn) {
       const previous = locks.get(key) ?? Promise.resolve();
       let release!: () => void;
+
       const gate = new Promise<void>((resolve) => {
         release = resolve;
       });
+
       locks.set(key, gate);
 
       const waitMs = options.waitMs;
       let timedOut = false;
+
       if (waitMs > 0) {
         timedOut = await new Promise<boolean>((resolve) => {
           const timer = setTimeout(() => resolve(true), waitMs);
@@ -66,6 +69,7 @@ export function createChatLock(defaults?: {
         return await fn();
       } finally {
         release();
+
         if (locks.get(key) === gate) {
           locks.delete(key);
         }

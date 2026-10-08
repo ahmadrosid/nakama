@@ -23,6 +23,16 @@ import {
   vacuumPluginDatabaseInto,
 } from "./plugin-service";
 
+type TestJsonValue =
+  | boolean
+  | null
+  | number
+  | string
+  | TestJsonValue[]
+  | { [key: string]: TestJsonValue };
+
+type TestJsonRecord = { [key: string]: TestJsonValue };
+
 afterEach(closePluginPackageRegistry);
 
 const echoJs = `
@@ -90,7 +100,7 @@ export async function run() {
 }
 `;
 
-function manifest(id: string, extras: Record<string, unknown> = {}) {
+function manifest(id: string, extras: TestJsonRecord = {}) {
   return {
     actions: [
       {
@@ -123,7 +133,7 @@ function manifest(id: string, extras: Record<string, unknown> = {}) {
 function bundle(
   id: string,
   actionSource: string,
-  extras: Record<string, unknown> = {}
+  extras: TestJsonRecord = {}
 ): ReturnType<typeof pluginPackage> {
   return pluginPackage({
     "actions/echo.js": actionSource,
@@ -147,6 +157,7 @@ async function enablePlugin(
     pluginId,
     selectedVersion: version,
   });
+
   expect(published.ok).toBe(true);
 }
 
@@ -165,10 +176,12 @@ describe("plugin runtime", () => {
 
   test("official Supermemory retains its private dataset across reinstall and uninstall", async () => {
     const db = createInMemoryDatabaseAdapter();
+
     const workerManager = {
       registerPluginWorkers: mock(async () => {}),
       unregisterPluginWorkers: mock(async () => {}),
     };
+
     const service = new PluginService(db, configDir, {
       officialPackagesDir: fileURLToPath(
         new URL("../../../../packages/plugins", import.meta.url)
@@ -176,8 +189,10 @@ describe("plugin runtime", () => {
       onHostRequest: async () => [{ id: "agent", name: "Agent" }],
       workerManager,
     });
+
     const actor = { id: "admin", role: "admin" as const };
-    const invoke = (actionKey: string, input: Record<string, unknown> = {}) =>
+
+    const invoke = (actionKey: string, input: TestJsonRecord = {}) =>
       service.invokePluginAction({
         access: "ui",
         actionKey,
@@ -186,6 +201,7 @@ describe("plugin runtime", () => {
         orgId: "org_a",
         pluginId: "supermemory",
       });
+
     await service.installOfficialPlugin("org_a", "supermemory", actor);
     expect(workerManager.registerPluginWorkers).toHaveBeenCalledWith(
       expect.objectContaining({ orgId: "org_a", pluginId: "supermemory" }),
@@ -200,16 +216,20 @@ describe("plugin runtime", () => {
       url: "http://localhost:6767",
     });
     const installed = await db.getOrgPlugin("org_a", "supermemory");
+
     const path = getOrgPluginDatabasePath(
       "org_a",
       "supermemory",
       installed!.databaseGeneration!,
       configDir
     );
+
     const dataset = new Database(path);
+
     const identity = dataset
       .query("SELECT namespace, org_id FROM dataset")
       .get();
+
     dataset.close();
     await service.installOfficialPlugin("org_a", "supermemory", actor, {
       expectedRevision: installed!.revision,
@@ -219,12 +239,14 @@ describe("plugin runtime", () => {
       url: "http://localhost:6767",
     });
     const reinstalled = await db.getOrgPlugin("org_a", "supermemory");
+
     const restoredPath = getOrgPluginDatabasePath(
       "org_a",
       "supermemory",
       reinstalled!.databaseGeneration!,
       configDir
     );
+
     const retained = new Database(restoredPath);
     expect(
       retained.query("SELECT namespace, org_id FROM dataset").get()
@@ -300,6 +322,7 @@ describe("plugin runtime", () => {
 
     const actor = { id: "user_1", role: "member" as const };
     const input = { message: "hello" };
+
     const ui = await service.invokePluginAction({
       access: "ui",
       actionKey: "echo",
@@ -308,6 +331,7 @@ describe("plugin runtime", () => {
       orgId: "org_a",
       pluginId: "echoer",
     });
+
     const tool = await service.invokePluginAction({
       access: "tool",
       actionKey: "echo",
@@ -319,8 +343,10 @@ describe("plugin runtime", () => {
       sessionId: "session_1",
     });
 
-    const uiResult = ui.result as Record<string, unknown>;
-    const toolResult = tool.result as Record<string, unknown>;
+    // SAFETY: The test fixture matches the contract used by this test.
+    const uiResult = ui.result as TestJsonRecord;
+    // SAFETY: The test fixture matches the contract used by this test.
+    const toolResult = tool.result as TestJsonRecord;
     expect(uiResult.input).toEqual(input);
     expect(toolResult.input).toEqual(input);
     expect(uiResult.orgId).toBe("org_a");
@@ -350,6 +376,7 @@ describe("plugin runtime", () => {
     await service.installPluginPackage(bundle("echoer", echoJs));
     await enablePlugin(db, "org_a", "echoer", "1.0.0");
 
+    // SAFETY: The test fixture matches the contract used by this test.
     const result = (
       await service.invokePluginAction({
         access: "ui",
@@ -369,7 +396,7 @@ describe("plugin runtime", () => {
         orgId: "org_a",
         pluginId: "echoer",
       })
-    ).result as Record<string, unknown>;
+    ).result as TestJsonRecord;
 
     expect(result.orgId).toBe("org_a");
     expect(result.actorRole).toBe("member");
@@ -431,6 +458,7 @@ describe("plugin runtime", () => {
     ).rejects.toBeInstanceOf(Error);
 
     process.env.NAKAMA_CUSTOM_TOOL_TIMEOUT_MS = "200";
+
     try {
       await expect(
         service.invokePluginAction({
@@ -447,6 +475,7 @@ describe("plugin runtime", () => {
     }
 
     const controller = new AbortController();
+
     const hang = service.invokePluginAction({
       access: "ui",
       actionKey: "echo",
@@ -456,6 +485,7 @@ describe("plugin runtime", () => {
       pluginId: "broken-hang",
       signal: controller.signal,
     });
+
     controller.abort();
     await expect(hang).rejects.toBeInstanceOf(Error);
 
@@ -467,7 +497,9 @@ describe("plugin runtime", () => {
       orgId: "org_a",
       pluginId: "healthy",
     });
+
     expect(
+      // SAFETY: The test fixture matches the contract used by this test.
       (healthy.result as { input: { message: string } }).input.message
     ).toBe("still-works");
   });
@@ -492,10 +524,12 @@ describe("plugin runtime", () => {
 
   test("runner works when copied outside the repository cwd", async () => {
     const elsewhere = await mkdtemp(join(tmpdir(), "nakama-plugin-runner-"));
+
     try {
       const runnerSource = fileURLToPath(
         new URL("./plugin-runner.js", import.meta.url)
       );
+
       const runnerDest = join(elsewhere, "plugin-runner.js");
       const moduleDest = join(elsewhere, "echo.js");
       await copyFile(runnerSource, runnerDest);
@@ -509,6 +543,7 @@ describe("plugin runtime", () => {
         stdin: "pipe",
         stdout: "pipe",
       });
+
       child.stdin.write(
         JSON.stringify({
           context: {
@@ -524,11 +559,13 @@ describe("plugin runtime", () => {
         })
       );
       child.stdin.end();
+
       const [stdout, stderr, exitCode] = await Promise.all([
         new Response(child.stdout).text(),
         new Response(child.stderr).text(),
         child.exited,
       ]);
+
       expect(exitCode).toBe(0);
       expect(stderr).toBe("");
       expect(JSON.parse(stdout).input).toEqual({ message: "outside" });
@@ -544,6 +581,7 @@ describe("plugin runtime", () => {
     await enablePlugin(db, "org_a", "slow", "1.0.0");
 
     const actor = { id: "user_1", role: "member" as const };
+
     const invoke = () =>
       service.invokePluginAction({
         access: "ui",
@@ -583,6 +621,7 @@ describe("plugin runtime", () => {
       orgId: "org_a",
       pluginId: "slow",
     });
+
     hanging.catch(() => undefined);
     await Bun.sleep(40);
 
@@ -612,6 +651,7 @@ describe("plugin runtime", () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new PluginService(db, configDir);
     await service.installPluginPackage(bundle("echoer", echoJs));
+
     const published = await db.publishOrgPluginRelease({
       contributions: { skills: [], tools: [] },
       databaseGeneration: "gen_u3",
@@ -622,6 +662,7 @@ describe("plugin runtime", () => {
       pluginId: "echoer",
       selectedVersion: "1.0.0",
     });
+
     expect(published.ok).toBe(true);
 
     await expect(

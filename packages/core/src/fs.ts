@@ -16,9 +16,11 @@ import {
 import { dirname } from "node:path";
 
 export const PRIVATE_DIR_MODE = 0o700;
+
 export const PRIVATE_FILE_MODE = 0o600;
 
 const WINDOWS_RENAME_ATTEMPTS = 10;
+
 const WINDOWS_RENAME_RETRY_CODES = new Set(["EACCES", "EBUSY", "EPERM"]);
 
 /**
@@ -32,15 +34,19 @@ async function replaceWithTempFile(
 ): Promise<void> {
   if (process.platform !== "win32") {
     await rename(tempPath, path);
+
     return;
   }
 
   for (let attempt = 1; ; attempt += 1) {
     try {
       await rename(tempPath, path);
+
       return;
     } catch (error) {
+      // SAFETY: Filesystem errors carry errno codes used by this retry policy.
       const code = (error as NodeJS.ErrnoException).code;
+
       if (
         attempt >= WINDOWS_RENAME_ATTEMPTS ||
         !(code && WINDOWS_RENAME_RETRY_CODES.has(code))
@@ -49,6 +55,7 @@ async function replaceWithTempFile(
         throw error;
       }
     }
+
     await Bun.sleep(Math.min(attempt * 10, 50));
   }
 }
@@ -56,6 +63,7 @@ async function replaceWithTempFile(
 export async function pathExists(path: string): Promise<boolean> {
   try {
     await access(path);
+
     return true;
   } catch {
     return false;
@@ -81,6 +89,7 @@ export async function readTextIfExists(
   }
 
   const content = (await readFile(path, "utf8")).trim();
+
   return content || undefined;
 }
 
@@ -111,6 +120,7 @@ export async function writeTextFile(
   await ensureDir(directory, options.ensureDirMode ?? PRIVATE_DIR_MODE);
 
   let preserveMode: number | undefined;
+
   if (options.chmod === false && (await pathExists(path))) {
     // biome-ignore lint/suspicious/noBitwiseOperators: permission bits are stored in st_mode.
     preserveMode = (await stat(path)).mode & 0o777;
@@ -129,6 +139,7 @@ export async function writeTextFile(
   }
 
   const handle = await open(tempPath, "r+");
+
   try {
     await handle.sync();
   } finally {
@@ -147,6 +158,7 @@ export async function writePrivateTextFileIfMissing(
   }
 
   await writeTextFile(path, content);
+
   return true;
 }
 
@@ -178,7 +190,7 @@ export async function removeFile(path: string): Promise<void> {
   await unlink(path);
 }
 
-export function parseIni(raw: string): Record<string, string> {
+export function parseIni(raw: string) {
   const values: Record<string, string> = {};
 
   for (const line of raw.split(/\r?\n/)) {

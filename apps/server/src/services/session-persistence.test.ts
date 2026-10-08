@@ -45,6 +45,7 @@ const summaryProvider: ProviderClient = {
   name: "openai",
   streamChat(input, handlers) {
     handlers.onChunk("Summary");
+
     return this.generateChat(input);
   },
 };
@@ -98,6 +99,7 @@ async function openDatabaseWithProfiles(
 ) {
   const database = await createSqliteDatabase(":memory:");
   const now = new Date().toISOString();
+
   for (const [orgId, id] of profiles) {
     await database.adapter.upsertOrganization({
       createdAt: now,
@@ -118,6 +120,7 @@ async function openDatabaseWithProfiles(
       updatedAt: now,
     });
   }
+
   return database;
 }
 
@@ -147,9 +150,11 @@ describe("session persistence", () => {
     });
     expect(await service.resolveSession("retired", "org_1")).not.toBeNull();
     const originalGet = db.getSession.bind(db);
+
     const read = spyOn(db, "getSession").mockImplementation((id) =>
       id === "retired" ? Promise.resolve(null) : originalGet(id)
     );
+
     try {
       expect(await service.resolveSession("retired", "org_1")).toBeNull();
       await expect(tool.run({}, {})).rejects.toThrow();
@@ -165,10 +170,13 @@ describe("session persistence", () => {
     test(`saves the user message before the provider fails (stream: ${stream})`, async () => {
       const db = createInMemoryDatabaseAdapter();
       await seedSession(db, "failed");
+
       const expected: ChatMessage[] = [
         { content: "Please help", role: "user" },
       ];
+
       let savedBeforeRequest: ChatMessage[] = [];
+
       const provider: ProviderClient = {
         ...summaryProvider,
         async generateChat() {
@@ -176,11 +184,13 @@ describe("session persistence", () => {
           throw new Error("Provider unavailable");
         },
       };
+
       const session = wrapPersistedSession(
         "failed",
         createAgentChatSession({ provider }),
         db
       );
+
       await expect(
         stream
           ? session.sendStream("Please help", { onChunk() {} })
@@ -191,6 +201,7 @@ describe("session persistence", () => {
       const saved = await loadSessionHistory(db, "failed");
       expect(saved).toEqual(expected);
       let nextMessages: readonly ChatMessage[] = [];
+
       const reopened = wrapPersistedSession(
         "failed",
         createAgentChatSession(
@@ -199,6 +210,7 @@ describe("session persistence", () => {
               ...summaryProvider,
               generateChat(input) {
                 nextMessages = [...input.messages];
+
                 return summaryProvider.generateChat(input);
               },
             },
@@ -207,6 +219,7 @@ describe("session persistence", () => {
         ),
         db
       );
+
       await reopened.send("Continue");
       expect(nextMessages[0]).toEqual(expected[0]);
       expect(await loadSessionHistory(db, "failed")).toHaveLength(3);
@@ -218,6 +231,7 @@ describe("session persistence", () => {
       const db = createInMemoryDatabaseAdapter();
       await seedSession(db, "empty");
       const controller = new AbortController();
+
       const session = wrapPersistedSession(
         "empty",
         createAgentChatSession({
@@ -227,12 +241,14 @@ describe("session persistence", () => {
               if (cancelled) {
                 controller.abort();
               }
+
               return Promise.reject(new Error("Interrupted"));
             },
           },
         }),
         db
       );
+
       await expect(
         session.sendStream(
           "Keep my request",
@@ -251,6 +267,7 @@ describe("session persistence", () => {
       const db = createInMemoryDatabaseAdapter();
       await seedSession(db, "stopped");
       const controller = new AbortController();
+
       const provider: ProviderClient = {
         ...summaryProvider,
         async streamChat(input, handlers) {
@@ -258,18 +275,23 @@ describe("session persistence", () => {
           handlers.onChunk("Partial ");
           handlers.onChunk("reply");
           controller.abort();
+
           if (!ignoresAbort) {
             input.signal?.throwIfAborted();
           }
+
           handlers.onChunk("late output");
+
           return summaryProvider.generateChat(input);
         },
       };
+
       const session = wrapPersistedSession(
         "stopped",
         createAgentChatSession({ provider }),
         db
       );
+
       await expect(
         session.sendStream(
           "Help me",
@@ -288,6 +310,7 @@ describe("session persistence", () => {
         },
       ]);
       let nextMessages: readonly ChatMessage[] = [];
+
       const reopened = wrapPersistedSession(
         "stopped",
         createAgentChatSession(
@@ -296,6 +319,7 @@ describe("session persistence", () => {
               ...summaryProvider,
               generateChat(input) {
                 nextMessages = [...input.messages];
+
                 return summaryProvider.generateChat(input);
               },
             },
@@ -304,6 +328,7 @@ describe("session persistence", () => {
         ),
         db
       );
+
       await reopened.send("Continue");
       expect(nextMessages.slice(0, 2)).toEqual(stored);
       expect(await loadSessionHistory(db, "stopped")).toHaveLength(4);
@@ -315,6 +340,7 @@ describe("session persistence", () => {
     await seedSession(db, "session_1");
     const original = historyWithTool();
     await replaceSessionHistory(db, "session_1", original);
+
     const session = createAgentChatSession(
       { provider: summaryProvider },
       {
@@ -324,39 +350,49 @@ describe("session persistence", () => {
         initialHistory: original,
       }
     );
+
     const wrapped = wrapPersistedSession("session_1", session, db);
     expect((await wrapped.compact({ force: true })).action).toBe("summarized");
     const working = await loadSessionHistory(db, "session_1");
     expect(working.length).toBeLessThan(original.length);
     expect(working.some((message) => message.role === "tool")).toBe(false);
+
     const archived = JSON.parse(
       await readFile(sessionHistoryArchivePath("org_1", "session_1"), "utf8")
     );
+
     expect(archived.messages).toEqual(original);
     const tool = createReadSessionHistoryTool(db, "org_1", "session_1");
     let content = "";
     let offset = 0;
+
     for (;;) {
+      // SAFETY: The test fixture matches the contract used by this test.
       const page = (await tool.run(
         { limit: 17, offset, orgId: "other-org", sessionId: "other-session" },
         {}
       )) as { content: string; nextOffset: number; done: boolean };
+
       content += page.content;
       expect(page.nextOffset).toBeGreaterThan(offset);
       offset = page.nextOffset;
+
       if (page.done) {
         break;
       }
     }
+
     expect(JSON.parse(content).messages).toEqual(original);
     await wrapped.send("Another turn");
     await wrapped.compact({ force: true });
+
     const snapshots = (
       await readFile(sessionHistoryArchivePath("org_1", "session_1"), "utf8")
     )
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
+
     expect(snapshots).toHaveLength(2);
     expect(snapshots[0].messages).toEqual(original);
     expect(snapshots[1].messages).toContainEqual({
@@ -373,6 +409,7 @@ describe("session persistence", () => {
 
   test("a failed archive leaves history and revision intact", async () => {
     const original = historyWithTool();
+
     const session = createAgentChatSession(
       { provider: summaryProvider },
       {
@@ -383,6 +420,7 @@ describe("session persistence", () => {
         initialHistory: original,
       }
     );
+
     await expect(session.compact({ force: true })).rejects.toThrow();
     expect(session.getHistory()).toEqual(original);
     expect(session.getHistoryRevision()).toBe(0);
@@ -400,6 +438,7 @@ describe("session persistence", () => {
         role: "tool",
         toolCallId: "call",
       };
+
       const session = createAgentChatSession(
         { provider: summaryProvider },
         {
@@ -409,11 +448,13 @@ describe("session persistence", () => {
           initialHistory: original,
         }
       );
+
       if (mode === "stream") {
         await session.sendStream("Proceed", { onChunk() {} });
       } else {
         await session.send("Proceed");
       }
+
       const path = sessionHistoryArchivePath("org_1", "automatic");
       const first = await readFile(path, "utf8");
       expect(JSON.parse(first).messages).toEqual([
@@ -456,19 +497,23 @@ describe("session persistence", () => {
     expect(
       (await service.compactSession(id, { force: true }, "org_1"))?.action
     ).toBe("summarized");
+
     const saved = await readFile(
       sessionHistoryArchivePath("org_1", id),
       "utf8"
     );
+
     expect(JSON.parse(saved).messages).toEqual(history);
     const branch = await service.branchSession(id, 0, "org_1");
     expect(branch).not.toBeNull();
     expect(await service.purgeSession(id, "other-org")).toBe(false);
     expect(await service.clearSession(id, "other-org")).toBe(false);
+
     const source = await readFile(
       sessionHistoryArchivePath("org_1", id),
       "utf8"
     );
+
     expect(await service.purgeSession(id, "org_1")).toBe(true);
     await expect(
       readFile(sessionHistoryArchivePath("org_1", id))
@@ -507,12 +552,14 @@ describe("session persistence", () => {
     });
     const service = new AgentService(null, null, db);
     const sessionId = await service.createSession("org_1", "web", "profile");
+
     const attachmentPath = await saveAttachmentBytes(
       "org_1",
       "profile",
       "attachment",
       Buffer.from("attachment")
     );
+
     await db.insertAttachment({
       channel: "web",
       createdAt: now,
@@ -540,10 +587,13 @@ describe("session persistence", () => {
       ["org_1", "profile"],
       ["org_2", "other-profile"]
     );
+
     const db = database.adapter;
+
     try {
       const service = new AgentService(null, null, db);
       const sourceId = await service.createSession("org_1", "web", "profile");
+
       const { attachmentId } = await createAttachmentSaver(db, {
         channel: "web",
         orgId: "org_1",
@@ -554,6 +604,7 @@ describe("session persistence", () => {
         kind: "image",
         mediaType: "image/png",
       });
+
       const history: ChatMessage[] = [
         {
           content: [
@@ -567,14 +618,18 @@ describe("session persistence", () => {
           role: "user",
         },
       ];
+
       await replaceSessionHistory(db, sourceId, history);
+
       // Another organization naming the same id must not keep the file alive.
       const foreignId = await service.createSession(
         "org_2",
         "web",
         "other-profile"
       );
+
       await replaceSessionHistory(db, foreignId, history);
+
       const load = createAttachmentLoader(db, {
         orgId: "org_1",
         profileId: "profile",
@@ -602,16 +657,20 @@ describe("session persistence", () => {
     async (method, cache) => {
       const database = await openDatabaseWithProfiles(["org_1", "profile"]);
       const db = database.adapter;
+
       try {
         const service = new AgentService(null, null, db);
+
         const sessionId = await service.createSession(
           "org_1",
           "web",
           "profile"
         );
+
         const session = await service.resolveSession(sessionId, "org_1");
         const paused = Promise.withResolvers<void>();
         const release = Promise.withResolvers<void>();
+
         // The wrapper persists the user message, then calls this: the turn is
         // held open exactly where a provider call would be.
         const turn = session!.send("hello", {
@@ -620,8 +679,10 @@ describe("session persistence", () => {
             await release.promise;
           },
         });
+
         await paused.promise;
         expect(await db.listMessagesForSession(sessionId)).toHaveLength(1);
+
         if (cache === "evicted") {
           // A profile edit drops the cached session while its turn still runs.
           await service.updateProfile("org_1", "profile", { model: null });
@@ -632,6 +693,7 @@ describe("session persistence", () => {
         await turn;
 
         expect(await db.listMessagesForSession(sessionId)).toEqual([]);
+
         if (method === "clearSession") {
           expect(
             (await service.getSessionMessages(sessionId, "org_1"))?.messages
@@ -649,6 +711,7 @@ describe("session persistence", () => {
     const db = createInMemoryDatabaseAdapter();
     await seedSession(db, "cleared");
     let writing: Promise<string> | undefined;
+
     const session = createAgentChatSession(
       { provider: summaryProvider },
       {
@@ -656,12 +719,14 @@ describe("session persistence", () => {
           writing = archiveSessionHistory(db, "org_1", "cleared", history);
           session.clear();
           const deletion = deleteSessionHistoryArchive("org_1", "cleared");
+
           return Promise.all([writing, deletion]).then(([pointer]) => pointer);
         },
         compaction: { contextWindow: 100_000, maxOutputTokens: 8192 },
         initialHistory: historyWithTool(),
       }
     );
+
     await expect(session.compact({ force: true })).rejects.toThrow();
     expect(writing).toBeDefined();
     expect(session.getHistory()).toEqual([]);
@@ -673,8 +738,10 @@ describe("session persistence", () => {
   test("profile deletion cleans archives, rejects late writers, and can retry failed cleanup", async () => {
     const database = await createSqliteDatabase(":memory:");
     const db = database.adapter;
+
     try {
       const now = new Date().toISOString();
+
       for (const [orgId, profileId] of [
         ["org_1", "deleted"],
         ["org_1", "kept"],
@@ -700,15 +767,18 @@ describe("session persistence", () => {
         });
         await seedSession(db, profileId, profileId, orgId);
         await archiveSessionHistory(db, orgId, profileId, historyWithTool());
+
         const retired = join(
           getUserConfigDir(),
           "retired-app-users",
           orgId,
           profileId
         );
+
         await mkdir(retired, { recursive: true });
         await Bun.write(join(retired, "private.txt"), "retired data");
       }
+
       const path = sessionHistoryArchivePath("org_1", "deleted");
       await rm(path);
       await mkdir(path);
@@ -740,6 +810,7 @@ describe("session persistence", () => {
           )
         )
       ).rejects.toThrow();
+
       for (const [orgId, id] of [
         ["org_1", "kept"],
         ["org_2", "other"],
@@ -770,22 +841,25 @@ describe("session persistence", () => {
 
   test("clear leaves the delete to clearSession instead of firing it unawaited", () => {
     let cleared = false;
+
+    // SAFETY: The test fixture matches the contract used by this test.
     const session = {
       clear() {
         cleared = true;
       },
       getHistory: () => [],
       getHistoryRevision: () => 0,
-    } as unknown as AgentChatSession;
+    } as AgentChatSession;
 
     // An unawaited call here rejects with nowhere to report, and Bun ends the
     // process on an unhandled rejection. AgentService.clearSession awaits the
     // same delete right after, so this wrapper must not repeat it.
+    // SAFETY: The test fixture matches the contract used by this test.
     const db = {
       deleteMessagesForSession() {
         throw new Error("clear() must not delete messages");
       },
-    } as unknown as DatabaseAdapter;
+    } as DatabaseAdapter;
 
     wrapPersistedSession("session_1", session, db).clear();
 

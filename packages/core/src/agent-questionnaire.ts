@@ -60,9 +60,11 @@ export function tryParseChannelQuestionnaireAnswers(
 
   if (questionnaire.questions.length === 1) {
     const [question] = questionnaire.questions;
+
     if (!question) {
       return null;
     }
+
     const answer = resolveQuestionAnswer(question, trimmed);
 
     if (!answer) {
@@ -203,18 +205,22 @@ function resolveQuestionAnswer(
   }
 
   const byNumber = trimmed.match(/^(\d+)$/);
+
   if (byNumber) {
     const index = Number(byNumber[1]) - 1;
     const choice = question.choices[index];
+
     if (choice) {
       return choice.label;
     }
   }
 
   const byLetter = trimmed.match(/^([a-z])$/i);
+
   if (byLetter) {
     const index = byLetter[1]!.toLowerCase().charCodeAt(0) - "a".charCodeAt(0);
     const choice = question.choices[index];
+
     if (choice) {
       return choice.label;
     }
@@ -223,6 +229,7 @@ function resolveQuestionAnswer(
   const labelMatch = question.choices.find(
     (choice) => choice.label.trim().toLowerCase() === trimmed.toLowerCase()
   );
+
   if (labelMatch) {
     return labelMatch.label;
   }

@@ -63,6 +63,7 @@ const PIPE_HOLDING_PLAN = {
 describe("runTimedInstallCommand", () => {
   test("preserves UTF-8 characters split across stdout and stderr chunks", async () => {
     const progress: string[] = [];
+
     const result = await runTimedInstallCommand(
       {
         args: [
@@ -157,6 +158,7 @@ describe("runTimedInstallCommand", () => {
           timeoutMs: 50,
         }
       );
+
       const elapsedMs = performance.now() - startedAt;
 
       expect({
@@ -185,6 +187,7 @@ describe("runTimedInstallCommand", () => {
           timeoutMs: 50,
         }
       );
+
       const elapsedMs = performance.now() - startedAt;
 
       expect({
@@ -204,6 +207,7 @@ describe("runTimedInstallCommand", () => {
     const result = await runTimedInstallCommand(PIPE_HOLDING_PLAN, undefined, {
       timeoutMs: 200,
     });
+
     const elapsedMs = performance.now() - startedAt;
 
     expect({
@@ -312,6 +316,7 @@ describe("runTimedInstallCommand", () => {
     setTimeout(() => controller.abort(), 100);
 
     const startedAt = Date.now();
+
     const result = await runTimedInstallCommand(STALLING_PLAN, undefined, {
       settleTimeoutMs: 1000,
       signal: controller.signal,
@@ -330,6 +335,7 @@ const SHA512_OF_ABC =
   "sha512-3a81oZNherrMQXNJriBBMRLm+k6JqX6iCp7u5ktV05ohkpkqJ0/BqDa6PCOj/uu9RU1EI2Q86A4qmslPpUyknw==";
 
 const TARBALL_BYTES = Buffer.from("nakama pinned tarball fixture");
+
 const PINNED_FIXTURE: PinnedNpmPackage = {
   integrity: `sha512-${createHash("sha512").update(TARBALL_BYTES).digest("base64")}`,
   name: "pinned-probe",
@@ -346,7 +352,7 @@ function startFakeRegistry(
     name: string;
     origin: string;
     version: string;
-  }) => unknown,
+  }) => object,
   body: Uint8Array
 ): FakeRegistry {
   const server = Bun.serve({
@@ -554,6 +560,7 @@ describe("pinned package verification", () => {
         const tarball = await downloadPinnedPackageTarball(PINNED_FIXTURE, {
           registry: registry.url,
         });
+
         const result = await runTimedInstallCommand(
           buildPinnedPackageInstallPlan(tarball.path, "npm")
         );
@@ -573,16 +580,19 @@ describe("pinned package verification", () => {
       } finally {
         registry.stop();
         process.env.PATH = originalPath;
+
         if (originalDisableFixPath === undefined) {
           delete process.env.NAKAMA_DISABLE_FIX_PATH;
         } else {
           process.env.NAKAMA_DISABLE_FIX_PATH = originalDisableFixPath;
         }
+
         if (originalSecret === undefined) {
           delete process.env.NAKAMA_TEST_PROVIDER_KEY;
         } else {
           process.env.NAKAMA_TEST_PROVIDER_KEY = originalSecret;
         }
+
         await rm(binDir, { force: true, recursive: true });
       }
     },

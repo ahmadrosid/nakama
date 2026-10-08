@@ -21,6 +21,7 @@ describe("SessionTurnRegistry", () => {
     registry.publish("session_1", { delta: " world", type: "chunk" });
 
     const received: string[] = [];
+
     const handle = registry.subscribe("session_1", (event) => {
       if (event.type === "chunk") {
         received.push(event.delta);
@@ -47,6 +48,7 @@ describe("SessionTurnRegistry", () => {
     const todos: AgentTodo[] = [
       { content: "Read files", id: "todo_1", status: "in_progress" },
     ];
+
     const events: StreamEvent[] = [
       { todos: [], type: "todos_updated" },
       {
@@ -63,6 +65,7 @@ describe("SessionTurnRegistry", () => {
       },
       { todos, type: "todos_updated" },
     ];
+
     for (const event of events) {
       registry.publish("session_1", event);
     }
@@ -90,18 +93,22 @@ describe("SessionTurnRegistry", () => {
       toolCallId: "call_1",
       type: "tool_input_delta",
     };
+
     const second: StreamEvent = { ...first, toolCallId: "call_2" };
     const chunk: StreamEvent = { delta: "Reading files", type: "chunk" };
+
     const firstUpdated: StreamEvent = {
       ...first,
       accumulatedArguments: '{"path":"a.txt"}',
       delta: '"path":"a.txt"}',
     };
+
     const secondUpdated: StreamEvent = {
       ...second,
       accumulatedArguments: '{"path":',
       delta: '"path":',
     };
+
     const secondComplete: StreamEvent = {
       ...second,
       accumulatedArguments: '{"path":"b.txt"}',

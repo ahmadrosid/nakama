@@ -32,6 +32,7 @@ describe("ChannelSessionStore hot session cache", () => {
   test("load clears hot sessions without touching persisted map", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "nakama-session-store-"));
     const filePath = path.join(dir, "chat-sessions.json");
+
     try {
       const store = new ChannelSessionStore(filePath);
       store.set("chat_1", {
@@ -54,6 +55,7 @@ describe("ChannelSessionStore hot session cache", () => {
   test("a slow save does not land after a newer one", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "nakama-session-store-"));
     const filePath = path.join(dir, "chat-sessions.json");
+
     try {
       const store = new ChannelSessionStore(filePath);
       // Big enough that this snapshot is still being written when the next

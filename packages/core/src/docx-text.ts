@@ -85,6 +85,7 @@ function convertWordprocessingXmlToMarkdown(xml: string): string {
 export async function convertDocxToMarkdown(bytes: Buffer): Promise<string> {
   if (looksLikeZipArchive(bytes)) {
     const { text } = await convertDocumentBytes(bytes, { format: "docx" });
+
     return text;
   }
 

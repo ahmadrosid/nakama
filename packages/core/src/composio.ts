@@ -1,15 +1,22 @@
+import { z } from "zod";
+import type { JsonValue } from "./contract";
 import {
   COMPOSIO_TOOLKIT_SLUG_PATTERN,
   type EnableComposioToolkitRequest,
   type UpdateProfileComposioToolkitsRequest,
 } from "./contract";
 
-function normalizeToolkitSlug(value: unknown, fieldName: string): string {
-  if (typeof value !== "string" || !value.trim()) {
+function normalizeToolkitSlug(
+  value: JsonValue | undefined,
+  fieldName: string
+): string {
+  const parsed = z.string().trim().min(1).safeParse(value);
+
+  if (!parsed.success) {
     throw new Error(`${fieldName} must be a non-empty string.`);
   }
 
-  const slug = value.trim().toLowerCase();
+  const slug = parsed.data.toLowerCase();
 
   if (!COMPOSIO_TOOLKIT_SLUG_PATTERN.test(slug)) {
     throw new Error(
@@ -21,25 +28,24 @@ function normalizeToolkitSlug(value: unknown, fieldName: string): string {
 }
 
 function normalizeActionSlugList(
-  value: unknown,
+  value: JsonValue | undefined,
   fieldName: string
 ): string[] | null {
   if (value === undefined || value === null) {
     return null;
   }
 
-  if (!Array.isArray(value)) {
+  const parsed = z.array(z.string().trim().min(1)).safeParse(value);
+
+  if (!parsed.success) {
     throw new Error(`${fieldName} must be an array of action slugs or null.`);
   }
 
   const slugs: string[] = [];
 
-  for (const entry of value) {
-    if (typeof entry !== "string" || !entry.trim()) {
-      throw new Error(`${fieldName} entries must be non-empty strings.`);
-    }
+  for (const entry of parsed.data) {
+    const slug = entry.toUpperCase();
 
-    const slug = entry.trim().toUpperCase();
     if (!/^[A-Z0-9_]+$/.test(slug)) {
       throw new Error(
         `${fieldName} entries must use uppercase letters, numbers, or underscores.`
@@ -53,54 +59,51 @@ function normalizeActionSlugList(
 }
 
 export function normalizeEnableComposioToolkitRequest(
-  value: unknown
+  value: JsonValue
 ): EnableComposioToolkitRequest {
-  if (typeof value !== "object" || value === null) {
+  const parsed = z
+    .object({ toolkitSlug: z.json().optional() })
+    .safeParse(value);
+
+  if (!parsed.success) {
     throw new Error("toolkit request must be an object.");
   }
 
-  const record = value as Record<string, unknown>;
-
   return {
-    toolkitSlug: normalizeToolkitSlug(record.toolkitSlug, "toolkitSlug"),
+    toolkitSlug: normalizeToolkitSlug(parsed.data.toolkitSlug, "toolkitSlug"),
   };
 }
 
 export function normalizeUpdateProfileComposioToolkitsRequest(
-  value: unknown
+  value: JsonValue
 ): UpdateProfileComposioToolkitsRequest {
-  if (typeof value !== "object" || value === null) {
+  const parsed = z.object({ assignments: z.array(z.json()) }).safeParse(value);
+
+  if (!parsed.success) {
     throw new Error("profile composio assignment request must be an object.");
   }
 
-  const record = value as Record<string, unknown>;
-  const assignments = record.assignments;
-
-  if (!Array.isArray(assignments)) {
-    throw new Error("assignments must be an array.");
-  }
-
   return {
-    assignments: assignments.map((entry, index) => {
-      if (typeof entry !== "object" || entry === null) {
+    assignments: parsed.data.assignments.map((entry, index) => {
+      const assignmentResult = z
+        .object({
+          allowedActions: z.json().optional(),
+          toolkitId: z.string().trim().min(1),
+        })
+        .safeParse(entry);
+
+      if (!assignmentResult.success) {
         throw new Error(`assignments[${index}] must be an object.`);
       }
 
-      const assignment = entry as Record<string, unknown>;
-      const toolkitId = assignment.toolkitId;
-
-      if (typeof toolkitId !== "string" || !toolkitId.trim()) {
-        throw new Error(
-          `assignments[${index}].toolkitId must be a non-empty string.`
-        );
-      }
+      const assignment = assignmentResult.data;
 
       return {
         allowedActions: normalizeActionSlugList(
           assignment.allowedActions,
           `assignments[${index}].allowedActions`
         ),
-        toolkitId: toolkitId.trim(),
+        toolkitId: assignment.toolkitId,
       };
     }),
   };

@@ -58,6 +58,7 @@ describe("Nakama data portability", () => {
     const raw = new Database(databasePath);
     const oldConfigDir = process.env.NAKAMA_CONFIG_DIR;
     process.env.NAKAMA_CONFIG_DIR = rootDir;
+
     try {
       raw.exec(
         "INSERT INTO organizations (id,name,slug,created_at,updated_at) VALUES ('o','Org','o','now','now')"
@@ -91,10 +92,12 @@ describe("Nakama data portability", () => {
         "private attachment"
       );
       await writeFile(join(history, "old.jsonl"), "private history");
+
       const legacyBackup = await createNakamaDataExport({
         databasePath,
         rootDir,
       });
+
       await retireAppUserData(rootDir, databasePath);
       await retireAppUserData(rootDir, databasePath);
       const retired = join(rootDir, "retired-app-users", "o", "p");
@@ -118,6 +121,7 @@ describe("Nakama data portability", () => {
       expect(await readFile(join(profile, "MEMORY.md"), "utf8")).toBe(
         "shared memory"
       );
+
       if (process.platform !== "win32") {
         expect((await lstat(retired)).mode % 0o1000).toBe(0o700);
         expect(
@@ -125,12 +129,15 @@ describe("Nakama data portability", () => {
             0o1000
         ).toBe(0o600);
       }
+
       expect(
         raw.query("SELECT name FROM sqlite_master WHERE name='api_keys'").get()
       ).toBeNull();
+
       const normal = fflate.unzipSync(
         (await createNakamaOrgDataExport(database.adapter, "o")).data
       );
+
       expect(JSON.stringify(Object.keys(normal))).not.toContain(
         "retired-app-users"
       );
@@ -156,6 +163,7 @@ describe("Nakama data portability", () => {
         await readFile(join(retired, "attachments", "attachment"), "utf8")
       ).toBe("private attachment");
       const restored = new Database(databasePath, { readonly: true });
+
       try {
         expect(
           restored
@@ -173,6 +181,7 @@ describe("Nakama data portability", () => {
     } finally {
       raw.close(true);
       database.release();
+
       if (oldConfigDir === undefined) {
         delete process.env.NAKAMA_CONFIG_DIR;
       } else {
@@ -191,6 +200,7 @@ describe("Nakama data portability", () => {
       "users",
       "alice"
     );
+
     const target = join(
       rootDir,
       "retired-app-users",
@@ -199,6 +209,7 @@ describe("Nakama data portability", () => {
       "users",
       "alice"
     );
+
     await mkdir(source, { recursive: true });
     await mkdir(target, { recursive: true });
     await writeFile(join(source, "MEMORY.md"), "secret");
@@ -221,6 +232,7 @@ describe("Nakama data portability", () => {
 
   test("legacy restore sanitation failure leaves live data and runtime untouched", async () => {
     await writeFile(join(rootDir, "config.ini"), "live");
+
     const archive = fflate.zipSync({
       ...fflate.unzipSync(
         (await createNakamaDataExport({ databasePath: null, rootDir })).data
@@ -228,6 +240,7 @@ describe("Nakama data portability", () => {
       "orgs/o/profiles/p/users/alice/MEMORY.md": Buffer.from("private"),
       "retired-app-users/o/p/users/alice/MEMORY.md": Buffer.from("conflict"),
     });
+
     let stopped = false;
     await expect(
       restoreNakamaDataImport(archive, {
@@ -250,15 +263,18 @@ describe("Nakama data portability", () => {
     store.close();
     await mkdir(join(directory, "audio"), { recursive: true });
     await writeFile(join(directory, "audio", "temporary.wav"), "audio");
+
     const exported = await createNakamaDataExport({
       databasePath: null,
       rootDir,
     });
+
     const files = Object.keys(fflate.unzipSync(exported.data));
     expect(files).toContain("orgs/a/meet/meetings.sqlite");
     expect(files.some((path) => path.includes("audio/"))).toBe(false);
     await restoreNakamaDataImport(exported.data, { confirm: true, rootDir });
     const restored = new MeetingStore(directory, "a");
+
     try {
       expect(
         restored
@@ -273,10 +289,12 @@ describe("Nakama data portability", () => {
   test("round-trips a backup at the restore entry-byte limit", async () => {
     const filePath = join(rootDir, "at-budget.bin");
     await writeFile(filePath, Buffer.alloc(MAX_IMPORT_ENTRY_BYTES));
+
     const exported = await createNakamaDataExport({
       databasePath: null,
       rootDir,
     });
+
     const preview = await previewNakamaDataImport(exported.data, { rootDir });
     expect(preview.archiveFileCount).toBe(1);
     expect(preview.archiveTotalBytes).toBe(MAX_IMPORT_ENTRY_BYTES);
@@ -285,6 +303,7 @@ describe("Nakama data portability", () => {
       confirm: true,
       rootDir,
     });
+
     expect(restored.restoredFileCount).toBe(1);
     expect((await lstat(filePath)).size).toBe(MAX_IMPORT_ENTRY_BYTES);
   }, 30_000);
@@ -292,6 +311,7 @@ describe("Nakama data portability", () => {
   test("rejects an export whose SQLite snapshot exceeds the restore entry budget", async () => {
     const databasePath = join(rootDir, "nakama.sqlite");
     const db = new Database(databasePath);
+
     try {
       db.exec("CREATE TABLE retained_data (payload BLOB)");
       db.run("INSERT INTO retained_data VALUES (zeroblob(?))", [
@@ -306,6 +326,7 @@ describe("Nakama data portability", () => {
     ).rejects.toMatchObject({ status: 413 });
     expect(await readdir(rootDir)).toEqual(["nakama.sqlite"]);
     const original = new Database(databasePath, { readonly: true });
+
     try {
       expect(
         original
@@ -338,9 +359,11 @@ describe("Nakama data portability", () => {
     for (let index = 0; index < 5; index += 1) {
       await writeFile(join(rootDir, `part-${index}.bin`), "original");
     }
+
     const readMock = spyOn(fsPromises, "readFile").mockResolvedValue(
       Buffer.alloc(MAX_IMPORT_ENTRY_BYTES)
     );
+
     try {
       await expect(
         createNakamaDataExport({ databasePath: null, rootDir })
@@ -348,14 +371,17 @@ describe("Nakama data portability", () => {
     } finally {
       readMock.mockRestore();
     }
+
     expect((await readdir(rootDir)).length).toBe(5);
   });
 
   test("rejects a ZIP result above the compressed restore budget", async () => {
     await writeFile(join(rootDir, "config.ini"), "original");
+
     const zipMock = spyOn(fflate, "zipSync").mockReturnValue(
       new Uint8Array(MAX_IMPORT_ARCHIVE_BYTES + 1)
     );
+
     try {
       await expect(
         createNakamaDataExport({ databasePath: null, rootDir })
@@ -363,6 +389,7 @@ describe("Nakama data portability", () => {
     } finally {
       zipMock.mockRestore();
     }
+
     expect(await readFile(join(rootDir, "config.ini"), "utf8")).toBe(
       "original"
     );
@@ -394,6 +421,7 @@ describe("Nakama data portability", () => {
       now: new Date("2026-07-01T10:00:00.000Z"),
       rootDir,
     });
+
     const preview = await previewNakamaDataImport(result.data, { rootDir });
 
     expect(result.filename).toBe("nakama-export-2026-07-01T10-00-00-000Z.zip");
@@ -417,6 +445,7 @@ describe("Nakama data portability", () => {
       await mkdtemp(join(tmpdir(), "nakama-external-db-")),
       "nakama.db"
     );
+
     await writeFile(join(rootDir, "config.ini"), "ok");
 
     try {
@@ -424,6 +453,7 @@ describe("Nakama data portability", () => {
         databasePath: outsideDb,
         rootDir,
       });
+
       expect(result.manifest.skipped).toEqual([
         {
           path: outsideDb,
@@ -445,6 +475,7 @@ describe("Nakama data portability", () => {
     const preview = await previewNakamaDataImport(exportResult.data, {
       rootDir,
     });
+
     expect(preview.willReplaceRoot).toBe(true);
     expect(await readFile(join(rootDir, "config.ini"), "utf8")).toBe("changed");
 
@@ -488,6 +519,7 @@ describe("Nakama data portability", () => {
         name.startsWith(".nakama-backup-") ||
         name.startsWith(".nakama-restore-")
     );
+
     expect(leftovers).toEqual([]);
   });
 
@@ -496,12 +528,15 @@ describe("Nakama data portability", () => {
     // handle must be released before live entries move to the backup.
     const databasePath = join(rootDir, "sqlite", "nakama.sqlite");
     const database = await createDatabase(`file:${databasePath}`);
+
     try {
       await writeFile(join(rootDir, "config.ini"), "original");
+
       const exportResult = await createNakamaDataExport({
         databasePath,
         rootDir,
       });
+
       await writeFile(join(rootDir, "config.ini"), "changed");
 
       let liveConfigWhenClosed: string | null = null;
@@ -556,10 +591,12 @@ describe("Nakama data portability", () => {
     // The desktop app sets PM2_HOME inside its data root. Moving it away loses
     // pm2.pid, so quitting the app no longer stops the daemon and its workers.
     const sourceRoot = await mkdtemp(join(tmpdir(), "nakama-pm2-source-"));
+
     try {
       await mkdir(join(sourceRoot, "pm2"), { recursive: true });
       await writeFile(join(sourceRoot, "pm2", "pm2.pid"), "from-archive");
       await writeFile(join(sourceRoot, "config.ini"), "restored");
+
       const exportResult = await createNakamaDataExport({
         databasePath: null,
         rootDir: sourceRoot,
@@ -588,10 +625,12 @@ describe("Nakama data portability", () => {
 
   test("restore keeps the log file this process writes to", async () => {
     await writeFile(join(rootDir, "config.ini"), "original");
+
     const exportResult = await createNakamaDataExport({
       databasePath: null,
       rootDir,
     });
+
     await writeFile(join(rootDir, "server.log"), "live session");
 
     await restoreNakamaDataImport(exportResult.data, {
@@ -611,10 +650,12 @@ describe("Nakama data portability", () => {
     // PM2_HOME under data/ must not freeze data/sqlite/nakama.sqlite in place.
     await mkdir(join(rootDir, "data"), { recursive: true });
     await writeFile(join(rootDir, "data", "notes.txt"), "original");
+
     const exportResult = await createNakamaDataExport({
       databasePath: null,
       rootDir,
     });
+
     await writeFile(join(rootDir, "data", "notes.txt"), "changed");
 
     await restoreNakamaDataImport(exportResult.data, {
@@ -632,10 +673,12 @@ describe("Nakama data portability", () => {
   test("restore replaces a pm2 directory that is not the live pm2 home", async () => {
     // Installs whose PM2_HOME is outside the root restore exactly as before.
     await writeFile(join(rootDir, "config.ini"), "original");
+
     const exportResult = await createNakamaDataExport({
       databasePath: null,
       rootDir,
     });
+
     await mkdir(join(rootDir, "pm2"), { recursive: true });
     await writeFile(join(rootDir, "pm2", "pm2.pid"), "stale");
 
@@ -654,6 +697,7 @@ describe("Nakama data portability", () => {
   test("restore moves a server-layout database to where a desktop root reads it", async () => {
     // The server defaults to data/sqlite/nakama.sqlite; the desktop app reads sqlite/nakama.sqlite.
     const sourceRoot = await mkdtemp(join(tmpdir(), "nakama-web-root-"));
+
     try {
       const sourceDatabase = join(
         sourceRoot,
@@ -661,6 +705,7 @@ describe("Nakama data portability", () => {
         "sqlite",
         "nakama.sqlite"
       );
+
       await mkdir(join(sourceRoot, "data", "sqlite"), { recursive: true });
       const schema = await createDatabase(`file:${sourceDatabase}`);
       schema.release();
@@ -672,6 +717,7 @@ describe("Nakama data portability", () => {
         "INSERT INTO org_plugins (org_id,plugin_id,lifecycle_state,revision,pending_operation,created_at,updated_at) VALUES ('org-1', 'notes', 'enabled', 1, NULL, 'now', '2026-09-30T00:00:00.000Z')"
       );
       source.close(true);
+
       const exportResult = await createNakamaDataExport({
         databasePath: sourceDatabase,
         rootDir: sourceRoot,
@@ -690,6 +736,7 @@ describe("Nakama data portability", () => {
         ).exists()
       ).toBe(false);
       const restored = new Database(liveDatabase, { readonly: true });
+
       try {
         expect(
           restored.query("SELECT lifecycle_state FROM org_plugins").get()
@@ -704,6 +751,7 @@ describe("Nakama data portability", () => {
 
   test("restore moves a desktop-layout database to where a server root reads it", async () => {
     const sourceRoot = await mkdtemp(join(tmpdir(), "nakama-desktop-root-"));
+
     try {
       const sourceDatabase = join(sourceRoot, "sqlite", "nakama.sqlite");
       await mkdir(join(sourceRoot, "sqlite"), { recursive: true });
@@ -711,6 +759,7 @@ describe("Nakama data portability", () => {
       source.exec("CREATE TABLE marker (value TEXT)");
       source.exec("INSERT INTO marker VALUES ('desktop')");
       source.close(true);
+
       const exportResult = await createNakamaDataExport({
         databasePath: sourceDatabase,
         rootDir: sourceRoot,
@@ -727,6 +776,7 @@ describe("Nakama data portability", () => {
         await Bun.file(join(rootDir, "sqlite", "nakama.sqlite")).exists()
       ).toBe(false);
       const restored = new Database(liveDatabase, { readonly: true });
+
       try {
         expect(restored.query("SELECT value FROM marker").get()).toEqual({
           value: "desktop",
@@ -744,6 +794,7 @@ describe("Nakama data portability", () => {
     // sqlite/nakama.sqlite comes only from DATABASE_URL.
     const sourceRoot = await mkdtemp(join(tmpdir(), "nakama-desktop-source-"));
     const previousDatabaseUrl = process.env.DATABASE_URL;
+
     try {
       const sourceDatabase = join(sourceRoot, "sqlite", "nakama.sqlite");
       await mkdir(join(sourceRoot, "sqlite"), { recursive: true });
@@ -757,6 +808,7 @@ describe("Nakama data portability", () => {
         "INSERT INTO org_plugins (org_id,plugin_id,lifecycle_state,revision,pending_operation,created_at,updated_at) VALUES ('org-1', 'notes', 'enabled', 1, NULL, 'now', '2026-09-30T00:00:00.000Z')"
       );
       source.close(true);
+
       const exportResult = await createNakamaDataExport({
         databasePath: sourceDatabase,
         rootDir: sourceRoot,
@@ -770,6 +822,7 @@ describe("Nakama data portability", () => {
       });
 
       const restored = new Database(liveDatabase, { readonly: true });
+
       try {
         expect(
           restored.query("SELECT lifecycle_state FROM org_plugins").get()
@@ -783,6 +836,7 @@ describe("Nakama data portability", () => {
       } else {
         process.env.DATABASE_URL = previousDatabaseUrl;
       }
+
       await rm(sourceRoot, { force: true, recursive: true });
     }
   });
@@ -834,6 +888,7 @@ describe("Nakama data portability", () => {
     "Windows rejects colon archive entry %s before replacing data",
     async (name) => {
       await writeFile(join(rootDir, "config.ini"), "original");
+
       const archive = fflate.zipSync({
         [NAKAMA_EXPORT_MANIFEST]: Buffer.from(
           JSON.stringify({ kind: "nakama-export", version: 1 })
@@ -841,10 +896,12 @@ describe("Nakama data portability", () => {
         "config.ini": Buffer.from("replacement"),
         [name]: Buffer.from("synthetic"),
       });
+
       let closed = false;
       const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
       // Exercise the Windows admission check locally; CI also runs on Windows.
       Object.defineProperty(process, "platform", { value: "win32" });
+
       try {
         await expect(
           previewNakamaDataImport(archive, { rootDir })
@@ -862,6 +919,7 @@ describe("Nakama data portability", () => {
       } finally {
         Object.defineProperty(process, "platform", platform);
       }
+
       expect(closed).toBe(false);
       expect(await readFile(join(rootDir, "config.ini"), "utf8")).toBe(
         "original"
@@ -877,16 +935,20 @@ describe("Nakama data portability", () => {
       ),
       "notes/summary.md": Buffer.from("retained"),
     });
+
     const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
     Object.defineProperty(process, "platform", { value: "win32" });
+
     try {
       const preview = await previewNakamaDataImport(archive, { rootDir });
       expect(preview.archiveFileCount).toBe(1);
+
       const result = await restoreNakamaDataImport(archive, {
         confirm: true,
         databasePath: null,
         rootDir,
       });
+
       expect(result.restoredFileCount).toBe(1);
       expect(await readFile(join(rootDir, "notes/summary.md"), "utf8")).toBe(
         "retained"
@@ -904,6 +966,7 @@ describe("Nakama data portability", () => {
         "notes/10:30.md": "time",
         "notes/summary.md::$DATA": "stream",
       };
+
       const archive = fflate.zipSync({
         [NAKAMA_EXPORT_MANIFEST]: Buffer.from(
           JSON.stringify({ kind: "nakama-export", version: 1 })
@@ -915,14 +978,18 @@ describe("Nakama data portability", () => {
           ])
         ),
       });
+
       const preview = await previewNakamaDataImport(archive, { rootDir });
       expect(preview.archiveFileCount).toBe(3);
+
       const result = await restoreNakamaDataImport(archive, {
         confirm: true,
         databasePath: null,
         rootDir,
       });
+
       expect(result.restoredFileCount).toBe(3);
+
       for (const [name, content] of Object.entries(entries)) {
         expect(await readFile(join(rootDir, name), "utf8")).toBe(content);
       }
@@ -937,14 +1004,17 @@ describe("Nakama data portability", () => {
     const fsPromises = await import("node:fs/promises");
     const originalRename = fsPromises.rename;
     const { spyOn } = await import("bun:test");
+
     const renameMock = spyOn(fsPromises, "rename").mockImplementation(
       async (from, to) => {
         const toPath = String(to);
+
         if (toPath.includes(".nakama-backup-") && toPath.endsWith("move.ini")) {
           throw Object.assign(new Error("simulated backup failure"), {
             code: "EIO",
           });
         }
+
         return originalRename(from, to);
       }
     );
@@ -971,9 +1041,11 @@ describe("Nakama data portability", () => {
     );
 
     let status = 0;
+
     try {
       decodeArchiveRequestData(oversized);
     } catch (error) {
+      // SAFETY: The test fixture matches the contract used by this test.
       status = (error as NakamaApiError).status;
     }
 
@@ -1010,6 +1082,7 @@ describe("Nakama data portability", () => {
   test("rejects an archive whose entries add up past the total cap", async () => {
     const count =
       Math.ceil(MAX_IMPORT_UNCOMPRESSED_BYTES / MAX_IMPORT_ENTRY_BYTES) + 1;
+
     const archive = buildZipWithEntries(
       Array.from({ length: count }, (_, index) => ({
         content: "{}",

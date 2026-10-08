@@ -8,16 +8,15 @@ import { getCustomToolHandler } from "./custom-tool-handlers";
 import { readHandlerModulePath } from "./custom-tool-shared";
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+
 const serverSrcDir = path.join(
   moduleDir,
   path.basename(moduleDir) === "dist" ? "../src" : ".."
 );
+
 const corePackageRoot = path.resolve(serverSrcDir, "../../../packages/core");
 
-const BUILTIN_SOURCE_BY_NAME: Record<
-  string,
-  { filePath: string; displayPath: string }
-> = {
+const BUILTIN_SOURCE_BY_NAME = {
   delete_file: {
     displayPath: "packages/core/src/tools/builtin.ts",
     filePath: path.join(corePackageRoot, "src/tools/builtin.ts"),
@@ -50,7 +49,7 @@ const BUILTIN_SOURCE_BY_NAME: Record<
     displayPath: "packages/core/src/tools/builtin.ts",
     filePath: path.join(corePackageRoot, "src/tools/builtin.ts"),
   },
-};
+} satisfies Record<string, { filePath: string; displayPath: string }>;
 
 const BASH_SOURCE = {
   displayPath: "apps/server/src/tools/bash.ts",
@@ -98,6 +97,7 @@ export async function readToolSource(
   if (record.handlerType === "plugin") {
     const pluginId = record.pluginId ?? "plugin";
     const actionKey = record.pluginKey ?? record.name;
+
     return {
       content: "",
       language: "javascript",

@@ -9,6 +9,7 @@ export interface SkillNameKeyed {
 export function isGlobalSkillSourcePath(sourcePath: string): boolean {
   const globalRoot = path.resolve(getGlobalSkillsDir());
   const resolved = path.resolve(sourcePath);
+
   return (
     resolved === globalRoot || resolved.startsWith(`${globalRoot}${path.sep}`)
   );

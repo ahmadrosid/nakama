@@ -41,6 +41,7 @@ describe("artifact shares", () => {
     const orgId = "org_test";
     const shareId = "share_test";
     const bytes = Buffer.from("# Hello", "utf8");
+
     const storagePath = await writeArtifactShareSnapshot({
       bytes,
       filename: "report.md",

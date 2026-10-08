@@ -3,6 +3,13 @@ import { splitTelegramChunks } from "./message-format";
 import { renderTelegramRichText } from "./telegram-rich-text";
 import type { ChannelSendResult, TelegramOutboundAdapter } from "./types";
 
+interface TelegramMessagePayload {
+  chat_id: number | string;
+  message_thread_id?: number;
+  parse_mode?: "HTML";
+  text: string;
+}
+
 export interface TelegramOutboundOptions {
   fetchImpl?: typeof fetch;
 }
@@ -21,6 +28,7 @@ export function createTelegramOutboundAdapter(
             ok: false,
           };
         }
+
         const owner = { orgId: input.orgId, profileId: input.profileId };
         const config = await loadTelegramConfigFile(owner);
         const token = config?.botToken.trim();
@@ -50,17 +58,24 @@ export function createTelegramOutboundAdapter(
               input.parseMode === "HTML"
                 ? renderTelegramRichText(chunk)
                 : chunk;
+
+            const payload: TelegramMessagePayload = {
+              chat_id: chatId,
+              text,
+            };
+
+            if (input.parseMode) {
+              payload.parse_mode = input.parseMode;
+            }
+
+            if (input.topicId) {
+              payload.message_thread_id = input.topicId;
+            }
+
             const response = await fetchImpl(
               `https://api.telegram.org/bot${token}/sendMessage`,
               {
-                body: JSON.stringify({
-                  chat_id: chatId,
-                  text,
-                  ...(input.parseMode ? { parse_mode: input.parseMode } : {}),
-                  ...(input.topicId
-                    ? { message_thread_id: input.topicId }
-                    : {}),
-                }),
+                body: JSON.stringify(payload),
                 headers: { "Content-Type": "application/json" },
                 method: "POST",
               }
@@ -68,6 +83,7 @@ export function createTelegramOutboundAdapter(
 
             if (!response.ok) {
               const body = await response.text();
+
               return {
                 error: `Telegram API error (${response.status}): ${body.slice(0, 200)}`,
                 ok: false,
@@ -79,6 +95,7 @@ export function createTelegramOutboundAdapter(
         return { ok: true };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+
         return { error: message, ok: false };
       }
     },

@@ -30,6 +30,7 @@ export type ImageGenerationSize = (typeof IMAGE_GENERATION_SIZES)[number];
 const DEFAULT_IMAGE_GENERATION_SIZE: ImageGenerationSize = "1024x1024";
 
 const OPENAI_IMAGES_GENERATIONS_PATH = "/images/generations";
+
 const DEFAULT_OPENAI_IMAGES_BASE_URL = "https://api.openai.com/v1";
 
 /**
@@ -71,6 +72,12 @@ export interface GenerateImageInput {
   size?: string;
 }
 
+interface OpenAIImageResponse {
+  data: Array<{ b64_json?: string; revised_prompt?: string }>;
+  output_format?: string;
+  usage?: { input_tokens?: number; output_tokens?: number };
+}
+
 /**
  * Fallback token estimate when the Images API omits `usage`.
  * Input ≈ prompt chars/4; output is a low-quality floor for the chosen size
@@ -82,6 +89,7 @@ export function fallbackImageGenerationTokens(
 ): ImageGenerationUsage {
   const inputTokens = Math.max(1, Math.ceil(prompt.trim().length / 4));
   const outputTokens = size === "1024x1536" || size === "1536x1024" ? 167 : 200;
+
   return { inputTokens, outputTokens };
 }
 
@@ -92,8 +100,8 @@ export function resolveImageGenerationTokens(
 ): ImageGenerationUsage {
   if (
     usage &&
-    typeof usage.input_tokens === "number" &&
-    typeof usage.output_tokens === "number" &&
+    usage.input_tokens !== undefined &&
+    usage.output_tokens !== undefined &&
     Number.isFinite(usage.input_tokens) &&
     Number.isFinite(usage.output_tokens) &&
     usage.input_tokens >= 0 &&
@@ -112,12 +120,17 @@ export function normalizeImageGenerationSize(
   size: string | null | undefined
 ): ImageGenerationSize {
   const trimmed = size?.trim();
+
   if (!trimmed) {
     return DEFAULT_IMAGE_GENERATION_SIZE;
   }
 
-  if ((IMAGE_GENERATION_SIZES as readonly string[]).includes(trimmed)) {
-    return trimmed as ImageGenerationSize;
+  const allowedSize = IMAGE_GENERATION_SIZES.find(
+    (candidate) => candidate === trimmed
+  );
+
+  if (allowedSize) {
+    return allowedSize;
   }
 
   throw new NakamaApiError(
@@ -150,6 +163,7 @@ export function resolveImageGenerationSelection(
     if (provider.type === "openai") {
       return prefix === "openai";
     }
+
     // Self-hosted backends that speak the OpenAI Images API surface as
     // openai_compatible with a baseUrl (e.g. a local OpenAI-compatible
     // wrapper). They carry an apiKey and must resolve a real baseUrl.
@@ -159,7 +173,9 @@ export function resolveImageGenerationSelection(
       Boolean(provider.baseUrl?.trim())
     );
   });
+
   const preferredId = userConfig?.defaultProviderId?.trim();
+
   const preferred =
     preferredId &&
     openaiInstances.some((instance) => instance.id === preferredId)
@@ -168,6 +184,7 @@ export function resolveImageGenerationSelection(
           preferredId
         )
       : null;
+
   const instance = preferred ?? openaiInstances[0] ?? null;
 
   if (!instance) {
@@ -217,12 +234,14 @@ function resolveCompatibleImageGenerationSelection(
   env: Record<string, string | undefined>
 ): ResolvedImageGenerationSelection {
   const decoded = decodeStoredModelSelection(imageModel);
+
   const instance = decoded
     ? findProviderInstance(
         { providers: userConfig?.providers ?? [] },
         decoded.providerId
       )
     : null;
+
   const baseUrl = instance?.baseUrl?.trim();
 
   if (
@@ -288,14 +307,16 @@ export async function generateImageWithOpenAI(
   }
 
   const deadline = AbortSignal.timeout(IMAGE_GENERATION_TIMEOUT_MS);
-  const rethrowTimeout = (error: unknown): never => {
+
+  const rethrowTimeout = (cause: unknown): never => {
     if (deadline.aborted && !input.signal?.aborted) {
       throw new NakamaApiError(
         `Image generation timed out after ${IMAGE_GENERATION_TIMEOUT_MS / 1000}s waiting for the provider.`,
         504
       );
     }
-    throw error;
+
+    throw cause;
   };
 
   const response = await fetch(
@@ -328,11 +349,9 @@ export async function generateImageWithOpenAI(
     );
   }
 
-  const payload = (await response.json().catch(rethrowTimeout)) as {
-    data?: Array<{ b64_json?: string; revised_prompt?: string }>;
-    output_format?: string;
-    usage?: { input_tokens?: number; output_tokens?: number };
-  };
+  const payload = parseOpenAIImageResponse(
+    await response.json().catch(rethrowTimeout)
+  );
 
   const first = payload.data?.[0];
   const b64 = first?.b64_json?.trim();
@@ -366,14 +385,68 @@ export async function generateImageWithOpenAI(
         ? "image/webp"
         : "image/png";
 
-  return {
+  const result: GenerateImageResult = {
     data: bytes,
     mediaType,
     model,
     size,
-    ...(first.revised_prompt?.trim()
-      ? { revisedPrompt: first.revised_prompt.trim() }
-      : {}),
     usage: resolveImageGenerationTokens(prompt, size, payload.usage),
   };
+
+  const revisedPrompt = first.revised_prompt?.trim();
+
+  if (revisedPrompt) {
+    result.revisedPrompt = revisedPrompt;
+  }
+
+  return result;
+}
+
+function parseOpenAIImageResponse<T>(input: T): OpenAIImageResponse {
+  const record = readRecord(input);
+  const data = record?.get("data");
+  const usage = readRecord(record?.get("usage"));
+
+  return {
+    data: Array.isArray(data)
+      ? data.map((entry) => {
+          const item = readRecord(entry);
+
+          return {
+            b64_json: readString(item?.get("b64_json")),
+            revised_prompt: readString(item?.get("revised_prompt")),
+          };
+        })
+      : [],
+    output_format: readString(record?.get("output_format")),
+    usage: usage
+      ? {
+          input_tokens: readNumber(usage.get("input_tokens")),
+          output_tokens: readNumber(usage.get("output_tokens")),
+        }
+      : undefined,
+  };
+}
+
+function readRecord<T>(value: T): Map<string, unknown> | undefined {
+  if (!(value instanceof Object)) {
+    return;
+  }
+
+  return new Map(Object.entries(value));
+}
+
+function readString<T>(value: T): string | undefined {
+  // SAFETY: The object tag check confirms the value uses the string representation.
+  return Object.prototype.toString.call(value) === "[object String]"
+    ? (value as T & string)
+    : undefined;
+}
+
+function readNumber<T>(value: T): number | undefined {
+  // SAFETY: The tag and finite checks confirm the value is a valid number.
+  return Object.prototype.toString.call(value) === "[object Number]" &&
+    Number.isFinite(value)
+    ? (value as T & number)
+    : undefined;
 }

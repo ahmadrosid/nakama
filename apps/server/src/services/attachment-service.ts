@@ -26,13 +26,16 @@ export function createAttachmentSaver(
 ): SaveInlineAttachment {
   return async (input) => {
     const attachmentId = createId("att");
+
     const storagePath = await saveAttachmentBytes(
       context.orgId,
       context.profileId,
       attachmentId,
       input.bytes
     );
+
     const now = new Date().toISOString();
+
     const record: StoredAttachmentRecord = {
       channel: context.channel,
       createdAt: now,

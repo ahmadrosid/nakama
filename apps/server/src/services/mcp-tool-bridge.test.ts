@@ -23,6 +23,7 @@ function serverLookup(servers: StoredMcpServerRecord[]) {
     },
   };
 }
+
 describe("mcp tool bridge", () => {
   test("namespaces tool names by server", () => {
     expect(namespacedMcpToolName("filesystem", "read_file")).toBe(
@@ -43,6 +44,7 @@ describe("mcp tool bridge", () => {
 
   test("deduplicates sanitized tool names", () => {
     const mcpService = failingMcpService("unused");
+
     const servers: StoredMcpServerRecord[] = [
       {
         cachedTools: [
@@ -78,6 +80,7 @@ describe("mcp tool bridge", () => {
 
   test("builds tools only from attached servers", () => {
     const mcpService = failingMcpService("unused");
+
     const servers: StoredMcpServerRecord[] = [
       {
         cachedTools: [
@@ -118,6 +121,7 @@ describe("mcp tool bridge", () => {
     const mcpService = failingMcpService(
       'MCP server "filesystem" is not connected.'
     );
+
     const servers: StoredMcpServerRecord[] = [
       {
         cachedTools: [{ description: "Read a file", name: "read_file" }],
@@ -140,6 +144,7 @@ describe("mcp tool bridge", () => {
       "org_test",
       "profile_test"
     );
+
     const result = await tools[0]!.run({}, {});
 
     expect(result).toEqual({
@@ -149,6 +154,7 @@ describe("mcp tool bridge", () => {
 
   test("excludes disabled servers from new tool definitions", () => {
     const mcpService = failingMcpService("unused");
+
     const servers: StoredMcpServerRecord[] = [
       {
         cachedTools: [{ description: "Read a file", name: "read_file" }],
@@ -178,12 +184,15 @@ describe("mcp tool bridge", () => {
   test("blocks an existing tool definition after its server is disabled", async () => {
     let enabled = true;
     const calls: string[] = [];
+
     const mcpService: Pick<McpService, "callTool"> = {
       callTool() {
         calls.push("callTool");
+
         return Promise.resolve({ ok: true });
       },
     };
+
     const server: StoredMcpServerRecord = {
       cachedTools: [{ description: "Read a file", name: "read_file" }],
       config: { command: "mcp-filesystem" },
@@ -196,6 +205,7 @@ describe("mcp tool bridge", () => {
       transport: "stdio",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
+
     const tools = buildMcpToolDefinitions(
       [server],
       mcpService,
@@ -217,6 +227,7 @@ describe("mcp tool bridge", () => {
 
   test("adds validated current chat images only for opted-in MCP tools", async () => {
     const calls: unknown[] = [];
+
     const server: StoredMcpServerRecord = {
       cachedTools: [
         {
@@ -245,11 +256,13 @@ describe("mcp tool bridge", () => {
       transport: "http",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
+
     const tool = buildMcpToolDefinitions(
       [server],
       {
         async callTool(_server, _name, args) {
           calls.push(args);
+
           return { ok: true };
         },
       },
@@ -301,6 +314,7 @@ describe("mcp tool bridge", () => {
 
   test("returns an error and skips MCP call for an invalid current image", async () => {
     let called = false;
+
     const server: StoredMcpServerRecord = {
       cachedTools: [
         {
@@ -327,11 +341,13 @@ describe("mcp tool bridge", () => {
       transport: "http",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
+
     const tool = buildMcpToolDefinitions(
       [server],
       {
         async callTool() {
           called = true;
+
           return {};
         },
       },

@@ -6,7 +6,8 @@ import {
   rehydrateMessagesForProvider,
   type SaveInlineAttachmentInput,
 } from "@nakama/core";
-import { streamFromChunks } from "../test-helpers";
+import { type ProviderJsonRecord, parseJsonRecord } from "../shared";
+import { asTestFetch, streamFromChunks } from "../test-helpers";
 import { createChatgptProvider } from "./index";
 import { CHATGPT_CODEX_BASE_URL } from "./oauth";
 
@@ -57,19 +58,21 @@ describe("createChatgptProvider", () => {
   ])(
     "sends GPT-6.1 Sol tools through OAuth Responses (stream: $streaming, thinking: $enabled)",
     async ({ enabled, streaming }) => {
-      const bodies: Array<Record<string, unknown>> = [];
-      globalThis.fetch = (async (
-        input: RequestInfo | URL,
-        init?: RequestInit
-      ) => {
-        expect(String(input)).toBe(`${CHATGPT_CODEX_BASE_URL}/responses`);
-        bodies.push(JSON.parse(String(init?.body)));
-        return textStreamResponse("Done");
-      }) as typeof fetch;
+      const bodies: ProviderJsonRecord[] = [];
+      globalThis.fetch = asTestFetch(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          expect(String(input)).toBe(`${CHATGPT_CODEX_BASE_URL}/responses`);
+          bodies.push(parseJsonRecord(String(init?.body)));
+
+          return textStreamResponse("Done");
+        }
+      );
+
       const provider = createChatgptProvider({
         getOAuth: validOauth,
         model: "gpt-6.1-sol",
       });
+
       const request = {
         messages: [{ content: "Search", role: "user" as const }],
         providerOptions: { thinking: { effort: "high" as const, enabled } },
@@ -86,6 +89,7 @@ describe("createChatgptProvider", () => {
       const result = streaming
         ? await provider.streamChat(request, { onChunk: () => {} })
         : await provider.generateChat(request);
+
       expect(result.content).toBe("Done");
 
       expect(bodies[0]).toMatchObject({
@@ -120,9 +124,12 @@ describe("createChatgptProvider", () => {
           import.meta.url
         )
       ).toString("base64");
+
       const png =
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
       const saved = new Map<string, SaveInlineAttachmentInput>();
+
       const fetchMock = mock(
         async (url: RequestInfo | URL, init?: RequestInit) => {
           expect(String(url)).toBe(`${CHATGPT_CODEX_BASE_URL}/responses`);
@@ -146,10 +153,13 @@ describe("createChatgptProvider", () => {
               type: "message",
             },
           ]);
+
           return textStreamResponse("Received");
         }
       );
-      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      globalThis.fetch = asTestFetch(fetchMock);
+
       const session = createAgentChatSession(
         {
           provider: createChatgptProvider({
@@ -163,6 +173,7 @@ describe("createChatgptProvider", () => {
             persistInlineAttachmentsInContent(content, async (attachment) => {
               const attachmentId = `att-${saved.size}`;
               saved.set(attachmentId, attachment);
+
               return { attachmentId, size: attachment.bytes.length };
             }),
           rehydrateMessagesForProvider: (messages) =>
@@ -172,6 +183,7 @@ describe("createChatgptProvider", () => {
             ),
         }
       );
+
       const input = {
         ...(kind === "pdf"
           ? {
@@ -186,16 +198,21 @@ describe("createChatgptProvider", () => {
           : { images: [{ data: png, mediaType: "image/png" }] }),
         message: "",
       };
+
       const chunks: string[] = [];
+
       const reply = streaming
         ? await session.sendStream(input, {
             onChunk: (chunk) => chunks.push(chunk),
           })
         : await session.send(input);
+
       expect(reply).toBe("Received");
+
       if (streaming) {
         expect(chunks.join("")).toBe("Received");
       }
+
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(session.getHistory()[0]?.content).toEqual([
         kind === "pdf"
@@ -241,7 +258,7 @@ describe("createChatgptProvider", () => {
         }
       );
 
-      globalThis.fetch = fetchMock as unknown as typeof fetch;
+      globalThis.fetch = asTestFetch(fetchMock);
 
       const provider = createChatgptProvider({
         getOAuth: validOauth,
@@ -276,7 +293,7 @@ describe("createChatgptProvider", () => {
       }
     );
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createChatgptProvider({
       getOAuth: validOauth,

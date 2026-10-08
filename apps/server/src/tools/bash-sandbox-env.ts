@@ -18,25 +18,23 @@ export function buildBashSandboxEnv(args: {
   hostEnv?: NodeJS.ProcessEnv;
   overrides?: Record<string, string>;
   workspaceRoot?: string;
-}): Record<string, string> {
+}) {
   const host = args.hostEnv ?? process.env;
-  const env: Record<string, string> = {};
+
+  const env = Object.fromEntries([
+    ...(host.LANG ? [["LANG", host.LANG]] : []),
+    ...(args.workspaceRoot
+      ? [
+          ["NAKAMA_WORKSPACE_ROOT", args.workspaceRoot],
+          ["HOME", args.workspaceRoot],
+        ]
+      : []),
+    ...Object.entries(args.overrides ?? {}).filter(
+      ([key]) => !isSecretEnvKey(key)
+    ),
+  ]);
 
   // Do not copy host PATH — guest images (alpine / bun slim) have their own,
   // and macOS/dev host paths do not exist inside the microVM.
-  if (host.LANG) {
-    env.LANG = host.LANG;
-  }
-  if (args.workspaceRoot) {
-    env.NAKAMA_WORKSPACE_ROOT = args.workspaceRoot;
-    env.HOME = args.workspaceRoot;
-  }
-
-  for (const [key, value] of Object.entries(args.overrides ?? {})) {
-    if (!isSecretEnvKey(key)) {
-      env[key] = value;
-    }
-  }
-
   return env;
 }

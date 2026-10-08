@@ -75,6 +75,7 @@ describe("buildCodingAgentCommandTemplate", () => {
         userConfig: anthropicUserConfig,
       }
     );
+
     expect(template.backend).toBe("pi");
     expect(template.command).toContain("pi");
     expect(template.command).toContain("--provider");

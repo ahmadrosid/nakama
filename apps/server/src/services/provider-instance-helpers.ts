@@ -62,6 +62,10 @@ export function toProviderInstanceSummary(
 
   return {
     baseUrl: instance.baseUrl ?? null,
+    createdAt: instance.createdAt,
+    customModels: instance.customModels?.length
+      ? instance.customModels
+      : undefined,
     hasApiKey:
       Boolean(instance.apiKey.trim()) ||
       chatgptConnected ||
@@ -72,16 +76,11 @@ export function toProviderInstanceSummary(
       instance.type === "ollama" ? resolveOllamaHostMode(instance) : null,
     id: instance.id,
     label: normalizeProviderInstanceLabel(instance.type, instance.label, []),
+    modelCount,
+    openRouterRouting:
+      instance.type === "openrouter" ? instance.openRouterRouting : undefined,
     type: instance.type,
     wireApi: instance.wireApi ?? null,
-    ...(instance.type === "openrouter" && instance.openRouterRouting
-      ? { openRouterRouting: instance.openRouterRouting }
-      : {}),
-    ...(instance.customModels?.length
-      ? { customModels: instance.customModels }
-      : {}),
-    createdAt: instance.createdAt,
-    modelCount,
   };
 }
 
@@ -113,6 +112,7 @@ export function modelExistsOnInstance(
   }
 
   const catalog = getModelsForProviderInstance(instance);
+
   if (catalog.some((model) => model.id === trimmed)) {
     return true;
   }
@@ -168,6 +168,7 @@ export function modelExistsOnInstance(
     if (instance.customModels?.length) {
       return findCustomModel(instance.customModels, trimmed) !== undefined;
     }
+
     return true;
   }
 
@@ -249,12 +250,12 @@ export function buildProviderInstanceFromCreateRequest(
       {
         apiKey: "",
         createdAt: new Date().toISOString(),
+        customModels: request.customModels?.length
+          ? validateCustomModels(request.customModels)
+          : undefined,
         id: createProviderInstanceId(),
         label,
         type,
-        ...(request.customModels?.length
-          ? { customModels: validateCustomModels(request.customModels) }
-          : {}),
       },
       request.xaiOAuth
     );
@@ -276,12 +277,12 @@ export function buildProviderInstanceFromCreateRequest(
       {
         apiKey: "",
         createdAt: new Date().toISOString(),
+        customModels: request.customModels?.length
+          ? validateCustomModels(request.customModels)
+          : undefined,
         id: createProviderInstanceId(),
         label,
         type,
-        ...(request.customModels?.length
-          ? { customModels: validateCustomModels(request.customModels) }
-          : {}),
       },
       request.chatgptOAuth
     );
@@ -303,9 +304,11 @@ export function buildProviderInstanceFromCreateRequest(
   }
 
   const fields = buildProviderFieldsFromRequest({ ...request, apiKey, type });
+
   const rawLabel = request.label?.trim()
     ? validateProviderInstanceLabel(request.label, type)
     : fields.label;
+
   const label =
     type === "ollama" && fields.hostMode
       ? normalizeProviderInstanceLabel(type, rawLabel, existing, {
@@ -330,9 +333,11 @@ export function applyProviderInstanceUpdate(
   if (instance.type === "netra" && request.wireApi === "responses") {
     throw new Error("Netra Runtime supports Chat Completions only.");
   }
+
   if (instance.type === "netra" && request.baseUrl !== undefined) {
     throw new Error("Netra Runtime uses its fixed API URL.");
   }
+
   const next: ProviderInstance = { ...instance };
 
   if (
@@ -342,6 +347,7 @@ export function applyProviderInstanceUpdate(
     const routing = validateOpenRouterRoutingSettings(
       request.openRouterRouting
     );
+
     next.openRouterRouting = Object.keys(routing).length ? routing : undefined;
   }
 
@@ -363,9 +369,11 @@ export function applyProviderInstanceUpdate(
 
   if (request.baseUrl !== undefined) {
     const normalized = normalizeBaseUrl(request.baseUrl);
+
     if (!isValidBaseUrl(normalized)) {
       throw new Error("A valid http(s) base URL is required.");
     }
+
     next.baseUrl = normalized;
   }
 
@@ -380,6 +388,7 @@ export function applyProviderInstanceUpdate(
   if (request.customModels !== undefined) {
     if (instance.type === "openai_compatible" || instance.type === "netra") {
       next.customModels = validateCustomModels(request.customModels);
+
       if (!next.customModels.length) {
         throw new Error("At least one model is required.");
       }
@@ -443,6 +452,7 @@ function buildProviderFieldsFromRequest(
     const resolvedHostMode: OllamaHostMode =
       request.hostMode ??
       (request.baseUrl?.includes("ollama.com") ? "cloud" : "local");
+
     const baseUrl = normalizeBaseUrl(
       request.baseUrl?.trim() || defaultOllamaBaseUrl(resolvedHostMode)
     );
@@ -482,27 +492,31 @@ function buildProviderFieldsFromRequest(
       ]);
     }
 
-    return { ...(customModels ? { customModels } : {}) };
+    return { customModels };
   }
 
   if (type === "netra") {
     if (request.wireApi === "responses") {
       throw new Error("Netra Runtime supports Chat Completions only.");
     }
+
     const customModels = request.customModels?.length
       ? validateCustomModels(request.customModels)
       : request.model?.trim()
         ? validateCustomModels([{ default: true, id: request.model.trim() }])
         : undefined;
+
     if (!customModels?.length) {
       throw new Error("At least one Netra model is required.");
     }
+
     return { customModels };
   }
 
   if (type === "openai_compatible") {
     const label = validateDisplayName(request.label ?? "");
     const baseUrl = normalizeBaseUrl(request.baseUrl ?? "");
+
     if (!isValidBaseUrl(baseUrl)) {
       throw new Error("A valid http(s) base URL is required.");
     }
@@ -533,15 +547,16 @@ function buildProviderFieldsFromRequest(
     const customModels = request.customModels?.length
       ? validateOpenRouterCustomModels(request.customModels)
       : undefined;
+
     const routing =
       request.openRouterRouting === undefined
         ? undefined
         : validateOpenRouterRoutingSettings(request.openRouterRouting);
+
     return {
-      ...(customModels ? { customModels } : {}),
-      ...(routing && Object.keys(routing).length
-        ? { openRouterRouting: routing }
-        : {}),
+      customModels,
+      openRouterRouting:
+        routing && Object.keys(routing).length ? routing : undefined,
     };
   }
 
@@ -549,7 +564,8 @@ function buildProviderFieldsFromRequest(
     const customModels = request.customModels?.length
       ? validateCerebrasCustomModels(request.customModels)
       : undefined;
-    return { ...(customModels ? { customModels } : {}) };
+
+    return { customModels };
   }
 
   if (type === "fireworks") {
@@ -563,18 +579,10 @@ function buildProviderFieldsFromRequest(
         {
           default: true,
           id: request.model.trim(),
-          ...(catalogModel?.supportsThinking === undefined
-            ? {}
-            : { supportsThinking: catalogModel.supportsThinking }),
-          ...(catalogModel?.supportsVision === undefined
-            ? {}
-            : { supportsVision: catalogModel.supportsVision }),
-          ...(catalogModel?.inputPerMillionUsd === undefined
-            ? {}
-            : { inputPerMillionUsd: catalogModel.inputPerMillionUsd }),
-          ...(catalogModel?.outputPerMillionUsd === undefined
-            ? {}
-            : { outputPerMillionUsd: catalogModel.outputPerMillionUsd }),
+          inputPerMillionUsd: catalogModel?.inputPerMillionUsd,
+          outputPerMillionUsd: catalogModel?.outputPerMillionUsd,
+          supportsThinking: catalogModel?.supportsThinking,
+          supportsVision: catalogModel?.supportsVision,
         },
       ]);
     }
@@ -587,11 +595,13 @@ function buildProviderFieldsFromRequest(
   }
 
   const rawBaseUrl = request.baseUrl?.trim();
+
   if (!rawBaseUrl) {
     return {};
   }
 
   const baseUrl = normalizeBaseUrl(rawBaseUrl);
+
   if (!isValidBaseUrl(baseUrl)) {
     throw new Error("A valid http(s) base URL is required.");
   }
@@ -683,9 +693,11 @@ export function resolveProfileProviderSelection(options: {
   profileModel: string | null | undefined;
 }): ResolvedProfileProviderSelection | null {
   const { providers, defaultProviderId, profileModel } = options;
+
   const active = defaultProviderId
     ? findProviderInstance({ providers }, defaultProviderId)
     : null;
+
   const fallbackInstance = active ?? providers[0] ?? null;
 
   if (!fallbackInstance) {
@@ -717,6 +729,7 @@ export function resolveProfileProviderSelection(options: {
     );
 
     const catalogProvider = getModelById(selectedModel)?.provider;
+
     const preferred =
       (catalogProvider === "openai" &&
       active?.type === "chatgpt" &&

@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { z } from "zod";
 import {
   parseIni,
   readDirectoryOrEmpty,
@@ -38,6 +39,7 @@ export {
 } from "./pairing-code";
 
 export type ChannelPlatform = "telegram" | "discord" | "whatsapp" | "slack";
+
 export interface ChannelOwner {
   orgId: string;
   profileId: string;
@@ -46,10 +48,15 @@ export interface ChannelOwner {
 /** String/null scopes are retained solely for reading and migrating old installations. */
 export type ChannelConfigScope = ChannelOwner | string | null;
 
+const ChannelOwnerSchema = z.object({
+  orgId: z.string(),
+  profileId: z.string(),
+});
+
 export function isChannelOwner(
   scope: ChannelConfigScope
 ): scope is ChannelOwner {
-  return scope !== null && typeof scope === "object";
+  return ChannelOwnerSchema.safeParse(scope).success;
 }
 
 export function getChannelConfigDir(
@@ -62,16 +69,20 @@ export function getChannelConfigDir(
       platform
     );
   }
+
   if (!/^[A-Za-z0-9][\w.-]{0,127}$/.test(scope.profileId)) {
     throw new Error("Invalid profile id");
   }
+
   const directory = join(
     getOrgConfigDir(scope.orgId),
     "channels",
     scope.profileId,
     platform
   );
+
   assertChannelPath(directory);
+
   return directory;
 }
 
@@ -79,18 +90,24 @@ export function getChannelConfigDir(
 export function assertChannelPath(path: string): void {
   const root = resolve(getUserConfigDir());
   const parts = relative(root, resolve(path)).split(sep);
+
   if (parts.includes("..")) {
     throw new Error("Invalid channel path");
   }
+
   let current = root;
+
   for (const part of parts) {
     current = join(current, part);
+
     try {
       if (lstatSync(current).isSymbolicLink()) {
         throw new Error("Channel paths cannot contain symbolic links");
       }
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      if (
+        !(error instanceof Error && "code" in error && error.code === "ENOENT")
+      ) {
         throw error;
       }
     }
@@ -101,6 +118,7 @@ export async function listChannelOwners(
   platform: ChannelPlatform
 ): Promise<ChannelOwner[]> {
   const owners: ChannelOwner[] = [];
+
   for (const orgId of await readDirectoryOrEmpty(
     join(getUserConfigDir(), "orgs")
   )) {
@@ -110,11 +128,13 @@ export async function listChannelOwners(
       const owner = { orgId, profileId };
       const path = join(getChannelConfigDir(platform, owner), "config.ini");
       assertChannelPath(path);
+
       if (await readTextOrNull(path)) {
         owners.push(owner);
       }
     }
   }
+
   return owners;
 }
 
@@ -125,30 +145,40 @@ export async function claimChannelIdentity(
   identity: string
 ): Promise<() => Promise<void>> {
   getChannelConfigDir(platform, owner);
+
   if (!identity.trim()) {
     throw new Error("Missing channel account identity");
   }
+
   const directory = join(getUserConfigDir(), "channel-claims", platform);
+
   const path = join(
     directory,
     createHash("sha256").update(identity).digest("hex")
   );
+
   assertChannelPath(path);
   await mkdir(directory, { mode: 0o700, recursive: true });
   const value = JSON.stringify([owner.orgId, owner.profileId]);
+
   try {
     await writeFile(path, value, { flag: "wx", mode: 0o600 });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+    if (
+      !(error instanceof Error && "code" in error && error.code === "EEXIST")
+    ) {
       throw error;
     }
+
     if ((await readFile(path, "utf8")) !== value) {
       throw new Error(
         "This channel account is already in use by another agent."
       );
     }
+
     return async () => {};
   }
+
   return async () => {
     await unlink(path);
   };
@@ -188,11 +218,14 @@ export async function releaseChannelClaims(
   const keep = keepIdentity
     ? createHash("sha256").update(keepIdentity).digest("hex")
     : null;
+
   const directory = join(getUserConfigDir(), "channel-claims", platform);
   const value = JSON.stringify([owner.orgId, owner.profileId]);
+
   for (const entry of await readDirectoryOrEmpty(directory)) {
     const path = join(directory, entry);
     assertChannelPath(path);
+
     if (entry !== keep && (await readTextOrNull(path)) === value) {
       await unlink(path);
     }
@@ -205,7 +238,9 @@ export function maskBotToken(secret: string): string | null {
 
 /** A crashed bridge must not wedge pairing forever, so a lock goes stale. */
 const PAIRING_LOCK_STALE_MS = 15_000;
+
 const PAIRING_LOCK_WAIT_MS = 5000;
+
 const PAIRING_LOCK_FILE = "pairing.lock";
 
 export class ChannelConfigBusyError extends Error {}
@@ -228,7 +263,9 @@ export async function withPairingConfigLock<T>(
       await writeFile(path, `${process.pid}\n`, { flag: "wx", mode: 0o600 });
       break;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      if (
+        !(error instanceof Error && "code" in error && error.code === "EEXIST")
+      ) {
         throw error;
       }
 
@@ -309,6 +346,7 @@ export function resolveHandshakeOnSave<TId extends string | number>(
   allowedUserIds: TId[]
 ): HandshakeSecret {
   const pairedUserIds = existing?.pairedUserIds ?? [];
+
   const stored: HandshakeSecret = {
     handshakeCode: existing?.handshakeCode ?? null,
     handshakeExpiresAt: existing?.handshakeExpiresAt ?? null,
@@ -369,6 +407,7 @@ export async function writeBotChannelIniConfig<
   label: string;
 }): Promise<void> {
   const { config } = options;
+
   const lines = [
     `# Nakama ${options.label} bridge`,
     `bot_token=${config.botToken}`,
@@ -437,7 +476,12 @@ export async function verifyAndPairBotChannelUser<
         return failure;
       }
 
-      const expected = config.handshakeCode as string;
+      const expected = config.handshakeCode;
+
+      if (!expected) {
+        return failure;
+      }
+
       const budget = getPairingAttemptBudget(options.configDir, expected);
 
       if (isPairingAttemptBlocked(budget)) {
@@ -450,6 +494,7 @@ export async function verifyAndPairBotChannelUser<
         if (recordPairingFailure(budget)) {
           await options.write({ ...config, ...SPENT_HANDSHAKE });
         }
+
         return failure;
       }
 
@@ -468,6 +513,7 @@ export async function verifyAndPairBotChannelUser<
     if (error instanceof ChannelConfigBusyError) {
       return failure;
     }
+
     throw error;
   }
 }
@@ -486,10 +532,13 @@ export function channelOwnerFromEnv(
 ): ChannelOwner {
   const orgId = env.NAKAMA_CHANNEL_ORG_ID?.trim();
   const profileId = env.NAKAMA_CHANNEL_PROFILE_ID?.trim();
+
   if (!(orgId && profileId)) {
     throw new Error("Channel workers require an organization and agent scope.");
   }
+
   const owner = { orgId, profileId };
   getChannelConfigDir("telegram", owner);
+
   return owner;
 }

@@ -43,6 +43,7 @@ describe("loadLocalAuthToken", () => {
       join(getUserConfigDir(), "local-auth-token"),
       "utf8"
     );
+
     expect(storedToken.trim()).toBe(token);
   });
 

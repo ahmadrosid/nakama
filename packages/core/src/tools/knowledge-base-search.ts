@@ -42,7 +42,9 @@ export type KnowledgeBaseSearchInput = z.infer<
 >;
 
 type KnowledgeBaseScope = "organization" | "profile";
+
 type ScopedMatch = RipgrepMatch & { scope: KnowledgeBaseScope };
+
 const qmdSearchLock = createChatLock();
 
 export interface KnowledgeBaseSearchOutput {
@@ -78,24 +80,26 @@ export const knowledgeBaseSearchTool: ToolDefinition<
 };
 
 export async function runKnowledgeBaseSearch(
-  input: unknown,
+  input: KnowledgeBaseSearchInput,
   context: ToolContext,
   options: KnowledgeBaseSearchOptions = {}
 ): Promise<KnowledgeBaseSearchOutput> {
   const orgId = context.orgId?.trim();
   const profileId = context.profileId?.trim();
+
   if (!(orgId && profileId)) {
     throw new Error("orgId and profileId are required.");
   }
 
   const parsed = parseToolInput(knowledgeBaseSearchInputSchema, input);
+
   // The backend call, the profile root and the organization target are
   // independent reads, so they share one round of I/O.
   const [backend, workspaceRoot, organizationTarget, profileTarget] =
     await Promise.all([
       context.searchKnowledge?.({
         ...parsed,
-        regex: (input as { regex?: unknown }).regex === true,
+        regex: parsed.regex,
       }),
       resolveWorkspaceRoot(
         options.workspaceRoot ?? getProfileSoulDir(orgId, profileId)
@@ -107,10 +111,12 @@ export async function runKnowledgeBaseSearch(
       ),
       resolveProfileSearchTarget(orgId, profileId, parsed.filename ?? null),
     ]);
+
   const unreadable = [
     ...profileTarget.unreadable,
     ...organizationTarget.unreadable,
   ];
+
   const unreadableField = unreadable.length > 0 ? { unreadable } : {};
   // Organization hits are relative to the organization root, not to the
   // profile workspace they used to be resolved against.
@@ -123,6 +129,7 @@ export async function runKnowledgeBaseSearch(
       ...match,
       scope: "profile" as const,
     }));
+
     const organizationResult = parsed.regex
       ? await runSearchTarget(organizationTarget, parsed, organizationRoot)
       : (
@@ -133,11 +140,13 @@ export async function runKnowledgeBaseSearch(
             workspaceRoot
           )
         )[0]!;
+
     const merged = mergeScopedMatches(
       profileMatches,
       organizationResult.matches,
       parsed.maxResults
     );
+
     return {
       matchCount: merged.matches.length,
       matches: merged.matches,
@@ -150,6 +159,7 @@ export async function runKnowledgeBaseSearch(
   }
 
   await ensureKnowledgeBaseDirs(orgId, profileId);
+
   const [profileResult, organizationResult] = parsed.regex
     ? await Promise.all([
         runSearchTarget(profileTarget, parsed, workspaceRoot),
@@ -161,11 +171,13 @@ export async function runKnowledgeBaseSearch(
         parsed,
         workspaceRoot
       );
+
   const merged = mergeScopedMatches(
     profileResult.matches,
     organizationResult.matches,
     parsed.maxResults
   );
+
   return {
     matchCount: merged.matches.length,
     matches: merged.matches,
@@ -182,11 +194,16 @@ export async function runKnowledgeBaseSearch(
  * purpose, so a profile search that fills `maxResults` on its own must not push
  * them out. Whatever the organization scope leaves goes to the profile scope.
  */
+interface MergeScopedMatchesResult {
+  dropped: boolean;
+  matches: ScopedMatch[];
+}
+
 function mergeScopedMatches(
   profileMatches: ScopedMatch[],
   organizationMatches: ScopedMatch[],
   maxResults: number
-): { dropped: boolean; matches: ScopedMatch[] } {
+): MergeScopedMatchesResult {
   const organizationKept = organizationMatches.slice(0, maxResults);
   const profileBudget = Math.max(0, maxResults - organizationKept.length);
   const profileKept = profileMatches.slice(0, profileBudget);
@@ -224,20 +241,24 @@ async function resolveOrganizationSearchTarget(
   filename: string | null
 ): Promise<SearchTarget> {
   const root = getOrgKnowledgeBaseDir(orgId);
+
   const [sharedDocumentIds, organizationDocuments] = await Promise.all([
     getProfileSharedDocumentIds(orgId, profileId),
     listOrganizationKnowledgeBaseDocuments(orgId),
   ]);
+
   // Guard against stale profile references: never search the organization root
   // when no currently listed organization document is attached to this profile.
   const attached = organizationDocuments.filter((document) =>
     sharedDocumentIds.includes(document.id)
   );
+
   if (attached.length === 0) {
     // Nothing of the organization is in scope for this profile, so it has no
     // unreadable documents to report either.
     return { kind: "missing", root, scope: "organization", unreadable: [] };
   }
+
   return pickSearchTarget(root, "organization", attached, filename);
 }
 
@@ -248,13 +269,16 @@ function pickSearchTarget(
   filename: string | null
 ): SearchTarget {
   const unreadable = unreadableFilenames(documents, filename);
+
   if (!filename) {
-    const ids = documents
-      .filter((document) => document.status === "ready")
-      .map((document) => document.id);
+    const ids = documents.flatMap((document) =>
+      document.status === "ready" ? [document.id] : []
+    );
+
     if (ids.length === 0) {
       return { kind: "missing", root, scope, unreadable };
     }
+
     return {
       glob:
         ids.length === 1
@@ -266,15 +290,19 @@ function pickSearchTarget(
       unreadable,
     };
   }
+
   const normalized = filename.trim().toLowerCase();
+
   const document = documents.find(
     (entry) =>
       entry.filename.trim().toLowerCase() === normalized &&
       entry.status === "ready"
   );
+
   if (!document) {
     return { kind: "missing", root, scope, unreadable };
   }
+
   return {
     glob: null,
     kind: "file",
@@ -294,14 +322,20 @@ function unreadableFilenames(
   documents: { filename: string; status: string }[],
   filename: string | null
 ): string[] {
-  const notReady = documents.filter((document) => document.status !== "ready");
   if (!filename) {
-    return notReady.map((document) => document.filename);
+    return documents.flatMap((document) =>
+      document.status === "ready" ? [] : [document.filename]
+    );
   }
+
   const normalized = filename.trim().toLowerCase();
-  return notReady
-    .filter((document) => document.filename.trim().toLowerCase() === normalized)
-    .map((document) => document.filename);
+
+  return documents.flatMap((document) =>
+    document.status !== "ready" &&
+    document.filename.trim().toLowerCase() === normalized
+      ? [document.filename]
+      : []
+  );
 }
 
 async function runSearchTarget(
@@ -313,9 +347,11 @@ async function runSearchTarget(
   if (target.kind === "missing" || maxResults <= 0) {
     return { matches: [], truncated: false };
   }
+
   // Ask for one match more than the budget so "exactly `maxResults` matches" is
   // only reported as truncated when a further match really exists.
   const probeLimit = maxResults + 1;
+
   const result = await runRipgrep(
     buildRipgrepArgs({
       glob: target.glob,
@@ -333,6 +369,7 @@ async function runSearchTarget(
       workspaceRoot: relativeTo,
     }
   );
+
   return {
     matches: result.matches.slice(0, maxResults).map((match) => ({
       ...match,
@@ -358,29 +395,39 @@ async function runQmdSearchTargets(
     const canonicalProfileRoot = await realpath(profileRoot);
     // Keep QMD's native packages out of the server and worker bundles.
     const qmdPackage = "@tobilu/qmd";
+
+    // SAFETY: The constant package specifier is the declared @tobilu/qmd module.
     const { createStore, extractSnippet } = (await import(
       qmdPackage
     )) as typeof import("@tobilu/qmd");
+
     const store = await createStore({
       dbPath: join(canonicalProfileRoot, ".qmd.sqlite"),
     });
+
     try {
       const collectionNames: string[] = [];
+
       for (const target of targets) {
         if (target.kind === "missing") {
           await store.removeCollection(target.scope);
           continue;
         }
+
         const path =
           target.kind === "file" ? dirname(target.root) : target.root;
+
         const pattern =
           target.kind === "file" ? basename(target.root) : target.glob!;
+
         await store.addCollection(target.scope, { path, pattern });
         collectionNames.push(target.scope);
       }
+
       if (collectionNames.length === 0) {
         return targets.map(() => ({ matches: [], truncated: false }));
       }
+
       await store.update({ collections: collectionNames });
 
       return await Promise.all(
@@ -388,10 +435,12 @@ async function runQmdSearchTargets(
           if (target.kind === "missing") {
             return { matches: [], truncated: false };
           }
+
           const results = await store.searchLex(parsed.query, {
             collection: target.scope,
             limit: parsed.maxResults + 1,
           });
+
           return {
             matches: results.slice(0, parsed.maxResults).map((result) => {
               const snippet = extractSnippet(
@@ -399,7 +448,9 @@ async function runQmdSearchTargets(
                 parsed.query,
                 16_000
               );
+
               const filename = basename(result.filepath);
+
               return {
                 file:
                   target.scope === "profile"

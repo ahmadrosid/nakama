@@ -10,6 +10,7 @@ import { describeProfileChangeEvents } from "./profile-change-history";
 import { ProfileService } from "./profile-service";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
+
 const ORG_ID = "org_history_test";
 
 describe("profile change history", () => {
@@ -18,6 +19,7 @@ describe("profile change history", () => {
   test("summarizes skill assignments while preserving content edits and unavailable IDs", async () => {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();
+
     const skill = {
       createdAt: now,
       createdBy: "human" as const,
@@ -31,6 +33,7 @@ describe("profile change history", () => {
       sourcePath: "/tmp/history-skill",
       updatedAt: now,
     };
+
     await db.upsertSkill(skill);
     await db.upsertSkill({
       ...skill,
@@ -38,6 +41,7 @@ describe("profile change history", () => {
       name: "Private skill",
       orgId: "another_org",
     });
+
     const event = {
       actorUserId: "deleted_user",
       afterValue: '["skill_private","skill_browser","skill_browser"]',
@@ -49,6 +53,7 @@ describe("profile change history", () => {
       profileId: "profile_history",
       source: "skill_manage" as const,
     };
+
     const events = await describeProfileChangeEvents(db, ORG_ID, [
       event,
       {
@@ -77,6 +82,7 @@ describe("profile change history", () => {
         id: "reordered",
       },
     ]);
+
     expect(events[0]?.assignmentChanges).toEqual({
       added: [{ id: "skill_private", name: null }],
       removed: [{ id: "deleted_skill", name: null }],
@@ -92,9 +98,11 @@ describe("profile change history", () => {
       added: [{ id: "skill_browser", name: "Browser automation" }],
       removed: [],
     });
+
     for (const index of [2, 3, 4]) {
       expect(events[index]?.assignmentChanges).toBeUndefined();
     }
+
     expect(events[5]?.assignmentChanges).toEqual({ added: [], removed: [] });
   });
 
@@ -134,10 +142,12 @@ describe("profile change history", () => {
       passwordHash: "unused",
       updatedAt: new Date().toISOString(),
     });
+
     const created = await service.createProfile(ORG_ID, {
       name: "History Bot",
       systemPrompt: "before",
     });
+
     const profileId = created.profile.id;
 
     await service.updateProfile(
@@ -160,6 +170,7 @@ describe("profile change history", () => {
     const promptEvent = history.events.find(
       (event) => event.field === "system_prompt"
     );
+
     expect(promptEvent).toMatchObject({
       actorUserId: "user_admin",
       afterValue: "after",
@@ -198,6 +209,7 @@ describe("profile change history", () => {
     });
 
     const service = new ProfileService(db);
+
     const created = await service.createProfile(ORG_ID, {
       name: "Source Bot",
       systemPrompt: "v1",
@@ -217,6 +229,7 @@ describe("profile change history", () => {
       ORG_ID,
       created.profile.id
     );
+
     expect(
       history.events.some(
         (event) =>

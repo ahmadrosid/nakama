@@ -6,7 +6,7 @@ import {
   validateCustomModels,
   validateDisplayName,
 } from "./compatible-provider-config";
-import type { ProviderModelOption } from "./contract";
+import type { CustomModelEntry, ProviderModelOption } from "./contract";
 import { NETRA_AGENT_MODEL_ID } from "./discovery-providers";
 import {
   defaultOllamaBaseUrl,
@@ -77,6 +77,7 @@ export async function promptForProviderConfig(
 
   while (true) {
     writeLine("\nChoose a provider:");
+
     for (const [index, choice] of PROVIDER_CHOICES.entries()) {
       writeLine(`  ${index + 1}) ${choice.label}`);
     }
@@ -94,6 +95,7 @@ export async function promptForProviderConfig(
         question,
         writeLine
       );
+
       return buildUserConfigFromInstance(instance);
     }
 
@@ -102,6 +104,7 @@ export async function promptForProviderConfig(
         question,
         writeLine
       );
+
       return buildUserConfigFromInstance(instance);
     }
 
@@ -114,36 +117,40 @@ export async function promptForProviderConfig(
 
     if (provider === "netra") {
       let models: ProviderModelOption[] = [];
+
       try {
         models = (await options.discoverModels?.("netra", apiKey)) ?? [];
       } catch {
         writeLine("Model discovery failed. Enter an exact Netra model ID.\n");
       }
+
       const chosen = models.find((model) => model.id === NETRA_AGENT_MODEL_ID);
+
       const modelId =
         chosen?.id ??
         (models.length === 0
           ? (await question("Netra model ID: ")).trim()
           : "");
+
       if (modelId !== NETRA_AGENT_MODEL_ID) {
         writeLine("Enter an available Netra model ID.\n");
         continue;
       }
+
+      const netraModel: CustomModelEntry = { default: true, id: modelId };
+
+      if (chosen?.supportsThinking !== undefined) {
+        netraModel.supportsThinking = chosen.supportsThinking;
+      }
+
+      if (chosen?.supportsVision !== undefined) {
+        netraModel.supportsVision = chosen.supportsVision;
+      }
+
       return buildUserConfigFromInstance({
         apiKey,
         createdAt: new Date().toISOString(),
-        customModels: [
-          {
-            default: true,
-            id: modelId,
-            ...(chosen?.supportsThinking === undefined
-              ? {}
-              : { supportsThinking: chosen.supportsThinking }),
-            ...(chosen?.supportsVision === undefined
-              ? {}
-              : { supportsVision: chosen.supportsVision }),
-          },
-        ],
+        customModels: [netraModel],
         id: createProviderInstanceId(),
         label: "Netra Runtime",
         type: "netra",
@@ -175,6 +182,7 @@ export async function promptForProviderConfig(
     }
 
     const modelInput = (await question("\nModel (optional): ")).trim();
+
     const selectedModel = resolveModelChoice(modelInput, provider, {
       getDefaultModel,
       getModelById,
@@ -182,27 +190,30 @@ export async function promptForProviderConfig(
     });
 
     const catalogModel = getModelById(selectedModel);
-    const customModels =
-      (provider === "fireworks" || provider === "cerebras") && catalogModel
-        ? [
-            {
-              default: true,
-              id: selectedModel,
-              ...(catalogModel.supportsThinking === undefined
-                ? {}
-                : { supportsThinking: catalogModel.supportsThinking }),
-              ...(catalogModel.supportsVision === undefined
-                ? {}
-                : { supportsVision: catalogModel.supportsVision }),
-              ...(catalogModel.inputPerMillionUsd === undefined
-                ? {}
-                : { inputPerMillionUsd: catalogModel.inputPerMillionUsd }),
-              ...(catalogModel.outputPerMillionUsd === undefined
-                ? {}
-                : { outputPerMillionUsd: catalogModel.outputPerMillionUsd }),
-            },
-          ]
-        : undefined;
+
+    let customModels: CustomModelEntry[] | undefined;
+
+    if ((provider === "fireworks" || provider === "cerebras") && catalogModel) {
+      const model: CustomModelEntry = { default: true, id: selectedModel };
+
+      if (catalogModel.supportsThinking !== undefined) {
+        model.supportsThinking = catalogModel.supportsThinking;
+      }
+
+      if (catalogModel.supportsVision !== undefined) {
+        model.supportsVision = catalogModel.supportsVision;
+      }
+
+      if (catalogModel.inputPerMillionUsd !== undefined) {
+        model.inputPerMillionUsd = catalogModel.inputPerMillionUsd;
+      }
+
+      if (catalogModel.outputPerMillionUsd !== undefined) {
+        model.outputPerMillionUsd = catalogModel.outputPerMillionUsd;
+      }
+
+      customModels = [model];
+    }
 
     const instance: ProviderInstance = {
       apiKey,
@@ -210,9 +221,15 @@ export async function promptForProviderConfig(
       id: createProviderInstanceId(),
       label: defaultProviderLabel(provider, []),
       type: getModelById(selectedModel)?.provider ?? provider,
-      ...(cloudflareBaseUrl ? { baseUrl: cloudflareBaseUrl } : {}),
-      ...(customModels ? { customModels } : {}),
     };
+
+    if (cloudflareBaseUrl) {
+      instance.baseUrl = cloudflareBaseUrl;
+    }
+
+    if (customModels) {
+      instance.customModels = customModels;
+    }
 
     return buildUserConfigFromInstance(instance);
   }
@@ -261,6 +278,7 @@ function resolveProviderChoice(input: string): UserProviderName | null {
   }
 
   const numeric = Number(input);
+
   const choice =
     Number.isInteger(numeric) &&
     numeric >= 1 &&
@@ -299,6 +317,7 @@ function resolveModelChoice(
 
   const numeric = Number(input);
   const models = options.getModelsForProvider(provider);
+
   const choice =
     Number.isInteger(numeric) && numeric >= 1 && numeric <= models.length
       ? models[numeric - 1]
@@ -318,9 +337,12 @@ async function promptForOllamaProviderInstance(
   while (true) {
     writeLine("\nOllama host: 1) Local  2) Cloud");
     const hostInput = (await question("Host [1]: ")).trim().toLowerCase();
+
     const hostMode: OllamaHostMode =
       hostInput === "2" || hostInput === "cloud" ? "cloud" : "local";
+
     const defaultBaseUrl = defaultOllamaBaseUrl(hostMode);
+
     const baseUrl = normalizeBaseUrl(
       (await question(`Base URL (${defaultBaseUrl}): `)).trim() ||
         defaultBaseUrl
@@ -357,10 +379,15 @@ async function promptForOllamaProviderInstance(
       baseUrl,
       createdAt: new Date().toISOString(),
       customModels: validateCustomModels(
-        modelIds.map((id, index) => ({
-          id,
-          ...(index === 0 ? { default: true } : {}),
-        }))
+        modelIds.map((id, index) => {
+          const model: CustomModelEntry = { id };
+
+          if (index === 0) {
+            model.default = true;
+          }
+
+          return model;
+        })
       ),
       hostMode,
       id: createProviderInstanceId(),
@@ -385,9 +412,11 @@ async function promptForCompatibleProviderInstance(
 
     const baseUrl = normalizeBaseUrl(baseUrlInput);
     const apiKey = (await question("API key (optional): ")).trim();
+
     const wireApi = parseWireApi(
       await question("API, chat or responses (default chat): ")
     );
+
     const modelIds = (await question("Model IDs (comma-separated): "))
       .split(",")
       .map((value) => value.trim())
@@ -399,13 +428,18 @@ async function promptForCompatibleProviderInstance(
     }
 
     const customModels = validateCustomModels(
-      modelIds.map((id, index) => ({
-        id,
-        ...(index === 0 ? { default: true } : {}),
-      }))
+      modelIds.map((id, index) => {
+        const model: CustomModelEntry = { id };
+
+        if (index === 0) {
+          model.default = true;
+        }
+
+        return model;
+      })
     );
 
-    return {
+    const instance: ProviderInstance = {
       apiKey,
       baseUrl,
       createdAt: new Date().toISOString(),
@@ -413,7 +447,12 @@ async function promptForCompatibleProviderInstance(
       id: createProviderInstanceId(),
       label: displayName,
       type: "openai_compatible",
-      ...(wireApi ? { wireApi } : {}),
     };
+
+    if (wireApi) {
+      instance.wireApi = wireApi;
+    }
+
+    return instance;
   }
 }

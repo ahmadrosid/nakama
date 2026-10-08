@@ -48,6 +48,7 @@ export class AutomationRunner {
       }
 
       const orgId = automation.orgId?.trim();
+
       if (!orgId) {
         throw new Error("Automation organization is missing.");
       }
@@ -59,6 +60,7 @@ export class AutomationRunner {
       }
 
       const run = await this.automationService.createRun(automationId);
+
       return await this.execute(automation, orgId, run.id);
     } finally {
       this.running.delete(automationId);
@@ -73,16 +75,20 @@ export class AutomationRunner {
       if (this.running.has(automationId)) {
         continue;
       }
+
       this.running.add(automationId);
+
       try {
         const automation = await this.automationService.get(automationId);
         const orgId = automation?.orgId?.trim();
+
         if (!(automation && orgId)) {
           await this.automationService.completeRun(id, automationId, {
             error: "Automation not found.",
           });
           continue;
         }
+
         await this.execute(automation, orgId, id, true);
       } catch (error) {
         console.error("Resuming automation run failed:", error);
@@ -100,15 +106,18 @@ export class AutomationRunner {
   ): Promise<{ output?: string; error?: string }> {
     const automationId = automation.id;
     let progress = "";
+
     const messages: ChatMessage[] = [
       { content: automation.prompt, role: "user" },
     ];
+
     const publishProgress = () => {
       this.automationService.setRunProgress(runId, {
         output: progress,
         progress: messages,
       });
     };
+
     publishProgress();
 
     try {
@@ -123,15 +132,18 @@ export class AutomationRunner {
             // ponytail: cap live text at 100k characters; persist events for full live history.
             progress = (progress + delta).slice(-100_000);
             const last = messages.at(-1);
+
             if (last?.role === "assistant" && !last.toolCalls) {
               last.content = (last.content + delta).slice(-100_000);
             } else {
               messages.push({ content: delta, role: "assistant" });
             }
+
             publishProgress();
           },
           onThinking: (delta) => {
             const last = messages.at(-1);
+
             if (last?.role === "assistant" && !last.toolCalls) {
               last.thinking = ((last.thinking ?? "") + delta).slice(-100_000);
             } else {
@@ -141,12 +153,14 @@ export class AutomationRunner {
                 thinking: delta,
               });
             }
+
             publishProgress();
           },
           onToolEnd: ({ toolCallId, result }) => {
             const message = messages.find(
               (item) => item.role === "tool" && item.toolCallId === toolCallId
             );
+
             if (message?.role === "tool") {
               // Large results fall back to a text preview in the chat renderer.
               message.content = (JSON.stringify(result) ?? "").slice(
@@ -184,10 +198,13 @@ export class AutomationRunner {
         automationId,
         { output }
       );
+
       await this.tryDeliver(automation, completedRun);
+
       return { output };
     } catch (error) {
       const message = formatAutomationRunError(error);
+
       const completedRun = await this.automationService.completeRun(
         runId,
         automationId,
@@ -196,7 +213,9 @@ export class AutomationRunner {
           output: progress || undefined,
         }
       );
+
       await this.tryDeliver(automation, completedRun);
+
       return { error: message };
     } finally {
       this.automationService.setRunProgress(runId);

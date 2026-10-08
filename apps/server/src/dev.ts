@@ -3,9 +3,11 @@ import { fileURLToPath } from "node:url";
 import { clearRuntimeServerUrl, DEFAULT_SERVER_PORT } from "@nakama/core";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
+
 const serverEntry = join(projectRoot, "apps/server/src/index.ts");
 
 await killListenersOnPort(DEFAULT_SERVER_PORT);
+
 clearRuntimeServerUrl();
 
 const child = Bun.spawn(["bun", "run", serverEntry], {
@@ -23,6 +25,7 @@ async function killListenersOnPort(port: number): Promise<void> {
     const output = Bun.spawnSync(["lsof", "-ti", `:${port}`])
       .stdout.toString()
       .trim();
+
     if (!output) {
       return;
     }

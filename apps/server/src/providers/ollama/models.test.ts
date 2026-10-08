@@ -59,6 +59,7 @@ describe("fetchOllamaModels", () => {
 
   test("sends Authorization header to /api/tags when apiKey is set", async () => {
     const seen: string[] = [];
+
     using _fetchMock = spyOn(globalThis, "fetch").mockImplementation(
       async (input, init) => {
         const url = String(input);
@@ -68,11 +69,8 @@ describe("fetchOllamaModels", () => {
         }
 
         if (url.endsWith("/api/tags")) {
-          seen.push(
-            String(
-              (init?.headers as Record<string, string>)?.Authorization ?? ""
-            )
-          );
+          seen.push(new Headers(init?.headers).get("Authorization") ?? "");
+
           return new Response(
             JSON.stringify({ models: [{ name: "gpt-oss:120b" }] }),
             {

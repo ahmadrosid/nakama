@@ -78,6 +78,7 @@ describe("resolveGitHubSkillRawUrl", () => {
     const resolved = resolveGitHubSkillRawUrl(
       "https://github.com/trusted-org/skills/blob/main/../attacker/SKILL.md"
     );
+
     expect(resolved).toBe(
       "https://raw.githubusercontent.com/trusted-org/skills/attacker/SKILL.md"
     );

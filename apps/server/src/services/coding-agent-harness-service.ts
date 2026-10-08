@@ -264,6 +264,7 @@ export async function refreshCodingAgentHarnessProbe(
   );
 
   const checkedAt = new Date().toISOString();
+
   const probeCache: StoredCodingAgentHarnessProbeCache = {
     authenticated: probe.authenticated,
     checkedAt,
@@ -299,6 +300,7 @@ export async function saveCodingAgentWorkspaceSettings(
 ): Promise<CodingAgentWorkspaceSettings> {
   const stored = await db.getWorkspaceSettings();
   const settings = await loadCodingAgentWorkspaceSettings(db);
+
   const byId = new Map(
     settings.harnesses.map((harness) => [harness.id, harness])
   );
@@ -325,6 +327,7 @@ export async function saveCodingAgentWorkspaceSettings(
       : input.selectedHarnessId && byId.has(input.selectedHarnessId)
         ? input.selectedHarnessId
         : null;
+
   const providerPassthroughEnabled =
     input.providerPassthroughEnabled ?? settings.providerPassthroughEnabled;
 
@@ -397,6 +400,7 @@ export async function listInstalledCodingAgentHarnesses(
   db: DatabaseAdapter
 ): Promise<CodingAgentHarnessStatus[]> {
   const statuses = await listCodingAgentHarnessStatuses(db);
+
   return statuses.filter((harness) => harness.enabled && harness.installed);
 }
 
@@ -544,6 +548,7 @@ async function saveHarnessProbeCache(
 ): Promise<void> {
   const stored = await db.getWorkspaceSettings();
   const settings = await loadCodingAgentWorkspaceSettings(db);
+
   const nextHarnesses = settings.harnesses.map((harness) =>
     harness.id === harnessId ? { ...harness, probeCache } : harness
   );
@@ -563,6 +568,7 @@ async function clearHarnessProbeCache(
 ): Promise<void> {
   const stored = await db.getWorkspaceSettings();
   const settings = await loadCodingAgentWorkspaceSettings(db);
+
   const nextHarnesses = settings.harnesses.map((harness) =>
     harness.id === harnessId ? { ...harness, probeCache: null } : harness
   );
@@ -625,6 +631,7 @@ export function listCodingHarnessLoginCommands(): Array<{
 }> {
   return DEFAULT_HARNESSES.flatMap((harness) => {
     const command = getCodingHarnessLoginCommand(harness.kind);
+
     return command ? [{ command, name: harness.name }] : [];
   });
 }
@@ -723,6 +730,7 @@ async function probeHarnessExec(
   }
 
   const passthrough = probeContext?.providerPassthroughEnabled !== false;
+
   const { spawn, routing } = passthrough
     ? await resolveCodingAgentSpawnBundle({
         harnessKind: harness.kind,
@@ -741,8 +749,9 @@ async function probeHarnessExec(
           providerLabel: null,
           providerType: null,
         },
-        spawn: { env: {} as Record<string, string> },
+        spawn: { env: {} },
       };
+
   const tempDir = await mkdtemp(
     path.join(tmpdir(), "nakama-coding-agent-probe-")
   );
@@ -750,6 +759,7 @@ async function probeHarnessExec(
   const piProvider = routing.providerType
     ? mapNakamaProviderToPi(routing.providerType, routing.baseUrl)
     : null;
+
   const piModel =
     routing.model && routing.providerType
       ? formatModelForHarness("pi", routing.providerType, routing.model)
@@ -761,6 +771,7 @@ async function probeHarnessExec(
       provider: piProvider,
       timeoutMs: probeContext?.probeTimeoutMs,
     });
+
     const combinedOutput = [result.stdout, result.stderr]
       .filter(Boolean)
       .join("\n")
@@ -790,6 +801,7 @@ async function probeHarnessExec(
 
     if (looksLikeAuthenticationFailure(combinedOutput)) {
       const login = getCodingHarnessLoginCommand(harness.kind);
+
       const nativeHint = login
         ? `Run \`${login}\` on this server.`
         : "Authenticate the CLI on this server.";
@@ -841,6 +853,7 @@ async function runProbeCommand(
   const { spawn } = await import("node:child_process");
   const timeoutMs = piOptions?.timeoutMs ?? 15_000;
   const prompt = "Reply with OK and nothing else.";
+
   const args = buildHarnessNonInteractiveArgs(harness.kind, {
     baseArgs: harness.args,
     cwd,
@@ -857,6 +870,7 @@ async function runProbeCommand(
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
+
     let stdout = "";
     let stderr = "";
     let timedOut = false;
@@ -864,6 +878,7 @@ async function runProbeCommand(
 
     const timeoutId = setTimeout(() => {
       timedOut = true;
+
       if (process.platform === "win32") {
         void killProcessTree(child, "SIGKILL");
       } else {
@@ -872,6 +887,7 @@ async function runProbeCommand(
           void killProcessTree(child, "SIGKILL");
         }, SIGTERM_GRACE_MS);
       }
+
       // Resolve here rather than waiting for `close`: a child that ignores
       // SIGTERM never emits one, so the caller would wait past the timeout it
       // just set.
@@ -890,11 +906,13 @@ async function runProbeCommand(
       timedOut: boolean;
     }) => {
       clearTimeout(timeoutId);
+
       // The parent can exit while a descendant ignores SIGTERM. Keep the
       // escalation armed until the group has received SIGKILL.
       if (!timedOut) {
         clearTimeout(killTimeoutId);
       }
+
       resolve(result);
     };
 
@@ -934,6 +952,7 @@ function summarizeProbeOutput(output: string): string {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
+
   const meaningful =
     lines.find((line) => /^(?:error|fatal|panic):/i.test(line)) ??
     lines.find((line) =>
@@ -943,6 +962,7 @@ function summarizeProbeOutput(output: string): string {
     ) ??
     lines[lines.length - 1] ??
     output.trim();
+
   return meaningful.length > 240
     ? `${meaningful.slice(0, 237)}...`
     : meaningful;

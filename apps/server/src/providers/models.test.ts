@@ -97,6 +97,7 @@ describe("resolveModel", () => {
       { id: "gpt-5.6-sol" },
       { default: true, id: "gpt-5.6-luna" },
     ];
+
     expect(resolveModel("chatgpt", undefined, customModels)).toBe(
       "gpt-5.6-luna"
     );
@@ -146,6 +147,7 @@ describe("resolveModel", () => {
       expect(estimateUsageCostUsd(id, 100_000, 20_000)).toBeCloseTo(cost);
       expect(resolveModel("openai", id)).toBe(id);
     }
+
     expect(getDefaultModel("openai")).toBe("gpt-5.4");
   });
 
@@ -164,6 +166,7 @@ describe("resolveModel", () => {
         provider: "gemini",
       });
     }
+
     expect(getModelById("gemini-3.8-flash")?.default).not.toBe(true);
   });
 
@@ -188,6 +191,7 @@ describe("resolveModel", () => {
       });
       expect(resolveModel("anthropic", id)).toBe(id);
     }
+
     expect(getDefaultModel("anthropic")).toBe("claude-sonnet-4-6");
     expect(
       resolveModel("anthropic", undefined, [
@@ -223,6 +227,7 @@ describe("resolveModel", () => {
   test("resolves catalog models for DeepSeek", () => {
     expect(resolveModel("deepseek", "deepseek-v4-pro")).toBe("deepseek-v4-pro");
     expect(getDefaultModel("deepseek")).toBe("deepseek-flash");
+
     for (const id of [
       "deepseek-flash",
       "deepseek-v4-flash",
@@ -247,6 +252,7 @@ describe("resolveModel", () => {
       { default: true, id: "private-model" },
       { id: "deepseek-v4-flash-vision-exp", supportsVision: true },
     ];
+
     expect(getDefaultModel("deepseek", customModels)).toBe("private-model");
     expect(resolveModel("deepseek", "deepseek-flash", customModels)).toBe(
       "private-model"

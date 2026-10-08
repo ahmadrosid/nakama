@@ -14,6 +14,7 @@ import {
 } from "./cli-package-install";
 
 const AGENT_BROWSER_PACKAGE = "agent-browser";
+
 const AGENT_BROWSER_COMMAND = "agent-browser";
 
 /**
@@ -31,6 +32,7 @@ const AGENT_BROWSER_PINNED_PACKAGE: PinnedNpmPackage = {
 export function getAgentBrowserInstallCommand(): string {
   const spec = `${AGENT_BROWSER_PACKAGE}@${AGENT_BROWSER_PINNED_PACKAGE.version}`;
   const manager = detectNpmOrBun();
+
   const install =
     manager === "bun"
       ? `bun install -g --trust ${spec}`
@@ -79,6 +81,7 @@ function toAgentBrowserStatusResponse(
 
 export async function getAgentBrowserStatus(): Promise<AgentBrowserStatusResponse> {
   const runtime = await getAgentBrowserRuntimeStatus();
+
   return toAgentBrowserStatusResponse(runtime);
 }
 
@@ -111,6 +114,7 @@ export async function installAgentBrowser(
 
     try {
       const cliPlan = buildPinnedPackageInstallPlan(tarball.path);
+
       if (cliPlan.command === "bun") {
         ensureBunGlobalInstallDirs();
       }
@@ -120,6 +124,7 @@ export async function installAgentBrowser(
       const cliResult = await runTimedInstallCommand(cliPlan, emitProgress, {
         signal: options.signal,
       });
+
       const cliOutput = [cliResult.stdout, cliResult.stderr]
         .filter(Boolean)
         .join("\n")
@@ -178,6 +183,7 @@ export async function installAgentBrowser(
     emitProgress,
     { signal: options.signal }
   );
+
   const browserOutput = [browserResult.stdout, browserResult.stderr]
     .filter(Boolean)
     .join("\n")

@@ -1,4 +1,5 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { z } from "zod";
 import type { ToolContext } from "../contract";
 import type { MailboxConfig } from "./types";
 
@@ -15,10 +16,22 @@ interface AttachmentReferenceClaims {
   uid: number;
 }
 
+const AttachmentReferenceClaimsSchema = z.object({
+  attachmentId: z.string(),
+  expiresAt: z.number(),
+  folder: z.string(),
+  mailboxId: z.string(),
+  orgId: z.string(),
+  profileId: z.string(),
+  sessionId: z.string(),
+  uid: z.number(),
+});
+
 function contextScope(
   context: ToolContext
 ): Pick<AttachmentReferenceClaims, "orgId" | "profileId" | "sessionId"> {
   const sessionId = context.sessionId ?? context.automationRunId;
+
   if (!(context.orgId && context.profileId && sessionId)) {
     throw new Error(
       "Email attachment references require an organization, profile, and session."
@@ -34,6 +47,7 @@ function contextScope(
 
 function sign(payload: string): string {
   const secret = process.env.NAKAMA_EMAIL_ATTACHMENT_SECRET?.trim();
+
   if (!secret || secret.length < 32) {
     throw new Error(
       "NAKAMA_EMAIL_ATTACHMENT_SECRET must be configured with at least 32 characters."
@@ -69,9 +83,11 @@ export function createAttachmentReference(
     ...input,
     expiresAt: Date.now() + REFERENCE_TTL_MS,
   };
+
   const payload = Buffer.from(JSON.stringify(claims), "utf8").toString(
     "base64url"
   );
+
   return `${payload}.${sign(payload)}`;
 }
 
@@ -81,14 +97,17 @@ export function verifyAttachmentReference(
   mailboxId: string
 ): Omit<AttachmentReferenceClaims, "orgId" | "profileId" | "sessionId"> {
   const parts = reference.split(".");
+
   if (parts.length !== 2) {
     throw new Error("Invalid email attachment reference.");
   }
+
   const [payload, signature] = parts;
 
   const expected = sign(payload);
   const actualBuffer = Buffer.from(signature);
   const expectedBuffer = Buffer.from(expected);
+
   if (
     actualBuffer.length !== expectedBuffer.length ||
     !timingSafeEqual(actualBuffer, expectedBuffer)
@@ -97,15 +116,17 @@ export function verifyAttachmentReference(
   }
 
   let claims: AttachmentReferenceClaims;
+
   try {
-    claims = JSON.parse(
-      Buffer.from(payload, "base64url").toString("utf8")
-    ) as AttachmentReferenceClaims;
+    claims = AttachmentReferenceClaimsSchema.parse(
+      JSON.parse(Buffer.from(payload, "base64url").toString("utf8"))
+    );
   } catch {
     throw new Error("Invalid email attachment reference.");
   }
 
   const scope = contextScope(context);
+
   if (
     claims.orgId !== scope.orgId ||
     claims.profileId !== scope.profileId ||

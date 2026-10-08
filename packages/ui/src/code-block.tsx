@@ -55,18 +55,21 @@ export function CodeBlock({
   const label = lang?.trim() || "text";
   const lineNumberDigits = Math.max(2, String(lines.length).length);
   const lineNumberGutterWidth = `calc(${lineNumberDigits}ch + 1.25rem)`;
+
   const gridStyle = {
     "--code-block-gutter": lineNumberGutterWidth,
     gridTemplateColumns: "var(--code-block-gutter) minmax(0, 1fr)",
-  } as CSSProperties;
+  } satisfies CSSProperties & { "--code-block-gutter": string };
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(code);
       setCopied(true);
+
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current);
       }
+
       copyTimeoutRef.current = setTimeout(() => {
         setCopied(false);
         copyTimeoutRef.current = null;

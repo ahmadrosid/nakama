@@ -7,6 +7,7 @@ const UNKNOWN_MIME_TYPE = "application/octet-stream";
 
 export const DOCX_MEDIA_TYPE =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
 export const LEGACY_DOC_MEDIA_TYPE = "application/msword";
 
 /**
@@ -16,7 +17,7 @@ export const LEGACY_DOC_MEDIA_TYPE = "application/msword";
 export const LEGACY_DOC_UNSUPPORTED_MESSAGE =
   "Legacy .doc files (Word 97-2003) are not supported. Convert the file to .docx and try again.";
 
-const MIME_TYPE_BY_EXTENSION: Record<string, string> = {
+const MIME_TYPE_BY_EXTENSION = {
   bash: "text/plain",
   cjs: "application/javascript",
   conf: "text/plain",
@@ -67,7 +68,7 @@ const MIME_TYPE_BY_EXTENSION: Record<string, string> = {
   yaml: "text/plain",
   yml: "text/plain",
   zsh: "text/plain",
-};
+} satisfies Record<string, string>;
 
 function fileExtension(filename: string): string {
   const basename = filename.split(/[\\/]/).pop() ?? filename;
@@ -82,7 +83,11 @@ function fileExtension(filename: string): string {
 
 /** Best-effort MIME type for an artifact that has no `.nakama-meta.json` sidecar. */
 export function inferArtifactMimeType(filename: string): string {
-  return MIME_TYPE_BY_EXTENSION[fileExtension(filename)] ?? UNKNOWN_MIME_TYPE;
+  return (
+    Object.entries(MIME_TYPE_BY_EXTENSION).find(
+      ([extension]) => extension === fileExtension(filename)
+    )?.[1] ?? UNKNOWN_MIME_TYPE
+  );
 }
 
 /** Strip parameters (`text/markdown; charset=utf-8`) and normalize casing. */
@@ -109,6 +114,7 @@ export function resolveArtifactMimeType(
 
 export function isHtmlArtifactMimeType(mimeType: string): boolean {
   const normalized = normalizeMimeType(mimeType);
+
   return normalized === "text/html" || normalized === "application/xhtml+xml";
 }
 
@@ -181,7 +187,7 @@ export function isLegacyDocFile(filename: string, mediaType = ""): boolean {
   );
 }
 
-const CODE_LANGUAGE_BY_EXTENSION: Record<string, string> = {
+const CODE_LANGUAGE_BY_EXTENSION = {
   bash: "bash",
   cjs: "javascript",
   conf: "ini",
@@ -209,14 +215,18 @@ const CODE_LANGUAGE_BY_EXTENSION: Record<string, string> = {
   yaml: "yaml",
   yml: "yaml",
   zsh: "bash",
-};
+} satisfies Record<string, string>;
 
 /**
  * Syntax-highlighting language for an artifact, or `null` for prose-ish text
  * (`.txt`, `.log`, `.csv`) that reads better unhighlighted.
  */
 export function artifactCodeLanguage(filename: string): string | null {
-  return CODE_LANGUAGE_BY_EXTENSION[fileExtension(filename)] ?? null;
+  return (
+    Object.entries(CODE_LANGUAGE_BY_EXTENSION).find(
+      ([extension]) => extension === fileExtension(filename)
+    )?.[1] ?? null
+  );
 }
 
 /**
@@ -234,6 +244,7 @@ export function looksLikeUtf8Text(bytes: Uint8Array): boolean {
     // multi-byte character straddling the sample boundary; `fatal` throws on the
     // first invalid sequence, so binary input bails out early.
     new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+
     return true;
   } catch {
     return false;
@@ -243,6 +254,7 @@ export function looksLikeUtf8Text(bytes: Uint8Array): boolean {
 /** MIME types that must not be served inline on the app origin (public shares). */
 export function isBrowserExecutableArtifactMimeType(mimeType: string): boolean {
   const normalized = mimeType.toLowerCase().split(";")[0]?.trim() ?? "";
+
   return (
     normalized === "text/html" ||
     normalized === "application/xhtml+xml" ||

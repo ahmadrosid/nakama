@@ -7,6 +7,7 @@ import { guardFilePath, PathGuardError } from "./paths";
 describe("guardFilePath", () => {
   test("allows a new directory beneath a symlinked parent without allowing siblings", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "nakama-new-tools-"));
+
     try {
       const data = path.join(root, "data");
       const alias = path.join(root, "alias");
@@ -29,6 +30,7 @@ describe("guardFilePath", () => {
 
   test("checks the real cwd and preserves valid directory aliases", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "nakama-cwd-"));
+
     try {
       const workspace = path.join(root, "workspace");
       const outside = path.join(root, "outside");
@@ -46,12 +48,14 @@ describe("guardFilePath", () => {
           path.join(await realpath(workspace), "notes.md")
         );
       }
+
       for (const cwd of [nested, alias, "nested"]) {
         const result = await guardFilePath("notes.md", cwd, undefined, options);
         expect(result.resolved).toBe(
           path.join(await realpath(nested), "notes.md")
         );
       }
+
       for (const cwd of [outside, path.join(workspace, "escape")]) {
         await expect(
           guardFilePath(
@@ -79,6 +83,7 @@ describe("guardFilePath", () => {
   test("resolves relative paths under an explicit workspace", async () => {
     const workspaceRoot = await mkdtemp(path.join(tmpdir(), "nakama-guard-"));
     const realWorkspace = await realpath(workspaceRoot);
+
     const guarded = await guardFilePath("SOUL.md", null, undefined, {
       cwd: workspaceRoot,
     });
@@ -90,6 +95,7 @@ describe("guardFilePath", () => {
     "refuses NTFS alternate data stream names on Windows",
     async () => {
       const workspace = await mkdtemp(path.join(tmpdir(), "nakama-guard-ads-"));
+
       try {
         for (const attempt of [
           "skills/x/tool.js::$DATA",
@@ -109,6 +115,7 @@ describe("guardFilePath", () => {
           10,
           { cwd: workspace }
         );
+
         expect(guarded.resolved).toBe(
           path.join(await realpath(workspace), "notes.md")
         );
@@ -124,10 +131,12 @@ describe("guardFilePath", () => {
       const workspace = await mkdtemp(
         path.join(tmpdir(), "nakama-guard-colon-")
       );
+
       try {
         const guarded = await guardFilePath("notes 10:30.md", null, 10, {
           cwd: workspace,
         });
+
         expect(guarded.resolved).toBe(
           path.join(await realpath(workspace), "notes 10:30.md")
         );

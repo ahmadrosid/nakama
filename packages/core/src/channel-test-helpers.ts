@@ -9,6 +9,7 @@ import type { UserOrgSummary } from "./contract";
 
 export function createDefaultTestOrgs(): UserOrgSummary[] {
   const now = new Date().toISOString();
+
   return [
     {
       createdAt: now,
@@ -23,6 +24,7 @@ export function createDefaultTestOrgs(): UserOrgSummary[] {
 
 export function createMultiTestOrgs(): UserOrgSummary[] {
   const now = new Date().toISOString();
+
   return [
     {
       createdAt: now,
@@ -59,9 +61,11 @@ export async function withTempHome<T>(
   run: (homeDir: string) => Promise<T>
 ): Promise<T> {
   let release!: () => void;
+
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
+
   const previous = tempHomeChains.get(prefix) ?? Promise.resolve();
   tempHomeChains.set(
     prefix,

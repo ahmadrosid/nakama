@@ -69,6 +69,7 @@ export class EphemeralSessionStore {
 
     this.entries.delete(sessionId);
     await this.onEvict(entry);
+
     return true;
   }
 

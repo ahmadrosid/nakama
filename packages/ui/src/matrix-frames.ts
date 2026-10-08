@@ -24,6 +24,7 @@ function createSnakeFrames(
   let dy = 0;
 
   const visited = new Set<string>();
+
   while (path.length < rows * cols) {
     path.push([y, x]);
     visited.add(`${y},${x}`);
@@ -69,6 +70,7 @@ function createSnakeFrames(
 
     for (let i = 0; i < snakeLength; i++) {
       const idx = frame - i;
+
       if (idx >= 0 && idx < path.length) {
         const [y, x] = path[idx];
         const brightness = 1 - i / snakeLength;
@@ -94,8 +96,10 @@ export function vu(columns: number, levels: number[]): Frame {
 
     for (let row = 0; row < rows; row++) {
       const rowFromBottom = rows - 1 - row;
+
       if (rowFromBottom < height) {
         let brightness = 1;
+
         if (row < rows * 0.3) {
           brightness = 1;
         } else if (row < rows * 0.6) {
@@ -103,6 +107,7 @@ export function vu(columns: number, levels: number[]): Frame {
         } else {
           brightness = 0.6;
         }
+
         frame[row][col] = brightness;
       }
     }
