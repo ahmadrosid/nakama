@@ -1,15 +1,9 @@
 import type { ToolSummary } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { Input } from "@nakama/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@nakama/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
 import { cn } from "@nakama/ui/utils";
-import { Cancel01Icon } from "hugeicons-react";
+import { ArrowDown01Icon, Cancel01Icon } from "hugeicons-react";
 import type { ChangeEvent, ReactNode, RefObject } from "react";
 
 export function ProfileCreateDialogForm({
@@ -23,7 +17,6 @@ export function ProfileCreateDialogForm({
   avatarPreview,
   avatarInputRef,
   tools,
-  selectableTools,
   selectedTools,
   onNameChange,
   onProfileIdChange,
@@ -31,6 +24,7 @@ export function ProfileCreateDialogForm({
   onClearAvatar,
   onToolSelect,
   onRemoveTool,
+  onToolsChange,
 }: {
   busy: boolean;
   submitError: string | null;
@@ -42,7 +36,6 @@ export function ProfileCreateDialogForm({
   avatarPreview: string | null;
   avatarInputRef: RefObject<HTMLInputElement | null>;
   tools: ToolSummary[];
-  selectableTools: ToolSummary[];
   selectedTools: ToolSummary[];
   onNameChange: (value: string) => void;
   onProfileIdChange: (value: string) => void;
@@ -50,6 +43,7 @@ export function ProfileCreateDialogForm({
   onClearAvatar: () => void;
   onToolSelect: (toolId: string) => void;
   onRemoveTool: (toolId: string) => void;
+  onToolsChange: (toolIds: string[]) => void;
 }) {
   return (
     <div className="min-h-0 space-y-4 overflow-y-auto">
@@ -146,35 +140,14 @@ export function ProfileCreateDialogForm({
               </p>
             ) : (
               <div className="space-y-3">
-                <div className="flex flex-col gap-2">
-                  <Select
-                    disabled={busy || selectableTools.length === 0}
-                    onValueChange={(value) =>
-                      onToolSelect(value == null ? "" : String(value))
-                    }
-                    value=""
-                  >
-                    <SelectTrigger
-                      aria-label="Tool to assign"
-                      className="w-full focus-visible:ring-1 focus-visible:ring-inset"
-                    >
-                      <SelectValue
-                        placeholder={
-                          selectableTools.length === 0
-                            ? "All tools added"
-                            : "Add a tool…"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {selectableTools.map((tool) => (
-                        <SelectItem key={tool.id} value={tool.id}>
-                          {tool.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <ToolPicker
+                  busy={busy}
+                  onRemoveTool={onRemoveTool}
+                  onToolSelect={onToolSelect}
+                  onToolsChange={onToolsChange}
+                  selectedTools={selectedTools}
+                  tools={tools}
+                />
 
                 {selectedTools.length > 0 ? (
                   <div className="rounded-md border border-border">
@@ -210,6 +183,99 @@ export function ProfileCreateDialogForm({
         </div>
       </div>
     </div>
+  );
+}
+
+function ToolPicker({
+  busy,
+  tools,
+  selectedTools,
+  onToolSelect,
+  onRemoveTool,
+  onToolsChange,
+}: {
+  busy: boolean;
+  tools: ToolSummary[];
+  selectedTools: ToolSummary[];
+  onToolSelect: (toolId: string) => void;
+  onRemoveTool: (toolId: string) => void;
+  onToolsChange: (toolIds: string[]) => void;
+}) {
+  const selectedIds = new Set(selectedTools.map((tool) => tool.id));
+  const allSelected = selectedTools.length === tools.length;
+  const someSelected = selectedTools.length > 0 && !allSelected;
+
+  return (
+    <Popover>
+      <PopoverTrigger
+        className={cn(
+          "flex h-8 w-full cursor-pointer select-none items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50",
+          selectedTools.length === 0 && "text-muted-foreground"
+        )}
+        disabled={busy}
+        id="btn-create-profile-tools"
+      >
+        <span className="min-w-0 flex-1 truncate text-left">
+          {selectedTools.length === 0
+            ? "Choose tools…"
+            : `${selectedTools.length} of ${tools.length} tools selected`}
+        </span>
+        <ArrowDown01Icon
+          aria-hidden
+          className="size-4 shrink-0 text-muted-foreground"
+        />
+      </PopoverTrigger>
+      <PopoverContent className="p-0" id="create-profile-tool-list">
+        <label className="flex cursor-pointer items-center gap-3 border-border border-b px-3 py-2.5 font-medium text-sm">
+          <input
+            checked={allSelected}
+            className="size-4 rounded border-input"
+            onChange={() =>
+              onToolsChange(allSelected ? [] : tools.map((tool) => tool.id))
+            }
+            ref={(element) => {
+              if (element) {
+                element.indeterminate = someSelected;
+              }
+            }}
+            type="checkbox"
+          />
+          Select all
+          <span className="ml-auto font-normal text-muted-foreground text-xs">
+            {selectedTools.length}/{tools.length}
+          </span>
+        </label>
+        <ul className="max-h-72 overflow-y-auto py-1">
+          {tools.map((tool) => (
+            <li key={tool.id}>
+              <label
+                className="flex cursor-pointer items-start gap-3 px-3 py-2 transition-colors hover:bg-muted/50"
+                title={tool.description || tool.name}
+              >
+                <input
+                  checked={selectedIds.has(tool.id)}
+                  className="mt-0.5 size-4 shrink-0 rounded border-input"
+                  onChange={(event) =>
+                    event.target.checked
+                      ? onToolSelect(tool.id)
+                      : onRemoveTool(tool.id)
+                  }
+                  type="checkbox"
+                />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm">{tool.name}</span>
+                  {tool.description ? (
+                    <span className="block truncate text-muted-foreground text-xs">
+                      {tool.description}
+                    </span>
+                  ) : null}
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 }
 

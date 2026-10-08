@@ -162,8 +162,6 @@ function ProfileCreateDialogContent({
     : "Agent id must start with a letter or number and only use letters, numbers, `_`, or `-`.";
 
   const toolIdSet = useMemo(() => new Set(form.toolIds), [form.toolIds]);
-  const availableTools = tools.filter((tool) => !toolIdSet.has(tool.id));
-  const selectableTools = availableTools;
   const selectedTools = tools.filter((tool) => toolIdSet.has(tool.id));
 
   function handleAvatarSelected(event: ChangeEvent<HTMLInputElement>) {
@@ -319,11 +317,13 @@ function ProfileCreateDialogContent({
           }}
           onRemoveTool={handleRemoveTool}
           onToolSelect={handleToolSelect}
+          onToolsChange={(toolIds) => {
+            dispatch({ type: "patch", values: { submitError: null, toolIds } });
+          }}
           profileId={form.profileId}
           profileIdHasValue={profileIdHasValue}
           profileIdHelpText={profileIdHelpText}
           profileIdValid={profileIdValid}
-          selectableTools={selectableTools}
           selectedTools={selectedTools}
           submitError={form.submitError}
           tools={tools}
