@@ -9,7 +9,11 @@ import {
   test,
 } from "bun:test";
 import { NakamaApiError } from "@nakama/core/api-error";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  QueryObserver,
+} from "@tanstack/react-query";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
@@ -20,6 +24,7 @@ import {
 } from "@/context/auth-context-shared";
 import { artifactShareStorageKey } from "@/lib/artifact-share-storage";
 import { client } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 import {
   useArtifactsExist,
@@ -42,6 +47,66 @@ const queryKey = queryKeys.artifacts.shareStatus(
   variables.profileId,
   variables.path
 );
+
+test("cache updates invalidate matching keys and leave other organizations alone", async () => {
+  const first = queryKeys.orgMemory("first");
+  const second = queryKeys.orgMemory("second");
+  const history = [...queryKeys.orgMemoryHistory("first"), "revision"];
+
+  for (const key of [first, second, history]) {
+    queryClient.setQueryData(key, { value: "saved" });
+  }
+
+  await invalidateQueries(
+    queryClient,
+    first,
+    queryKeys.orgMemoryHistory("first")
+  );
+
+  expect(queryClient.getQueryState(first)?.isInvalidated).toBe(true);
+  expect(queryClient.getQueryState(history)?.isInvalidated).toBe(true);
+  expect(queryClient.getQueryState(second)?.isInvalidated).toBe(false);
+  expect(queryClient.getQueryData<{ value: string }>(second)).toEqual({
+    value: "saved",
+  });
+});
+
+test("cache updates start each refetch and wait for all updated data", async () => {
+  const first = Promise.withResolvers<number>();
+  const second = Promise.withResolvers<number>();
+  const keys = [["first"], ["second"]];
+
+  const stops = [first, second].map((pending, index) =>
+    new QueryObserver(queryClient, {
+      initialData: 0,
+      queryFn: () => pending.promise,
+      queryKey: keys[index],
+      staleTime: Number.POSITIVE_INFINITY,
+    }).subscribe(() => {})
+  );
+
+  try {
+    let finished = false;
+
+    const updating = invalidateQueries(queryClient, ...keys).then(() => {
+      finished = true;
+    });
+
+    expect(
+      keys.map((key) => queryClient.getQueryState(key)?.fetchStatus)
+    ).toEqual(["fetching", "fetching"]);
+    first.resolve(1);
+    await first.promise;
+    expect(finished).toBe(false);
+    second.resolve(2);
+    await updating;
+    expect(keys.map((key) => queryClient.getQueryData(key))).toEqual([1, 2]);
+  } finally {
+    for (const stop of stops) {
+      stop();
+    }
+  }
+});
 
 afterEach(() => {
   revoke.mockReset();

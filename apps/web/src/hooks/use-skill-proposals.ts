@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 export function useSkillProposals(
@@ -33,7 +34,7 @@ function invalidateSkillProposalQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   orgId: string
 ) {
-  return queryClient.invalidateQueries({ queryKey: ["skillProposals", orgId] });
+  return invalidateQueries(queryClient, ["skillProposals", orgId]);
 }
 
 export function useApproveSkillProposal(orgId: string) {

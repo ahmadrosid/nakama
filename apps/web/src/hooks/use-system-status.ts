@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/use-auth";
 import { useChannelProfileId } from "@/hooks/use-app-queries";
 import { client } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 const REFRESH_INTERVAL_MS = 10_000;
@@ -46,6 +47,5 @@ export function useSystemStatusQuery() {
 export function useRefreshSystemStatus() {
   const queryClient = useQueryClient();
 
-  return () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.systemStatus });
+  return () => invalidateQueries(queryClient, queryKeys.systemStatus);
 }

@@ -26,6 +26,7 @@ import { createContext, useCallback, useContext, useEffect } from "react";
 import { useAuth } from "@/context/use-auth";
 import { prefetchTimezoneData } from "@/hooks/use-timezones";
 import { client } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 
 export const ChannelProfileContext = createContext<string | undefined>(
@@ -217,9 +218,7 @@ export function useApplyTelegramPairing() {
       profileId: string;
     }) => api.applyTelegramPairing(pairingId, ownerProfileId ?? profileId),
     onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.telegram.settings,
-      });
+      void invalidateQueries(queryClient, queryKeys.telegram.settings);
     },
   });
 }
@@ -308,7 +307,7 @@ function useWhatsAppSettingsHooks() {
       ),
     onSaveSuccess: async (queryClient, saved) => {
       queryClient.setQueryData(queryKey, saved);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.systemStatus });
+      await invalidateQueries(queryClient, queryKeys.systemStatus);
     },
     queryFn: () => api.getWhatsAppSettings(profileId),
     queryKey,
@@ -341,9 +340,7 @@ const thinkingSettings = createSettingsHooks({
   mutationFn: (settings: UpdateThinkingRequest) =>
     client.setThinkingSettings(settings),
   onSaveError: (queryClient) => {
-    void queryClient.invalidateQueries({
-      queryKey: queryKeys.thinkingSettings,
-    });
+    void invalidateQueries(queryClient, queryKeys.thinkingSettings);
   },
   queryFn: () => client.getThinkingSettings(),
   queryKey: queryKeys.thinkingSettings,
@@ -369,7 +366,7 @@ const webPublicUrlSettings = createSettingsHooks<
     return { envOverride: null, webPublicUrl: saved.webPublicUrl };
   },
   onSaveSuccess: (queryClient) => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.webPublicUrl });
+    void invalidateQueries(queryClient, queryKeys.webPublicUrl);
   },
   queryFn: () => client.getWebPublicUrl(),
   queryKey: queryKeys.webPublicUrl,
@@ -581,11 +578,12 @@ export function useProvidersQuery(options?: { enabled?: boolean }) {
 }
 
 async function invalidateProviderQueries(queryClient: QueryClient) {
-  await Promise.all([
-    queryClient.invalidateQueries({ queryKey: queryKeys.health }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.models }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.providers }),
-  ]);
+  await invalidateQueries(
+    queryClient,
+    queryKeys.health,
+    queryKeys.models,
+    queryKeys.providers
+  );
 }
 
 export function useCreateProviderMutation() {
