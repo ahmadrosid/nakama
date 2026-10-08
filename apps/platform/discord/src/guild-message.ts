@@ -76,6 +76,7 @@ export function resolveConversationKey(
   if (message.channel.isThread()) {
     const parentId =
       message.channel.parentId ?? options?.parentChannelId ?? channelId;
+
     return `g:${parentId}:t:${message.channel.id}`;
   }
 
@@ -153,6 +154,7 @@ export function stripBotMention(
 
   if (botInfo) {
     patterns.push(new RegExp(`<@!?${botInfo.id}>`, "g"));
+
     if (botInfo.username) {
       patterns.push(
         new RegExp(
@@ -230,6 +232,7 @@ function hasBotMention(message: Message, botInfo: DiscordBotInfo): boolean {
 
   if (botInfo.username) {
     const mention = `@${botInfo.username}`;
+
     return message.content.toLowerCase().includes(mention.toLowerCase());
   }
 
@@ -239,5 +242,6 @@ function hasBotMention(message: Message, botInfo: DiscordBotInfo): boolean {
 export function parseTextCommand(text: string): string {
   const first = text.trim().split(/\s+/)[0] ?? "";
   const command = first.split("@")[0] ?? first;
+
   return command.toLowerCase();
 }

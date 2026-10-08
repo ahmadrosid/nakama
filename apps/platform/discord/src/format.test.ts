@@ -12,6 +12,7 @@ describe("splitDiscordMessage", () => {
     const chunks = splitDiscordMessage(text);
 
     expect(chunks.length).toBeGreaterThan(1);
+
     for (const chunk of chunks) {
       expect(chunk.length).toBeLessThanOrEqual(2000);
     }
