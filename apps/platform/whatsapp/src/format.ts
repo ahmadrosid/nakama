@@ -1,6 +1,7 @@
 import type { AgentTodo } from "@nakama/core/contract";
 
 const WHATSAPP_MAX_MESSAGE_LENGTH = 65_536;
+
 const WHATSAPP_CHAT_BUBBLE_MAX_CHARS = 400;
 
 export function stripMarkdownForWhatsApp(text: string): string {
@@ -30,6 +31,7 @@ export function splitWhatsAppMessage(text: string): string[] {
     .split(/\n\n+/)
     .map((part) => part.trim())
     .filter(Boolean);
+
   const merged: string[] = [];
   let current = "";
 

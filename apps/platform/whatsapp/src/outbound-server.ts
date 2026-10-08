@@ -7,6 +7,7 @@ import {
 } from "@nakama/core";
 import type { ChannelConfigScope } from "@nakama/core/channel-config-shared";
 import { saveWhatsAppOutboundPort } from "@nakama/core/whatsapp-config";
+import type { WASocket } from "@whiskeysockets/baileys";
 import { rememberWhatsAppOutbound } from "./inbound-message";
 
 function tokenMatches(provided: string | null, expected: string): boolean {
@@ -21,7 +22,7 @@ function tokenMatches(provided: string | null, expected: string): boolean {
 }
 
 interface WhatsAppOutboundSendHandle {
-  sendMessage: (jid: string, content: { text: string }) => Promise<unknown>;
+  sendMessage: WASocket["sendMessage"];
 }
 
 export interface WhatsAppOutboundServerOptions {
@@ -73,10 +74,10 @@ export async function startWhatsAppOutboundServer(
           );
         }
 
-        let body: { text?: string };
+        let body: unknown;
 
         try {
-          body = (await request.json()) as { text?: string };
+          body = await request.json();
         } catch {
           return Response.json(
             { error: "Invalid JSON body." },
@@ -84,7 +85,17 @@ export async function startWhatsAppOutboundServer(
           );
         }
 
-        const text = body.text?.trim();
+        if (!(body instanceof Object) || !("text" in body)) {
+          return Response.json({ error: "Invalid JSON body." }, { status: 400 });
+        }
+
+        const rawText = body.text;
+
+        if (Object.prototype.toString.call(rawText) !== "[object String]") {
+          return Response.json({ error: "text is required." }, { status: 400 });
+        }
+
+        const text = String(rawText).trim();
 
         if (!text) {
           return Response.json({ error: "text is required." }, { status: 400 });
@@ -102,10 +113,12 @@ export async function startWhatsAppOutboundServer(
         try {
           rememberWhatsAppOutbound({ jid: pairedJid, text });
           await handle.sendMessage(pairedJid, { text });
+
           return Response.json({ ok: true });
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);
+
           return Response.json({ error: message }, { status: 500 });
         }
       }

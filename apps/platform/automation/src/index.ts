@@ -13,14 +13,18 @@ import { AUTOMATION_POLL_INTERVAL_MS, loadConfig } from "./config";
 import { AutomationWorkerScheduler } from "./scheduler";
 
 let spawnedChild: Bun.Subprocess | null = null;
+
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
 let scheduler: AutomationWorkerScheduler | null = null;
 
 registerCleanupHandlers(async () => {
   scheduler?.stop();
+
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
   }
+
   await clearAutomationWorkerHeartbeat();
   stopSpawnedServer(spawnedChild);
 });
@@ -36,6 +40,7 @@ try {
   });
 
   const health = await client.health();
+
   if (!health.providerConfigured) {
     console.warn(
       "Server has no provider configured. Automations will run in offline mode until an API key is set."
@@ -47,11 +52,13 @@ try {
   });
 
   await scheduler.start();
+
   const workerSettings = await client
     .getAutomationWorkerSettings()
     .catch(() => ({
       pollIntervalMinutes: AUTOMATION_POLL_INTERVAL_MS / (60 * 1000),
     }));
+
   scheduler.beginPolling(workerSettings.pollIntervalMinutes * 60 * 1000);
 
   heartbeatTimer = setInterval(() => {
@@ -59,6 +66,7 @@ try {
       running: true,
       scheduledJobs: 0,
     };
+
     void writeAutomationWorkerHeartbeat(status.running, status.scheduledJobs);
   }, config.heartbeatIntervalMs);
 
@@ -80,6 +88,7 @@ function registerCleanupHandlers(cleanup: () => void | Promise<void>): void {
       process.exit(0);
     });
   }
+
   // pm2 stops Windows workers with a "shutdown" message instead of a signal.
   if (process.platform === "win32") {
     process.on("message", async (message) => {
