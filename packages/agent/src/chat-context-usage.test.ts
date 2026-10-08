@@ -23,6 +23,7 @@ function providerReplayingThinking(
     name,
     async streamChat(_input, handlers) {
       handlers.onChunk("Hello");
+
       return { assistantMessage, content: "Hello", toolCalls: [] };
     },
   };
@@ -83,6 +84,7 @@ function providerReturning(
     name: "openai",
     async streamChat(_input, handlers) {
       handlers.onChunk("Hello");
+
       return {
         assistantMessage: { content: "Hello", role: "assistant" },
         content: "Hello",

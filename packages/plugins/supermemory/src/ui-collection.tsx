@@ -6,11 +6,13 @@ import type { Context } from "./ui-context";
 import { createEditor } from "./ui-editor";
 import { createItems } from "./ui-items";
 import { useCollection } from "./use-collection";
+
 export function createCollection(ctx: Context) {
   const React = ctx.React;
   const { Button, Input } = ctx.ui;
   const Editor = createEditor(ctx);
   const Items = createItems(ctx);
+
   function Collection({
     agentId,
     kind,
@@ -23,6 +25,7 @@ export function createCollection(ctx: Context) {
     kind: "memory" | "knowledge";
   }) {
     const model = useCollection(ctx, agentId, kind);
+
     const {
       memory,
       query,
@@ -38,6 +41,7 @@ export function createCollection(ctx: Context) {
       setEditing,
       setRevision,
     } = model;
+
     return (
       <div className="sm-stack">
         <div className="sm-row sm-toolbar">
@@ -93,5 +97,6 @@ export function createCollection(ctx: Context) {
       </div>
     );
   }
+
   return Collection;
 }

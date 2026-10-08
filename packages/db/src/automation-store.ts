@@ -6,16 +6,19 @@ export class DatabaseAutomationStore {
 
   async list(): Promise<StoredAutomation[]> {
     const records = await this.db.listAutomations();
+
     return records.map(fromRecord);
   }
 
   async listForOrg(orgId: string): Promise<StoredAutomation[]> {
     const records = await this.db.listAutomationsForOrg(orgId);
+
     return records.map(fromRecord);
   }
 
   async get(id: string): Promise<StoredAutomation | null> {
     const record = await this.db.getAutomation(id);
+
     return record ? fromRecord(record) : null;
   }
 
@@ -29,6 +32,7 @@ export class DatabaseAutomationStore {
 }
 
 function fromRecord(record: StoredAutomationRecord): StoredAutomation {
+  // SAFETY: DatabaseAdapter stores this definition from a typed automation input.
   const definition = record.definition as
     | Partial<AutomationDefinition>
     | undefined;
@@ -53,16 +57,21 @@ function fromRecord(record: StoredAutomationRecord): StoredAutomation {
 function toRecord(definition: StoredAutomation): StoredAutomationRecord {
   const now = new Date().toISOString();
 
+  const storedDefinition = {
+    description: definition.description,
+    prompt: definition.prompt,
+    steps: definition.steps,
+    trigger: definition.trigger,
+    version: definition.version,
+  };
+
+  if (definition.delivery) {
+    storedDefinition.delivery = definition.delivery;
+  }
+
   return {
     createdAt: definition.createdAt ?? now,
-    definition: {
-      description: definition.description,
-      prompt: definition.prompt,
-      steps: definition.steps,
-      trigger: definition.trigger,
-      version: definition.version,
-      ...(definition.delivery ? { delivery: definition.delivery } : {}),
-    },
+    definition: storedDefinition,
     enabled: definition.enabled,
     id: definition.id,
     name: definition.name,

@@ -64,6 +64,7 @@ export function resolveProfileInput(
   }
 
   const lower = trimmed.toLowerCase();
+
   const exactName = profiles.filter(
     (profile) => profile.name.toLowerCase() === lower
   );
@@ -125,9 +126,11 @@ export async function resolveStartupProfile(
   }
 
   const explicitProfileId = options.profileId?.trim();
+
   const savedProfileId = explicitProfileId
     ? null
     : await loadSavedCliProfileId();
+
   const candidateProfileId = explicitProfileId ?? savedProfileId ?? undefined;
 
   if (candidateProfileId) {
@@ -135,6 +138,7 @@ export async function resolveStartupProfile(
 
     if (match) {
       await saveCliProfileId(match.id);
+
       return { profile: match, profileId: match.id };
     }
 
@@ -144,8 +148,10 @@ export async function resolveStartupProfile(
   }
 
   const superBot = profiles.find((profile) => profile.isSuper);
+
   if (superBot) {
     await saveCliProfileId(superBot.id);
+
     return { profile: superBot, profileId: superBot.id };
   }
 
@@ -153,11 +159,13 @@ export async function resolveStartupProfile(
     const fallback = pickProfileForOrg(profiles);
 
     await saveCliProfileId(fallback.id);
+
     return { profile: fallback, profileId: fallback.id };
   }
 
   const selected = await promptForProfile(profiles);
   await saveCliProfileId(selected.profileId);
+
   return selected;
 }
 

@@ -22,24 +22,29 @@ export function registerSetupImportRoutes(
   options: ServerOptions
 ): void {
   const { databaseAdapter } = options;
+
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
+
   const importRequestSchema = z
     .object({
       data: z.string(),
     })
     .openapi("SetupPreviewDataImportRequest");
+
   const restoreRequestSchema = z
     .object({
       confirm: z.boolean(),
       data: z.string(),
     })
     .openapi("SetupRestoreDataImportRequest");
+
   const previewResponseSchema = z
     .object({})
     .passthrough()
     .openapi("SetupDataImportPreviewResponse");
+
   const restoreResponseSchema = z
     .object({})
     .passthrough()
@@ -134,11 +139,13 @@ export function registerSetupImportRoutes(
       c.req.raw,
       importRequestSchema
     );
+
     // Decoded outside the catch so an oversized archive keeps its 413.
     const archive = decodeArchiveRequestData(body.data);
 
     try {
       const preview = await previewNakamaDataImport(archive);
+
       return json<DataImportPreviewResponse>(preview);
     } catch (error) {
       return errorResponse(formatServerError(error), 400);
@@ -158,9 +165,11 @@ export function registerSetupImportRoutes(
       c.req.raw,
       restoreRequestSchema
     );
+
     const archive = decodeArchiveRequestData(body.data);
 
     let restore;
+
     try {
       restore = await restoreNakamaDataImport(archive, {
         afterFailedReplace: options.onDataRestored,
@@ -172,6 +181,7 @@ export function registerSetupImportRoutes(
     }
 
     let requiresRestart = !options.onDataRestored;
+
     if (options.onDataRestored) {
       try {
         await options.onDataRestored();
@@ -192,6 +202,7 @@ async function assertSetupImportAllowed(
   databaseAdapter: DatabaseAdapter
 ): Promise<void> {
   const humanUserCount = await databaseAdapter.countHumanUsers();
+
   if (humanUserCount > 0) {
     throw new NakamaApiError(
       "Setup import is only available before the first admin account is created.",

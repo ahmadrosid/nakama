@@ -129,6 +129,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
 export function ProfileConnections() {
   const profileId = useChannelProfileId();
   const { data: status, isPending, error } = useSystemStatusQuery();
+
   // Brand SVGs: Simple Icons v16 (CC0), https://simpleicons.org. Slack is from
   // v13.21.0, the last release that still ships it.
   const channels = [
@@ -154,17 +155,21 @@ export function ProfileConnections() {
     },
   ].map((channel) => {
     const worker = channel.worker;
+
     const connected = Boolean(
       !error &&
         worker?.running &&
         worker.paired &&
         ("connected" in worker ? worker.connected : true)
     );
+
     const unavailable = Boolean(error || !worker);
+
     const action =
       unavailable || worker?.configured || worker?.paired
         ? "Settings"
         : "Connect";
+
     const statusLabel = isPending
       ? "Checking…"
       : unavailable
@@ -176,6 +181,7 @@ export function ProfileConnections() {
             : worker?.configured
               ? "Setup incomplete"
               : "Not connected";
+
     return { ...channel, action, connected, statusLabel };
   });
 
@@ -237,12 +243,14 @@ export function ProfileChannelSettingsPage() {
   const { activeOrg } = useAuth();
   const { data: profiles = [], isPending, error } = useProfilesQuery();
   const profile = profiles.find((item) => item.id === profileId);
+
   const settings = {
     discord: { Component: DiscordSettingsCard, name: "Discord" },
     slack: { Component: SlackSettingsCard, name: "Slack" },
     telegram: { Component: TelegramSettingsCard, name: "Telegram" },
     whatsapp: { Component: WhatsAppSettingsCard, name: "WhatsApp" },
   };
+
   const selected =
     channel === "telegram" ||
     channel === "whatsapp" ||
@@ -250,16 +258,21 @@ export function ProfileChannelSettingsPage() {
     channel === "slack"
       ? settings[channel]
       : undefined;
+
   if (isPending) {
     return <p role="status">Loading settings…</p>;
   }
+
   if (error) {
     return <p role="alert">{formatError(error)}</p>;
   }
+
   if (!(profile && selected)) {
     return <p role="alert">Channel settings not found.</p>;
   }
+
   const Settings = selected.Component;
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <Link
@@ -287,6 +300,7 @@ export function ProfileChannelSettingsPage() {
 function ProfileAdminMenu({ state }: { state: ProfilesPageState }) {
   const [moveOpen, setMoveOpen] = useState(false);
   const { busy, detail, selectedId } = state;
+
   const deleteDisabled =
     busy || (detail?.isDefault === true && state.profiles.length < 3);
 
@@ -363,17 +377,21 @@ function MoveProfileDialog({
   const { activeOrg } = useAuth();
   const [organizationId, setOrganizationId] = useState("");
   const queryClient = useQueryClient();
+
   const organizations = useQuery({
     enabled: open,
     queryFn: () => client.listPlatformOrganizations(),
     queryKey: ["platformOrganizations"],
   });
+
   const move = useMutation({
     mutationFn: async () => {
       const profileId = state.detail!.id;
+
       if (!(await state.flushSave())) {
         throw new Error("Save profile changes before changing organization.");
       }
+
       return client.moveProfile(profileId, { organizationId });
     },
     onError: (error) => toast(formatError(error)),
@@ -392,10 +410,12 @@ function MoveProfileDialog({
       await queryClient.invalidateQueries();
     },
   });
+
   const destinations =
     organizations.data?.organizations.filter(
       (org) => org.id !== activeOrg?.id && !org.archivedAt
     ) ?? [];
+
   return (
     <Dialog
       onOpenChange={(next) => {

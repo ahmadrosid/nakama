@@ -274,6 +274,7 @@ export function AutomationEditorForm({
 }) {
   const scheduleTrigger =
     automation.trigger.type === "schedule" ? automation.trigger : null;
+
   const isSchedule = scheduleTrigger !== null;
 
   return (
@@ -291,6 +292,7 @@ export function AutomationEditorForm({
           disabled={busy}
           onValueChange={(value) => {
             const profileId = String(value);
+
             if (profileId) {
               onChange({ profileId });
             }
@@ -344,6 +346,7 @@ export function AutomationEditorForm({
 
               if (type === "manual") {
                 onChange({ trigger: { type: "manual" } });
+
                 return;
               }
 
@@ -537,6 +540,7 @@ export function RunHistoryList({
   const [open, setOpen] = useState(false);
   const selectedRun = runs.find((run) => run.id === selectedRunId);
   const groups = useMemo(() => groupRunsByDay(runs), [runs]);
+
   return (
     <DialogPrimitive.Root
       onOpenChange={setOpen}
@@ -741,19 +745,38 @@ function DeliverySettingsFields({
 
               if (next === "none") {
                 onChange(undefined);
+
                 return;
               }
 
-              onChange({
-                channel: next as AutomationDeliveryChannel,
-                ...(next === "email" && delivery?.to
-                  ? { to: delivery.to }
-                  : {}),
-                ...(next === "discord" && delivery?.channelId
-                  ? { channelId: delivery.channelId }
-                  : {}),
-                ...(delivery?.notifyOn ? { notifyOn: delivery.notifyOn } : {}),
-              });
+              const channels: AutomationDeliveryChannel[] = [
+                "telegram",
+                "whatsapp",
+                "email",
+                "discord",
+              ];
+
+              const nextChannel = channels.find((channel) => channel === next);
+
+              if (!nextChannel) {
+                return;
+              }
+
+              const nextDelivery: AutomationDelivery = { channel: nextChannel };
+
+              if (next === "email" && delivery?.to) {
+                nextDelivery.to = delivery.to;
+              }
+
+              if (next === "discord" && delivery?.channelId) {
+                nextDelivery.channelId = delivery.channelId;
+              }
+
+              if (delivery?.notifyOn) {
+                nextDelivery.notifyOn = delivery.notifyOn;
+              }
+
+              onChange(nextDelivery);
             }}
             value={channel}
           >
@@ -774,12 +797,19 @@ function DeliverySettingsFields({
           <Field label="Notify on">
             <Select
               disabled={busy}
-              onValueChange={(value) =>
-                onChange({
-                  ...delivery,
-                  notifyOn: String(value) as AutomationDelivery["notifyOn"],
-                })
-              }
+              onValueChange={(value) => {
+                const notifyValues: NonNullable<
+                  AutomationDelivery["notifyOn"]
+                >[] = ["success", "failure", "both"];
+
+                const notifyOn = notifyValues.find(
+                  (notifyValue) => notifyValue === String(value)
+                );
+
+                if (notifyOn) {
+                  onChange({ ...delivery, notifyOn });
+                }
+              }}
               value={delivery.notifyOn ?? "success"}
             >
               <SelectTrigger className="w-full">
@@ -805,10 +835,12 @@ function DeliverySettingsFields({
             disabled={busy}
             onChange={(event) => {
               const raw = event.target.value.trim();
+
               const channelId =
                 /discord(?:app)?\.com\/channels\/[^/]+\/(\d{17,20})/i.exec(
                   raw
                 )?.[1] ?? raw;
+
               const next = { ...delivery };
 
               if (channelId) {

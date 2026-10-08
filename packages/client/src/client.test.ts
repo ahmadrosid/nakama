@@ -23,7 +23,17 @@ test.each(["http://localhost:4310", "https://nakama.example.com"])(
     });
     const images = [{ data: "aW1hZ2U=", mediaType: "image/png" }];
     const session = client.createChatSession("session-1", "cli");
-    await session.sendStream({ images, message: "Describe this" }, () => {});
+    const whatsappMessage = {
+      chatJid: "chat@g.us",
+      fromMe: false,
+      isGroup: true,
+      senderJid: "sender@s.whatsapp.net",
+      senderJids: ["sender@s.whatsapp.net"],
+    };
+    await session.sendStream({ images, message: "Describe this" }, () => {}, {
+      whatsappContextToken: "internal-worker-token",
+      whatsappMessage,
+    });
     expect(requests).toHaveLength(1);
     const request = requests[0]!;
     expect(request.url).toBe(
@@ -31,10 +41,14 @@ test.each(["http://localhost:4310", "https://nakama.example.com"])(
     );
     expect(request.headers.get("Authorization")).toBe("Bearer test-token");
     expect(request.headers.get("X-Org-Id")).toBe("org-a");
+    expect(request.headers.get("X-Nakama-WhatsApp-Context-Token")).toBe(
+      "internal-worker-token"
+    );
     expect(await request.json()).toMatchObject({
       images,
       message: "Describe this",
       stream: true,
+      whatsappMessage,
     });
   }
 );

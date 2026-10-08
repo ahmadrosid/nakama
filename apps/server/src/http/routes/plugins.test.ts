@@ -27,6 +27,7 @@ afterEach(closePluginPackageRegistry);
 setupTestConfigDir("nakama-plugins-http-");
 
 const PASSWORD = "password123";
+
 const echoJs = `
 export async function run(input) {
   return { ok: true, input };
@@ -73,6 +74,7 @@ function pluginBundle(
     },
     version,
   };
+
   return pluginPackage({
     "actions/list.js": Buffer.from(echoJs),
     "actions/wipe.js": Buffer.from(echoJs),
@@ -94,11 +96,13 @@ function createApp(
   options: ConstructorParameters<typeof PluginService>[2] = {}
 ) {
   const databaseAdapter = createInMemoryDatabaseAdapter();
+
   const pluginService = new PluginService(
     databaseAdapter,
     getUserConfigDir(),
     options
   );
+
   return {
     ...createMinimalHonoApp({ databaseAdapter, pluginService }),
     pluginService,
@@ -125,6 +129,7 @@ async function seedUser(
     passwordHash: await authService.hashPassword(PASSWORD),
     updatedAt: now,
   });
+
   if (input.orgId && input.role) {
     await databaseAdapter.upsertOrgMember({
       createdAt: now,
@@ -142,22 +147,29 @@ async function jsonRequest(
   init: RequestInit = {},
   orgId?: string | ""
 ) {
-  const headers = session
-    ? session.headers(
-        {
-          ...(init.body ? { "Content-Type": "application/json" } : {}),
-          ...(init.method && init.method !== "GET"
-            ? { "X-CSRF-Token": session.csrfToken }
-            : {}),
-          ...((init.headers as Record<string, string>) ?? {}),
-        },
-        orgId
-      )
-    : ((init.headers as Record<string, string>) ?? {});
+  const headers = new Headers(init.headers);
+
+  if (init.body) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  if (
+    session &&
+    init.method &&
+    init.method !== "GET" &&
+    !headers.has("X-CSRF-Token")
+  ) {
+    headers.set("X-CSRF-Token", session.csrfToken);
+  }
+
+  const requestHeaders = session
+    ? session.headers(Object.fromEntries(headers.entries()), orgId)
+    : Object.fromEntries(headers.entries());
+
   return app.fetch(
     new Request(`http://localhost:4310${path}`, {
       ...init,
-      headers,
+      headers: requestHeaders,
     })
   );
 }
@@ -176,7 +188,10 @@ async function installRelease(
       method: "POST",
     }
   );
+
   expect(response.status).toBe(200);
+
+  // SAFETY: This test controls the fixture shape at this boundary.
   return response.json() as Promise<{ pluginId: string; version: string }>;
 }
 
@@ -230,29 +245,34 @@ describe("plugin HTTP API", () => {
       authService,
       databaseAdapter
     );
+
     const admin = await loginUserSession(
       app,
       "org-admin@example.com",
       PASSWORD,
       orgId
     );
+
     const member = await loginUserSession(
       app,
       "member@example.com",
       PASSWORD,
       orgId
     );
+
     const viewer = await loginUserSession(
       app,
       "viewer@example.com",
       PASSWORD,
       orgId
     );
+
     const outsider = await loginUserSession(
       app,
       "outsider@example.com",
       PASSWORD
     );
+
     const archived = await loginUserSession(
       app,
       "archived@example.com",
@@ -304,7 +324,9 @@ describe("plugin HTTP API", () => {
       body: JSON.stringify({}),
       method: "POST",
     });
+
     expect(add.status).toBe(200);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const added = (await add.json()) as { revision: number };
 
     expect(
@@ -331,12 +353,14 @@ describe("plugin HTTP API", () => {
       role: "member",
       userId: "user_platform_member",
     });
+
     const platformMember = await loginUserSession(
       app,
       "platform-member@example.com",
       PASSWORD,
       orgId
     );
+
     const enabled = await jsonRequest(
       app,
       "/v1/plugins/notes/enable",
@@ -346,6 +370,7 @@ describe("plugin HTTP API", () => {
         method: "POST",
       }
     );
+
     expect(enabled.status).toBe(200);
 
     expect(
@@ -364,42 +389,52 @@ describe("plugin HTTP API", () => {
   test("crafted UI paths cannot leave the enabled UI directory and require auth", async () => {
     const { app, authService, databaseAdapter, pluginService } = createApp();
     const admin = await setupFreshInstallSession(app, databaseAdapter);
+
     const platform = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     await installRelease(app, platform);
     await installRelease(app, platform, pluginBundle("1.0.1"));
+
     const added = await pluginService.addOrgPlugin(
       admin.orgId!,
       "notes",
       "1.0.0"
     );
+
     await pluginService.enableOrgPlugin(admin.orgId!, "notes", added.revision);
 
     const orgId = admin.orgId!;
+
     const redirect = await jsonRequest(
       app,
       `/v1/plugins/ui/${orgId}/notes?theme=dark`,
       admin
     );
+
     expect(redirect.status).toBe(302);
     expect(redirect.headers.get("location")).toBe(
       `/v1/plugins/ui/${orgId}/notes/?theme=dark`
     );
+
     const document = await jsonRequest(
       app,
       `/v1/plugins/ui/${orgId}/notes/`,
       admin
     );
+
     expect(document.status).toBe(200);
     expect(await document.text()).toContain("export function apply");
+
     const asset = await jsonRequest(
       app,
       `/v1/plugins/ui/${orgId}/notes/assets/app.js`,
       admin
     );
+
     expect(asset.status).toBe(200);
 
     const forbidden = [
@@ -410,6 +445,7 @@ describe("plugin HTTP API", () => {
       `/v1/plugins/ui/${orgId}/notes/%2e%2e/secret.txt`,
       `/v1/plugins/ui/${orgId}/notes/assets/../../secret.txt`,
     ];
+
     for (const path of forbidden) {
       expect((await jsonRequest(app, path, admin)).status).toBe(404);
     }
@@ -431,11 +467,13 @@ describe("plugin HTTP API", () => {
   test("plugin modules use JavaScript MIME and retain frame protection", async () => {
     const { app, authService, databaseAdapter, pluginService } = createApp();
     const admin = await setupFreshInstallSession(app, databaseAdapter);
+
     const platform = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     await installRelease(app, platform);
     const added = await pluginService.addOrgPlugin(admin.orgId!, "notes");
     await pluginService.enableOrgPlugin(admin.orgId!, "notes", added.revision);
@@ -445,6 +483,7 @@ describe("plugin HTTP API", () => {
       `/v1/plugins/ui/${admin.orgId}/notes/`,
       admin
     );
+
     expect(document.headers.get("Content-Type")).toContain("javascript");
     expect(document.headers.get("X-Frame-Options")).toBe("DENY");
     expect(document.headers.get("Content-Security-Policy") ?? "").not.toContain(
@@ -467,11 +506,13 @@ describe("plugin HTTP API", () => {
         method: "POST",
       })
     );
+
     expect(login.headers.get("X-Frame-Options")).toBe("DENY");
 
     const setup = await app.fetch(
       new Request("http://localhost:4310/v1/auth/setup", { method: "GET" })
     );
+
     expect(setup.headers.get("X-Frame-Options")).toBe("DENY");
 
     const health = await app.fetch(new Request("http://localhost:4310/health"));
@@ -503,6 +544,7 @@ describe("plugin HTTP API", () => {
       authService,
       databaseAdapter
     );
+
     await installRelease(app, platform);
     const added = await pluginService.addOrgPlugin(orgA, "notes");
     await pluginService.enableOrgPlugin(orgA, "notes", added.revision);
@@ -511,6 +553,7 @@ describe("plugin HTTP API", () => {
       body: JSON.stringify({ orgId: "org_b" }),
       method: "POST",
     });
+
     expect(switched.status).toBe(200);
 
     const pathOnly = await jsonRequest(
@@ -520,6 +563,7 @@ describe("plugin HTTP API", () => {
       {},
       ""
     );
+
     expect(pathOnly.status).toBe(200);
 
     const conflict = await jsonRequest(
@@ -529,6 +573,7 @@ describe("plugin HTTP API", () => {
       { headers: { "X-Org-Id": "org_b" } },
       ""
     );
+
     expect(conflict.status).toBe(400);
 
     const actionOnA = await jsonRequest(
@@ -541,6 +586,7 @@ describe("plugin HTTP API", () => {
       },
       orgA
     );
+
     expect(actionOnA.status).toBe(200);
 
     const actionOnCookieB = await jsonRequest(
@@ -553,6 +599,7 @@ describe("plugin HTTP API", () => {
       },
       ""
     );
+
     expect(actionOnCookieB.status).toBe(400);
   });
 
@@ -565,17 +612,20 @@ describe("plugin HTTP API", () => {
       role: "member",
       userId: "user_member",
     });
+
     const member = await loginUserSession(
       app,
       "member@example.com",
       PASSWORD,
       admin.orgId
     );
+
     const platform = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     await installRelease(app, platform);
     await pluginService.addOrgPlugin(admin.orgId!, "notes");
 
@@ -585,6 +635,7 @@ describe("plugin HTTP API", () => {
       member,
       { body: JSON.stringify({ input: {} }), method: "POST" }
     );
+
     expect(disabled.status).toBe(409);
 
     const added = await pluginService.getOrgPluginDetail(admin.orgId!, "notes");
@@ -596,6 +647,7 @@ describe("plugin HTTP API", () => {
       member,
       { body: JSON.stringify({ input: {} }), method: "POST" }
     );
+
     expect(unknown.status).toBe(404);
 
     const adminOnly = await jsonRequest(
@@ -604,6 +656,7 @@ describe("plugin HTTP API", () => {
       member,
       { body: JSON.stringify({ input: {} }), method: "POST" }
     );
+
     expect(adminOnly.status).toBe(403);
 
     const allowed = await jsonRequest(
@@ -612,6 +665,7 @@ describe("plugin HTTP API", () => {
       member,
       { body: JSON.stringify({ input: { q: "n" } }), method: "POST" }
     );
+
     expect(allowed.status).toBe(200);
     await expect(allowed.json()).resolves.toMatchObject({
       result: { input: { q: "n" }, ok: true },
@@ -621,11 +675,13 @@ describe("plugin HTTP API", () => {
   test("cookie-authenticated mutations require CSRF including npm package installs", async () => {
     const { app, authService, databaseAdapter } = createApp();
     await setupFreshInstallSession(app, databaseAdapter);
+
     const platform = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     const source = pluginBundle();
 
     const missingCsrf = await app.fetch(
@@ -638,6 +694,7 @@ describe("plugin HTTP API", () => {
         }
       )
     );
+
     expect(missingCsrf.status).toBe(403);
 
     const missingCsrfInstall = await app.fetch(
@@ -647,7 +704,9 @@ describe("plugin HTTP API", () => {
         method: "POST",
       })
     );
+
     expect(missingCsrfInstall.status).toBe(403);
+
     const missingApproval = await jsonRequest(
       app,
       "/v1/platform/plugins/releases",
@@ -657,7 +716,9 @@ describe("plugin HTTP API", () => {
         method: "POST",
       }
     );
+
     expect(missingApproval.status).toBe(400);
+
     const withCsrf = await jsonRequest(
       app,
       "/v1/platform/plugins/releases",
@@ -667,17 +728,20 @@ describe("plugin HTTP API", () => {
         method: "POST",
       }
     );
+
     expect(withCsrf.status).toBe(200);
   });
 
   test("cannot remove a release while an installation or retained schema depends on it", async () => {
     const { app, authService, databaseAdapter, pluginService } = createApp();
     const admin = await setupFreshInstallSession(app, databaseAdapter);
+
     const platform = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     await installRelease(app, platform);
     const added = await pluginService.addOrgPlugin(admin.orgId!, "notes");
 
@@ -687,6 +751,7 @@ describe("plugin HTTP API", () => {
       platform,
       { method: "DELETE" }
     );
+
     expect(blocked.status).toBe(409);
 
     await pluginService.uninstallOrgPlugin(
@@ -694,40 +759,47 @@ describe("plugin HTTP API", () => {
       "notes",
       added.revision
     );
+
     const stillBlocked = await jsonRequest(
       app,
       "/v1/platform/plugins/releases/notes/1.0.0",
       platform,
       { method: "DELETE" }
     );
+
     expect(stillBlocked.status).toBe(409);
 
     const retained = await pluginService.getOrgPluginDetail(
       admin.orgId!,
       "notes"
     );
+
     await pluginService.deleteRetainedPluginData(
       admin.orgId!,
       "notes",
       retained!.revision
     );
+
     const removed = await jsonRequest(
       app,
       "/v1/platform/plugins/releases/notes/1.0.0",
       platform,
       { method: "DELETE" }
     );
+
     expect(removed.status).toBe(204);
   });
 
   test("update preview includes lifecycle errors and removed contributions", async () => {
     const { app, authService, databaseAdapter, pluginService } = createApp();
     const admin = await setupFreshInstallSession(app, databaseAdapter);
+
     const platform = await loginPlatformAdminSession(
       app,
       authService,
       databaseAdapter
     );
+
     await installRelease(app, platform);
     await installRelease(
       app,
@@ -747,16 +819,20 @@ describe("plugin HTTP API", () => {
         }),
       })
     );
+
     const added = await pluginService.addOrgPlugin(
       admin.orgId!,
       "notes",
       "1.0.0"
     );
+
     await pluginService.enableOrgPlugin(admin.orgId!, "notes", added.revision);
+
     const enabled = await pluginService.getOrgPluginDetail(
       admin.orgId!,
       "notes"
     );
+
     await pluginService.disableOrgPlugin(
       admin.orgId!,
       "notes",
@@ -768,6 +844,7 @@ describe("plugin HTTP API", () => {
       "/v1/plugins/notes/update/preview?targetVersion=1.1.0",
       admin
     );
+
     expect(preview.status).toBe(200);
     await expect(preview.json()).resolves.toMatchObject({
       lastLifecycleError: null,
@@ -782,6 +859,7 @@ describe("plugin HTTP API", () => {
         registerPluginWorkers: mock(async () => {}),
         unregisterPluginWorkers: mock(async () => {}),
       };
+
       const { app, authService, databaseAdapter } = createApp({
         workerManager,
         officialPackagesDir: resolve(
@@ -790,16 +868,19 @@ describe("plugin HTTP API", () => {
         ),
         onHostRequest: async () => [],
       });
+
       const admin = await setupFreshInstallSession(app, databaseAdapter);
       const orgId = admin.orgId!;
       const catalog = await jsonRequest(app, "/v1/plugins/official", admin);
       expect(catalog.status).toBe(200);
       expect((await catalog.json()).plugins[0].id).toBe("workflows");
       const path = `/v1/plugins/official/${pluginId}/install`;
+
       const denied = await jsonRequest(app, path, admin, {
         method: "POST",
         headers: { "X-CSRF-Token": "invalid" },
       });
+
       expect(denied.status).toBe(403);
       await seedUser(databaseAdapter, authService, {
         email: "official-member@example.com",
@@ -807,30 +888,36 @@ describe("plugin HTTP API", () => {
         role: "member",
         userId: "official_member",
       });
+
       const member = await loginUserSession(
         app,
         "official-member@example.com",
         PASSWORD,
         orgId
       );
+
       expect(
         (await jsonRequest(app, path, member, { method: "POST" })).status
       ).toBe(403);
       const installed = await jsonRequest(app, path, admin, { method: "POST" });
       expect(installed.status).toBe(200);
+
       if (pluginId === "supermemory") {
         expect(workerManager.registerPluginWorkers).toHaveBeenCalledWith(
           expect.objectContaining({ orgId, pluginId }),
           true
         );
       }
+
       const install = (await installed.json()).install;
       expect(install.lifecycleState).toBe("enabled");
       const reinstallPath = `/v1/plugins/official/${pluginId}/reinstall`;
+
       const reinstallRequest = {
         method: "POST",
         body: JSON.stringify({ expectedRevision: install.revision }),
       };
+
       expect(
         (await jsonRequest(app, reinstallPath, member, reinstallRequest)).status
       ).toBe(403);
@@ -850,12 +937,14 @@ describe("plugin HTTP API", () => {
           })
         ).status
       ).toBe(400);
+
       const reinstalled = await jsonRequest(
         app,
         reinstallPath,
         admin,
         reinstallRequest
       );
+
       expect(reinstalled.status).toBe(200);
       const refreshed = (await reinstalled.json()).install;
       expect(refreshed.lifecycleState).toBe("enabled");
@@ -875,13 +964,18 @@ describe("plugin HTTP API", () => {
 
   test("openapi documents plugin routes", async () => {
     const { app } = createApp();
+
     const response = await app.fetch(
       new Request("http://localhost:4310/openapi.json")
     );
+
     expect(response.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const spec = (await response.json()) as {
-      paths: Record<string, unknown>;
+      paths: Record<string, { get?: object; post?: object; put?: object }>;
     };
+
     expect(spec.paths["/v1/platform/plugins/releases"]).toBeTruthy();
     expect(spec.paths["/v1/plugins"]).toBeTruthy();
     expect(

@@ -23,32 +23,38 @@ import {
 import { queryKeys } from "@/lib/query-keys";
 
 const bundledSkillNames = new Set<string>(BUNDLED_SKILL_NAMES);
-const skillSourceOrder: Record<string, number> = {
-  "Agent-created": 1,
-  "Built-in": 0,
-  "User-added": 2,
-};
+
+const skillSourceOrder = new Map([
+  ["Agent-created", 1],
+  ["Built-in", 0],
+  ["User-added", 2],
+]);
 
 function skillSourceLabel(skill: SkillSummary): string {
   if (skill.pluginId) {
     return `Plugin: ${skill.pluginId}`;
   }
+
   if (skill.createdBy === "agent") {
     return "Agent-created";
   }
+
   if (skill.createdBy === "bundled" && bundledSkillNames.has(skill.name)) {
     return "Built-in";
   }
+
   return "User-added";
 }
 
 export function CustomizePage() {
   const { user, activeOrg } = useAuth();
   const { data: plugins = [], isLoading, error } = useOrgPlugins();
+
   const items = visibleNavGroups({
     isPlatformAdmin: user?.isPlatformAdmin === true,
     orgRole: activeOrg?.role,
   }).flatMap((group) => group.items);
+
   const sections = [
     {
       pages: ["organization", "usage", "workers", "google-meet", "settings"],
@@ -61,6 +67,7 @@ export function CustomizePage() {
   ].map(({ title, pages }) => ({
     items: pages.flatMap((page) => {
       const item = items.find((entry) => entry.id === page);
+
       return item
         ? [
             {
@@ -73,6 +80,7 @@ export function CustomizePage() {
     }),
     title,
   }));
+
   sections.push({
     items: visibleIntegrationSections(
       user?.isPlatformAdmin === true,
@@ -95,49 +103,51 @@ export function CustomizePage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
-      {sections
-        .filter((section) => section.items.length > 0)
-        .map((section) => (
-          <section
-            aria-label={section.title}
-            className="space-y-3"
-            key={section.title}
-          >
-            <h2 className="type-section-title font-normal text-muted-foreground/55">
-              {section.title}
-            </h2>
-            <Card className="w-full overflow-hidden shadow-none">
-              <CardContent className="p-0">
-                <nav
-                  aria-label={section.title}
-                  className="divide-y divide-border"
-                >
-                  {section.items.map(({ href, icon: Icon, label }) => (
-                    <Link
-                      className="flex min-w-0 items-center gap-3 px-4 py-3 text-sm transition-colors hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-ring focus-visible:-outline-offset-2"
-                      key={href}
-                      to={href}
+      {sections.flatMap((section) =>
+        section.items.length > 0
+          ? [
+              <section
+                aria-label={section.title}
+                className="space-y-3"
+                key={section.title}
+              >
+                <h2 className="type-section-title font-normal text-muted-foreground/55">
+                  {section.title}
+                </h2>
+                <Card className="w-full overflow-hidden shadow-none">
+                  <CardContent className="p-0">
+                    <nav
+                      aria-label={section.title}
+                      className="divide-y divide-border"
                     >
-                      <Icon
-                        aria-hidden="true"
-                        className="size-4 shrink-0 text-muted-foreground"
-                        strokeWidth={1.75}
-                      />
-                      <span className="min-w-0 flex-1 truncate font-normal">
-                        {label}
-                      </span>
-                      <ArrowRight01Icon
-                        aria-hidden="true"
-                        className="size-4 shrink-0 text-muted-foreground"
-                        strokeWidth={1.75}
-                      />
-                    </Link>
-                  ))}
-                </nav>
-              </CardContent>
-            </Card>
-          </section>
-        ))}
+                      {section.items.map(({ href, icon: Icon, label }) => (
+                        <Link
+                          className="flex min-w-0 items-center gap-3 px-4 py-3 text-sm transition-colors hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-ring focus-visible:-outline-offset-2"
+                          key={href}
+                          to={href}
+                        >
+                          <Icon
+                            aria-hidden="true"
+                            className="size-4 shrink-0 text-muted-foreground"
+                            strokeWidth={1.75}
+                          />
+                          <span className="min-w-0 flex-1 truncate font-normal">
+                            {label}
+                          </span>
+                          <ArrowRight01Icon
+                            aria-hidden="true"
+                            className="size-4 shrink-0 text-muted-foreground"
+                            strokeWidth={1.75}
+                          />
+                        </Link>
+                      ))}
+                    </nav>
+                  </CardContent>
+                </Card>
+              </section>,
+            ]
+          : []
+      )}
       {isLoading && (
         <p className="mt-4 text-muted-foreground text-sm" role="status">
           Loading plugins…
@@ -156,6 +166,7 @@ export function SkillsPage() {
   const { activeOrg } = useAuth();
   const orgId = activeOrg?.id;
   const [search, setSearch] = useState("");
+
   const {
     data: skills = [],
     isLoading,
@@ -166,7 +177,9 @@ export function SkillsPage() {
     queryFn: async () => (await client.listSkills(orgId)).skills,
     queryKey: [...queryKeys.skills.all, "organization", orgId],
   });
+
   const query = search.trim().toLowerCase();
+
   const {
     data: profiles,
     error: profilesError,
@@ -175,6 +188,7 @@ export function SkillsPage() {
     enabled: Boolean(orgId),
     queryFn: async () => {
       const { profiles: summaries } = await client.listProfiles(orgId);
+
       return Promise.all(
         summaries.map(
           async (profile) =>
@@ -184,7 +198,9 @@ export function SkillsPage() {
     },
     queryKey: [...queryKeys.profiles.all, "skill-assignments", orgId],
   });
+
   const profilesBySkill = new Map<string, ProfileSummary[]>();
+
   for (const profile of profiles ?? []) {
     for (const skill of profile.skills) {
       const assigned = profilesBySkill.get(skill.id) ?? [];
@@ -192,6 +208,7 @@ export function SkillsPage() {
       profilesBySkill.set(skill.id, assigned);
     }
   }
+
   const filtered = skills
     .filter(
       (skill) =>
@@ -204,8 +221,8 @@ export function SkillsPage() {
     )
     .sort(
       (left, right) =>
-        (skillSourceOrder[skillSourceLabel(left)] ?? 3) -
-          (skillSourceOrder[skillSourceLabel(right)] ?? 3) ||
+        (skillSourceOrder.get(skillSourceLabel(left)) ?? 3) -
+          (skillSourceOrder.get(skillSourceLabel(right)) ?? 3) ||
         left.name.localeCompare(right.name)
     );
 

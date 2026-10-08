@@ -36,31 +36,38 @@ export function registerTokenOptimizationRoutes(
 ): void {
   app.get("/v1/token-optimization", async (c) => {
     const orgId = requireActiveOrgIdFromContext(c);
+
     const [rows, turnRows, settings, installed] = await Promise.all([
       options.databaseAdapter.listToolOutputSavings(orgId),
       options.databaseAdapter.listLlmTurnUsage(orgId),
       options.databaseAdapter.getWorkspaceSettings(),
       isOmniInstalled(),
     ]);
+
     const enabled = settings?.tokenOptimizerEnabled ?? isOmniEnabled();
 
     const from = new Date(Date.now() - (DAYS - 1) * 86_400_000)
       .toISOString()
       .slice(0, 10);
+
     const recent = rows.filter((row) => row.bucket >= from);
 
     const days = new Map<
       string,
       { bytesIn: number; bytesRemoved: number; day: string }
     >();
+
     for (let index = 0; index < DAYS; index += 1) {
       const day = new Date(Date.now() - (DAYS - 1 - index) * 86_400_000)
         .toISOString()
         .slice(0, 10);
+
       days.set(day, { bytesIn: 0, bytesRemoved: 0, day });
     }
+
     for (const row of recent) {
       const day = days.get(row.bucket);
+
       if (day) {
         day.bytesIn += row.bytesIn;
         day.bytesRemoved += row.bytesIn - row.bytesOut;
@@ -69,6 +76,7 @@ export function registerTokenOptimizationRoutes(
 
     const byArm = (arm: string) => {
       const armRows = recent.filter((row) => row.optimizer === arm);
+
       return {
         arm,
         bytesIn: armRows.reduce((sum, row) => sum + row.bytesIn, 0),
@@ -81,6 +89,7 @@ export function registerTokenOptimizationRoutes(
       string,
       { bytesIn: number; bytesOut: number; calls: number; tool: string }
     >();
+
     for (const row of recent.filter((r) => r.optimizer === OPTIMIZER_ID)) {
       const entry = byToolMap.get(row.tool) ?? {
         bytesIn: 0,
@@ -88,6 +97,7 @@ export function registerTokenOptimizationRoutes(
         calls: 0,
         tool: row.tool,
       };
+
       entry.bytesIn += row.bytesIn;
       entry.bytesOut += row.bytesOut;
       entry.calls += row.calls;
@@ -104,11 +114,14 @@ export function registerTokenOptimizationRoutes(
       const armRows = turnRows.filter(
         (row) => row.arm === arm && row.bucket >= from
       );
+
       const turns = armRows.reduce((sum, row) => sum + row.turns, 0);
+
       const inputTokens = armRows.reduce(
         (sum, row) => sum + row.inputTokens,
         0
       );
+
       return {
         arm,
         estimatedTurns: armRows.reduce(
@@ -152,7 +165,12 @@ export function registerTokenOptimizationRoutes(
   app.put("/v1/token-optimization", async (c) => {
     // Admin only: this changes what every session in the org does.
     requireOrgAdminFromContext(c);
-    const body = await readJson<{ enabled: boolean }>(c.req.raw);
+
+    const body = await readJson(
+      c.req.raw,
+      z.object({ enabled: z.boolean() }).strict()
+    );
+
     const enabled = Boolean(body.enabled);
     const existing = await options.databaseAdapter.getWorkspaceSettings();
 
@@ -177,3 +195,5 @@ export function registerTokenOptimizationRoutes(
     });
   });
 }
+
+import { z } from "@hono/zod-openapi";

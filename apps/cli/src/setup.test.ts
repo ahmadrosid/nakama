@@ -20,6 +20,7 @@ import {
 test("login form edits the server, switches fields, and never renders the password", async () => {
   const done = Promise.withResolvers<void>();
   let attempts = 0;
+
   const form = new LoginForm(
     "https://example.com",
     async (serverUrl, email, password) => {
@@ -31,6 +32,7 @@ test("login form edits the server, switches fields, and never renders the passwo
     () => {},
     (error) => (error ? done.reject(error) : done.resolve())
   );
+
   expect(form.render(80)[1]).toContain("https://example.com");
   form.handleInput("\x15");
   form.handleInput("http://cloud.example.com");
@@ -68,6 +70,7 @@ class MockStdin extends EventEmitter {
 
   setRawMode(enabled: boolean) {
     this.rawModeEnabled = enabled;
+
     return this;
   }
 
@@ -77,14 +80,17 @@ class MockStdin extends EventEmitter {
 
   resume() {
     this.paused = false;
+
     if (this.failOnResume) {
       throw new Error("simulated stdin failure");
     }
+
     return this;
   }
 
   pause() {
     this.paused = true;
+
     return this;
   }
 
@@ -150,18 +156,23 @@ setupTestConfigDir("nakama-cli-remote-test-");
 test("login stores only tokens; restored sessions authenticate and logout revokes them", async () => {
   const { app, databaseAdapter } = createMinimalHonoApp();
   await setupFreshInstallSession(
+    // SAFETY: Hono app.fetch accepts the Fetch API request used by this test.
     { fetch: app.fetch as typeof fetch },
     databaseAdapter
   );
   let saved: string | null = null;
+
   const options = {
+    // SAFETY: This fetch stub forwards requests to the test server.
     fetch: ((input, init) => {
       expect(init?.redirect).toBe("error");
+
       return app.fetch(new Request(input, init));
     }) as typeof fetch,
     secretStore: {
       delete: async () => {
         saved = null;
+
         return true;
       },
       get: async () => saved,
@@ -170,10 +181,12 @@ test("login stores only tokens; restored sessions authenticate and logout revoke
       },
     },
   };
+
   const connection = await createRemoteConnection(
     "https://example.com",
     options
   );
+
   await expect(
     connection.login("admin@example.com", "wrong")
   ).rejects.toMatchObject({ status: 401 });
@@ -205,6 +218,7 @@ test("server arguments reject insecure URLs and embedded credentials", () => {
   expect(
     parseConnectionArgs(["login", "--server", "https://example.com/"])
   ).toEqual({ command: "login", serverUrl: "https://example.com" });
+
   for (const url of [
     "http://example.com",
     "https://user:pass@example.com",
@@ -213,12 +227,14 @@ test("server arguments reject insecure URLs and embedded credentials", () => {
   ]) {
     expect(() => parseConnectionArgs(["--server", url])).toThrow();
   }
+
   expect(() => parseConnectionArgs(["--server"])).toThrow();
 });
 
 test("local logout rotates the persisted token through the CLI entrypoint", async () => {
   const originalToken = await loadLocalAuthToken("cli@nakama.internal");
   const configDir = process.env.NAKAMA_CONFIG_DIR;
+
   if (!configDir) {
     throw new Error("Expected an isolated test config directory");
   }
@@ -239,6 +255,7 @@ test("local logout rotates the persisted token through the CLI entrypoint", asyn
       stdout: "pipe",
     }
   );
+
   const [code, stdout, stderr] = await Promise.all([
     child.exited,
     new Response(child.stdout).text(),

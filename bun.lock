@@ -53,6 +53,7 @@
         "@nakama/client": "workspace:*",
         "@nakama/core": "workspace:*",
         "discord.js": "^14.18.0",
+        "zod": "^4.6.5",
       },
     },
     "apps/platform/slack": {
@@ -148,6 +149,7 @@
       "name": "@nakama/agent",
       "dependencies": {
         "@nakama/core": "workspace:*",
+        "zod": "^4.6.5",
       },
     },
     "packages/client": {

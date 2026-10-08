@@ -50,9 +50,11 @@ describe("disableBunIdleTimeoutForSse", () => {
         method: "POST",
       }
     );
+
     const response = new Response(null, {
       headers: { "Content-Type": "text/event-stream; charset=utf-8" },
     });
+
     const calls: Array<{ request: Request; seconds: number }> = [];
 
     disableBunIdleTimeoutForSse(request, response, {
@@ -118,6 +120,7 @@ describe("disableBunIdleTimeoutForLongHeldRequest", () => {
       "http://127.0.0.1:4310/v1/automations/auto_1/run",
       { method: "POST" }
     );
+
     const calls: Array<{ request: Request; seconds: number }> = [];
 
     disableBunIdleTimeoutForLongHeldRequest(request, {

@@ -1,15 +1,9 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import { NakamaApiError } from "@nakama/core";
 import type {
-  AddOrgMemoryFactRequest,
-  ArchiveOrgMemoryRequest,
   ArchiveOrgMemoryResponse,
   OrgMemoryResponse,
-  OrgMemorySearchRequest,
   OrgMemorySearchResponse,
-  PinOrgMemoryRequest,
-  UnpinOrgMemoryRequest,
-  UpdateOrgMemoryRequest,
 } from "@nakama/core/contract";
 import type { ServerOptions } from "../context";
 import {
@@ -29,39 +23,50 @@ export function registerOrgMemoryRoutes(
   options: ServerOptions
 ): void {
   const orgMemoryService = options.orgMemoryService;
+
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
+
   const orgIdParam = z.object({
     orgId: z.string().openapi({ param: { in: "path", name: "orgId" } }),
   });
+
   const orgMemoryResponseSchema = z
     .object({})
     .passthrough()
     .openapi("OrgMemoryResponse");
+
   const updateOrgMemorySchema = z
     .object({ content: z.string() })
     .openapi("UpdateOrgMemoryRequest");
+
   const addOrgMemoryFactSchema = z
     .object({ bullet: z.string(), pin: z.boolean().optional() })
     .openapi("AddOrgMemoryFactRequest");
+
   const orgMemorySearchSchema = z
     .object({ query: z.string() })
     .openapi("OrgMemorySearchRequest");
+
   const orgMemorySearchResponseSchema = z
     .object({})
     .passthrough()
     .openapi("OrgMemorySearchResponse");
+
   const archiveOrgMemorySchema = z
     .object({ entries: z.array(z.string()), reason: z.string().optional() })
     .openapi("ArchiveOrgMemoryRequest");
+
   const archiveOrgMemoryResponseSchema = z
     .object({})
     .passthrough()
     .openapi("ArchiveOrgMemoryResponse");
+
   const pinOrgMemorySchema = z
     .object({ bullet: z.string() })
     .openapi("PinOrgMemoryRequest");
+
   const unpinOrgMemorySchema = z
     .object({ bullet: z.string() })
     .openapi("UnpinOrgMemoryRequest");
@@ -71,9 +76,11 @@ export function registerOrgMemoryRoutes(
     authOrgId: string
   ): string {
     const orgId = decodeURIComponent(c.req.param("orgId"));
+
     if (authOrgId !== orgId) {
       throw new NakamaApiError("Not found", 404);
     }
+
     return orgId;
   }
 
@@ -81,6 +88,7 @@ export function registerOrgMemoryRoutes(
     if (!orgMemoryService) {
       throw new NakamaApiError("Org memory service not configured", 500);
     }
+
     return orgMemoryService;
   }
 
@@ -119,6 +127,7 @@ export function registerOrgMemoryRoutes(
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
     const content = await service.getMemory(orgId);
+
     return json<OrgMemoryResponse>({ content });
   });
 
@@ -166,13 +175,14 @@ export function registerOrgMemoryRoutes(
     const auth = requireOrgAdminFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
-    const body = await readJson<UpdateOrgMemoryRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, updateOrgMemorySchema);
     await service.setMemory(orgId, body.content, {
       action: "edit",
       actorUserId: auth.user.id,
       label: "Manual edit",
     });
     const content = await service.getMemory(orgId);
+
     return json<OrgMemoryResponse>({ content });
   });
 
@@ -220,7 +230,7 @@ export function registerOrgMemoryRoutes(
     const auth = requireOrgAdminFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
-    const body = await readJson<AddOrgMemoryFactRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, addOrgMemoryFactSchema);
     await service.addFact(orgId, body.bullet, {
       change: {
         action: "add_fact",
@@ -230,6 +240,7 @@ export function registerOrgMemoryRoutes(
       pin: body.pin ?? true,
     });
     const content = await service.getMemory(orgId);
+
     return json<OrgMemoryResponse>({ content });
   });
 
@@ -275,8 +286,9 @@ export function registerOrgMemoryRoutes(
     const auth = requireNotViewerFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
-    const body = await readJson<OrgMemorySearchRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, orgMemorySearchSchema);
     const result = await service.search(orgId, body.query);
+
     return json<OrgMemorySearchResponse>(result);
   });
 
@@ -324,13 +336,14 @@ export function registerOrgMemoryRoutes(
     const auth = requireOrgAdminFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
-    const body = await readJson<PinOrgMemoryRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, pinOrgMemorySchema);
     await service.pinFact(orgId, body.bullet, {
       action: "pin",
       actorUserId: auth.user.id,
       label: `Pinned fact: ${body.bullet.trim()}`,
     });
     const content = await service.getMemory(orgId);
+
     return json<OrgMemoryResponse>({ content });
   });
 
@@ -378,13 +391,14 @@ export function registerOrgMemoryRoutes(
     const auth = requireOrgAdminFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
-    const body = await readJson<UnpinOrgMemoryRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, unpinOrgMemorySchema);
     await service.unpinFact(orgId, body.bullet, {
       action: "unpin",
       actorUserId: auth.user.id,
       label: `Unpinned fact: ${body.bullet.trim()}`,
     });
     const content = await service.getMemory(orgId);
+
     return json<OrgMemoryResponse>({ content });
   });
 
@@ -434,7 +448,8 @@ export function registerOrgMemoryRoutes(
     const auth = requireOrgAdminFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
-    const body = await readJson<ArchiveOrgMemoryRequest>(c.req.raw);
+    const body = await readJson(c.req.raw, archiveOrgMemorySchema);
+
     const result = await service.archiveEntries(orgId, body.entries, {
       change: {
         action: "archive",
@@ -443,6 +458,7 @@ export function registerOrgMemoryRoutes(
       },
       reason: body.reason,
     });
+
     return json<ArchiveOrgMemoryResponse>(result);
   });
 
@@ -450,10 +466,12 @@ export function registerOrgMemoryRoutes(
     .object({})
     .passthrough()
     .openapi("ListOrgMemoryHistoryResponse");
+
   const orgMemoryHistoryRevisionResponseSchema = z
     .object({})
     .passthrough()
     .openapi("OrgMemoryHistoryRevisionResponse");
+
   const restoreOrgMemoryHistoryResponseSchema = z
     .object({})
     .passthrough()
@@ -495,6 +513,7 @@ export function registerOrgMemoryRoutes(
     const auth = requireOrgAdminFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
+
     return json(await service.listHistory(orgId));
   });
 
@@ -544,6 +563,7 @@ export function registerOrgMemoryRoutes(
     const revisionId = decodeURIComponent(c.req.param("revisionId"));
     const service = requireService();
     const revision = await service.getHistoryRevision(orgId, revisionId);
+
     return json(revision);
   });
 
@@ -586,6 +606,7 @@ export function registerOrgMemoryRoutes(
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
     const content = await service.undoLastChange(orgId, auth.user.id);
+
     return json({ content });
   });
 
@@ -634,11 +655,13 @@ export function registerOrgMemoryRoutes(
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const revisionId = decodeURIComponent(c.req.param("revisionId"));
     const service = requireService();
+
     const content = await service.restoreHistoryRevision(
       orgId,
       revisionId,
       auth.user.id
     );
+
     return json({ content });
   });
 
@@ -646,9 +669,11 @@ export function registerOrgMemoryRoutes(
     .object({})
     .passthrough()
     .openapi("ListOrgMemoryProposalsResponse");
+
   const approveOrgMemoryProposalSchema = z
     .object({ pin: z.boolean().optional() })
     .openapi("ApproveOrgMemoryProposalRequest");
+
   const orgMemoryProposalResponseSchema = z
     .object({})
     .passthrough()
@@ -697,13 +722,16 @@ export function registerOrgMemoryRoutes(
     const auth = requireOrgAdminFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
+
     const status = parseOptionalQueryEnum(c.req.query("status"), [
       "pending",
       "approved",
       "rejected",
     ]);
+
     const proposals = await service.listProposals(orgId, status);
     const pendingCount = await service.countPendingProposals(orgId);
+
     return json({ pendingCount, proposals });
   });
 
@@ -763,6 +791,7 @@ export function registerOrgMemoryRoutes(
       const proposalId = decodeURIComponent(c.req.param("proposalId"));
       const service = requireService();
       const body = await readOptionalJson<{ pin?: boolean }>(c.req.raw, {});
+
       const proposal = await service.approveProposal(
         orgId,
         proposalId,
@@ -771,7 +800,9 @@ export function registerOrgMemoryRoutes(
           pin: body.pin,
         }
       );
+
       const content = await service.getMemory(orgId);
+
       return json({ content, proposal });
     }
   );
@@ -823,11 +854,13 @@ export function registerOrgMemoryRoutes(
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const proposalId = decodeURIComponent(c.req.param("proposalId"));
     const service = requireService();
+
     const proposal = await service.rejectProposal(
       orgId,
       proposalId,
       auth.user.id
     );
+
     return json({ proposal });
   });
 }

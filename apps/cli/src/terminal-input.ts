@@ -1,7 +1,9 @@
 import { isKeyRelease, ProcessTerminal } from "@earendil-works/pi-tui";
 
 const CURSOR_POSITION_REPORT = /^\x1b\[(\d+);(\d+)R$/;
+
 const CURSOR_POSITION_REPORT_GLOBAL = /\x1b\[(\d+);(\d+)R/g;
+
 const MOUSE_EVENT_REPORT = /^\x1b\[<\d+;\d+;\d+[mM]$/;
 
 type ReadableEncodingState = {
@@ -20,11 +22,14 @@ export function restoreReadableEncoding(
 ): void {
   if (previous) {
     stream.setEncoding(previous);
+
     return;
   }
 
+  // SAFETY: Node streams expose this internal state for encoding restoration.
   const state = (stream as { _readableState?: ReadableEncodingState })
     ._readableState;
+
   if (!state) {
     return;
   }
@@ -34,20 +39,20 @@ export function restoreReadableEncoding(
 }
 
 /** Strip all CPR sequences in one pass; return the first report's row. */
-export function stripCursorPositionReports(pending: string): {
-  pending: string;
-  row: number | null;
-} {
+export function stripCursorPositionReports(pending: string) {
   let row: number | null = null;
+
   const cleaned = pending.replace(
     CURSOR_POSITION_REPORT_GLOBAL,
     (_match, rowText: string) => {
       if (row === null) {
         row = Number(rowText);
       }
+
       return "";
     }
   );
+
   return { pending: cleaned, row };
 }
 
@@ -92,10 +97,7 @@ export function isIncompleteEscapeSequence(pending: string): boolean {
   return false;
 }
 
-export function consumeTerminalInput(buffer: string): {
-  events: string[];
-  pending: string;
-} {
+export function consumeTerminalInput(buffer: string) {
   const events: string[] = [];
   let pending = buffer;
 
@@ -186,6 +188,7 @@ export class TerminalInput {
 
   onInput(listener: (chunk: string) => void): () => void {
     this.listeners.add(listener);
+
     return () => this.listeners.delete(listener);
   }
 
@@ -221,6 +224,7 @@ export class TerminalInput {
       for (const waiter of this.cursorWaiters) {
         waiter(stripped.row);
       }
+
       this.cursorWaiters.clear();
     }
 

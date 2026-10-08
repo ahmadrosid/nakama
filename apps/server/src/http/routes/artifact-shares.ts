@@ -1,7 +1,7 @@
+import { z } from "@hono/zod-openapi";
 import { NakamaApiError } from "@nakama/core";
 import type {
   ArtifactShareStatusResponse,
-  PublishArtifactShareRequest,
   PublishArtifactShareResponse,
   RevokeArtifactShareResponse,
 } from "@nakama/core/contract";
@@ -32,7 +32,13 @@ export function registerArtifactShareRoutes(
     const auth = requireNotViewerFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
-    const body = await readJson<PublishArtifactShareRequest>(c.req.raw);
+
+    const body = await readJson(
+      c.req.raw,
+      z
+        .object({ clientOrigin: z.string().optional(), path: z.string() })
+        .strict()
+    );
 
     if (!body.path?.trim()) {
       return json({ error: "path is required" }, 400);
@@ -43,15 +49,20 @@ export function registerArtifactShareRoutes(
       body.clientOrigin
     );
 
+    const publishRequest = {
+      orgId,
+      profileId,
+      request: c.req.raw,
+      sourcePath: body.path.trim(),
+      userId: auth.user.id,
+    };
+
+    if (clientOrigin) {
+      Object.assign(publishRequest, { clientOrigin });
+    }
+
     return json<PublishArtifactShareResponse>(
-      await service.publishArtifactShare({
-        orgId,
-        profileId,
-        request: c.req.raw,
-        sourcePath: body.path.trim(),
-        userId: auth.user.id,
-        ...(clientOrigin ? { clientOrigin } : {}),
-      }),
+      await service.publishArtifactShare(publishRequest),
       201
     );
   });
@@ -104,6 +115,7 @@ export function registerArtifactShareRoutes(
 
       const downloadName = metadata.filename.replace(/["\\]/g, "_");
       const disposition = metadata.inlineAllowed ? "inline" : "attachment";
+
       const contentType = metadata.inlineAllowed
         ? metadata.mimeType
         : metadata.mimeType.startsWith("text/")

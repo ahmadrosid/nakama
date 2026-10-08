@@ -15,7 +15,7 @@ function createDocumentContext(options: {
   caption?: string;
   fileSize?: number;
 }): Context {
-  return {
+  const fixture = {
     api: {
       getFile: async () => ({
         file_path: "documents/report.pdf",
@@ -32,7 +32,10 @@ function createDocumentContext(options: {
         mime_type: options.mimeType,
       },
     },
-  } as unknown as Context;
+  };
+
+  // SAFETY: The fixture supplies the file context used by the download helper.
+  return fixture as Context;
 }
 
 describe("buildTelegramDocumentInput", () => {
@@ -87,6 +90,7 @@ describe("buildTelegramDocumentInput", () => {
     );
 
     expect(result?.kind).toBe("input");
+
     if (result?.kind === "input") {
       expect(result.input.documents?.[0]?.mediaType).toBe("text/plain");
     }
@@ -152,14 +156,17 @@ describe("downloadTelegramFile", () => {
   });
 
   test("surfaces download failures to caller", async () => {
-    const ctx = {
+    const fixture = {
       api: {
         getFile: async () => {
           throw new Error("network down");
         },
         token: "test-token",
       },
-    } as unknown as Context;
+    };
+
+    // SAFETY: The fixture supplies the API fields used by the download helper.
+    const ctx = fixture as Context;
 
     await expect(
       downloadTelegramFile(ctx, "file-1", MAX_DOCUMENT_BYTES)
@@ -175,7 +182,7 @@ describe("downloadTelegramFile", () => {
       })
     );
 
-    const ctx = {
+    const fixture = {
       api: {
         getFile: async () => ({
           file_path: filePath,
@@ -183,7 +190,10 @@ describe("downloadTelegramFile", () => {
         }),
         token,
       },
-    } as unknown as Context;
+    };
+
+    // SAFETY: The fixture supplies the API fields used by the download helper.
+    const ctx = fixture as Context;
 
     const result = await downloadTelegramFile(
       ctx,
@@ -195,10 +205,15 @@ describe("downloadTelegramFile", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const fetched = fetchSpy.mock.calls[0]?.[0];
     expect(fetched).toBeInstanceOf(URL);
-    expect((fetched as URL).pathname).toBe(
+
+    if (!(fetched instanceof URL)) {
+      throw new Error("Expected Telegram download to use a URL.");
+    }
+
+    expect(fetched.pathname).toBe(
       `/file/${encodeURIComponent(`bot${token}`)}/${filePath}`
     );
-    expect((fetched as URL).href).not.toContain(token);
+    expect(fetched.href).not.toContain(token);
   });
 
   test("aborts while streaming once the body exceeds the cap", async () => {
@@ -210,6 +225,7 @@ describe("downloadTelegramFile", () => {
         new ReadableStream<Uint8Array>({
           pull(controller) {
             pulls += 1;
+
             if (pulls === 1) {
               controller.enqueue(new Uint8Array(4).fill(65));
             } else if (pulls === 2) {
@@ -225,14 +241,17 @@ describe("downloadTelegramFile", () => {
       )
     );
 
-    const ctx = {
+    const fixture = {
       api: {
         getFile: async () => ({
           file_path: "documents/big.pdf",
         }),
         token: "test-token",
       },
-    } as unknown as Context;
+    };
+
+    // SAFETY: The fixture supplies the API fields used by the download helper.
+    const ctx = fixture as Context;
 
     await expect(downloadTelegramFile(ctx, "file-1", maxBytes)).rejects.toThrow(
       "File is too large."

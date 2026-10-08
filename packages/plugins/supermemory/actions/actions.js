@@ -109,19 +109,33 @@ class SupermemoryClient {
 // src/actions.ts
 var hash = (parts) => createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 function required(value, name, max = 1000) {
-  if (typeof value !== "string" || !value.trim() || value.length > max) {
+  if (!(isJsonString(value) && value.trim()) || value.length > max) {
     throw new Error(`Invalid ${name}`);
   }
   return value.trim();
+}
+function isJsonString(value) {
+  return value === String(value);
 }
 function records(value) {
   if (!Array.isArray(value)) {
     throw new Error("Invalid Supermemory response");
   }
-  return value.filter((entry) => !!entry && typeof entry === "object" && !Array.isArray(entry));
+  return value.filter((entry) => entry instanceof Object && !Array.isArray(entry));
 }
 function metadata(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  return value instanceof Object && !Array.isArray(value) ? value : {};
+}
+function parseWorkerStatus(value) {
+  const record = metadata(value);
+  const state = isJsonString(record.state) ? record.state : null;
+  if (!state) {
+    throw new Error("Invalid Supermemory worker status");
+  }
+  return {
+    message: isJsonString(record.message) ? record.message : undefined,
+    state
+  };
 }
 function publicReceipt(row) {
   return {
@@ -154,7 +168,8 @@ async function run(input, context) {
   const settingsPath = managed ? join(workerDir, "connection.json") : externalSettingsPath;
   let worker = { state: "starting" };
   if (managed && existsSync(join(workerDir, "status.json"))) {
-    worker = JSON.parse(readFileSync(join(workerDir, "status.json"), "utf8"));
+    const status = JSON.parse(readFileSync(join(workerDir, "status.json"), "utf8"));
+    worker = parseWorkerStatus(status);
   }
   const action = context.actionKey;
   try {
@@ -224,13 +239,16 @@ async function run(input, context) {
       return { configured: !!config, url: config?.url ?? "" };
     }
     if (action === "profiles") {
-      return {
+      const result = {
         canConfigure: context.actor.role === "admin" && !managed,
-        managed,
-        ...managed ? { worker } : {},
         configured: !!config,
+        managed,
         profiles: await context.host({ op: "profiles" })
       };
+      if (managed) {
+        return { ...result, worker };
+      }
+      return result;
     }
     if (!config) {
       throw new Error(managed ? worker.message || "Supermemory is starting. Check its status in Workers." : "Ask an admin to connect Supermemory in plugin settings");
@@ -250,7 +268,7 @@ async function run(input, context) {
       throw new Error("Agent conflicts with tool context");
     }
     const profiles = records(await context.host({ op: "profiles" }));
-    if (!profiles.some((profile) => profile.id === profileId)) {
+    if (!profiles.some((profile) => isJsonString(profile.id) && profile.id === profileId)) {
       throw new Error("Agent unavailable");
     }
     const kind = [
@@ -297,7 +315,7 @@ async function run(input, context) {
         try {
           const document = await ownedDocument(row);
           return {
-            content: typeof document.content === "string" ? document.content : undefined,
+            content: isJsonString(document.content) ? document.content : undefined,
             ...update(row, document.status === "done" ? "ready" : document.status === "failed" ? "failed" : "pending", required(document.id, "document ID"))
           };
         } catch (error) {
@@ -412,7 +430,7 @@ async function run(input, context) {
       const items = [];
       for (const entry of records(response.results).slice(0, limit)) {
         const remoteId = kind === "memory" ? entry.id : entry.documentId;
-        if (typeof remoteId !== "string") {
+        if (!isJsonString(remoteId)) {
           continue;
         }
         const row = db.query("SELECT * FROM receipts WHERE profile_id = ? AND kind = ? AND upstream_id = ? AND state IN ('ready','pending')").get(profileId, kind, remoteId);
@@ -420,7 +438,7 @@ async function run(input, context) {
           continue;
         }
         if (kind === "memory") {
-          if (!ownsMemory(entry, row) || entry.isForgotten === true || typeof entry.memory !== "string") {
+          if (!ownsMemory(entry, row) || entry.isForgotten === true || !isJsonString(entry.memory)) {
             continue;
           }
           items.push({
@@ -431,7 +449,7 @@ async function run(input, context) {
           if (metadata(entry.metadata).nakamaContainer !== tag || metadata(entry.metadata).nakamaOperation !== row.custom_id) {
             continue;
           }
-          const excerpt = records(entry.chunks).flatMap((chunk) => chunk.isRelevant !== false && typeof chunk.content === "string" ? [chunk.content] : []).join(`
+          const excerpt = records(entry.chunks).flatMap((chunk) => chunk.isRelevant !== false && isJsonString(chunk.content) ? [chunk.content] : []).join(`
 `).slice(0, 16000);
           if (excerpt) {
             items.push({ ...publicReceipt(row), excerpt });

@@ -15,6 +15,7 @@ export function registerInternalAutomationRoutes(
 
   app.get("/v1/internal/automations/schedules", async (c) => {
     const auth = c.get("auth");
+
     if (!auth || auth.mode !== "local-token") {
       return errorResponse("Authentication required", 401);
     }
@@ -24,6 +25,7 @@ export function registerInternalAutomationRoutes(
     const now = Date.now();
 
     const automations = await automationService.listAll();
+
     const archivedOrgIds = new Set(
       orgService
         ? (await orgService.listOrganizations())
@@ -31,6 +33,7 @@ export function registerInternalAutomationRoutes(
             .map((organization) => organization.id)
         : []
     );
+
     // Org-less rows can only be pre-tenant legacy data; the run route 400s a
     // missing org now, so the worker must never receive an id it cannot run.
     const schedules: AutomationSchedule[] = automations
@@ -71,12 +74,14 @@ export function registerInternalAutomationRoutes(
 
   app.post("/v1/internal/automations/:automationId/run", async (c) => {
     const auth = c.get("auth");
+
     if (!auth || auth.mode !== "local-token") {
       return errorResponse("Authentication required", 401);
     }
 
     const automationId = decodeURIComponent(c.req.param("automationId"));
     const orgId = c.req.query("orgId")?.trim();
+
     if (!orgId) {
       return errorResponse("orgId query parameter is required.", 400);
     }
@@ -89,6 +94,7 @@ export function registerInternalAutomationRoutes(
 
     if (automation.orgId && orgService) {
       const organization = await orgService.getOrganization(automation.orgId);
+
       if (!organization || organization.archivedAt) {
         return errorResponse("Not found", 404);
       }

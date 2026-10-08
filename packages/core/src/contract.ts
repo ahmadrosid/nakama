@@ -1224,6 +1224,7 @@ export interface SendMessageRequest {
   images?: ImageAttachment[];
   message: string;
   stream?: boolean;
+  whatsappMessage?: ToolContext["whatsappMessage"];
 }
 
 export interface SendMessageResponse {
@@ -2913,6 +2914,13 @@ export interface ToolContext {
   clientOrigin?: string;
   /** Local CLI launch directory for shell commands, including coding agents. */
   codingWorkspaceRoot?: string;
+  /** Images attached to the current user message, as scoped stored references. */
+  currentChatImages?: Array<
+    Pick<
+      Extract<MessageContentPart, { type: "image_ref" }>,
+      "attachmentId" | "mediaType"
+    >
+  >;
   /** Emits concise live status lines while a sub-agent child loop runs (parent web UI). */
   emitSubAgentActivity?: (label: string) => void;
   /**
@@ -2989,6 +2997,14 @@ export interface ToolContext {
    */
   trackEphemeralAttachment?: (attachmentId: string) => void;
   userId?: string;
+  /** Verified WhatsApp identity for the current inbound message. */
+  whatsappMessage?: {
+    chatJid: string;
+    fromMe: boolean;
+    isGroup: boolean;
+    senderJid: string;
+    senderJids: string[];
+  };
   workflowId?: string;
   workflowRunId?: string;
   /** Profile workspace root (~/.nakama/orgs/{orgId}/profiles/{profileId}/). */

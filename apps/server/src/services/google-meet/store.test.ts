@@ -11,7 +11,9 @@ import { join } from "node:path";
 import { MeetingStore } from "./store";
 
 let dir: string;
+
 let store: MeetingStore;
+
 const meetingUrl = "https://meet.google.com/abc-defg-hij";
 
 beforeEach(() => {
@@ -27,15 +29,19 @@ test("large imports preserve Unicode and paginate below the runner output limit"
   expect(store.get(imported.id)?.sourceName).toBe("notes.md");
   let cursor = 0;
   let actual = "";
+
   while (true) {
     const page = store.transcript(imported.id, cursor);
+
     if (!page.length) {
       break;
     }
+
     expect(JSON.stringify(page).length).toBeLessThan(510_000);
     actual += page.map((segment) => segment.text).join("");
     cursor = page.at(-1)!.sequence;
   }
+
   expect(actual).toBe(text);
   expect(
     readFileSync(join(dir, "transcripts", `meeting-${imported.id}.txt`), "utf8")
@@ -71,10 +77,12 @@ test("one active meeting per org, transcripts survive closing and cannot cross t
   expect(store.list("user-a", "profile-a")[0]?.preview).toBe("Hello");
   const file = join(dir, "transcripts", `meeting-${meeting.id}.txt`);
   expect(readFileSync(file, "utf8")).toBe("Hello\n");
+
   // Windows does not expose POSIX owner/group permission bits.
   if (process.platform !== "win32") {
     expect(statSync(file).mode % 0o1000).toBe(0o600);
   }
+
   expect(store.list("user-a", "profile-a")[0]?.transcriptFile).toBe(
     `meeting-${meeting.id}.txt`
   );
@@ -94,11 +102,13 @@ test("file exports include every segment beyond the transcript page limit", () =
   const meeting = store.create(meetingUrl, "me", undefined, 1);
   store.close();
   const db = new Database(join(dir, "meetings.sqlite"));
+
   try {
     db.transaction(() => {
       const insert = db.query(
         "INSERT INTO segments (meetingId,id,text,receivedAt) VALUES (?,?,?,?)"
       );
+
       for (let i = 0; i < 2001; i++) {
         insert.run(meeting.id, String(i), `Line ${i}`, i);
       }
@@ -106,11 +116,14 @@ test("file exports include every segment beyond the transcript page limit", () =
   } finally {
     db.close();
   }
+
   store = new MeetingStore(dir, "org");
+
   const text = readFileSync(
     join(dir, "transcripts", `meeting-${meeting.id}.txt`),
     "utf8"
   );
+
   expect(text.split("\n")).toHaveLength(2002);
   expect(text.endsWith("Line 2000\n")).toBe(true);
 });
@@ -159,6 +172,7 @@ test("rejects arbitrary URLs and invalid durations before queuing a browser", ()
   ]) {
     expect(() => store.create(url, "user", undefined, 30)).toThrow();
   }
+
   expect(() => store.create(meetingUrl, "user", undefined, 0)).toThrow();
   expect(() => store.create(meetingUrl, "user", undefined, 121)).toThrow();
   expect(store.create(meetingUrl, "user", undefined, 120).durationMinutes).toBe(
@@ -170,11 +184,13 @@ test("history limits apply after actor and profile access filters", () => {
   const own = store.create(meetingUrl, "me", "mine", 1);
   store.update(own.id, "finished");
   const db = new Database(join(dir, "meetings.sqlite"));
+
   try {
     db.transaction(() => {
       const insert = db.query(
         "INSERT INTO meetings (id,actorId,profileId,url,state,createdAt,updatedAt,durationMinutes) VALUES (?,'other','theirs',?,'finished',?,?,1)"
       );
+
       for (let i = 0; i < 100; i++) {
         insert.run(
           String(i),
@@ -187,6 +203,7 @@ test("history limits apply after actor and profile access filters", () => {
   } finally {
     db.close();
   }
+
   expect(store.list("me", "mine").map((row) => row.id)).toEqual([own.id]);
   expect(store.list("me", "theirs")).toEqual([]);
   expect(store.list(null, "mine").map((row) => row.id)).toEqual([own.id]);
@@ -216,6 +233,7 @@ test("titles and transcript text survive reopening the database", () => {
 test("speaker turns survive reopen and recording remains an exclusive active state", () => {
   const directory = mkdtempSync(join(tmpdir(), "meet-speaker-store-"));
   let store = new MeetingStore(directory, "org");
+
   try {
     const meeting = store.create(
       "https://meet.google.com/abc-defg-hij",
@@ -223,10 +241,12 @@ test("speaker turns survive reopen and recording remains an exclusive active sta
       undefined,
       1
     );
+
     store.update(meeting.id, "recording");
     expect(() =>
       store.create("https://meet.google.com/abc-defg-hij", "user", undefined, 1)
     ).toThrow();
+
     const turn = {
       endMs: 500,
       id: "0-0",
@@ -236,6 +256,7 @@ test("speaker turns survive reopen and recording remains an exclusive active sta
       startMs: 100,
       text: "Hello",
     };
+
     store.addSegment(meeting.id, turn);
     store.addSegment(meeting.id, turn);
     store.close();

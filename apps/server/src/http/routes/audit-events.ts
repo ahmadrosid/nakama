@@ -67,16 +67,19 @@ export function registerAuditEventRoutes(
   app.get("/v1/platform/audit-events", async (c) => {
     requirePlatformAdminFromContext(c);
     const { databaseAdapter } = options;
+
     if (!databaseAdapter) {
       return errorResponse("Database not configured", 500);
     }
 
     const parsed = listAuditEventsQuerySchema.safeParse(c.req.query());
+
     if (!parsed.success) {
       return errorResponse("Invalid audit event query", 400);
     }
 
     const events = await databaseAdapter.listAuditEvents(parsed.data);
+
     return json({ events });
   });
 }

@@ -35,15 +35,31 @@ const DONE = [
   'event: message_delta\r\ndata:{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}\r\n\r\n',
 ];
 
-type CapturedBody = { messages: { content: unknown }[]; thinking?: unknown };
+type CapturedContentBlock = {
+  data?: string;
+  id?: string;
+  input?: unknown;
+  name?: string;
+  signature?: string;
+  text?: string;
+  thinking?: string;
+  type: string;
+};
+
+type CapturedBody = {
+  messages: { content: string | CapturedContentBlock[]; role: string }[];
+  thinking?: unknown;
+};
 
 function eventStream(chunks: string[]): Response {
   const encoder = new TextEncoder();
+
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
       for (const chunk of chunks) {
         controller.enqueue(encoder.encode(chunk));
       }
+
       controller.close();
     },
   });
@@ -67,13 +83,14 @@ function providerCapturingBodies(
       bodies.push(JSON.parse(String(init?.body)));
       const response = responses[call];
       call += 1;
+
       return response;
     }
   );
 
   const provider = createAnthropicProvider({
     apiKey: "sk-ant-test",
-    fetch: fetchMock as unknown as typeof fetch,
+    fetch: fetchMock,
     model,
   });
 
@@ -85,7 +102,7 @@ function replayedBlocks(body: CapturedBody | undefined) {
     Array.isArray(message.content)
   );
 
-  return (assistant?.content ?? []) as { type: string; input?: unknown }[];
+  return Array.isArray(assistant?.content) ? assistant.content : [];
 }
 
 describe("Anthropic tool input replay", () => {
@@ -97,27 +114,32 @@ describe("Anthropic tool input replay", () => {
         thinking: "Progress",
         type: "thinking",
       };
+
       const serverTool = {
         id: "srv-1",
         input: { query: "nakama" },
         name: "web_search",
         type: "server_tool_use",
       };
+
       const result = {
         content: [],
         tool_use_id: "srv-1",
         type: "web_search_tool_result",
       };
+
       const text = { text: "Done", type: "text" };
       const responses = [[signed, serverTool], [result], [text], [text]];
       const bodies: CapturedBody[] = [];
+
       const provider = createAnthropicProvider({
         apiKey: "test-key",
-        fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+        fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
           expect(String(init?.body)).not.toContain("_nakamaPrefixHash");
           bodies.push(JSON.parse(String(init?.body)));
           const blocks = responses[bodies.length - 1] ?? [];
           const stopReason = bodies.length < 3 ? "pause_turn" : "end_turn";
+
           if (stream && bodies.length < 4) {
             return eventStream([
               START,
@@ -128,22 +150,26 @@ describe("Anthropic tool input replay", () => {
               `event: message_delta\ndata: ${JSON.stringify({ delta: { stop_reason: stopReason }, type: "message_delta", usage: { output_tokens: 2 } })}\n\n`,
             ]);
           }
+
           return Response.json({
             content: blocks,
             stop_reason: stopReason,
             usage: { input_tokens: 10, output_tokens: 2 },
           });
-        }) as typeof fetch,
+        },
         model: "claude-sonnet-5-5",
       });
+
       const input = {
         messages: [{ content: "Search", role: "user" as const }],
         providerOptions: { webSearch: true },
         system: "s",
       };
+
       const first = stream
         ? await provider.streamChat(input, { onChunk: () => undefined })
         : await provider.generateChat(input);
+
       expect(bodies[1]?.messages[1]?.content).toEqual([signed, serverTool]);
       expect(bodies[2]?.messages).toHaveLength(2);
       expect(bodies[2]?.messages[1]?.content).toEqual([

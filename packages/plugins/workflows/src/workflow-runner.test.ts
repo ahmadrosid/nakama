@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { StoredWorkflow, WorkflowStep } from "@nakama/core";
+import type { WorkflowBag, WorkflowRecord } from "./workflow-ops";
 import { WorkflowRunner } from "./workflow-runner";
 
 describe("WorkflowRunner", () => {
@@ -27,33 +28,38 @@ describe("WorkflowRunner", () => {
   test("runs data steps in order and summarizes from receipt bag only", async () => {
     const workflow = { ...createBaseWorkflow(), steps };
 
-    let summarizeBag: Record<string, unknown> | null = null;
+    let summarizeBag: WorkflowBag | null = null;
     const service = createWorkflowServiceStub(workflow);
+
     const agent = {
       executeTool: async (
         _profile: string,
         _name: string,
-        args: Record<string, unknown>
+        args: WorkflowRecord
       ) => ({ ok: args.query, source: "tool" }),
       runWorkflowSummarize: async (
         _orgId: string,
         _profileId: string,
         _prompt: string,
-        bag: Record<string, unknown>
+        bag: WorkflowBag
       ) => {
         summarizeBag = bag;
+
         return "Summary from receipts";
       },
     };
 
-    const runner = new WorkflowRunner(service as never, agent as never);
+    const runner = new WorkflowRunner(service, agent);
     const result = await runner.run("workflow_test");
 
     expect(result.output).toBe("Summary from receipts");
     expect(summarizeBag).not.toBeNull();
-    expect(
-      (summarizeBag as { steps?: Record<string, unknown> }).steps?.fetch
-    ).toEqual({ ok: "hello", source: "tool" });
+
+    if (!summarizeBag) {
+      throw new Error("Summarize step did not receive a receipt bag");
+    }
+
+    expect(summarizeBag.steps.fetch).toEqual({ ok: "hello", source: "tool" });
   });
 
   test("stops before summarize when compare fails", async () => {
@@ -77,6 +83,7 @@ describe("WorkflowRunner", () => {
         prompt: "Never reached",
       },
     ];
+
     const workflow = {
       ...createBaseWorkflow(),
       steps: failingSteps,
@@ -84,15 +91,17 @@ describe("WorkflowRunner", () => {
 
     let summarizeCalled = false;
     const service = createWorkflowServiceStub(workflow);
+
     const agent = {
       executeTool: async () => ({ value: 1 }),
       runWorkflowSummarize: async () => {
         summarizeCalled = true;
+
         return "nope";
       },
     };
 
-    const runner = new WorkflowRunner(service as never, agent as never);
+    const runner = new WorkflowRunner(service, agent);
     const result = await runner.run("workflow_test");
 
     expect(result.error).toMatch(/compare/i);
@@ -113,6 +122,7 @@ describe("WorkflowRunner", () => {
         prompt: "Never reached",
       },
     ];
+
     const workflow = {
       ...createBaseWorkflow(),
       steps: failingSteps,
@@ -120,17 +130,19 @@ describe("WorkflowRunner", () => {
 
     let summarizeCalled = false;
     const service = createWorkflowServiceStub(workflow);
+
     const agent = {
       executeTool: async () => ({
         error: "web_search cannot be executed locally.",
       }),
       runWorkflowSummarize: async () => {
         summarizeCalled = true;
+
         return "nope";
       },
     };
 
-    const runner = new WorkflowRunner(service as never, agent as never);
+    const runner = new WorkflowRunner(service, agent);
     const result = await runner.run("workflow_test");
 
     expect(result.error).toMatch(/cannot be executed locally/i);
@@ -148,10 +160,12 @@ describe("WorkflowRunner", () => {
           path: "input.actual",
         },
         { id: "summary", kind: "summarize", prompt: "Summarize" },
-      ] as WorkflowStep[],
+      ] satisfies WorkflowStep[],
     };
+
     const service = createWorkflowServiceStub(workflow);
-    const runner = new WorkflowRunner(service as never, {
+
+    const runner = new WorkflowRunner(service, {
       executeTool: async () => ({}),
       runWorkflowSummarize: async () => "done",
     });
@@ -226,7 +240,9 @@ function createWorkflowServiceStub(workflow: StoredWorkflow) {
         status: "running" as const,
         stepId: step.id,
       };
+
       runSteps.push(record);
+
       return record;
     },
     async get(id: string) {
@@ -249,22 +265,24 @@ test("missing extraction data stops before the database write and summary", asyn
       },
       { id: "summary", kind: "summarize", prompt: "Summarize" },
     ],
-  } as StoredWorkflow;
+  } satisfies StoredWorkflow;
+
   let writes = 0;
   let summaries = 0;
-  const runner = new WorkflowRunner(
-    createWorkflowServiceStub(workflow) as never,
-    {
-      executeTool: async () => {
-        writes++;
-        return { changes: 0 };
-      },
-      runWorkflowSummarize: async () => {
-        summaries++;
-        return "done";
-      },
-    }
-  );
+
+  const runner = new WorkflowRunner(createWorkflowServiceStub(workflow), {
+    executeTool: async () => {
+      writes++;
+
+      return { changes: 0 };
+    },
+    runWorkflowSummarize: async () => {
+      summaries++;
+
+      return "done";
+    },
+  });
+
   const result = await runner.run(workflow.id);
   expect(result.error).toBeDefined();
   expect(writes).toBe(0);

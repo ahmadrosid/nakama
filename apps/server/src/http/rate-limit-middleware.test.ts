@@ -14,6 +14,7 @@ function buildApp(
     createRateLimitMiddleware({ windowMs: WINDOW_MS, ...overrides })
   );
   app.all("*", (c) => c.json({ ok: true }));
+
   return app;
 }
 

@@ -17,15 +17,18 @@ describe("preprocessUserContent vision fallback", () => {
     "preprocesses tool images using the existing %s path",
     async (mode) => {
       const calls: GenerateChatInput[] = [];
+
       const toolCalls = [
         { arguments: { path: "shot.png" }, id: "read1", name: "read_file" },
       ];
+
       const provider: ProviderClient = {
         async generateChat(input) {
           calls.push({
             ...input,
             messages: resolveMessagesForNonVisionProvider(input.messages),
           });
+
           return calls.length === 1
             ? {
                 assistantMessage: { content: "", role: "assistant", toolCalls },
@@ -46,6 +49,7 @@ describe("preprocessUserContent vision fallback", () => {
           return this.generateChat(input);
         },
       };
+
       const session = createAgentChatSession(
         {
           provider,
@@ -66,17 +70,20 @@ describe("preprocessUserContent vision fallback", () => {
         },
         {
           async preprocessUserContent(content) {
-            if (typeof content === "string") {
+            if (!Array.isArray(content)) {
               return content;
             }
+
             if (mode === "error") {
               throw new Error("Vision unavailable");
             }
+
             if (mode === "description") {
               return replaceImagePartsWithDescriptions(content, [
                 "A red square",
               ]);
             }
+
             return persistInlineAttachmentsInContent(content, async () => ({
               attachmentId: "saved-image",
               size: 70,
@@ -89,14 +96,19 @@ describe("preprocessUserContent vision fallback", () => {
             })),
         }
       );
+
       expect(await session.send("Read it")).toBe("done");
+
       const tool = session
         .getHistory()
         .find((message) => message.role === "tool");
+
       if (tool?.role !== "tool") {
         throw new Error("Missing tool result");
       }
+
       const sent = calls[1]!.messages;
+
       if (mode === "error") {
         expect(JSON.parse(tool.content)).toMatchObject({
           bytesRead: 70,
@@ -119,6 +131,7 @@ describe("preprocessUserContent vision fallback", () => {
         });
         expect(JSON.stringify(tool)).not.toContain(tinyPngBase64);
         expect(JSON.stringify(sent)).toContain(tinyPngBase64);
+
         const resumed = createAgentChatSession(
           { provider },
           {
@@ -130,6 +143,7 @@ describe("preprocessUserContent vision fallback", () => {
               })),
           }
         );
+
         await resumed.send("Look again");
         expect(JSON.stringify(calls[2]!.messages)).toContain(tinyPngBase64);
       }
@@ -138,9 +152,11 @@ describe("preprocessUserContent vision fallback", () => {
 
   test("stores described images and sends text to the primary provider", async () => {
     const calls: Array<string | { type: string }[]> = [];
+
     const provider: ProviderClient = {
       async generateChat(input) {
         calls.push(input.messages.at(-1)?.content ?? "");
+
         return {
           assistantMessage: {
             content: "A small red square.",
@@ -157,6 +173,7 @@ describe("preprocessUserContent vision fallback", () => {
       async streamChat(input, handlers) {
         const result = await this.generateChat(input);
         handlers.onChunk(result.content);
+
         return result;
       },
     };
@@ -184,11 +201,12 @@ describe("preprocessUserContent vision fallback", () => {
       { provider: wrappedProvider },
       {
         preprocessUserContent: async (content) => {
-          if (typeof content === "string") {
+          if (!Array.isArray(content)) {
             return content;
           }
 
           const hasImage = content.some((part) => part.type === "image");
+
           if (!hasImage) {
             return content;
           }

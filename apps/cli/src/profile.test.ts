@@ -38,6 +38,8 @@ test("startup defaults to Super Bot and respects saved and explicit choices", as
   const configDir = await mkdtemp(join(tmpdir(), "nakama-cli-profile-"));
   const previous = process.env.NAKAMA_CONFIG_DIR;
   process.env.NAKAMA_CONFIG_DIR = configDir;
+
+  // SAFETY: resolveStartupProfile only reads listProfiles from this fixture.
   const client = {
     listProfiles: async () => ({ profiles: sampleProfiles }),
   } as NakamaClient;
@@ -65,6 +67,7 @@ test("startup defaults to Super Bot and respects saved and explicit choices", as
     } else {
       process.env.NAKAMA_CONFIG_DIR = previous;
     }
+
     await rm(configDir, { force: true, recursive: true });
   }
 });

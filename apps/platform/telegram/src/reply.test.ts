@@ -15,14 +15,17 @@ function createMessenger(): TelegramRichMessenger & {
     rich,
     async send(text: string) {
       rich.push(text);
+
       return { message_id: rich.length };
     },
     async sendPlain(text: string) {
       plain.push(text);
+
       return { message_id: plain.length };
     },
     async sendRaw(text: string) {
       plain.push(text);
+
       return { message_id: plain.length };
     },
   };

@@ -44,6 +44,7 @@ describe("session tool definitions", () => {
     await removeUnsupportedTools(db);
 
     expect(await db.getTool("tool_invented")).toBeNull();
+
     for (const id of SESSION_TOOL_IDS) {
       expect(await db.getTool(id)).not.toBeNull();
     }
@@ -100,6 +101,7 @@ describe("session tool definitions", () => {
     const superProfile = (await db.listProfilesForOrg("org_a")).find(
       (candidate) => candidate.isSuper
     );
+
     expect(superProfile).toBeDefined();
 
     const names = (await db.listToolsForProfile(superProfile?.id ?? "")).map(
@@ -125,6 +127,7 @@ describe("session tool definitions", () => {
     const superProfile = (await db.listProfilesForOrg("org_a")).find(
       (candidate) => candidate.isSuper
     );
+
     const profileId = superProfile?.id ?? "";
 
     for (const id of SESSION_TOOL_IDS) {
@@ -134,6 +137,7 @@ describe("session tool definitions", () => {
     const afterUnassign = (await db.listToolsForProfile(profileId)).map(
       (tool) => tool.name
     );
+
     expect(afterUnassign).not.toContain("list_profile_sessions");
 
     // Second boot: seedOrgSuperBotProfile takes the existing-profile branch.
@@ -142,6 +146,7 @@ describe("session tool definitions", () => {
     const afterReboot = (await db.listToolsForProfile(profileId)).map(
       (tool) => tool.name
     );
+
     expect(afterReboot).toContain("list_profile_sessions");
     expect(afterReboot).toContain("read_profile_session");
   });

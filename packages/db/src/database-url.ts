@@ -34,6 +34,7 @@ export function ensureDatabaseDirectory(databasePath: string): void {
   if (databasePath === ":memory:") {
     return;
   }
+
   if (!isAbsolute(databasePath)) {
     throw new Error("Database path must be absolute.");
   }

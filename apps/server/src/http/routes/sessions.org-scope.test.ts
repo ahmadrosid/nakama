@@ -13,11 +13,14 @@ import { loginUserSession, seedOrgAdmin } from "../test-session-helpers";
 setupTestConfigDir("nakama-sessions-org-scope-test-");
 
 const PASSWORD = "password123";
+
 const ATTACKER_ORG = "org_attacker";
+
 const VICTIM_ORG = "org_victim";
 
 async function createScenario() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
+
   const agent = new AgentService(
     {
       defaultProviderId: "provider-1",
@@ -36,6 +39,7 @@ async function createScenario() {
     null,
     databaseAdapter
   );
+
   const { app, authService } = createMinimalHonoApp({
     agent,
     databaseAdapter,
@@ -62,6 +66,7 @@ async function createScenario() {
     "profile_victim",
     "user_victim"
   );
+
   await databaseAdapter.replaceMessagesForSession(victimSessionId, [
     {
       createdAt: "2026-08-19T10:00:00.000Z",
@@ -107,18 +112,22 @@ const CROSS_ORG_ROUTES: Array<{
 describe("session routes are scoped to the caller's active org", () => {
   test("remote images require browser auth and org membership, returning only image bytes", async () => {
     const { app } = await createScenario();
+
     const user = await loginUserSession(
       app,
       "victim@example.com",
       PASSWORD,
       VICTIM_ORG
     );
+
     const png = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII=",
       "base64"
     );
+
     const url =
       "http://localhost:4310/v1/chat/images/proxy?url=https%3A%2F%2F8.8.8.8%2Fimage.png";
+
     const upstream = spyOn(globalThis, "fetch").mockImplementation(
       async () =>
         new Response(png, {
@@ -128,6 +137,7 @@ describe("session routes are scoped to the caller's active org", () => {
           },
         })
     );
+
     try {
       expect((await app.fetch(new Request(url))).status).toBe(401);
       expect(
@@ -140,9 +150,11 @@ describe("session routes are scoped to the caller's active org", () => {
         ).status
       ).toBe(404);
       expect(upstream).not.toHaveBeenCalled();
+
       const response = await app.fetch(
         new Request(url, { headers: { Cookie: user.cookieHeader } })
       );
+
       expect(response.status).toBe(200);
       expect(Buffer.from(await response.arrayBuffer())).toEqual(png);
       expect(response.headers.get("Content-Type")).toBe("image/png");
@@ -160,6 +172,7 @@ describe("session routes are scoped to the caller's active org", () => {
 
   test("image content uses browser auth, stays org-scoped, and handles missing bytes", async () => {
     const { app, databaseAdapter, victimSessionId } = await createScenario();
+
     const saved = await createAttachmentSaver(databaseAdapter, {
       channel: "web",
       orgId: VICTIM_ORG,
@@ -170,6 +183,7 @@ describe("session routes are scoped to the caller's active org", () => {
       kind: "image",
       mediaType: "image/png",
     });
+
     await seedOrgAdmin(databaseAdapter, {
       email: "viewer@example.com",
       orgId: VICTIM_ORG,
@@ -177,22 +191,27 @@ describe("session routes are scoped to the caller's active org", () => {
       role: "viewer",
       userId: "user_viewer",
     });
+
     const viewer = await loginUserSession(
       app,
       "viewer@example.com",
       PASSWORD,
       VICTIM_ORG
     );
+
     const attacker = await loginUserSession(
       app,
       "attacker@example.com",
       PASSWORD,
       ATTACKER_ORG
     );
+
     const url = `http://localhost:4310/v1/attachments/${saved.attachmentId}/content`;
+
     const response = await app.fetch(
       new Request(url, { headers: { Cookie: viewer.cookieHeader } })
     );
+
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("image/png");
     expect(response.headers.get("Cache-Control")).toBe("private, no-store");
@@ -216,6 +235,7 @@ describe("session routes are scoped to the caller's active org", () => {
   for (const route of CROSS_ORG_ROUTES) {
     test(`${route.method} ${route.path(":id")} -> 404 across orgs`, async () => {
       const { app, databaseAdapter, victimSessionId } = await createScenario();
+
       const attacker = await loginUserSession(
         app,
         "attacker@example.com",
@@ -244,6 +264,7 @@ describe("session routes are scoped to the caller's active org", () => {
 
   test("GET /v1/sessions -> 404 for a profile in another org", async () => {
     const { app } = await createScenario();
+
     const attacker = await loginUserSession(
       app,
       "attacker@example.com",
@@ -264,6 +285,7 @@ describe("session routes are scoped to the caller's active org", () => {
 
   test("the owning org still reads its own session", async () => {
     const { app, victimSessionId } = await createScenario();
+
     const victim = await loginUserSession(
       app,
       "victim@example.com",
@@ -279,14 +301,18 @@ describe("session routes are scoped to the caller's active org", () => {
     );
 
     expect(response.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await response.json()) as {
       messages: Array<{ content: string }>;
     };
+
     expect(body.messages[0]?.content).toBe("victim org secret");
   });
 
   test("the owning org reads one session's summary", async () => {
     const { app, victimSessionId } = await createScenario();
+
     const victim = await loginUserSession(
       app,
       "victim@example.com",
@@ -310,8 +336,10 @@ describe("session routes are scoped to the caller's active org", () => {
 
   test("the owning org can set a chat-only model", async () => {
     const { app, databaseAdapter, victimSessionId } = await createScenario();
+
     const profileModel = (await databaseAdapter.getProfile("profile_victim"))
       ?.model;
+
     const victim = await loginUserSession(
       app,
       "victim@example.com",
@@ -338,6 +366,7 @@ describe("session routes are scoped to the caller's active org", () => {
 
   test("rejects malformed and unknown chat models", async () => {
     const { app, databaseAdapter, victimSessionId } = await createScenario();
+
     const victim = await loginUserSession(
       app,
       "victim@example.com",
@@ -363,12 +392,14 @@ describe("session routes are scoped to the caller's active org", () => {
   });
   test("renames, pins, lists, and deletes a chat session", async () => {
     const { app, databaseAdapter, victimSessionId } = await createScenario();
+
     const victim = await loginUserSession(
       app,
       "victim@example.com",
       PASSWORD,
       VICTIM_ORG
     );
+
     const headers = victim.headers({ "X-CSRF-Token": victim.csrfToken });
 
     const updated = await app.fetch(
@@ -378,6 +409,7 @@ describe("session routes are scoped to the caller's active org", () => {
         method: "PATCH",
       })
     );
+
     expect(updated.status).toBe(204);
 
     const listed = await app.fetch(
@@ -386,6 +418,7 @@ describe("session routes are scoped to the caller's active org", () => {
         { headers: victim.headers() }
       )
     );
+
     expect(listed.status).toBe(200);
     expect((await listed.json()).sessions[0]).toMatchObject({
       id: victimSessionId,
@@ -402,6 +435,7 @@ describe("session routes are scoped to the caller's active org", () => {
         }
       )
     );
+
     expect(deleted.status).toBe(204);
     expect(await databaseAdapter.getSession(victimSessionId)).toBeNull();
   });
@@ -417,10 +451,12 @@ describe("Super Bot sessions stay admin-only after they are created", () => {
       role: "member",
       userId: "user_member",
     });
+
     const superProfile = await seedOrgSuperBotProfile(
       scenario.databaseAdapter,
       VICTIM_ORG
     );
+
     const superSessionId = await scenario.agent.createSession(
       VICTIM_ORG,
       "web",
@@ -428,6 +464,7 @@ describe("Super Bot sessions stay admin-only after they are created", () => {
       "user_victim",
       { orgRole: "admin" }
     );
+
     await scenario.databaseAdapter.replaceMessagesForSession(superSessionId, [
       {
         createdAt: "2026-09-14T10:00:00.000Z",
@@ -437,6 +474,7 @@ describe("Super Bot sessions stay admin-only after they are created", () => {
         sessionId: superSessionId,
       },
     ]);
+
     const member = await loginUserSession(
       scenario.app,
       "member@example.com",
@@ -455,6 +493,7 @@ describe("Super Bot sessions stay admin-only after they are created", () => {
   test("Super Bot images use the same profile access guard as chat history", async () => {
     const { app, databaseAdapter, member, superProfileId, superSessionId } =
       await createSuperBotScenario();
+
     const saved = await createAttachmentSaver(databaseAdapter, {
       channel: "web",
       orgId: VICTIM_ORG,
@@ -465,19 +504,23 @@ describe("Super Bot sessions stay admin-only after they are created", () => {
       kind: "image",
       mediaType: "image/png",
     });
+
     const url = `http://localhost:4310/v1/attachments/${saved.attachmentId}/content`;
     expect(
       (await app.fetch(new Request(url, { headers: member.headers() }))).status
     ).toBe(403);
+
     const admin = await loginUserSession(
       app,
       "victim@example.com",
       PASSWORD,
       VICTIM_ORG
     );
+
     const response = await app.fetch(
       new Request(url, { headers: admin.headers() })
     );
+
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("admin-image");
   });
@@ -505,16 +548,19 @@ describe("Super Bot sessions stay admin-only after they are created", () => {
   test("a member cannot list Super Bot sessions, an admin still can", async () => {
     const { app, member, superProfileId, superSessionId } =
       await createSuperBotScenario();
+
     const admin = await loginUserSession(
       app,
       "victim@example.com",
       PASSWORD,
       VICTIM_ORG
     );
+
     const get = (user: typeof member, path: string) =>
       app.fetch(
         new Request(`http://localhost:4310${path}`, { headers: user.headers() })
       );
+
     const listPath = `/v1/sessions?profileId=${superProfileId}&channel=web`;
 
     expect((await get(member, listPath)).status).toBe(403);
@@ -530,13 +576,19 @@ describe("clearing a session while its turn is running", () => {
   test("a DELETE sent as a separate request leaves the session empty", async () => {
     const { app, databaseAdapter, victimSessionId } = await createScenario();
     await databaseAdapter.deleteMessagesForSession(victimSessionId);
+
     const user = await loginUserSession(
       app,
       "victim@example.com",
       PASSWORD,
       VICTIM_ORG
     );
-    const request = (method: string, path: string, body?: unknown) =>
+
+    const request = (
+      method: string,
+      path: string,
+      body?: { message: string }
+    ) =>
       app.fetch(
         new Request(
           `http://localhost:4310/v1/sessions/${victimSessionId}${path}`,
@@ -550,11 +602,14 @@ describe("clearing a session while its turn is running", () => {
           }
         )
       );
+
     const providerCalled = Promise.withResolvers<void>();
     const releaseProvider = Promise.withResolvers<void>();
+
     const provider = spyOn(globalThis, "fetch").mockImplementation(async () => {
       providerCalled.resolve();
       await releaseProvider.promise;
+
       return Response.json({
         choices: [
           {
@@ -565,6 +620,7 @@ describe("clearing a session while its turn is running", () => {
         ],
       });
     });
+
     try {
       const turn = request("POST", "/messages", { message: "hello" });
       await providerCalled.promise;

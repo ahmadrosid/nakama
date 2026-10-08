@@ -10,10 +10,12 @@ export interface PendingMessage {
 }
 
 const PENDING_PREFIX = "⏳ pending: ";
+
 const MAX_PENDING_DISPLAY_LINES = 6;
 
 export function formatPendingSummary(message: PendingMessage): string {
   const text = message.line.trim() || (message.images?.length ? "[image]" : "");
+
   return text.replace(/\s+/g, " ");
 }
 
@@ -65,9 +67,7 @@ export function formatPendingDisplayLines(
  * Serialize async work so each task runs after the prior one settles.
  * Prior rejection does not block the next task.
  */
-export function createSerializedQueue(): {
-  enqueue(task: () => Promise<void>): Promise<void>;
-} {
+export function createSerializedQueue() {
   let tail: Promise<void> = Promise.resolve();
 
   return {
@@ -77,6 +77,7 @@ export function createSerializedQueue(): {
         () => undefined,
         () => undefined
       );
+
       return run;
     },
   };

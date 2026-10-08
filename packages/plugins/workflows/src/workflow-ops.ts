@@ -1,85 +1,143 @@
-import type {
-  WorkflowCompareOp,
-  WorkflowReceiptBag,
-  WorkflowStep,
-} from "@nakama/core/contract";
+import type { WorkflowCompareOp, WorkflowStep } from "@nakama/core/contract";
 
 const TEMPLATE_PATTERN = /\{\{([^}]+)\}\}/g;
 
-export function getPathValue(bag: WorkflowReceiptBag, path: string): unknown {
+export type WorkflowValue =
+  | boolean
+  | null
+  | number
+  | string
+  | undefined
+  | WorkflowValue[]
+  | WorkflowRecord;
+
+export type WorkflowRecord = { [key: string]: WorkflowValue };
+
+export type WorkflowBag = {
+  input: WorkflowRecord;
+  steps: WorkflowRecord;
+};
+
+export function parseWorkflowValue<Value>(value: Value): WorkflowValue {
+  const serialized = JSON.stringify(value);
+
+  if (serialized === undefined) {
+    throw new Error("Workflow values must be JSON serializable.");
+  }
+
+  const parsed: WorkflowValue = JSON.parse(serialized);
+
+  return parsed;
+}
+
+export function parseWorkflowRecord<Value>(value: Value): WorkflowRecord {
+  const parsed = parseWorkflowValue(value);
+
+  if (!isWorkflowRecord(parsed)) {
+    throw new Error("Workflow values must be JSON objects.");
+  }
+
+  return parsed;
+}
+
+type CompareResult = {
+  diff?: WorkflowValue;
+  left: WorkflowValue;
+  ok: boolean;
+  right: WorkflowValue;
+};
+
+type AssertResult = {
+  actual: WorkflowValue;
+  expected: WorkflowValue;
+  ok: boolean;
+};
+
+export function getPathValue(bag: WorkflowBag, path: string): WorkflowValue {
   const trimmed = path.trim();
+
   if (!trimmed) {
     return;
   }
 
   const parts = trimmed.split(".").filter(Boolean);
-  let current: unknown = bag;
+  let current: WorkflowValue = { input: bag.input, steps: bag.steps };
 
   for (const part of parts) {
-    if (current == null || typeof current !== "object") {
+    if (!isWorkflowRecord(current)) {
       return;
     }
 
-    current = (current as Record<string, unknown>)[part];
+    current = current[part];
   }
 
   return current;
 }
 
-function requireTemplateValue(bag: WorkflowReceiptBag, path: string): unknown {
+function requireTemplateValue(bag: WorkflowBag, path: string): WorkflowValue {
   const value = getPathValue(bag, path);
+
   if (value === undefined) {
     throw new Error(
       `Missing workflow data at ${path}. Check the referenced step output or run input.`
     );
   }
+
   return value;
 }
 
 export function resolveTemplateString(
   template: string,
-  bag: WorkflowReceiptBag
+  bag: WorkflowBag
 ): string {
   return template.replace(TEMPLATE_PATTERN, (_match, rawPath: string) => {
     const value = requireTemplateValue(bag, rawPath.trim());
+
     if (value === undefined || value === null) {
       return "";
     }
 
-    if (typeof value === "string") {
-      return value;
+    const stringValue = readString(value);
+
+    if (stringValue !== null) {
+      return stringValue;
     }
 
-    return JSON.stringify(value);
+    return JSON.stringify(value) ?? "";
   });
 }
 
 export function resolveWorkflowValue(
-  value: unknown,
-  bag: WorkflowReceiptBag
-): unknown {
-  if (typeof value === "string") {
-    if (!value.includes("{{")) {
-      return value;
+  value: WorkflowValue,
+  bag: WorkflowBag
+): WorkflowValue {
+  const stringValue = readString(value);
+
+  if (stringValue !== null) {
+    if (!stringValue.includes("{{")) {
+      return stringValue;
     }
 
-    if (value.match(/^\{\{[^}]+\}\}$/)) {
-      const inner = value.slice(2, -2).trim();
+    if (stringValue.match(/^\{\{[^}]+\}\}$/)) {
+      const inner = stringValue.slice(2, -2).trim();
+
       return requireTemplateValue(bag, inner);
     }
 
-    return resolveTemplateString(value, bag);
+    return resolveTemplateString(stringValue, bag);
   }
 
   if (Array.isArray(value)) {
     return value.map((entry) => resolveWorkflowValue(entry, bag));
   }
 
-  if (value && typeof value === "object") {
-    const resolved: Record<string, unknown> = {};
+  if (isWorkflowRecord(value)) {
+    const resolved: WorkflowRecord = {};
+
     for (const [key, entry] of Object.entries(value)) {
       resolved[key] = resolveWorkflowValue(entry, bag);
     }
+
     return resolved;
   }
 
@@ -87,17 +145,24 @@ export function resolveWorkflowValue(
 }
 
 export function executeCompare(input: {
-  left: unknown;
+  left: WorkflowValue;
   op: WorkflowCompareOp;
-  right: unknown;
+  right: WorkflowValue;
   tolerance?: number;
-}): { diff?: unknown; left: unknown; ok: boolean; right: unknown } {
+}): CompareResult {
   const left = input.left;
   const right = input.right;
 
   if (input.op === "eq") {
     const ok = deepEqual(left, right);
-    return { left, ok, right, ...(ok ? {} : { diff: { left, right } }) };
+
+    const result: CompareResult = { left, ok, right };
+
+    if (!ok) {
+      result.diff = { left, right };
+    }
+
+    return result;
   }
 
   if (input.op === "near") {
@@ -115,6 +180,7 @@ export function executeCompare(input: {
     }
 
     const ok = Math.abs(leftNum - rightNum) <= tolerance;
+
     return {
       diff: ok ? undefined : { delta: leftNum - rightNum, left, right },
       left,
@@ -124,6 +190,7 @@ export function executeCompare(input: {
   }
 
   const ok = containsValue(left, right);
+
   return {
     diff: ok ? undefined : { left, right },
     left,
@@ -133,34 +200,38 @@ export function executeCompare(input: {
 }
 
 export function executeAssert(input: {
-  bag: WorkflowReceiptBag;
-  expected: unknown;
+  bag: WorkflowBag;
+  expected: WorkflowValue;
   path: string;
-}): { actual: unknown; expected: unknown; ok: boolean } {
+}): AssertResult {
   const actual = getPathValue(input.bag, input.path);
   const expected = resolveWorkflowValue(input.expected, input.bag);
   const ok = deepEqual(actual, expected);
+
   return { actual, expected, ok };
 }
 
 export function buildReceiptBag(
-  input: Record<string, unknown>,
-  stepOutputs: Record<string, unknown>
-): WorkflowReceiptBag {
+  input: WorkflowRecord,
+  stepOutputs: WorkflowRecord
+): WorkflowBag {
   return {
     input,
     steps: stepOutputs,
   };
 }
 
-function collectTemplateRefs(value: unknown): string[] {
+function collectTemplateRefs(value: WorkflowValue): string[] {
   const refs: string[] = [];
 
-  const visit = (current: unknown): void => {
-    if (typeof current === "string") {
-      for (const match of current.matchAll(TEMPLATE_PATTERN)) {
+  const visit = (current: WorkflowValue): void => {
+    const stringValue = readString(current);
+
+    if (stringValue !== null) {
+      for (const match of stringValue.matchAll(TEMPLATE_PATTERN)) {
         refs.push(match[1]?.trim() ?? "");
       }
+
       return;
     }
 
@@ -168,10 +239,11 @@ function collectTemplateRefs(value: unknown): string[] {
       for (const entry of current) {
         visit(entry);
       }
+
       return;
     }
 
-    if (current && typeof current === "object") {
+    if (isWorkflowRecord(current)) {
       for (const entry of Object.values(current)) {
         visit(entry);
       }
@@ -179,6 +251,7 @@ function collectTemplateRefs(value: unknown): string[] {
   };
 
   visit(value);
+
   return refs.filter(Boolean);
 }
 
@@ -193,7 +266,7 @@ const WORKFLOW_STEP_KINDS = [
 const WORKFLOW_COMPARE_OPS = ["eq", "near", "contains"] as const;
 
 export function validateWorkflowSteps(
-  steps: WorkflowStep[],
+  steps: WorkflowStep[] | WorkflowValue[],
   allowedTools: Set<string>
 ): void {
   if (steps.length === 0) {
@@ -221,6 +294,7 @@ export function validateWorkflowSteps(
           "Summarize step must be the last step. Use a tool for intermediate extraction or analysis."
         );
       }
+
       summarizeCount += 1;
       readRequiredStepString(record, "prompt", `Summarize step ${id}`, {
         alias: "instruction",
@@ -232,14 +306,12 @@ export function validateWorkflowSteps(
       const tool = readRequiredStepString(record, "tool", `Tool step ${id}`, {
         label: "a tool name",
       });
+
       if (!allowedTools.has(tool)) {
         throw new Error(`Tool step ${id} references unknown tool: ${tool}`);
       }
-      if (
-        !record.input ||
-        typeof record.input !== "object" ||
-        Array.isArray(record.input)
-      ) {
+
+      if (!isWorkflowRecord(record.input)) {
         throw new Error(
           `Tool step ${id} requires an input object. Use input, not args; use {} for tools without arguments.`
         );
@@ -247,18 +319,19 @@ export function validateWorkflowSteps(
     }
 
     if (kind === "compare") {
-      const op = record.op;
-      if (
-        typeof op !== "string" ||
-        !WORKFLOW_COMPARE_OPS.includes(op as WorkflowCompareOp)
-      ) {
+      const opValue = record.op;
+      const op = readString(opValue);
+
+      if (op === null || !isWorkflowCompareOp(op)) {
         throw new Error(
-          `Compare step ${id} has invalid op: ${String(op)}. Use ${WORKFLOW_COMPARE_OPS.join(" | ")}.`
+          `Compare step ${id} has invalid op: ${String(opValue)}. Use ${WORKFLOW_COMPARE_OPS.join(" | ")}.`
         );
       }
+
       if (!("left" in record) || record.left === undefined) {
         throw new Error(`Compare step ${id} is missing left.`);
       }
+
       if (!("right" in record) || record.right === undefined) {
         throw new Error(`Compare step ${id} is missing right.`);
       }
@@ -274,7 +347,8 @@ export function validateWorkflowSteps(
       });
     }
 
-    const refs = collectTemplateRefs(step);
+    const refs = collectTemplateRefs(record);
+
     for (const ref of refs) {
       validateTemplateRef(ref, priorStepIds, id);
     }
@@ -287,60 +361,92 @@ export function validateWorkflowSteps(
   }
 }
 
-function asStepRecord(step: unknown, index: number): Record<string, unknown> {
-  if (!step || typeof step !== "object" || Array.isArray(step)) {
+function asStepRecord(
+  step: WorkflowStep | WorkflowValue,
+  index: number
+): WorkflowRecord {
+  const record: WorkflowValue = JSON.parse(JSON.stringify(step));
+
+  if (!isWorkflowRecord(record)) {
     throw new Error(`Step ${index + 1} must be an object.`);
   }
-  return step as Record<string, unknown>;
+
+  return record;
 }
 
-function readStepId(step: Record<string, unknown>, index: number): string {
-  const id = typeof step.id === "string" ? step.id.trim() : "";
+function readStepId(step: WorkflowRecord, index: number): string {
+  const id = readString(step.id)?.trim() ?? "";
+
   if (!id) {
     throw new Error(`Step ${index + 1} is missing an id.`);
   }
+
   return id;
 }
 
 function readStepKind(
-  step: Record<string, unknown>,
+  step: WorkflowRecord,
   id: string
 ): (typeof WORKFLOW_STEP_KINDS)[number] {
-  const kind = typeof step.kind === "string" ? step.kind.trim() : "";
+  const kind = readString(step.kind)?.trim() ?? "";
+
   if (!kind) {
-    if (typeof step.type === "string" && step.type.trim()) {
+    if (readString(step.type)?.trim()) {
       throw new Error(
         `Step ${id} uses type; use kind instead (${WORKFLOW_STEP_KINDS.join(" | ")}).`
       );
     }
+
     throw new Error(
       `Step ${id} is missing kind (${WORKFLOW_STEP_KINDS.join(" | ")}).`
     );
   }
-  if (
-    !WORKFLOW_STEP_KINDS.includes(kind as (typeof WORKFLOW_STEP_KINDS)[number])
-  ) {
+
+  if (!isWorkflowStepKind(kind)) {
     throw new Error(
       `Step ${id} has invalid kind: ${kind}. Use ${WORKFLOW_STEP_KINDS.join(" | ")}.`
     );
   }
-  return kind as (typeof WORKFLOW_STEP_KINDS)[number];
+
+  return kind;
+}
+
+function readString(value: WorkflowValue): string | null {
+  return value === String(value) ? value : null;
+}
+
+function isWorkflowRecord(value: WorkflowValue): value is WorkflowRecord {
+  return value instanceof Object && !Array.isArray(value);
+}
+
+function isWorkflowStepKind(
+  value: string
+): value is (typeof WORKFLOW_STEP_KINDS)[number] {
+  return WORKFLOW_STEP_KINDS.some((kind) => kind === value);
+}
+
+function isWorkflowCompareOp(value: string): value is WorkflowCompareOp {
+  return WORKFLOW_COMPARE_OPS.some((op) => op === value);
 }
 
 function readRequiredStepString(
-  step: Record<string, unknown>,
+  step: WorkflowRecord,
   key: string,
   prefix: string,
   options?: { alias?: string; label?: string }
 ): string {
-  const value = typeof step[key] === "string" ? step[key].trim() : "";
+  const value = readString(step[key])?.trim() ?? "";
+
   if (value) {
     return value;
   }
+
   const alias = options?.alias;
-  if (alias && typeof step[alias] === "string" && step[alias].trim()) {
+
+  if (alias && readString(step[alias])?.trim()) {
     throw new Error(`${prefix} uses ${alias}; use ${key} instead.`);
   }
+
   throw new Error(`${prefix} is missing ${options?.label ?? key}.`);
 }
 
@@ -355,6 +461,7 @@ function validateTemplateRef(
 
   if (ref.startsWith("steps.")) {
     const [, stepId] = ref.split(".");
+
     if (!stepId) {
       throw new Error(`Invalid template reference: ${ref}`);
     }
@@ -370,15 +477,22 @@ function validateTemplateRef(
         `Step ${currentStepId} references unknown step in template: ${ref}`
       );
     }
+
     return;
   }
 
   throw new Error(`Invalid template reference: ${ref}`);
 }
 
-function containsValue(haystack: unknown, needle: unknown): boolean {
-  if (typeof haystack === "string" && typeof needle === "string") {
-    return haystack.includes(needle);
+function containsValue(
+  haystack: WorkflowValue,
+  needle: WorkflowValue
+): boolean {
+  const haystackString = readString(haystack);
+  const needleString = readString(needle);
+
+  if (haystackString !== null && needleString !== null) {
+    return haystackString.includes(needleString);
   }
 
   if (Array.isArray(haystack)) {
@@ -388,31 +502,27 @@ function containsValue(haystack: unknown, needle: unknown): boolean {
   return false;
 }
 
-function toNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
+function toNumber(value: WorkflowValue): number | null {
+  const numberValue = Number(value);
+
+  if (value === numberValue && Number.isFinite(numberValue)) {
+    return numberValue;
   }
 
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value);
+  const stringValue = readString(value);
+
+  if (stringValue !== null && stringValue.trim()) {
+    const parsed = Number(stringValue);
+
     return Number.isFinite(parsed) ? parsed : null;
   }
 
   return null;
 }
 
-function deepEqual(left: unknown, right: unknown): boolean {
+function deepEqual(left: WorkflowValue, right: WorkflowValue): boolean {
   if (Object.is(left, right)) {
     return true;
-  }
-
-  if (
-    typeof left !== "object" ||
-    typeof right !== "object" ||
-    left === null ||
-    right === null
-  ) {
-    return false;
   }
 
   if (Array.isArray(left) || Array.isArray(right)) {
@@ -427,8 +537,13 @@ function deepEqual(left: unknown, right: unknown): boolean {
     return left.every((entry, index) => deepEqual(entry, right[index]));
   }
 
-  const leftRecord = left as Record<string, unknown>;
-  const rightRecord = right as Record<string, unknown>;
+  if (!(isWorkflowRecord(left) && isWorkflowRecord(right))) {
+    return false;
+  }
+
+  const leftRecord = left;
+  const rightRecord = right;
+
   const keys = new Set([
     ...Object.keys(leftRecord),
     ...Object.keys(rightRecord),

@@ -1,6 +1,12 @@
-import { createHash, randomUUID } from "node:crypto";
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 import { existsSync } from "node:fs";
 import {
+  chmod,
   mkdir,
   readdir,
   readFile,
@@ -12,6 +18,7 @@ import {
 import { dirname, join } from "node:path";
 import type { WorkerLogsResponse, WorkerProcessInfo } from "@nakama/core";
 import {
+  getUserConfigDir,
   type PlatformWorkerName,
   type PluginWorkerContribution,
   readRuntimeServerUrl,
@@ -95,6 +102,7 @@ function promisifyPm2<T>(
 }
 
 export class WorkerManagerService {
+  private whatsappContextTokenPromise: Promise<string> | null = null;
   async legacyChannels(orgId: string, includeGlobal: boolean) {
     const pending: { platform: ChannelPlatform; global: boolean }[] = [];
     for (const platform of ["telegram", "discord", "whatsapp"] as const) {
@@ -828,6 +836,8 @@ export class WorkerManagerService {
       }
       await setWorkerDesiredRunning(name as PlatformWorkerName, true, scope);
       const script = this.resolveWorkerScript(name);
+      const whatsappContextToken =
+        name === "whatsapp" ? await this.getWhatsAppContextToken() : null;
       if (isChannelOwner(scope)) {
         await this.deletePluginProcess(pm2, processName);
       } else {
@@ -846,8 +856,9 @@ export class WorkerManagerService {
                     NAKAMA_CHANNEL_PROFILE_ID: scope.profileId,
                   }
                 : {}),
-              ...(name === "whatsapp"
+              ...(whatsappContextToken
                 ? {
+                    NAKAMA_WHATSAPP_CONTEXT_TOKEN: whatsappContextToken,
                     NAKAMA_WHATSAPP_ORG_ID: isChannelOwner(scope)
                       ? scope.orgId
                       : (scope ?? ""),
@@ -874,6 +885,55 @@ export class WorkerManagerService {
         )
       );
     });
+  }
+
+  async getWhatsAppContextToken(): Promise<string> {
+    this.whatsappContextTokenPromise ??= this.loadWhatsAppContextToken();
+    return this.whatsappContextTokenPromise;
+  }
+
+  async verifyWhatsAppContextToken(token: string | null): Promise<boolean> {
+    if (!token) {
+      return false;
+    }
+    const supplied = Buffer.from(token);
+    const expected = Buffer.from(await this.getWhatsAppContextToken());
+    return (
+      supplied.length === expected.length && timingSafeEqual(supplied, expected)
+    );
+  }
+
+  private async loadWhatsAppContextToken(): Promise<string> {
+    const path = join(getUserConfigDir(), "whatsapp-context-token");
+    await mkdir(getUserConfigDir(), { mode: 0o700, recursive: true });
+    try {
+      const token = (await readFile(path, "utf8")).trim();
+      if (!/^[a-f0-9]{64}$/.test(token)) {
+        throw new Error("WhatsApp worker context token is invalid.");
+      }
+      await chmod(path, 0o600);
+      return token;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+    }
+
+    const token = randomBytes(32).toString("hex");
+    try {
+      await writeFile(path, token, { flag: "wx", mode: 0o600 });
+      return token;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+        throw error;
+      }
+      const existing = (await readFile(path, "utf8")).trim();
+      if (!/^[a-f0-9]{64}$/.test(existing)) {
+        throw new Error("WhatsApp worker context token is invalid.");
+      }
+      await chmod(path, 0o600);
+      return existing;
+    }
   }
 
   async stopWorker(

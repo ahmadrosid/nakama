@@ -11,6 +11,7 @@ setupTestConfigDir("nakama-org-members-test-");
 describe("org member management (AE2)", () => {
   test("viewer can read org data but not list or manage members", async () => {
     const { app, authService, databaseAdapter } = createMinimalHonoApp();
+
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
@@ -36,10 +37,13 @@ describe("org member management (AE2)", () => {
     );
 
     expect(createResponse.status).toBe(201);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const created = (await createResponse.json()) as {
       organization: { id: string };
       adminMember: { temporaryPassword: string };
     };
+
     const orgId = created.organization.id;
 
     const adminSession = await loginUserSession(
@@ -67,9 +71,12 @@ describe("org member management (AE2)", () => {
     );
 
     expect(addViewerResponse.status).toBe(201);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const viewerProvisioned = (await addViewerResponse.json()) as {
       temporaryPassword: string;
     };
+
     const viewerSession = await loginUserSession(
       app,
       "viewer@acme.com",
@@ -81,6 +88,7 @@ describe("org member management (AE2)", () => {
         headers: viewerSession.headers({}, orgId),
       })
     );
+
     expect(profilesResponse.status).toBe(200);
 
     const listMembersResponse = await app.fetch(
@@ -88,6 +96,7 @@ describe("org member management (AE2)", () => {
         headers: viewerSession.headers({}, orgId),
       })
     );
+
     expect(listMembersResponse.status).toBe(403);
 
     const addMemberResponse = await app.fetch(
@@ -107,11 +116,13 @@ describe("org member management (AE2)", () => {
         method: "POST",
       })
     );
+
     expect(addMemberResponse.status).toBe(403);
   });
 
   test("org admin can list, edit, change role, and remove members", async () => {
     const { app, authService, databaseAdapter } = createMinimalHonoApp();
+
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
@@ -136,11 +147,14 @@ describe("org member management (AE2)", () => {
       })
     );
 
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const created = (await createResponse.json()) as {
       organization: { id: string };
       adminMember: { temporaryPassword: string };
     };
+
     const orgId = created.organization.id;
+
     const adminSession = await loginUserSession(
       app,
       "admin-mgmt@acme.com",
@@ -164,6 +178,8 @@ describe("org member management (AE2)", () => {
         method: "POST",
       })
     );
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const added = (await addMemberResponse.json()) as {
       member: { userId: string };
     };
@@ -173,10 +189,14 @@ describe("org member management (AE2)", () => {
         headers: adminSession.headers({}, orgId),
       })
     );
+
     expect(listResponse.status).toBe(200);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const listed = (await listResponse.json()) as {
       members: Array<{ email: string }>;
     };
+
     expect(listed.members).toHaveLength(2);
     expect(listed.members.map((member) => member.email).sort()).toEqual([
       "admin-mgmt@acme.com",
@@ -202,10 +222,14 @@ describe("org member management (AE2)", () => {
         }
       )
     );
+
     expect(patchResponse.status).toBe(200);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const patched = (await patchResponse.json()) as {
       member: { role: string; name: string; phone: string };
     };
+
     expect(patched.member.name).toBe("Member Prime");
     expect(patched.member.phone).toBe("+628111222333");
     expect(patched.member.role).toBe("member");
@@ -224,6 +248,7 @@ describe("org member management (AE2)", () => {
         }
       )
     );
+
     expect(deleteResponse.status).toBe(204);
 
     const afterDelete = await app.fetch(
@@ -231,9 +256,12 @@ describe("org member management (AE2)", () => {
         headers: adminSession.headers({}, orgId),
       })
     );
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const remaining = (await afterDelete.json()) as {
       members: Array<{ email: string }>;
     };
+
     expect(remaining.members).toHaveLength(1);
     expect(remaining.members.map((member) => member.email).sort()).toEqual([
       "admin-mgmt@acme.com",
@@ -242,6 +270,7 @@ describe("org member management (AE2)", () => {
 
   test("remove member rejects invalid userId shape with 400", async () => {
     const { app, authService, databaseAdapter } = createMinimalHonoApp();
+
     const platformSession = await loginPlatformAdminSession(
       app,
       authService,
@@ -265,11 +294,15 @@ describe("org member management (AE2)", () => {
         method: "POST",
       })
     );
+
     expect(createResponse.status).toBe(201);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const created = (await createResponse.json()) as {
       organization: { id: string };
       adminMember: { temporaryPassword: string };
     };
+
     const orgId = created.organization.id;
 
     const adminSession = await loginUserSession(
@@ -278,7 +311,7 @@ describe("org member management (AE2)", () => {
       created.adminMember.temporaryPassword
     );
 
-    const badShapeResponse = await app.fetch(
+    const invalidMemberPathResponse = await app.fetch(
       new Request(
         `http://localhost:4310/v1/orgs/${orgId}/members/${encodeURIComponent("../nope")}`,
         {
@@ -292,6 +325,7 @@ describe("org member management (AE2)", () => {
         }
       )
     );
-    expect(badShapeResponse.status).toBe(400);
+
+    expect(invalidMemberPathResponse.status).toBe(400);
   });
 });

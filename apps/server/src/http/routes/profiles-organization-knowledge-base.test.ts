@@ -36,7 +36,9 @@ describe("profile knowledge base ZIP import", () => {
     const { app, orgId, post, profileId, session } = await setupSession(
       "platform-kb-zip-1@example.com"
     );
+
     const path = `/v1/profiles/${profileId}/knowledge-base/import-zip`;
+
     const response = await post(
       path,
       body({
@@ -47,7 +49,10 @@ describe("profile knowledge base ZIP import", () => {
         "__MACOSX/._setup.md": Buffer.from("metadata"),
       })
     );
+
     expect(response.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const result = (await response.json()) as {
       entries: Array<{
         documentId?: string;
@@ -58,6 +63,7 @@ describe("profile knowledge base ZIP import", () => {
       }>;
       totals: Record<string, number>;
     };
+
     expect(result.totals).toEqual({
       created: 2,
       duplicate: 1,
@@ -74,10 +80,13 @@ describe("profile knowledge base ZIP import", () => {
     expect(
       result.entries.some((entry) => entry.filename.startsWith("__MACOSX"))
     ).toBe(false);
+
     const created = result.entries.find(
       (entry) => entry.filename === "guides/setup.md"
     )!;
+
     expect(created.status).toBe("ready");
+
     const extracted = await readFile(
       getKnowledgeBaseExtractedPath(
         getKnowledgeBaseDir(orgId, profileId),
@@ -85,6 +94,7 @@ describe("profile knowledge base ZIP import", () => {
       ),
       "utf8"
     );
+
     expect(extracted).toContain("The comet manual");
 
     const content = await app.fetch(
@@ -93,6 +103,7 @@ describe("profile knowledge base ZIP import", () => {
         { headers: session.headers({}, orgId) }
       )
     );
+
     expect(content.status).toBe(200);
     expect(content.headers.get("content-disposition")).toContain(
       "filename*=UTF-8''setup.md"
@@ -103,8 +114,10 @@ describe("profile knowledge base ZIP import", () => {
       path,
       body({ "guides/setup.md": Buffer.from("The comet manual") })
     );
+
     expect(retry.status).toBe(200);
     expect((await retry.json()).totals.duplicate).toBe(1);
+
     const removed = await app.fetch(
       new Request(
         `${BASE}/v1/profiles/${profileId}/knowledge-base/${created.documentId}`,
@@ -117,6 +130,7 @@ describe("profile knowledge base ZIP import", () => {
         }
       )
     );
+
     expect(removed.status).toBe(200);
     expect((await removed.json()).deleted).toBe(true);
   }, 30_000);
@@ -125,6 +139,7 @@ describe("profile knowledge base ZIP import", () => {
     const { post, profileId } = await setupSession(
       "platform-kb-zip-2@example.com"
     );
+
     const path = `/v1/profiles/${profileId}/knowledge-base/import-zip`;
     expect(
       (await post(path, body({ "same.txt": Buffer.from("one") }))).status
@@ -141,12 +156,16 @@ describe("profile knowledge base ZIP import", () => {
     const { post, profileId } = await setupSession(
       "platform-kb-zip-sync@example.com"
     );
+
     const path = `/v1/profiles/${profileId}/knowledge-base/import-zip`;
+
     const payload = body({
       "a.txt": Buffer.from("first"),
       "b.txt": Buffer.from("second"),
     });
+
     const sync = spyOn(MemoryBackendService.prototype, "syncKnowledge");
+
     try {
       expect((await post(path, payload)).status).toBe(200);
       expect(sync).toHaveBeenCalledTimes(1);
@@ -166,7 +185,9 @@ describe("profile knowledge base ZIP import", () => {
     const { app, orgId, post, profileId, session } = await setupSession(
       "platform-kb-zip-3@example.com"
     );
+
     const path = `/v1/profiles/${profileId}/knowledge-base/import-zip`;
+
     const invalid = [
       JSON.stringify({ zipBase64: "invalid!" }),
       JSON.stringify({
@@ -180,10 +201,12 @@ describe("profile knowledge base ZIP import", () => {
       body({ "nope.png": Buffer.from("bad") }),
       body({}),
     ];
+
     for (const payload of invalid) {
       const response = await post(path, payload);
       expect(response.status).toBe(400);
     }
+
     expect(
       (
         await post(
@@ -193,14 +216,18 @@ describe("profile knowledge base ZIP import", () => {
       ).status
     ).toBe(413);
     const many: Record<string, Uint8Array> = {};
+
     for (let index = 0; index < 101; index += 1) {
       many[`file-${index}.txt`] = Buffer.from("x");
     }
+
     expect((await post(path, body(many))).status).toBe(413);
     const total: Record<string, Uint8Array> = {};
+
     for (let index = 0; index < 6; index += 1) {
       total[`large-${index}.txt`] = Buffer.alloc(17 * 1024 * 1024);
     }
+
     expect((await post(path, body(total))).status).toBe(413);
     expect(
       (
@@ -212,11 +239,13 @@ describe("profile knowledge base ZIP import", () => {
         )
       ).status
     ).toBe(413);
+
     const list = await app.fetch(
       new Request(`${BASE}/v1/profiles/${profileId}/knowledge-base`, {
         headers: session.headers({}, orgId),
       })
     );
+
     expect(list.status).toBe(200);
     expect((await list.json()).documents).toEqual([]);
   }, 30_000);
@@ -224,9 +253,12 @@ describe("profile knowledge base ZIP import", () => {
   test("openapi describes the ZIP import route", async () => {
     const { app } = createApp();
     const response = await app.fetch(new Request(`${BASE}/openapi.json`));
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const spec = (await response.json()) as {
-      paths: Record<string, Record<string, unknown>>;
+      paths: Record<string, { get?: object; post?: object; put?: object }>;
     };
+
     expect(
       spec.paths["/v1/profiles/{profileId}/knowledge-base/import-zip"]?.post
     ).toBeDefined();
@@ -234,6 +266,7 @@ describe("profile knowledge base ZIP import", () => {
 
   test("requires a platform administrator and the active organization", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const { adminSession, orgId } = await createOrgAdminSession(
       app,
       authService,
@@ -241,6 +274,7 @@ describe("profile knowledge base ZIP import", () => {
       "acme-org-kb-zip-guard",
       "org-admin-kb-zip@acme.com"
     );
+
     const denied = await app.fetch(
       new Request(`${BASE}/v1/profiles/profile_1/knowledge-base/import-zip`, {
         body: body({ "x.txt": Buffer.from("x") }),
@@ -254,7 +288,9 @@ describe("profile knowledge base ZIP import", () => {
         method: "POST",
       })
     );
+
     expect(denied.status).toBe(403);
+
     const {
       post,
       profileId,
@@ -264,6 +300,7 @@ describe("profile knowledge base ZIP import", () => {
       databaseAdapter: otherDatabase,
       orgId: firstOrgId,
     } = await setupSession("platform-kb-zip-4@example.com");
+
     expect(
       (
         await post(
@@ -272,6 +309,7 @@ describe("profile knowledge base ZIP import", () => {
         )
       ).status
     ).toBe(404);
+
     const { orgId: secondOrgId } = await createOrgAdminSession(
       otherApp,
       otherAuthService,
@@ -279,7 +317,9 @@ describe("profile knowledge base ZIP import", () => {
       "other-kb-zip-org",
       "other-kb-zip-admin@example.com"
     );
+
     expect(secondOrgId).not.toBe(firstOrgId);
+
     const crossOrg = await otherApp.fetch(
       new Request(
         `${BASE}/v1/profiles/${profileId}/knowledge-base/import-zip`,
@@ -296,6 +336,7 @@ describe("profile knowledge base ZIP import", () => {
         }
       )
     );
+
     expect(crossOrg.status).toBe(404);
   }, 30_000);
 });
@@ -303,6 +344,7 @@ describe("profile knowledge base ZIP import", () => {
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const profileService = new ProfileService(databaseAdapter);
+
   return {
     ...createMinimalHonoApp({
       agent: {
@@ -360,14 +402,14 @@ function createApp() {
           ),
         uploadOrganizationKnowledgeBaseDocument: (
           orgId: string,
-          document: unknown,
+          document: Parameters<
+            ProfileService["uploadOrganizationKnowledgeBaseDocument"]
+          >[1],
           onDuplicate?: "error" | "replace" | "skip"
         ) =>
           profileService.uploadOrganizationKnowledgeBaseDocument(
             orgId,
-            document as Parameters<
-              ProfileService["uploadOrganizationKnowledgeBaseDocument"]
-            >[1],
+            document,
             onDuplicate
           ),
       },
@@ -383,10 +425,12 @@ async function setupSession(email: string) {
   const orgId = session.orgId!;
   const profiles = await databaseAdapter.listProfilesForOrg(orgId);
   const profile = profiles.find((entry) => !entry.isSuper)!;
+
   const headers = {
     "Content-Type": "application/json",
     "X-CSRF-Token": session.csrfToken,
   };
+
   const post = (path: string, body: string) =>
     app.fetch(
       new Request(`${BASE}${path}`, {
@@ -395,6 +439,7 @@ async function setupSession(email: string) {
         method: "POST",
       })
     );
+
   return {
     app,
     authService,
@@ -415,16 +460,21 @@ describe("organization knowledge base routes", () => {
       path,
       JSON.stringify({ document: textDocument("Shared handbook body") })
     );
+
     expect(created.status).toBe(201);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const { document } = (await created.json()) as {
       document: { id: string; scope: string };
     };
+
     expect(document.scope).toBe("organization");
 
     const duplicate = await post(
       path,
       JSON.stringify({ document: textDocument("Shared handbook body") })
     );
+
     expect(duplicate.status).toBe(409);
 
     const unsupported = await post(
@@ -437,6 +487,7 @@ describe("organization knowledge base routes", () => {
         },
       })
     );
+
     expect(unsupported.status).toBe(400);
 
     const missing = await post(path, "{}");
@@ -447,15 +498,19 @@ describe("organization knowledge base routes", () => {
     const { app, orgId, post, profileId, session } = await setupSession(
       "platform-kb-2@example.com"
     );
+
     const path = `/v1/orgs/${orgId}/knowledge-base`;
 
     const created = await post(
       path,
       JSON.stringify({ document: textDocument("Attached handbook body") })
     );
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const { document } = (await created.json()) as {
       document: { id: string };
     };
+
     await attachSharedKnowledgeBaseDocument(orgId, profileId, document.id);
 
     const inUse = await app.fetch(
@@ -464,6 +519,7 @@ describe("organization knowledge base routes", () => {
         method: "DELETE",
       })
     );
+
     expect(inUse.status).toBe(409);
     expect(await inUse.json()).toMatchObject({ profileIds: [profileId] });
 
@@ -489,6 +545,7 @@ describe("organization knowledge base routes", () => {
         method: "DELETE",
       })
     );
+
     expect(removed.status).toBe(200);
 
     const missing = await app.fetch(
@@ -497,6 +554,7 @@ describe("organization knowledge base routes", () => {
         method: "DELETE",
       })
     );
+
     expect(missing.status).toBe(404);
   }, 20_000);
 
@@ -504,15 +562,19 @@ describe("organization knowledge base routes", () => {
     const { orgId, post, profileId } = await setupSession(
       "platform-kb-3@example.com"
     );
+
     const path = `/v1/orgs/${orgId}/knowledge-base`;
 
     const created = await post(
       path,
       JSON.stringify({ document: textDocument("Replaced handbook body") })
     );
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const { document } = (await created.json()) as {
       document: { id: string };
     };
+
     await attachSharedKnowledgeBaseDocument(orgId, profileId, document.id);
 
     const replacement = await post(
@@ -522,6 +584,7 @@ describe("organization knowledge base routes", () => {
         onDuplicate: "replace",
       })
     );
+
     expect(replacement.status).toBe(409);
   }, 20_000);
 
@@ -536,11 +599,13 @@ describe("organization knowledge base routes", () => {
         { headers: session.headers({}, orgId) }
       )
     );
+
     expect(response.status).toBe(404);
   }, 20_000);
 
   test("shared organization knowledge base management stays platform-admin only", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const { adminSession, orgId } = await createOrgAdminSession(
       app,
       authService,
@@ -548,6 +613,7 @@ describe("organization knowledge base routes", () => {
       "acme-org-kb-guard",
       "org-admin-kb@acme.com"
     );
+
     const headers = adminSession.headers(
       {
         "Content-Type": "application/json",
@@ -573,6 +639,7 @@ describe("organization knowledge base routes", () => {
           method,
         })
       );
+
       expect([method, path, response.status]).toEqual([method, path, 403]);
     }
   }, 30_000);
@@ -582,9 +649,11 @@ describe("organization knowledge base routes", () => {
     const response = await app.fetch(new Request(`${BASE}/openapi.json`));
     expect(response.status).toBe(200);
 
+    // SAFETY: This test controls the fixture shape at this boundary.
     const spec = (await response.json()) as {
-      paths: Record<string, Record<string, unknown>>;
+      paths: Record<string, { get?: object; post?: object; put?: object }>;
     };
+
     const expected: Array<[string, string[]]> = [
       ["/v1/orgs/{orgId}/knowledge-base", ["get", "post"]],
       ["/v1/orgs/{orgId}/knowledge-base/{documentId}", ["delete"]],
