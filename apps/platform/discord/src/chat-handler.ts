@@ -8,6 +8,7 @@ import { formatClientError } from "@nakama/core/api-error";
 import {
   clearActiveStream,
   isAbortError,
+  isStreamActive,
   registerActiveStream,
   stopActiveStream,
 } from "@nakama/core/channel-active-stream";
@@ -502,8 +503,9 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
       | ButtonInteraction
       | StringSelectMenuInteraction
   ): Promise<void> {
-    // Caller (bot.ts) already deferred — do not wait on withChatLock here.
-    // Agent replies hold that lock for a long time and would leave commands stuck.
+    // Caller (bot.ts) already deferred. Do not wait on withChatLock while a
+    // stream is active: a reply holds that lock for minutes and the command
+    // would sit on "thinking" until it ends.
 
     const userId = interaction.user.id;
     const channelId = interaction.channelId;
@@ -607,28 +609,46 @@ function createScopedChatHandler(deps: ChatHandlerDeps) {
         return;
       }
 
+      // Aborting a turn does not wait for it to unwind, so it would still write
+      // to the session these three rewrite. Refuse until /stop has landed.
+      if (
+        (commandName === "clear" ||
+          commandName === "compact" ||
+          commandName === "new") &&
+        isStreamActive(conversationKey)
+      ) {
+        await messenger.send(
+          "A response is still running here. Send /stop, then try again."
+        );
+        return;
+      }
+
+      // The lock covers the short parts of a turn outside the stream itself.
       switch (commandName) {
         case "clear": {
-          stopActiveStream(conversationKey);
-          const session = await resolveSession(conversationKey);
-          await session.clear();
-          await clearSessionArtifactState(conversationKey);
-          await messenger.send("History cleared.");
+          await withChatLock(conversationKey, async () => {
+            const session = await resolveSession(conversationKey);
+            await session.clear();
+            await clearSessionArtifactState(conversationKey);
+            await messenger.send("History cleared.");
+          });
           return;
         }
         case "compact": {
-          stopActiveStream(conversationKey);
-          const session = await resolveSession(conversationKey);
-          const result = await session.compact({ force: true });
-          await messenger.send(
-            `Compacted (${result.action}). Messages: ${result.messagesAfter}.`
-          );
+          await withChatLock(conversationKey, async () => {
+            const session = await resolveSession(conversationKey);
+            const result = await session.compact({ force: true });
+            await messenger.send(
+              `Compacted (${result.action}). Messages: ${result.messagesAfter}.`
+            );
+          });
           return;
         }
         case "new": {
-          stopActiveStream(conversationKey);
-          await createAndBindSession(conversationKey);
-          await messenger.send("Started a new conversation.");
+          await withChatLock(conversationKey, async () => {
+            await createAndBindSession(conversationKey);
+            await messenger.send("Started a new conversation.");
+          });
           return;
         }
         case "sessions":

@@ -32,6 +32,10 @@ export function stopActiveStream(chatId: string): boolean {
   return true;
 }
 
+export function isStreamActive(chatId: string): boolean {
+  return activeByChat.has(chatId);
+}
+
 export function hasActiveStreams(): boolean {
   return activeByChat.size > 0;
 }
