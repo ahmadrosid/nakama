@@ -460,43 +460,28 @@ function ConnectionStatus({
   );
 }
 
-function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
-  const [overview, setOverview] = React.useState<Overview | null>(null);
-  const [error, setError] = React.useState("");
-  const [extensionConnected, setExtensionConnected] = React.useState(false);
-  const [busy, setBusy] = React.useState(false);
-  const [settings, setSettings] = React.useState<boolean | null>(null);
-  const [deleting, setDeleting] = React.useState<Meeting | null>(null);
-  const [selected, setSelected] = React.useState<Meeting | null>(null);
-  const [uploading, setUploading] = React.useState(false);
-  const uploadInput = React.useRef<HTMLInputElement>(null);
-  async function upload(file: File) {
-    setUploading(true);
-    setError("");
-    try {
-      const markdown = /\.(md|markdown)$/i.test(file.name);
-      if (
-        !(markdown || /\.(mp3|mp4|mpeg|mpga|m4a|wav|webm)$/i.test(file.name))
-      ) {
-        throw new Error("Choose a Markdown or supported audio file");
-      }
-      if (!file.size || file.size > (markdown ? 1 : 7) * 1024 * 1024) {
-        throw new Error(`Choose a nonempty file under ${markdown ? 1 : 7} MB`);
-      }
-      const content = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result).split(",")[1]!);
-        reader.onerror = () => reject(new Error("Could not read file"));
-        reader.readAsDataURL(file);
-      });
-      await call("upload", { content, filename: file.name });
-      setOverview((await call("meetings")) as Overview);
-    } catch (reason) {
-      setError(message(reason));
-    } finally {
-      setUploading(false);
-    }
+function readUploadContent(file: File) {
+  const markdown = /\.(md|markdown)$/i.test(file.name);
+  if (!(markdown || /\.(mp3|mp4|mpeg|mpga|m4a|wav|webm)$/i.test(file.name))) {
+    throw new Error("Choose a Markdown or supported audio file");
   }
+  if (!file.size || file.size > (markdown ? 1 : 7) * 1024 * 1024) {
+    throw new Error(`Choose a nonempty file under ${markdown ? 1 : 7} MB`);
+  }
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1]!);
+    reader.onerror = () => reject(new Error("Could not read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function useExtensionBridge(
+  call: MeetCall,
+  signal: AbortSignal,
+  setConnected: (connected: boolean) => void,
+  setSelected: (meeting: Meeting) => void
+) {
   React.useEffect(() => {
     async function receive(event: MessageEvent) {
       if (event.source !== window || event.origin !== window.location.origin) {
@@ -504,7 +489,7 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
       }
       const data = event.data;
       if (data?.type === "NAKAMA_MEET_EXTENSION") {
-        setExtensionConnected(data.connected === true);
+        setConnected(data.connected === true);
         return;
       }
       if (
@@ -551,7 +536,33 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
       window.removeEventListener("message", receive);
       clearInterval(timer);
     };
-  }, [call, signal]);
+  }, [call, signal, setConnected, setSelected]);
+}
+
+function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
+  const [overview, setOverview] = React.useState<Overview | null>(null);
+  const [error, setError] = React.useState("");
+  const [extensionConnected, setExtensionConnected] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [settings, setSettings] = React.useState<boolean | null>(null);
+  const [deleting, setDeleting] = React.useState<Meeting | null>(null);
+  const [selected, setSelected] = React.useState<Meeting | null>(null);
+  const [uploading, setUploading] = React.useState(false);
+  const uploadInput = React.useRef<HTMLInputElement>(null);
+  async function upload(file: File) {
+    setUploading(true);
+    setError("");
+    try {
+      const content = await readUploadContent(file);
+      await call("upload", { content, filename: file.name });
+      setOverview((await call("meetings")) as Overview);
+    } catch (reason) {
+      setError(message(reason));
+    } finally {
+      setUploading(false);
+    }
+  }
+  useExtensionBridge(call, signal, setExtensionConnected, setSelected);
   React.useEffect(() => {
     let alive = true;
     let running = false;
