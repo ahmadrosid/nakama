@@ -524,3 +524,66 @@ describe("Super Bot sessions stay admin-only after they are created", () => {
     ).toBe(200);
   });
 });
+
+describe("clearing a session while its turn is running", () => {
+  // A channel worker clears with this same request, from its own process.
+  test("a DELETE sent as a separate request leaves the session empty", async () => {
+    const { app, databaseAdapter, victimSessionId } = await createScenario();
+    await databaseAdapter.deleteMessagesForSession(victimSessionId);
+    const user = await loginUserSession(
+      app,
+      "victim@example.com",
+      PASSWORD,
+      VICTIM_ORG
+    );
+    const request = (method: string, path: string, body?: unknown) =>
+      app.fetch(
+        new Request(
+          `http://localhost:4310/v1/sessions/${victimSessionId}${path}`,
+          {
+            body: body ? JSON.stringify(body) : undefined,
+            headers: user.headers({
+              "Content-Type": "application/json",
+              "X-CSRF-Token": user.csrfToken,
+            }),
+            method,
+          }
+        )
+      );
+    const providerCalled = Promise.withResolvers<void>();
+    const releaseProvider = Promise.withResolvers<void>();
+    const provider = spyOn(globalThis, "fetch").mockImplementation(async () => {
+      providerCalled.resolve();
+      await releaseProvider.promise;
+      return Response.json({
+        choices: [
+          {
+            finish_reason: "stop",
+            index: 0,
+            message: { content: "late reply", role: "assistant" },
+          },
+        ],
+      });
+    });
+    try {
+      const turn = request("POST", "/messages", { message: "hello" });
+      await providerCalled.promise;
+      expect(
+        await databaseAdapter.listMessagesForSession(victimSessionId)
+      ).toHaveLength(1);
+
+      expect((await request("DELETE", "")).status).toBe(204);
+      releaseProvider.resolve();
+      expect((await turn).status).toBe(200);
+
+      expect(
+        await databaseAdapter.listMessagesForSession(victimSessionId)
+      ).toEqual([]);
+      const messages = await request("GET", "/messages");
+      expect((await messages.json()).messages).toEqual([]);
+    } finally {
+      releaseProvider.resolve();
+      provider.mockRestore();
+    }
+  });
+});

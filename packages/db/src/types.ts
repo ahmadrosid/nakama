@@ -1068,6 +1068,12 @@ export interface DatabaseAdapter {
   ): Promise<StoredWorkflowRunRecord | null>;
 
   getWorkspaceSettings(): Promise<StoredWorkspaceSettingsRecord | null>;
+  /**
+   * Moves each attachment of this session that another session in the org
+   * still names over to that session. Call it before deleting a session's
+   * attachments, or a branch loses the files it copied references to.
+   */
+  handOverSharedAttachments(sessionId: string, orgId: string): Promise<void>;
   incrementLlmTurnUsage(orgId: string, delta: LlmTurnUsageDelta): Promise<void>;
   incrementLlmUsageDailyStats(
     orgId: string,

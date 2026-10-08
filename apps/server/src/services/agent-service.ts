@@ -348,6 +348,7 @@ import {
   copySessionHistoryArchive,
   createReadSessionHistoryTool,
   deleteSessionHistoryArchive,
+  discardInFlightSessionWrites,
   loadSessionHistory,
   replaceSessionHistory,
   wrapPersistedSession,
@@ -2457,12 +2458,17 @@ export class AgentService {
       return true;
     }
 
+    discardInFlightSessionWrites(sessionId);
     this.sessions.get(sessionId)?.session.clear();
     this.sessions.delete(sessionId);
     this.superBotSessionState.clearSession(sessionId);
     this.agentTodoState.clearSession(sessionId);
     this.agentQuestionnaireState.clearSession(sessionId);
     await deleteSessionHistoryArchive(orgId, sessionId);
+    // A branch copies its source's messages, attachment ids included. Those
+    // files change owner here; what is still listed below is this session's
+    // alone.
+    await this.db.handOverSharedAttachments(sessionId, orgId);
     const attachments = await this.db.listAttachmentsForSession(sessionId);
     for (const attachment of attachments) {
       await deleteAttachmentBytes(orgId, attachment.profileId, attachment.id);
@@ -2643,11 +2649,13 @@ export class AgentService {
       return true;
     }
 
-    const stored = this.sessions.get(sessionId);
-
-    if (stored) {
-      stored.session.clear();
-    }
+    // A turn still running keeps appending to the session object it holds, so
+    // that object leaves the cache too: the next read rebuilds from the
+    // database instead of showing what the turn wrote after the clear. The
+    // turn lock is left alone and is released when the turn ends.
+    discardInFlightSessionWrites(sessionId);
+    this.sessions.get(sessionId)?.session.clear();
+    this.sessions.delete(sessionId);
 
     await deleteSessionHistoryArchive(orgId, sessionId);
     await this.db.deleteMessagesForSession(sessionId);
