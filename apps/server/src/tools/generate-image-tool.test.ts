@@ -90,6 +90,7 @@ describe("generate_image tool seed and resolver (U3)", () => {
     const assignedIds = (await db.listToolsForProfile(superBot.id)).map(
       (tool) => tool.id
     );
+
     expect(assignedIds).not.toContain(GENERATE_IMAGE_TOOL_ID);
   });
 
@@ -117,6 +118,7 @@ describe("generate_image tool seed and resolver (U3)", () => {
       [],
       { serverTools: { generateImage: generateImageTool(db) } }
     );
+
     const tool = assigned.find(
       (entry) => entry.name === GENERATE_IMAGE_TOOL_NAME
     );
@@ -190,10 +192,12 @@ describe("generate_image tool persistence (U4)", () => {
       await rm(tempConfigDir, { force: true, recursive: true });
       tempConfigDir = "";
     }
+
     if (workspaceRoot) {
       await rm(workspaceRoot, { force: true, recursive: true });
       workspaceRoot = "";
     }
+
     if (originalConfigDir === undefined) {
       delete process.env.NAKAMA_CONFIG_DIR;
     } else {
@@ -225,6 +229,7 @@ describe("generate_image tool persistence (U4)", () => {
         ensureSettingsLoaded: async () => {},
         generateImage: async (input) => {
           seen = input.signal;
+
           return {
             data: PNG_BYTES,
             mediaType: "image/png",
@@ -252,6 +257,7 @@ describe("generate_image tool persistence (U4)", () => {
         ensureSettingsLoaded: async () => {},
         generateImage: async (input) => {
           seenBaseUrl = input.baseUrl;
+
           return {
             data: PNG_BYTES,
             mediaType: "image/png",
@@ -310,6 +316,7 @@ describe("generate_image tool persistence (U4)", () => {
   test("prompt saves only the image and returns an attachmentId", async () => {
     await setupWorkspace();
     const db = createInMemoryDatabaseAdapter();
+
     const usage: Array<{
       model: string;
       input: number;
@@ -353,9 +360,7 @@ describe("generate_image tool persistence (U4)", () => {
       path: "artifacts/cat.png",
       sizeBytes: PNG_BYTES.byteLength,
     });
-    expect(
-      "attachmentId" in result && typeof result.attachmentId === "string"
-    ).toBe(true);
+
     if (!("attachmentId" in result && result.attachmentId)) {
       throw new Error("expected attachmentId");
     }
@@ -417,9 +422,11 @@ describe("generate_image tool persistence (U4)", () => {
     );
 
     expect("path" in result).toBe(true);
+
     if (!("path" in result)) {
       throw new Error("expected success");
     }
+
     expect(result.path).not.toBe("artifacts/cat.png");
     expect(result.path.startsWith("artifacts/cat-")).toBe(true);
     expect(result.path.endsWith(".png")).toBe(true);
@@ -440,6 +447,7 @@ describe("generate_image tool persistence (U4)", () => {
     ["cat.png", "image/webp"],
   ])("filename %s matches generated type %s", async (filename, mediaType) => {
     await setupWorkspace();
+
     const result = await runGenerateImageTool(
       { filename, prompt: "a cat" },
       { orgId: "org_1", profileId: "profile_1", workspaceRoot },
@@ -456,9 +464,11 @@ describe("generate_image tool persistence (U4)", () => {
           openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
       }
     );
+
     if (!("path" in result)) {
       throw new Error("expected success");
     }
+
     expect(inferArtifactMimeType(result.path)).toBe(mediaType);
     expect(await readFile(path.join(workspaceRoot, result.path))).toEqual(
       Buffer.from(PNG_BYTES)
@@ -472,6 +482,7 @@ describe("generate_image tool persistence (U4)", () => {
     const originalInsert = db.insertAttachment.bind(db);
     db.insertAttachment = async (record) => {
       attachmentInserts += 1;
+
       return originalInsert(record);
     };
 
@@ -496,7 +507,7 @@ describe("generate_image tool persistence (U4)", () => {
 
     expect(result).toEqual({ error: IMAGE_MODEL_REQUIRED_MESSAGE });
     const artifactsDir = path.join(workspaceRoot, "artifacts");
-    const entries = await readdir(artifactsDir).catch(() => [] as string[]);
+    const entries = await readdir(artifactsDir).catch(() => []);
     expect(entries).toEqual([]);
     expect(attachmentInserts).toBe(0);
   });
@@ -508,6 +519,7 @@ describe("generate_image tool persistence (U4)", () => {
     const originalInsert = db.insertAttachment.bind(db);
     db.insertAttachment = async (record) => {
       attachmentInserts += 1;
+
       return originalInsert(record);
     };
 
@@ -532,9 +544,11 @@ describe("generate_image tool persistence (U4)", () => {
     );
 
     expect("error" in result).toBe(true);
+
     const entries = await readdir(path.join(workspaceRoot, "artifacts")).catch(
-      () => [] as string[]
+      () => []
     );
+
     expect(entries).toEqual([]);
     expect(attachmentInserts).toBe(0);
   });

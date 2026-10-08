@@ -16,6 +16,7 @@ import {
   toLlmToolDefinition,
 } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { z } from "zod";
 import { createProviderForInstance } from "../providers/create";
 import { AgentTodoState } from "../services/agent-todo-state";
 import {
@@ -26,6 +27,17 @@ import {
 import { createTodoTools } from "./todo-tools";
 
 const cassetteName = "todo-write-tool-call";
+
+const TodoCallSchema = z.object({
+  merge: z.boolean(),
+  todos: z.array(
+    z.object({
+      content: z.string(),
+      id: z.string(),
+      status: z.enum(["pending", "in_progress", "completed", "cancelled"]),
+    })
+  ),
+});
 
 test("todo_write requires sessionId", async () => {
   const db = createInMemoryDatabaseAdapter();
@@ -45,6 +57,7 @@ test("todo_write requires sessionId", async () => {
   const tool = createTodoTools(state).find(
     (entry) => entry.name === "todo_write"
   );
+
   if (!tool) {
     throw new Error("todo_write tool missing");
   }
@@ -59,6 +72,7 @@ test("todo_write requires sessionId", async () => {
 
 async function resolveOpenAiInstance(): Promise<ProviderInstance | null> {
   const config = await loadUserConfig();
+
   const configured =
     config?.providers.find(
       (provider) => provider.type === "openai" && provider.apiKey.trim()
@@ -69,6 +83,7 @@ async function resolveOpenAiInstance(): Promise<ProviderInstance | null> {
   }
 
   const apiKey = process.env.OPENAI_API_KEY?.trim();
+
   if (!apiKey) {
     return null;
   }
@@ -126,6 +141,7 @@ test("todo_write schema is callable by a real OpenAI model", async () => {
     const tool = createTodoTools(state).find(
       (entry) => entry.name === "todo_write"
     );
+
     if (!tool) {
       throw new Error("todo_write tool missing");
     }
@@ -146,41 +162,26 @@ test("todo_write schema is callable by a real OpenAI model", async () => {
     const toolCall = result.toolCalls?.[0];
     expect(toolCall?.name).toBe("todo_write");
 
-    const args = toolCall?.arguments ?? {};
-    expect(typeof args.merge).toBe("boolean");
-    expect(Array.isArray(args.todos)).toBe(true);
+    const parsedArgs = TodoCallSchema.safeParse(toolCall?.arguments);
 
-    const todos = args.todos;
-    if (!Array.isArray(todos) || todos.length < 3) {
+    if (!parsedArgs.success || parsedArgs.data.todos.length < 3) {
       throw new Error(
-        `expected todo_write todos array with 3+ items, got ${JSON.stringify(args)}`
+        `expected todo_write todos array with 3+ items, got ${JSON.stringify(toolCall?.arguments)}`
       );
     }
 
-    for (const item of todos) {
-      expect(typeof item === "object" && item !== null).toBe(true);
-      const todo = item as Record<string, unknown>;
-      expect(typeof todo.id).toBe("string");
-      expect(typeof todo.content).toBe("string");
-      expect(typeof todo.status).toBe("string");
-      expect(["pending", "in_progress", "completed", "cancelled"]).toContain(
-        todo.status as string
-      );
-    }
+    const { todos } = parsedArgs.data;
 
-    const inProgress = todos.filter(
-      (item) =>
-        typeof item === "object" &&
-        item !== null &&
-        (item as Record<string, unknown>).status === "in_progress"
-    );
+    const inProgress = todos.filter((item) => item.status === "in_progress");
+
     expect(inProgress.length).toBeGreaterThanOrEqual(1);
 
-    const stored = await tool.run(args, { sessionId: "session_llm" });
-    expect(stored).toHaveProperty("todos");
-    expect(Array.isArray((stored as { todos: unknown }).todos)).toBe(true);
-    expect(
-      (stored as { todos: unknown[] }).todos.length
-    ).toBeGreaterThanOrEqual(3);
+    const stored = await tool.run(parsedArgs.data, {
+      sessionId: "session_llm",
+    });
+
+    const storedTodos = TodoCallSchema.shape.todos.parse(stored.todos);
+
+    expect(storedTodos.length).toBeGreaterThanOrEqual(3);
   });
 });

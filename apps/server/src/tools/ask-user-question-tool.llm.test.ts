@@ -16,6 +16,7 @@ import {
   toLlmToolDefinition,
 } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { z } from "zod";
 import { createProviderForInstance } from "../providers/create";
 import { AgentQuestionnaireState } from "../services/agent-questionnaire-state";
 import {
@@ -27,8 +28,21 @@ import { createAskUserQuestionTools } from "./ask-user-question-tool";
 
 const cassetteName = "ask-user-question-tool-call";
 
+const QuestionnaireCallSchema = z.object({
+  questions: z
+    .array(
+      z.object({
+        choices: z.array(z.string()),
+        prompt: z.string(),
+      })
+    )
+    .min(1),
+  title: z.string(),
+});
+
 async function resolveOpenAiInstance(): Promise<ProviderInstance | null> {
   const config = await loadUserConfig();
+
   const configured =
     config?.providers.find(
       (provider) => provider.type === "openai" && provider.apiKey.trim()
@@ -39,6 +53,7 @@ async function resolveOpenAiInstance(): Promise<ProviderInstance | null> {
   }
 
   const apiKey = process.env.OPENAI_API_KEY?.trim();
+
   if (!apiKey) {
     return null;
   }
@@ -96,6 +111,7 @@ test("ask_user_question schema is callable by a real OpenAI model", async () => 
     const tool = createAskUserQuestionTools(state).find(
       (entry) => entry.name === "ask_user_question"
     );
+
     if (!tool) {
       throw new Error("ask_user_question tool missing");
     }
@@ -116,24 +132,19 @@ test("ask_user_question schema is callable by a real OpenAI model", async () => 
     const toolCall = result.toolCalls?.[0];
     expect(toolCall?.name).toBe("ask_user_question");
 
-    const args = toolCall?.arguments ?? {};
-    expect(typeof args.title).toBe("string");
-    expect(Array.isArray(args.questions)).toBe(true);
+    const parsedArgs = QuestionnaireCallSchema.safeParse(toolCall?.arguments);
 
-    const questions = args.questions;
-    if (!Array.isArray(questions) || questions.length === 0) {
+    if (!parsedArgs.success) {
       throw new Error(
-        `expected ask_user_question questions array, got ${JSON.stringify(args)}`
+        `expected ask_user_question questions array, got ${JSON.stringify(toolCall?.arguments)}`
       );
     }
-    const first = questions[0];
-    expect(typeof first === "object" && first !== null).toBe(true);
-    const question = first as Record<string, unknown>;
-    expect(typeof question.prompt).toBe("string");
-    expect(Array.isArray(question.choices)).toBe(true);
-    expect(typeof (question.choices as unknown[])[0]).toBe("string");
 
-    const stored = await tool.run(args, { sessionId: "session_llm" });
-    expect(stored).toHaveProperty("questionnaire");
+    expect(parsedArgs.data.questions[0]?.choices.length).toBeGreaterThan(0);
+
+    const stored = await tool.run(parsedArgs.data, {
+      sessionId: "session_llm",
+    });
+    expect(stored.questionnaire.title).toBe(parsedArgs.data.title);
   });
 });

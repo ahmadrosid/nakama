@@ -1,3 +1,14 @@
+import { z } from "zod";
+
+const ActivityInputSchema = z.object({
+  command: z.string().optional(),
+  path: z.string().optional(),
+  query: z.string().optional(),
+  url: z.string().optional(),
+});
+
+type ActivityInput = z.infer<typeof ActivityInputSchema>;
+
 function truncateDisplay(value: string, maxLength: number): string {
   const trimmed = value.trim();
 
@@ -11,24 +22,29 @@ function truncateDisplay(value: string, maxLength: number): string {
 function basename(value: string): string {
   const normalized = value.replace(/\\/g, "/");
   const parts = normalized.split("/");
+
   return parts[parts.length - 1] || normalized;
 }
 
 function readString(
-  input: Record<string, unknown> | undefined,
-  key: string
+  input: ActivityInput,
+  key: keyof ActivityInput
 ): string | null {
-  const value = input?.[key];
-  return typeof value === "string" && value.trim() ? value.trim() : null;
+  const value = input[key]?.trim();
+
+  return value || null;
 }
 
 /** Short status line for sub-agent child tool activity shown in the parent chat UI. */
 export function formatToolActivityLabel(
   tool: string | undefined,
-  input?: Record<string, unknown>
+  input?: ActivityInput
 ): string {
+  const parsedInput = ActivityInputSchema.safeParse(input);
+  const details = parsedInput.success ? parsedInput.data : {};
+
   if (tool === "read_file") {
-    const path = readString(input, "path");
+    const path = readString(details, "path");
 
     if (path) {
       return `Reading ${basename(path)}`;
@@ -36,8 +52,8 @@ export function formatToolActivityLabel(
   }
 
   if (tool === "search_files") {
-    const query = readString(input, "query");
-    const path = readString(input, "path");
+    const query = readString(details, "query");
+    const path = readString(details, "path");
 
     if (query && path) {
       return `Searching ${basename(path)} · ${truncateDisplay(query, 48)}`;
@@ -49,7 +65,7 @@ export function formatToolActivityLabel(
   }
 
   if (tool === "knowledge_base_search") {
-    const query = readString(input, "query");
+    const query = readString(details, "query");
 
     if (query) {
       return `Searching docs · ${truncateDisplay(query, 56)}`;
@@ -57,11 +73,12 @@ export function formatToolActivityLabel(
   }
 
   if (tool === "web_fetch") {
-    const url = readString(input, "url");
+    const url = readString(details, "url");
 
     if (url) {
       try {
         const hostname = new URL(url).hostname.replace(/^www\./, "");
+
         return `Fetching ${truncateDisplay(hostname, 48)}`;
       } catch {
         return `Fetching ${truncateDisplay(url, 56)}`;
@@ -70,7 +87,7 @@ export function formatToolActivityLabel(
   }
 
   if (tool === "web_search") {
-    const query = readString(input, "query");
+    const query = readString(details, "query");
 
     if (query) {
       return `Searching web · ${truncateDisplay(query, 56)}`;
@@ -78,7 +95,7 @@ export function formatToolActivityLabel(
   }
 
   if (tool === "bash") {
-    const command = readString(input, "command");
+    const command = readString(details, "command");
 
     if (command) {
       return `Running ${truncateDisplay(command.split("\n")[0] ?? command, 64)}`;
@@ -110,15 +127,18 @@ export function formatToolActivityLabel(
   }
 
   const query = readString(input, "query");
+
   if (query) {
     return truncateDisplay(query, 72);
   }
 
   const path = readString(input, "path");
+
   if (path) {
     return basename(path);
   }
 
   const displayTool = tool?.replace(/^[^_]+__/, "") ?? "tool";
+
   return `Using ${displayTool}`;
 }

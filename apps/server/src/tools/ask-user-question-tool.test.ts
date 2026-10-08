@@ -23,6 +23,7 @@ async function createTool() {
   const tool = createAskUserQuestionTools(state).find(
     (entry) => entry.name === "ask_user_question"
   );
+
   return { state, tool: tool! };
 }
 

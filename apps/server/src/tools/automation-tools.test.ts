@@ -9,6 +9,7 @@ import {
   getTelegramConfigDir,
   getTelegramConfigPath,
   NakamaApiError,
+  type ToolContext,
 } from "@nakama/core";
 import { AutomationRunner } from "../services/automation-runner";
 import { AutomationService } from "../services/automation-service";
@@ -26,7 +27,7 @@ const TOOL_CONTEXT = {
   orgId: ORG_ID,
   orgRole: "member",
   profileId: PROFILE_ID,
-};
+} satisfies ToolContext;
 
 function getRunAutomationTool(
   service: AutomationService,
@@ -77,12 +78,16 @@ describe("viewer automation mutation access", () => {
   for (const channel of AGENT_CHANNELS) {
     test(`rejects create_automation from a viewer ${channel} session`, async () => {
       const db = await createTestDb();
+
       const service = new AutomationService(db, {
         getUserTimezone: async () => "UTC",
       });
+
+      // SAFETY: This fake agent service implements only the method exercised by this test.
       const runner = new AutomationRunner(service, {
         runAutomationPrompt: async () => "unused",
       } as never);
+
       const tool = getCreateAutomationTool(service, runner);
 
       await expect(
@@ -93,7 +98,7 @@ describe("viewer automation mutation access", () => {
             prompt: "Summarize news",
             trigger: { type: "manual" },
           },
-          { ...TOOL_CONTEXT, channel, orgRole: "viewer" } as never
+          { ...TOOL_CONTEXT, channel, orgRole: "viewer" }
         )
       ).rejects.toMatchObject({ status: 403 });
       expect((await service.listForOrg(ORG_ID)).automations).toEqual([]);
@@ -101,9 +106,11 @@ describe("viewer automation mutation access", () => {
 
     test(`rejects delete_automation from a viewer ${channel} session`, async () => {
       const db = await createTestDb();
+
       const service = new AutomationService(db, {
         getUserTimezone: async () => "UTC",
       });
+
       const automation = await service.create(
         ORG_ID,
         {
@@ -114,26 +121,34 @@ describe("viewer automation mutation access", () => {
         },
         PROFILE_ID
       );
+
+      // SAFETY: This fake agent service implements only the method exercised by this test.
       const runner = new AutomationRunner(service, {
         runAutomationPrompt: async () => "unused",
       } as never);
+
       const tool = getDeleteAutomationTool(service, runner);
 
       await expect(
-        tool.run({ automationId: automation.id }, {
-          ...TOOL_CONTEXT,
-          channel,
-          orgRole: "viewer",
-        } as never)
+        tool.run(
+          { automationId: automation.id },
+          {
+            ...TOOL_CONTEXT,
+            channel,
+            orgRole: "viewer",
+          }
+        )
       ).rejects.toMatchObject({ status: 403 });
       expect(await service.get(automation.id, ORG_ID)).not.toBeNull();
     });
 
     test(`rejects run_automation from a viewer ${channel} session`, async () => {
       const db = await createTestDb();
+
       const service = new AutomationService(db, {
         getUserTimezone: async () => "UTC",
       });
+
       const automation = await service.create(
         ORG_ID,
         {
@@ -144,21 +159,29 @@ describe("viewer automation mutation access", () => {
         },
         PROFILE_ID
       );
+
       let runCount = 0;
+
+      // SAFETY: This fake agent service implements only the method exercised by this test.
       const runner = new AutomationRunner(service, {
         runAutomationPrompt: async () => {
           runCount += 1;
+
           return "Done";
         },
       } as never);
+
       const tool = getRunAutomationTool(service, runner);
 
       await expect(
-        tool.run({ automationId: automation.id }, {
-          ...TOOL_CONTEXT,
-          channel,
-          orgRole: "viewer",
-        } as never)
+        tool.run(
+          { automationId: automation.id },
+          {
+            ...TOOL_CONTEXT,
+            channel,
+            orgRole: "viewer",
+          }
+        )
       ).rejects.toMatchObject({ status: 403 });
       expect(runCount).toBe(0);
     });
@@ -180,9 +203,11 @@ function getPreviousAutomationRunsTool(service: AutomationService) {
 describe("run_automation tool", () => {
   test("skips an existing automation when its profile is disabled", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
     const automation = await service.create(
       ORG_ID,
       {
@@ -193,18 +218,23 @@ describe("run_automation tool", () => {
       },
       PROFILE_ID
     );
+
     const profile = (await db.getProfile(PROFILE_ID))!;
     await db.upsertProfile({ ...profile, automationsEnabled: false });
+
+    // SAFETY: This fake agent service implements only the method exercised by this test.
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => {
         throw new Error("must not run");
       },
     } as never);
+
     expect(await runner.run(automation.id)).toMatchObject({ skipped: true });
   });
 
   test("returns completed status and output on success", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
@@ -220,14 +250,16 @@ describe("run_automation tool", () => {
       PROFILE_ID
     );
 
+    // SAFETY: This fake agent service implements only the method exercised by this test.
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => "Hello from automation",
     } as never);
+
     const tool = getRunAutomationTool(service, runner);
 
     const result = await tool.run(
       { automationId: automation.id },
-      TOOL_CONTEXT as never
+      TOOL_CONTEXT
     );
 
     expect(result).toEqual({
@@ -241,21 +273,26 @@ describe("run_automation tool", () => {
 
   test("throws when automation is not found", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
+    // SAFETY: This fake agent service implements only the method exercised by this test.
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => "unused",
     } as never);
+
     const tool = getRunAutomationTool(service, runner);
 
     await expect(
-      tool.run({ automationId: "automation_missing" }, TOOL_CONTEXT as never)
+      tool.run({ automationId: "automation_missing" }, TOOL_CONTEXT)
     ).rejects.toThrow("Automation not found.");
   });
 
   test("throws when automation is disabled", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
@@ -272,18 +309,21 @@ describe("run_automation tool", () => {
       PROFILE_ID
     );
 
+    // SAFETY: This fake agent service implements only the method exercised by this test.
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => "unused",
     } as never);
+
     const tool = getRunAutomationTool(service, runner);
 
     await expect(
-      tool.run({ automationId: automation.id }, TOOL_CONTEXT as never)
+      tool.run({ automationId: automation.id }, TOOL_CONTEXT)
     ).rejects.toThrow("Automation is disabled.");
   });
 
   test("throws when automation is already running", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
@@ -301,29 +341,31 @@ describe("run_automation tool", () => {
 
     let releaseFirstRun: (() => void) | undefined;
     let markFirstRunStarted: (() => void) | undefined;
+
     const firstRunHasStarted = new Promise<void>((resolve) => {
       markFirstRunStarted = resolve;
     });
 
+    // SAFETY: This fake agent service implements only the method exercised by this test.
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => {
         markFirstRunStarted?.();
         await new Promise<void>((resolve) => {
           releaseFirstRun = resolve;
         });
+
         return "Done";
       },
     } as never);
+
     const tool = getRunAutomationTool(service, runner);
 
-    const firstRun = tool.run(
-      { automationId: automation.id },
-      TOOL_CONTEXT as never
-    );
+    const firstRun = tool.run({ automationId: automation.id }, TOOL_CONTEXT);
+
     await firstRunHasStarted;
 
     await expect(
-      tool.run({ automationId: automation.id }, TOOL_CONTEXT as never)
+      tool.run({ automationId: automation.id }, TOOL_CONTEXT)
     ).rejects.toThrow("Automation is already running.");
 
     releaseFirstRun?.();
@@ -332,6 +374,7 @@ describe("run_automation tool", () => {
 
   test("returns failed status when the run errors", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
@@ -347,16 +390,18 @@ describe("run_automation tool", () => {
       PROFILE_ID
     );
 
+    // SAFETY: This fake agent service implements only the method exercised by this test.
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => {
         throw new Error("Provider offline");
       },
     } as never);
+
     const tool = getRunAutomationTool(service, runner);
 
     const result = await tool.run(
       { automationId: automation.id },
-      TOOL_CONTEXT as never
+      TOOL_CONTEXT
     );
 
     expect(result).toEqual({
@@ -376,6 +421,7 @@ describe("run_automation tool", () => {
 describe("list_previous_automation_runs tool", () => {
   test("returns previous runs for the current automation only", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
@@ -390,6 +436,7 @@ describe("list_previous_automation_runs tool", () => {
       },
       PROFILE_ID
     );
+
     const otherAutomation = await service.create(
       ORG_ID,
       {
@@ -430,11 +477,15 @@ describe("list_previous_automation_runs tool", () => {
     });
 
     const tool = getPreviousAutomationRunsTool(service);
-    const result = await tool.run({ limit: 5 }, {
-      ...TOOL_CONTEXT,
-      automationId: automation.id,
-      automationRunId: "run_current",
-    } as never);
+
+    const result = await tool.run(
+      { limit: 5 },
+      {
+        ...TOOL_CONTEXT,
+        automationId: automation.id,
+        automationRunId: "run_current",
+      }
+    );
 
     expect(result).toEqual([
       {
@@ -450,12 +501,14 @@ describe("list_previous_automation_runs tool", () => {
 
   test("requires current automation context", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
     const tool = getPreviousAutomationRunsTool(service);
 
-    await expect(tool.run({}, TOOL_CONTEXT as never)).rejects.toThrow(
+    await expect(tool.run({}, TOOL_CONTEXT)).rejects.toThrow(
       "automationId is required."
     );
   });
@@ -474,14 +527,19 @@ describe("create_automation tool", () => {
 
   test("defaults profileId to the chat session profile", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
+    // SAFETY: This fake agent service implements only the method exercised by this test.
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => "unused",
     } as never);
+
     const tool = getCreateAutomationTool(service, runner);
 
+    // SAFETY: The test invokes the create tool and checks fields from its automation result.
     const created = (await tool.run(
       {
         description: "Digest",
@@ -489,7 +547,7 @@ describe("create_automation tool", () => {
         prompt: "Summarize news",
         trigger: { type: "manual" },
       },
-      { ...TOOL_CONTEXT, orgRole: "member" } as never
+      { ...TOOL_CONTEXT, orgRole: "member" }
     )) as { id: string; profileId: string };
 
     expect(created.profileId).toBe(PROFILE_ID);
@@ -498,14 +556,19 @@ describe("create_automation tool", () => {
 
   test("treats blank profileId as the session profile", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
+    // SAFETY: This fake agent service implements only the method exercised by this test.
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => "unused",
     } as never);
+
     const tool = getCreateAutomationTool(service, runner);
 
+    // SAFETY: The test invokes the create tool and checks fields from its automation result.
     const created = (await tool.run(
       {
         description: "Digest",
@@ -514,7 +577,7 @@ describe("create_automation tool", () => {
         prompt: "Summarize news",
         trigger: { type: "manual" },
       },
-      { ...TOOL_CONTEXT, orgRole: "member" } as never
+      { ...TOOL_CONTEXT, orgRole: "member" }
     )) as { profileId: string };
 
     expect(created.profileId).toBe(PROFILE_ID);
@@ -539,11 +602,15 @@ describe("create_automation tool", () => {
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
+    // SAFETY: This fake agent service implements only the method exercised by this test.
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => "unused",
     } as never);
+
     const tool = getCreateAutomationTool(service, runner);
 
+    // SAFETY: The test invokes the create tool and checks fields from its automation result.
     const created = (await tool.run(
       {
         description: "Digest",
@@ -552,7 +619,7 @@ describe("create_automation tool", () => {
         prompt: "Summarize news",
         trigger: { type: "manual" },
       },
-      { ...TOOL_CONTEXT, orgRole: "member" } as never
+      { ...TOOL_CONTEXT, orgRole: "member" }
     )) as { profileId: string };
 
     expect(created.profileId).toBe(otherId);
@@ -577,9 +644,12 @@ describe("create_automation tool", () => {
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
+    // SAFETY: This fake agent service implements only the method exercised by this test.
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => "unused",
     } as never);
+
     const tool = getCreateAutomationTool(service, runner);
 
     await expect(
@@ -591,16 +661,18 @@ describe("create_automation tool", () => {
           prompt: "Summarize news",
           trigger: { type: "manual" },
         },
-        { ...TOOL_CONTEXT, orgRole: "member" } as never
+        { ...TOOL_CONTEXT, orgRole: "member" }
       )
     ).rejects.toMatchObject({ status: 403 });
   });
 
   test("list_automations includes profileId", async () => {
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
     await service.create(
       ORG_ID,
       {
@@ -612,9 +684,11 @@ describe("create_automation tool", () => {
       PROFILE_ID
     );
 
+    // SAFETY: This fake agent service implements only the method exercised by this test.
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => "unused",
     } as never);
+
     const tool = createAutomationTools(service, runner).find(
       (entry) => entry.name === "list_automations"
     );
@@ -623,9 +697,11 @@ describe("create_automation tool", () => {
       throw new Error("list_automations tool not found");
     }
 
-    const listed = (await tool.run({}, TOOL_CONTEXT as never)) as Array<{
+    // SAFETY: The list tool returns session records with profileId, as this test checks.
+    const listed = (await tool.run({}, TOOL_CONTEXT)) as Array<{
       profileId: string;
     }>;
+
     expect(listed[0]?.profileId).toBe(PROFILE_ID);
   });
 
@@ -642,14 +718,19 @@ describe("create_automation tool", () => {
     );
 
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
+    // SAFETY: This fake agent service implements only the method exercised by this test.
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => "unused",
     } as never);
+
     const tool = getCreateAutomationTool(service, runner);
 
+    // SAFETY: The test invokes the create tool and checks fields from its automation result.
     const created = (await tool.run(
       {
         delivery: { channel: "discord" },
@@ -658,7 +739,7 @@ describe("create_automation tool", () => {
         prompt: "Summarize news",
         trigger: { type: "manual" },
       },
-      TOOL_CONTEXT as never
+      TOOL_CONTEXT
     )) as { delivery: unknown; id: string };
 
     expect(created.delivery).toEqual({ channel: "discord" });
@@ -675,15 +756,16 @@ describe("create_automation tool", () => {
           prompt: "Summarize news",
           trigger: { type: "manual" },
         },
-        TOOL_CONTEXT as never
+        TOOL_CONTEXT
       )
       .then(
         () => null,
-        (thrown: unknown) => thrown
+        (thrown: NakamaApiError) => thrown
       );
 
     // A non-admin caller cannot pin delivery to a channel it never paired.
     expect(withChannel).toBeInstanceOf(NakamaApiError);
+    // SAFETY: The preceding matcher checks this rejection is a NakamaApiError.
     expect((withChannel as NakamaApiError).status).toBe(403);
 
     await rm(configDir, { force: true, recursive: true });
@@ -701,12 +783,16 @@ describe("create_automation tool", () => {
     );
 
     const db = await createTestDb();
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
+    // SAFETY: This fake agent service implements only the method exercised by this test.
     const runner = new AutomationRunner(service, {
       runAutomationPrompt: async () => "unused",
     } as never);
+
     const tool = getCreateAutomationTool(service, runner);
 
     const foreign = await tool
@@ -718,16 +804,18 @@ describe("create_automation tool", () => {
           prompt: "Summarize news",
           trigger: { type: "manual" },
         },
-        TOOL_CONTEXT as never
+        TOOL_CONTEXT
       )
       .then(
         () => null,
-        (thrown: unknown) => thrown
+        (thrown: NakamaApiError) => thrown
       );
 
     expect(foreign).toBeInstanceOf(NakamaApiError);
+    // SAFETY: The preceding matcher checks this rejection is a NakamaApiError.
     expect((foreign as NakamaApiError).status).toBe(403);
 
+    // SAFETY: The paired delivery is a created automation result with its delivery field.
     const paired = (await tool.run(
       {
         delivery: { channel: "telegram", chatId: 111 },
@@ -736,7 +824,7 @@ describe("create_automation tool", () => {
         prompt: "Summarize news",
         trigger: { type: "manual" },
       },
-      TOOL_CONTEXT as never
+      TOOL_CONTEXT
     )) as { delivery: unknown };
 
     expect(paired.delivery).toEqual({ channel: "telegram", chatId: 111 });

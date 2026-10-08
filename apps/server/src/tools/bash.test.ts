@@ -20,6 +20,7 @@ describe("host Bash discovery", () => {
     ProgramFiles: "C:\\Program Files",
     "ProgramFiles(x86)": "C:\\Program Files (x86)",
   };
+
   const gitBash = "C:\\Program Files\\Git\\usr\\bin\\bash.exe";
   const gitBashX86 = "C:\\Program Files (x86)\\Git\\usr\\bin\\bash.exe";
   const pathBash = "C:\\msys64\\usr\\bin\\bash.exe";
@@ -105,20 +106,24 @@ async function waitForPositivePid(pidPath: string): Promise<number> {
   for (let attempt = 0; attempt < 500; attempt += 1) {
     try {
       const pid = Number((await readFile(pidPath, "utf8")).trim());
+
       if (Number.isInteger(pid) && pid > 0) {
         return pid;
       }
     } catch {
       // The shell has not created the PID file yet.
     }
+
     await Bun.sleep(10);
   }
+
   return 0;
 }
 
 function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
+
     return true;
   } catch {
     return false;
@@ -137,6 +142,7 @@ describe("bash tool", () => {
 
   test("coding-agent commands preserve quoted arguments in a workspace with spaces", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama bash "));
+
     const result = await runBash(
       {
         codingAgent: true,
@@ -145,6 +151,7 @@ describe("bash tool", () => {
       { orgId: "org_test", profileId: "profile_test" },
       { backend: "host", workspaceRoot }
     );
+
     expect(result.exitCode).toBe(0);
     expect(await readFile(path.join(workspaceRoot, "result.txt"), "utf8")).toBe(
       "quoted argument with spaces"
@@ -163,14 +170,17 @@ describe("bash tool", () => {
             process.platform !== "win32" ||
             attempt >= 5 ||
             !["EBUSY", "EPERM", "ENOTEMPTY"].includes(
+              // SAFETY: Bun file-system busy errors expose Node's standard errno code.
               (error as NodeJS.ErrnoException).code ?? ""
             )
           ) {
             throw error;
           }
+
           await Bun.sleep(100 * (attempt + 1));
         }
       }
+
       workspaceRoot = "";
     }
   });
@@ -184,6 +194,7 @@ describe("bash tool", () => {
         'const fs = require("node:fs"); fs.writeFileSync("heartbeat", String(Date.now())); fs.writeFileSync("child.pid", String(process.pid)); setInterval(() => fs.writeFileSync("heartbeat", String(Date.now())), 20);'
       );
       const controller = new AbortController();
+
       const pending = runBash(
         {
           command: '"$NAKAMA_TEST_BUN" child.cjs & wait',
@@ -203,36 +214,46 @@ describe("bash tool", () => {
           signal: controller.signal,
         },
         { backend: "host", workspaceRoot }
-      ).catch((error: unknown) => error);
+      ).catch((error: Error) => error);
+
       const pid = await waitForPositivePid(
         path.join(workspaceRoot, "child.pid")
       );
+
       try {
         expect(pid).toBeGreaterThan(0);
+
         if (mode === "abort") {
           controller.abort();
         }
+
         const result = await Promise.race([
           pending,
           Bun.sleep(process.platform === "win32" ? 5000 : 2000).then(
             () => "hung"
           ),
         ]);
+
         expect(result).not.toBe("hung");
+
         if (mode === "abort") {
           expect(result).toMatchObject({ name: "AbortError" });
         } else {
           expect(result).toMatchObject({ timedOut: true });
         }
+
         // Reaping descendants can lag the shell's close event slightly.
         for (let i = 0; i < 50 && isProcessAlive(pid); i++) {
           await Bun.sleep(10);
         }
+
         expect(isProcessAlive(pid)).toBe(false);
+
         const heartbeat = await readFile(
           path.join(workspaceRoot, "heartbeat"),
           "utf8"
         );
+
         await Bun.sleep(100);
         expect(
           await readFile(path.join(workspaceRoot, "heartbeat"), "utf8")
@@ -241,6 +262,7 @@ describe("bash tool", () => {
         if (pid > 0 && isProcessAlive(pid)) {
           process.kill(pid, "SIGKILL");
         }
+
         controller.abort();
         await pending;
       }
@@ -249,6 +271,7 @@ describe("bash tool", () => {
 
   test("returns after shell exit when a quiet descendant holds the pipes", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+
     const pending = runBash(
       {
         command: `sleep 30 & ${childPidCommand} > child.pid; echo done; exit 0`,
@@ -256,13 +279,17 @@ describe("bash tool", () => {
       { orgId: "org_test", profileId: "profile_test" },
       { backend: "host", workspaceRoot }
     );
+
     const pid = await waitForPositivePid(path.join(workspaceRoot, "child.pid"));
+
     try {
       expect(pid).toBeGreaterThan(0);
+
       const result = await Promise.race([
         pending,
         Bun.sleep(2000).then(() => "hung"),
       ]);
+
       expect(result).toMatchObject({
         exitCode: 0,
         stdout: "done\n",
@@ -272,6 +299,7 @@ describe("bash tool", () => {
       if (pid > 0 && isProcessAlive(pid)) {
         process.kill(pid, "SIGKILL");
       }
+
       await pending;
     }
   }, 10_000);
@@ -290,6 +318,7 @@ const timer = setInterval(() => {
   if (i === 8) clearInterval(timer);
 }, 40);`
     );
+
     const result = await runBash(
       {
         command:
@@ -299,6 +328,7 @@ const timer = setInterval(() => {
       { orgId: "org_test", profileId: "profile_test" },
       { backend: "host", workspaceRoot }
     );
+
     expect(result).toMatchObject({
       exitCode: 0,
       stdout: "1\n2\n3\n4\n5\n6\n7\n8\n",
@@ -329,6 +359,7 @@ const timer = setInterval(() => {
 
     const controller = new AbortController();
     const startedAt = Date.now();
+
     // 30s beats any plausible test runtime, so finishing fast can only mean the
     // abort killed it rather than the command completing on its own.
     const pending = runBash(
@@ -351,6 +382,7 @@ const timer = setInterval(() => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
     const pidPath = path.join(workspaceRoot, "trapped.pid");
     const controller = new AbortController();
+
     const pending = runBash(
       {
         command: `trap '' TERM; ${process.platform === "win32" ? "cat /proc/$$/winpid" : "echo $$"} > trapped.pid; while :; do sleep 1; done`,
@@ -371,17 +403,20 @@ const timer = setInterval(() => {
 
     let survivedAbort = true;
     const forceKillDeadline = Date.now() + 6500;
+
     while (Date.now() < forceKillDeadline) {
       if (!isProcessAlive(childPid)) {
         survivedAbort = false;
         break;
       }
+
       await Bun.sleep(25);
     }
 
     if (survivedAbort) {
       process.kill(childPid, "SIGKILL");
     }
+
     expect(survivedAbort).toBe(false);
   }, 10_000);
 
@@ -421,6 +456,7 @@ const timer = setInterval(() => {
             },
             { backend: "host" }
           );
+
           expect(result.exitCode).toBe(0);
           expect(result.stdout.trim()).toBe(
             (await realpath(profileWorkspace)).replaceAll("\\", "/")
@@ -438,6 +474,7 @@ const timer = setInterval(() => {
 
   test("ordinary commands use the active user workspace from context", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-user-"));
+
     const result = await runBash(
       { command: process.platform === "win32" ? "pwd -W" : "pwd" },
       {
@@ -456,12 +493,14 @@ const timer = setInterval(() => {
 
   test("CLI commands use the launch directory without coding-agent mode", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+
     const context = {
       channel: "cli" as const,
       codingWorkspaceRoot: workspaceRoot,
       orgId: "org_test",
       profileId: "profile_test",
     };
+
     const nestedDir = path.join(workspaceRoot, "nested");
     await mkdir(nestedDir);
 
@@ -473,6 +512,7 @@ const timer = setInterval(() => {
           backend: "host",
         }
       );
+
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toBe(
         (
@@ -492,6 +532,7 @@ const timer = setInterval(() => {
 
   test("coding-agent workspace selection respects explicit overrides", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
+
     const codingWorkspaceRoot = await mkdtemp(
       path.join(os.tmpdir(), "nakama-coding-workspace-")
     );
@@ -507,6 +548,7 @@ const timer = setInterval(() => {
         profileId: "profile_test",
       }
     );
+
     const ordinaryResult = await runBash(
       { command: process.platform === "win32" ? "pwd -W" : "pwd" },
       {
@@ -636,6 +678,7 @@ const timer = setInterval(() => {
   test("summarizes Cursor stream-json for coding-agent runs and saves a full log", async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "nakama-bash-"));
     const agentPath = path.join(workspaceRoot, "agent");
+
     const stream = [
       '{"type":"system","subtype":"init","model":"composer-2","cwd":"/tmp/repo"}',
       ...Array.from({ length: 80 }, (_, i) =>
@@ -742,6 +785,7 @@ const timer = setInterval(() => {
     await writeFile(path.join(logDir, "keep-me.txt"), "user file", "utf8");
 
     const now = Date.now();
+
     for (let i = 0; i < 15; i++) {
       const name = `old-${String(i).padStart(2, "0")}.log`;
       const filePath = path.join(logDir, name);
