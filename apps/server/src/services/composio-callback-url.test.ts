@@ -16,6 +16,7 @@ describe("composio-callback-url", () => {
     publicUrl: process.env.NAKAMA_PUBLIC_URL,
     webPublicUrl: process.env.NAKAMA_WEB_PUBLIC_URL,
   };
+
   let isolatedConfigDir = "";
 
   beforeEach(() => {
@@ -31,16 +32,19 @@ describe("composio-callback-url", () => {
 
   afterEach(() => {
     rmSync(isolatedConfigDir, { force: true, recursive: true });
+
     if (previous.configDir === undefined) {
       delete process.env.NAKAMA_CONFIG_DIR;
     } else {
       process.env.NAKAMA_CONFIG_DIR = previous.configDir;
     }
+
     if (previous.publicUrl === undefined) {
       delete process.env.NAKAMA_PUBLIC_URL;
     } else {
       process.env.NAKAMA_PUBLIC_URL = previous.publicUrl;
     }
+
     if (previous.webPublicUrl === undefined) {
       delete process.env.NAKAMA_WEB_PUBLIC_URL;
     } else {
@@ -124,6 +128,7 @@ describe("composio-callback-url", () => {
   test("caller headers off the configured URL are refused", () => {
     const previous = process.env.NAKAMA_WEB_PUBLIC_URL;
     process.env.NAKAMA_WEB_PUBLIC_URL = "https://deployed.example.com";
+
     const request = new Request(
       "http://127.0.0.1:4310/v1/composio/toolkits/gmail/connect",
       {
@@ -158,6 +163,7 @@ describe("composio-callback-url", () => {
     await saveUserWebPublicUrl("https://nakama.example.com");
     const previousDesktop = process.env.NAKAMA_DESKTOP;
     process.env.NAKAMA_DESKTOP = "1";
+
     const request = new Request(
       "http://127.0.0.1:50839/v1/sessions/session-1/messages",
       { headers: { Origin: "http://127.0.0.1:50839" }, method: "POST" }
@@ -181,6 +187,7 @@ describe("composio-callback-url", () => {
 
   test("outside the desktop app a saved public URL still refuses loopback", async () => {
     await saveUserWebPublicUrl("https://nakama.example.com");
+
     const request = new Request(
       "http://127.0.0.1:50839/v1/sessions/session-1/messages",
       { headers: { Origin: "http://127.0.0.1:50839" }, method: "POST" }
@@ -193,6 +200,7 @@ describe("composio-callback-url", () => {
 
   test("a saved loopback URL accepts the loopback origin on a new port", () => {
     process.env.NAKAMA_WEB_PUBLIC_URL = "http://127.0.0.1:4391";
+
     const request = new Request(
       "http://127.0.0.1:4392/v1/sessions/s1/messages",
       { headers: { Origin: "http://127.0.0.1:4392" }, method: "POST" }
@@ -214,6 +222,7 @@ describe("composio-callback-url", () => {
     const previousPublicUrl = process.env.NAKAMA_WEB_PUBLIC_URL;
     process.env.NAKAMA_CONFIG_DIR = configDir;
     delete process.env.NAKAMA_WEB_PUBLIC_URL;
+
     const request = new Request(
       "http://127.0.0.1:4310/v1/composio/toolkits/gmail/connect",
       { method: "POST" }
@@ -232,9 +241,11 @@ describe("composio-callback-url", () => {
       } else {
         process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
       }
+
       if (previousPublicUrl !== undefined) {
         process.env.NAKAMA_WEB_PUBLIC_URL = previousPublicUrl;
       }
+
       rmSync(configDir, { force: true, recursive: true });
     }
   });
@@ -261,6 +272,7 @@ describe("composio-callback-url", () => {
       } else {
         process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
       }
+
       rmSync(configDir, { force: true, recursive: true });
     }
   });
@@ -296,11 +308,13 @@ describe("composio-callback-url", () => {
       } else {
         process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
       }
+
       if (previousPublicUrl === undefined) {
         delete process.env.NAKAMA_WEB_PUBLIC_URL;
       } else {
         process.env.NAKAMA_WEB_PUBLIC_URL = previousPublicUrl;
       }
+
       rmSync(configDir, { force: true, recursive: true });
     }
   });
