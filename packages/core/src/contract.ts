@@ -1722,6 +1722,9 @@ export interface UpdateComposioSettingsRequest {
 export interface ErrorTrackingSettingsResponse {
   configured: boolean;
   dsnMasked: string | null;
+  /** Cleared when the DSN changes. */
+  lastTest: { at: string; delivered: boolean } | null;
+  savedAt: string | null;
 }
 
 export interface UpdateErrorTrackingSettingsRequest {

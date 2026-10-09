@@ -6,8 +6,10 @@ import {
   getErrorTrackingConfigPath,
   isErrorTrackingEnabled,
   loadErrorTrackingConfig,
+  loadErrorTrackingSettingsPublic,
   resolveErrorTrackingDsn,
   saveErrorTrackingDsn,
+  saveErrorTrackingTestResult,
 } from "./error-tracking-config";
 
 const DSN = "https://key@errors.example.com/7";
@@ -44,7 +46,7 @@ test("an install with no config file reports nothing", async () => {
 test("a saved DSN round trips and enables reporting", async () => {
   await saveErrorTrackingDsn(DSN);
 
-  expect(await loadErrorTrackingConfig()).toEqual({ dsn: DSN });
+  expect(await loadErrorTrackingConfig()).toMatchObject({ dsn: DSN });
   expect(await isErrorTrackingEnabled()).toBe(true);
 });
 
@@ -89,4 +91,32 @@ test("the env DSN overrides the file, and an empty one means off", () => {
   expect(
     resolveErrorTrackingDsn({ dsn: DSN }, { NAKAMA_ERROR_TRACKING_DSN: "" })
   ).toBeNull();
+});
+
+test("a test result is kept until the DSN changes", async () => {
+  const savedAt = new Date("2026-10-01T10:00:00.000Z");
+  const testedAt = new Date("2026-10-02T11:00:00.000Z");
+
+  await saveErrorTrackingDsn(DSN, savedAt);
+  await saveErrorTrackingTestResult(false, testedAt);
+
+  expect(await loadErrorTrackingSettingsPublic()).toMatchObject({
+    lastTest: { at: testedAt.toISOString(), delivered: false },
+    savedAt: savedAt.toISOString(),
+  });
+  expect(await loadErrorTrackingConfig()).toMatchObject({ dsn: DSN });
+
+  await saveErrorTrackingDsn("https://other@errors.example.com/8");
+
+  expect((await loadErrorTrackingSettingsPublic()).lastTest).toBeNull();
+});
+
+test("a test result is not stored without a DSN", async () => {
+  await saveErrorTrackingTestResult(true);
+
+  expect(await loadErrorTrackingSettingsPublic()).toMatchObject({
+    configured: false,
+    lastTest: null,
+    savedAt: null,
+  });
 });

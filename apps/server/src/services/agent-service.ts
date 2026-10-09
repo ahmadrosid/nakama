@@ -192,6 +192,7 @@ import {
   saveDiscordConfig,
   saveEmailConfig,
   saveErrorTrackingDsn,
+  saveErrorTrackingTestResult,
   saveTelegramConfig,
   saveUserConfig,
   saveUserThinkingSettings,
@@ -1483,6 +1484,8 @@ export class AgentService {
         source: "settings",
       })
     );
+
+    await saveErrorTrackingTestResult(delivered);
 
     return { delivered };
   }

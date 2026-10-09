@@ -8,7 +8,6 @@ import {
 import { Spinner } from "@nakama/ui/spinner";
 import {
   Alert02Icon,
-  CheckmarkCircle02Icon,
   Link01Icon,
   RefreshIcon,
   ViewIcon,
@@ -21,6 +20,10 @@ import {
   useSaveErrorTrackingSettings,
   useSendErrorTrackingTest,
 } from "@/hooks/use-app-queries";
+import {
+  formatSessionRelativeTime,
+  formatSessionTimestamp,
+} from "@/lib/chat-history";
 import { formatError } from "@/lib/client";
 
 export function ErrorTrackingSettingsCard() {
@@ -36,7 +39,6 @@ export function ErrorTrackingSettingsCard() {
   const [showDsn, setShowDsn] = useState(false);
   const [replacing, setReplacing] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [delivered, setDelivered] = useState<boolean | null>(null);
 
   if (isLoading) {
     return (
@@ -50,12 +52,13 @@ export function ErrorTrackingSettingsCard() {
   }
 
   const configured = settings?.configured === true;
+  const lastTest = settings?.lastTest ?? null;
+  const testFailed = configured && lastTest?.delivered === false;
   const editing = !configured || replacing;
   const errorMessage = formError ?? (loadError ? formatError(loadError) : null);
 
   async function save(next: string) {
     setFormError(null);
-    setDelivered(null);
 
     try {
       await saveMutation.mutateAsync({ dsn: next });
@@ -68,11 +71,9 @@ export function ErrorTrackingSettingsCard() {
 
   async function handleTest() {
     setFormError(null);
-    setDelivered(null);
 
     try {
-      const result = await testMutation.mutateAsync();
-      setDelivered(result.delivered);
+      await testMutation.mutateAsync();
     } catch (error) {
       setFormError(formatError(error));
     }
@@ -86,7 +87,7 @@ export function ErrorTrackingSettingsCard() {
     <div className="space-y-4">
       {/* The result leads the page: a saved DSN that rejects events is the state
           an operator must not miss. */}
-      {delivered === false ? (
+      {testFailed ? (
         <div
           className="flex flex-wrap items-center gap-4 rounded-xl border border-destructive/30 bg-destructive/5 p-5"
           role="alert"
@@ -118,22 +119,6 @@ export function ErrorTrackingSettingsCard() {
               </>
             )}
           </Button>
-        </div>
-      ) : null}
-
-      {delivered === true ? (
-        <div
-          className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 text-sm"
-          role="status"
-        >
-          <CheckmarkCircle02Icon
-            aria-hidden
-            className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400"
-          />
-          <span className="text-foreground">
-            Test event delivered. It should appear in your project within a few
-            seconds.
-          </span>
         </div>
       ) : null}
 
@@ -228,10 +213,7 @@ export function ErrorTrackingSettingsCard() {
             <div className="flex flex-wrap gap-2">
               <Button
                 className="shrink-0"
-                onClick={() => {
-                  setReplacing(true);
-                  setDelivered(null);
-                }}
+                onClick={() => setReplacing(true)}
                 size="sm"
                 type="button"
               >
@@ -239,7 +221,7 @@ export function ErrorTrackingSettingsCard() {
               </Button>
               {/* Without this the only way to learn the DSN is wrong is to wait
                   for a real crash. The failure banner carries its own retry. */}
-              {delivered === false ? null : (
+              {testFailed ? null : (
                 <Button
                   className="shrink-0"
                   disabled={testMutation.isPending}
@@ -267,6 +249,41 @@ export function ErrorTrackingSettingsCard() {
               </Button>
             </div>
           </div>
+        )}
+
+        {editing ? null : (
+          <dl className="grid grid-cols-1 gap-4 border-border border-t px-5 py-4 text-sm sm:grid-cols-3">
+            <div className="space-y-1">
+              <dt className="text-muted-foreground">Saved</dt>
+              <dd className="text-foreground">
+                {settings?.savedAt
+                  ? formatSessionTimestamp(settings.savedAt)
+                  : "—"}
+              </dd>
+            </div>
+            <div className="space-y-1">
+              <dt className="text-muted-foreground">Last test</dt>
+              <dd
+                className={
+                  testFailed
+                    ? "text-destructive"
+                    : lastTest
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-foreground"
+                }
+              >
+                {lastTest
+                  ? `${lastTest.delivered ? "Delivered" : "Failed"} · ${formatSessionRelativeTime(lastTest.at)}`
+                  : "Not sent yet"}
+              </dd>
+            </div>
+            <div className="space-y-1">
+              <dt className="text-muted-foreground">Works with</dt>
+              <dd className="text-foreground">
+                Sentry, GlitchTip, Bugsink, Rustrak
+              </dd>
+            </div>
+          </dl>
         )}
 
         {errorMessage ? (
