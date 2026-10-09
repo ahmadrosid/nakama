@@ -315,13 +315,13 @@ function ProfileChatAgentField({
         className="h-full w-auto rounded-none border-0 border-input border-r dark:bg-transparent"
         id="profile-chat-agent"
       >
-        <SelectValue placeholder="Nakama built-in">
+        <SelectValue placeholder="Nakama">
           {presets.find((preset) => preset.id === selectedPresetId)?.label ??
-            (hasCustomAgent ? "Custom command" : "Nakama built-in")}
+            (hasCustomAgent ? "Custom command" : "Nakama")}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value={builtInValue}>Nakama built-in</SelectItem>
+        <SelectItem value={builtInValue}>Nakama</SelectItem>
         {presets.map((preset) => (
           <SelectItem key={preset.id} value={preset.id}>
             {preset.label}
