@@ -40,7 +40,7 @@ import {
   useUpdateProfileMutation,
   useUploadProfileAvatarMutation,
 } from "@/hooks/use-resource-mutations";
-import { presetIdForAgent } from "@/lib/acp-settings";
+import { NO_ACP_AGENT_PRESETS, presetIdForAgent } from "@/lib/acp-settings";
 import { resolveProfilesPageProfileId } from "@/lib/chat-history";
 import { formatError } from "@/lib/client";
 import {
@@ -179,8 +179,11 @@ export function useProfilesPage() {
 
   const updateMutation = useUpdateProfileMutation();
 
-  const acpAgentPresets = useAcpAgentPresetsQuery().data ?? [];
+  const acpAgentPresets =
+    useAcpAgentPresetsQuery().data ?? NO_ACP_AGENT_PRESETS;
+
   const acpAgentId = presetIdForAgent(detail?.acpAgent, acpAgentPresets);
+  const { mutateAsync: updateProfile } = updateMutation;
   const cloneProfileMutation = useCloneProfileMutation();
   const deleteMutation = useDeleteProfileMutation();
   const uploadAvatarMutation = useUploadProfileAvatarMutation();
@@ -513,7 +516,7 @@ export function useProfilesPage() {
       setError(null);
 
       try {
-        await updateMutation.mutateAsync({
+        await updateProfile({
           input: { acpAgent: agent },
           profileId: selectedId,
         });
@@ -521,7 +524,7 @@ export function useProfilesPage() {
         setError(formatError(err));
       }
     },
-    [acpAgentPresets, selectedId, updateMutation]
+    [acpAgentPresets, selectedId, updateProfile]
   );
 
   const switchingProfileRef = useRef(false);

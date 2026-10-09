@@ -1,7 +1,9 @@
 import type { AcpSessionSetting } from "@nakama/core/contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
+import { ACP_PROVIDER_ID, acpModelGroups } from "@/lib/acp-settings";
 import { client } from "@/lib/client";
+import { decodeModelSelection, encodeModelSelection } from "@/lib/models";
 import { queryKeys } from "@/lib/query-keys";
 
 interface UseAcpSettingsOptions {
@@ -17,7 +19,7 @@ interface UseAcpSettingsOptions {
  * session, the profile's draft settings are used; the agent keeps them once
  * the chat starts.
  */
-export function useAcpSettings({
+function useAcpSettings({
   enabled,
   profileId,
   sessionId,
@@ -62,4 +64,82 @@ export function useAcpSettings({
     model: settings.find((setting) => setting.category === "model"),
     setSetting,
   };
+}
+
+interface UseAcpChatControlsOptions {
+  enabled: boolean;
+  profileId: string | null;
+  sessionId: string | null;
+}
+
+/**
+ * What the chat composer shows for an ACP agent: its model list, the chosen
+ * model and effort, and the setters that send a change to the agent.
+ */
+export function useAcpChatControls({
+  enabled,
+  profileId,
+  sessionId,
+}: UseAcpChatControlsOptions) {
+  const { effort, isSaving, model, setSetting } = useAcpSettings({
+    enabled,
+    profileId,
+    sessionId,
+  });
+
+  const providerModelGroups = useMemo(() => acpModelGroups(model), [model]);
+
+  const effortOptions = useMemo(
+    () =>
+      effort?.options.map((option) => ({
+        label: option.name,
+        value: option.value,
+      })),
+    [effort]
+  );
+
+  // Takes the composer's `provider::model` selection and sends only the model id.
+  const setModel = useCallback(
+    (selection: string) => {
+      const decoded = decodeModelSelection(selection);
+
+      if (model && decoded) {
+        setSetting(model.id, decoded.modelId);
+      }
+    },
+    [model, setSetting]
+  );
+
+  const setEffort = useCallback(
+    (value: string) => {
+      if (effort) {
+        setSetting(effort.id, value);
+      }
+    },
+    [effort, setSetting]
+  );
+
+  return useMemo(
+    () => ({
+      currentModelSelection: model
+        ? encodeModelSelection(ACP_PROVIDER_ID, model.currentValue)
+        : null,
+      effortOptions,
+      effortValue: effort?.currentValue ?? "",
+      hasEffort: Boolean(effort),
+      isSaving,
+      providerModelGroups,
+      setEffort,
+      setModel,
+    }),
+    [
+      effort,
+      effortOptions,
+      isSaving,
+      model,
+      providerModelGroups,
+      setEffort,
+      setModel,
+    ]
+  );
 }
