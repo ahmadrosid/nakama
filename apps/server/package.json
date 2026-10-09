@@ -19,7 +19,7 @@
     "@nakama/db": "workspace:*",
     "@openrouter/sdk": "^1.2.108",
     "fflate": "^0.8.3",
-    "hono": "^4.13.10",
+    "hono": "^4.13.13",
     "microsandbox": "0.7.4",
     "openai": "^7.5.0",
     "pacote": "^22.0.0",
