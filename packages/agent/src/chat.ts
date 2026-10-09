@@ -886,6 +886,22 @@ async function runConversation(
       return EMPTY_REPLY_NOTICE;
     }
 
+    // Steps the provider already ran are saved in order, each with the text before it,
+    // then the final answer. They are never run again.
+    for (const step of result.completedToolCalls ?? []) {
+      history.push({
+        content: step.textBefore ?? "",
+        role: "assistant",
+        toolCalls: [step.call],
+      });
+      history.push({
+        content: JSON.stringify(step.result ?? null),
+        name: step.call.name,
+        role: "tool",
+        toolCallId: step.call.id,
+      });
+    }
+
     history.push(
       result.usage
         ? { ...result.assistantMessage, usage: result.usage }

@@ -2882,6 +2882,16 @@ export interface ChatTurnUsage {
 
 export interface ChatCompletionResult {
   assistantMessage: Extract<ChatMessage, { role: "assistant" }>;
+  /**
+   * Tool steps the provider already ran and finished. They are saved to history
+   * as tool results and are not run again.
+   */
+  completedToolCalls?: Array<{
+    call: ToolCall;
+    result: unknown;
+    /** Text the agent wrote just before this step. */
+    textBefore?: string;
+  }>;
   content: string;
   toolCalls: ToolCall[];
   usage?: ChatUsage;
