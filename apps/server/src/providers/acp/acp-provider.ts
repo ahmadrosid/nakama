@@ -12,6 +12,7 @@ import {
   type AcpAgentProcess,
   startAcpAgentProcess,
 } from "./acp-agent-process";
+import { isEditInsideFolder } from "./acp-edit-policy";
 import { isNakamaToolPermission, moveAcpToolAccess } from "./acp-mcp-tools";
 import { createAcpUpdateMapper } from "./acp-session-events";
 
@@ -277,9 +278,11 @@ async function getOrStartProcess(
     },
     {
       requestPermission: async (params) => {
-        // Only the chat's own Nakama tools are approved. Every other request is
-        // denied until the approval flow exists for ACP agents.
-        const approve = isNakamaToolPermission(route.key, params.toolCall);
+        // Approved: the chat's own Nakama tools, and edits to files inside the
+        // profile folder. Commands and edits outside the folder are denied.
+        const approve =
+          isNakamaToolPermission(route.key, params.toolCall) ||
+          isEditInsideFolder(options.cwd, params.toolCall);
 
         const choice = params.options.find((option) =>
           approve
