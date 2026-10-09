@@ -1,5 +1,5 @@
 import type * as acp from "@agentclientprotocol/sdk";
-import type { JsonValue, StreamChatHandlers } from "@nakama/core";
+import type { JsonValue, StreamChatHandlers, ToolCall } from "@nakama/core";
 import { readRecord } from "../shared";
 
 const NAKAMA_MCP_PREFIX = "mcp__nakama__";
@@ -17,6 +17,8 @@ const BUILT_IN_TOOLS = new Map([
 interface ToolRecord {
   input: Record<string, JsonValue>;
   started: boolean;
+  /** Text the agent wrote before this step, so the step can be saved after it. */
+  textBefore: string;
   tool: string;
 }
 
@@ -28,7 +30,14 @@ interface ToolRecord {
  */
 export function createAcpUpdateMapper(handlers: StreamChatHandlers) {
   const tools = new Map<string, ToolRecord>();
+  const completed: Array<{
+    call: ToolCall;
+    result: unknown;
+    textBefore: string;
+  }> = [];
   let assistantText = "";
+  // Text since the last tool step. The final answer is what is left after the last step.
+  let segmentText = "";
 
   function start(toolCallId: string, record: ToolRecord): void {
     if (record.started) {
@@ -36,6 +45,8 @@ export function createAcpUpdateMapper(handlers: StreamChatHandlers) {
     }
 
     record.started = true;
+    record.textBefore = segmentText;
+    segmentText = "";
     handlers.onToolStart?.({
       input: record.input,
       tool: record.tool,
@@ -47,6 +58,7 @@ export function createAcpUpdateMapper(handlers: StreamChatHandlers) {
     const record = tools.get(update.toolCallId) ?? {
       input: {},
       started: false,
+      textBefore: "",
       tool: "tool",
     };
 
@@ -67,6 +79,10 @@ export function createAcpUpdateMapper(handlers: StreamChatHandlers) {
   return {
     assistantText: () => assistantText,
 
+    completedToolCalls: () => completed,
+
+    finalText: () => segmentText,
+
     handle(notification: acp.SessionNotification): void {
       const update = notification.update;
 
@@ -77,6 +93,7 @@ export function createAcpUpdateMapper(handlers: StreamChatHandlers) {
           }
 
           assistantText += update.content.text;
+          segmentText += update.content.text;
           handlers.onChunk(update.content.text);
 
           return;
@@ -113,10 +130,22 @@ export function createAcpUpdateMapper(handlers: StreamChatHandlers) {
 
           start(update.toolCallId, record);
 
+          const result = update.rawOutput ?? update.content ?? null;
+
           handlers.onToolEnd?.({
-            result: update.rawOutput ?? update.content ?? null,
+            result,
             tool: record.tool,
             toolCallId: update.toolCallId,
+          });
+
+          completed.push({
+            call: {
+              arguments: record.input,
+              id: update.toolCallId,
+              name: record.tool,
+            },
+            result,
+            textBefore: record.textBefore,
           });
 
           tools.delete(update.toolCallId);

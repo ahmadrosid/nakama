@@ -97,7 +97,9 @@ export function createAcpProvider(options: AcpProviderOptions): ProviderClient {
     const content = mapper.assistantText();
 
     return {
-      assistantMessage: { content, role: "assistant" },
+      // The text after the last step is the answer. Earlier text is saved with its step.
+      assistantMessage: { content: mapper.finalText(), role: "assistant" },
+      completedToolCalls: mapper.completedToolCalls(),
       content,
       toolCalls: [],
     };
