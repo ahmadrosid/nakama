@@ -58,7 +58,11 @@ export function ChatThinkingEffortControl({
           <div className="inline-flex">
             <PromptInputSelect
               disabled={disabled}
-              onValueChange={(value) => onEffortChange(value)}
+              onValueChange={(value) => {
+                if (value) {
+                  onEffortChange(value);
+                }
+              }}
               value={effort}
             >
               <PromptInputSelectTrigger
