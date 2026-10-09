@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { splitExternalUrl } from "./external-link-url";
+import { splitExternalUrl } from "./external-link-safety-modal";
 
 describe("splitExternalUrl", () => {
   test("highlights host between protocol and path", () => {

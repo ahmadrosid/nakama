@@ -10,7 +10,26 @@ import {
 import { Cancel01Icon } from "hugeicons-react";
 import { useState } from "react";
 import type { LinkSafetyModalProps } from "streamdown";
-import { splitExternalUrl } from "@/lib/external-link-url";
+
+/** Split a URL so the host can be emphasized in the external-link safety dialog. */
+export function splitExternalUrl(url: string): {
+  prefix: string;
+  host: string;
+  suffix: string;
+} {
+  try {
+    const parsed = new URL(url);
+    const prefix = `${parsed.protocol}//`;
+    const host = parsed.host;
+    const suffix = url.slice(prefix.length + host.length);
+
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
+    return { host, prefix, suffix };
+  } catch {
+    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
+    return { host: url, prefix: "", suffix: "" };
+  }
+}
 
 const LEARN_MORE_HREF =
   "https://www.cisa.gov/secure-our-world/recognize-and-report-phishing";

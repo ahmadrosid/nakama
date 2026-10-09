@@ -1,4 +1,5 @@
 import type { McpServerSummary } from "@nakama/core/contract";
+import { isPreinstalledMcpServerId } from "@nakama/core/mcp/preinstalled";
 import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
 import { Spinner } from "@nakama/ui/spinner";
@@ -15,7 +16,16 @@ import {
 } from "hugeicons-react";
 import { useId } from "react";
 import { McpServerTools } from "@/components/soul-tools/mcp-tab/McpServerTools";
-import { mcpServerDeleteBlockReason } from "@/components/soul-tools/mcp-tab/mcp-server-delete-block-reason";
+
+export function mcpServerDeleteBlockReason(
+  server: McpServerSummary
+): string | null {
+  if (isPreinstalledMcpServerId(server.id)) {
+    return "Preinstalled MCP servers cannot be deleted.";
+  }
+
+  return null;
+}
 
 export function McpPageState({
   message,

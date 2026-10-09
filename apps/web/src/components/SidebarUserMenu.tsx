@@ -18,19 +18,32 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
 import {
   Building03Icon,
+  ComputerIcon,
   Logout03Icon,
+  MoonIcon,
   SparklesIcon,
+  Sun01Icon,
   UserIcon,
 } from "hugeicons-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { THEME_OPTIONS } from "@/components/theme-options";
 import { UserContextEditorDialog } from "@/components/UserContextCard";
 import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
 import { client, formatError } from "@/lib/client";
 import { canAccessSystemPage, PAGE_PATHS } from "@/lib/navigation";
+import type { Theme } from "@/lib/theme";
+
+const THEME_OPTIONS: {
+  id: Theme;
+  label: string;
+  icon: typeof Sun01Icon;
+}[] = [
+  { icon: Sun01Icon, id: "light", label: "Light" },
+  { icon: MoonIcon, id: "dark", label: "Dark" },
+  { icon: ComputerIcon, id: "system", label: "System" },
+];
 
 export function SidebarUserMenu() {
   const { user, activeOrg, logout, refreshSession } = useAuth();

@@ -63,7 +63,6 @@ import {
   type QueuedComposerMessage,
 } from "@/components/chat/ChatMessageQueuePanel";
 import { ChatAddCapabilitiesDialogs } from "@/components/chat/chat-add-capabilities-dialogs";
-import { composerActions } from "@/components/chat/chat-composer-actions";
 import { ChatContextUsageRing } from "@/components/chat/chat-context-usage";
 import { ChatSkillPicker } from "@/components/chat/chat-skill-picker";
 import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overlay";
@@ -110,6 +109,18 @@ import {
   LONG_PASTE_WORD_THRESHOLD,
 } from "@/lib/pasted-text";
 import { ChatComposerError, ChatTips } from "./chat-tips";
+
+/**
+ * Stop must stay reachable while a turn is running. It used to be hidden as soon
+ * as the composer had text, so typing the next message swapped Stop for Queue and
+ * left no way to cancel: the turn kept the session and every send came back 409.
+ */
+export function composerActions(state: {
+  canStop: boolean;
+  hasContent: boolean;
+}) {
+  return { showStop: state.canStop, showSubmit: state.hasContent };
+}
 
 interface ChatComposerBaseProps {
   busy: boolean;

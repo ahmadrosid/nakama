@@ -8,7 +8,21 @@ import type {
   WorkflowStep,
 } from "@nakama/core/contract";
 import { validateWorkflowSteps, type WorkflowRecord } from "./workflow-ops";
-import { validateWorkflowInput } from "./workflow-validate";
+
+function validateWorkflowInput(input: {
+  name: string | undefined;
+  steps: unknown;
+}): void {
+  const name = input.name?.trim() ?? "";
+
+  if (!name) {
+    throw new Error("Workflow name is required.");
+  }
+
+  if (!Array.isArray(input.steps) || input.steps.length === 0) {
+    throw new Error("Workflow steps are required.");
+  }
+}
 
 export class WorkflowService {
   readonly db: Database;

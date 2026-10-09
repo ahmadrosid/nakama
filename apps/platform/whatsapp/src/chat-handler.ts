@@ -53,7 +53,6 @@ import {
   parsePreparedWhatsAppArtifact,
   sendArtifactDocumentForPath,
 } from "./channel-artifact-flow";
-import { isChannelDebugEnabled } from "./channel-log";
 import type { WhatsAppBridgeConfig } from "./config";
 import {
   HELP_TEXT,
@@ -74,6 +73,11 @@ import {
 } from "./inbound-message";
 import { maskWhatsAppJid } from "./log-metadata";
 import { WhatsAppTodoStatusMessage } from "./todo-status-message";
+
+/** Optional verbose channel worker logging (per-message structural info). */
+function isChannelDebugEnabled(): boolean {
+  return process.env.NAKAMA_CH_DEBUG === "1";
+}
 
 const chatLock = createChatLock();
 

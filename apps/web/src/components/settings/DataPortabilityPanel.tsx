@@ -16,7 +16,21 @@ import {
   useRestoreDataImport,
 } from "@/hooks/use-data-portability";
 import { formatError } from "@/lib/client";
-import { downloadArchive } from "@/lib/download-archive";
+
+/** Trigger a browser download for an in-memory archive. */
+function downloadArchive(filename: string, data: ArrayBuffer): void {
+  const url = URL.createObjectURL(
+    new Blob([data], { type: "application/zip" })
+  );
+
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
 
 const DownloadIcon = ({ className }: SVGProps<SVGSVGElement>) => (
   <Download04Icon className={className} />
