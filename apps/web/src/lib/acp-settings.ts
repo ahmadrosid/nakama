@@ -29,6 +29,12 @@ export function presetIdForAgent(
   return match?.id ?? null;
 }
 
+export function acpAgentSettingsKey(
+  agent: AcpAgentConfig | null | undefined
+): string {
+  return agent ? `${agent.command}\u0000${agent.args.join("\u0000")}` : "";
+}
+
 /** Provider id for models an ACP agent reports. Never a real provider instance. */
 export const ACP_PROVIDER_ID = "acp";
 

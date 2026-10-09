@@ -56,6 +56,13 @@ type IdentityState = Pick<
   | "acpAgentId"
   | "acpAgentPresets"
   | "handleEditAcpAgent"
+  | "acpCurrentModelSelection"
+  | "acpEffortOptions"
+  | "acpEffortValue"
+  | "acpIsSaving"
+  | "acpModelGroups"
+  | "setAcpEffort"
+  | "setAcpModel"
 >;
 
 export function ProfileConfigIdentitySection({
@@ -87,6 +94,13 @@ export function ProfileConfigIdentitySection({
     acpAgentId,
     acpAgentPresets,
     handleEditAcpAgent,
+    acpCurrentModelSelection,
+    acpEffortOptions,
+    acpEffortValue,
+    acpIsSaving,
+    acpModelGroups,
+    setAcpEffort,
+    setAcpModel,
   } = state;
 
   if (!detail) {
@@ -150,13 +164,46 @@ export function ProfileConfigIdentitySection({
               />
 
               <ProfileModelField
-                disabled={identityDisabled}
-                editModel={editModel}
-                modelInCatalog={modelInCatalog}
-                modelSelectionValue={modelSelectionValue}
-                onChange={handleEditModelChange}
-                providerModelGroups={providerModelGroups}
+                disabled={identityDisabled || acpIsSaving}
+                editModel={
+                  detail.acpAgent ? acpCurrentModelSelection : editModel
+                }
+                modelInCatalog={detail.acpAgent ? true : modelInCatalog}
+                modelSelectionValue={
+                  detail.acpAgent
+                    ? acpCurrentModelSelection
+                    : modelSelectionValue
+                }
+                onChange={detail.acpAgent ? setAcpModel : handleEditModelChange}
+                providerModelGroups={
+                  detail.acpAgent ? acpModelGroups : providerModelGroups
+                }
               />
+              {detail.acpAgent && acpEffortOptions?.length ? (
+                <Select
+                  disabled={identityDisabled || acpIsSaving}
+                  onValueChange={(value) => {
+                    if (value) {
+                      setAcpEffort(value);
+                    }
+                  }}
+                  value={acpEffortValue}
+                >
+                  <SelectTrigger
+                    aria-label="Reasoning effort"
+                    className="h-full w-auto rounded-none border-0 dark:bg-transparent"
+                  >
+                    <SelectValue placeholder="Effort" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {acpEffortOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
             </div>
           </Field>
         </div>
@@ -207,7 +254,7 @@ function ProfileModelField({
   editModel: string | null;
   modelInCatalog: boolean;
   modelSelectionValue: string | null;
-  onChange: (model: string | null) => void;
+  onChange: (model: string) => void;
   providerModelGroups: ProfilesPageState["providerModelGroups"];
 }) {
   const [modelPickerOpen, setModelPickerOpen] = useState(false);

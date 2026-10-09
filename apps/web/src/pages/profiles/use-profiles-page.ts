@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
+import { useAcpChatControls } from "@/hooks/use-acp-settings";
 import {
   useAcpAgentPresetsQuery,
   useMcpServersQuery,
@@ -40,7 +41,11 @@ import {
   useUpdateProfileMutation,
   useUploadProfileAvatarMutation,
 } from "@/hooks/use-resource-mutations";
-import { NO_ACP_AGENT_PRESETS, presetIdForAgent } from "@/lib/acp-settings";
+import {
+  acpAgentSettingsKey,
+  NO_ACP_AGENT_PRESETS,
+  presetIdForAgent,
+} from "@/lib/acp-settings";
 import { resolveProfilesPageProfileId } from "@/lib/chat-history";
 import { formatError } from "@/lib/client";
 import {
@@ -181,6 +186,13 @@ export function useProfilesPage() {
 
   const acpAgentPresets =
     useAcpAgentPresetsQuery().data ?? NO_ACP_AGENT_PRESETS;
+
+  const acpModelControls = useAcpChatControls({
+    agentKey: acpAgentSettingsKey(detail?.acpAgent),
+    enabled: Boolean(detail?.acpAgent),
+    profileId: selectedId,
+    sessionId: null,
+  });
 
   const acpAgentId = presetIdForAgent(detail?.acpAgent, acpAgentPresets);
   const { mutateAsync: updateProfile } = updateMutation;
@@ -1154,6 +1166,11 @@ export function useProfilesPage() {
   return {
     acpAgentId,
     acpAgentPresets,
+    acpCurrentModelSelection: acpModelControls.currentModelSelection,
+    acpEffortOptions: acpModelControls.effortOptions,
+    acpEffortValue: acpModelControls.effortValue,
+    acpIsSaving: acpModelControls.isSaving,
+    acpModelGroups: acpModelControls.providerModelGroups,
     allMcpServers,
     allSkills,
     allTools,
@@ -1229,6 +1246,8 @@ export function useProfilesPage() {
     removeConfirm,
     saveStatus,
     selectedId,
+    setAcpEffort: acpModelControls.setEffort,
+    setAcpModel: acpModelControls.setModel,
     setCreateOpen,
     setDeleteOpen,
     setDetailTab,

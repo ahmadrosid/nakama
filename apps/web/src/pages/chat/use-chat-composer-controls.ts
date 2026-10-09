@@ -16,6 +16,7 @@ import {
 
 interface ChatComposerControlsInput {
   /** The profile uses an ACP agent, so the agent's settings replace the workspace lists. */
+  acpAgentKey: string;
   acpEnabled: boolean;
   busy: boolean;
   canManageInstallSettings: boolean;
@@ -36,6 +37,7 @@ interface ChatComposerControlsInput {
  * lists and levels. Other profiles get the workspace's, as before.
  */
 export function useChatComposerControls({
+  acpAgentKey,
   acpEnabled,
   busy,
   canManageInstallSettings,
@@ -51,6 +53,7 @@ export function useChatComposerControls({
   thinkingSettingsLoading,
 }: ChatComposerControlsInput) {
   const acp = useAcpChatControls({
+    agentKey: acpAgentKey,
     enabled: acpEnabled,
     profileId,
     sessionId,

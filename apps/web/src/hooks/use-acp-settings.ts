@@ -8,6 +8,7 @@ import { queryKeys } from "@/lib/query-keys";
 
 interface UseAcpSettingsOptions {
   /** Only profiles that use an ACP agent have settings. */
+  agentKey: string;
   enabled: boolean;
   profileId: string | null;
   /** Null before the first message: the draft settings apply then. */
@@ -20,6 +21,7 @@ interface UseAcpSettingsOptions {
  * the chat starts.
  */
 function useAcpSettings({
+  agentKey,
   enabled,
   profileId,
   sessionId,
@@ -27,8 +29,8 @@ function useAcpSettings({
   const queryClient = useQueryClient();
 
   const queryKey = sessionId
-    ? queryKeys.acpSettings.session(sessionId)
-    : queryKeys.acpSettings.profile(profileId ?? "");
+    ? queryKeys.acpSettings.session(sessionId, agentKey)
+    : queryKeys.acpSettings.profile(profileId ?? "", agentKey);
 
   const query = useQuery({
     enabled: enabled && Boolean(sessionId || profileId),
@@ -67,6 +69,7 @@ function useAcpSettings({
 }
 
 interface UseAcpChatControlsOptions {
+  agentKey: string;
   enabled: boolean;
   profileId: string | null;
   sessionId: string | null;
@@ -77,11 +80,13 @@ interface UseAcpChatControlsOptions {
  * model and effort, and the setters that send a change to the agent.
  */
 export function useAcpChatControls({
+  agentKey,
   enabled,
   profileId,
   sessionId,
 }: UseAcpChatControlsOptions) {
   const { effort, isSaving, model, setSetting } = useAcpSettings({
+    agentKey,
     enabled,
     profileId,
     sessionId,

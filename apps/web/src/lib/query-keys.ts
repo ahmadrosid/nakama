@@ -1,10 +1,10 @@
 export const queryKeys = {
   acpAgentPresets: ["acpAgentPresets"] as const,
   acpSettings: {
-    profile: (profileId: string) =>
-      ["acpSettings", "profile", profileId] as const,
-    session: (sessionId: string) =>
-      ["acpSettings", "session", sessionId] as const,
+    profile: (profileId: string, agentKey: string) =>
+      ["acpSettings", "profile", profileId, agentKey] as const,
+    session: (sessionId: string, agentKey: string) =>
+      ["acpSettings", "session", sessionId, agentKey] as const,
   },
   agentBrowser: {
     settings: ["agentBrowser", "settings"] as const,

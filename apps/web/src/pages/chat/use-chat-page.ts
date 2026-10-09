@@ -37,6 +37,7 @@ import {
   useBranchSessionMutation,
   useUpdateSessionMutation,
 } from "@/hooks/use-resource-mutations";
+import { acpAgentSettingsKey } from "@/lib/acp-settings";
 import type { FileUIPart } from "@/lib/ai-ui-types";
 import {
   buildChatBasePath,
@@ -345,6 +346,7 @@ export function useChatPage() {
   // An ACP profile picks its model and effort from the agent. The composer
   // controls hook chooses the agent's lists or the workspace's.
   const composer = useChatComposerControls({
+    acpAgentKey: acpAgentSettingsKey(activeProfile?.acpAgent),
     acpEnabled: Boolean(activeProfile?.acpAgent),
     busy,
     canManageInstallSettings,
