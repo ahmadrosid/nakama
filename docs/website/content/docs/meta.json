@@ -37,6 +37,7 @@
     "image-generation",
     "token-optimiser",
     "coding-agent",
+    "acp-agents",
     "workflows",
     "agent-browser",
     "mcp",

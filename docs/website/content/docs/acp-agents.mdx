@@ -1,0 +1,33 @@
+---
+title: "ACP chat agents"
+description: "Run Claude or Codex as the chat agent for a Nakama profile with the Agent Client Protocol."
+---
+
+Nakama can run a Claude or Codex agent as the chat agent for a profile. The agent runs on the Nakama server and uses the Agent Client Protocol (ACP) to send replies and tool updates to Nakama.
+
+## Why use an ACP agent
+
+Use an ACP agent when you want a coding agent to handle a profile's chat turns. Nakama still manages the profile, chat, and tool access. The ACP agent runs its own model loop and returns its updates to the chat.
+
+ACP agents can use the Nakama tools assigned to the profile. They can also edit files inside that profile's workspace. Nakama denies shell commands and file edits outside that workspace.
+
+## Set the chat agent
+
+1. Open **Agents** in the dashboard and select a profile.
+2. In the profile header, open **Chat agent**.
+3. Select **Claude** or **Codex**. Select **Nakama** to return to the built-in agent.
+4. Open a chat with that profile and send a message.
+
+Only platform admins can change a profile's chat agent. The model and reasoning choices in chat come from the selected ACP agent. The composer shows the choices that agent supports.
+
+## Server requirements
+
+The ACP agent runs as a child process on the machine that runs Nakama. The server image includes the Claude and Codex ACP packages. The agent may still need its own provider credentials or sign-in on that machine before it can answer.
+
+Keep the server able to start child processes. In Docker deployments, configure credentials for the container, not only for the host. Follow the selected agent's instructions for authentication and model access.
+
+An ACP agent uses the profile's workspace as its working directory. Nakama gives it access only to tools assigned to that profile. Review those tools before you enable an ACP agent for a profile.
+
+## Change back to Nakama
+
+Open the profile's **Chat agent** menu and select **Nakama**. New chat turns then use Nakama's built-in agent loop.
