@@ -227,13 +227,23 @@ async function checkComposerInBrowser(): Promise<void> {
     });
     await new Promise((resolve) => setTimeout(resolve, 6000));
 
+    // Reads the composer labels and the saved settings the composer should show.
     const composer = await mcpTool("evaluate", {
       code: `
         const picker = document.querySelector('[aria-label="Select model"]');
         const effort = document.querySelector('[aria-label="Thinking effort"]');
+        const saved = await (await fetch('/v1/profiles/${profileId}/acp-settings', { credentials: 'include' })).json();
+        const model = saved.settings.find((s) => s.category === 'model');
+        const level = saved.settings.find((s) => s.category === 'thought_level');
+        const nameOf = (setting) => {
+          const option = setting ? setting.options.find((o) => o.value === setting.currentValue) : undefined;
+          return option ? option.name : null;
+        };
         return 'CHECK ' + JSON.stringify({
           model: picker ? picker.textContent.trim() : null,
           effort: effort ? effort.textContent.trim() : null,
+          savedModel: nameOf(model),
+          savedEffort: nameOf(level),
         });`,
       page: Number(page),
     });
@@ -245,6 +255,8 @@ async function checkComposerInBrowser(): Promise<void> {
       ? (JSON.parse(composerJson) as {
           model: string | null;
           effort: string | null;
+          savedModel: string | null;
+          savedEffort: string | null;
         })
       : null;
 
@@ -252,6 +264,22 @@ async function checkComposerInBrowser(): Promise<void> {
       "Composer shows the agent's model and thinking controls",
       Boolean(shown?.model && shown.effort),
       shown ? `model "${shown.model}", effort "${shown.effort}"` : "not found"
+    );
+    record(
+      "Composer model is the one saved on the profile",
+      Boolean(shown?.savedModel) && shown?.model === shown?.savedModel,
+      shown
+        ? `shows "${shown.model}", saved "${shown.savedModel}"`
+        : "not found"
+    );
+    // The effort label repeats the level name (short and long form), so it must contain the saved name.
+    record(
+      "Composer thinking level is the one saved on the profile",
+      Boolean(shown?.savedEffort) &&
+        Boolean(shown?.effort?.includes(shown.savedEffort ?? "\u0000")),
+      shown
+        ? `shows "${shown.effort}", saved "${shown.savedEffort}"`
+        : "not found"
     );
   } finally {
     await mcpTool("tabs", { action: "close", page: Number(page) }).catch(

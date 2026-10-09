@@ -21,6 +21,8 @@ export interface AcpProviderOptions {
   agent: AcpAgentConfig;
   /** Absolute path. The agent works here; Nakama never runs its own tools in it. */
   cwd: string;
+  /** Settings applied once when the agent session starts, such as the model and effort. */
+  initialSettings?: Record<string, string>;
   mcpServers?: acp.McpServer[];
   /** One chat session keeps one agent process, so the agent keeps its context between turns. */
   sessionKey: string;
@@ -201,9 +203,50 @@ async function ensureSession(
 
     live.sessionId = created.sessionId;
     live.configOptions = created.configOptions ?? [];
+    await applyInitialSettings(live, options.initialSettings ?? {});
   }
 
   return live;
+}
+
+/**
+ * Applies the profile's saved choices to a new agent session. A value the agent
+ * no longer offers is skipped, so an old choice never fails a new chat.
+ */
+async function applyInitialSettings(
+  live: LiveSession,
+  settings: Record<string, string>
+): Promise<void> {
+  for (const [configId, value] of Object.entries(settings)) {
+    const option = live.configOptions.find((item) => item.id === configId);
+
+    if (
+      option?.type !== "select" ||
+      !option.options.some(optionAccepts(value))
+    ) {
+      continue;
+    }
+
+    const response = await live.process.connection.setSessionConfigOption({
+      configId,
+      // SAFETY: ensureSession sets sessionId before this runs.
+      sessionId: live.sessionId as string,
+      value,
+    });
+
+    live.configOptions = response.configOptions;
+  }
+}
+
+function optionAccepts(
+  value: string
+): (
+  entry: { value: string } | { options: Array<{ value: string }> }
+) => boolean {
+  return (entry) =>
+    "options" in entry
+      ? entry.options.some((item) => item.value === value)
+      : entry.value === value;
 }
 
 async function getOrStartProcess(
