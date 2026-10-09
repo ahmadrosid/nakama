@@ -80,27 +80,12 @@ export function ProfileConfigIdentitySection({
     editName,
     handleEditNameChange,
     flushSave,
-    modelSelectionValue,
-    providerModelGroups,
-    handleEditModelChange,
-    editModel,
-    modelInCatalog,
     saveStatus,
     isDirty,
     editPrompt,
     handleEditPromptChange,
     handleAvatarSelected,
     handleAvatarRemove,
-    acpAgentId,
-    acpAgentPresets,
-    handleEditAcpAgent,
-    acpCurrentModelSelection,
-    acpEffortOptions,
-    acpEffortValue,
-    acpIsSaving,
-    acpModelGroups,
-    setAcpEffort,
-    setAcpModel,
   } = state;
 
   if (!detail) {
@@ -108,6 +93,7 @@ export function ProfileConfigIdentitySection({
   }
 
   const identityDisabled = busy || !canManageProfile;
+  const nameMissing = isDirty && !editName.trim();
 
   return (
     <Card className="w-full overflow-hidden shadow-none">
@@ -154,63 +140,15 @@ export function ProfileConfigIdentitySection({
             htmlFor="profile-chat-agent"
             label="Agent"
           >
-            <div className="flex h-8 min-w-0 overflow-hidden rounded-lg border border-input dark:bg-input/30">
-              <ProfileChatAgentField
-                disabled={identityDisabled}
-                hasCustomAgent={Boolean(detail.acpAgent) && !acpAgentId}
-                onChange={handleEditAcpAgent}
-                presets={acpAgentPresets}
-                selectedPresetId={acpAgentId}
-              />
-
-              <ProfileModelField
-                disabled={identityDisabled || acpIsSaving}
-                editModel={
-                  detail.acpAgent ? acpCurrentModelSelection : editModel
-                }
-                modelInCatalog={detail.acpAgent ? true : modelInCatalog}
-                modelSelectionValue={
-                  detail.acpAgent
-                    ? acpCurrentModelSelection
-                    : modelSelectionValue
-                }
-                onChange={detail.acpAgent ? setAcpModel : handleEditModelChange}
-                providerModelGroups={
-                  detail.acpAgent ? acpModelGroups : providerModelGroups
-                }
-              />
-              {detail.acpAgent && acpEffortOptions?.length ? (
-                <Select
-                  disabled={identityDisabled || acpIsSaving}
-                  onValueChange={(value) => {
-                    if (value) {
-                      setAcpEffort(value);
-                    }
-                  }}
-                  value={acpEffortValue}
-                >
-                  <SelectTrigger
-                    aria-label="Reasoning effort"
-                    className="h-full w-auto rounded-none border-0 dark:bg-transparent"
-                  >
-                    <SelectValue placeholder="Effort" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {acpEffortOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : null}
-            </div>
+            <ProfileAgentPicker
+              disabled={identityDisabled}
+              hasAcpAgent={Boolean(detail.acpAgent)}
+              state={state}
+            />
           </Field>
         </div>
 
-        {(detail.isSuper ||
-          saveStatus !== "idle" ||
-          (isDirty && !editName.trim())) && (
+        {(detail.isSuper || saveStatus !== "idle" || nameMissing) && (
           <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-4 py-3 text-muted-foreground text-xs">
             {detail.isSuper ? (
               <span className="scope-badge bg-muted text-muted-foreground">
@@ -220,7 +158,7 @@ export function ProfileConfigIdentitySection({
             <ProfileSaveIndicator
               inline
               leadingSeparator={detail.isSuper}
-              nameMissing={isDirty && !editName.trim()}
+              nameMissing={nameMissing}
               saveStatus={saveStatus}
             />
           </div>
@@ -239,6 +177,82 @@ export function ProfileConfigIdentitySection({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function ProfileAgentPicker({
+  disabled,
+  hasAcpAgent,
+  state,
+}: {
+  disabled: boolean;
+  hasAcpAgent: boolean;
+  state: IdentityState;
+}) {
+  const {
+    acpAgentId,
+    acpCurrentModelSelection,
+    acpEffortOptions,
+    acpEffortValue,
+    acpIsSaving,
+    acpModelGroups,
+  } = state;
+
+  // An ACP agent brings its own model list; the built-in chat uses the
+  // configured providers.
+  const model = hasAcpAgent
+    ? {
+        editModel: acpCurrentModelSelection,
+        modelInCatalog: true,
+        modelSelectionValue: acpCurrentModelSelection,
+        onChange: state.setAcpModel,
+        providerModelGroups: acpModelGroups,
+      }
+    : {
+        editModel: state.editModel,
+        modelInCatalog: state.modelInCatalog,
+        modelSelectionValue: state.modelSelectionValue,
+        onChange: state.handleEditModelChange,
+        providerModelGroups: state.providerModelGroups,
+      };
+
+  return (
+    <div className="flex h-8 min-w-0 overflow-hidden rounded-lg border border-input dark:bg-input/30">
+      <ProfileChatAgentField
+        disabled={disabled}
+        hasCustomAgent={hasAcpAgent && !acpAgentId}
+        onChange={state.handleEditAcpAgent}
+        presets={state.acpAgentPresets}
+        selectedPresetId={acpAgentId}
+      />
+
+      <ProfileModelField disabled={disabled || acpIsSaving} {...model} />
+      {hasAcpAgent && acpEffortOptions?.length ? (
+        <Select
+          disabled={disabled || acpIsSaving}
+          onValueChange={(value) => {
+            if (value) {
+              state.setAcpEffort(value);
+            }
+          }}
+          value={acpEffortValue}
+        >
+          <SelectTrigger
+            aria-label="Reasoning effort"
+            className="h-full w-auto rounded-none border-0 dark:bg-transparent"
+          >
+            <SelectValue placeholder="Effort" />
+          </SelectTrigger>
+          <SelectContent>
+            {acpEffortOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : null}
+    </div>
   );
 }
 
