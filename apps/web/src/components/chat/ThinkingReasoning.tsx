@@ -1,4 +1,5 @@
 import { cn } from "@nakama/ui/utils";
+import { BrainIcon } from "hugeicons-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ThinkingState } from "@/components/chat/ThinkingState";
@@ -333,6 +334,9 @@ function ThinkingReasoningBody({
               sentences.length > 0 && styles.timelineWithReasoning
             )}
           >
+            {sentences.length > 0 ? (
+              <BrainIcon aria-hidden className={styles.thinkingMarker} />
+            ) : null}
             {sentences.length > 0 ? (
               <ThinkingReasoningViewport
                 isWorkActive={isWorkActive}
