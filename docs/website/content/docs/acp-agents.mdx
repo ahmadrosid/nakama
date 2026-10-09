@@ -11,14 +11,35 @@ Use an ACP agent when you want a coding agent to handle a profile's chat turns. 
 
 ACP agents can use the Nakama tools assigned to the profile. They can also edit files inside that profile's workspace. Nakama denies shell commands and file edits outside that workspace.
 
-## Set the chat agent
+## Create an agent that uses ACP
 
-1. Open **Agents** in the dashboard and select a profile.
-2. In the profile header, open **Chat agent**.
-3. Select **Claude** or **Codex**. Select **Nakama** to return to the built-in agent.
-4. Open a chat with that profile and send a message.
+Only platform admins can create agents and change an agent's chat agent.
 
-Only platform admins can change a profile's chat agent. The model and reasoning choices in chat come from the selected ACP agent. The composer shows the choices that agent supports.
+1. In the left rail, click **+** to open **Create agent**.
+2. Type a **Name**. **Agent id** is optional.
+3. Optional: choose an **Avatar** and the **Tools** the agent can use.
+4. Click **Create**. Nakama opens the new agent's page.
+
+![The Create agent dialog with the name Code Reviewer typed in](/screenshots/acp-create-agent.png)
+
+5. On the agent's page, find **Agent** next to **Name**. Open the menu that shows **Nakama**.
+6. Select **Claude** or **Codex**.
+
+![The Agent menu open with Nakama, Claude, and Codex](/screenshots/acp-chat-agent-menu.png)
+
+7. Select the model and the reasoning effort in the menus next to the agent. The choices come from the selected ACP agent.
+
+![The agent set to Claude, with the model and reasoning effort menus](/screenshots/acp-chat-agent-claude.png)
+
+8. With the agent selected in the left rail, click **New chat** and send a message.
+
+## Change an existing agent
+
+1. Click **Agent** in the sidebar and select the agent in the left rail.
+2. Open the **Agent** menu next to **Name**.
+3. Select **Claude** or **Codex**. The change saves at once.
+
+In chat, the composer shows the model and reasoning choices that the selected ACP agent supports.
 
 ## Server requirements
 
@@ -30,4 +51,4 @@ An ACP agent uses the profile's workspace as its working directory. Nakama gives
 
 ## Change back to Nakama
 
-Open the profile's **Chat agent** menu and select **Nakama**. New chat turns then use Nakama's built-in agent loop.
+Open the agent's **Agent** menu next to **Name** and select **Nakama**. New chat turns then use Nakama's built-in agent loop.
