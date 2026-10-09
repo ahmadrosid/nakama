@@ -207,6 +207,7 @@ function ToolChecklist({
   const selectedCount = tools.filter((tool) =>
     selectedToolIds.has(tool.id)
   ).length;
+
   const allSelected = selectedCount === tools.length;
   const someSelected = selectedCount > 0 && !allSelected;
 

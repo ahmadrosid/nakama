@@ -485,6 +485,7 @@ export function registerPluginRoutes(
   app.get("/v1/platform/plugins/updates", async (c) => {
     requirePlatformAdminFromContext(c);
     const plugins = requirePluginService(options);
+
     return json<ListPluginUpdatesResponse>({
       updates: await plugins.listPluginUpdates(),
     });
