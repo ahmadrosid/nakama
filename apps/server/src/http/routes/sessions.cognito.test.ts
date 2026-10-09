@@ -35,6 +35,7 @@ async function createScenario() {
     }),
   });
   const workerManager = new WorkerManagerService("/tmp/test-project");
+
   const { app } = createMinimalHonoApp({
     agent,
     databaseAdapter,
@@ -105,9 +106,11 @@ async function sendOverHttp(
 describe("POST /v1/sessions with cognito", () => {
   test("accepts WhatsApp sender context only from the WhatsApp worker", async () => {
     const { app, session, workerManager } = await createScenario();
+
     const sessionId = await createSessionOverHttp(app, session, {
       channel: "whatsapp",
     });
+
     const whatsappMessage = {
       chatJid: "chat@s.whatsapp.net",
       fromMe: false,
@@ -115,22 +118,29 @@ describe("POST /v1/sessions with cognito", () => {
       senderJid: "sender@s.whatsapp.net",
       senderJids: ["sender@s.whatsapp.net"],
     };
-    const request = (token?: string) =>
-      app.fetch(
+
+    const request = (token?: string) => {
+      const headers = session.headers({
+        "Content-Type": "application/json",
+        "X-CSRF-Token": session.csrfToken,
+      });
+
+      if (token) {
+        headers["X-Nakama-WhatsApp-Context-Token"] = token;
+      }
+
+      return app.fetch(
         new Request(`http://localhost:4310/v1/sessions/${sessionId}/messages`, {
           body: JSON.stringify({
             message: "hello",
             stream: true,
             whatsappMessage,
           }),
-          headers: session.headers({
-            "Content-Type": "application/json",
-            "X-CSRF-Token": session.csrfToken,
-            ...(token ? { "X-Nakama-WhatsApp-Context-Token": token } : {}),
-          }),
+          headers,
           method: "POST",
         })
       );
+    };
 
     expect((await request("forged-token")).status).toBe(403);
     expect(
