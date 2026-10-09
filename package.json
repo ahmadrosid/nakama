@@ -15,6 +15,7 @@
     "build": "bun run --workspaces --if-present build",
     "build:docs": "bun run --cwd docs/website build",
     "check": "ultracite check && bun run check:anti-slop",
+    "check:acp": "bun run scripts/check-acp.ts",
     "check:anti-slop": "oxlint",
     "cli": "bun run apps/cli/src/index.ts",
     "desktop": "bun run --cwd apps/desktop dev",

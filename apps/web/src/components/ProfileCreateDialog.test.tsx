@@ -46,15 +46,18 @@ test("Select all checks every tool, clears them, and marks a partial pick", asyn
 
   const trigger = () =>
     document.querySelector<HTMLButtonElement>("#btn-create-profile-tools");
+
   const boxes = () => [
     ...document.querySelectorAll<HTMLInputElement>(
       "#create-profile-tool-list input[type=checkbox]"
     ),
   ];
+
   const checkedTools = () =>
     boxes()
       .slice(1)
       .filter((box) => box.checked).length;
+
   const removeButtons = () =>
     document.querySelectorAll('button[aria-label^="Remove "]').length;
 

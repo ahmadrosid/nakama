@@ -26,6 +26,11 @@ describe("chat-stream-workflow", () => {
   test.each([undefined, null])(
     "workflow cards tolerate absent tool input: %p",
     (input) => {
+      const persistedStep: unknown =
+        input === undefined
+          ? { id: "fetch", kind: "tool", tool: "web_fetch" }
+          : { id: "fetch", input, kind: "tool", tool: "web_fetch" };
+
       const card = buildWorkflowRunCard({
         isRunning: false,
         parsed: null,
@@ -33,14 +38,8 @@ describe("chat-stream-workflow", () => {
         workflow: {
           enabled: true,
           name: "Morning Brief",
-          steps: [
-            // SAFETY: Persisted workflow input may omit or null this field before parsing.
-            structuredClone(
-              input === undefined
-                ? { id: "fetch", kind: "tool", tool: "web_fetch" }
-                : { id: "fetch", input, kind: "tool", tool: "web_fetch" }
-            ) as unknown as WorkflowStep,
-          ],
+          // SAFETY: Persisted workflow input may omit or null this field, and the card must still render it.
+          steps: [persistedStep as WorkflowStep],
         },
       });
 

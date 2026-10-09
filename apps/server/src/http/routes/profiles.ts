@@ -1,5 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type {
+  AcpAgentPresetsResponse,
+  AcpSessionSettingsResponse,
   CloneProfileRequest,
   DeleteArtifactResponse,
   DeleteKnowledgeBaseResponse,
@@ -30,6 +32,7 @@ import {
   renameWorkspaceEntry,
 } from "@nakama/core";
 import { filterProfilesForChatAccess } from "@nakama/core/profiles";
+import { listAcpAgentPresets } from "../../providers/acp/acp-agent-presets";
 import { ArtifactShareService } from "../../services/artifact-share-service";
 import type { ServerOptions } from "../context";
 import {
@@ -1849,6 +1852,39 @@ export function registerProfileRoutes(
 
     return json<ListProfileChangeHistoryResponse>(
       await agent.listProfileChangeHistory(orgId, profileId, { limit, offset })
+    );
+  });
+
+  // The agents Nakama ships with, for the profile's chat agent setting.
+  app.get("/v1/acp-agent-presets", () =>
+    json<AcpAgentPresetsResponse>({
+      presets: listAcpAgentPresets(),
+    })
+  );
+
+  // Settings for the next chat of this profile, before the chat has a session.
+  app.get("/v1/profiles/:profileId/acp-settings", async (c) => {
+    const orgId = requireActiveOrgIdFromContext(c);
+    const profileId = decodeURIComponent(c.req.param("profileId"));
+
+    return json<AcpSessionSettingsResponse>(
+      await agent.getAcpDraftSettings(orgId, profileId)
+    );
+  });
+
+  app.put("/v1/profiles/:profileId/acp-settings/:configId", async (c) => {
+    requireNotViewerFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+    const profileId = decodeURIComponent(c.req.param("profileId"));
+    const configId = decodeURIComponent(c.req.param("configId"));
+
+    const body = await readJson(
+      c.req.raw,
+      z.object({ value: z.string().min(1).max(256) })
+    );
+
+    return json<AcpSessionSettingsResponse>(
+      await agent.setAcpDraftSetting(orgId, profileId, configId, body.value)
     );
   });
 

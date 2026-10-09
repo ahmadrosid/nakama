@@ -5,7 +5,6 @@ import type {
   AgentQuestionnaire,
   AgentTodo,
   ChatContextUsage,
-  ThinkingEffort,
 } from "@nakama/core/contract";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -84,17 +83,13 @@ import { client, formatError } from "@/lib/client";
 import { createClientId } from "@/lib/client-id";
 import {
   decodeModelSelection,
-  effectiveProfileModelSelection,
-  groupModelsByProvider,
   knownModelSelection,
-  resolveModelThinkingSupport,
   resolveModelVisionSupport,
 } from "@/lib/models";
 import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 import {
   buildAutoEnableThinkingPayload,
-  DEFAULT_THINKING_EFFORT,
   shouldAutoEnableThinking,
   shouldShowThinkingEffort,
 } from "@/lib/thinking-settings";
@@ -109,6 +104,7 @@ import {
   planPromptBranch,
   releaseChatStream,
 } from "@/pages/chat/chat-page.shared";
+import { useChatComposerControls } from "@/pages/chat/use-chat-composer-controls";
 
 interface SendMessageOptions {
   initialMessages?: ChatListItem[];
@@ -344,10 +340,36 @@ export function useChatPage() {
 
   const availableSkills = activeProfileQuery.data?.skills ?? [];
 
-  const providerModelGroups = useMemo(
-    () => groupModelsByProvider(models?.models ?? []),
-    [models?.models]
-  );
+  const readOnlySession = isReadOnlySessionChannel(sessionChannel);
+
+  // An ACP profile picks its model and effort from the agent. The composer
+  // controls hook chooses the agent's lists or the workspace's.
+  const composer = useChatComposerControls({
+    acpEnabled: Boolean(activeProfile?.acpAgent),
+    busy,
+    canManageInstallSettings,
+    currentProviderId: models?.currentProviderId,
+    models: models?.models,
+    profileId: profileId || null,
+    profileModel: activeProfile?.model,
+    readOnlySession,
+    saveThinkingPending: saveThinkingSettingsMutation.isPending,
+    sessionId: session?.id ?? null,
+    sessionModel,
+    thinkingSettingsEffort: thinkingSettings?.effort,
+    thinkingSettingsLoading,
+  });
+
+  const {
+    acpEnabled: acpProfile,
+    activeModelSupportsThinking,
+    currentModelSelection,
+    providerModelGroups,
+    thinkingEffort,
+    thinkingEffortDisabled,
+    thinkingEffortOptions,
+    thinkingEffortVisible,
+  } = composer;
 
   const providerModelGroupsRef = useRef(providerModelGroups);
 
@@ -364,21 +386,6 @@ export function useChatPage() {
         providerModelGroupsRef.current
       ),
     []
-  );
-
-  const currentModelSelection = useMemo(
-    () =>
-      effectiveProfileModelSelection(
-        sessionModel ?? activeProfile?.model,
-        providerModelGroups,
-        models?.currentProviderId
-      ),
-    [
-      activeProfile?.model,
-      models?.currentProviderId,
-      providerModelGroups,
-      sessionModel,
-    ]
   );
 
   const renderModelLabel = useCallback(
@@ -409,35 +416,21 @@ export function useChatPage() {
     [providerModelGroups]
   );
 
-  const activeModelSupportsThinking = useMemo(
-    () =>
-      resolveModelThinkingSupport(currentModelSelection, providerModelGroups),
-    [currentModelSelection, providerModelGroups]
-  );
-
   const activeModelSupportsVision = useMemo(
     () => resolveModelVisionSupport(currentModelSelection, providerModelGroups),
     [currentModelSelection, providerModelGroups]
   );
 
-  const readOnlySession = isReadOnlySessionChannel(sessionChannel);
   const showThinking = shouldShowThinkingEffort(activeModelSupportsThinking);
-
-  const thinkingEffortVisible = shouldShowThinkingEffort(
-    activeModelSupportsThinking
-  );
-
-  const thinkingEffort = thinkingSettings?.effort ?? DEFAULT_THINKING_EFFORT;
-
-  const thinkingEffortDisabled =
-    !canManageInstallSettings ||
-    busy ||
-    thinkingSettingsLoading ||
-    saveThinkingSettingsMutation.isPending ||
-    readOnlySession;
 
   const handleModelChange = useCallback(
     (selection: string) => {
+      if (acpProfile) {
+        composer.setAcpModel(selection);
+
+        return;
+      }
+
       if (
         !(profileId && selection) ||
         busy ||
@@ -480,6 +473,8 @@ export function useChatPage() {
         });
     },
     [
+      composer.setAcpModel,
+      acpProfile,
       busy,
       profileId,
       readOnlySession,
@@ -562,7 +557,17 @@ export function useChatPage() {
   }, [activeOrg?.id, authLoading, navigate, releaseActiveStream, routeSession]);
 
   const handleThinkingEffortChange = useCallback(
-    (effort: ThinkingEffort) => {
+    (effort: string) => {
+      if (acpProfile) {
+        composer.setAcpEffort(effort);
+
+        return;
+      }
+
+      if (effort !== "low" && effort !== "medium" && effort !== "high") {
+        return;
+      }
+
       if (
         !(canManageInstallSettings && profileId) ||
         effort === thinkingEffort
@@ -585,6 +590,8 @@ export function useChatPage() {
         });
     },
     [
+      composer.setAcpEffort,
+      acpProfile,
       canManageInstallSettings,
       profileId,
       thinkingEffort,
@@ -1612,6 +1619,7 @@ export function useChatPage() {
     stopStreaming,
     thinkingEffort,
     thinkingEffortDisabled,
+    thinkingEffortOptions,
     thinkingEffortVisible,
     turnStartedAt,
   };

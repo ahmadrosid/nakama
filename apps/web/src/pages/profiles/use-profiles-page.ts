@@ -10,6 +10,7 @@ import { useSearchParams } from "react-router-dom";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
 import {
+  useAcpAgentPresetsQuery,
   useMcpServersQuery,
   useModelsQuery,
   useProfileQuery,
@@ -39,6 +40,7 @@ import {
   useUpdateProfileMutation,
   useUploadProfileAvatarMutation,
 } from "@/hooks/use-resource-mutations";
+import { NO_ACP_AGENT_PRESETS, presetIdForAgent } from "@/lib/acp-settings";
 import { resolveProfilesPageProfileId } from "@/lib/chat-history";
 import { formatError } from "@/lib/client";
 import {
@@ -176,6 +178,12 @@ export function useProfilesPage() {
   } = useProfileQuery(selectedId);
 
   const updateMutation = useUpdateProfileMutation();
+
+  const acpAgentPresets =
+    useAcpAgentPresetsQuery().data ?? NO_ACP_AGENT_PRESETS;
+
+  const acpAgentId = presetIdForAgent(detail?.acpAgent, acpAgentPresets);
+  const { mutateAsync: updateProfile } = updateMutation;
   const cloneProfileMutation = useCloneProfileMutation();
   const deleteMutation = useDeleteProfileMutation();
   const uploadAvatarMutation = useUploadProfileAvatarMutation();
@@ -492,6 +500,31 @@ export function useProfilesPage() {
       scheduleSave(profileModelSaveDelayMs);
     },
     [scheduleSave]
+  );
+
+  // Saved right away, not debounced: the agent is a choice, not text. An empty
+  // preset id returns the profile to the built-in chat.
+  const handleEditAcpAgent = useCallback(
+    async (presetId: string) => {
+      if (!selectedId) {
+        return;
+      }
+
+      const agent =
+        acpAgentPresets.find((preset) => preset.id === presetId)?.agent ?? null;
+
+      setError(null);
+
+      try {
+        await updateProfile({
+          input: { acpAgent: agent },
+          profileId: selectedId,
+        });
+      } catch (err) {
+        setError(formatError(err));
+      }
+    },
+    [acpAgentPresets, selectedId, updateProfile]
   );
 
   const switchingProfileRef = useRef(false);
@@ -1119,6 +1152,8 @@ export function useProfilesPage() {
     : null;
 
   return {
+    acpAgentId,
+    acpAgentPresets,
     allMcpServers,
     allSkills,
     allTools,
@@ -1168,6 +1203,7 @@ export function useProfilesPage() {
     handleDeleteConfirm,
     handleDeleteOpenChange,
     handleDeleteSkill,
+    handleEditAcpAgent,
     handleEditModelChange,
     handleEditNameChange,
     handleEditPromptChange,

@@ -555,6 +555,16 @@ export function useProfileQuery(profileId: string | null) {
   });
 }
 
+const acpAgentPresetsQueryOptions = queryOptions({
+  queryFn: async () => (await client.getAcpAgentPresets()).presets,
+  queryKey: queryKeys.acpAgentPresets,
+  staleTime: defaultStaleTime,
+});
+
+export function useAcpAgentPresetsQuery() {
+  return useQuery(acpAgentPresetsQueryOptions);
+}
+
 export function useToolsQuery() {
   return useQuery(toolsQueryOptions);
 }

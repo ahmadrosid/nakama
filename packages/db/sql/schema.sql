@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   skills_write_approval INTEGER,
   skills_post_turn_review INTEGER,
   skills_curator_consolidate_enabled INTEGER,
+  acp_agent TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (org_id) REFERENCES organizations (id) ON DELETE CASCADE
