@@ -131,7 +131,7 @@ async function connect() {
 
   if (
     !(tab?.id && ["http:", "https:"].includes(url.protocol)) ||
-    url.pathname !== "/plugins/google-meet"
+    url.pathname !== "/google-meet"
   ) {
     throw new Error("Open the Google Meet page in Nakama, then click Connect.");
   }

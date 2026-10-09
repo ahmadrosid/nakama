@@ -244,6 +244,12 @@ function AppShell() {
                   </Route>
                   <Route
                     element={<GoogleMeetPage />}
+                    path={PAGE_PATHS["google-meet"]}
+                  />
+                  <Route
+                    element={
+                      <Navigate replace to={PAGE_PATHS["google-meet"]} />
+                    }
                     path="/plugins/google-meet"
                   />
                   <Route element={<PluginPage />} path="/plugins/:pluginId" />

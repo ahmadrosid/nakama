@@ -54,7 +54,7 @@ async function refresh() {
   );
   document.querySelector("#meet-label").textContent =
     recording || onMeet ? "Google Meet open" : "Open Google Meet";
-  connect.hidden = url.pathname !== "/plugins/google-meet" || recording;
+  connect.hidden = url.pathname !== "/google-meet" || recording;
   connect.textContent = connected
     ? "Reconnect this Nakama tab"
     : "Connect this Nakama tab";

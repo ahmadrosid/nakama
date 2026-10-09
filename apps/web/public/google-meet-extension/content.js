@@ -7,7 +7,7 @@ const isMeet = location.hostname === "meet.google.com";
 const isMeeting =
   isMeet && /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}\/?$/.test(location.pathname);
 
-const isNakamaMeetPage = () => location.pathname === "/plugins/google-meet";
+const isNakamaMeetPage = () => location.pathname === "/google-meet";
 
 const pending = new Map();
 
