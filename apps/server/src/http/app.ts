@@ -67,7 +67,7 @@ import type { HonoApp } from "./types";
  * the two drift, which is the only thing keeping this constant honest.
  */
 const THEME_BOOTSTRAP_SCRIPT_HASH =
-  "sha256-rQ5OTxagyMHDDSQ6k5wlUK8gtuYxXBrpQGqjAcYBz2w=";
+  "sha256-HsiO8mtwNQyMUSzPhZ0Zgx52OUxlMda3rA2mB6m/SO0=";
 
 // Regular JSON can carry a 5 MiB attachment after base64 expansion. Full-data
 // imports accept a 100 MiB archive, which expands to roughly 134 MiB as base64.
