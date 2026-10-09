@@ -15,6 +15,7 @@ import type { ServerOptions } from "./context";
 import { serializeHttpOpenApiSpec } from "./openapi";
 import { createOrgContextMiddleware } from "./org-middleware";
 import { createRateLimitMiddleware } from "./rate-limit-middleware";
+import { registerAcpMcpRoutes } from "./routes/acp-mcp";
 import { registerArtifactShareRoutes } from "./routes/artifact-shares";
 import { registerAuditEventRoutes } from "./routes/audit-events";
 import { registerAuthRoutes } from "./routes/auth";
@@ -364,6 +365,7 @@ export function createHonoApp(options: ServerOptions) {
   registerInternalAutomationRoutes(app, options);
   registerInternalCuratorRoutes(app, options);
   registerNotificationWebhookRoutes(app, options);
+  registerAcpMcpRoutes(app);
   registerComposioOAuthRoutes(app, options);
   registerMcpOAuthRoutes(app, options);
   app.use("*", createOrgContextMiddleware(options));

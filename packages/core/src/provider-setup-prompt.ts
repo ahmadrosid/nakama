@@ -6,7 +6,11 @@ import {
   validateCustomModels,
   validateDisplayName,
 } from "./compatible-provider-config";
-import type { CustomModelEntry, ProviderModelOption } from "./contract";
+import type {
+  CustomModelEntry,
+  ProviderModelOption,
+  ProviderName,
+} from "./contract";
 import { NETRA_AGENT_MODEL_ID } from "./discovery-providers";
 import {
   defaultOllamaBaseUrl,
@@ -215,12 +219,17 @@ export async function promptForProviderConfig(
       customModels = [model];
     }
 
+    // SAFETY: Catalog models come from the static provider list, which never includes "acp".
+    const catalogProvider = getModelById(selectedModel)?.provider as
+      | ProviderName
+      | undefined;
+
     const instance: ProviderInstance = {
       apiKey,
       createdAt: new Date().toISOString(),
       id: createProviderInstanceId(),
       label: defaultProviderLabel(provider, []),
-      type: getModelById(selectedModel)?.provider ?? provider,
+      type: catalogProvider ?? provider,
     };
 
     if (cloudflareBaseUrl) {

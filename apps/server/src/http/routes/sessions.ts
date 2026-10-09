@@ -1,6 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type { AgentChatSession } from "@nakama/agent";
 import type {
+  AcpSessionSettingsResponse,
   BranchSessionResponse,
   ChatTurnUsage,
   CompactionResponse,
@@ -175,6 +176,10 @@ export function registerSessionRoutes(
   const branchSessionRequestSchema = z
     .object({ messageIndex: z.number() })
     .openapi("BranchSessionRequest");
+
+  const acpSettingRequestSchema = z
+    .object({ value: z.string().min(1).max(256) })
+    .openapi("AcpSessionSettingRequest");
 
   const branchSessionResponseSchema = z
     .object({ sessionId: z.string() })
@@ -828,6 +833,37 @@ export function registerSessionRoutes(
     return new Response(null, { status: 204 });
   });
 
+  app.get("/v1/sessions/:sessionId/acp-settings", async (c) => {
+    const { orgId, sessionId } = await requireSessionAccess(c);
+    const response = await agent.getAcpSessionSettings(sessionId, orgId);
+
+    if (!response) {
+      return errorResponse("Session not found", 404);
+    }
+
+    return json<AcpSessionSettingsResponse>(response);
+  });
+
+  app.put("/v1/sessions/:sessionId/acp-settings/:configId", async (c) => {
+    requireNotViewerFromContext(c);
+    const { orgId, sessionId } = await requireSessionAccess(c);
+    const configId = decodeURIComponent(c.req.param("configId"));
+    const body = await readJson(c.req.raw, acpSettingRequestSchema);
+
+    const response = await agent.setAcpSessionSetting(
+      sessionId,
+      orgId,
+      configId,
+      body.value
+    );
+
+    if (!response) {
+      return errorResponse("Session not found", 404);
+    }
+
+    return json<AcpSessionSettingsResponse>(response);
+  });
+
   app.post("/v1/sessions/:sessionId/compact", async (c) => {
     requireNotViewerFromContext(c);
     const { orgId, sessionId } = await requireSessionAccess(c);
@@ -966,6 +1002,7 @@ export function registerSessionRoutes(
       ))
     ) {
       sessionTurnRegistry.cancelTurn(sessionId);
+
       return errorResponse(
         "WhatsApp context requires worker authentication.",
         403
@@ -1015,6 +1052,7 @@ export function registerSessionRoutes(
           ? { whatsappMessage: body.whatsappMessage }
           : undefined
       );
+
       const contextUsage = session.getContextUsage() ?? undefined;
       const usage = session.getTurnUsage() ?? undefined;
       sessionTurnRegistry.endTurn(sessionId, {

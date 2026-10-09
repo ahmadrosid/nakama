@@ -1,0 +1,30 @@
+---
+title: "Chat agents"
+description: "Let a profile's chats run on a coding agent you already use, such as Claude or Codex, with Nakama's tools and chat view."
+---
+
+## Why
+
+Nakama runs chats with its own agent loop. Some people already pay for Claude or Codex and want those models to answer in a Nakama profile. They also want Nakama's tools, such as knowledge base search, to stay available.
+
+## Value
+
+- A profile can answer with Claude or Codex, and the chat view stays the same.
+- Nakama tools, such as knowledge base search and web search, still run inside Nakama, under the profile's assignments.
+- You can pick the model and the reasoning effort the agent offers, from the chat composer.
+
+## How
+
+Only a platform admin can set a chat agent. The setting is on the profile.
+
+1. Open **Profiles** and select the profile.
+2. In **Chat agent**, choose **Claude** or **Codex**. Choose **Nakama built-in** to go back to the default chat.
+3. Open a chat with that profile. The composer now lists the agent's models and thinking levels. Pick one, and the next reply uses it.
+
+Before you use an agent, sign in to it on the server. Claude needs an Anthropic API key or a Claude sign-in. Codex needs an OpenAI API key or a ChatGPT sign-in. The agent reads its key from the server's environment.
+
+### Limits
+
+- Agent chats do not write chat titles or shorten long conversations. The agent keeps its own history.
+- An agent asks before it edits files or runs commands. Nakama denies those requests. It allows only the profile's Nakama tools.
+- The agent runs on the same server as Nakama, under the same workspace folder as the profile.

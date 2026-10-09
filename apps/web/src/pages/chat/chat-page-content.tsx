@@ -49,6 +49,7 @@ export function ChatPageContent(state: ChatPageState) {
     thinkingEffortVisible,
     thinkingEffort,
     thinkingEffortDisabled,
+    thinkingEffortOptions,
     readOnlySession,
     isEmptyState,
     composerDisabled,
@@ -149,6 +150,7 @@ export function ChatPageContent(state: ChatPageState) {
         showTips={isEmptyState}
         thinkingEffort={thinkingEffort}
         thinkingEffortDisabled={thinkingEffortDisabled}
+        thinkingEffortOptions={thinkingEffortOptions}
         thinkingEffortVisible={thinkingEffortVisible}
         todos={agentTodos}
       />

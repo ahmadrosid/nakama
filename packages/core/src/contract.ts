@@ -1942,7 +1942,8 @@ export interface ProviderModelOption {
   maxOutputTokens?: number;
   name: string;
   outputPerMillionUsd?: number;
-  provider: ProviderName;
+  /** "acp" for models an ACP agent reports for its chat. */
+  provider: ProviderName | "acp";
   providerId?: string;
   providerLabel?: string;
   supportsThinking?: boolean;
@@ -2052,7 +2053,39 @@ export interface ConfigureProviderResponse {
   provider: ProviderName;
 }
 
+/** A coding agent that runs a profile's chat turns over ACP (stdio). */
+export interface AcpAgentConfig {
+  args: string[];
+  command: string;
+}
+
+/** One setting the ACP agent offers for a chat, such as its model or reasoning effort. */
+export interface AcpSessionSetting {
+  category: string | null;
+  currentValue: string;
+  id: string;
+  name: string;
+  options: Array<{ name: string; value: string }>;
+}
+
+export interface AcpSessionSettingsResponse {
+  settings: AcpSessionSetting[];
+}
+
+/** An agent Nakama ships with, ready to save on a profile. */
+export interface AcpAgentPresetSummary {
+  agent: AcpAgentConfig;
+  id: string;
+  label: string;
+}
+
+export interface AcpAgentPresetsResponse {
+  presets: AcpAgentPresetSummary[];
+}
+
 export interface ProfileSummary {
+  /** Set when chat turns run through an ACP agent. The composer shows the agent's settings. */
+  acpAgent?: AcpAgentConfig | null;
   /** Whether this profile may create and execute automations. */
   automationsEnabled?: boolean;
   createdAt: string;
@@ -2322,6 +2355,8 @@ export interface CreateProfileRequest {
 }
 
 export interface UpdateProfileRequest {
+  /** Platform admins only: the agent runs as a process on the server host. */
+  acpAgent?: AcpAgentConfig | null;
   automationsEnabled?: boolean;
   model?: string | null;
   name?: string;
@@ -2907,7 +2942,8 @@ export interface StreamChatHandlers {
 export interface ProviderClient {
   generateChat(input: GenerateChatInput): Promise<ChatCompletionResult>;
   generateText(input: GenerateTextInput): Promise<GenerateTextResult>;
-  name: ProviderName;
+  /** "acp" for chat turns run by an ACP agent (see providers/acp). */
+  name: ProviderName | "acp";
   streamChat(
     input: GenerateChatInput,
     handlers: StreamChatHandlers

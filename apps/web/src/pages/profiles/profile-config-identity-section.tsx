@@ -45,6 +45,9 @@ type IdentityState = Pick<
   | "handleEditPromptChange"
   | "handleAvatarSelected"
   | "handleAvatarRemove"
+  | "acpAgentId"
+  | "acpAgentPresets"
+  | "handleEditAcpAgent"
 >;
 
 export function ProfileConfigIdentitySection({
@@ -73,6 +76,9 @@ export function ProfileConfigIdentitySection({
     handleEditPromptChange,
     handleAvatarSelected,
     handleAvatarRemove,
+    acpAgentId,
+    acpAgentPresets,
+    handleEditAcpAgent,
   } = state;
 
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
@@ -206,6 +212,34 @@ export function ProfileConfigIdentitySection({
                 </Command>
               </PopoverContent>
             </Popover>
+          </Field>
+        </div>
+
+        <div className="flex min-w-0 flex-wrap items-end gap-3 px-4 py-3">
+          <Field
+            className="w-full min-w-0 sm:w-auto sm:min-w-[12rem] sm:max-w-[14rem]"
+            htmlFor="profile-chat-agent"
+            label="Chat agent"
+          >
+            <select
+              className="flex h-8 w-full cursor-pointer items-center rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+              disabled={identityDisabled}
+              id="profile-chat-agent"
+              onChange={(event) => void handleEditAcpAgent(event.target.value)}
+              value={acpAgentId ?? (detail.acpAgent ? "custom" : "")}
+            >
+              <option value="">Nakama built-in</option>
+              {acpAgentPresets.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.label}
+                </option>
+              ))}
+              {detail.acpAgent && !acpAgentId ? (
+                <option disabled value="custom">
+                  Custom command
+                </option>
+              ) : null}
+            </select>
           </Field>
         </div>
 

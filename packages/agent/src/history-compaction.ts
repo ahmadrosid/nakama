@@ -95,8 +95,11 @@ function estimateTokens(text: string): number {
 
 // Unsigned Gemini thinking is display-only. Signed parts are replayed and
 // counted through providerContent instead.
-export function providerReplaysThinking(provider: ProviderName): boolean {
-  return provider !== "gemini";
+// ACP agents keep their own history, so Nakama never replays thinking to them.
+export function providerReplaysThinking(
+  provider: ProviderName | "acp"
+): boolean {
+  return provider !== "gemini" && provider !== "acp";
 }
 
 function estimateMessageTokens(

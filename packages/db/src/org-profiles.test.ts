@@ -322,3 +322,50 @@ test("shared listing is seeded and assigned to fresh profiles, without restoring
     ).toBe(true);
   }
 });
+
+describe("profile ACP agent", () => {
+  test("keeps the ACP agent command across a save and read", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+
+    await db.upsertProfile({
+      acpAgent: {
+        args: ["-y", "@agentclientprotocol/claude-agent-acp@0.88.0"],
+        command: "npx",
+      },
+      createdAt: now,
+      id: "profile_acp",
+      isSuper: false,
+      model: null,
+      name: "ACP",
+      orgId: "org_a",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+
+    const saved = await db.getProfileForOrg("profile_acp", "org_a");
+    expect(saved?.acpAgent).toEqual({
+      args: ["-y", "@agentclientprotocol/claude-agent-acp@0.88.0"],
+      command: "npx",
+    });
+  });
+
+  test("reads a profile without an ACP agent as null", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+
+    await db.upsertProfile({
+      createdAt: now,
+      id: "profile_plain",
+      isSuper: false,
+      model: null,
+      name: "Plain",
+      orgId: "org_a",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+
+    const saved = await db.getProfileForOrg("profile_plain", "org_a");
+    expect(saved?.acpAgent).toBeNull();
+  });
+});

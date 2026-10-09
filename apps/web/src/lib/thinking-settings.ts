@@ -11,13 +11,6 @@ export const THINKING_EFFORT_OPTIONS: Array<{
   { label: "High", value: "high" },
 ];
 
-export function thinkingEffortLabel(effort: ThinkingEffort): string {
-  return (
-    THINKING_EFFORT_OPTIONS.find((option) => option.value === effort)?.label ??
-    effort
-  );
-}
-
 export function shouldShowThinkingEffort(
   activeModelSupportsThinking: boolean | undefined
 ): boolean {
