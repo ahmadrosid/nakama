@@ -1,9 +1,8 @@
 import { getProfileAvatarUrl } from "@nakama/client";
 import type { ProfileSummary } from "@nakama/core/contract";
 import { cn } from "@nakama/ui/utils";
-import { hashToSeeds, oklchToCss } from "hashvatar";
-import { Hashvatar } from "hashvatar/react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { moodstoneAvatars, moodstoneColors } from "./moodstone-avatars";
 
 type ProfileAvatarProfile = Pick<
   ProfileSummary,
@@ -29,25 +28,6 @@ const sizePixels = {
   xs: 20,
   xxs: 18,
 } as const;
-
-/** Two OKLCH tones derived from the profile hash — same hash ⇒ same palette. */
-function tonesFromHash(hash: string): [string, string] {
-  const [h1, h2, l1, l2, c1, c2] = hashToSeeds(hash, 6);
-
-  return [
-    oklchToCss({
-      c: 0.16 + c1 * 0.14,
-      h: h1 * 360,
-      l: 0.55 + l1 * 0.22,
-    }),
-    oklchToCss({
-      c: 0.1 + c2 * 0.12,
-      h: (h1 * 360 + 40 + h2 * 80) % 360,
-      // Offset hue so the pair stays distinct, still seeded by the hash.
-      l: 0.28 + l2 * 0.2,
-    }),
-  ];
-}
 
 function resolveAvatarSrc(
   profile: ProfileAvatarProfile,
@@ -75,13 +55,53 @@ export function ProfileAvatar({
 }: {
   profile: ProfileAvatarProfile;
   size?: keyof typeof sizeClasses;
-  /** Animate the hashvatar dither when this profile is selected. */
+  /** Animate the generated SVG when this profile is selected in chat. */
   active?: boolean;
   className?: string;
   orgId?: string;
 }) {
   const avatarUrl = resolveAvatarSrc(profile, orgId);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  // Start still on the server and before the motion preference is known.
+  const [reducedMotion, setReducedMotion] = useState(true);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReducedMotion(media.matches);
+    update();
+    media.addEventListener("change", update);
+
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  const src = useMemo(() => {
+    if (avatarUrl && avatarUrl !== failedUrl) {
+      return avatarUrl;
+    }
+
+    const identity = profile.id || profile.name || "?";
+    let hash = 0;
+
+    for (let index = 0; index < identity.length; index++) {
+      hash = (hash * 31 + identity.charCodeAt(index)) % 0x1_00_00_00_00;
+    }
+
+    const avatar = moodstoneAvatars[hash % moodstoneAvatars.length];
+
+    const color =
+      moodstoneColors[
+        Math.floor(hash / moodstoneAvatars.length) % moodstoneColors.length
+      ];
+
+    const template = active && !reducedMotion ? avatar.animated : avatar.still;
+
+    const svg = template
+      .replaceAll("MOODSTONE_LIT", color.lit)
+      .replaceAll("MOODSTONE_SHADE", color.shade);
+
+    // An image document isolates SVG gradient IDs, even for repeated profiles.
+    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  }, [avatarUrl, failedUrl, profile.id, profile.name, active, reducedMotion]);
 
   const surfaceClass = cn(
     "shrink-0 rounded-full outline outline-1 outline-black/10 -outline-offset-1 dark:outline-white/10",
@@ -89,29 +109,14 @@ export function ProfileAvatar({
     className
   );
 
-  if (avatarUrl && avatarUrl !== failedUrl) {
-    return (
-      <img
-        alt=""
-        className={cn(surfaceClass, "object-cover")}
-        onError={() => setFailedUrl(avatarUrl)}
-        src={avatarUrl}
-      />
-    );
-  }
-
-  const hash = profile.id || profile.name || "?";
-
   return (
-    <Hashvatar
-      animated={active}
-      className={surfaceClass}
-      hash={hash}
-      mode="dither"
-      size={sizePixels[size]}
-      // Let Tailwind className control radius (Hashvatar defaults to 50%).
-      style={{ borderRadius: undefined }}
-      tones={tonesFromHash(hash)}
+    <img
+      alt=""
+      className={cn(surfaceClass, "object-cover")}
+      height={sizePixels[size]}
+      onError={() => setFailedUrl(avatarUrl)}
+      src={src}
+      width={sizePixels[size]}
     />
   );
 }
