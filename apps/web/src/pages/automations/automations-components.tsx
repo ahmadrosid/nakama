@@ -27,6 +27,7 @@ import {
   Cancel01Icon,
   CancelCircleIcon,
   CheckmarkCircle01Icon,
+  Copy01Icon,
   Delete02Icon,
   Edit03Icon,
   Loading03Icon,
@@ -537,6 +538,7 @@ export function RunHistoryList({
   onRerun: () => void;
 }) {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [copiedRunId, setCopiedRunId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const selectedRun = runs.find((run) => run.id === selectedRunId);
   const groups = useMemo(() => groupRunsByDay(runs), [runs]);
@@ -635,6 +637,32 @@ export function RunHistoryList({
                 ? `${runStatusLabel(selectedRun.status)} · ${formatSessionTimestamp(selectedRun.startedAt)}`
                 : "Run conversation"}
             </DialogTitle>
+            {selectedRun ? (
+              <Button
+                aria-label={
+                  copiedRunId === selectedRun.id
+                    ? "Copied run ID"
+                    : "Copy run ID"
+                }
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(selectedRun.id);
+                    setCopiedRunId(selectedRun.id);
+                  } catch {
+                    // Clipboard may be unavailable outside a secure context.
+                  }
+                }}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                {copiedRunId === selectedRun.id ? (
+                  <CheckmarkCircle01Icon aria-hidden className="size-4" />
+                ) : (
+                  <Copy01Icon aria-hidden className="size-4" />
+                )}
+              </Button>
+            ) : null}
             {selectedRun?.status === "failed" ? (
               <Button
                 disabled={busy || running}

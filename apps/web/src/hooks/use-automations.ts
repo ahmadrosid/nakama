@@ -31,8 +31,7 @@ export function useAutomationRunsQuery(automationId: string | null) {
     enabled: Boolean(automationId),
     queryFn: () => client.listAutomationRuns(automationId!),
     queryKey: queryKeys.automations.runs(automationId ?? ""),
-    refetchInterval: (query) =>
-      query.state.data?.some((run) => run.status === "running") ? 1000 : 5000,
+    refetchInterval: 5000,
   });
 }
 
