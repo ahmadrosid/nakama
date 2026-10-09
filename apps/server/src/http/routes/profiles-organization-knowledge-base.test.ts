@@ -27,6 +27,73 @@ const textDocument = (content: string) => ({
 });
 
 describe("profile knowledge base ZIP import", () => {
+  test("imports a valid 15 MiB stored ZIP", async () => {
+    const { app, orgId, post, profileId, session } = await setupSession(
+      "platform-kb-large-zip@example.com"
+    );
+
+    const bytes = Buffer.alloc(15 * 1024 * 1024, 65);
+    const archive = zipSync({ "large.txt": bytes }, { level: 0 });
+
+    const response = await post(
+      `/v1/profiles/${profileId}/knowledge-base/import-zip`,
+      JSON.stringify({ zipBase64: Buffer.from(archive).toString("base64") })
+    );
+
+    expect(response.status).toBe(200);
+    const result = await response.json();
+    expect(result.totals).toEqual({
+      created: 1,
+      duplicate: 0,
+      error: 0,
+      failedExtraction: 0,
+      unsupported: 0,
+    });
+    const documentId = result.entries[0].documentId;
+
+    const content = await app.fetch(
+      new Request(
+        `${BASE}/v1/profiles/${profileId}/knowledge-base/${documentId}/content`,
+        { headers: session.headers({}, orgId) }
+      )
+    );
+
+    expect(content.status).toBe(200);
+    expect(Buffer.from(await content.arrayBuffer())).toEqual(bytes);
+  }, 30_000);
+
+  test("rejects noncanonical base64 without importing documents", async () => {
+    const { post, profileId } = await setupSession(
+      "platform-kb-canonical-zip@example.com"
+    );
+
+    const archive = zipSync({ "a.txt": Buffer.from("x") }, { level: 0 });
+    const canonical = Buffer.from(archive).toString("base64");
+    expect(canonical.endsWith("==")).toBe(true);
+    const noncanonicalPadding = `${canonical.slice(0, -3)}B==`;
+    expect(Buffer.from(noncanonicalPadding, "base64")).toEqual(
+      Buffer.from(archive)
+    );
+    const path = `/v1/profiles/${profileId}/knowledge-base/import-zip`;
+
+    for (const zipBase64 of [
+      `${canonical}\n`,
+      ` ${canonical}`,
+      `${canonical}!`,
+      canonical.slice(0, -2),
+      `${canonical}=`,
+      `${canonical.slice(0, 4)}=${canonical.slice(4)}`,
+      noncanonicalPadding,
+    ]) {
+      const response = await post(path, JSON.stringify({ zipBase64 }));
+      expect(response.status).toBe(400);
+    }
+
+    const response = await post(path, JSON.stringify({ zipBase64: canonical }));
+    expect(response.status).toBe(200);
+    expect((await response.json()).totals.created).toBe(1);
+  }, 30_000);
+
   const body = (files: Record<string, Uint8Array>) =>
     JSON.stringify({
       zipBase64: Buffer.from(zipSync(files)).toString("base64"),
