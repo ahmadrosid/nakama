@@ -10,6 +10,13 @@ import {
 import { ExpandableTextarea } from "@nakama/ui/expandable-textarea";
 import { Input } from "@nakama/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@nakama/ui/select";
 import { ArrowDown01Icon } from "hugeicons-react";
 import { useState } from "react";
 import {
@@ -295,7 +302,10 @@ function ProfileChatAgentField({
   presets: AcpAgentPresetSummary[];
   selectedPresetId: string | null;
 }) {
-  const value = selectedPresetId ?? (hasCustomAgent ? "custom" : "");
+  // Radix select items cannot be empty strings, so the built-in chat uses a
+  // sentinel that maps back to "no agent" on save.
+  const builtInValue = "builtin";
+  const value = selectedPresetId ?? (hasCustomAgent ? "custom" : builtInValue);
 
   return (
     <Field
@@ -303,25 +313,37 @@ function ProfileChatAgentField({
       htmlFor="profile-chat-agent"
       label="Chat agent"
     >
-      <select
-        className="flex h-8 w-full cursor-pointer items-center rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+      <Select
         disabled={disabled}
-        id="profile-chat-agent"
-        onChange={(event) => void onChange(event.target.value)}
+        onValueChange={(next) =>
+          void onChange(next === builtInValue ? "" : (next ?? ""))
+        }
         value={value}
       >
-        <option value="">Nakama built-in</option>
-        {presets.map((preset) => (
-          <option key={preset.id} value={preset.id}>
-            {preset.label}
-          </option>
-        ))}
-        {hasCustomAgent ? (
-          <option disabled value="custom">
-            Custom command
-          </option>
-        ) : null}
-      </select>
+        <SelectTrigger
+          aria-label="Chat agent"
+          className="w-full"
+          id="profile-chat-agent"
+        >
+          <SelectValue placeholder="Nakama built-in">
+            {presets.find((preset) => preset.id === selectedPresetId)?.label ??
+              (hasCustomAgent ? "Custom command" : "Nakama built-in")}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={builtInValue}>Nakama built-in</SelectItem>
+          {presets.map((preset) => (
+            <SelectItem key={preset.id} value={preset.id}>
+              {preset.label}
+            </SelectItem>
+          ))}
+          {hasCustomAgent ? (
+            <SelectItem disabled value="custom">
+              Custom command
+            </SelectItem>
+          ) : null}
+        </SelectContent>
+      </Select>
     </Field>
   );
 }

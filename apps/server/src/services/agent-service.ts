@@ -2824,6 +2824,33 @@ export class AgentService {
     return { settings: toAcpSessionSettings(configOptions) };
   }
 
+  /**
+   * The agent reads its MCP tool list when it connects, which happens when its
+   * session starts. A draft starts that session before any chat exists, so the
+   * draft registers the profile's tools first. The chat overwrites the context
+   * when it starts.
+   */
+  private async registerAcpDraftTools(
+    orgId: string,
+    profile: StoredProfileRecord
+  ): Promise<void> {
+    const tools = await this.resolveProfileTools(profile, {
+      includeMemoryWriteTools: true,
+      userId: null,
+    });
+
+    setAcpToolAccess(
+      acpDraftKey(orgId, profile.id),
+      tools,
+      buildToolExecutionContext({
+        channel: "web",
+        ...this.memoryBackend.toolContext(orgId, profile.id),
+        orgId,
+        profileId: profile.id,
+      })
+    );
+  }
+
   private async resolveAcpSession(
     sessionId: string,
     orgId: string
@@ -2846,6 +2873,7 @@ export class AgentService {
     profileId: string
   ): Promise<AcpSessionSettingsResponse> {
     const profile = await this.requireProfile(orgId, profileId);
+    await this.registerAcpDraftTools(orgId, profile);
 
     const agentOptions = acpOptionsForProfile(
       profile,
@@ -2864,6 +2892,7 @@ export class AgentService {
     value: string
   ): Promise<AcpSessionSettingsResponse> {
     const profile = await this.requireProfile(orgId, profileId);
+    await this.registerAcpDraftTools(orgId, profile);
 
     const agentOptions = acpOptionsForProfile(
       profile,
