@@ -13,6 +13,7 @@ import {
   approvedPluginPackage,
   closePluginPackageRegistry,
   pluginPackage,
+  publishPluginPackageVersion,
 } from "../../testing/plugin-package-fixture";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
@@ -790,6 +791,62 @@ describe("plugin HTTP API", () => {
     expect(removed.status).toBe(204);
   });
 
+  test("a newer registry version of an approved plugin is reported to platform admins only", async () => {
+    const { app, authService, databaseAdapter } = createApp();
+    const installer = await setupFreshInstallSession(app, databaseAdapter);
+
+    await seedUser(databaseAdapter, authService, {
+      email: "org-admin@example.com",
+      orgId: installer.orgId!,
+      role: "admin",
+      userId: "user_org_admin",
+    });
+
+    const orgAdmin = await loginUserSession(
+      app,
+      "org-admin@example.com",
+      PASSWORD,
+      installer.orgId!
+    );
+
+    const platform = await loginPlatformAdminSession(
+      app,
+      authService,
+      databaseAdapter
+    );
+
+    const source = pluginBundle();
+    await installRelease(app, platform, source);
+
+    const updates = async () => {
+      const response = await jsonRequest(
+        app,
+        "/v1/platform/plugins/updates",
+        platform
+      );
+
+      expect(response.status).toBe(200);
+
+      return (await response.json()).updates;
+    };
+
+    expect(await updates()).toEqual([]);
+
+    publishPluginPackageVersion(source.packageName, "1.1.0");
+
+    expect(await updates()).toEqual([
+      { packageName: source.packageName, pluginId: "notes", version: "1.1.0" },
+    ]);
+
+    const forbidden = await jsonRequest(
+      app,
+      "/v1/platform/plugins/updates",
+      orgAdmin
+    );
+
+    expect(forbidden.status).toBe(403);
+  });
+
   test("update preview includes lifecycle errors and removed contributions", async () => {
     const { app, authService, databaseAdapter, pluginService } = createApp();
     const admin = await setupFreshInstallSession(app, databaseAdapter);
@@ -977,6 +1034,7 @@ describe("plugin HTTP API", () => {
     };
 
     expect(spec.paths["/v1/platform/plugins/releases"]).toBeTruthy();
+    expect(spec.paths["/v1/platform/plugins/updates"]).toBeTruthy();
     expect(spec.paths["/v1/plugins"]).toBeTruthy();
     expect(
       spec.paths["/v1/plugins/official/{pluginId}/reinstall"]

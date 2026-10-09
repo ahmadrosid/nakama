@@ -3238,6 +3238,17 @@ export interface ListPluginReleasesResponse {
   releases: PluginReleaseSummary[];
 }
 
+/** A registry version newer than anything approved for this plugin. */
+export interface PluginUpdateSummary {
+  packageName: string;
+  pluginId: string;
+  version: string;
+}
+
+export interface ListPluginUpdatesResponse {
+  updates: PluginUpdateSummary[];
+}
+
 export interface PluginPackageRequest {
   packageName: string;
   version: string;

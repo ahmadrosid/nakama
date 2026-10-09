@@ -143,6 +143,23 @@ export function pluginPackage(
   return source;
 }
 
+/** Makes the registry answer with a newer latest version of a fixture package. */
+export function publishPluginPackageVersion(
+  packageName: string,
+  version: string
+) {
+  const fixture = packages.get(packageName);
+
+  if (!fixture) {
+    throw new Error("Unknown fixture");
+  }
+
+  packages.set(packageName, {
+    ...fixture,
+    source: { packageName, version },
+  });
+}
+
 export function approvedPluginPackage(
   source: PluginPackageRequest
 ): InstallPluginPackageRequest {

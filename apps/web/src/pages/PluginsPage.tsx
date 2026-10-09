@@ -28,6 +28,7 @@ import { Link, useParams } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
 import {
   formatPluginTrustLines,
+  isNewerPluginVersion,
   isPluginLifecycleBusy,
   nextPluginVersions,
   pluginAgentAccessState,
@@ -42,6 +43,7 @@ import {
   useOrgPlugins,
   usePluginAgentAccess,
   usePluginReleases,
+  usePluginUpdates,
   usePreviewOrgPluginUpdate,
   usePreviewPluginPackage,
   useReinstallOfficialPlugin,
@@ -73,6 +75,8 @@ type PluginDialog =
       description: string;
     }
   | {
+      /** Set when approving a newer version of a plugin this org already runs. */
+      plugin?: OrgPluginDetail;
       source: PluginPackageRequest;
       preview: PluginPackagePreviewResponse;
       type: "package";
@@ -95,6 +99,7 @@ function usePluginCatalog(canInstallPackages: boolean) {
   const releasesQuery = usePluginReleases(canInstallPackages);
   const officialQuery = useOfficialPlugins();
   const official = officialQuery.data?.plugins ?? [];
+  const updates = usePluginUpdates(canInstallPackages).data?.updates ?? [];
 
   const releases = canInstallPackages
     ? (releasesQuery.data?.releases ?? [])
@@ -119,6 +124,7 @@ function usePluginCatalog(canInstallPackages: boolean) {
     pluginIds,
     plugins,
     releases,
+    updates,
   };
 }
 
@@ -172,7 +178,10 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
     queueMicrotask(() => restoreFocusRef.current?.focus());
   }
 
-  async function previewNpmPackage(source: PluginPackageRequest) {
+  async function previewNpmPackage(
+    source: PluginPackageRequest,
+    plugin?: OrgPluginDetail
+  ) {
     if (!canInstallPackages) {
       return;
     }
@@ -181,7 +190,7 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
 
     try {
       const preview = await previewPackage.mutateAsync(source);
-      setDialog({ preview, source, type: "package" });
+      setDialog({ plugin, preview, source, type: "package" });
     } catch (err) {
       setActionError(formatError(err));
     }
@@ -218,6 +227,12 @@ function usePluginManagement(canInstallPackages: boolean, orgId: string) {
           expectedIntegrity: dialog.preview.integrity,
           ...dialog.source,
         });
+
+        if (dialog.plugin) {
+          await handleUpdate(dialog.plugin, dialog.source.version);
+
+          return;
+        }
       } else if (dialog.type === "install") {
         await installOrg.mutateAsync({ pluginId: dialog.plugin.pluginId });
       } else if (dialog.type === "enable") {
@@ -322,6 +337,7 @@ export function PluginsPage() {
     official,
     releases,
     pluginIds,
+    updates,
     isLoading,
     catalogLoading,
     error: queryError,
@@ -392,6 +408,22 @@ export function PluginsPage() {
               (item) => item.pluginId === pluginId
             );
 
+            const updatable =
+              plugin?.installed &&
+              ["enabled", "disabled"].includes(plugin.lifecycleState);
+
+            const registryUpdate = updatable
+              ? updates.find(
+                  (item) =>
+                    item.pluginId === pluginId &&
+                    isNewerPluginVersion(item.version, plugin)
+                )
+              : undefined;
+
+            const updateVersion = updatable
+              ? (nextPluginVersions(plugin)[0] ?? registryUpdate?.version)
+              : undefined;
+
             return (
               <PluginRow
                 accessCount={accessData?.counts[pluginId]}
@@ -454,6 +486,15 @@ export function PluginsPage() {
 
                     if (version) {
                       void handleUpdate(plugin, version);
+                    } else if (registryUpdate) {
+                      // Nobody approved this version yet: review it, then update.
+                      void previewNpmPackage(
+                        {
+                          packageName: registryUpdate.packageName,
+                          version: registryUpdate.version,
+                        },
+                        plugin
+                      );
                     }
 
                     return;
@@ -472,6 +513,7 @@ export function PluginsPage() {
                 plugin={plugin}
                 pluginId={pluginId}
                 releases={pluginReleases}
+                updateVersion={canManage ? updateVersion : undefined}
               />
             );
           })}
@@ -701,6 +743,8 @@ interface PluginRowProps {
   plugin?: OrgPluginDetail;
   pluginId: string;
   releases: PluginReleaseSummary[];
+  /** A newer version this org can move to, approved or still in the registry. */
+  updateVersion?: string;
 }
 
 function PluginRow({
@@ -718,6 +762,7 @@ function PluginRow({
   accessCount,
   onAction,
   onRemove,
+  updateVersion,
 }: PluginRowProps) {
   return (
     <li className={detail ? "min-w-0" : "min-w-0 px-4 py-3"}>
@@ -731,6 +776,7 @@ function PluginRow({
           plugin={plugin}
           pluginId={pluginId}
           releases={releases}
+          updateVersion={updateVersion}
         />
         <PluginRowControls
           busy={busy}
@@ -742,6 +788,7 @@ function PluginRow({
           onAction={onAction}
           plugin={plugin}
           pluginId={pluginId}
+          updateVersion={updateVersion}
         />
       </div>
       {plugin?.lastLifecycleError ? (
@@ -772,6 +819,7 @@ function PluginIdentity({
   plugin,
   pluginId,
   releases,
+  updateVersion,
 }: Pick<
   PluginRowProps,
   | "catalogDescription"
@@ -782,6 +830,7 @@ function PluginIdentity({
   | "plugin"
   | "pluginId"
   | "releases"
+  | "updateVersion"
 >) {
   const canOpen = plugin?.lifecycleState === "enabled" && plugin.ui !== null;
 
@@ -811,6 +860,11 @@ function PluginIdentity({
           {!detail && plugin?.selectedVersion ? (
             <span className="ml-2 font-normal text-muted-foreground text-xs">
               {plugin.selectedVersion}
+            </span>
+          ) : null}
+          {updateVersion ? (
+            <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 font-normal text-[10px] text-primary">
+              Update {updateVersion}
             </span>
           ) : null}
         </h2>
@@ -852,6 +906,7 @@ function PluginRowControls({
   canManage,
   canManageAgentAccess,
   onAction,
+  updateVersion,
 }: Pick<
   PluginRowProps,
   | "plugin"
@@ -863,6 +918,7 @@ function PluginRowControls({
   | "canManage"
   | "canManageAgentAccess"
   | "onAction"
+  | "updateVersion"
 >) {
   const actions = plugin ? pluginRowActions(plugin) : null;
   const canOpen = plugin?.lifecycleState === "enabled" && plugin.ui !== null;
@@ -899,6 +955,7 @@ function PluginRowControls({
         onAction={onAction}
         plugin={plugin}
         pluginId={pluginId}
+        updateVersion={updateVersion}
       />
     </div>
   );
@@ -944,6 +1001,7 @@ function PluginRowMenu({
   canManage,
   canManageAgentAccess,
   onAction,
+  updateVersion,
 }: Pick<
   PluginRowProps,
   | "plugin"
@@ -955,13 +1013,14 @@ function PluginRowMenu({
   | "canManage"
   | "canManageAgentAccess"
   | "onAction"
+  | "updateVersion"
 >) {
   const menuRef = useRef<HTMLButtonElement | null>(null);
   const actions = plugin ? pluginRowActions(plugin) : null;
 
   const secondaryActions = [
     ["disable", "Disable", actions?.disable],
-    ["update", "Update", actions?.update],
+    ["update", "Update", actions?.update || Boolean(updateVersion)],
     ["reinstall", "Reinstall", official && plugin?.installed],
     ["uninstall", "Uninstall", actions?.uninstall],
     ["purge", "Delete data", actions?.purge],
