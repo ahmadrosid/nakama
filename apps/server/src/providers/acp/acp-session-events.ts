@@ -30,11 +30,13 @@ interface ToolRecord {
  */
 export function createAcpUpdateMapper(handlers: StreamChatHandlers) {
   const tools = new Map<string, ToolRecord>();
+
   const completed: Array<{
     call: ToolCall;
     result: unknown;
     textBefore: string;
   }> = [];
+
   let assistantText = "";
   // Text since the last tool step. The final answer is what is left after the last step.
   let segmentText = "";
