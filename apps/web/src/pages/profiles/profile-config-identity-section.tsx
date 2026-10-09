@@ -135,6 +135,14 @@ export function ProfileConfigIdentitySection({
             />
           </Field>
 
+          <ProfileChatAgentField
+            disabled={identityDisabled}
+            hasCustomAgent={Boolean(detail.acpAgent) && !acpAgentId}
+            onChange={handleEditAcpAgent}
+            presets={acpAgentPresets}
+            selectedPresetId={acpAgentId}
+          />
+
           <ProfileModelField
             disabled={identityDisabled}
             editModel={editModel}
@@ -142,16 +150,6 @@ export function ProfileConfigIdentitySection({
             modelSelectionValue={modelSelectionValue}
             onChange={handleEditModelChange}
             providerModelGroups={providerModelGroups}
-          />
-        </div>
-
-        <div className="flex min-w-0 flex-wrap items-end gap-3 px-4 py-3">
-          <ProfileChatAgentField
-            disabled={identityDisabled}
-            hasCustomAgent={Boolean(detail.acpAgent) && !acpAgentId}
-            onChange={handleEditAcpAgent}
-            presets={acpAgentPresets}
-            selectedPresetId={acpAgentId}
           />
         </div>
 
