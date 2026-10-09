@@ -203,7 +203,13 @@ export class AutomationRunner {
 
       return { output };
     } catch (error) {
-      const message = formatAutomationRunError(error);
+      const lastTool = messages.findLast((item) => item.role === "tool");
+      const lastToolTimedOut =
+        lastTool?.role === "tool" &&
+        lastTool.content.includes('"timedOut":true');
+      const message = lastToolTimedOut
+        ? `${formatAutomationRunError(error)} The last tool call (${lastTool.name}) timed out.`
+        : formatAutomationRunError(error);
 
       const completedRun = await this.automationService.completeRun(
         runId,
