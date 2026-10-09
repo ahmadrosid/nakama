@@ -2905,6 +2905,14 @@ export class AgentService {
       value
     );
 
+    // The draft's choice becomes the default for the profile's next chats, so it
+    // survives an API restart and a new agent session.
+    await this.db.upsertProfile({
+      ...profile,
+      acpSettings: { ...profile.acpSettings, [configId]: value },
+      updatedAt: new Date().toISOString(),
+    });
+
     return { settings: toAcpSessionSettings(configOptions) };
   }
 
@@ -5443,6 +5451,7 @@ function acpOptionsForProfile(
   return {
     agent: profile.acpAgent,
     cwd: getProfileSoulDir(profile.orgId, profile.id),
+    initialSettings: profile.acpSettings ?? {},
     // Every ACP session gets the Nakama tools, including ones created by a settings call.
     mcpServers: [acpMcpServerFor(sessionKey)],
     sessionKey,

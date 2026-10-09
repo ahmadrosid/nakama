@@ -73,6 +73,9 @@ export function migrateDatabase(db: Database): void {
   atomic((database) =>
     addNullableTextColumnIfMissing(database, "profiles", "acp_agent")
   );
+  atomic((database) =>
+    addNullableTextColumnIfMissing(database, "profiles", "acp_settings")
+  );
 }
 
 function migrateSessionAppUserId(db: Database): void {
