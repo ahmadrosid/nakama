@@ -8,6 +8,7 @@ import {
   DashboardSquare01Icon,
   Folder01Icon,
   LayoutGridIcon,
+  Link01Icon,
   Notification01Icon,
   PackageIcon,
   Plug01Icon,
@@ -497,9 +498,9 @@ const INTEGRATION_SECTIONS = [
     label: "Notifications",
   },
   {
-    icon: Plug01Icon,
-    id: "composio",
-    label: "Composio",
+    icon: Link01Icon,
+    id: "connectors",
+    label: "Connectors",
   },
   {
     icon: CodeIcon,
@@ -525,7 +526,7 @@ export function visibleIntegrationSections(
   orgRole: string | undefined
 ) {
   return INTEGRATION_SECTIONS.filter((item) => {
-    if (item.id === "composio") {
+    if (item.id === "connectors") {
       return isPlatformAdmin || orgRole === "admin" || orgRole === "member";
     }
 

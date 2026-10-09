@@ -267,6 +267,15 @@ function AppShell() {
                   />
                   <Route element={<IntegrationsPage />} path="/integrations" />
                   <Route
+                    element={
+                      <Navigate
+                        replace
+                        to="/customize/connections/connectors"
+                      />
+                    }
+                    path="/customize/connections/composio"
+                  />
+                  <Route
                     element={<IntegrationsPage />}
                     path="/customize/connections/:section"
                   />

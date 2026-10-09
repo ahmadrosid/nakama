@@ -10,6 +10,7 @@ import {
   pluginManagementPath,
   pluginPagePath,
   skillDetailBackTarget,
+  visibleIntegrationSections,
   visibleNavGroups,
 } from "./navigation";
 
@@ -165,6 +166,31 @@ describe("plugin navigation", () => {
     expect(canAccessSystemPage(false, "member")).toBe(false);
     expect(canManagePluginReleases(true)).toBe(true);
     expect(canManagePluginReleases(false)).toBe(false);
+  });
+});
+
+describe("integration sections", () => {
+  const sectionIdsFor = (
+    isPlatformAdmin: boolean,
+    orgRole: string | undefined
+  ): string[] =>
+    visibleIntegrationSections(isPlatformAdmin, orgRole).map((item) => item.id);
+
+  test("members, org admins, and platform admins reach Connectors", () => {
+    expect(sectionIdsFor(false, "member")).toEqual(["connectors"]);
+    expect(sectionIdsFor(false, "admin")).toContain("connectors");
+    expect(sectionIdsFor(true, undefined)).toContain("connectors");
+  });
+
+  test("viewers do not reach Connectors", () => {
+    expect(sectionIdsFor(false, "viewer")).toEqual([]);
+  });
+
+  test("no two sections share an icon", () => {
+    const icons = visibleIntegrationSections(true, "admin").map(
+      (item) => item.icon
+    );
+    expect(new Set(icons).size).toBe(icons.length);
   });
 });
 
