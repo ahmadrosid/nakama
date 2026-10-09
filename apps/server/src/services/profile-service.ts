@@ -129,20 +129,14 @@ function readKnowledgeZip(zipBase64: string): Record<string, Uint8Array> {
     throw new NakamaApiError("ZIP file exceeds the 20 MiB limit.", 413);
   }
 
-  if (
-    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-      zipBase64
-    )
-  ) {
-    throw new NakamaApiError("Invalid base64 ZIP data.", 400);
-  }
-
   const archive = Buffer.from(zipBase64, "base64");
 
   if (archive.length > MAX_KNOWLEDGE_ZIP_BYTES) {
     throw new NakamaApiError("ZIP file exceeds the 20 MiB limit.", 413);
   }
 
+  // The canonical round-trip rejects invalid characters and padding without
+  // the regex engine's input-size limit on otherwise valid large archives.
   if (archive.toString("base64") !== zipBase64) {
     throw new NakamaApiError("Invalid base64 ZIP data.", 400);
   }
