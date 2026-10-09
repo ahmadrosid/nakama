@@ -64,6 +64,8 @@ export const queryKeys = {
     detail: (orgId: string, pluginId: string) =>
       ["plugins", orgId, pluginId] as const,
     releases: ["plugins", "releases"] as const,
+    // Under releases so approving a release refreshes the check too.
+    updates: ["plugins", "releases", "updates"] as const,
   },
   profiles: {
     all: ["profiles"] as const,

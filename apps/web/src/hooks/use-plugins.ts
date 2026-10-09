@@ -287,6 +287,15 @@ export function useOrgPlugin(pluginId: string | undefined) {
   });
 }
 
+export function usePluginUpdates(enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryFn: () => client.listPluginUpdates(),
+    queryKey: queryKeys.plugins.updates,
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function usePluginReleases(enabled: boolean) {
   return useQuery({
     ...pluginReleasesQueryOptions(),
@@ -488,6 +497,17 @@ function compareVersions(a: string, b: string): number {
   return preA.join("-").localeCompare(preB.join("-"), undefined, {
     numeric: true,
   });
+}
+
+/** True when a registry version is newer than the one this org runs. */
+export function isNewerPluginVersion(
+  version: string,
+  plugin: OrgPluginDetail
+): boolean {
+  return (
+    plugin.selectedVersion !== null &&
+    compareVersions(version, plugin.selectedVersion) > 0
+  );
 }
 
 /** Approved releases newer than the selected one, newest first. */

@@ -104,6 +104,7 @@ import type {
   ListOrgMemoryProposalsResponse,
   ListOrgPluginsResponse,
   ListPluginReleasesResponse,
+  ListPluginUpdatesResponse,
   ListProfileChangeHistoryResponse,
   ListProfileComposioToolkitsResponse,
   ListProfilesResponse,
@@ -3113,6 +3114,12 @@ export class NakamaClient {
   async listPluginReleases(): Promise<ListPluginReleasesResponse> {
     return this.request<ListPluginReleasesResponse>(
       "/v1/platform/plugins/releases"
+    );
+  }
+
+  async listPluginUpdates(): Promise<ListPluginUpdatesResponse> {
+    return this.request<ListPluginUpdatesResponse>(
+      "/v1/platform/plugins/updates"
     );
   }
 
