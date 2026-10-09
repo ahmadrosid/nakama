@@ -213,7 +213,7 @@ function ToolChecklist({
 
   return (
     <fieldset
-      className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border"
+      className="min-w-0 overflow-hidden rounded-xl border border-border"
       disabled={busy}
       id="create-profile-tool-list"
     >
@@ -238,7 +238,7 @@ function ToolChecklist({
           {selectedCount}/{tools.length}
         </span>
       </label>
-      <ul className="min-h-0 overflow-y-auto py-1">
+      <ul className="max-h-[min(18rem,35dvh)] overflow-y-auto py-1">
         {tools.map((tool) => (
           <li key={tool.id}>
             <label

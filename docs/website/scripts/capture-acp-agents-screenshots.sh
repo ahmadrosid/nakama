@@ -77,11 +77,14 @@ shoot() {
 }
 
 # ---------------------------------------------------------------------------
-# Shot 1: the Create agent dialog, filled in.
+# Shot 1: the Create agent dialog, filled in, with Claude as the agent.
 # ---------------------------------------------------------------------------
 $AB --session "$SESSION" open "${BASE_URL}/profiles?create=1"
 $AB --session "$SESSION" wait 2500
 $AB --session "$SESSION" fill "#create-profile-name" "Code Reviewer"
+$AB --session "$SESSION" click "#create-profile-agent"
+$AB --session "$SESSION" wait 400
+$AB --session "$SESSION" find role option click --name "Claude" --exact
 $AB --session "$SESSION" wait 300
 shoot acp-create-agent.png
 
