@@ -1,4 +1,5 @@
 import { Button } from "@nakama/ui/button";
+import { Card, CardContent } from "@nakama/ui/card";
 import {
   InputGroup,
   InputGroupAddon,
@@ -23,6 +24,11 @@ import {
 } from "@/components/integration-settings.shared";
 import { TelegramQrSetup } from "@/components/telegram-qr-setup";
 import { WorkerActionBar } from "@/components/WorkerActionBar";
+import {
+  useResolveTelegramAccessRequest,
+  useTelegramAccessRequests,
+} from "@/hooks/use-app-queries";
+import { formatError } from "@/lib/client";
 
 function pairingCodeDescription(
   pairingCode: string | null,
@@ -127,6 +133,72 @@ function TelegramPairingCodeControls({
         "Generate pairing code"
       )}
     </Button>
+  );
+}
+
+function TelegramAccessRequests() {
+  const { data } = useTelegramAccessRequests();
+  const resolve = useResolveTelegramAccessRequest();
+  const requests = data?.requests ?? [];
+
+  if (requests.length === 0) {
+    return null;
+  }
+
+  return (
+    <Card className="w-full overflow-hidden shadow-none">
+      <CardContent className="divide-y divide-border p-0">
+        <h3 className="px-4 py-3 font-medium text-sm">Waiting for approval</h3>
+        {requests.map((request) => (
+          <div
+            className="flex items-center justify-between gap-3 px-4 py-3"
+            key={request.userId}
+          >
+            <div className="min-w-0">
+              <div className="truncate text-sm">
+                {request.username ? `@${request.username}` : request.userId}
+              </div>
+              {request.username ? (
+                <div className="text-muted-foreground text-xs">
+                  {request.userId}
+                </div>
+              ) : null}
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button
+                disabled={resolve.isPending}
+                onClick={() =>
+                  resolve.mutate({ decision: "deny", userId: request.userId })
+                }
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                Deny
+              </Button>
+              <Button
+                disabled={resolve.isPending}
+                onClick={() =>
+                  resolve.mutate({
+                    decision: "approve",
+                    userId: request.userId,
+                  })
+                }
+                size="sm"
+                type="button"
+              >
+                Approve
+              </Button>
+            </div>
+          </div>
+        ))}
+        {resolve.error ? (
+          <p className="px-4 py-3 text-destructive text-xs" role="alert">
+            {formatError(resolve.error)}
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -486,7 +558,12 @@ export function TelegramSettingsCardContent({
           {tokenEditor}
         </ChannelConnectionStep>
       ) : null}
-      {step === 2 ? pairing : null}
+      {step === 2 ? (
+        <>
+          <TelegramAccessRequests />
+          {pairing}
+        </>
+      ) : null}
       {step === 0 ? null : footer}
     </ChannelSetupChecklist>
   );
@@ -498,6 +575,7 @@ export function TelegramSettingsCardContent({
   return (
     <div className="space-y-4">
       {checklist}
+      <TelegramAccessRequests />
       <ChannelAccessSettings
         actions={workerActions}
         configured={configured}

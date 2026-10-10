@@ -174,6 +174,53 @@ export function useSaveTelegramSettings() {
   return useTelegramSettingsHooks().useSave();
 }
 
+export function useTelegramAccessRequests() {
+  const profileId = useChannelProfileId();
+  const { activeOrg } = useAuth();
+  const api = client.forOrg(activeOrg?.id ?? null);
+
+  return useQuery({
+    queryFn: () => api.getTelegramAccessRequests(profileId),
+    queryKey: [...queryKeys.telegram.requests, activeOrg?.id, profileId],
+    refetchInterval: 5000,
+  });
+}
+
+export function useResolveTelegramAccessRequest() {
+  const profileId = useChannelProfileId();
+  const queryClient = useQueryClient();
+  const { activeOrg } = useAuth();
+  const api = client.forOrg(activeOrg?.id ?? null);
+
+  return useMutation({
+    mutationFn: async ({
+      decision,
+      userId,
+    }: {
+      decision: "approve" | "deny";
+      userId: number;
+    }) => {
+      if (decision === "approve") {
+        await api.approveTelegramAccessRequest(userId, profileId);
+
+        return;
+      }
+
+      await api.denyTelegramAccessRequest(userId, profileId);
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.telegram.requests,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.telegram.settings,
+        }),
+      ]);
+    },
+  });
+}
+
 export function useRegenerateTelegramHandshake() {
   const profileId = useChannelProfileId();
   const { activeOrg } = useAuth();

@@ -206,6 +206,7 @@ import type {
   SuggestToolParamsResponse,
   SyncSkillsResponse,
   SystemStatusResponse,
+  TelegramAccessRequestsResponse,
   TelegramPairingStartResponse,
   TelegramPairingStatusResponse,
   TelegramSettingsResponse,
@@ -2445,6 +2446,35 @@ export class NakamaClient {
       }
     );
   }
+
+  async getTelegramAccessRequests(
+    profileId?: string
+  ): Promise<TelegramAccessRequestsResponse> {
+    return this.request<TelegramAccessRequestsResponse>(
+      `/v1/settings/telegram/requests?profileId=${encodeURIComponent(profileId ?? "")}`
+    );
+  }
+
+  async approveTelegramAccessRequest(
+    userId: number,
+    profileId?: string
+  ): Promise<TelegramSettingsResponse> {
+    return this.request<TelegramSettingsResponse>(
+      `/v1/settings/telegram/requests/${userId}/approve?profileId=${encodeURIComponent(profileId ?? "")}`,
+      { method: "POST" }
+    );
+  }
+
+  async denyTelegramAccessRequest(
+    userId: number,
+    profileId?: string
+  ): Promise<TelegramAccessRequestsResponse> {
+    return this.request<TelegramAccessRequestsResponse>(
+      `/v1/settings/telegram/requests/${userId}/deny?profileId=${encodeURIComponent(profileId ?? "")}`,
+      { method: "POST" }
+    );
+  }
+
   async startTelegramPairing(
     request: StartTelegramPairingRequest,
     profileId?: string

@@ -117,6 +117,7 @@ export const queryKeys = {
   },
   systemStatus: ["systemStatus"] as const,
   telegram: {
+    requests: ["telegram", "requests"] as const,
     settings: ["telegram", "settings"] as const,
   },
   thinkingSettings: ["thinking", "settings"] as const,

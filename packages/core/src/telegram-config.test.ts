@@ -7,11 +7,14 @@ import {
   generatePairingCode,
   getTelegramConfigDir,
   isTelegramUserAuthorized,
+  listTelegramAccessRequests,
   listTelegramConfigOrgIds,
   loadTelegramConfigFile,
   maskBotToken,
   parseAllowedUserIds,
+  recordTelegramAccessRequest,
   regenerateTelegramHandshake,
+  removeTelegramAccessRequest,
   resolveTelegramConfigFromSources,
   saveTelegramConfig,
   verifyAndPairTelegramUser,
@@ -158,5 +161,38 @@ describe("per-org telegram config", () => {
     expect(() => getTelegramConfigDir("../../etc")).toThrow(
       "Invalid organization id"
     );
+  });
+});
+
+describe("telegram access requests", () => {
+  test("records each sender once and removes on resolve", async () => {
+    await withTempHomedir("nakama-telegram-requests-", async () => {
+      await recordTelegramAccessRequest(null, { userId: 7, username: "jane" });
+      await recordTelegramAccessRequest(null, { userId: 7, username: "other" });
+      await recordTelegramAccessRequest(null, { userId: 8 });
+
+      expect(await listTelegramAccessRequests(null)).toMatchObject([
+        { userId: 7, username: "jane" },
+        { userId: 8, username: null },
+      ]);
+
+      const remaining = await removeTelegramAccessRequest(null, 7);
+
+      expect(remaining.map((request) => request.userId)).toEqual([8]);
+    });
+  });
+
+  test("drops new senders once the list is full", async () => {
+    await withTempHomedir("nakama-telegram-requests-cap-", async () => {
+      for (let userId = 1; userId <= 20; userId += 1) {
+        await recordTelegramAccessRequest(null, { userId });
+      }
+
+      expect(await recordTelegramAccessRequest(null, { userId: 99 })).toBe(
+        false
+      );
+
+      expect(await listTelegramAccessRequests(null)).toHaveLength(20);
+    });
   });
 });

@@ -112,6 +112,9 @@ const NO_CODE_PROMPT =
   "Open Nakama Integrations → Telegram, save your bot token, and copy the pairing code. " +
   "Then send that code here.";
 
+const ACCESS_REQUESTED_NOTE =
+  "I asked the owner to let you in. You can chat once they approve.";
+
 export interface ChatHandlerDeps {
   authStore: TelegramAuthStore;
   client: NakamaClient;
@@ -338,6 +341,14 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     });
   };
 
+  async function requestAccess(ctx: Context, userId: number): Promise<void> {
+    try {
+      await authStore.requestAccess(userId, ctx.from?.username);
+    } catch (error) {
+      console.error("Failed to record Telegram access request", error);
+    }
+  }
+
   async function handlePairing(
     ctx: Context,
     text: string,
@@ -355,13 +366,19 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
 
     if (command === "/start") {
-      await telegram.send(hasHandshake ? PAIRING_PROMPT : NO_CODE_PROMPT);
+      await requestAccess(ctx, userId);
+
+      await telegram.send(
+        `${hasHandshake ? PAIRING_PROMPT : NO_CODE_PROMPT}\n\n${ACCESS_REQUESTED_NOTE}`
+      );
 
       return;
     }
 
     if (!hasHandshake) {
-      await telegram.send(NO_CODE_PROMPT);
+      await requestAccess(ctx, userId);
+
+      await telegram.send(`${NO_CODE_PROMPT}\n\n${ACCESS_REQUESTED_NOTE}`);
 
       return;
     }

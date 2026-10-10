@@ -1,5 +1,6 @@
 import { rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { z } from "zod";
 import {
   assertChannelPath,
   type ChannelConfigScope,
@@ -16,10 +17,17 @@ import {
   resetChannelConversationState,
   resolveHandshakeOnSave,
   verifyAndPairBotChannelUser,
+  withPairingConfigLock,
   writeBotChannelIniConfig,
 } from "./channel-config-shared";
 import { readEnvValue } from "./config";
-import { ensureDir, pathExists, readDirectoryOrEmpty } from "./fs";
+import {
+  ensureDir,
+  pathExists,
+  readDirectoryOrEmpty,
+  readTextOrNull,
+  writeTextFile,
+} from "./fs";
 import { getUserConfigDir } from "./user-config";
 
 export {
@@ -389,6 +397,130 @@ export async function verifyAndPairTelegramUser(
     load: () => loadTelegramConfigFile(orgId),
     userId,
     write: (config) => writeTelegramConfigFile(orgId, config),
+  });
+}
+
+export interface TelegramAccessRequest {
+  requestedAt: string;
+  userId: number;
+  username: string | null;
+}
+
+const ACCESS_REQUEST_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** A bot token leaks easily; strangers must not be able to fill the owner's list. */
+const MAX_ACCESS_REQUESTS = 20;
+
+const accessRequestsSchema = z.array(
+  z.object({
+    requestedAt: z.string(),
+    userId: z.number().int(),
+    username: z.string().nullable(),
+  })
+);
+
+function getTelegramAccessRequestsPath(orgId: TelegramConfigScope): string {
+  const path = join(getTelegramConfigDir(orgId), "access-requests.json");
+
+  if (isChannelOwner(orgId)) {
+    assertChannelPath(path);
+  }
+
+  return path;
+}
+
+async function readTelegramAccessRequests(
+  orgId: TelegramConfigScope
+): Promise<TelegramAccessRequest[]> {
+  const raw = await readTextOrNull(getTelegramAccessRequestsPath(orgId));
+
+  if (!raw) {
+    return [];
+  }
+
+  let json: unknown;
+
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+
+  const parsed = accessRequestsSchema.safeParse(json);
+
+  if (!parsed.success) {
+    return [];
+  }
+
+  const cutoff = Date.now() - ACCESS_REQUEST_TTL_MS;
+
+  return parsed.data.filter((entry) => Date.parse(entry.requestedAt) > cutoff);
+}
+
+async function updateTelegramAccessRequests<T>(
+  orgId: TelegramConfigScope,
+  change: (requests: TelegramAccessRequest[]) => {
+    result: T;
+    requests: TelegramAccessRequest[];
+  }
+): Promise<T> {
+  return withPairingConfigLock(getTelegramConfigDir(orgId), async () => {
+    const { result, requests } = change(
+      await readTelegramAccessRequests(orgId)
+    );
+
+    await writeTextFile(
+      getTelegramAccessRequestsPath(orgId),
+      JSON.stringify(requests),
+      { ensureDir: getTelegramConfigDir(orgId) }
+    );
+
+    return result;
+  });
+}
+
+export function listTelegramAccessRequests(
+  orgId: TelegramConfigScope
+): Promise<TelegramAccessRequest[]> {
+  return readTelegramAccessRequests(orgId);
+}
+
+/** Returns false when the list is full and the request was dropped. */
+export function recordTelegramAccessRequest(
+  orgId: TelegramConfigScope,
+  request: { userId: number; username?: string | null }
+): Promise<boolean> {
+  return updateTelegramAccessRequests(orgId, (requests) => {
+    if (requests.some((entry) => entry.userId === request.userId)) {
+      return { requests, result: true };
+    }
+
+    if (requests.length >= MAX_ACCESS_REQUESTS) {
+      return { requests, result: false };
+    }
+
+    return {
+      requests: [
+        ...requests,
+        {
+          requestedAt: new Date().toISOString(),
+          userId: request.userId,
+          username: request.username?.trim() || null,
+        },
+      ],
+      result: true,
+    };
+  });
+}
+
+export function removeTelegramAccessRequest(
+  orgId: TelegramConfigScope,
+  userId: number
+): Promise<TelegramAccessRequest[]> {
+  return updateTelegramAccessRequests(orgId, (requests) => {
+    const remaining = requests.filter((entry) => entry.userId !== userId);
+
+    return { requests: remaining, result: remaining };
   });
 }
 

@@ -13,6 +13,7 @@ import {
 } from "@nakama/core/channel-active-stream";
 import { ChannelSessionStore as SessionStore } from "@nakama/core/channel-session-store";
 import type { ChatMessage } from "@nakama/core/contract";
+import { listTelegramAccessRequests } from "@nakama/core/telegram-config";
 import {
   UNSUPPORTED_DOCUMENT_TYPES_REPLY,
   UNSUPPORTED_MEDIA_REPLY,
@@ -1314,6 +1315,28 @@ describe("createChatHandler security", () => {
       expect(replies).toHaveLength(1);
       expect(replies[0]).toContain("Paste your pairing code");
       expect(calls.sendStream).toBe(0);
+    });
+  });
+
+  test("/start from an unlinked user queues an access request", async () => {
+    await withTempHome(async (homeDir) => {
+      await writeTelegramConfigIni(homeDir, { botToken: "1234567890:TEST" });
+
+      const { handler: handleMessage } = await createTestHandler(
+        homeDir,
+        { config: TEST_CONFIG },
+        {}
+      );
+
+      const { ctx } = createMessageContext({ text: "/start", userId: 1001 });
+
+      await handleMessage(ctx);
+
+      expect(
+        (await listTelegramAccessRequests(null)).map(
+          (request) => request.userId
+        )
+      ).toEqual([1001]);
     });
   });
 

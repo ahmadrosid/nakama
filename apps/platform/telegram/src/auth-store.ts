@@ -5,6 +5,7 @@ import type {
 import {
   isTelegramUserAuthorized,
   loadTelegramConfigFile,
+  recordTelegramAccessRequest,
   verifyAndPairTelegramUser,
 } from "@nakama/core/telegram-config";
 
@@ -29,6 +30,10 @@ export class TelegramAuthStore {
     }
 
     return isTelegramUserAuthorized(userId, this.config);
+  }
+
+  async requestAccess(userId: number, username?: string): Promise<void> {
+    await recordTelegramAccessRequest(this.orgId, { userId, username });
   }
 
   async tryPair(

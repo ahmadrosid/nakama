@@ -80,6 +80,7 @@ import type {
   StartTelegramPairingRequest,
   SuggestToolParamsResponse,
   SyncSkillsResponse,
+  TelegramAccessRequestsResponse,
   TelegramPairingStartResponse,
   TelegramPairingStatusResponse,
   TelegramSettingsResponse,
@@ -150,6 +151,7 @@ import {
   isProviderConfigured,
   isWritableSoulFileKey,
   listArtifacts,
+  listTelegramAccessRequests,
   loadComposioSettingsPublic,
   loadDiscordSettingsPublic,
   loadEmailConfig,
@@ -185,6 +187,7 @@ import {
   regenerateWhatsAppPairingCode,
   rehydrateMessagesForProvider as rehydrateAttachmentMessages,
   rehydrateAttachmentRefsInContent,
+  removeTelegramAccessRequest,
   replaceImagePartsWithDescriptions,
   resolveDiscordApplicationId,
   resolveOllamaHostMode,
@@ -1340,6 +1343,36 @@ export class AgentService {
     );
 
     return settings;
+  }
+
+  async getTelegramAccessRequests(
+    orgId: ChannelConfigScope
+  ): Promise<TelegramAccessRequestsResponse> {
+    return { requests: await listTelegramAccessRequests(orgId) };
+  }
+
+  async approveTelegramAccessRequest(
+    orgId: ChannelConfigScope,
+    userId: number
+  ): Promise<TelegramSettingsResponse> {
+    const existing = await loadTelegramSettingsPublic(orgId);
+
+    const settings = await this.setTelegramSettings(orgId, {
+      allowedUserIds: [...new Set([...existing.allowedUserIds, userId])].join(
+        ","
+      ),
+    });
+
+    await removeTelegramAccessRequest(orgId, userId);
+
+    return settings;
+  }
+
+  async denyTelegramAccessRequest(
+    orgId: ChannelConfigScope,
+    userId: number
+  ): Promise<TelegramAccessRequestsResponse> {
+    return { requests: await removeTelegramAccessRequest(orgId, userId) };
   }
 
   async regenerateTelegramHandshake(

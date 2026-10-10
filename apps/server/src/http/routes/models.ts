@@ -21,6 +21,7 @@ import {
   type SendEmailTestResponse,
   type SendErrorTrackingTestResponse,
   type SlackSettingsResponse,
+  type TelegramAccessRequestsResponse,
   type TelegramPairingStartResponse,
   type TelegramPairingStatusResponse,
   type TelegramSettingsResponse,
@@ -2251,6 +2252,46 @@ export function registerModelRoutes(
       return errorResponse(message, 400);
     }
   });
+  app.get("/v1/settings/telegram/requests", async (c) => {
+    requireOrgAdminOrPlatformAdminFromContext(c);
+
+    return json<TelegramAccessRequestsResponse>(
+      await agent.getTelegramAccessRequests(await channelOwner(c))
+    );
+  });
+
+  app.post("/v1/settings/telegram/requests/:userId/approve", async (c) => {
+    requireOrgAdminOrPlatformAdminFromContext(c);
+    const userId = Number(c.req.param("userId"));
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return errorResponse("Invalid Telegram user ID.", 400);
+    }
+
+    try {
+      return json<TelegramSettingsResponse>(
+        await agent.approveTelegramAccessRequest(await channelOwner(c), userId)
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      return errorResponse(message, 400);
+    }
+  });
+
+  app.post("/v1/settings/telegram/requests/:userId/deny", async (c) => {
+    requireOrgAdminOrPlatformAdminFromContext(c);
+    const userId = Number(c.req.param("userId"));
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return errorResponse("Invalid Telegram user ID.", 400);
+    }
+
+    return json<TelegramAccessRequestsResponse>(
+      await agent.denyTelegramAccessRequest(await channelOwner(c), userId)
+    );
+  });
+
   app.post("/v1/settings/telegram/pairing", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
     const owner = await channelOwner(c);
