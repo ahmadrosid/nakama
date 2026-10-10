@@ -1,5 +1,4 @@
 import { Button } from "@nakama/ui/button";
-import { Card, CardContent } from "@nakama/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -119,83 +118,79 @@ export function TelegramAllowedUsers({
 
   return (
     <>
-      <Card className="w-full overflow-hidden shadow-none">
-        <CardContent className="divide-y divide-border p-0">
-          <h3 className="px-4 py-3 font-medium text-sm">
-            Allowed users{" "}
-            <span className="font-normal text-muted-foreground">
-              {allowedUsers.length}
-            </span>
-          </h3>
-          {allowedUsers.map((user) => (
-            <div
-              className="flex items-center justify-between gap-3 px-4 py-3"
-              key={user.id}
+      <div className="divide-y divide-border">
+        <h3 className="px-4 py-3 font-medium text-sm">
+          Allowed users{" "}
+          <span className="font-normal text-muted-foreground">
+            {allowedUsers.length}
+          </span>
+        </h3>
+        {allowedUsers.map((user) => (
+          <div
+            className="flex items-center justify-between gap-3 px-4 py-3"
+            key={user.id}
+          >
+            <div className="min-w-0">
+              {user.username ? (
+                <p className="truncate text-sm">@{user.username}</p>
+              ) : null}
+              <code className="block truncate text-muted-foreground text-xs">
+                {user.id}
+              </code>
+            </div>
+            <Button
+              aria-label={`Remove Telegram user ID ${user.id}`}
+              disabled={saveMutation.isPending}
+              onClick={() => setRemoveTarget(user)}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
             >
-              <div className="min-w-0">
-                {user.username ? (
-                  <p className="truncate text-sm">@{user.username}</p>
-                ) : null}
-                <code className="block truncate text-muted-foreground text-xs">
-                  {user.id}
-                </code>
-              </div>
-              <Button
-                aria-label={`Remove Telegram user ID ${user.id}`}
-                disabled={saveMutation.isPending}
-                onClick={() => setRemoveTarget(user)}
-                size="icon-sm"
+              <Delete02Icon aria-hidden="true" className="size-4" />
+            </Button>
+          </div>
+        ))}
+        <details className="px-4 py-3 text-sm">
+          <summary className="cursor-pointer text-muted-foreground hover:text-foreground focus-visible:outline-ring">
+            Add by user ID
+          </summary>
+          <InputGroup className="mt-3">
+            <InputGroupInput
+              aria-label="Telegram user ID"
+              className="font-mono text-sm"
+              disabled={saveMutation.isPending}
+              onChange={(event) => {
+                setNewAllowedUserInput(event.target.value);
+
+                if (formError) {
+                  setFormError(null);
+                }
+              }}
+              placeholder="213193924"
+              value={newAllowedUserInput}
+            />
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                disabled={saveMutation.isPending || !newAllowedUserInput.trim()}
+                onClick={addAllowedUserId}
+                size="sm"
                 type="button"
                 variant="ghost"
               >
-                <Delete02Icon aria-hidden="true" className="size-4" />
-              </Button>
-            </div>
-          ))}
-          <details className="px-4 py-3 text-sm">
-            <summary className="cursor-pointer text-muted-foreground hover:text-foreground focus-visible:outline-ring">
-              Add by user ID
-            </summary>
-            <InputGroup className="mt-3">
-              <InputGroupInput
-                aria-label="Telegram user ID"
-                className="font-mono text-sm"
-                disabled={saveMutation.isPending}
-                onChange={(event) => {
-                  setNewAllowedUserInput(event.target.value);
-
-                  if (formError) {
-                    setFormError(null);
-                  }
-                }}
-                placeholder="213193924"
-                value={newAllowedUserInput}
-              />
-              <InputGroupAddon align="inline-end">
-                <InputGroupButton
-                  disabled={
-                    saveMutation.isPending || !newAllowedUserInput.trim()
-                  }
-                  onClick={addAllowedUserId}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  Add user
-                </InputGroupButton>
-              </InputGroupAddon>
-            </InputGroup>
-            {formError ? (
-              <p
-                className="mt-2 rounded-md bg-destructive/10 px-2.5 py-1 text-destructive text-xs"
-                role="alert"
-              >
-                {formError}
-              </p>
-            ) : null}
-          </details>
-        </CardContent>
-      </Card>
+                Add user
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
+          {formError ? (
+            <p
+              className="mt-2 rounded-md bg-destructive/10 px-2.5 py-1 text-destructive text-xs"
+              role="alert"
+            >
+              {formError}
+            </p>
+          ) : null}
+        </details>
+      </div>
 
       <Dialog
         onOpenChange={(next) => !next && setRemoveTarget(null)}

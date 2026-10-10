@@ -8,7 +8,6 @@ import {
 } from "@nakama/ui/input-group";
 import { Spinner } from "@nakama/ui/spinner";
 import {
-  CheckmarkCircle01Icon,
   Copy01Icon,
   RefreshIcon,
   ViewIcon,
@@ -20,7 +19,6 @@ import {
   ChannelSettings,
   ChannelSetupChecklist,
   IntegrationSettingsFooter,
-  IntegrationStatusHeader,
   SettingsRow,
 } from "@/components/integration-settings.shared";
 import { TelegramQrSetup } from "@/components/telegram-qr-setup";
@@ -30,6 +28,7 @@ import {
   useTelegramAccessRequests,
 } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
+import { cn } from "@/lib/utils";
 
 function pairingCodeDescription(
   pairingCode: string | null,
@@ -156,30 +155,28 @@ function TelegramInviteLink() {
   }
 
   return (
-    <Card className="w-full overflow-hidden shadow-none">
-      <CardContent className="space-y-3 p-4">
-        <h3 className="font-medium text-sm">Invite someone</h3>
-        <InputGroup>
-          <InputGroupInput
-            aria-label="Bot link"
-            className="font-mono text-sm"
-            readOnly
-            value={link}
-          />
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton
-              onClick={() => void copyLink()}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              <Copy01Icon aria-hidden />
-              {copied ? "Copied" : "Copy link"}
-            </InputGroupButton>
-          </InputGroupAddon>
-        </InputGroup>
-      </CardContent>
-    </Card>
+    <div className="space-y-3 p-4">
+      <h3 className="font-medium text-sm">Invite someone</h3>
+      <InputGroup>
+        <InputGroupInput
+          aria-label="Bot link"
+          className="font-mono text-sm"
+          readOnly
+          value={link}
+        />
+        <InputGroupAddon align="inline-end">
+          <InputGroupButton
+            onClick={() => void copyLink()}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            <Copy01Icon aria-hidden />
+            {copied ? "Copied" : "Copy link"}
+          </InputGroupButton>
+        </InputGroupAddon>
+      </InputGroup>
+    </div>
   );
 }
 
@@ -193,59 +190,57 @@ function TelegramAccessRequests() {
   }
 
   return (
-    <Card className="w-full overflow-hidden shadow-none">
-      <CardContent className="divide-y divide-border p-0">
-        <h3 className="px-4 py-3 font-medium text-sm">Waiting for approval</h3>
-        {requests.map((request) => (
-          <div
-            className="flex items-center justify-between gap-3 px-4 py-3"
-            key={request.userId}
-          >
-            <div className="min-w-0">
-              <div className="truncate text-sm">
-                {request.username ? `@${request.username}` : request.userId}
+    <div className="divide-y divide-border">
+      <h3 className="px-4 py-3 font-medium text-sm">Waiting for approval</h3>
+      {requests.map((request) => (
+        <div
+          className="flex items-center justify-between gap-3 px-4 py-3"
+          key={request.userId}
+        >
+          <div className="min-w-0">
+            <div className="truncate text-sm">
+              {request.username ? `@${request.username}` : request.userId}
+            </div>
+            {request.username ? (
+              <div className="text-muted-foreground text-xs">
+                {request.userId}
               </div>
-              {request.username ? (
-                <div className="text-muted-foreground text-xs">
-                  {request.userId}
-                </div>
-              ) : null}
-            </div>
-            <div className="flex shrink-0 gap-2">
-              <Button
-                disabled={resolve.isPending}
-                onClick={() =>
-                  resolve.mutate({ decision: "deny", userId: request.userId })
-                }
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                Deny
-              </Button>
-              <Button
-                disabled={resolve.isPending}
-                onClick={() =>
-                  resolve.mutate({
-                    decision: "approve",
-                    userId: request.userId,
-                  })
-                }
-                size="sm"
-                type="button"
-              >
-                Approve
-              </Button>
-            </div>
+            ) : null}
           </div>
-        ))}
-        {resolve.error ? (
-          <p className="px-4 py-3 text-destructive text-xs" role="alert">
-            {formatError(resolve.error)}
-          </p>
-        ) : null}
-      </CardContent>
-    </Card>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              disabled={resolve.isPending}
+              onClick={() =>
+                resolve.mutate({ decision: "deny", userId: request.userId })
+              }
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              Deny
+            </Button>
+            <Button
+              disabled={resolve.isPending}
+              onClick={() =>
+                resolve.mutate({
+                  decision: "approve",
+                  userId: request.userId,
+                })
+              }
+              size="sm"
+              type="button"
+            >
+              Approve
+            </Button>
+          </div>
+        </div>
+      ))}
+      {resolve.error ? (
+        <p className="px-4 py-3 text-destructive text-xs" role="alert">
+          {formatError(resolve.error)}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -535,7 +530,7 @@ export function TelegramSettingsCardContent({
     />
   );
 
-  const pairing = (
+  const pairingRow = (
     <>
       <SettingsRow
         description={pairingCodeDescription(pairingCode, isPaired)}
@@ -557,6 +552,12 @@ export function TelegramSettingsCardContent({
           </p>
         ) : null}
       </SettingsRow>
+    </>
+  );
+
+  const pairing = (
+    <>
+      {pairingRow}
       <TelegramSetupHelp />
     </>
   );
@@ -619,28 +620,26 @@ export function TelegramSettingsCardContent({
 
   return (
     <div className="space-y-4">
-      <Card className="w-full overflow-hidden shadow-none">
-        <IntegrationStatusHeader
-          actions={workerActions}
-          configured={configured}
-          connected={statusBadge === "Connected"}
-          statusBadge={statusBadge}
-          title="Connection"
-        />
-      </Card>
-      <TelegramInviteLink />
-      <TelegramAccessRequests />
-      {allowedUsersPanel}
-      <details className="group rounded-xl border border-border">
-        <summary className="flex cursor-pointer items-center gap-3 px-4 py-3 font-medium text-sm focus-visible:outline-ring">
-          <CheckmarkCircle01Icon
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm">
+          <span
             aria-hidden
-            className="size-5 shrink-0 text-emerald-600"
+            className={cn(
+              "size-2 rounded-full",
+              statusBadge === "Connected" ? "bg-emerald-600" : "bg-amber-500"
+            )}
           />
-          Setup complete
-        </summary>
-        {checklist}
-      </details>
+          {statusBadge}
+        </div>
+        {workerActions}
+      </div>
+      <Card className="w-full overflow-hidden shadow-none">
+        <CardContent className="divide-y divide-border p-0">
+          <TelegramInviteLink />
+          <TelegramAccessRequests />
+          {allowedUsersPanel}
+        </CardContent>
+      </Card>
       <ChannelSettings>
         <SettingsRow label="Bot token">
           <div className="flex items-center gap-3">
@@ -664,7 +663,7 @@ export function TelegramSettingsCardContent({
           </div>
         </SettingsRow>
         {replacingToken ? tokenEditor : null}
-        {pairing}
+        {pairingRow}
       </ChannelSettings>
       {footer}
     </div>
