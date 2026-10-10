@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { composerActions } from "./chat-composer";
+import { composerActions } from "./chat-composer.shared";
 
 describe("composerActions", () => {
   test("keeps Stop reachable once the user starts typing the next message", () => {

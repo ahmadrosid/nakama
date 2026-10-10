@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
+import { z } from "zod";
 import {
   assertChannelPath,
   ChannelConfigBusyError,
@@ -13,6 +14,7 @@ import {
   resetChannelConversationState,
   withPairingConfigLock,
 } from "./channel-config-shared";
+import type { WhatsAppAllowedPhoneDetail } from "./contract";
 import {
   parseIni,
   pathExists,
@@ -68,7 +70,13 @@ const SPENT_PAIRING_SECRET = {
 
 export const DEFAULT_WHATSAPP_REQUIRE_GROUP_MENTION = true;
 
+export type WhatsAppAllowedPhoneDetails = Record<
+  string,
+  WhatsAppAllowedPhoneDetail
+>;
+
 export interface WhatsAppConfigFile {
+  allowedPhoneDetails?: WhatsAppAllowedPhoneDetails;
   allowedPhones: string[];
   allowUnpairedGroupMembers: boolean;
   outboundPort?: string | null;
@@ -83,6 +91,7 @@ export interface WhatsAppConfigFile {
 }
 
 export interface WhatsAppSettingsPublic {
+  allowedPhoneDetails: WhatsAppAllowedPhoneDetails;
   allowedPhones: string[];
   allowUnpairedGroupMembers: boolean;
   configured: boolean;
@@ -94,6 +103,8 @@ export interface WhatsAppSettingsPublic {
 }
 
 export interface UpdateWhatsAppSettingsInput {
+  /** Display names keyed by phone; an empty name clears it. */
+  allowedPhoneNames?: Record<string, string>;
   allowedPhones?: string;
   allowUnpairedGroupMembers?: boolean;
   phoneNumber?: string;
@@ -301,6 +312,7 @@ export async function loadWhatsAppConfigFile(
   );
 
   return {
+    allowedPhoneDetails: parseAllowedPhoneDetails(values.allowed_phone_details),
     allowedPhones: parseAllowedWhatsAppPhones(values.allowed_phones ?? ""),
     // Files written before this setting existed opened the group to everyone
     // exactly when the mention requirement was off, so a missing value keeps that.
@@ -349,6 +361,7 @@ export function toWhatsAppSettingsPublic(
 ): WhatsAppSettingsPublic {
   if (!file) {
     return {
+      allowedPhoneDetails: {},
       allowedPhones: [],
       allowUnpairedGroupMembers: false,
       configured: false,
@@ -361,6 +374,7 @@ export function toWhatsAppSettingsPublic(
   }
 
   return {
+    allowedPhoneDetails: file.allowedPhoneDetails ?? {},
     allowedPhones: file.allowedPhones,
     allowUnpairedGroupMembers: file.allowUnpairedGroupMembers,
     configured: true,
@@ -404,6 +418,9 @@ async function writeWhatsAppConfigFile(
     ...(config.pairedLid ? [`paired_lid=${config.pairedLid}`] : []),
     ...(config.allowedPhones.length > 0
       ? [`allowed_phones=${config.allowedPhones.join(",")}`]
+      : []),
+    ...(Object.keys(config.allowedPhoneDetails ?? {}).length > 0
+      ? [`allowed_phone_details=${JSON.stringify(config.allowedPhoneDetails)}`]
       : []),
     ...(config.outboundPort ? [`outbound_port=${config.outboundPort}`] : []),
     ...(config.outboundToken ? [`outbound_token=${config.outboundToken}`] : []),
@@ -468,9 +485,15 @@ function buildSavedWhatsAppConfig(
 ): WhatsAppConfigFile {
   const phoneNumber = resolvePhoneNumber(input, existing);
   const pairedJid = existing?.pairedJid ?? null;
+  const allowedPhones = resolveAllowedPhones(input, existing);
 
   return {
-    allowedPhones: resolveAllowedPhones(input, existing),
+    allowedPhoneDetails: resolveAllowedPhoneDetails(
+      input,
+      existing,
+      allowedPhones
+    ),
+    allowedPhones,
     allowUnpairedGroupMembers:
       input.allowUnpairedGroupMembers ??
       existing?.allowUnpairedGroupMembers ??
@@ -502,6 +525,58 @@ function resolveAllowedPhones(
   return input.allowedPhones === undefined
     ? (existing?.allowedPhones ?? [])
     : parseAllowedWhatsAppPhones(input.allowedPhones);
+}
+
+const AllowedPhoneDetailsSchema = z.record(
+  z.string(),
+  z.object({
+    addedAt: z.string().nullable().catch(null),
+    name: z.string().catch(""),
+  })
+);
+
+function parseAllowedPhoneDetails(raw: string | undefined) {
+  if (!raw) {
+    return {};
+  }
+
+  try {
+    return AllowedPhoneDetailsSchema.parse(JSON.parse(raw));
+  } catch {
+    return {};
+  }
+}
+
+function resolveAllowedPhoneDetails(
+  input: UpdateWhatsAppSettingsInput,
+  existing: WhatsAppConfigFile | null,
+  allowedPhones: string[]
+) {
+  const previous = existing?.allowedPhoneDetails ?? {};
+  const previousPhones = new Set(existing?.allowedPhones ?? []);
+  const names = new Map<string, string>();
+
+  for (const [phone, name] of Object.entries(input.allowedPhoneNames ?? {})) {
+    names.set(phone.replace(/\D/g, ""), name.replace(/\s+/g, " ").trim());
+  }
+
+  const now = new Date().toISOString();
+  const details: WhatsAppAllowedPhoneDetails = {};
+
+  for (const phone of allowedPhones) {
+    const name = names.get(phone) ?? previous[phone]?.name ?? "";
+
+    // Numbers saved before details existed have no known add time.
+    const addedAt = previousPhones.has(phone)
+      ? (previous[phone]?.addedAt ?? null)
+      : now;
+
+    if (name || addedAt) {
+      details[phone] = { addedAt, name };
+    }
+  }
+
+  return details;
 }
 
 export async function saveWhatsAppConfig(

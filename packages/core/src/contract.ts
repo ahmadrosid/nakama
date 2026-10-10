@@ -1866,7 +1866,13 @@ export type AgentBrowserInstallEvent =
       error: string;
     };
 
+export interface WhatsAppAllowedPhoneDetail {
+  addedAt: string | null;
+  name: string;
+}
+
 export interface WhatsAppSettingsResponse {
+  allowedPhoneDetails: Record<string, WhatsAppAllowedPhoneDetail>;
   allowedPhones: string[];
   allowUnpairedGroupMembers: boolean;
   configured: boolean;
@@ -1878,6 +1884,8 @@ export interface WhatsAppSettingsResponse {
 }
 
 export interface UpdateWhatsAppSettingsRequest {
+  /** Display names keyed by phone; an empty name clears it. */
+  allowedPhoneNames?: Record<string, string>;
   allowedPhones?: string;
   allowUnpairedGroupMembers?: boolean;
   phoneNumber?: string;
