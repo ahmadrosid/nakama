@@ -16,7 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { useClearWorkerLogs, useWorkerLogs } from "@/hooks/use-worker-logs";
 import { formatError } from "@/lib/client";
 
-interface WorkerLogDialogProps {
+interface WorkerLogDrawerProps {
   onOpenChange: (open: boolean) => void;
   open: boolean;
   workerName: string;
@@ -33,7 +33,7 @@ function tabLogContent(
   return data?.stderr ?? "";
 }
 
-function useWorkerLogDialog(
+function useWorkerLogDrawer(
   workerName: string,
   open: boolean,
   onOpenChange: (open: boolean) => void
@@ -287,16 +287,16 @@ function WorkerLogPane({
   );
 }
 
-export function WorkerLogDialog({
+export function WorkerLogDrawer({
   workerName,
   open,
   onOpenChange,
-}: WorkerLogDialogProps) {
-  const log = useWorkerLogDialog(workerName, open, onOpenChange);
+}: WorkerLogDrawerProps) {
+  const log = useWorkerLogDrawer(workerName, open, onOpenChange);
 
   return (
     <Dialog onOpenChange={log.handleOpenChange} open={open}>
-      <DialogContent className="flex max-h-[min(90dvh,85vh)] w-[calc(100%-1.5rem)] flex-col gap-4 p-4 sm:max-w-3xl sm:gap-6 sm:p-6">
+      <DialogContent className="data-closed:slide-out-to-right data-open:slide-in-from-right data-closed:zoom-out-100 data-open:zoom-in-100 top-0 right-0 bottom-0 left-auto flex h-dvh max-h-none w-full translate-x-0 translate-y-0 flex-col gap-4 rounded-none rounded-l-xl p-4 duration-200 sm:max-w-xl sm:gap-6 sm:p-6">
         <DialogHeader className="flex flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <File01Icon aria-hidden className="size-4 text-muted-foreground" />

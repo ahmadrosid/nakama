@@ -16,7 +16,7 @@ import {
   StopIcon,
 } from "hugeicons-react";
 import { useState } from "react";
-import { WorkerLogDialog } from "@/components/WorkerLogDialog";
+import { WorkerLogDrawer } from "@/components/WorkerLogDrawer";
 import { useChannelProfileId } from "@/hooks/use-app-queries";
 import {
   useDisconnectChannel,
@@ -229,7 +229,7 @@ export function WorkerActionBar({
   showLogs?: boolean;
   compact?: boolean;
 }) {
-  const [logDialogOpen, setLogDialogOpen] = useState(false);
+  const [logDrawerOpen, setLogDrawerOpen] = useState(false);
   const ownerProfileId = useChannelProfileId();
   const disconnect = useDisconnectChannel();
   const startWorker = useStartWorker();
@@ -287,7 +287,7 @@ export function WorkerActionBar({
         {showLogs ? (
           <ViewLogsButton
             compact={compact}
-            onClick={() => setLogDialogOpen(true)}
+            onClick={() => setLogDrawerOpen(true)}
           />
         ) : null}
         {ownerProfileId && compact ? (
@@ -295,9 +295,9 @@ export function WorkerActionBar({
         ) : null}
       </div>
       {showLogs ? (
-        <WorkerLogDialog
-          onOpenChange={setLogDialogOpen}
-          open={logDialogOpen}
+        <WorkerLogDrawer
+          onOpenChange={setLogDrawerOpen}
+          open={logDrawerOpen}
           workerName={workerName}
         />
       ) : null}
@@ -312,13 +312,13 @@ export function WorkerViewLogsButton({
   workerName: string;
   className?: string;
 }) {
-  const [logDialogOpen, setLogDialogOpen] = useState(false);
+  const [logDrawerOpen, setLogDrawerOpen] = useState(false);
 
   return (
     <>
       <Button
         className={cn("text-muted-foreground", className)}
-        onClick={() => setLogDialogOpen(true)}
+        onClick={() => setLogDrawerOpen(true)}
         size="sm"
         type="button"
         variant="ghost"
@@ -326,9 +326,9 @@ export function WorkerViewLogsButton({
         <ScrollIcon aria-hidden className="size-3.5" strokeWidth={2} />
         View logs
       </Button>
-      <WorkerLogDialog
-        onOpenChange={setLogDialogOpen}
-        open={logDialogOpen}
+      <WorkerLogDrawer
+        onOpenChange={setLogDrawerOpen}
+        open={logDrawerOpen}
         workerName={workerName}
       />
     </>
