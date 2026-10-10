@@ -170,15 +170,18 @@ export class SystemStatusService {
       };
     }
 
+    // Keep the unmanaged info so the UI can show why PM2 failed.
+    const process = pm2Status ?? undefined;
+
     if (name === "telegram") {
-      return getTelegramWorkerStatus(orgId);
+      return { ...(await getTelegramWorkerStatus(orgId)), process };
     }
 
     if (name === "discord") {
-      return getDiscordWorkerStatus(orgId);
+      return { ...(await getDiscordWorkerStatus(orgId)), process };
     }
 
-    return getWhatsAppWorkerStatus(orgId);
+    return { ...(await getWhatsAppWorkerStatus(orgId)), process };
   }
 
   private getLlmUsage(
