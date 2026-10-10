@@ -1,15 +1,21 @@
 import { getProfileAvatarUrl } from "@nakama/client";
 import type { ProfileSummary } from "@nakama/core/contract";
 import { cn } from "@nakama/ui/utils";
+import { hashToSeeds, oklchToCss } from "hashvatar";
+import { Hashvatar } from "hashvatar/react";
 import { useEffect, useMemo, useState } from "react";
 import { moodstoneAvatars, moodstoneColors } from "./moodstone-avatars";
 
 type ProfileAvatarProfile = Pick<
   ProfileSummary,
   "id" | "name" | "hasAvatar" | "updatedAt" | "isSuper"
->;
+> &
+  Partial<Pick<ProfileSummary, "createdAt">>;
 
 const SUPER_AGENT_DEFAULT_AVATAR = "/super-agent.png";
+
+/** Profiles created before Moodstone shipped keep their Hashvatar look. */
+const MOODSTONE_SINCE = Date.parse("2026-10-10T00:00:00Z");
 
 const sizeClasses = {
   lg: "size-16",
@@ -28,6 +34,30 @@ const sizePixels = {
   xs: 20,
   xxs: 18,
 } as const;
+
+/** Two OKLCH tones derived from the profile hash — same hash ⇒ same palette. */
+function tonesFromHash(hash: string): [string, string] {
+  const [h1, h2, l1, l2, c1, c2] = hashToSeeds(hash, 6);
+
+  return [
+    oklchToCss({
+      c: 0.16 + c1 * 0.14,
+      h: h1 * 360,
+      l: 0.55 + l1 * 0.22,
+    }),
+    oklchToCss({
+      c: 0.1 + c2 * 0.12,
+      h: (h1 * 360 + 40 + h2 * 80) % 360,
+      // Offset hue so the pair stays distinct, still seeded by the hash.
+      l: 0.28 + l2 * 0.2,
+    }),
+  ];
+}
+
+// create_profile chat cards carry only updatedAt, which is the creation time there.
+function isPreMoodstone(profile: ProfileAvatarProfile): boolean {
+  return Date.parse(profile.createdAt ?? profile.updatedAt) < MOODSTONE_SINCE;
+}
 
 function resolveAvatarSrc(
   profile: ProfileAvatarProfile,
@@ -55,7 +85,7 @@ export function ProfileAvatar({
 }: {
   profile: ProfileAvatarProfile;
   size?: keyof typeof sizeClasses;
-  /** Animate the generated SVG when this profile is selected in chat. */
+  /** Animate the generated avatar when this profile is selected in chat. */
   active?: boolean;
   className?: string;
   orgId?: string;
@@ -108,6 +138,25 @@ export function ProfileAvatar({
     sizeClasses[size],
     className
   );
+
+  const showUploaded = avatarUrl !== null && avatarUrl !== failedUrl;
+
+  if (!showUploaded && isPreMoodstone(profile)) {
+    const hash = profile.id || profile.name || "?";
+
+    return (
+      <Hashvatar
+        animated={active}
+        className={surfaceClass}
+        hash={hash}
+        mode="dither"
+        size={sizePixels[size]}
+        // Let Tailwind className control radius (Hashvatar defaults to 50%).
+        style={{ borderRadius: undefined }}
+        tones={tonesFromHash(hash)}
+      />
+    );
+  }
 
   return (
     <img

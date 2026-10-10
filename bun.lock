@@ -124,6 +124,7 @@
         "@streamdown/math": "^1.0.2",
         "@streamdown/mermaid": "^1.0.2",
         "@tanstack/react-query": "^5.104.1",
+        "hashvatar": "^0.1.2",
         "hugeicons-react": "^0.4.0",
         "qrcode.react": "^4.2.0",
         "react": "^19.3.0",
@@ -2032,6 +2033,8 @@
     "hash.js": ["hash.js@1.1.7", "", { "dependencies": { "inherits": "^2.0.3", "minimalistic-assert": "^1.0.1" } }, "sha512-taOaskGt4z4SOANNseOviYDvjEJinIkRgmp7LbKP2YTTmVxWBl87s/uzK9r+44BclBSp2X7K1hqeNfz9JbBeXA=="],
 
     "hashery": ["hashery@1.5.1", "", { "dependencies": { "hookified": "^1.15.0" } }, "sha512-iZyKG96/JwPz1N55vj2Ie2vXbhu440zfUfJvSwEqEbeLluk7NnapfGqa7LH0mOsnDxTF85Mx8/dyR6HfqcbmbQ=="],
+
+    "hashvatar": ["hashvatar@0.1.2", "", { "peerDependencies": { "react": ">=17" }, "optionalPeers": ["react"] }, "sha512-RdGvT8Ct0qTzDwAFkJACurTiCJ+Pv7YBwvq4YCKX6ZPNFvOPsb9nCc7Leh3jgxZCgutnCjaWEkYm7p4lVQaq1g=="],
 
     "hasown": ["hasown@2.0.4", "", { "dependencies": { "function-bind": "^1.1.2" } }, "sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A=="],
 

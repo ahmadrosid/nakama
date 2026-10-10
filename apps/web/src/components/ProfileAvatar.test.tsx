@@ -16,6 +16,7 @@ import { ProfileAvatar } from "./ProfileAvatar";
 import { ProfileRail } from "./ProfileRail";
 
 const profile = {
+  createdAt: "2026-10-10T00:00:00Z",
   hasAvatar: false,
   id: "agent-a",
   isSuper: false,
@@ -144,6 +145,17 @@ test("changing reduced motion switches between animated and still SVG", async ()
     media.dispatchEvent(new window.Event("change"));
   });
   expect(readSvg(image).querySelector("animate")).not.toBeNull();
+});
+
+test("profiles created before Moodstone keep their Hashvatar", () => {
+  for (const old of [
+    { ...profile, createdAt: "2026-01-01T00:00:00Z" },
+    { ...profile, createdAt: undefined, updatedAt: "2026-01-01T00:00:00Z" },
+  ]) {
+    container.innerHTML = renderToStaticMarkup(<ProfileAvatar profile={old} />);
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("canvas")).not.toBeNull();
+  }
 });
 
 test("uploaded avatars retain their organization and revision URL", async () => {
