@@ -12,13 +12,13 @@ import {
   ViewIcon,
   ViewOffIcon,
 } from "hugeicons-react";
+import { type ReactNode, useState } from "react";
 import {
   ChannelAccessSettings,
   ChannelConnectionStep,
   ChannelSettings,
   ChannelSetupChecklist,
   IntegrationSettingsFooter,
-  PairingStepTile,
   SettingsRow,
 } from "@/components/integration-settings.shared";
 import { TelegramQrSetup } from "@/components/telegram-qr-setup";
@@ -29,18 +29,22 @@ function pairingCodeDescription(
   isPaired: boolean
 ): string {
   if (pairingCode) {
-    if (isPaired) {
-      return "Message this code to your bot to link another account. It expires in 10 minutes.";
-    }
-
-    return "Message this code to your bot to finish linking. It expires in 10 minutes.";
+    return "Send this code to your bot in a private chat. It expires in 10 minutes.";
   }
 
   if (isPaired) {
-    return "Linked. Generate a new code to add another account.";
+    return "Your Telegram account can message the bot.";
   }
 
   return "Generate a code, then message it to your bot once.";
+}
+
+function pairingRowLabel(pairingCode: string | null, isPaired: boolean) {
+  if (!isPaired) {
+    return "Link with a code";
+  }
+
+  return pairingCode ? "Add account" : "Linked account";
 }
 
 function TelegramPairingCodeControls({
@@ -60,7 +64,7 @@ function TelegramPairingCodeControls({
 }) {
   if (pairingCode) {
     return (
-      <div className="flex flex-wrap items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <code className="rounded-md border border-border bg-background px-2.5 py-1 text-sm tracking-widest">
           {pairingCode}
         </code>
@@ -102,14 +106,7 @@ function TelegramPairingCodeControls({
         type="button"
         variant="outline"
       >
-        {regeneratePending ? (
-          <Spinner />
-        ) : (
-          <>
-            <RefreshIcon aria-hidden="true" className="size-3.5" />
-            New code
-          </>
-        )}
+        {regeneratePending ? <Spinner /> : "Add account"}
       </Button>
     );
   }
@@ -156,7 +153,7 @@ function TelegramBotTokenRow({
 }) {
   return (
     <SettingsRow className={paneItemClass} label="Bot token" layout="stacked">
-      <details className="mb-3 text-sm">
+      <details className={configured ? "hidden" : "mb-3 text-sm"}>
         <summary className="cursor-pointer text-muted-foreground hover:text-foreground focus-visible:outline-ring">
           How to get your bot token
         </summary>
@@ -226,72 +223,78 @@ function TelegramBotTokenRow({
   );
 }
 
-function TelegramPairingGuide() {
+function BotFatherLink() {
   return (
-    <div className="mx-4 space-y-3">
-      <p className="font-medium text-foreground text-xs">Link in Telegram</p>
-      <div className="overflow-hidden rounded-md border border-border">
-        <div className="grid grid-cols-1 sm:grid-cols-2">
-          <PairingStepTile
-            className="border-border border-b sm:border-r sm:border-b-0"
-            description="Start a private chat with your bot."
-            step={1}
-            title="Open the bot"
-          />
-          <PairingStepTile
-            description="Paste the pairing code and send it."
-            step={2}
-            title="Send the code"
-          />
-        </div>
-      </div>
+    <a
+      className="font-medium text-primary underline-offset-2 hover:underline"
+      href="https://t.me/BotFather"
+      rel="noreferrer"
+      target="_blank"
+    >
+      @BotFather
+      <span className="sr-only"> (opens in a new tab)</span>
+    </a>
+  );
+}
 
-      <details className="group mt-4 mb-3">
-        <summary className="cursor-pointer text-muted-foreground text-xs transition-colors hover:text-foreground">
-          Using the bot in a group?
-        </summary>
-        <div className="mt-3 overflow-hidden rounded-md border border-border">
-          <PairingStepTile
-            className="border-border border-b"
-            description="Link your account in a private chat before using groups."
-            step={1}
-            title="Pair privately first"
+function SetupHelpList({
+  items,
+  title,
+}: {
+  items: ReactNode[];
+  title: string;
+}) {
+  return (
+    <div>
+      <p className="mb-2 font-medium text-foreground text-xs">{title}</p>
+      <ol className="list-decimal space-y-1.5 pl-4.5">
+        {items.map((item, index) => (
+          <li key={index}>{item}</li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function TelegramSetupHelp() {
+  return (
+    <details className="px-4 py-3 text-sm">
+      <summary className="cursor-pointer text-muted-foreground transition-colors hover:text-foreground">
+        Setup help
+      </summary>
+      <div className="grid gap-6 pt-3 text-muted-foreground text-xs leading-relaxed sm:grid-cols-2">
+        <div className="space-y-4">
+          <SetupHelpList
+            items={[
+              <>
+                Open <BotFatherLink /> in Telegram.
+              </>,
+              "Send /newbot and pick a name.",
+              "Copy the token it sends you.",
+            ]}
+            title="Bot token"
           />
-          <div className="grid grid-cols-1 sm:grid-cols-2">
-            <PairingStepTile
-              className="border-border border-b sm:border-r sm:border-b-0"
-              description={
-                <>
-                  Turn it off in{" "}
-                  <a
-                    className="font-medium text-primary underline-offset-2 hover:underline"
-                    href="https://t.me/BotFather"
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    @BotFather
-                  </a>{" "}
-                  so @mentions work.
-                </>
-              }
-              step={2}
-              title="Disable Group Privacy"
-            />
-            <PairingStepTile
-              className="border-border border-b"
-              description="Remove and re-add the bot after changing Group Privacy."
-              step={3}
-              title="Re-add the bot"
-            />
-          </div>
-          <PairingStepTile
-            description="@mention the bot, reply to it, or use a slash command."
-            step={4}
-            title="Trigger in the group"
+          <SetupHelpList
+            items={[
+              "Open a private chat with your bot.",
+              "Send the pairing code.",
+            ]}
+            title="Link an account"
           />
         </div>
-      </details>
-    </div>
+        <SetupHelpList
+          items={[
+            "Link your account in a private chat first.",
+            <>
+              In <BotFatherLink />, turn off Group Privacy.
+            </>,
+            "Remove the bot from the group, then add it again.",
+            "@mention the bot, reply to it, or use a slash command.",
+          ]}
+          title="Use in a group"
+        />
+      </div>
+    </details>
   );
 }
 
@@ -364,6 +367,8 @@ export function TelegramSettingsCardContent({
   } = view;
 
   const paneItemClass = "px-4 py-3";
+  const [replacingToken, setReplacingToken] = useState(false);
+  const pairingLabel = pairingRowLabel(pairingCode, isPaired);
 
   const step = configured ? (running ? (hasLinkedUsers ? 3 : 2) : 1) : 0;
 
@@ -392,11 +397,11 @@ export function TelegramSettingsCardContent({
   );
 
   const pairing = (
-    <div className="space-y-3">
+    <>
       <SettingsRow
         description={pairingCodeDescription(pairingCode, isPaired)}
-        label="Link with a code"
-        layout="stacked"
+        label={pairingLabel}
+        layout={pairingCode || !isPaired ? "stacked" : "inline"}
       >
         <TelegramPairingCodeControls
           isPaired={isPaired}
@@ -406,16 +411,15 @@ export function TelegramSettingsCardContent({
           regeneratePending={regeneratePending}
           savePending={savePending}
         />
+        {pairingCode ? (
+          <p className="mt-3 text-muted-foreground text-xs">
+            Using a group? Link here first, turn off Group Privacy in{" "}
+            <BotFatherLink />, then remove and re-add the bot.
+          </p>
+        ) : null}
       </SettingsRow>
-      <details className="px-4 pb-3 text-sm">
-        <summary className="cursor-pointer text-muted-foreground">
-          Need help?
-        </summary>
-        <div className="pt-3">
-          <TelegramPairingGuide />
-        </div>
-      </details>
-    </div>
+      <TelegramSetupHelp />
+    </>
   );
 
   const footer = (
@@ -481,7 +485,27 @@ export function TelegramSettingsCardContent({
         summary={allowedUserSummary}
       />
       <ChannelSettings>
-        {tokenEditor}
+        <SettingsRow label="Bot token">
+          <div className="flex items-center gap-3">
+            <code className="text-muted-foreground text-xs">
+              {settings?.botTokenMasked ?? "Saved"}
+            </code>
+            <Button
+              onClick={() => {
+                if (replacingToken) {
+                  onBotTokenChange("");
+                }
+                setReplacingToken(!replacingToken);
+              }}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {replacingToken ? "Cancel" : "Replace"}
+            </Button>
+          </div>
+        </SettingsRow>
+        {replacingToken ? tokenEditor : null}
         {pairing}
       </ChannelSettings>
       {footer}
