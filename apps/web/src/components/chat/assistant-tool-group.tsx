@@ -2,6 +2,7 @@ import { Button } from "@nakama/ui/button";
 import { cn } from "@nakama/ui/utils";
 import { useQuery } from "@tanstack/react-query";
 import {
+  AiBrain01Icon,
   ArrowDown01Icon,
   ArrowRight01Icon,
   Audit02Icon,
@@ -11,7 +12,6 @@ import {
   PropertySearchIcon,
   Rotate02Icon,
   TaskEdit01Icon,
-  Wrench01Icon,
 } from "hugeicons-react";
 import type { MouseEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -1073,7 +1073,7 @@ function ToolTimelineItem({ message }: { message: ChatListItem }) {
   );
 }
 
-const TOOL_ICONS = new Map<string, typeof Wrench01Icon>([
+const TOOL_ICONS = new Map<string, typeof AiBrain01Icon>([
   ["bash", ComputerTerminal01Icon],
   ["edit_file", TaskEdit01Icon],
   ["knowledge_base_search", PropertySearchIcon],
@@ -1107,7 +1107,7 @@ function CollapsibleTrigger({
 
   const ToolIcon =
     (tool ? TOOL_ICONS.get(tool) : undefined) ??
-    (isMcpTool ? McpServerIcon : Wrench01Icon);
+    (isMcpTool ? McpServerIcon : AiBrain01Icon);
 
   return (
     <button
