@@ -79,7 +79,11 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
               type="button"
             >
               <ProfileAvatar
-                active={active}
+                active={
+                  active &&
+                  (location.pathname === PAGE_PATHS.chat ||
+                    location.pathname.startsWith(`${PAGE_PATHS.chat}/`))
+                }
                 className={cn(
                   "size-7 rounded-md transition-all duration-150",
                   active
