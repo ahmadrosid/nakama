@@ -106,6 +106,7 @@ function WorkerActionsMenu({
 export function WorkerActionBar({
   running,
   pm2Managed,
+  pm2Error,
   workerName,
   className,
   showLogs = true,
@@ -113,6 +114,7 @@ export function WorkerActionBar({
 }: {
   running: boolean;
   pm2Managed: boolean;
+  pm2Error?: string;
   workerName: string;
   className?: string;
   showLogs?: boolean;
@@ -132,8 +134,11 @@ export function WorkerActionBar({
 
   if (!pm2Managed) {
     return (
-      <span className={cn("text-muted-foreground text-xs", className)}>
-        PM2 not available
+      <span
+        className={cn("text-muted-foreground text-xs", className)}
+        title={pm2Error}
+      >
+        PM2 not available{pm2Error ? `: ${pm2Error}` : ""}
       </span>
     );
   }

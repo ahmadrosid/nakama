@@ -156,6 +156,7 @@ export interface AutomationWorkerStatus {
 
 export interface WorkerProcessInfo {
   cpuPercent: number | null;
+  error?: string;
   managed: boolean;
   memoryMb: number | null;
   status: "online" | "stopped" | "errored" | null;

@@ -342,7 +342,10 @@ export function TelegramSettingsCardContent({
   allowedUserSummary: string;
   onManageAllowedUsers: () => void;
   profileId: string;
-  worker: { process?: { managed?: boolean } } | null | undefined;
+  worker:
+    | { process?: { error?: string; managed?: boolean } }
+    | null
+    | undefined;
   statusLine: string | null;
   formError: string | null;
   loadError: unknown;
@@ -367,6 +370,7 @@ export function TelegramSettingsCardContent({
   const workerActions = (
     <WorkerActionBar
       compact
+      pm2Error={worker?.process?.error}
       pm2Managed={worker?.process?.managed ?? false}
       running={running}
       workerName="telegram"

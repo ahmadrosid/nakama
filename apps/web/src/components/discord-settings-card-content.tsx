@@ -199,7 +199,7 @@ export function DiscordSettingsCardContent({
   allowedUserSummary: string;
   onManageAllowedUsers: () => void;
   worker:
-    | { connected?: boolean; process?: { managed?: boolean } }
+    | { connected?: boolean; process?: { error?: string; managed?: boolean } }
     | null
     | undefined;
   statusLine: string | null;
@@ -245,6 +245,7 @@ export function DiscordSettingsCardContent({
   const workerActions = (
     <WorkerActionBar
       compact
+      pm2Error={worker?.process?.error}
       pm2Managed={worker?.process?.managed ?? false}
       running={running}
       workerName="discord"
