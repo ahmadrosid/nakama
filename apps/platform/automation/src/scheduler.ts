@@ -1,10 +1,40 @@
 import type { NakamaClient } from "@nakama/client";
+import { resolveCuratorScheduleAction } from "@nakama/core";
 import {
   AutomationScheduler,
   type AutomationSchedulerStatus,
 } from "@nakama/core/automation-scheduler";
 import type { AutomationSchedule } from "@nakama/core/contract";
-import { tickSkillCurator } from "./curator-tick";
+
+async function tickSkillCurator(
+  client: Pick<
+    NakamaClient,
+    "listSkillCuratorOrgs" | "runSkillCuratorInternal"
+  >,
+  now = new Date()
+): Promise<{ ran: number; skipped: number }> {
+  const { orgs } = await client.listSkillCuratorOrgs();
+  let ran = 0;
+  let skipped = 0;
+
+  for (const org of orgs) {
+    const action = resolveCuratorScheduleAction({
+      enabled: org.skillsCuratorEnabled,
+      lastRunAt: org.skillsCuratorLastRunAt,
+      now,
+    });
+
+    if (action === "skip") {
+      skipped += 1;
+      continue;
+    }
+
+    await client.runSkillCuratorInternal(org.id, { trigger: action });
+    ran += 1;
+  }
+
+  return { ran, skipped };
+}
 
 export class AutomationWorkerScheduler {
   private readonly scheduler: AutomationScheduler;

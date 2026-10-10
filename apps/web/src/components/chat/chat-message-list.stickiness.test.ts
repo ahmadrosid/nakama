@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { listOverflowsViewport } from "./chat-list-stickiness";
+import { listOverflowsViewport } from "./chat-message-list";
 
 describe("listOverflowsViewport", () => {
   test("detects when content is taller than the viewport", () => {

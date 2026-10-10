@@ -4,9 +4,20 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@nakama/ui/select";
-import { THEME_OPTIONS } from "@/components/theme-options";
+import { ComputerIcon, MoonIcon, Sun01Icon } from "hugeicons-react";
 import { useTheme } from "@/context/use-theme";
+import type { Theme } from "@/lib/theme";
 import { isTheme } from "@/lib/theme";
+
+const THEME_OPTIONS: {
+  id: Theme;
+  label: string;
+  icon: typeof Sun01Icon;
+}[] = [
+  { icon: Sun01Icon, id: "light", label: "Light" },
+  { icon: MoonIcon, id: "dark", label: "Dark" },
+  { icon: ComputerIcon, id: "system", label: "System" },
+];
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();

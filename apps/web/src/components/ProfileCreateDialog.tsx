@@ -1,4 +1,9 @@
-import type { AcpAgentPresetSummary, ToolSummary } from "@nakama/core/contract";
+import type {
+  AcpAgentPresetSummary,
+  ImageAttachment,
+  ToolSummary,
+} from "@nakama/core/contract";
+import { parseDataUrl } from "@nakama/core/message-content";
 import { Button } from "@nakama/ui/button";
 import {
   Dialog,
@@ -27,7 +32,11 @@ import {
   useUploadProfileAvatarMutation,
 } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
-import { fileToImageAttachment } from "@/lib/profile-images";
+import { readFileAsDataUrl } from "../lib/read-file-as-data-url";
+
+function fileToImageAttachment(file: File): Promise<ImageAttachment | null> {
+  return readFileAsDataUrl(file).then(parseDataUrl, () => null);
+}
 
 interface ProfileCreateDialogProps {
   agentPresets: AcpAgentPresetSummary[];

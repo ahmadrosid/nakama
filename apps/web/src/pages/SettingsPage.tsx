@@ -1,3 +1,4 @@
+import { DEMO_LOGIN_HOST } from "@nakama/core/demo-login";
 import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
 import {
@@ -31,8 +32,15 @@ import { useAuth } from "@/context/use-auth";
 import { useChatUsageVisible } from "@/hooks/use-chat-usage-visible";
 import { useSaveUserTimezone, useUserTimezone } from "@/hooks/use-timezones";
 import { formatError } from "@/lib/client";
-import { isDemoLoginHost } from "@/lib/demo-login";
 import { getBrowserTimezone } from "@/lib/timezones";
+
+function isDemoLoginHost(
+  hostname: string = typeof window === "undefined"
+    ? ""
+    : window.location.hostname
+): boolean {
+  return hostname.trim().toLowerCase() === DEMO_LOGIN_HOST;
+}
 
 export function SettingsPage() {
   const location = useLocation();

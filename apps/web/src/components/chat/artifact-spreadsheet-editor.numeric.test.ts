@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isSpreadsheetNumericCell } from "./spreadsheet-numeric";
+import { isSpreadsheetNumericCell } from "./artifact-spreadsheet-editor";
 
 describe("isSpreadsheetNumericCell", () => {
   test("detects numeric spreadsheet cells", () => {

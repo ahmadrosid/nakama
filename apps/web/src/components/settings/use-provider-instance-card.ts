@@ -1,5 +1,6 @@
 import type {
   ChatgptOAuthCredentials,
+  CustomModelEntry,
   OpenRouterRoutingSettings,
   ProviderInstanceSummary,
   ProviderModelOption,
@@ -15,7 +16,6 @@ import { useMemo, useState } from "react";
 import { isCatalogShortlistProvider } from "@/components/catalog-provider-model-fields.shared";
 import type { ModelListRow } from "@/components/ModelListEditor";
 import { normalizeModelListRows } from "@/components/model-list-editor.shared";
-import { seedManageModelRows } from "@/components/settings/provider-settings-seed";
 import { isShortlistBrowseProvider } from "@/components/shortlist-browse-providers.shared";
 import { formatError } from "@/lib/client";
 import {
@@ -29,6 +29,28 @@ import {
   validateOpenRouterModelsInput,
   validateShortlistCapabilityModelsInput,
 } from "@/lib/models";
+
+function seedManageModelRows(
+  customModels: CustomModelEntry[] | undefined,
+  configuredModels: ProviderModelOption[]
+): ModelListRow[] {
+  const models: CustomModelEntry[] = customModels?.length
+    ? customModels
+    : configuredModels;
+
+  return models.map((model) => ({
+    cachedInputPerMillionUsd: model.cachedInputPerMillionUsd,
+    contextWindow: model.contextWindow,
+    default: model.default,
+    id: model.id,
+    inputPerMillionUsd: model.inputPerMillionUsd,
+    maxOutputTokens: model.maxOutputTokens,
+    name: model.name ?? model.id,
+    outputPerMillionUsd: model.outputPerMillionUsd,
+    supportsThinking: model.supportsThinking,
+    supportsVision: model.supportsVision,
+  }));
+}
 
 export function useProviderInstanceCard({
   instance,

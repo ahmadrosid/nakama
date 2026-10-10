@@ -1,9 +1,11 @@
 import type {
   CreateMcpServerRequest,
   CreateSkillRequest,
+  ImageAttachment,
   InstallSkillRequest,
   ProfileDetail,
 } from "@nakama/core/contract";
+import { parseDataUrl } from "@nakama/core/message-content";
 import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -53,7 +55,6 @@ import {
   groupModelsByProvider,
   profileModelSelectionValue,
 } from "@/lib/models";
-import { fileToImageAttachment } from "@/lib/profile-images";
 import {
   type ProfileDetailTab,
   type ProfileSaveStatus,
@@ -63,6 +64,11 @@ import {
   type RemoveAssignmentTarget,
   resolveProfileDetailTab,
 } from "@/pages/profiles/profiles-page.shared";
+import { readFileAsDataUrl } from "../../lib/read-file-as-data-url";
+
+function fileToImageAttachment(file: File): Promise<ImageAttachment | null> {
+  return readFileAsDataUrl(file).then(parseDataUrl, () => null);
+}
 
 function isProfilesPageBusy(flags: {
   assignMcpPending: boolean;

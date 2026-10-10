@@ -5,7 +5,12 @@ import { Add01Icon } from "hugeicons-react";
 import { useEffect, useState } from "react";
 import type { SpreadsheetRows } from "@/lib/artifact-spreadsheet";
 import * as artifactSpreadsheet from "@/lib/artifact-spreadsheet";
-import { isSpreadsheetNumericCell } from "./spreadsheet-numeric";
+
+export function isSpreadsheetNumericCell(value: string): boolean {
+  const trimmed = value.trim();
+
+  return trimmed.length > 0 && /^-?\d[\d,]*(\.\d+)?%?$/.test(trimmed);
+}
 
 const GRID_LINE = "border-border";
 
