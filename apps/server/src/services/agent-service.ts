@@ -11,6 +11,7 @@ import {
   suggestToolParamsFromPrompt,
 } from "@nakama/agent";
 import type {
+  AcpSessionSettingsResponse,
   AgentBrowserStatusResponse,
   AgentChannel,
   AgentQuestionnaire,
@@ -191,6 +192,7 @@ import {
   saveDiscordConfig,
   saveEmailConfig,
   saveErrorTrackingDsn,
+  saveErrorTrackingTestResult,
   saveTelegramConfig,
   saveUserConfig,
   saveUserThinkingSettings,
@@ -237,6 +239,18 @@ import {
   isCostEstimated,
   resolveModelLimits,
 } from "../providers";
+import {
+  acpMcpServerFor,
+  setAcpToolAccess,
+} from "../providers/acp/acp-mcp-tools";
+import {
+  type AcpProviderOptions,
+  adoptAcpDraftSession,
+  createAcpProvider,
+  getAcpConfigOptions,
+  setAcpConfigOption,
+} from "../providers/acp/acp-provider";
+import { toAcpSessionSettings } from "../providers/acp/acp-session-settings";
 import {
   fetchChatgptCodexModels,
   refreshChatgptOAuthToken,
@@ -1471,6 +1485,8 @@ export class AgentService {
       })
     );
 
+    await saveErrorTrackingTestResult(delivered);
+
     return { delivered };
   }
 
@@ -1565,6 +1581,9 @@ export class AgentService {
         {
           ...(input.allowedPhones !== undefined && {
             allowedPhones: input.allowedPhones,
+          }),
+          ...(input.allowedPhoneNames !== undefined && {
+            allowedPhoneNames: input.allowedPhoneNames,
           }),
           ...(input.allowUnpairedGroupMembers !== undefined && {
             allowUnpairedGroupMembers: input.allowUnpairedGroupMembers,
@@ -2078,6 +2097,14 @@ export class AgentService {
     // persisted even by a path that forgets to check.
     if (!cognito) {
       await this.db.upsertSession(record);
+    }
+
+    if (profile.acpAgent) {
+      // Keep the agent the user already configured on this draft.
+      adoptAcpDraftSession(
+        acpDraftKey(orgId, resolvedProfileId),
+        `${orgId}:${sessionId}`
+      );
     }
 
     const session = await this.buildChatSession(
@@ -2764,6 +2791,135 @@ export class AgentService {
     await this.agentQuestionnaireState.clear(sessionId);
 
     return true;
+  }
+
+  /** The model and effort settings an ACP agent offers for this chat. */
+  async getAcpSessionSettings(
+    sessionId: string,
+    orgId: string
+  ): Promise<AcpSessionSettingsResponse | null> {
+    const agentOptions = await this.resolveAcpSession(sessionId, orgId);
+
+    if (!agentOptions) {
+      return null;
+    }
+
+    return {
+      settings: toAcpSessionSettings(await getAcpConfigOptions(agentOptions)),
+    };
+  }
+
+  async setAcpSessionSetting(
+    sessionId: string,
+    orgId: string,
+    configId: string,
+    value: string
+  ): Promise<AcpSessionSettingsResponse | null> {
+    const agentOptions = await this.resolveAcpSession(sessionId, orgId);
+
+    if (!agentOptions) {
+      return null;
+    }
+
+    const configOptions = await setAcpConfigOption(
+      agentOptions,
+      configId,
+      value
+    );
+
+    return { settings: toAcpSessionSettings(configOptions) };
+  }
+
+  /**
+   * The agent reads its MCP tool list when it connects, which happens when its
+   * session starts. A draft starts that session before any chat exists, so the
+   * draft registers the profile's tools first. The chat overwrites the context
+   * when it starts.
+   */
+  private async registerAcpDraftTools(
+    orgId: string,
+    profile: StoredProfileRecord
+  ): Promise<void> {
+    const tools = await this.resolveProfileTools(profile, {
+      includeMemoryWriteTools: true,
+      userId: null,
+    });
+
+    setAcpToolAccess(
+      acpDraftKey(orgId, profile.id),
+      tools,
+      buildToolExecutionContext({
+        channel: "web",
+        ...this.memoryBackend.toolContext(orgId, profile.id),
+        orgId,
+        profileId: profile.id,
+      })
+    );
+  }
+
+  private async resolveAcpSession(
+    sessionId: string,
+    orgId: string
+  ): Promise<AcpProviderOptions | null> {
+    const record = await this.getSessionRecordForOrg(sessionId, orgId);
+
+    if (!record) {
+      return null;
+    }
+
+    const profile = await this.requireProfile(orgId, record.profileId);
+
+    // Same key buildChatSession uses, so the settings and the chat share one agent.
+    return acpOptionsForProfile(profile, `${orgId}:${sessionId}`);
+  }
+
+  /** The settings a profile's next chat will start with, before it has a session. */
+  async getAcpDraftSettings(
+    orgId: string,
+    profileId: string
+  ): Promise<AcpSessionSettingsResponse> {
+    const profile = await this.requireProfile(orgId, profileId);
+    await this.registerAcpDraftTools(orgId, profile);
+
+    const agentOptions = acpOptionsForProfile(
+      profile,
+      acpDraftKey(orgId, profileId)
+    );
+
+    return {
+      settings: toAcpSessionSettings(await getAcpConfigOptions(agentOptions)),
+    };
+  }
+
+  async setAcpDraftSetting(
+    orgId: string,
+    profileId: string,
+    configId: string,
+    value: string
+  ): Promise<AcpSessionSettingsResponse> {
+    const profile = await this.requireProfile(orgId, profileId);
+    await this.registerAcpDraftTools(orgId, profile);
+
+    const agentOptions = acpOptionsForProfile(
+      profile,
+      acpDraftKey(orgId, profileId)
+    );
+
+    const configOptions = await setAcpConfigOption(
+      agentOptions,
+      configId,
+      value
+    );
+
+    // The draft's choice becomes the default for the profile's next chats, so it
+    // survives an API restart and a new agent session.
+    await this.db.upsertProfile({
+      ...profile,
+      acpSettings: { ...profile.acpSettings, [configId]: value },
+      updatedAt: new Date().toISOString(),
+    });
+
+    return { settings: toAcpSessionSettings(configOptions) };
   }
 
   async compactSession(
@@ -4272,7 +4428,12 @@ export class AgentService {
               userId: options.userId,
             },
             {
-              provider: providerInstance?.type ?? options.provider.name,
+              // ACP agents report no token usage, so there is no provider to bill.
+              provider:
+                providerInstance?.type ??
+                (options.provider.name === "acp"
+                  ? null
+                  : options.provider.name),
               providerInstance,
             }
           )
@@ -4649,7 +4810,8 @@ export class AgentService {
     const harness = this.createHarnessForProfile(
       profile,
       selectedModel,
-      userId
+      userId,
+      `${orgId}:${sessionId}`
     );
 
     // Part of the "no tools" contract: session-history and channel-artifact
@@ -4692,6 +4854,34 @@ export class AgentService {
     });
 
     const hasSkillManage = tools.some((tool) => tool.name === "skill_manage");
+
+    const toolContext = buildToolExecutionContext({
+      assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
+      channel,
+      ...this.memoryBackend.toolContext(orgId, profileId),
+      codingWorkspaceRoot,
+      forbidMemoryWrites: cognito ? true : undefined,
+      forbidProfileSkillMarkdownWrites: hasSkillManage,
+      isPlatformAdmin: isPlatformAdmin || undefined,
+      loadAttachment,
+      onSkillCatalogChange: () => {
+        this.sessions.delete(sessionId);
+      },
+      orgId,
+      orgRole: orgRole ?? undefined,
+      profileId,
+      recordToolOutputSavings: this.savingsRecorderFor(orgId),
+      recordTurnUsage: this.turnUsageRecorderFor(orgId),
+      sessionId,
+      tokenOptimizerEnabled: tokenOptimizerEnabled ?? undefined,
+      trackEphemeralAttachment,
+      userId: userId ?? undefined,
+    });
+
+    if (profile.acpAgent) {
+      // The ACP agent reaches these tools over MCP, in this same chat context.
+      setAcpToolAccess(`${orgId}:${sessionId}`, tools, toolContext);
+    }
 
     const session = createAgentChatSession(harness, {
       archiveHistory: (history) => {
@@ -4860,28 +5050,7 @@ export class AgentService {
       },
       soul: soulActive,
       systemPrompt: resolvedSystemPrompt,
-      toolContext: buildToolExecutionContext({
-        assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
-        channel,
-        ...this.memoryBackend.toolContext(orgId, profileId),
-        codingWorkspaceRoot,
-        forbidMemoryWrites: cognito ? true : undefined,
-        forbidProfileSkillMarkdownWrites: hasSkillManage,
-        isPlatformAdmin: isPlatformAdmin || undefined,
-        loadAttachment,
-        onSkillCatalogChange: () => {
-          this.sessions.delete(sessionId);
-        },
-        orgId,
-        orgRole: orgRole ?? undefined,
-        profileId,
-        recordToolOutputSavings: this.savingsRecorderFor(orgId),
-        recordTurnUsage: this.turnUsageRecorderFor(orgId),
-        sessionId,
-        tokenOptimizerEnabled: tokenOptimizerEnabled ?? undefined,
-        trackEphemeralAttachment,
-        userId: userId ?? undefined,
-      }),
+      toolContext,
       tools,
       userContext,
       userTimezone,
@@ -5101,8 +5270,29 @@ export class AgentService {
   private createHarnessForProfile(
     profile: StoredProfileRecord,
     selectedModel: string | null = profile.model,
-    userId?: string | null
+    userId?: string | null,
+    acpSessionKey?: string
   ): AgentDependencies {
+    if (profile.acpAgent && profile.orgId) {
+      // ACP agents run their own model loop, so the profile's LLM provider is unused.
+      const provider = createAcpProvider(
+        acpOptionsForProfile(
+          profile,
+          acpSessionKey ?? `${profile.id}:${randomUUID()}`
+        )
+      );
+
+      return this.createHarness({
+        modelId: null,
+        orgId: profile.orgId,
+        profileId: profile.id,
+        provider,
+        providerInstance: null,
+        thinking: this.resolveWorkspaceThinkingDefaults(),
+        userId,
+      });
+    }
+
     const resolved = resolveProfileProviderSelection({
       defaultProviderId: this.userConfig?.defaultProviderId,
       profileModel: selectedModel,
@@ -5213,6 +5403,11 @@ export class AgentService {
     profile: StoredProfileRecord,
     selectedModel: string | null = profile.model
   ): CompactionConfig | undefined {
+    // An ACP agent cannot write the summary that compaction asks a provider for.
+    if (profile.acpAgent) {
+      return;
+    }
+
     const resolved = resolveProfileProviderSelection({
       defaultProviderId: this.userConfig?.defaultProviderId,
       profileModel: selectedModel,
@@ -5246,6 +5441,33 @@ const agentJsonValueSchema = z.json();
 const agentJsonRecordSchema = z.record(z.string(), agentJsonValueSchema);
 
 type AgentJsonRecord = z.infer<typeof agentJsonRecordSchema>;
+
+function acpOptionsForProfile(
+  profile: StoredProfileRecord,
+  sessionKey: string
+): AcpProviderOptions {
+  if (!profile.acpAgent) {
+    throw new NakamaApiError("This profile does not use an ACP agent.", 400);
+  }
+
+  if (!profile.orgId) {
+    throw new NakamaApiError("Profile has no organization.", 400);
+  }
+
+  return {
+    agent: profile.acpAgent,
+    cwd: getProfileSoulDir(profile.orgId, profile.id),
+    initialSettings: profile.acpSettings ?? {},
+    // Every ACP session gets the Nakama tools, including ones created by a settings call.
+    mcpServers: [acpMcpServerFor(sessionKey)],
+    sessionKey,
+  };
+}
+
+/** Key for the agent that holds a profile's draft settings until its first chat starts. */
+function acpDraftKey(orgId: string, profileId: string): string {
+  return `${orgId}:draft:${profileId}`;
+}
 
 function parseAutomationToolArguments(serialized: string): AgentJsonRecord {
   const parsed: unknown = JSON.parse(serialized);

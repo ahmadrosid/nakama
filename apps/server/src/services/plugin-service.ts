@@ -33,6 +33,7 @@ import {
 import type {
   PluginPackageRequest,
   PluginRevisionRequest,
+  PluginUpdateSummary,
 } from "@nakama/core/contract";
 import type {
   DatabaseAdapter,
@@ -1357,6 +1358,56 @@ export class PluginService {
     return this.db.listPluginReleases(pluginId);
   }
 
+  /**
+   * Asks the registry for the latest version of every approved external
+   * plugin. Nothing is downloaded or approved here: the caller still previews
+   * and approves the release. A plugin the registry cannot answer for is left out.
+   */
+  async listPluginUpdates(): Promise<PluginUpdateSummary[]> {
+    const releases = await this.db.listPluginReleases();
+
+    const newest = new Map(
+      releases
+        .filter((release) => !OFFICIAL_PLUGINS.has(release.pluginId))
+        .map((release) => [release.pluginId, release.version])
+    );
+
+    const updates = await Promise.all(
+      [...newest].map(async ([pluginId, approved]) => {
+        try {
+          const packageName = packageNameSchema.parse(
+            JSON.parse(
+              await readFile(
+                join(
+                  getPluginReleaseDir(pluginId, approved, this.configDir),
+                  "package.json"
+                ),
+                "utf8"
+              )
+            ).name
+          );
+
+          const { version } = await pacote.manifest(`${packageName}@latest`, {
+            ...REGISTRY_OPTIONS,
+            signal: AbortSignal.timeout(10_000),
+            timeout: 10_000,
+          });
+
+          return releases.some(
+            (release) =>
+              release.pluginId === pluginId && release.version === version
+          )
+            ? null
+            : { packageName, pluginId, version };
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    return updates.filter((update) => update !== null);
+  }
+
   async listOrgPluginDetails(orgId: string): Promise<OrgPluginDetail[]> {
     const releases = await this.db.listPluginReleases();
     const installs = await this.db.listOrgPlugins(orgId);
@@ -2421,16 +2472,30 @@ function toPreview(inspected: InspectedPackage): PluginPackagePreview {
   };
 }
 
+const packageNameSchema = z
+  .string()
+  .max(214)
+  .regex(/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/);
+
+const REGISTRY_OPTIONS = {
+  allowDirectory: "none",
+  allowFile: "none",
+  allowGit: "none",
+  allowRemote: "none",
+  fetchRetries: 0,
+  fullMetadata: true,
+  ignoreScripts: true,
+  preferOnline: true,
+  registry: "https://registry.npmjs.org/",
+} as const;
+
 async function inspectPluginPackage<T>(
   source: T,
   expectedIntegrity?: string
 ): Promise<InspectedPackage> {
   const identity = z
     .object({
-      packageName: z
-        .string()
-        .max(214)
-        .regex(/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/),
+      packageName: packageNameSchema,
       version: z
         .string()
         .max(128)
@@ -2445,15 +2510,7 @@ async function inspectPluginPackage<T>(
   const spec = `${identity.data.packageName}@${identity.data.version}`;
 
   const options = {
-    allowDirectory: "none",
-    allowFile: "none",
-    allowGit: "none",
-    allowRemote: "none",
-    fetchRetries: 0,
-    fullMetadata: true,
-    ignoreScripts: true,
-    preferOnline: true,
-    registry: "https://registry.npmjs.org/",
+    ...REGISTRY_OPTIONS,
     signal: AbortSignal.timeout(30_000),
     timeout: 30_000,
   } as const;

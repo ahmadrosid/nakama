@@ -1,4 +1,3 @@
-import type { ThinkingEffort } from "@nakama/core/contract";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
 import { BrainIcon } from "hugeicons-react";
@@ -10,17 +9,29 @@ import {
   PromptInputSelectValue,
 } from "@/components/ai-elements/prompt-input";
 import { composerSelectTriggerClass } from "@/lib/chat-stream";
-import {
-  THINKING_EFFORT_OPTIONS,
-  thinkingEffortLabel,
-} from "@/lib/thinking-settings";
+import { THINKING_EFFORT_OPTIONS } from "@/lib/thinking-settings";
 
 const THINKING_TOOLTIP = "Reasoning depth for the next replies.";
 
+function shortEffortLabel(effort: string, fullLabel: string): string {
+  switch (effort) {
+    case "high":
+      return "High";
+    case "low":
+      return "Low";
+    case "medium":
+      return "Med";
+    default:
+      return fullLabel;
+  }
+}
+
 export interface ChatThinkingEffortControlProps {
   disabled?: boolean;
-  effort: ThinkingEffort;
-  onEffortChange: (effort: ThinkingEffort) => void;
+  effort: string;
+  onEffortChange: (effort: string) => void;
+  /** Levels to offer. Defaults to low, medium, and high. */
+  options?: Array<{ label: string; value: string }>;
   visible: boolean;
 }
 
@@ -29,16 +40,16 @@ export function ChatThinkingEffortControl({
   effort,
   disabled = false,
   onEffortChange,
+  options = THINKING_EFFORT_OPTIONS,
 }: ChatThinkingEffortControlProps) {
   if (!visible) {
     return null;
   }
 
-  const fullLabel = thinkingEffortLabel(effort);
+  const fullLabel =
+    options.find((option) => option.value === effort)?.label ?? effort;
 
-  const shortLabel = ({ high: "High", low: "Low", medium: "Med" } as const)[
-    effort
-  ];
+  const shortLabel = shortEffortLabel(effort, fullLabel);
 
   return (
     <Tooltip>
@@ -48,7 +59,7 @@ export function ChatThinkingEffortControl({
             <PromptInputSelect
               disabled={disabled}
               onValueChange={(value) => {
-                if (value === "low" || value === "medium" || value === "high") {
+                if (value) {
                   onEffortChange(value);
                 }
               }}
@@ -80,7 +91,7 @@ export function ChatThinkingEffortControl({
                 alignItemWithTrigger={false}
                 className="w-max min-w-[8rem] text-xs"
               >
-                {THINKING_EFFORT_OPTIONS.map((option) => (
+                {options.map((option) => (
                   <PromptInputSelectItem
                     key={option.value}
                     label={option.label}

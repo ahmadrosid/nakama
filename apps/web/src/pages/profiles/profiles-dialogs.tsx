@@ -278,6 +278,7 @@ export function ProfilesDialogs(state: ProfilesPageState) {
     unassignSkillMutation,
     handleRemoveAssignmentConfirm,
     profiles,
+    acpAgentPresets,
   } = state;
 
   const { navigateToNewChat } = useAppNavigation();
@@ -290,6 +291,7 @@ export function ProfilesDialogs(state: ProfilesPageState) {
   return (
     <>
       <ProfileCreateDialog
+        agentPresets={acpAgentPresets}
         onAskSuperBot={onAskSuperBot}
         onCreated={(profileId) => setSelectedId(profileId)}
         onOpenChange={handleCreateOpenChange}

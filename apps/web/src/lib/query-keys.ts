@@ -1,4 +1,11 @@
 export const queryKeys = {
+  acpAgentPresets: ["acpAgentPresets"] as const,
+  acpSettings: {
+    profile: (profileId: string, agentKey: string) =>
+      ["acpSettings", "profile", profileId, agentKey] as const,
+    session: (sessionId: string, agentKey: string) =>
+      ["acpSettings", "session", sessionId, agentKey] as const,
+  },
   agentBrowser: {
     settings: ["agentBrowser", "settings"] as const,
   },
@@ -57,6 +64,8 @@ export const queryKeys = {
     detail: (orgId: string, pluginId: string) =>
       ["plugins", orgId, pluginId] as const,
     releases: ["plugins", "releases"] as const,
+    // Under releases so approving a release refreshes the check too.
+    updates: ["plugins", "releases", "updates"] as const,
   },
   profiles: {
     all: ["profiles"] as const,

@@ -25,6 +25,7 @@ jobs:
 
       - name: Check
         run: |
+          bun run check:anti-slop
           bun x oxlint apps/server/src/http --ignore-pattern 'apps/server/src/http/routes/**'
           bun x oxlint docs/website
           bun x ultracite check docs/website

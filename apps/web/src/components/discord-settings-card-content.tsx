@@ -15,10 +15,11 @@ import {
   SettingsRow,
 } from "@/components/integration-settings.shared";
 import { WorkerActionBar } from "@/components/WorkerActionBar";
-import {
-  DISCORD_DEVELOPER_PORTAL_URL,
-  DISCORD_SETUP_GUIDE_URL,
-} from "@/lib/integration-docs";
+
+const DISCORD_SETUP_GUIDE_URL = "https://ahmadrosid.github.io/nakama/discord";
+
+const DISCORD_DEVELOPER_PORTAL_URL =
+  "https://discord.com/developers/applications";
 
 function DiscordBotTokenFields({
   configured,

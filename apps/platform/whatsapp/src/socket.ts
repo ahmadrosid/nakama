@@ -17,7 +17,6 @@ import {
 } from "@whiskeysockets/baileys";
 import { usePrivateMultiFileAuthState } from "./auth-state";
 import { createBaileysLogger } from "./baileys-logger";
-import { isChannelDebugEnabled } from "./channel-log";
 import {
   extractInboundText,
   isPrivateWhatsAppChat,
@@ -27,6 +26,11 @@ import {
   type WhatsAppInboundChat,
 } from "./inbound-message";
 import { maskWhatsAppJid } from "./log-metadata";
+
+/** Optional verbose channel worker logging (per-message structural info). */
+export function isChannelDebugEnabled(): boolean {
+  return process.env.NAKAMA_CH_DEBUG === "1";
+}
 
 export interface WhatsAppSocketDeps {
   onConnected?: (me: { id: string; lid?: string | null }) => void;

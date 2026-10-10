@@ -53,11 +53,6 @@ import {
   isEditableUserMessage,
 } from "@/lib/chat-history";
 import {
-  followOutputBehavior,
-  listOverflowsViewport,
-  shouldAutoscrollOnHeightGrowth,
-} from "@/lib/chat-list-stickiness";
-import {
   groupMessagesIntoTurns,
   type IndexedMessage,
   type MessageTurn,
@@ -71,6 +66,15 @@ import {
 import { sumChatUsage } from "@/lib/chat-usage";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
 import { isPastedTextDocument } from "@/lib/pasted-text";
+import { listOverflowsViewport } from "./chat-message-list.shared";
+
+function followOutputBehavior(atBottom: boolean): false | "auto" {
+  return atBottom ? "auto" : false;
+}
+
+function shouldAutoscrollOnHeightGrowth(atBottom: boolean): boolean {
+  return atBottom;
+}
 
 /** Top/bottom inset as Virtuoso Header/Footer — never put padding on the scroller. */
 function VirtuosoEdgePad() {

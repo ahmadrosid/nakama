@@ -1,4 +1,5 @@
 import type {
+  AcpAgentConfig,
   AgentQuestionnaire,
   AgentTodo,
   ChatMessage,
@@ -97,6 +98,10 @@ export interface StoredWorkflowRunStepRecord {
 }
 
 export interface StoredProfileRecord {
+  /** Set when chat turns run through an ACP agent instead of the built-in loop. */
+  acpAgent?: AcpAgentConfig | null;
+  /** The agent settings new chats start with, keyed by config id (for example model or effort). */
+  acpSettings?: Record<string, string> | null;
   /** Defaults to enabled when absent for legacy in-memory records. */
   automationsEnabled?: boolean;
   createdAt: string;

@@ -1,15 +1,19 @@
 import type {
   CreateMcpServerRequest,
   CreateSkillRequest,
+  ImageAttachment,
   InstallSkillRequest,
   ProfileDetail,
 } from "@nakama/core/contract";
+import { parseDataUrl } from "@nakama/core/message-content";
 import { BASH_TOOL_ID } from "@nakama/core/tools/protected";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
+import { useAcpChatControls } from "@/hooks/use-acp-settings";
 import {
+  useAcpAgentPresetsQuery,
   useMcpServersQuery,
   useModelsQuery,
   useProfileQuery,
@@ -39,6 +43,11 @@ import {
   useUpdateProfileMutation,
   useUploadProfileAvatarMutation,
 } from "@/hooks/use-resource-mutations";
+import {
+  acpAgentSettingsKey,
+  NO_ACP_AGENT_PRESETS,
+  presetIdForAgent,
+} from "@/lib/acp-settings";
 import { resolveProfilesPageProfileId } from "@/lib/chat-history";
 import { formatError } from "@/lib/client";
 import {
@@ -46,7 +55,6 @@ import {
   groupModelsByProvider,
   profileModelSelectionValue,
 } from "@/lib/models";
-import { fileToImageAttachment } from "@/lib/profile-images";
 import {
   type ProfileDetailTab,
   type ProfileSaveStatus,
@@ -56,6 +64,11 @@ import {
   type RemoveAssignmentTarget,
   resolveProfileDetailTab,
 } from "@/pages/profiles/profiles-page.shared";
+import { readFileAsDataUrl } from "../../lib/read-file-as-data-url";
+
+function fileToImageAttachment(file: File): Promise<ImageAttachment | null> {
+  return readFileAsDataUrl(file).then(parseDataUrl, () => null);
+}
 
 function isProfilesPageBusy(flags: {
   assignMcpPending: boolean;
@@ -176,6 +189,19 @@ export function useProfilesPage() {
   } = useProfileQuery(selectedId);
 
   const updateMutation = useUpdateProfileMutation();
+
+  const acpAgentPresets =
+    useAcpAgentPresetsQuery().data ?? NO_ACP_AGENT_PRESETS;
+
+  const acpModelControls = useAcpChatControls({
+    agentKey: acpAgentSettingsKey(detail?.acpAgent),
+    enabled: Boolean(detail?.acpAgent),
+    profileId: selectedId,
+    sessionId: null,
+  });
+
+  const acpAgentId = presetIdForAgent(detail?.acpAgent, acpAgentPresets);
+  const { mutateAsync: updateProfile } = updateMutation;
   const cloneProfileMutation = useCloneProfileMutation();
   const deleteMutation = useDeleteProfileMutation();
   const uploadAvatarMutation = useUploadProfileAvatarMutation();
@@ -492,6 +518,31 @@ export function useProfilesPage() {
       scheduleSave(profileModelSaveDelayMs);
     },
     [scheduleSave]
+  );
+
+  // Saved right away, not debounced: the agent is a choice, not text. An empty
+  // preset id returns the profile to the built-in chat.
+  const handleEditAcpAgent = useCallback(
+    async (presetId: string) => {
+      if (!selectedId) {
+        return;
+      }
+
+      const agent =
+        acpAgentPresets.find((preset) => preset.id === presetId)?.agent ?? null;
+
+      setError(null);
+
+      try {
+        await updateProfile({
+          input: { acpAgent: agent },
+          profileId: selectedId,
+        });
+      } catch (err) {
+        setError(formatError(err));
+      }
+    },
+    [acpAgentPresets, selectedId, updateProfile]
   );
 
   const switchingProfileRef = useRef(false);
@@ -1119,6 +1170,13 @@ export function useProfilesPage() {
     : null;
 
   return {
+    acpAgentId,
+    acpAgentPresets,
+    acpCurrentModelSelection: acpModelControls.currentModelSelection,
+    acpEffortOptions: acpModelControls.effortOptions,
+    acpEffortValue: acpModelControls.effortValue,
+    acpIsSaving: acpModelControls.isSaving,
+    acpModelGroups: acpModelControls.providerModelGroups,
     allMcpServers,
     allSkills,
     allTools,
@@ -1168,6 +1226,7 @@ export function useProfilesPage() {
     handleDeleteConfirm,
     handleDeleteOpenChange,
     handleDeleteSkill,
+    handleEditAcpAgent,
     handleEditModelChange,
     handleEditNameChange,
     handleEditPromptChange,
@@ -1193,6 +1252,8 @@ export function useProfilesPage() {
     removeConfirm,
     saveStatus,
     selectedId,
+    setAcpEffort: acpModelControls.setEffort,
+    setAcpModel: acpModelControls.setModel,
     setCreateOpen,
     setDeleteOpen,
     setDetailTab,

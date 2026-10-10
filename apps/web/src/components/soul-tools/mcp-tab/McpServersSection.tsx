@@ -15,7 +15,7 @@ import {
 } from "hugeicons-react";
 import { useId } from "react";
 import { McpServerTools } from "@/components/soul-tools/mcp-tab/McpServerTools";
-import { mcpServerDeleteBlockReason } from "@/components/soul-tools/mcp-tab/mcp-server-delete-block-reason";
+import { mcpServerDeleteBlockReason } from "./shared";
 
 export function McpPageState({
   message,

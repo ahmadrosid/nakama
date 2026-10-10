@@ -3,9 +3,11 @@ import { Spinner } from "@nakama/ui/spinner";
 import { cn } from "@nakama/ui/utils";
 import { Add01Icon } from "hugeicons-react";
 import { useEffect, useState } from "react";
-import type { SpreadsheetRows } from "@/lib/artifact-spreadsheet";
 import * as artifactSpreadsheet from "@/lib/artifact-spreadsheet";
-import { isSpreadsheetNumericCell } from "./spreadsheet-numeric";
+import {
+  isSpreadsheetNumericCell,
+  type SpreadsheetRows,
+} from "@/lib/artifact-spreadsheet";
 
 const GRID_LINE = "border-border";
 

@@ -1722,6 +1722,9 @@ export interface UpdateComposioSettingsRequest {
 export interface ErrorTrackingSettingsResponse {
   configured: boolean;
   dsnMasked: string | null;
+  /** Cleared when the DSN changes. */
+  lastTest: { at: string; delivered: boolean } | null;
+  savedAt: string | null;
 }
 
 export interface UpdateErrorTrackingSettingsRequest {
@@ -1863,7 +1866,13 @@ export type AgentBrowserInstallEvent =
       error: string;
     };
 
+export interface WhatsAppAllowedPhoneDetail {
+  addedAt: string | null;
+  name: string;
+}
+
 export interface WhatsAppSettingsResponse {
+  allowedPhoneDetails: Record<string, WhatsAppAllowedPhoneDetail>;
   allowedPhones: string[];
   allowUnpairedGroupMembers: boolean;
   configured: boolean;
@@ -1875,6 +1884,8 @@ export interface WhatsAppSettingsResponse {
 }
 
 export interface UpdateWhatsAppSettingsRequest {
+  /** Display names keyed by phone; an empty name clears it. */
+  allowedPhoneNames?: Record<string, string>;
   allowedPhones?: string;
   allowUnpairedGroupMembers?: boolean;
   phoneNumber?: string;
@@ -1942,7 +1953,8 @@ export interface ProviderModelOption {
   maxOutputTokens?: number;
   name: string;
   outputPerMillionUsd?: number;
-  provider: ProviderName;
+  /** "acp" for models an ACP agent reports for its chat. */
+  provider: ProviderName | "acp";
   providerId?: string;
   providerLabel?: string;
   supportsThinking?: boolean;
@@ -2052,7 +2064,39 @@ export interface ConfigureProviderResponse {
   provider: ProviderName;
 }
 
+/** A coding agent that runs a profile's chat turns over ACP (stdio). */
+export interface AcpAgentConfig {
+  args: string[];
+  command: string;
+}
+
+/** One setting the ACP agent offers for a chat, such as its model or reasoning effort. */
+export interface AcpSessionSetting {
+  category: string | null;
+  currentValue: string;
+  id: string;
+  name: string;
+  options: Array<{ name: string; value: string }>;
+}
+
+export interface AcpSessionSettingsResponse {
+  settings: AcpSessionSetting[];
+}
+
+/** An agent Nakama ships with, ready to save on a profile. */
+export interface AcpAgentPresetSummary {
+  agent: AcpAgentConfig;
+  id: string;
+  label: string;
+}
+
+export interface AcpAgentPresetsResponse {
+  presets: AcpAgentPresetSummary[];
+}
+
 export interface ProfileSummary {
+  /** Set when chat turns run through an ACP agent. The composer shows the agent's settings. */
+  acpAgent?: AcpAgentConfig | null;
   /** Whether this profile may create and execute automations. */
   automationsEnabled?: boolean;
   createdAt: string;
@@ -2322,6 +2366,8 @@ export interface CreateProfileRequest {
 }
 
 export interface UpdateProfileRequest {
+  /** Platform admins only: the agent runs as a process on the server host. */
+  acpAgent?: AcpAgentConfig | null;
   automationsEnabled?: boolean;
   model?: string | null;
   name?: string;
@@ -2847,6 +2893,16 @@ export interface ChatTurnUsage {
 
 export interface ChatCompletionResult {
   assistantMessage: Extract<ChatMessage, { role: "assistant" }>;
+  /**
+   * Tool steps the provider already ran and finished. They are saved to history
+   * as tool results and are not run again.
+   */
+  completedToolCalls?: Array<{
+    call: ToolCall;
+    result: unknown;
+    /** Text the agent wrote just before this step. */
+    textBefore?: string;
+  }>;
   content: string;
   toolCalls: ToolCall[];
   usage?: ChatUsage;
@@ -2907,7 +2963,8 @@ export interface StreamChatHandlers {
 export interface ProviderClient {
   generateChat(input: GenerateChatInput): Promise<ChatCompletionResult>;
   generateText(input: GenerateTextInput): Promise<GenerateTextResult>;
-  name: ProviderName;
+  /** "acp" for chat turns run by an ACP agent (see providers/acp). */
+  name: ProviderName | "acp";
   streamChat(
     input: GenerateChatInput,
     handlers: StreamChatHandlers
@@ -3190,6 +3247,17 @@ export interface ListOrgPluginsResponse {
 
 export interface ListPluginReleasesResponse {
   releases: PluginReleaseSummary[];
+}
+
+/** A registry version newer than anything approved for this plugin. */
+export interface PluginUpdateSummary {
+  packageName: string;
+  pluginId: string;
+  version: string;
+}
+
+export interface ListPluginUpdatesResponse {
+  updates: PluginUpdateSummary[];
 }
 
 export interface PluginPackageRequest {

@@ -10,7 +10,7 @@ import {
 import { Cancel01Icon } from "hugeicons-react";
 import { useState } from "react";
 import type { LinkSafetyModalProps } from "streamdown";
-import { splitExternalUrl } from "@/lib/external-link-url";
+import { splitExternalUrl } from "./external-link-safety.shared";
 
 const LEARN_MORE_HREF =
   "https://www.cisa.gov/secure-our-world/recognize-and-report-phishing";

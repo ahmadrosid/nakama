@@ -48,7 +48,7 @@ function extension() {
   const calls: Array<{ action: string; input: unknown }> = [];
 
   const tabs = new Map([
-    [1, { id: 1, url: "https://nakama.example/plugins/google-meet" }],
+    [1, { id: 1, url: "https://nakama.example/google-meet" }],
     [2, { id: 2, url: "https://meet.google.com/abc-defg-hij?authuser=0" }],
   ]);
 
@@ -242,11 +242,11 @@ test("extension requires a connected Nakama tab and cancels sessions when captur
     status: "error",
   });
   expect(ext.badge()).toBe("!");
-  ext.tabs.get(1)!.url = "https://other.example/plugins/google-meet";
+  ext.tabs.get(1)!.url = "https://other.example/google-meet";
   const count = ext.calls.length;
   expect((await ext.dispatch("START")).error).toBeDefined();
   expect(ext.calls).toHaveLength(count);
-  ext.tabs.get(1)!.url = "https://nakama.example/plugins/google-meet";
+  ext.tabs.get(1)!.url = "https://nakama.example/google-meet";
   ext.failCapture(false);
   expect(await ext.dispatch("START")).toEqual({ ok: true });
   await ext.captureEvent("CAPTURE_STARTED");
@@ -347,7 +347,7 @@ test.each(["connected", "throw", "reject", "invalidated"])(
         window: page,
       }
     );
-    location.pathname = "/plugins/google-meet";
+    location.pathname = "/google-meet";
     await receive({
       data: { type: "NAKAMA_MEET_PING" },
       origin: "http://localhost:3003",
@@ -402,7 +402,7 @@ test("popup shows setup progress and only the available capture action", async (
                 {
                   url: onMeet
                     ? "https://meet.google.com/abc-defg-hij"
-                    : "https://nakama.example/plugins/google-meet",
+                    : "https://nakama.example/google-meet",
                 },
               ];
             },
@@ -433,7 +433,7 @@ test("extension clears a connection when its Nakama tab closes or navigates away
   ext.tabs.get(1)!.url = "https://other.example/";
   expect((await ext.dispatch("STATE")).connection).toBeUndefined();
   expect(ext.state.connection).toBeUndefined();
-  ext.tabs.get(1)!.url = "https://nakama.example/plugins/google-meet";
+  ext.tabs.get(1)!.url = "https://nakama.example/google-meet";
   await ext.dispatch("CONNECT");
   ext.tabs.delete(1);
   expect((await ext.dispatch("STATE")).connection).toBeUndefined();

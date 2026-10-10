@@ -7,7 +7,6 @@ import type {
   ChatUsage,
   ProviderModelOption,
   SkillSummary,
-  ThinkingEffort,
 } from "@nakama/core/contract";
 import { MAX_IMAGE_BYTES } from "@nakama/core/message-content";
 import { Button } from "@nakama/ui/button";
@@ -64,7 +63,6 @@ import {
   type QueuedComposerMessage,
 } from "@/components/chat/ChatMessageQueuePanel";
 import { ChatAddCapabilitiesDialogs } from "@/components/chat/chat-add-capabilities-dialogs";
-import { composerActions } from "@/components/chat/chat-composer-actions";
 import { ChatContextUsageRing } from "@/components/chat/chat-context-usage";
 import { ChatSkillPicker } from "@/components/chat/chat-skill-picker";
 import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overlay";
@@ -110,6 +108,7 @@ import {
   isPastedTextDocument,
   LONG_PASTE_WORD_THRESHOLD,
 } from "@/lib/pasted-text";
+import { composerActions } from "./chat-composer.shared";
 import { ChatComposerError, ChatTips } from "./chat-tips";
 
 interface ChatComposerBaseProps {
@@ -141,7 +140,7 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
   headerNotice?: ReactNode;
   onConnectProvider?: () => void;
   onModelChange: (selection: string) => void;
-  onThinkingEffortChange?: (effort: ThinkingEffort) => void;
+  onThinkingEffortChange?: (effort: string) => void;
   primarySupportsVision?: boolean;
   profileId?: string | null;
   profileModelId?: string | null;
@@ -155,8 +154,10 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
   sessionUsage?: ChatUsage | null;
   showOfflineHint?: boolean;
   showTips?: boolean;
-  thinkingEffort?: ThinkingEffort;
+  thinkingEffort?: string;
   thinkingEffortDisabled?: boolean;
+  /** Overrides the built-in low/medium/high list, for ACP agents that offer their own levels. */
+  thinkingEffortOptions?: Array<{ label: string; value: string }>;
   thinkingEffortVisible?: boolean;
   variant?: "full";
 }
@@ -1129,6 +1130,7 @@ function ChatComposerFullFooter({
             disabled={props.thinkingEffortDisabled}
             effort={props.thinkingEffort}
             onEffortChange={props.onThinkingEffortChange}
+            options={props.thinkingEffortOptions}
             visible
           />
         ) : null}

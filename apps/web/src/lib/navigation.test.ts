@@ -121,6 +121,7 @@ describe("plugin navigation", () => {
     expect(pluginIdFromPath("/plugins/notes")).toBe("notes");
     expect(pluginIdFromPath("/plugins")).toBeNull();
     expect(pageIdFromPath("/plugins/notes")).toBe("plugins");
+    expect(pageIdFromPath("/google-meet")).toBe("google-meet");
     expect(pluginManagementPath()).toBe("/customize/plugins");
     expect(pageIdFromPath("/customize/plugins")).toBe("plugin-management");
     expect(pageIdFromPath("/customize/plugins/notes")).toBe(

@@ -70,6 +70,12 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateRemoveGoogleMeetPlugin);
   atomic(migrateFilePinsTable);
   atomic(migrateNotificationWebhookDeliveriesTable);
+  atomic((database) =>
+    addNullableTextColumnIfMissing(database, "profiles", "acp_agent")
+  );
+  atomic((database) =>
+    addNullableTextColumnIfMissing(database, "profiles", "acp_settings")
+  );
 }
 
 function migrateSessionAppUserId(db: Database): void {

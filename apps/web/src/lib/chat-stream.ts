@@ -436,7 +436,9 @@ export function formatToolActionLabel(
   }
 
   if (tool === "bash") {
-    return "Ran command";
+    const command = summary?.split("\n")[0];
+
+    return command ? `Ran ${truncateDisplay(command, 96)}` : "Ran command";
   }
 
   if (

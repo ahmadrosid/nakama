@@ -2,6 +2,7 @@ import { existsSync, lstatSync, mkdirSync, renameSync } from "node:fs";
 import { cp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type {
+  AcpAgentConfig,
   AssignMcpServerRequest,
   AssignSkillRequest,
   AssignToolRequest,
@@ -465,6 +466,7 @@ export class ProfileService {
     const now = new Date().toISOString();
 
     validateGeneratedSoulFiles(request.soulFiles);
+    validateAcpAgent(request.acpAgent);
 
     const nextSystemPrompt =
       request.systemPrompt === undefined
@@ -473,6 +475,8 @@ export class ProfileService {
 
     await this.db.upsertProfile({
       ...profile,
+      acpAgent:
+        request.acpAgent === undefined ? profile.acpAgent : request.acpAgent,
       automationsEnabled:
         request.automationsEnabled === undefined
           ? profile.automationsEnabled !== false
@@ -1433,6 +1437,7 @@ export class ProfileService {
     const soulStack = await resolveSoulStackForProfile(orgId, profile.id);
 
     return {
+      acpAgent: profile.acpAgent ?? null,
       automationsEnabled: profile.automationsEnabled !== false,
       createdAt: profile.createdAt,
       hasAvatar: await hasProfileAvatar(orgId, profile.id),
@@ -1642,6 +1647,25 @@ async function writeSoulFileEntries(
       // SAFETY: The key was checked against SOUL_FILE_KEY_BY_NAME above.
       SOUL_FILE_KEY_BY_NAME[fileName as keyof typeof SOUL_FILE_KEY_BY_NAME],
       content
+    );
+  }
+}
+
+const ACP_AGENT_MAX_ARGS = 32;
+
+function validateAcpAgent(agent: AcpAgentConfig | null | undefined): void {
+  if (!agent) {
+    return;
+  }
+
+  if (!agent.command.trim()) {
+    throw new NakamaApiError("ACP agent command is required.", 400);
+  }
+
+  if (agent.args.length > ACP_AGENT_MAX_ARGS) {
+    throw new NakamaApiError(
+      `ACP agent takes at most ${ACP_AGENT_MAX_ARGS} arguments.`,
+      400
     );
   }
 }

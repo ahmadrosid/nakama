@@ -1,10 +1,21 @@
 import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
 import { Spinner } from "@nakama/ui/spinner";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Copy01Icon, RefreshIcon } from "hugeicons-react";
 import { useState } from "react";
-import { useRotateLocalAuthToken } from "@/hooks/use-local-auth-token";
-import { formatError } from "@/lib/client";
+import { client, formatError } from "@/lib/client";
+import { invalidateQueries } from "@/lib/query-client";
+import { queryKeys } from "@/lib/query-keys";
+
+function useRotateLocalAuthToken() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => client.rotateLocalAuthToken(),
+    onSuccess: () => invalidateQueries(queryClient, queryKeys.workerLogs),
+  });
+}
 
 export function LocalAuthTokenCard() {
   const rotateMutation = useRotateLocalAuthToken();

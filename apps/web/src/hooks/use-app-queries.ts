@@ -437,7 +437,14 @@ export const useErrorTrackingSettings = errorTrackingSettings.useSettings;
 export const useSaveErrorTrackingSettings = errorTrackingSettings.useSave;
 
 export function useSendErrorTrackingTest() {
-  return useMutation({ mutationFn: () => client.sendErrorTrackingTest() });
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => client.sendErrorTrackingTest(),
+    // The server stores the result, so the settings carry it from here on.
+    onSettled: () =>
+      invalidateQueries(queryClient, queryKeys.errorTracking.settings),
+  });
 }
 
 const healthQueryOptions = queryOptions({
@@ -553,6 +560,16 @@ export function useProfileQuery(profileId: string | null) {
     ...profileQueryOptions(profileId ?? ""),
     enabled: Boolean(profileId),
   });
+}
+
+const acpAgentPresetsQueryOptions = queryOptions({
+  queryFn: async () => (await client.getAcpAgentPresets()).presets,
+  queryKey: queryKeys.acpAgentPresets,
+  staleTime: defaultStaleTime,
+});
+
+export function useAcpAgentPresetsQuery() {
+  return useQuery(acpAgentPresetsQueryOptions);
 }
 
 export function useToolsQuery() {

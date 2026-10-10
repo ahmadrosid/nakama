@@ -1,7 +1,11 @@
 import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { chmodSync } from "node:fs";
 import { sep } from "node:path";
-import type { AgentQuestionnaire, ChatMessage } from "@nakama/core";
+import type {
+  AcpAgentConfig,
+  AgentQuestionnaire,
+  ChatMessage,
+} from "@nakama/core";
 import {
   derivePluginToolName,
   getUserMessageText,
@@ -151,6 +155,8 @@ interface WorkflowRunStepRow {
 }
 
 interface ProfileRow {
+  acp_agent: string | null;
+  acp_settings: string | null;
   automations_enabled: number;
   created_at: string;
   id: string;
@@ -911,10 +917,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       skills_write_approval,
       skills_post_turn_review,
       skills_curator_consolidate_enabled,
+      acp_agent,
+      acp_settings,
       created_at,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       system_prompt = excluded.system_prompt,
@@ -928,6 +936,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       skills_write_approval = excluded.skills_write_approval,
       skills_post_turn_review = excluded.skills_post_turn_review,
       skills_curator_consolidate_enabled = excluded.skills_curator_consolidate_enabled,
+      acp_agent = excluded.acp_agent,
+      acp_settings = excluded.acp_settings,
       updated_at = excluded.updated_at
   `);
 
@@ -958,6 +968,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         : record.skillsCuratorConsolidateEnabled
           ? 1
           : 0,
+      record.acpAgent ? JSON.stringify(record.acpAgent) : null,
+      record.acpSettings ? JSON.stringify(record.acpSettings) : null,
       record.createdAt,
       record.updatedAt ?? record.createdAt
     );
@@ -5655,6 +5667,16 @@ function toWorkflowRunStepRecord(
 
 function toProfileRecord(row: ProfileRow): StoredProfileRecord {
   return {
+    acpAgent:
+      // SAFETY: The adapter writes this column only through JSON.stringify(AcpAgentConfig).
+      row.acp_agent == null
+        ? null
+        : (JSON.parse(row.acp_agent) as AcpAgentConfig),
+    acpSettings:
+      // SAFETY: The adapter writes this column only through JSON.stringify(Record<string, string>).
+      row.acp_settings == null
+        ? null
+        : (JSON.parse(row.acp_settings) as Record<string, string>),
     automationsEnabled: row.automations_enabled !== 0,
     createdAt: row.created_at,
     id: row.id,

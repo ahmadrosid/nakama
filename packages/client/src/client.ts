@@ -11,6 +11,8 @@ import {
 import type {
   AcceptOrgInviteRequest,
   AcceptOrgInviteResponse,
+  AcpAgentPresetsResponse,
+  AcpSessionSettingsResponse,
   AddOrgMemberRequest,
   AddOrgMemberResponse,
   AddOrgMemoryFactRequest,
@@ -102,6 +104,7 @@ import type {
   ListOrgMemoryProposalsResponse,
   ListOrgPluginsResponse,
   ListPluginReleasesResponse,
+  ListPluginUpdatesResponse,
   ListProfileChangeHistoryResponse,
   ListProfileComposioToolkitsResponse,
   ListProfilesResponse,
@@ -837,6 +840,48 @@ export class NakamaClient {
   async getSessionStatus(sessionId: string): Promise<SessionStatusResponse> {
     return this.request<SessionStatusResponse>(
       `/v1/sessions/${encodeURIComponent(sessionId)}/status`
+    );
+  }
+
+  async getSessionAcpSettings(
+    sessionId: string
+  ): Promise<AcpSessionSettingsResponse> {
+    return this.request<AcpSessionSettingsResponse>(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/acp-settings`
+    );
+  }
+
+  async setSessionAcpSetting(
+    sessionId: string,
+    configId: string,
+    value: string
+  ): Promise<AcpSessionSettingsResponse> {
+    return this.request<AcpSessionSettingsResponse>(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/acp-settings/${encodeURIComponent(configId)}`,
+      { body: JSON.stringify({ value }), method: "PUT" }
+    );
+  }
+
+  async getAcpAgentPresets(): Promise<AcpAgentPresetsResponse> {
+    return this.request<AcpAgentPresetsResponse>("/v1/acp-agent-presets");
+  }
+
+  async getProfileAcpSettings(
+    profileId: string
+  ): Promise<AcpSessionSettingsResponse> {
+    return this.request<AcpSessionSettingsResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/acp-settings`
+    );
+  }
+
+  async setProfileAcpSetting(
+    profileId: string,
+    configId: string,
+    value: string
+  ): Promise<AcpSessionSettingsResponse> {
+    return this.request<AcpSessionSettingsResponse>(
+      `/v1/profiles/${encodeURIComponent(profileId)}/acp-settings/${encodeURIComponent(configId)}`,
+      { body: JSON.stringify({ value }), method: "PUT" }
     );
   }
 
@@ -3069,6 +3114,12 @@ export class NakamaClient {
   async listPluginReleases(): Promise<ListPluginReleasesResponse> {
     return this.request<ListPluginReleasesResponse>(
       "/v1/platform/plugins/releases"
+    );
+  }
+
+  async listPluginUpdates(): Promise<ListPluginUpdatesResponse> {
+    return this.request<ListPluginUpdatesResponse>(
+      "/v1/platform/plugins/updates"
     );
   }
 

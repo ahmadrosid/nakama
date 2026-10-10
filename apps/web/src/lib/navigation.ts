@@ -412,7 +412,7 @@ export const PAGE_PATHS: Record<PageId, string> = {
   chat: "/chat",
   customize: "/customize",
   files: "/files",
-  "google-meet": "/plugins/google-meet",
+  "google-meet": "/google-meet",
   mcp: "/customize/mcp",
   notifications: "/notifications",
   organization: "/organization",
@@ -466,10 +466,6 @@ export function findNavItem(pageId: PageId): NavItem | undefined {
 }
 
 export function pageIdFromPath(pathname: string): PageId | null {
-  if (pathname === "/plugins/google-meet") {
-    return "google-meet";
-  }
-
   if (pathname === "/tasks") {
     return "automations";
   }

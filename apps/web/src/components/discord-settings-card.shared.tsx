@@ -1,10 +1,11 @@
 import { buttonVariants } from "@nakama/ui/button-variants";
 import { cn } from "@nakama/ui/utils";
 import { PairingStepTile } from "@/components/integration-settings.shared";
-import {
-  DISCORD_DEVELOPER_PORTAL_URL,
-  DISCORD_SETUP_GUIDE_URL,
-} from "@/lib/integration-docs";
+
+const DISCORD_SETUP_GUIDE_URL = "https://ahmadrosid.github.io/nakama/discord";
+
+const DISCORD_DEVELOPER_PORTAL_URL =
+  "https://discord.com/developers/applications";
 
 export function DiscordPairingGuide({
   inviteUrl,

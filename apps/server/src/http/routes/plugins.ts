@@ -4,6 +4,7 @@ import {
   type InvokePluginActionResponse,
   type ListOrgPluginsResponse,
   type ListPluginReleasesResponse,
+  type ListPluginUpdatesResponse,
   NakamaApiError,
   type OrgPluginDetail,
   type PluginContributionChangePreview,
@@ -104,6 +105,7 @@ export function registerPluginRoutes(
   const previewResponseSchema = openapiBag("PluginPackagePreviewResponse");
   const installResponseSchema = openapiBag("InstallPluginPackageResponse");
   const listReleasesSchema = openapiBag("ListPluginReleasesResponse");
+  const listUpdatesSchema = openapiBag("ListPluginUpdatesResponse");
   const listOrgPluginsSchema = openapiBag("ListOrgPluginsResponse");
   const orgPluginSchema = openapiBag("OrgPluginDetail");
 
@@ -275,6 +277,15 @@ export function registerPluginRoutes(
     operationId: "listPluginReleases",
     path: "/v1/platform/plugins/releases",
     summary: "List approved plugin releases",
+    tags: platform,
+  });
+  pluginPath({
+    extra: { 403: errorResponse },
+    method: "get",
+    ok: jsonOk(listUpdatesSchema, "Registry versions not approved yet"),
+    operationId: "listPluginUpdates",
+    path: "/v1/platform/plugins/updates",
+    summary: "Check the registry for newer versions of approved plugins",
     tags: platform,
   });
   pluginPath({
@@ -468,6 +479,15 @@ export function registerPluginRoutes(
 
     return json<ListPluginReleasesResponse>({
       releases: await plugins.listApprovedPluginReleases(),
+    });
+  });
+
+  app.get("/v1/platform/plugins/updates", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const plugins = requirePluginService(options);
+
+    return json<ListPluginUpdatesResponse>({
+      updates: await plugins.listPluginUpdates(),
     });
   });
 
