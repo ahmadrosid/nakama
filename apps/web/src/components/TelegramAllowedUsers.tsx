@@ -13,7 +13,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@nakama/ui/input-group";
-import { ArrowRight01Icon, Delete02Icon } from "hugeicons-react";
+import { Add01Icon, Delete02Icon } from "hugeicons-react";
 import { useState } from "react";
 import {
   useSaveTelegramSettings,
@@ -44,6 +44,7 @@ export function TelegramAllowedUsers({
   const { data: access } = useTelegramAccessRequests();
 
   const [newAllowedUserInput, setNewAllowedUserInput] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const [removeTarget, setRemoveTarget] = useState<AllowedTelegramUser | null>(
@@ -158,63 +159,72 @@ export function TelegramAllowedUsers({
             </Button>
           </div>
         ))}
-        <details className="group px-4 py-3 text-sm">
-          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-muted-foreground marker:hidden hover:text-foreground focus-visible:outline-ring">
-            <ArrowRight01Icon
-              aria-hidden
-              className="size-4 transition-transform group-open:rotate-90"
-            />
+        <div className="px-4 py-3 text-sm">
+          <Button
+            aria-expanded={addOpen}
+            onClick={() => setAddOpen((open) => !open)}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <Add01Icon aria-hidden className="size-4" />
             Add by Telegram ID
-          </summary>
-          <InputGroup className="mt-3">
-            <InputGroupInput
-              aria-label="Telegram ID"
-              className="font-mono text-sm"
-              disabled={saveMutation.isPending}
-              onChange={(event) => {
-                setNewAllowedUserInput(event.target.value);
+          </Button>
+          {addOpen ? (
+            <div className="mt-3">
+              <InputGroup>
+                <InputGroupInput
+                  aria-label="Telegram ID"
+                  className="font-mono text-sm"
+                  disabled={saveMutation.isPending}
+                  onChange={(event) => {
+                    setNewAllowedUserInput(event.target.value);
 
-                if (formError) {
-                  setFormError(null);
-                }
-              }}
-              placeholder="e.g. 213193924"
-              value={newAllowedUserInput}
-            />
-            <InputGroupAddon align="inline-end">
-              <InputGroupButton
-                disabled={saveMutation.isPending || !newAllowedUserInput.trim()}
-                onClick={addAllowedUserId}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                Add
-              </InputGroupButton>
-            </InputGroupAddon>
-          </InputGroup>
-          <p className="mt-2 text-muted-foreground text-xs">
-            To find an ID, message{" "}
-            <a
-              className="font-medium text-primary hover:underline"
-              href="https://t.me/userinfobot"
-              rel="noreferrer"
-              target="_blank"
-            >
-              @userinfobot
-              <span className="sr-only"> (opens in a new tab)</span>
-            </a>{" "}
-            in Telegram.
-          </p>
-          {formError ? (
-            <p
-              className="mt-2 rounded-md bg-destructive/10 px-2.5 py-1 text-destructive text-xs"
-              role="alert"
-            >
-              {formError}
-            </p>
+                    if (formError) {
+                      setFormError(null);
+                    }
+                  }}
+                  placeholder="e.g. 213193924"
+                  value={newAllowedUserInput}
+                />
+                <InputGroupAddon align="inline-end">
+                  <InputGroupButton
+                    disabled={
+                      saveMutation.isPending || !newAllowedUserInput.trim()
+                    }
+                    onClick={addAllowedUserId}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    Add
+                  </InputGroupButton>
+                </InputGroupAddon>
+              </InputGroup>
+              <p className="mt-2 text-muted-foreground text-xs">
+                To find an ID, message{" "}
+                <a
+                  className="font-medium text-primary hover:underline"
+                  href="https://t.me/userinfobot"
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  @userinfobot
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </a>{" "}
+                in Telegram.
+              </p>
+              {formError ? (
+                <p
+                  className="mt-2 rounded-md bg-destructive/10 px-2.5 py-1 text-destructive text-xs"
+                  role="alert"
+                >
+                  {formError}
+                </p>
+              ) : null}
+            </div>
           ) : null}
-        </details>
+        </div>
       </div>
 
       <Dialog
