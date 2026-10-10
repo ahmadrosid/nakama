@@ -1,16 +1,9 @@
 import { Button } from "@nakama/ui/button";
 import { ConfirmDialog } from "@nakama/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@nakama/ui/dropdown-menu";
 import { toast } from "@nakama/ui/toast";
 import { cn } from "@nakama/ui/utils";
 import {
   Loading03Icon,
-  MoreHorizontalIcon,
   PlayIcon,
   Rotate02Icon,
   ScrollIcon,
@@ -69,7 +62,7 @@ function ActionGlyph({
   );
 }
 
-function DisconnectMenu({
+function DisconnectButton({
   busy,
   onDisconnect,
 }: {
@@ -77,25 +70,16 @@ function DisconnectMenu({
   onDisconnect: () => void;
 }) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            aria-label="More actions"
-            disabled={busy}
-            size="sm"
-            variant="outline"
-          />
-        }
-      >
-        <MoreHorizontalIcon aria-hidden className="size-4" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={onDisconnect} variant="destructive">
-          Disconnect
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Button
+      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+      disabled={busy}
+      onClick={onDisconnect}
+      size="sm"
+      type="button"
+      variant="outline"
+    >
+      Disconnect
+    </Button>
   );
 }
 
@@ -301,7 +285,7 @@ export function WorkerActionBar({
           />
         ) : null}
         {ownerProfileId && compact ? (
-          <DisconnectMenu
+          <DisconnectButton
             busy={isBusy}
             onDisconnect={() => setConfirmDisconnect(true)}
           />
