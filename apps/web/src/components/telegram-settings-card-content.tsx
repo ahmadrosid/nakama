@@ -495,6 +495,7 @@ export function TelegramSettingsCardContent({
                 if (replacingToken) {
                   onBotTokenChange("");
                 }
+
                 setReplacingToken(!replacingToken);
               }}
               size="sm"

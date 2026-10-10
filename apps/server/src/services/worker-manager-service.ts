@@ -1269,9 +1269,7 @@ export class WorkerManagerService {
     };
   }
 
-  private pm2UnavailableInfo(error: unknown): WorkerProcessInfo {
-    const message = error instanceof Error ? error.message : String(error);
-
+  private pm2UnavailableInfo(message: string): WorkerProcessInfo {
     console.warn(`PM2 unavailable: ${message}`);
 
     return {
@@ -1298,7 +1296,7 @@ export class WorkerManagerService {
 
       return this.pm2ProcessToInfo(match);
     } catch (error) {
-      return this.pm2UnavailableInfo(error);
+      return this.pm2UnavailableInfo(describeError(error));
     }
   }
 
@@ -1321,7 +1319,7 @@ export class WorkerManagerService {
       return Object.fromEntries(
         [...VALID_WORKERS, ...this.pluginWorkers.keys()].map((name) => [
           name,
-          this.pm2UnavailableInfo(error),
+          this.pm2UnavailableInfo(describeError(error)),
         ])
       );
     }
@@ -1529,6 +1527,10 @@ function getPlatformWorkerName(name: string): PlatformWorkerName {
   }
 
   throw new Error(`Unknown worker: ${name}`);
+}
+
+function describeError(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
 }
 
 function readChannelPlatform(name: string): ChannelPlatform {
