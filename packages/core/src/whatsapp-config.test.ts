@@ -238,21 +238,24 @@ describe("saveWhatsAppConfig", () => {
         allowedPhones: "628111111111",
         profileId: "default",
       });
+
       const firstAddedAt = first.allowedPhoneDetails["628111111111"]?.addedAt;
 
       const added = await saveWhatsAppConfig({
         allowedPhoneNames: { "+62 822-222-2222": "Sari, Ops = lead" },
         allowedPhones: "628111111111,628222222222",
       });
+
       const addedAt = added.allowedPhoneDetails["628222222222"]?.addedAt;
       expect(added.allowedPhoneDetails["628222222222"]?.name).toBe(
         "Sari, Ops = lead"
       );
-      expect(typeof addedAt).toBe("string");
+      expect(addedAt).toEqual(expect.any(String));
 
       const renamed = await saveWhatsAppConfig({
         allowedPhoneNames: { "628111111111": "Budi" },
       });
+
       expect(renamed.allowedPhoneDetails).toEqual({
         "628111111111": { addedAt: firstAddedAt ?? null, name: "Budi" },
         "628222222222": { addedAt: addedAt ?? null, name: "Sari, Ops = lead" },
