@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { replyAsChat } from "./reply";
+import { replyAsChat } from "./chat-handler";
 import type { TelegramRichMessenger } from "./rich-message";
 
 function createMessenger(): TelegramRichMessenger & {

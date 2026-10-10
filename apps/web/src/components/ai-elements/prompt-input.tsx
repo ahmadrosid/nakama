@@ -37,7 +37,6 @@ import {
   useOptionalProviderAttachments,
 } from "@/components/ai-elements/prompt-input-context";
 import { PromptInputForm } from "@/components/ai-elements/prompt-input-form";
-import { convertBlobUrlToDataUrl } from "@/components/ai-elements/prompt-input-media";
 import { usePromptInputFileState } from "@/components/ai-elements/use-prompt-input-file-state";
 import type { ChatStatus, FileUIPart } from "@/lib/ai-ui-types";
 import { createClientId } from "@/lib/client-id";
@@ -47,6 +46,29 @@ import {
   normalizePastedText,
 } from "@/lib/pasted-text";
 import { readFileAsDataUrl } from "@/lib/read-file-as-data-url";
+
+const convertBlobUrlToDataUrl = async (url: string): Promise<string | null> => {
+  try {
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const blob = await response.blob();
+
+    // FileReader uses a callback API, so wrapping in a Promise is required.
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      // SAFETY: readAsDataURL returns a string result for Blob input.
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+};
 
 export type {
   AttachmentsContext,

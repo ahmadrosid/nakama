@@ -9,8 +9,24 @@ import {
   stopSpawnedServer,
 } from "@nakama/core/ensure-server";
 import { loadLocalAuthToken } from "@nakama/core/local-auth";
-import { AUTOMATION_POLL_INTERVAL_MS, loadConfig } from "./config";
 import { AutomationWorkerScheduler } from "./scheduler";
+
+const AUTOMATION_POLL_INTERVAL_MS = 5 * 60 * 1000;
+
+interface AutomationWorkerConfig {
+  heartbeatIntervalMs: number;
+  serverUrl: string;
+}
+
+function loadConfig(): AutomationWorkerConfig {
+  return {
+    heartbeatIntervalMs: Number.parseInt(
+      process.env.NAKAMA_AUTOMATION_HEARTBEAT_INTERVAL_MS ?? "15000",
+      10
+    ),
+    serverUrl: process.env.NAKAMA_SERVER_URL?.trim() || "http://127.0.0.1:4310",
+  };
+}
 
 let spawnedChild: Bun.Subprocess | null = null;
 

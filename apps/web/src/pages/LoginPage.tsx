@@ -1,5 +1,9 @@
 import { NakamaApiError } from "@nakama/core/api-error";
-import { DEMO_LOGIN_EMAIL, DEMO_LOGIN_PASSWORD } from "@nakama/core/demo-login";
+import {
+  DEMO_LOGIN_EMAIL,
+  DEMO_LOGIN_HOST,
+  DEMO_LOGIN_PASSWORD,
+} from "@nakama/core/demo-login";
 import { Button } from "@nakama/ui/button";
 import { Input } from "@nakama/ui/input";
 import { ArrowLeft02Icon } from "hugeicons-react";
@@ -10,10 +14,17 @@ import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
 import { client } from "@/lib/client";
-import { isDemoLoginHost } from "@/lib/demo-login";
 import { SETUP_PATH } from "@/lib/navigation";
 import { getPasskey } from "@/lib/passkey";
 import { ditherLogoSrc } from "@/lib/theme";
+
+function isDemoLoginHost(
+  hostname: string = typeof window === "undefined"
+    ? ""
+    : window.location.hostname
+): boolean {
+  return hostname.trim().toLowerCase() === DEMO_LOGIN_HOST;
+}
 
 /**
  * A missing provider is not a reason to withhold the app. Chat already carries a

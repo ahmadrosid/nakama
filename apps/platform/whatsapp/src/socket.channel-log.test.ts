@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { isChannelDebugEnabled } from "./channel-log";
+import { isChannelDebugEnabled } from "./socket";
 
 describe("isChannelDebugEnabled", () => {
   const previousDebug = process.env.NAKAMA_CH_DEBUG;

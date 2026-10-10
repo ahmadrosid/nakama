@@ -1,6 +1,7 @@
 import type {
   NakamaClient,
   RemoteChatSession,
+  SendMessageArg,
   StreamHandlers,
 } from "@nakama/client";
 import {
@@ -16,6 +17,7 @@ import {
   type SoulStatusResponse,
   type UserContextStatusResponse,
 } from "@nakama/core";
+import { isAbortError } from "@nakama/core/channel-active-stream";
 import { loadSavedCliOrgId, saveCliProfileId } from "./cli-config";
 import {
   effectiveModelState,
@@ -39,7 +41,6 @@ import {
   type PromptLineResult,
   promptLine,
 } from "./prompt";
-import { sendStreamCancellable } from "./stream-abort";
 import { styledLine } from "./styled-text";
 import { TerminalInput } from "./terminal-input";
 import { getTerminalColumns } from "./terminal-layout";
@@ -47,6 +48,25 @@ import { TerminalRenderer } from "./terminal-renderer";
 import { printLine } from "./terminal-safe";
 import { stripAnsi, truncateText } from "./text-measure";
 import { ThinkingIndicator } from "./thinking-indicator";
+
+async function sendStreamCancellable(
+  session: RemoteChatSession,
+  input: SendMessageArg,
+  handlers: StreamHandlers,
+  options?: { signal?: AbortSignal }
+): Promise<{ aborted: boolean }> {
+  try {
+    await session.sendStream(input, handlers, options);
+
+    return { aborted: false };
+  } catch (error) {
+    if (isAbortError(error)) {
+      return { aborted: true };
+    }
+
+    throw error;
+  }
+}
 
 const HELP_TEXT = `${formatSlashCommands()}\n\n@/path/to/image.png [message]   attach an image from file\n/paste                            attach image from clipboard (recommended)\nCtrl+V / Cmd+V (empty paste)      attach image when terminal supports it\nPageUp/PageDown                   scroll conversation history\nHome/End                          jump to oldest/newest visible history`;
 

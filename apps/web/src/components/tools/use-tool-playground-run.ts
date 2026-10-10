@@ -2,8 +2,27 @@ import type { ToolDetail } from "@nakama/core/contract";
 import { useState } from "react";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
 import { client, formatError } from "@/lib/client";
-import { buildSuperBotFixDraft } from "@/lib/tool-playground-draft";
 import { buildExampleParametersJson } from "@/lib/tool-playground-params";
+
+function buildSuperBotFixDraft(input: {
+  toolName: string;
+  parameters: unknown;
+  error: string;
+}): string {
+  const paramsText = JSON.stringify(input.parameters, null, 2);
+
+  return [
+    `The tool "${input.toolName}" failed in the playground.`,
+    "",
+    "Parameters used:",
+    paramsText,
+    "",
+    "Error:",
+    input.error,
+    "",
+    "Please fix the JavaScript tool module so it works with these parameters.",
+  ].join("\n");
+}
 
 type JsonValue = boolean | null | number | string | JsonValue[] | JsonRecord;
 
