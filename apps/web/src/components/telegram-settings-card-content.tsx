@@ -35,22 +35,20 @@ function pairingCodeDescription(
   isPaired: boolean
 ): string {
   if (pairingCode) {
-    return "Send this code to your bot in a private chat. It expires in 10 minutes.";
+    return "Send this code to your bot in Telegram. It works for 10 minutes.";
   }
 
   if (isPaired) {
-    return "Your Telegram account can message the bot.";
+    return "Make a code, then send it to your bot in Telegram.";
   }
 
-  return "Generate a code, then message it to your bot once.";
+  return "Make a code, then send it to your bot in Telegram.";
 }
 
 function pairingRowLabel(pairingCode: string | null, isPaired: boolean) {
-  if (!isPaired) {
-    return "Link with a code";
-  }
-
-  return pairingCode ? "Add account" : "Linked account";
+  return isPaired || pairingCode
+    ? "Add someone with a code"
+    : "Link your Telegram";
 }
 
 function TelegramPairingCodeControls({
@@ -95,7 +93,7 @@ function TelegramPairingCodeControls({
           ) : (
             <>
               <RefreshIcon aria-hidden="true" className="size-3.5" />
-              New code
+              Make a new code
             </>
           )}
         </Button>
@@ -112,7 +110,7 @@ function TelegramPairingCodeControls({
         type="button"
         variant="outline"
       >
-        {regeneratePending ? <Spinner /> : "Add account"}
+        {regeneratePending ? <Spinner /> : "Make a code"}
       </Button>
     );
   }
@@ -127,10 +125,10 @@ function TelegramPairingCodeControls({
       {regeneratePending ? (
         <>
           <Spinner className="size-3" />
-          Generating…
+          Making code…
         </>
       ) : (
-        "Generate pairing code"
+        "Make a code"
       )}
     </Button>
   );
@@ -286,7 +284,7 @@ function TelegramBotTokenRow({
   showBotToken: boolean;
 }) {
   return (
-    <SettingsRow className={paneItemClass} label="Bot token" layout="stacked">
+    <SettingsRow className={paneItemClass} label="Bot key" layout="stacked">
       <details className={configured ? "hidden" : "mb-3 text-sm"}>
         <summary className="cursor-pointer text-muted-foreground hover:text-foreground focus-visible:outline-ring">
           How to get your bot token
@@ -313,7 +311,7 @@ function TelegramBotTokenRow({
       </details>
       <InputGroup className="w-full">
         <InputGroupInput
-          aria-label="Bot token"
+          aria-label="Bot key"
           autoComplete="off"
           disabled={savePending}
           id="telegram-bot-token"
@@ -409,9 +407,9 @@ function TelegramSetupHelp() {
                 id: "open-botfather",
               },
               { content: "Send /newbot and pick a name.", id: "newbot" },
-              { content: "Copy the token it sends you.", id: "copy-token" },
+              { content: "Copy the key it sends you.", id: "copy-token" },
             ]}
-            title="Bot token"
+            title="Bot key"
           />
           <SetupHelpList
             items={[
@@ -570,8 +568,8 @@ export function TelegramSettingsCardContent({
         />
         {pairingCode ? (
           <p className="mt-3 text-muted-foreground text-xs">
-            Using a group? Link here first, turn off Group Privacy in{" "}
-            <BotFatherLink />, then remove and re-add the bot.
+            Want to use the bot in a group? Link here first. Then turn off Group
+            Privacy in <BotFatherLink />, and add the bot to the group again.
           </p>
         ) : null}
       </SettingsRow>
@@ -680,7 +678,7 @@ export function TelegramSettingsCardContent({
         </CardContent>
       </Card>
       <ChannelSettings>
-        <SettingsRow label="Bot token">
+        <SettingsRow label="Bot key">
           <div className="flex items-center gap-3">
             <code className="text-muted-foreground text-xs">
               {settings?.botTokenMasked ?? "Saved"}
@@ -697,7 +695,7 @@ export function TelegramSettingsCardContent({
               type="button"
               variant="outline"
             >
-              {replacingToken ? "Cancel" : "Replace"}
+              {replacingToken ? "Cancel" : "Change"}
             </Button>
           </div>
         </SettingsRow>
