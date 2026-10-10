@@ -1365,6 +1365,7 @@ export class PluginService {
    */
   async listPluginUpdates(): Promise<PluginUpdateSummary[]> {
     const releases = await this.db.listPluginReleases();
+
     const newest = new Map(
       releases
         .filter((release) => !OFFICIAL_PLUGINS.has(release.pluginId))

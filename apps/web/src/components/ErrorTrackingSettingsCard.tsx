@@ -1,3 +1,4 @@
+import type { ErrorTrackingSettingsResponse } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import {
   InputGroup,
@@ -13,7 +14,7 @@ import {
   ViewIcon,
   ViewOffIcon,
 } from "hugeicons-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { IntegrationCardShell } from "@/components/integration-settings.shared";
 import {
   useErrorTrackingSettings,
@@ -88,202 +89,53 @@ export function ErrorTrackingSettingsCard() {
       {/* The result leads the page: a saved DSN that rejects events is the state
           an operator must not miss. */}
       {testFailed ? (
-        <div
-          className="flex flex-wrap items-center gap-4 rounded-xl border border-destructive/30 bg-destructive/5 p-5"
-          role="alert"
-        >
-          <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-destructive/10 text-destructive">
-            <Alert02Icon aria-hidden className="size-5" />
-          </div>
-          <div className="min-w-0 flex-[1_1_16rem] space-y-1">
-            <p className="font-medium text-foreground text-sm">
-              Test event not delivered
-            </p>
-            <p className="text-muted-foreground text-sm [text-wrap:pretty]">
-              The ingest rejected the event or could not be reached. Check the
-              DSN.
-            </p>
-          </div>
-          <Button
-            className="shrink-0"
-            disabled={testMutation.isPending}
-            onClick={() => void handleTest()}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {sendTestLabel ?? (
-              <>
-                <RefreshIcon aria-hidden className="size-4" />
-                Send again
-              </>
-            )}
-          </Button>
-        </div>
+        <TestFailedBanner
+          onRetry={() => void handleTest()}
+          pending={testMutation.isPending}
+          pendingLabel={sendTestLabel}
+        />
       ) : null}
 
       <IntegrationCardShell>
         {editing ? (
-          <div className="space-y-2 p-5">
-            <div className="min-w-0 space-y-1">
-              <p className="font-medium text-foreground text-sm">
-                Sentry-compatible DSN
-              </p>
-              <p className="text-muted-foreground text-sm [text-wrap:pretty]">
-                Works with Sentry, GlitchTip, Bugsink, Rustrak and a self-hosted
-                Sentry.
-              </p>
-            </div>
+          <DsnEditor
+            dsn={dsn}
+            onCancel={() => {
+              setReplacing(false);
+              setDsn("");
+              setFormError(null);
+            }}
+            onDsnChange={(value) => {
+              setDsn(value);
 
-            <div className="flex items-center gap-2">
-              <InputGroup className="h-9 min-w-0 flex-1">
-                <InputGroupInput
-                  aria-label="Sentry-compatible DSN"
-                  autoComplete="off"
-                  disabled={saveMutation.isPending}
-                  id="error-tracking-dsn"
-                  onChange={(event) => {
-                    setDsn(event.target.value);
-
-                    if (formError) {
-                      setFormError(null);
-                    }
-                  }}
-                  placeholder="https://<key>@sentry.example.com/42"
-                  type={showDsn ? "text" : "password"}
-                  value={dsn}
-                />
-                <InputGroupAddon align="inline-end">
-                  <InputGroupButton
-                    aria-label={showDsn ? "Hide DSN" : "Show DSN"}
-                    className="relative before:absolute before:-inset-2 before:content-['']"
-                    onClick={() => setShowDsn((current) => !current)}
-                    size="icon-xs"
-                    type="button"
-                  >
-                    {showDsn ? (
-                      <ViewOffIcon className="size-4" />
-                    ) : (
-                      <ViewIcon className="size-4" />
-                    )}
-                  </InputGroupButton>
-                </InputGroupAddon>
-              </InputGroup>
-              <Button
-                className="min-w-[4.5rem] shrink-0"
-                disabled={saveMutation.isPending || !dsn.trim()}
-                onClick={() => void save(dsn.trim())}
-                size="sm"
-                type="button"
-              >
-                {saveMutation.isPending ? (
-                  <Spinner className="size-4" />
-                ) : (
-                  "Save"
-                )}
-              </Button>
-              {replacing ? (
-                <Button
-                  className="shrink-0"
-                  disabled={saveMutation.isPending}
-                  onClick={() => {
-                    setReplacing(false);
-                    setDsn("");
-                    setFormError(null);
-                  }}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  Cancel
-                </Button>
-              ) : null}
-            </div>
-          </div>
+              if (formError) {
+                setFormError(null);
+              }
+            }}
+            onSave={() => void save(dsn.trim())}
+            onToggleShow={() => setShowDsn((current) => !current)}
+            replacing={replacing}
+            saving={saveMutation.isPending}
+            showDsn={showDsn}
+          />
         ) : (
-          <div className="flex flex-wrap items-center gap-4 p-5">
-            <div className="min-w-0 flex-[1_1_16rem] space-y-1">
-              <p className="text-muted-foreground text-sm">
-                Sentry-compatible DSN
-              </p>
-              <p className="truncate font-mono text-foreground text-sm">
-                {settings?.dsnMasked}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                className="shrink-0"
-                onClick={() => setReplacing(true)}
-                size="sm"
-                type="button"
-              >
-                Replace DSN
-              </Button>
-              {/* Without this the only way to learn the DSN is wrong is to wait
-                  for a real crash. The failure banner carries its own retry. */}
-              {testFailed ? null : (
-                <Button
-                  className="shrink-0"
-                  disabled={testMutation.isPending}
-                  onClick={() => void handleTest()}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  {sendTestLabel ?? "Send test event"}
-                </Button>
-              )}
-              <Button
-                className="shrink-0"
-                disabled={saveMutation.isPending}
-                onClick={() => void save("")}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                {saveMutation.isPending ? (
-                  <Spinner className="size-4" />
-                ) : (
-                  "Turn off"
-                )}
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {editing ? null : (
-          <dl className="grid grid-cols-1 gap-4 border-border border-t px-5 py-4 text-sm sm:grid-cols-3">
-            <div className="space-y-1">
-              <dt className="text-muted-foreground">Saved</dt>
-              <dd className="text-foreground">
-                {settings?.savedAt
-                  ? formatSessionTimestamp(settings.savedAt)
-                  : "—"}
-              </dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-muted-foreground">Last test</dt>
-              <dd
-                className={
-                  testFailed
-                    ? "text-destructive"
-                    : lastTest
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-foreground"
-                }
-              >
-                {lastTest
-                  ? `${lastTest.delivered ? "Delivered" : "Failed"} · ${formatSessionRelativeTime(lastTest.at)}`
-                  : "Not sent yet"}
-              </dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-muted-foreground">Works with</dt>
-              <dd className="text-foreground">
-                Sentry, GlitchTip, Bugsink, Rustrak
-              </dd>
-            </div>
-          </dl>
+          <>
+            <DsnSummary
+              dsnMasked={settings?.dsnMasked}
+              onReplace={() => setReplacing(true)}
+              onTest={() => void handleTest()}
+              onTurnOff={() => void save("")}
+              saving={saveMutation.isPending}
+              testFailed={testFailed}
+              testing={testMutation.isPending}
+              testingLabel={sendTestLabel}
+            />
+            <DsnDetails
+              lastTest={lastTest}
+              savedAt={settings?.savedAt}
+              testFailed={testFailed}
+            />
+          </>
         )}
 
         {errorMessage ? (
@@ -310,5 +162,240 @@ export function ErrorTrackingSettingsCard() {
         </div>
       </IntegrationCardShell>
     </div>
+  );
+}
+
+function TestFailedBanner({
+  onRetry,
+  pending,
+  pendingLabel,
+}: {
+  onRetry: () => void;
+  pending: boolean;
+  pendingLabel: ReactNode;
+}) {
+  return (
+    <div
+      className="flex flex-wrap items-center gap-4 rounded-xl border border-destructive/30 bg-destructive/5 p-5"
+      role="alert"
+    >
+      <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-destructive/10 text-destructive">
+        <Alert02Icon aria-hidden className="size-5" />
+      </div>
+      <div className="min-w-0 flex-[1_1_16rem] space-y-1">
+        <p className="font-medium text-foreground text-sm">
+          Test event not delivered
+        </p>
+        <p className="text-muted-foreground text-sm [text-wrap:pretty]">
+          The ingest rejected the event or could not be reached. Check the DSN.
+        </p>
+      </div>
+      <Button
+        className="shrink-0"
+        disabled={pending}
+        onClick={onRetry}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        {pendingLabel ?? (
+          <>
+            <RefreshIcon aria-hidden className="size-4" />
+            Send again
+          </>
+        )}
+      </Button>
+    </div>
+  );
+}
+
+function DsnEditor({
+  dsn,
+  onCancel,
+  onDsnChange,
+  onSave,
+  onToggleShow,
+  replacing,
+  saving,
+  showDsn,
+}: {
+  dsn: string;
+  onCancel: () => void;
+  onDsnChange: (value: string) => void;
+  onSave: () => void;
+  onToggleShow: () => void;
+  replacing: boolean;
+  saving: boolean;
+  showDsn: boolean;
+}) {
+  return (
+    <div className="space-y-2 p-5">
+      <div className="min-w-0 space-y-1">
+        <p className="font-medium text-foreground text-sm">
+          Sentry-compatible DSN
+        </p>
+        <p className="text-muted-foreground text-sm [text-wrap:pretty]">
+          Works with Sentry, GlitchTip, Bugsink, Rustrak and a self-hosted
+          Sentry.
+        </p>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <InputGroup className="h-9 min-w-0 flex-1">
+          <InputGroupInput
+            aria-label="Sentry-compatible DSN"
+            autoComplete="off"
+            disabled={saving}
+            id="error-tracking-dsn"
+            onChange={(event) => onDsnChange(event.target.value)}
+            placeholder="https://<key>@sentry.example.com/42"
+            type={showDsn ? "text" : "password"}
+            value={dsn}
+          />
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              aria-label={showDsn ? "Hide DSN" : "Show DSN"}
+              className="relative before:absolute before:-inset-2 before:content-['']"
+              onClick={onToggleShow}
+              size="icon-xs"
+              type="button"
+            >
+              {showDsn ? (
+                <ViewOffIcon className="size-4" />
+              ) : (
+                <ViewIcon className="size-4" />
+              )}
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+        <Button
+          className="min-w-[4.5rem] shrink-0"
+          disabled={saving || !dsn.trim()}
+          onClick={onSave}
+          size="sm"
+          type="button"
+        >
+          {saving ? <Spinner className="size-4" /> : "Save"}
+        </Button>
+        {replacing ? (
+          <Button
+            className="shrink-0"
+            disabled={saving}
+            onClick={onCancel}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Cancel
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function DsnSummary({
+  dsnMasked,
+  onReplace,
+  onTest,
+  onTurnOff,
+  saving,
+  testFailed,
+  testing,
+  testingLabel,
+}: {
+  dsnMasked: string | null | undefined;
+  onReplace: () => void;
+  onTest: () => void;
+  onTurnOff: () => void;
+  saving: boolean;
+  testFailed: boolean;
+  testing: boolean;
+  testingLabel: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-4 p-5">
+      <div className="min-w-0 flex-[1_1_16rem] space-y-1">
+        <p className="text-muted-foreground text-sm">Sentry-compatible DSN</p>
+        <p className="truncate font-mono text-foreground text-sm">
+          {dsnMasked}
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          className="shrink-0"
+          onClick={onReplace}
+          size="sm"
+          type="button"
+        >
+          Replace DSN
+        </Button>
+        {/* Without this the only way to learn the DSN is wrong is to wait
+            for a real crash. The failure banner carries its own retry. */}
+        {testFailed ? null : (
+          <Button
+            className="shrink-0"
+            disabled={testing}
+            onClick={onTest}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {testingLabel ?? "Send test event"}
+          </Button>
+        )}
+        <Button
+          className="shrink-0"
+          disabled={saving}
+          onClick={onTurnOff}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          {saving ? <Spinner className="size-4" /> : "Turn off"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function DsnDetails({
+  lastTest,
+  savedAt,
+  testFailed,
+}: {
+  lastTest: ErrorTrackingSettingsResponse["lastTest"];
+  savedAt: string | null | undefined;
+  testFailed: boolean;
+}) {
+  return (
+    <dl className="grid grid-cols-1 gap-4 border-border border-t px-5 py-4 text-sm sm:grid-cols-3">
+      <div className="space-y-1">
+        <dt className="text-muted-foreground">Saved</dt>
+        <dd className="text-foreground">
+          {savedAt ? formatSessionTimestamp(savedAt) : "—"}
+        </dd>
+      </div>
+      <div className="space-y-1">
+        <dt className="text-muted-foreground">Last test</dt>
+        <dd
+          className={
+            testFailed
+              ? "text-destructive"
+              : lastTest
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-foreground"
+          }
+        >
+          {lastTest
+            ? `${lastTest.delivered ? "Delivered" : "Failed"} · ${formatSessionRelativeTime(lastTest.at)}`
+            : "Not sent yet"}
+        </dd>
+      </div>
+      <div className="space-y-1">
+        <dt className="text-muted-foreground">Works with</dt>
+        <dd className="text-foreground">Sentry, GlitchTip, Bugsink, Rustrak</dd>
+      </div>
+    </dl>
   );
 }
