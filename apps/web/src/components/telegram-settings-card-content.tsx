@@ -150,7 +150,7 @@ function formatUptime(seconds: number | null | undefined): string {
   const hours = Math.floor(minutes / 60);
 
   if (hours < 48) {
-    return `Running for ${hours} h`;
+    return `Running for ${hours} hour${hours === 1 ? "" : "s"}`;
   }
 
   return `Running for ${Math.floor(hours / 24)} days`;
@@ -645,7 +645,7 @@ export function TelegramSettingsCardContent({
     <div className="space-y-4">
       <div
         className={cn(
-          "flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3",
+          "flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-5 py-4",
           running
             ? "border-border bg-card"
             : "border-amber-500/30 bg-amber-500/5"
@@ -660,7 +660,7 @@ export function TelegramSettingsCardContent({
             )}
           />
           <div>
-            <p className="font-medium text-sm">
+            <p className="font-semibold text-sm">
               {running ? "Connected" : "Offline"}
             </p>
             <p className="text-muted-foreground text-xs">

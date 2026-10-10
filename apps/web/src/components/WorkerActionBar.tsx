@@ -155,7 +155,9 @@ function RunningActions({
         type="button"
         variant="outline"
       >
-        <ActionGlyph busy={restarting} icon={Rotate02Icon} />
+        {compact && !restarting ? null : (
+          <ActionGlyph busy={restarting} icon={Rotate02Icon} />
+        )}
         Restart
       </Button>
     </>
@@ -182,11 +184,13 @@ function StartAction({
       type="button"
       variant={compact ? "default" : "outline"}
     >
-      <ActionGlyph
-        busy={starting}
-        icon={PlayIcon}
-        iconClassName="translate-x-px"
-      />
+      {compact && !starting ? null : (
+        <ActionGlyph
+          busy={starting}
+          icon={PlayIcon}
+          iconClassName="translate-x-px"
+        />
+      )}
       Start
     </Button>
   );
@@ -207,7 +211,9 @@ function ViewLogsButton({
       type="button"
       variant={compact ? "outline" : "ghost"}
     >
-      <ScrollIcon aria-hidden className="size-3.5" strokeWidth={2} />
+      {compact ? null : (
+        <ScrollIcon aria-hidden className="size-3.5" strokeWidth={2} />
+      )}
       View logs
     </Button>
   );
