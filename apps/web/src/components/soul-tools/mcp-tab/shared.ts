@@ -1,6 +1,17 @@
-import type { McpTransport } from "@nakama/core/contract";
+import type { McpServerSummary, McpTransport } from "@nakama/core/contract";
+import { isPreinstalledMcpServerId } from "@nakama/core/mcp/preinstalled";
 
 const REDACTED_SECRET_VALUE = "••••••••";
+
+export function mcpServerDeleteBlockReason(
+  server: McpServerSummary
+): string | null {
+  if (isPreinstalledMcpServerId(server.id)) {
+    return "Preinstalled MCP servers cannot be deleted.";
+  }
+
+  return null;
+}
 
 export type McpHeaderRow = {
   key: string;

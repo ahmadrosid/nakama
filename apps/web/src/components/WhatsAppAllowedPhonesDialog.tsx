@@ -112,6 +112,123 @@ interface WhatsAppAllowedPhonesDialogProps {
   profileId: string;
 }
 
+function AllowedPhoneRows({
+  allowedPhoneDetails,
+  allowedPhones,
+  editingName,
+  editingPhone,
+  justAddedPhones,
+  onEditCancel,
+  onEditNameChange,
+  onEditNameSave,
+  onEditStart,
+  onRemove,
+  query,
+  savePending,
+  visiblePhones,
+}: {
+  allowedPhoneDetails: Record<string, WhatsAppAllowedPhoneDetail>;
+  allowedPhones: string[];
+  editingName: string;
+  editingPhone: string | null;
+  justAddedPhones: string[];
+  onEditCancel: () => void;
+  onEditNameChange: (name: string) => void;
+  onEditNameSave: () => void;
+  onEditStart: (phone: string) => void;
+  onRemove: (phone: string) => void;
+  query: string;
+  savePending: boolean;
+  visiblePhones: string[];
+}) {
+  const justAdded = new Set(justAddedPhones);
+
+  return (
+    <div className="h-72 overflow-y-auto">
+      {visiblePhones.map((phone) => {
+        const name = allowedPhoneDetails[phone]?.name ?? "";
+
+        return (
+          <div
+            className={`${ROW_GRID} min-h-11 border-b px-3 py-1 last:border-b-0 ${justAdded.has(phone) ? "bg-emerald-500/10" : ""}`}
+            key={phone}
+          >
+            {editingPhone === phone ? (
+              <Input
+                aria-label={`Name for ${formatAllowedPhone(phone)}`}
+                autoFocus
+                className="h-8"
+                maxLength={80}
+                onBlur={onEditNameSave}
+                onChange={(event) => onEditNameChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    onEditNameSave();
+                  } else if (event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onEditCancel();
+                  }
+                }}
+                value={editingName}
+              />
+            ) : (
+              <span className="flex min-w-0 items-center gap-2">
+                <span
+                  className={`truncate text-sm ${name ? "font-medium" : "text-muted-foreground"}`}
+                >
+                  {name || "No name"}
+                </span>
+                {justAdded.has(phone) ? (
+                  <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 font-medium text-[11px] text-emerald-700 dark:text-emerald-300">
+                    Just added
+                  </span>
+                ) : null}
+              </span>
+            )}
+            <code className="truncate text-xs">
+              {formatAllowedPhone(phone)}
+            </code>
+            <span className="hidden text-muted-foreground text-xs sm:block">
+              {formatAddedAt(allowedPhoneDetails[phone]?.addedAt ?? null)}
+            </span>
+            <span className="flex justify-end gap-1">
+              <Button
+                aria-label={`Edit name for ${formatAllowedPhone(phone)}`}
+                disabled={savePending}
+                onClick={() => onEditStart(phone)}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <PencilEdit02Icon aria-hidden="true" className="size-4" />
+              </Button>
+              <Button
+                aria-label={`Remove ${formatAllowedPhone(phone)}`}
+                disabled={savePending}
+                onClick={() => onRemove(phone)}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <Delete02Icon aria-hidden="true" className="size-4" />
+              </Button>
+            </span>
+          </div>
+        );
+      })}
+      {visiblePhones.length === 0 ? (
+        <p className="px-3 py-6 text-center text-muted-foreground text-xs">
+          {allowedPhones.length === 0
+            ? "No numbers added."
+            : `No name or number matches “${query.trim()}”.`}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function WhatsAppAllowedPhonesDialog({
   allowedPhoneDetails,
   allowedPhones,
@@ -331,89 +448,21 @@ export function WhatsAppAllowedPhonesDialog({
             <span className="hidden sm:block">Added</span>
             <span />
           </div>
-          <div className="h-72 overflow-y-auto">
-            {visiblePhones.map((phone) => {
-              const name = allowedPhoneDetails[phone]?.name ?? "";
-              const isJustAdded = justAdded.includes(phone);
-
-              return (
-                <div
-                  className={`${ROW_GRID} min-h-11 border-b px-3 py-1 last:border-b-0 ${isJustAdded ? "bg-emerald-500/10" : ""}`}
-                  key={phone}
-                >
-                  {editingPhone === phone ? (
-                    <Input
-                      aria-label={`Name for ${formatAllowedPhone(phone)}`}
-                      autoFocus
-                      className="h-8"
-                      maxLength={80}
-                      onBlur={saveEditingName}
-                      onChange={(event) => setEditingName(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          saveEditingName();
-                        } else if (event.key === "Escape") {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          setEditingPhone(null);
-                        }
-                      }}
-                      value={editingName}
-                    />
-                  ) : (
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span
-                        className={`truncate text-sm ${name ? "font-medium" : "text-muted-foreground"}`}
-                      >
-                        {name || "No name"}
-                      </span>
-                      {isJustAdded ? (
-                        <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 font-medium text-[11px] text-emerald-700 dark:text-emerald-300">
-                          Just added
-                        </span>
-                      ) : null}
-                    </span>
-                  )}
-                  <code className="truncate text-xs">
-                    {formatAllowedPhone(phone)}
-                  </code>
-                  <span className="hidden text-muted-foreground text-xs sm:block">
-                    {formatAddedAt(allowedPhoneDetails[phone]?.addedAt ?? null)}
-                  </span>
-                  <span className="flex justify-end gap-1">
-                    <Button
-                      aria-label={`Edit name for ${formatAllowedPhone(phone)}`}
-                      disabled={saveMutation.isPending}
-                      onClick={() => startEditing(phone)}
-                      size="icon-sm"
-                      type="button"
-                      variant="ghost"
-                    >
-                      <PencilEdit02Icon aria-hidden="true" className="size-4" />
-                    </Button>
-                    <Button
-                      aria-label={`Remove ${formatAllowedPhone(phone)}`}
-                      disabled={saveMutation.isPending}
-                      onClick={() => setRemoveTarget(phone)}
-                      size="icon-sm"
-                      type="button"
-                      variant="ghost"
-                    >
-                      <Delete02Icon aria-hidden="true" className="size-4" />
-                    </Button>
-                  </span>
-                </div>
-              );
-            })}
-            {visiblePhones.length === 0 ? (
-              <p className="px-3 py-6 text-center text-muted-foreground text-xs">
-                {allowedPhones.length === 0
-                  ? "No numbers added."
-                  : `No name or number matches “${query.trim()}”.`}
-              </p>
-            ) : null}
-          </div>
+          <AllowedPhoneRows
+            allowedPhoneDetails={allowedPhoneDetails}
+            allowedPhones={allowedPhones}
+            editingName={editingName}
+            editingPhone={editingPhone}
+            justAddedPhones={justAdded}
+            onEditCancel={() => setEditingPhone(null)}
+            onEditNameChange={setEditingName}
+            onEditNameSave={saveEditingName}
+            onEditStart={startEditing}
+            onRemove={setRemoveTarget}
+            query={query}
+            savePending={saveMutation.isPending}
+            visiblePhones={visiblePhones}
+          />
           {query.trim() && allowedPhones.length > 0 ? (
             <p className="border-t px-3 py-2 text-muted-foreground text-xs">
               {visiblePhones.length} of {allowedPhones.length}
