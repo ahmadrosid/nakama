@@ -33,6 +33,7 @@ function WhatsAppSettingsCardForOrg({
 
   const allowedPhonesDialog = (
     <WhatsAppAllowedPhonesDialog
+      allowedPhoneDetails={card.allowedPhoneDetails}
       allowedPhones={card.allowedPhones}
       onAllowedPhonesChange={card.onAllowedPhonesChange}
       onError={card.onError}
