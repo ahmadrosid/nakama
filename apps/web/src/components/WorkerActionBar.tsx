@@ -1,7 +1,6 @@
 import { Button } from "@nakama/ui/button";
 import { ConfirmDialog } from "@nakama/ui/dialog";
 import { toast } from "@nakama/ui/toast";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
 import {
   Loading03Icon,
@@ -63,7 +62,7 @@ function ActionGlyph({
   );
 }
 
-function ToolbarIconButton({
+function ToolbarButton({
   busy = false,
   destructive = false,
   disabled,
@@ -79,28 +78,22 @@ function ToolbarIconButton({
   onClick: () => void;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            aria-busy={busy}
-            aria-label={label}
-            className={cn(
-              destructive &&
-                "text-destructive hover:bg-destructive/10 hover:text-destructive"
-            )}
-            disabled={disabled}
-            onClick={onClick}
-            size="icon-sm"
-            type="button"
-            variant="outline"
-          />
-        }
-      >
-        <ActionGlyph busy={busy} icon={icon} />
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
+    <Button
+      aria-busy={busy}
+      className={cn(
+        "px-4 text-sm",
+        destructive &&
+          "text-destructive hover:bg-destructive/10 hover:text-destructive"
+      )}
+      disabled={disabled}
+      onClick={onClick}
+      size="lg"
+      type="button"
+      variant="outline"
+    >
+      {busy ? <ActionGlyph busy icon={icon} /> : null}
+      {label}
+    </Button>
   );
 }
 
@@ -177,17 +170,20 @@ function StartAction({
   return (
     <Button
       aria-busy={starting}
+      className={compact ? "px-4 text-sm" : undefined}
       disabled={disabled}
       onClick={onStart}
-      size="sm"
+      size={compact ? "lg" : "sm"}
       type="button"
       variant={compact ? "default" : "outline"}
     >
-      <ActionGlyph
-        busy={starting}
-        icon={PlayIcon}
-        iconClassName="translate-x-px"
-      />
+      {compact && !starting ? null : (
+        <ActionGlyph
+          busy={starting}
+          icon={PlayIcon}
+          iconClassName="translate-x-px"
+        />
+      )}
       Start
     </Button>
   );
@@ -252,8 +248,8 @@ export function WorkerActionBar({
   const toolbar = (
     <div className={cn("flex flex-wrap items-center gap-2", className)}>
       {running ? (
-        <div className="flex overflow-hidden rounded-md border border-border [&>*+*]:border-l [&>*]:rounded-none [&>*]:border-0">
-          <ToolbarIconButton
+        <>
+          <ToolbarButton
             busy={restarting}
             disabled={isBusy}
             icon={Rotate02Icon}
@@ -261,14 +257,14 @@ export function WorkerActionBar({
             onClick={() => restartWorker.mutate(workerName)}
           />
           {showLogs ? (
-            <ToolbarIconButton
+            <ToolbarButton
               disabled={false}
               icon={ScrollIcon}
               label="View logs"
               onClick={() => setLogDrawerOpen(true)}
             />
           ) : null}
-        </div>
+        </>
       ) : (
         <>
           <StartAction
@@ -282,7 +278,7 @@ export function WorkerActionBar({
             starting={starting}
           />
           {showLogs ? (
-            <ToolbarIconButton
+            <ToolbarButton
               disabled={false}
               icon={ScrollIcon}
               label="View logs"
@@ -292,7 +288,7 @@ export function WorkerActionBar({
         </>
       )}
       {ownerProfileId ? (
-        <ToolbarIconButton
+        <ToolbarButton
           destructive
           disabled={isBusy}
           icon={StopIcon}
