@@ -117,89 +117,6 @@ function hintForSavedSettings(
   return "WhatsApp enabled. Preparing the QR code.";
 }
 
-function resolveWhatsAppStatusCopy(input: {
-  awaitingQr: boolean;
-  bridgeStarting: boolean;
-  connected: boolean;
-  configured: boolean;
-  linkingAfterScan: boolean;
-  paired: boolean;
-  pairingCode: string | null;
-  running: boolean;
-  showQr: boolean;
-}): { headerSubtitle: string; statusBadge: string } {
-  if (!input.configured) {
-    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
-    return {
-      headerSubtitle: "Connect WhatsApp to let this agent receive messages",
-      statusBadge: "Not set up",
-    };
-  }
-
-  if (input.paired && input.running && input.connected && !input.showQr) {
-    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
-    return {
-      headerSubtitle: "Connected",
-      statusBadge: "Connected",
-    };
-  }
-
-  if (input.paired && !(input.running && input.connected)) {
-    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
-    return {
-      headerSubtitle:
-        "WhatsApp is offline. Use the connection controls to reconnect.",
-      statusBadge: "Offline",
-    };
-  }
-
-  if (input.showQr) {
-    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
-    return {
-      headerSubtitle: "Scan the QR code with WhatsApp to link your device",
-      statusBadge: "Awaiting scan",
-    };
-  }
-
-  if (input.linkingAfterScan) {
-    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
-    return {
-      headerSubtitle: "Linking your WhatsApp account…",
-      statusBadge: "Linking",
-    };
-  }
-
-  if (input.bridgeStarting) {
-    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
-    return {
-      headerSubtitle: "Connecting — enter the code in WhatsApp",
-      statusBadge: "Starting…",
-    };
-  }
-
-  if (input.awaitingQr) {
-    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
-    return {
-      headerSubtitle: "Preparing QR code…",
-      statusBadge: "Starting…",
-    };
-  }
-
-  if (input.pairingCode) {
-    // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
-    return {
-      headerSubtitle: "Enter the pairing code in WhatsApp",
-      statusBadge: "Awaiting link",
-    };
-  }
-
-  // oxlint-disable-next-line anti-slop/no-known-value-widening -- This public result intentionally keeps its documented broad return contract.
-  return {
-    headerSubtitle: "Scan the QR code, or generate a pairing code",
-    statusBadge: "Not linked",
-  };
-}
-
 export function useWhatsAppSettingsCard({
   onSaveSuccess,
   submitLabel,
@@ -314,18 +231,6 @@ export function useWhatsAppSettingsCard({
     qrWasVisible,
     running,
     settingsProfileId,
-  });
-
-  const { headerSubtitle, statusBadge } = resolveWhatsAppStatusCopy({
-    awaitingQr: linking.awaitingQr,
-    bridgeStarting: linking.bridgeStarting,
-    configured,
-    connected,
-    linkingAfterScan: linking.linkingAfterScan,
-    paired,
-    pairingCode,
-    running,
-    showQr: linking.showQr,
   });
 
   async function copyPairingCode() {
@@ -471,9 +376,9 @@ export function useWhatsAppSettingsCard({
     bridgeStarting: linking.bridgeStarting,
     canSave: linking.canSave,
     configured,
+    connected,
     copied,
     formError,
-    headerSubtitle,
     isLoading,
     linkedNumber: settings?.phoneNumberMasked ?? null,
     linkingAfterScan: linking.linkingAfterScan,
@@ -505,7 +410,6 @@ export function useWhatsAppSettingsCard({
     savePending: saveMutation.isPending || startWorkerMutation.isPending,
     showQr: linking.showQr,
     showReconnect: linking.showReconnect,
-    statusBadge,
     statusLine: resolveWhatsAppStatusLine(hint, formError, loadError),
     worker,
   };
