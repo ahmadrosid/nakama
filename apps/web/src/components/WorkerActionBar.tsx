@@ -1,4 +1,5 @@
 import { Button } from "@nakama/ui/button";
+import { ConfirmDialog } from "@nakama/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -230,6 +231,7 @@ export function WorkerActionBar({
   compact?: boolean;
 }) {
   const [logDrawerOpen, setLogDrawerOpen] = useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const ownerProfileId = useChannelProfileId();
   const disconnect = useDisconnectChannel();
   const startWorker = useStartWorker();
@@ -240,6 +242,8 @@ export function WorkerActionBar({
   const stopping = stopWorker.isPending;
   const restarting = restartWorker.isPending;
   const isBusy = starting || stopping || restarting || disconnect.isPending;
+
+  const channelName = workerName.charAt(0).toUpperCase() + workerName.slice(1);
 
   const disconnectWorker = () =>
     disconnect.mutate(workerName, {
@@ -291,7 +295,10 @@ export function WorkerActionBar({
           />
         ) : null}
         {ownerProfileId && compact ? (
-          <DisconnectMenu busy={isBusy} onDisconnect={disconnectWorker} />
+          <DisconnectMenu
+            busy={isBusy}
+            onDisconnect={() => setConfirmDisconnect(true)}
+          />
         ) : null}
       </div>
       {showLogs ? (
@@ -299,6 +306,15 @@ export function WorkerActionBar({
           onOpenChange={setLogDrawerOpen}
           open={logDrawerOpen}
           workerName={workerName}
+        />
+      ) : null}
+      {confirmDisconnect ? (
+        <ConfirmDialog
+          confirmLabel="Disconnect"
+          description={`Nobody can message this agent on ${channelName} until you connect it again.`}
+          onClose={() => setConfirmDisconnect(false)}
+          onConfirm={() => disconnect.mutateAsync(workerName)}
+          title={`Disconnect ${channelName}?`}
         />
       ) : null}
     </>
