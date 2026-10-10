@@ -160,7 +160,7 @@ export function TelegramAllowedUsers({
         ))}
         <details className="px-4 py-3 text-sm">
           <summary className="cursor-pointer text-muted-foreground hover:text-foreground focus-visible:outline-ring">
-            Add someone by Telegram ID
+            Add by Telegram ID
           </summary>
           <InputGroup className="mt-3">
             <InputGroupInput
@@ -174,7 +174,7 @@ export function TelegramAllowedUsers({
                   setFormError(null);
                 }
               }}
-              placeholder="213193924"
+              placeholder="e.g. 213193924"
               value={newAllowedUserInput}
             />
             <InputGroupAddon align="inline-end">
@@ -189,6 +189,19 @@ export function TelegramAllowedUsers({
               </InputGroupButton>
             </InputGroupAddon>
           </InputGroup>
+          <p className="mt-2 text-muted-foreground text-xs">
+            To find an ID, message{" "}
+            <a
+              className="font-medium text-primary hover:underline"
+              href="https://t.me/userinfobot"
+              rel="noreferrer"
+              target="_blank"
+            >
+              @userinfobot
+              <span className="sr-only"> (opens in a new tab)</span>
+            </a>{" "}
+            in Telegram.
+          </p>
           {formError ? (
             <p
               className="mt-2 rounded-md bg-destructive/10 px-2.5 py-1 text-destructive text-xs"
