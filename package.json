@@ -31,7 +31,7 @@
     "docs:install": "bun install --cwd docs/website --frozen-lockfile --ignore-scripts",
     "doctor": "bun x react-doctor",
     "dupes": "bun x jscpd --format typescript,tsx .",
-    "fix": "ultracite fix",
+    "fix": "ultracite fix && oxlint --fix",
     "postinstall": "bun run docs:install",
     "knip": "knip",
     "prepare": "husky",
