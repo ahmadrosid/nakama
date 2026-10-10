@@ -1,4 +1,8 @@
-import type { ImageAttachment, ToolSummary } from "@nakama/core/contract";
+import type {
+  AcpAgentPresetSummary,
+  ImageAttachment,
+  ToolSummary,
+} from "@nakama/core/contract";
 import { parseDataUrl } from "@nakama/core/message-content";
 import { Button } from "@nakama/ui/button";
 import {
@@ -17,10 +21,14 @@ import {
   useReducer,
   useRef,
 } from "react";
-import { ProfileCreateDialogForm } from "@/components/profile-create-dialog-form";
+import {
+  BUILT_IN_AGENT,
+  ProfileCreateDialogForm,
+} from "@/components/profile-create-dialog-form";
 import {
   useAssignToolMutation,
   useCreateProfileMutation,
+  useUpdateProfileMutation,
   useUploadProfileAvatarMutation,
 } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
@@ -31,6 +39,7 @@ function fileToImageAttachment(file: File): Promise<ImageAttachment | null> {
 }
 
 interface ProfileCreateDialogProps {
+  agentPresets: AcpAgentPresetSummary[];
   onAskSuperBot?: () => void;
   onCreated: (profileId: string) => void;
   onOpenChange: (open: boolean) => void;
@@ -47,6 +56,7 @@ type ProfileCreateFormState = {
   name: string;
   profileId: string;
   avatarPreview: string | null;
+  agentId: string;
   toolIds: string[];
 };
 
@@ -62,6 +72,7 @@ type ProfileCreateFormAction =
     };
 
 const initialProfileCreateFormState: ProfileCreateFormState = {
+  agentId: BUILT_IN_AGENT,
   avatarPreview: null,
   name: "",
   profileId: "",
@@ -107,6 +118,7 @@ function profileCreateFormReducer(
 }
 
 export function ProfileCreateDialog({
+  agentPresets,
   open,
   tools,
   onCreated,
@@ -117,6 +129,7 @@ export function ProfileCreateDialog({
     <Dialog onOpenChange={onOpenChange} open={open}>
       {open ? (
         <ProfileCreateDialogContent
+          agentPresets={agentPresets}
           onAskSuperBot={onAskSuperBot}
           onCreated={onCreated}
           onOpenChange={onOpenChange}
@@ -128,11 +141,13 @@ export function ProfileCreateDialog({
 }
 
 function ProfileCreateDialogContent({
+  agentPresets,
   tools,
   onCreated,
   onOpenChange,
   onAskSuperBot,
 }: {
+  agentPresets: AcpAgentPresetSummary[];
   tools: ToolSummary[];
   onCreated: (profileId: string) => void;
   onOpenChange: (open: boolean) => void;
@@ -141,6 +156,7 @@ function ProfileCreateDialogContent({
   const createMutation = useCreateProfileMutation();
   const uploadAvatarMutation = useUploadProfileAvatarMutation();
   const assignToolMutation = useAssignToolMutation();
+  const updateProfileMutation = useUpdateProfileMutation();
   const createAvatarInputRef = useRef<HTMLInputElement>(null);
 
   const [form, dispatch] = useReducer(
@@ -153,7 +169,8 @@ function ProfileCreateDialogContent({
   const busy =
     createMutation.isPending ||
     uploadAvatarMutation.isPending ||
-    assignToolMutation.isPending;
+    assignToolMutation.isPending ||
+    updateProfileMutation.isPending;
 
   const profileIdTrimmed = form.profileId.trim();
 
@@ -167,7 +184,6 @@ function ProfileCreateDialogContent({
     : "Agent id must start with a letter or number and only use letters, numbers, `_`, or `-`.";
 
   const toolIdSet = useMemo(() => new Set(form.toolIds), [form.toolIds]);
-  const selectedTools = tools.filter((tool) => toolIdSet.has(tool.id));
 
   function handleAvatarSelected(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -192,14 +208,9 @@ function ProfileCreateDialogContent({
     });
   }
 
-  function handleToolSelect(toolId: string) {
+  function handleToolToggle(toolId: string, checked: boolean) {
     dispatch({ type: "patch", values: { submitError: null } });
-    dispatch({ toolId, type: "add-tool" });
-  }
-
-  function handleRemoveTool(toolId: string) {
-    dispatch({ type: "patch", values: { submitError: null } });
-    dispatch({ toolId, type: "remove-tool" });
+    dispatch({ toolId, type: checked ? "add-tool" : "remove-tool" });
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -255,6 +266,17 @@ function ProfileCreateDialogContent({
         });
       }
 
+      const acpAgent = agentPresets.find(
+        (preset) => preset.id === form.agentId
+      )?.agent;
+
+      if (acpAgent) {
+        await updateProfileMutation.mutateAsync({
+          input: { acpAgent },
+          profileId: response.profile.id,
+        });
+      }
+
       onOpenChange(false);
       onCreated(response.profile.id);
     } catch (error) {
@@ -263,7 +285,7 @@ function ProfileCreateDialogContent({
   }
 
   return (
-    <DialogContent className="flex max-h-[min(90dvh,42rem)] flex-col gap-5 overflow-hidden p-5 sm:max-w-2xl">
+    <DialogContent className="flex max-h-[min(90dvh,48rem)] flex-col gap-5 overflow-hidden p-5 sm:max-w-2xl">
       <form
         className="flex min-h-0 flex-1 flex-col gap-5"
         onSubmit={handleSubmit}
@@ -294,10 +316,15 @@ function ProfileCreateDialogContent({
         </DialogHeader>
 
         <ProfileCreateDialogForm
+          agentId={form.agentId}
+          agentPresets={agentPresets}
           avatarInputRef={createAvatarInputRef}
           avatarPreview={form.avatarPreview}
           busy={busy}
           name={form.name}
+          onAgentChange={(agentId) => {
+            dispatch({ type: "patch", values: { agentId, submitError: null } });
+          }}
           onAvatarSelected={handleAvatarSelected}
           onClearAvatar={() => {
             dispatch({ type: "patch", values: { submitError: null } });
@@ -320,16 +347,15 @@ function ProfileCreateDialogContent({
               values: { profileId: value, submitError: null },
             });
           }}
-          onRemoveTool={handleRemoveTool}
-          onToolSelect={handleToolSelect}
           onToolsChange={(toolIds) => {
             dispatch({ type: "patch", values: { submitError: null, toolIds } });
           }}
+          onToolToggle={handleToolToggle}
           profileId={form.profileId}
           profileIdHasValue={profileIdHasValue}
           profileIdHelpText={profileIdHelpText}
           profileIdValid={profileIdValid}
-          selectedTools={selectedTools}
+          selectedToolIds={toolIdSet}
           submitError={form.submitError}
           tools={tools}
         />

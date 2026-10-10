@@ -35,6 +35,7 @@ test("Select all checks every tool, clears them, and marks a partial pick", asyn
     root.render(
       <QueryClientProvider client={new QueryClient()}>
         <ProfileCreateDialog
+          agentPresets={[]}
           onCreated={() => {}}
           onOpenChange={() => {}}
           open
@@ -43,9 +44,6 @@ test("Select all checks every tool, clears them, and marks a partial pick", asyn
       </QueryClientProvider>
     );
   });
-
-  const trigger = () =>
-    document.querySelector<HTMLButtonElement>("#btn-create-profile-tools");
 
   const boxes = () => [
     ...document.querySelectorAll<HTMLInputElement>(
@@ -58,35 +56,24 @@ test("Select all checks every tool, clears them, and marks a partial pick", asyn
       .slice(1)
       .filter((box) => box.checked).length;
 
-  const removeButtons = () =>
-    document.querySelectorAll('button[aria-label^="Remove "]').length;
-
-  expect(trigger()?.textContent).toBe("Choose tools…");
-
-  await act(async () => {
-    trigger()?.click();
-  });
   expect(boxes()).toHaveLength(tools.length + 1);
+  expect(checkedTools()).toBe(0);
 
   await act(async () => {
     boxes()[0]?.click();
   });
   expect(boxes()[0]?.checked).toBe(true);
   expect(checkedTools()).toBe(3);
-  expect(removeButtons()).toBe(3);
-  expect(trigger()?.textContent).toBe("3 of 3 tools selected");
 
   await act(async () => {
     boxes()[0]?.click();
   });
   expect(checkedTools()).toBe(0);
-  expect(removeButtons()).toBe(0);
-  expect(trigger()?.textContent).toBe("Choose tools…");
 
   await act(async () => {
     boxes()[2]?.click();
   });
   expect(boxes()[0]?.checked).toBe(false);
   expect(boxes()[0]?.indeterminate).toBe(true);
-  expect(trigger()?.textContent).toBe("1 of 3 tools selected");
+  expect(checkedTools()).toBe(1);
 });
