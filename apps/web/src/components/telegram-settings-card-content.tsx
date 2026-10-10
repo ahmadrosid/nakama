@@ -7,6 +7,7 @@ import {
   InputGroupInput,
 } from "@nakama/ui/input-group";
 import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import {
   Copy01Icon,
   RefreshIcon,
@@ -28,7 +29,6 @@ import {
   useTelegramAccessRequests,
 } from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
-import { cn } from "@/lib/utils";
 
 function pairingCodeDescription(
   pairingCode: string | null,
