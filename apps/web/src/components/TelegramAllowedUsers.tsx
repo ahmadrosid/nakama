@@ -15,7 +15,10 @@ import {
 } from "@nakama/ui/input-group";
 import { Delete02Icon } from "hugeicons-react";
 import { useState } from "react";
-import { useSaveTelegramSettings } from "@/hooks/use-app-queries";
+import {
+  useSaveTelegramSettings,
+  useTelegramAccessRequests,
+} from "@/hooks/use-app-queries";
 import { formatError } from "@/lib/client";
 import {
   type AllowedTelegramUser,
@@ -38,6 +41,7 @@ export function TelegramAllowedUsers({
   onError,
 }: TelegramAllowedUsersProps) {
   const saveMutation = useSaveTelegramSettings();
+  const { data: access } = useTelegramAccessRequests();
 
   const [newAllowedUserInput, setNewAllowedUserInput] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
@@ -116,11 +120,17 @@ export function TelegramAllowedUsers({
     saveAllowedUsers(allowedUsers.filter((entry) => entry.id !== id));
   }
 
+  function displayName(user: AllowedTelegramUser): string {
+    const username = user.username ?? access?.allowedUsernames[user.id];
+
+    return username ? `@${username}` : "Telegram user";
+  }
+
   return (
     <>
       <div className="divide-y divide-border">
         <h3 className="px-4 py-3 font-medium text-sm">
-          Allowed users{" "}
+          People with access{" "}
           <span className="font-normal text-muted-foreground">
             {allowedUsers.length}
           </span>
@@ -131,15 +141,13 @@ export function TelegramAllowedUsers({
             key={user.id}
           >
             <div className="min-w-0">
-              {user.username ? (
-                <p className="truncate text-sm">@{user.username}</p>
-              ) : null}
-              <code className="block truncate text-muted-foreground text-xs">
-                {user.id}
-              </code>
+              <p className="truncate text-sm">{displayName(user)}</p>
+              <p className="truncate text-muted-foreground text-xs">
+                ID {user.id}
+              </p>
             </div>
             <Button
-              aria-label={`Remove Telegram user ID ${user.id}`}
+              aria-label={`Remove ${displayName(user)}`}
               disabled={saveMutation.isPending}
               onClick={() => setRemoveTarget(user)}
               size="icon-sm"
@@ -152,11 +160,11 @@ export function TelegramAllowedUsers({
         ))}
         <details className="px-4 py-3 text-sm">
           <summary className="cursor-pointer text-muted-foreground hover:text-foreground focus-visible:outline-ring">
-            Add by user ID
+            Add someone by Telegram ID
           </summary>
           <InputGroup className="mt-3">
             <InputGroupInput
-              aria-label="Telegram user ID"
+              aria-label="Telegram ID"
               className="font-mono text-sm"
               disabled={saveMutation.isPending}
               onChange={(event) => {
@@ -177,7 +185,7 @@ export function TelegramAllowedUsers({
                 type="button"
                 variant="ghost"
               >
-                Add user
+                Add
               </InputGroupButton>
             </InputGroupAddon>
           </InputGroup>
@@ -198,12 +206,10 @@ export function TelegramAllowedUsers({
       >
         <DialogContent className="gap-5 p-6 sm:max-w-lg">
           <DialogHeader className="gap-2">
-            <DialogTitle>Remove Telegram user</DialogTitle>
+            <DialogTitle>Remove access?</DialogTitle>
             <DialogDescription>
-              {removeTarget?.username
-                ? `@${removeTarget.username} (${removeTarget.id})`
-                : removeTarget?.id}{" "}
-              loses access to this profile as soon as this is saved.
+              {removeTarget ? displayName(removeTarget) : null} will no longer
+              be able to message this agent.
             </DialogDescription>
           </DialogHeader>
 

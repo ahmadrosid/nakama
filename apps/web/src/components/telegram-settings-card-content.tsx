@@ -191,7 +191,7 @@ function TelegramAccessRequests() {
 
   return (
     <div className="divide-y divide-border">
-      <h3 className="px-4 py-3 font-medium text-sm">Waiting for approval</h3>
+      <h3 className="px-4 py-3 font-medium text-sm">Asking for access</h3>
       {requests.map((request) => (
         <div
           className="flex items-center justify-between gap-3 px-4 py-3"
@@ -217,7 +217,7 @@ function TelegramAccessRequests() {
               type="button"
               variant="outline"
             >
-              Deny
+              Decline
             </Button>
             <Button
               disabled={resolve.isPending}
@@ -230,7 +230,7 @@ function TelegramAccessRequests() {
               size="sm"
               type="button"
             >
-              Approve
+              Allow
             </Button>
           </div>
         </div>
