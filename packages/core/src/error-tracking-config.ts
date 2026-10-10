@@ -106,6 +106,7 @@ export async function saveErrorTrackingDsn(
   now: Date = new Date()
 ): Promise<ErrorTrackingConfig> {
   const trimmed = dsn?.trim() || null;
+
   const next: ErrorTrackingConfig = trimmed
     ? { dsn: trimmed, lastTest: null, savedAt: now.toISOString() }
     : { dsn: null };
