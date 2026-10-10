@@ -296,7 +296,7 @@ export function WorkerLogDrawer({
 
   return (
     <Dialog onOpenChange={log.handleOpenChange} open={open}>
-      <DialogContent className="data-closed:slide-out-to-right data-open:slide-in-from-right data-closed:zoom-out-100 data-open:zoom-in-100 top-0 right-0 bottom-0 left-auto flex h-dvh max-h-none w-full translate-x-0 translate-y-0 flex-col gap-4 rounded-none rounded-l-xl p-4 duration-200 sm:max-w-xl sm:gap-6 sm:p-6">
+      <DialogContent className="data-closed:slide-out-to-right data-open:slide-in-from-right data-closed:zoom-out-100 data-open:zoom-in-100 top-0 right-0 bottom-0 left-auto flex h-dvh max-h-none w-full translate-x-0 translate-y-0 flex-col gap-4 rounded-none p-4 duration-200 sm:max-w-xl sm:gap-6 sm:p-6">
         <DialogHeader className="flex flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <File01Icon aria-hidden className="size-4 text-muted-foreground" />
