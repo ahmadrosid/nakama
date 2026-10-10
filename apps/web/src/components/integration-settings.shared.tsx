@@ -311,12 +311,24 @@ export function ChannelSetupChecklist({
             ) : (
               <span
                 aria-hidden
-                className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground text-xs"
+                className={cn(
+                  "flex size-5 shrink-0 items-center justify-center rounded-full border",
+                  index === step ? "border-foreground" : "border-border"
+                )}
               >
-                {index + 1}
+                {index === step ? (
+                  <span className="size-2 rounded-full bg-foreground" />
+                ) : null}
               </span>
             )}
-            <h2 className="font-medium text-sm">{label}</h2>
+            <h2
+              className={cn(
+                "font-medium text-sm",
+                index > step && "text-muted-foreground"
+              )}
+            >
+              {label}
+            </h2>
             {index < step ? <span className="sr-only">Complete</span> : null}
           </div>
           {index === step ? (
