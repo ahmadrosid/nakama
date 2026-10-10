@@ -118,6 +118,63 @@ describe("OpenAI codex vision routing", () => {
   });
 });
 
+describe("OpenAI responses payload", () => {
+  test("accepts a null usage field", async () => {
+    globalThis.fetch = mock(
+      async () =>
+        new Response(
+          JSON.stringify({
+            output: [
+              {
+                content: [{ text: "Halo.", type: "output_text" }],
+                type: "message",
+              },
+            ],
+            usage: null,
+          }),
+          { headers: { "Content-Type": "application/json" }, status: 200 }
+        )
+    );
+
+    const provider = createOpenAIProvider({
+      apiKey: "sk-test",
+      model: "gpt-5.3-codex",
+    });
+
+    const result = await provider.generateChat({
+      messages: [{ content: "Hi", role: "user" }],
+      system: "Reply.",
+    });
+
+    expect(result.content).toBe("Halo.");
+    expect(result.usage).toBeUndefined();
+  });
+});
+
+describe("OpenAI chat completions payload", () => {
+  test("accepts a null usage field", async () => {
+    globalThis.fetch = mock(async () =>
+      Response.json({
+        choices: [{ message: { content: "Halo.", role: "assistant" } }],
+        usage: null,
+      })
+    );
+
+    const provider = createOpenAIProvider({
+      apiKey: "sk-test",
+      model: "gpt-4o-mini",
+    });
+
+    const result = await provider.generateChat({
+      messages: [{ content: "Hi", role: "user" }],
+      system: "Reply.",
+    });
+
+    expect(result.content).toBe("Halo.");
+    expect(result.usage).toBeUndefined();
+  });
+});
+
 describe("OpenAI tools + reasoning routing", () => {
   test.each(["gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna", "gpt-6-astra"])(
     "%s keeps no-tool chat on Chat Completions without forcing none",

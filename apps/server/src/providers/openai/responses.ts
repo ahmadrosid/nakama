@@ -53,7 +53,7 @@ const responsePayloadSchema = z.object({
       output_tokens: z.number().optional(),
       total_tokens: z.number().optional(),
     })
-    .optional(),
+    .nullish(),
 });
 
 const responseEventSchema = z.object({
@@ -67,7 +67,7 @@ const responseEventSchema = z.object({
         .object({ reason: z.unknown().optional() })
         .nullish(),
       output: z.array(responseItemSchema).optional(),
-      usage: responsePayloadSchema.shape.usage.nullable(),
+      usage: responsePayloadSchema.shape.usage,
     })
     .optional(),
   type: z.string(),
@@ -175,7 +175,7 @@ export async function generateOpenAIResponsesChat(options: {
   return parseResponsesOutput(
     payload.output ?? [],
     options.handlers,
-    payload.usage
+    payload.usage ?? undefined
   );
 }
 

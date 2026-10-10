@@ -342,7 +342,7 @@ const openAICompletionPayloadSchema = z.object({
         .optional(),
       total_tokens: z.number().optional(),
     })
-    .optional(),
+    .nullish(),
 });
 
 type OpenAIReasoningValue = {
