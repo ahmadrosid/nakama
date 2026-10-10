@@ -1,7 +1,7 @@
 import type { UpdateTelegramSettingsRequest } from "@nakama/core/contract";
 import { useEffect, useRef, useState } from "react";
 import { SETTINGS_CARD_LOADING_SKELETON } from "@/components/integration-settings.shared";
-import { TelegramAllowedUsersDialog } from "@/components/TelegramAllowedUsersDialog";
+import { TelegramAllowedUsers } from "@/components/TelegramAllowedUsers";
 import { TelegramSettingsCardContent } from "@/components/telegram-settings-card-content";
 import {
   useChannelProfileId,
@@ -31,14 +31,6 @@ function hydrateAllowedUsers(
 
     return existing.get(stringId) ?? { id: stringId };
   });
-}
-
-function formatAllowedUserSummary(count: number): string {
-  if (count === 0) {
-    return "No manual users";
-  }
-
-  return `${count} user${count === 1 ? "" : "s"}`;
 }
 
 function settingsStatusLine(
@@ -145,7 +137,6 @@ function useTelegramSettingsCard(onSaveSuccess?: () => void) {
   const [showBotToken, setShowBotToken] = useState(false);
   const [profileId, setProfileId] = useState("default");
   const [allowedUsers, setAllowedUsers] = useState<AllowedTelegramUser[]>([]);
-  const [allowedUsersOpen, setAllowedUsersOpen] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -231,9 +222,7 @@ function useTelegramSettingsCard(onSaveSuccess?: () => void) {
   }
 
   return {
-    allowedUserSummary: formatAllowedUserSummary(allowedUsers.length),
     allowedUsers,
-    allowedUsersOpen,
     botToken,
     canSave: botToken.trim().length > 0,
     configured,
@@ -251,7 +240,6 @@ function useTelegramSettingsCard(onSaveSuccess?: () => void) {
     running,
     savePending: saveMutation.isPending || startMutation.isPending,
     setAllowedUsers,
-    setAllowedUsersOpen,
     setBotToken,
     setFormError,
     setHint,
@@ -278,73 +266,61 @@ function TelegramSettingsCardLoaded({
   submitLabel: string;
 }) {
   const content = (
-    <>
-      <TelegramSettingsCardContent
-        allowedUserSummary={card.allowedUserSummary}
-        botToken={card.botToken}
-        formError={card.formError}
-        loadError={card.loadError}
-        onBotTokenChange={(value) => {
-          card.setBotToken(value);
-          card.setHint(null);
-
-          if (card.formError) {
+    <TelegramSettingsCardContent
+      allowedUsersPanel={
+        <TelegramAllowedUsers
+          allowedUsers={card.allowedUsers}
+          onAllowedUsersChange={card.setAllowedUsers}
+          onError={card.setFormError}
+          onSaved={() => {
+            card.setHint("Allowed users saved.");
             card.setFormError(null);
-          }
-        }}
-        onBotTokenPaste={(value) => {
-          card.setBotToken(value);
-          void card.handleSave(value);
-        }}
-        onCopyHandshakeCode={() => void card.copyHandshakeCode()}
-        onManageAllowedUsers={() => card.setAllowedUsersOpen(true)}
-        onRegenerateHandshake={card.handleRegenerateHandshake}
-        onSave={() => void card.handleSave()}
-        onToggleShowBotToken={() => card.setShowBotToken((current) => !current)}
-        pairingCode={card.pairingCode}
-        profileId={card.profileId}
-        settings={card.settings}
-        statusBadge={card.statusBadge}
-        statusLine={card.statusLine}
-        submitLabel={submitLabel}
-        view={{
-          canSave: card.canSave,
-          configured: card.configured,
-          embedded,
-          hasLinkedUsers: card.hasLinkedUsers,
-          isPaired: card.isPaired,
-          regeneratePending: card.regeneratePending,
-          running: card.running,
-          savePending: card.savePending,
-          showBotToken: card.showBotToken,
-          statusBadge: card.statusBadge,
-        }}
-        worker={card.worker}
-      />
-    </>
-  );
+          }}
+          profileId={card.profileId}
+        />
+      }
+      botToken={card.botToken}
+      formError={card.formError}
+      loadError={card.loadError}
+      onBotTokenChange={(value) => {
+        card.setBotToken(value);
+        card.setHint(null);
 
-  const allowedUsersDialog = (
-    <TelegramAllowedUsersDialog
-      allowedUsers={card.allowedUsers}
-      onAllowedUsersChange={card.setAllowedUsers}
-      onError={card.setFormError}
-      onOpenChange={card.setAllowedUsersOpen}
-      onSaved={() => {
-        card.setHint("Allowed users saved.");
-        card.setFormError(null);
+        if (card.formError) {
+          card.setFormError(null);
+        }
       }}
-      open={card.allowedUsersOpen}
+      onBotTokenPaste={(value) => {
+        card.setBotToken(value);
+        void card.handleSave(value);
+      }}
+      onCopyHandshakeCode={() => void card.copyHandshakeCode()}
+      onRegenerateHandshake={card.handleRegenerateHandshake}
+      onSave={() => void card.handleSave()}
+      onToggleShowBotToken={() => card.setShowBotToken((current) => !current)}
+      pairingCode={card.pairingCode}
       profileId={card.profileId}
+      settings={card.settings}
+      statusBadge={card.statusBadge}
+      statusLine={card.statusLine}
+      submitLabel={submitLabel}
+      view={{
+        canSave: card.canSave,
+        configured: card.configured,
+        embedded,
+        hasLinkedUsers: card.hasLinkedUsers,
+        isPaired: card.isPaired,
+        regeneratePending: card.regeneratePending,
+        running: card.running,
+        savePending: card.savePending,
+        showBotToken: card.showBotToken,
+        statusBadge: card.statusBadge,
+      }}
+      worker={card.worker}
     />
   );
 
-  return (
-    <>
-      {content}
-      {allowedUsersDialog}
-    </>
-  );
+  return content;
 }
 
 export function TelegramSettingsCard({

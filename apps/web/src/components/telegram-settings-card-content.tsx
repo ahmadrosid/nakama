@@ -8,6 +8,7 @@ import {
 } from "@nakama/ui/input-group";
 import { Spinner } from "@nakama/ui/spinner";
 import {
+  CheckmarkCircle01Icon,
   Copy01Icon,
   RefreshIcon,
   ViewIcon,
@@ -15,11 +16,11 @@ import {
 } from "hugeicons-react";
 import { type ReactNode, useState } from "react";
 import {
-  ChannelAccessSettings,
   ChannelConnectionStep,
   ChannelSettings,
   ChannelSetupChecklist,
   IntegrationSettingsFooter,
+  IntegrationStatusHeader,
   SettingsRow,
 } from "@/components/integration-settings.shared";
 import { TelegramQrSetup } from "@/components/telegram-qr-setup";
@@ -133,6 +134,52 @@ function TelegramPairingCodeControls({
         "Generate pairing code"
       )}
     </Button>
+  );
+}
+
+function TelegramInviteLink() {
+  const { data } = useTelegramAccessRequests();
+  const [copied, setCopied] = useState(false);
+  const link = data?.botUsername ? `https://t.me/${data.botUsername}` : null;
+
+  if (!link) {
+    return null;
+  }
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(link ?? "");
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <Card className="w-full overflow-hidden shadow-none">
+      <CardContent className="space-y-3 p-4">
+        <h3 className="font-medium text-sm">Invite someone</h3>
+        <InputGroup>
+          <InputGroupInput
+            aria-label="Bot link"
+            className="font-mono text-sm"
+            readOnly
+            value={link}
+          />
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              onClick={() => void copyLink()}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              <Copy01Icon aria-hidden />
+              {copied ? "Copied" : "Copy link"}
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -416,8 +463,7 @@ export function TelegramSettingsCardContent({
   pairingCode,
   onCopyHandshakeCode,
   onRegenerateHandshake,
-  allowedUserSummary,
-  onManageAllowedUsers,
+  allowedUsersPanel,
   profileId,
   worker,
   statusLine,
@@ -436,8 +482,7 @@ export function TelegramSettingsCardContent({
   pairingCode: string | null;
   onCopyHandshakeCode: () => void;
   onRegenerateHandshake: () => void;
-  allowedUserSummary: string;
-  onManageAllowedUsers: () => void;
+  allowedUsersPanel: ReactNode;
   profileId: string;
   worker:
     | { process?: { error?: string; managed?: boolean } }
@@ -574,16 +619,28 @@ export function TelegramSettingsCardContent({
 
   return (
     <div className="space-y-4">
-      {checklist}
+      <Card className="w-full overflow-hidden shadow-none">
+        <IntegrationStatusHeader
+          actions={workerActions}
+          configured={configured}
+          connected={statusBadge === "Connected"}
+          statusBadge={statusBadge}
+          title="Connection"
+        />
+      </Card>
+      <TelegramInviteLink />
       <TelegramAccessRequests />
-      <ChannelAccessSettings
-        actions={workerActions}
-        configured={configured}
-        onEdit={onManageAllowedUsers}
-        pending={savePending}
-        statusBadge={statusBadge}
-        summary={allowedUserSummary}
-      />
+      {allowedUsersPanel}
+      <details className="group rounded-xl border border-border">
+        <summary className="flex cursor-pointer items-center gap-3 px-4 py-3 font-medium text-sm focus-visible:outline-ring">
+          <CheckmarkCircle01Icon
+            aria-hidden
+            className="size-5 shrink-0 text-emerald-600"
+          />
+          Setup complete
+        </summary>
+        {checklist}
+      </details>
       <ChannelSettings>
         <SettingsRow label="Bot token">
           <div className="flex items-center gap-3">

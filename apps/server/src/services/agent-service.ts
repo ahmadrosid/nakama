@@ -158,6 +158,7 @@ import {
   loadEmailSettingsPublic,
   loadErrorTrackingSettingsPublic,
   loadSoulStack,
+  loadTelegramConfigFile,
   loadTelegramSettingsPublic,
   loadUserConfig,
   loadUserThinkingSettings,
@@ -1348,7 +1349,46 @@ export class AgentService {
   async getTelegramAccessRequests(
     orgId: ChannelConfigScope
   ): Promise<TelegramAccessRequestsResponse> {
-    return { requests: await listTelegramAccessRequests(orgId) };
+    return {
+      botUsername: await this.resolveTelegramBotUsername(orgId),
+      requests: await listTelegramAccessRequests(orgId),
+    };
+  }
+
+  private readonly telegramBotUsernames = new Map<string, string>();
+
+  private async resolveTelegramBotUsername(
+    orgId: ChannelConfigScope
+  ): Promise<string | null> {
+    const token = (await loadTelegramConfigFile(orgId))?.botToken.trim();
+
+    if (!token) {
+      return null;
+    }
+
+    const cached = this.telegramBotUsernames.get(token);
+
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      const path = [`bot${token}`, "getMe"].map(encodeURIComponent).join("/");
+
+      const response = await fetch(`https://api.telegram.org/${path}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+
+      const payload = z
+        .object({ result: z.object({ username: z.string() }) })
+        .parse(await response.json());
+
+      this.telegramBotUsernames.set(token, payload.result.username);
+
+      return payload.result.username;
+    } catch {
+      return null;
+    }
   }
 
   async approveTelegramAccessRequest(
@@ -1372,7 +1412,9 @@ export class AgentService {
     orgId: ChannelConfigScope,
     userId: number
   ): Promise<TelegramAccessRequestsResponse> {
-    return { requests: await removeTelegramAccessRequest(orgId, userId) };
+    await removeTelegramAccessRequest(orgId, userId);
+
+    return this.getTelegramAccessRequests(orgId);
   }
 
   async regenerateTelegramHandshake(

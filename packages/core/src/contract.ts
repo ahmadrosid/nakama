@@ -1614,6 +1614,7 @@ export interface TelegramSettingsResponse {
 }
 
 export interface TelegramAccessRequestsResponse {
+  botUsername: string | null;
   requests: Array<{
     requestedAt: string;
     userId: number;
