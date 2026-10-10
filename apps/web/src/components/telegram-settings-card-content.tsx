@@ -241,15 +241,15 @@ function SetupHelpList({
   items,
   title,
 }: {
-  items: ReactNode[];
+  items: { content: ReactNode; id: string }[];
   title: string;
 }) {
   return (
     <div>
       <p className="mb-2 font-medium text-foreground text-xs">{title}</p>
       <ol className="list-decimal space-y-1.5 pl-4.5">
-        {items.map((item, index) => (
-          <li key={index}>{item}</li>
+        {items.map((item) => (
+          <li key={item.id}>{item.content}</li>
         ))}
       </ol>
     </div>
@@ -266,30 +266,52 @@ function TelegramSetupHelp() {
         <div className="space-y-4">
           <SetupHelpList
             items={[
-              <>
-                Open <BotFatherLink /> in Telegram.
-              </>,
-              "Send /newbot and pick a name.",
-              "Copy the token it sends you.",
+              {
+                content: (
+                  <>
+                    Open <BotFatherLink /> in Telegram.
+                  </>
+                ),
+                id: "open-botfather",
+              },
+              { content: "Send /newbot and pick a name.", id: "newbot" },
+              { content: "Copy the token it sends you.", id: "copy-token" },
             ]}
             title="Bot token"
           />
           <SetupHelpList
             items={[
-              "Open a private chat with your bot.",
-              "Send the pairing code.",
+              {
+                content: "Open a private chat with your bot.",
+                id: "open-chat",
+              },
+              { content: "Send the pairing code.", id: "send-code" },
             ]}
             title="Link an account"
           />
         </div>
         <SetupHelpList
           items={[
-            "Link your account in a private chat first.",
-            <>
-              In <BotFatherLink />, turn off Group Privacy.
-            </>,
-            "Remove the bot from the group, then add it again.",
-            "@mention the bot, reply to it, or use a slash command.",
+            {
+              content: "Link your account in a private chat first.",
+              id: "link-first",
+            },
+            {
+              content: (
+                <>
+                  In <BotFatherLink />, turn off Group Privacy.
+                </>
+              ),
+              id: "group-privacy",
+            },
+            {
+              content: "Remove the bot from the group, then add it again.",
+              id: "re-add-bot",
+            },
+            {
+              content: "@mention the bot, reply to it, or use a slash command.",
+              id: "mention-bot",
+            },
           ]}
           title="Use in a group"
         />

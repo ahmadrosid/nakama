@@ -9,6 +9,7 @@ import { toast } from "@nakama/ui/toast";
 import { cn } from "@nakama/ui/utils";
 import {
   Loading03Icon,
+  MoreHorizontalIcon,
   PlayIcon,
   Rotate02Icon,
   ScrollIcon,
@@ -67,37 +68,31 @@ function ActionGlyph({
   );
 }
 
-function WorkerActionsMenu({
+function DisconnectMenu({
   busy,
-  running,
-  showLogs,
-  onAction,
-  onViewLogs,
+  onDisconnect,
 }: {
   busy: boolean;
-  running: boolean;
-  showLogs: boolean;
-  onAction: () => void;
-  onViewLogs: () => void;
+  onDisconnect: () => void;
 }) {
-  if (!(running || showLogs)) {
-    return null;
-  }
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button disabled={busy} size="sm" variant="outline" />}
+        render={
+          <Button
+            aria-label="More actions"
+            disabled={busy}
+            size="sm"
+            variant="outline"
+          />
+        }
       >
-        {busy ? "Working…" : "More"}
+        <MoreHorizontalIcon aria-hidden className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {running ? (
-          <DropdownMenuItem onClick={onAction}>Restart</DropdownMenuItem>
-        ) : null}
-        {showLogs ? (
-          <DropdownMenuItem onClick={onViewLogs}>View logs</DropdownMenuItem>
-        ) : null}
+        <DropdownMenuItem onClick={onDisconnect} variant="destructive">
+          Disconnect
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -132,6 +127,11 @@ export function WorkerActionBar({
   const restarting = restartWorker.isPending;
   const isBusy = starting || stopping || restarting || disconnect.isPending;
 
+  const disconnectWorker = () =>
+    disconnect.mutate(workerName, {
+      onError: (error) => toast(error.message),
+    });
+
   if (!pm2Managed) {
     return (
       <span
@@ -147,8 +147,8 @@ export function WorkerActionBar({
     <>
       <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
         {running ? (
-          compact ? null : (
-            <>
+          <>
+            {compact ? null : (
               <Button
                 aria-busy={stopping}
                 className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
@@ -161,19 +161,19 @@ export function WorkerActionBar({
                 <ActionGlyph busy={stopping} icon={StopIcon} />
                 Stop
               </Button>
-              <Button
-                aria-busy={restarting}
-                disabled={isBusy}
-                onClick={() => restartWorker.mutate(workerName)}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                <ActionGlyph busy={restarting} icon={Rotate02Icon} />
-                Restart
-              </Button>
-            </>
-          )
+            )}
+            <Button
+              aria-busy={restarting}
+              disabled={isBusy}
+              onClick={() => restartWorker.mutate(workerName)}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <ActionGlyph busy={restarting} icon={Rotate02Icon} />
+              Restart
+            </Button>
+          </>
         ) : (
           <Button
             aria-busy={starting}
@@ -195,44 +195,30 @@ export function WorkerActionBar({
             Start
           </Button>
         )}
-        {ownerProfileId ? (
+        {ownerProfileId && !compact ? (
           <Button
             disabled={isBusy}
-            onClick={() =>
-              disconnect.mutate(workerName, {
-                onError: (error) => toast(error.message),
-              })
-            }
+            onClick={disconnectWorker}
             size="sm"
             variant="ghost"
           >
             Disconnect
           </Button>
         ) : null}
-        {compact ? (
-          <WorkerActionsMenu
-            busy={isBusy}
-            onAction={() => {
-              const mutation = running ? restartWorker : startWorker;
-              mutation.mutate(workerName, {
-                onError: (error) => toast(error.message),
-              });
-            }}
-            onViewLogs={() => setLogDialogOpen(true)}
-            running={running}
-            showLogs={showLogs}
-          />
-        ) : showLogs ? (
+        {showLogs ? (
           <Button
-            className="ml-auto"
+            className={compact ? undefined : "ml-auto"}
             onClick={() => setLogDialogOpen(true)}
             size="sm"
             type="button"
-            variant="ghost"
+            variant={compact ? "outline" : "ghost"}
           >
             <ScrollIcon aria-hidden className="size-3.5" strokeWidth={2} />
             View logs
           </Button>
+        ) : null}
+        {ownerProfileId && compact ? (
+          <DisconnectMenu busy={isBusy} onDisconnect={disconnectWorker} />
         ) : null}
       </div>
       {showLogs ? (
