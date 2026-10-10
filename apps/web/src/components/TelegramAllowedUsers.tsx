@@ -13,7 +13,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@nakama/ui/input-group";
-import { Delete02Icon } from "hugeicons-react";
+import { ArrowRight01Icon, Delete02Icon } from "hugeicons-react";
 import { useState } from "react";
 import {
   useSaveTelegramSettings,
@@ -158,8 +158,12 @@ export function TelegramAllowedUsers({
             </Button>
           </div>
         ))}
-        <details className="px-4 py-3 text-sm">
-          <summary className="cursor-pointer text-muted-foreground hover:text-foreground focus-visible:outline-ring">
+        <details className="group px-4 py-3 text-sm">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-muted-foreground marker:hidden hover:text-foreground focus-visible:outline-ring">
+            <ArrowRight01Icon
+              aria-hidden
+              className="size-4 transition-transform group-open:rotate-90"
+            />
             Add by Telegram ID
           </summary>
           <InputGroup className="mt-3">
