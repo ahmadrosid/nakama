@@ -136,6 +136,26 @@ function TelegramPairingCodeControls({
   );
 }
 
+function formatUptime(seconds: number | null | undefined): string {
+  if (!seconds) {
+    return "Just started";
+  }
+
+  const minutes = Math.floor(seconds / 60);
+
+  if (minutes < 60) {
+    return `Running for ${Math.max(minutes, 1)} min`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+
+  if (hours < 48) {
+    return `Running for ${hours} h`;
+  }
+
+  return `Running for ${Math.floor(hours / 24)} days`;
+}
+
 function TelegramInviteLink() {
   const { data } = useTelegramAccessRequests();
   const [copied, setCopied] = useState(false);
@@ -444,12 +464,10 @@ export type TelegramSettingsCardView = {
   isPaired: boolean;
   regeneratePending: boolean;
   canSave: boolean;
-  statusBadge: string;
 };
 
 export function TelegramSettingsCardContent({
   view,
-  statusBadge,
   settings,
   botToken,
   onBotTokenChange,
@@ -473,14 +491,19 @@ export function TelegramSettingsCardContent({
   onBotTokenPaste: (value: string) => void;
   onToggleShowBotToken: () => void;
   view: TelegramSettingsCardView;
-  statusBadge: string;
   pairingCode: string | null;
   onCopyHandshakeCode: () => void;
   onRegenerateHandshake: () => void;
   allowedUsersPanel: ReactNode;
   profileId: string;
   worker:
-    | { process?: { error?: string; managed?: boolean } }
+    | {
+        process?: {
+          error?: string;
+          managed?: boolean;
+          uptimeSeconds?: number | null;
+        };
+      }
     | null
     | undefined;
   statusLine: string | null;
@@ -620,16 +643,32 @@ export function TelegramSettingsCardContent({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-sm">
+      <div
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3",
+          running
+            ? "border-border bg-card"
+            : "border-amber-500/30 bg-amber-500/5"
+        )}
+      >
+        <div className="flex items-center gap-3">
           <span
             aria-hidden
             className={cn(
-              "size-2 rounded-full",
-              statusBadge === "Connected" ? "bg-emerald-600" : "bg-amber-500"
+              "size-2.5 rounded-full",
+              running ? "bg-emerald-600" : "bg-amber-500"
             )}
           />
-          {statusBadge}
+          <div>
+            <p className="font-medium text-sm">
+              {running ? "Connected" : "Offline"}
+            </p>
+            <p className="text-muted-foreground text-xs">
+              {running
+                ? formatUptime(worker?.process?.uptimeSeconds)
+                : "Messages are not being answered"}
+            </p>
+          </div>
         </div>
         {workerActions}
       </div>

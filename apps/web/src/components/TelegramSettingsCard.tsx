@@ -53,26 +53,6 @@ function settingsStatusLine(
   return null;
 }
 
-function telegramStatusBadge(input: {
-  configured: boolean;
-  hasLinkedUsers: boolean;
-  running: boolean;
-}): string {
-  if (!input.configured) {
-    return "Not set up";
-  }
-
-  if (input.hasLinkedUsers && input.running) {
-    return "Connected";
-  }
-
-  if (input.hasLinkedUsers) {
-    return "Offline";
-  }
-
-  return "Awaiting link";
-}
-
 function channelSaveHint(saved: {
   allowedUserIds: unknown[];
   handshakeCode?: string | null;
@@ -246,11 +226,6 @@ function useTelegramSettingsCard(onSaveSuccess?: () => void) {
     setShowBotToken,
     settings,
     showBotToken,
-    statusBadge: telegramStatusBadge({
-      configured,
-      hasLinkedUsers,
-      running,
-    }),
     statusLine: settingsStatusLine(hint, formError, loadError),
     worker,
   };
@@ -301,7 +276,6 @@ function TelegramSettingsCardLoaded({
       pairingCode={card.pairingCode}
       profileId={card.profileId}
       settings={card.settings}
-      statusBadge={card.statusBadge}
       statusLine={card.statusLine}
       submitLabel={submitLabel}
       view={{
@@ -314,7 +288,6 @@ function TelegramSettingsCardLoaded({
         running: card.running,
         savePending: card.savePending,
         showBotToken: card.showBotToken,
-        statusBadge: card.statusBadge,
       }}
       worker={card.worker}
     />
