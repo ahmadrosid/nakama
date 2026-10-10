@@ -248,45 +248,33 @@ export function WorkerActionBar({
   const toolbar = (
     <div className={cn("flex flex-wrap items-center gap-2", className)}>
       {running ? (
-        <>
-          <ToolbarButton
-            busy={restarting}
-            disabled={isBusy}
-            icon={Rotate02Icon}
-            label="Restart"
-            onClick={() => restartWorker.mutate(workerName)}
-          />
-          {showLogs ? (
-            <ToolbarButton
-              disabled={false}
-              icon={ScrollIcon}
-              label="View logs"
-              onClick={() => setLogDrawerOpen(true)}
-            />
-          ) : null}
-        </>
+        <ToolbarButton
+          busy={restarting}
+          disabled={isBusy}
+          icon={Rotate02Icon}
+          label="Restart"
+          onClick={() => restartWorker.mutate(workerName)}
+        />
       ) : (
-        <>
-          <StartAction
-            compact
-            disabled={isBusy}
-            onStart={() =>
-              startWorker.mutate(workerName, {
-                onError: (error) => toast(error.message),
-              })
-            }
-            starting={starting}
-          />
-          {showLogs ? (
-            <ToolbarButton
-              disabled={false}
-              icon={ScrollIcon}
-              label="View logs"
-              onClick={() => setLogDrawerOpen(true)}
-            />
-          ) : null}
-        </>
+        <StartAction
+          compact
+          disabled={isBusy}
+          onStart={() =>
+            startWorker.mutate(workerName, {
+              onError: (error) => toast(error.message),
+            })
+          }
+          starting={starting}
+        />
       )}
+      {showLogs ? (
+        <ToolbarButton
+          disabled={false}
+          icon={ScrollIcon}
+          label="View logs"
+          onClick={() => setLogDrawerOpen(true)}
+        />
+      ) : null}
       {ownerProfileId ? (
         <ToolbarButton
           destructive

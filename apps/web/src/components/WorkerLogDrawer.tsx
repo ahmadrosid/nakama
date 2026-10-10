@@ -351,6 +351,7 @@ function WorkerLogPane({
   }
 
   const needle = filter.trim().toLowerCase();
+
   const rows = collapseRepeats(
     parseWorkerLog(content).filter(
       (row) =>
@@ -360,42 +361,50 @@ function WorkerLogPane({
   );
 
   const hasTime = rows.some((row) => row.time);
+  const occurrences = new Map<string, number>();
 
   return (
     <div className="min-h-64 flex-1 overflow-auto">
       {rows.length === 0 ? (
         <p className="p-4 text-muted-foreground text-sm">No matching lines</p>
       ) : null}
-      {rows.map((row, index) => (
-        <div
-          className="flex items-start gap-2.5 border-border/60 border-b px-1 py-1.5 last:border-b-0"
-          key={`${index}-${row.message}`}
-        >
-          {hasTime ? (
-            <span className="w-12 shrink-0 pt-0.5 font-mono text-muted-foreground text-xs">
-              {row.time?.slice(0, 5)}
-            </span>
-          ) : null}
-          <span
-            className={cn(
-              "w-11 shrink-0 rounded-md px-1.5 py-0.5 text-center font-semibold text-[11px] tracking-wide",
-              isInfo(row.level)
-                ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-                : "bg-muted text-muted-foreground"
-            )}
+      {rows.map((row) => {
+        const identity = JSON.stringify([row.time, row.level, row.message]);
+        const occurrence = occurrences.get(identity) ?? 0;
+
+        occurrences.set(identity, occurrence + 1);
+
+        return (
+          <div
+            className="flex items-start gap-2.5 border-border/60 border-b px-1 py-1.5 last:border-b-0"
+            key={`${identity}-${occurrence}`}
           >
-            {row.level ?? (activeTab === "stderr" ? "ERR" : "OUT")}
-          </span>
-          <span className="min-w-0 whitespace-pre-wrap break-words font-mono text-foreground text-xs leading-snug">
-            {row.message}
-          </span>
-          {row.count > 1 ? (
-            <span className="ml-auto shrink-0 rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground text-xs">
-              ×{row.count}
+            {hasTime ? (
+              <span className="w-12 shrink-0 pt-0.5 font-mono text-muted-foreground text-xs">
+                {row.time?.slice(0, 5)}
+              </span>
+            ) : null}
+            <span
+              className={cn(
+                "w-11 shrink-0 rounded-md px-1.5 py-0.5 text-center font-semibold text-[11px] tracking-wide",
+                isInfo(row.level)
+                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                  : "bg-muted text-muted-foreground"
+              )}
+            >
+              {row.level ?? (activeTab === "stderr" ? "ERR" : "OUT")}
             </span>
-          ) : null}
-        </div>
-      ))}
+            <span className="min-w-0 whitespace-pre-wrap break-words font-mono text-foreground text-xs leading-snug">
+              {row.message}
+            </span>
+            {row.count > 1 ? (
+              <span className="ml-auto shrink-0 rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground text-xs">
+                ×{row.count}
+              </span>
+            ) : null}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -410,6 +419,7 @@ export function WorkerLogDrawer({
   const [level, setLevel] = useState<LogLevelFilter>("all");
   const rows = parseWorkerLog(log.content);
   const infoCount = rows.filter((row) => isInfo(row.level)).length;
+
   const counts = {
     all: rows.length,
     info: infoCount,
@@ -418,7 +428,7 @@ export function WorkerLogDrawer({
 
   return (
     <Dialog onOpenChange={log.handleOpenChange} open={open}>
-      <DialogContent className="data-closed:slide-out-to-right data-open:slide-in-from-right data-closed:zoom-out-100 data-open:zoom-in-100 top-0 right-0 bottom-0 left-auto flex h-dvh max-h-none w-full translate-x-0 translate-y-0 flex-col gap-4 rounded-none p-4 duration-200 sm:max-w-xl sm:gap-6 sm:p-6">
+      <DialogContent className="data-closed:slide-out-to-right data-open:slide-in-from-right data-closed:zoom-out-100 data-open:zoom-in-100 top-0 right-0 bottom-0 left-auto flex h-dvh max-h-none w-full translate-x-0 translate-y-0 flex-col gap-4 rounded-none p-4 transition-[opacity,transform,translate,scale] duration-200 sm:max-w-xl sm:gap-6 sm:p-6">
         <DialogHeader className="flex flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <File01Icon aria-hidden className="size-4 text-muted-foreground" />

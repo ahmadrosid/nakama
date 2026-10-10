@@ -452,6 +452,106 @@ function TelegramSetupHelp() {
   );
 }
 
+function TelegramConnectionStatus({
+  running,
+  uptimeSeconds,
+  children,
+}: {
+  running: boolean;
+  uptimeSeconds: number | null | undefined;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-5 py-4",
+        running ? "border-border bg-card" : "border-amber-500/30 bg-amber-500/5"
+      )}
+    >
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className={cn(
+            "size-2.5 rounded-full",
+            running ? "bg-emerald-600" : "bg-amber-500"
+          )}
+        />
+        <div>
+          <p className="font-semibold text-sm">
+            {running ? "Connected" : "Offline"}
+          </p>
+          <p className="text-muted-foreground text-xs">
+            {running
+              ? formatUptime(uptimeSeconds)
+              : "Messages are not being answered"}
+          </p>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function TelegramSetupSteps({
+  step,
+  profileId,
+  running,
+  managed,
+  savePending,
+  workerActions,
+  tokenEditor,
+  footer,
+  pairing,
+}: {
+  step: number;
+  profileId: string;
+  running: boolean;
+  managed: boolean;
+  savePending: boolean;
+  workerActions: ReactNode;
+  tokenEditor: ReactNode;
+  footer: ReactNode;
+  pairing: ReactNode;
+}) {
+  return (
+    <ChannelSetupChecklist
+      label="Telegram setup progress"
+      step={step}
+      steps={["Add bot", "Start connection", "Link account"]}
+    >
+      {step === 0 ? (
+        <div className="grid gap-4 px-4 pb-3 md:grid-cols-2">
+          <div className="min-w-0 rounded-xl border border-primary/20 bg-primary/5">
+            <TelegramQrSetup profileId={profileId} running={running} />
+          </div>
+          <div className="flex min-w-0 flex-col justify-between rounded-xl border border-border">
+            {tokenEditor}
+            {footer}
+          </div>
+        </div>
+      ) : null}
+      {step === 1 ? (
+        <ChannelConnectionStep
+          managed={managed}
+          platform="telegram"
+          running={running}
+          starting={savePending}
+        >
+          {workerActions}
+          {tokenEditor}
+        </ChannelConnectionStep>
+      ) : null}
+      {step === 2 ? (
+        <>
+          <TelegramAccessRequests />
+          {pairing}
+        </>
+      ) : null}
+      {step === 0 ? null : footer}
+    </ChannelSetupChecklist>
+  );
+}
+
 export type TelegramSettingsCardView = {
   embedded: boolean;
   configured: boolean;
@@ -525,13 +625,21 @@ export function TelegramSettingsCardContent({
   const [replacingToken, setReplacingToken] = useState(false);
   const pairingLabel = pairingRowLabel(pairingCode, isPaired);
 
-  const step = configured ? (running ? (hasLinkedUsers ? 3 : 2) : 1) : 0;
+  let step = 0;
+
+  if (configured) {
+    step = 1;
+  }
+
+  if (configured && running) {
+    step = hasLinkedUsers ? 3 : 2;
+  }
 
   const workerActions = (
     <WorkerActionBar
       compact
       pm2Error={worker?.process?.error}
-      pm2Managed={worker?.process?.managed ?? false}
+      pm2Managed={worker?.process?.managed === true}
       running={running}
       workerName="telegram"
     />
@@ -597,79 +705,30 @@ export function TelegramSettingsCardContent({
     />
   );
 
-  const checklist = (
-    <ChannelSetupChecklist
-      label="Telegram setup progress"
-      step={step}
-      steps={["Add bot", "Start connection", "Link account"]}
-    >
-      {step === 0 ? (
-        <div className="grid gap-4 px-4 pb-3 md:grid-cols-2">
-          <div className="min-w-0 rounded-xl border border-primary/20 bg-primary/5">
-            <TelegramQrSetup profileId={profileId} running={running} />
-          </div>
-          <div className="flex min-w-0 flex-col justify-between rounded-xl border border-border">
-            {tokenEditor}
-            {footer}
-          </div>
-        </div>
-      ) : null}
-      {step === 1 ? (
-        <ChannelConnectionStep
-          managed={worker?.process?.managed === true}
-          platform="telegram"
-          running={running}
-          starting={savePending}
-        >
-          {workerActions}
-          {tokenEditor}
-        </ChannelConnectionStep>
-      ) : null}
-      {step === 2 ? (
-        <>
-          <TelegramAccessRequests />
-          {pairing}
-        </>
-      ) : null}
-      {step === 0 ? null : footer}
-    </ChannelSetupChecklist>
-  );
-
   if (step < 3) {
-    return checklist;
+    return (
+      <TelegramSetupSteps
+        footer={footer}
+        managed={worker?.process?.managed === true}
+        pairing={pairing}
+        profileId={profileId}
+        running={running}
+        savePending={savePending}
+        step={step}
+        tokenEditor={tokenEditor}
+        workerActions={workerActions}
+      />
+    );
   }
 
   return (
     <div className="space-y-4">
-      <div
-        className={cn(
-          "flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-5 py-4",
-          running
-            ? "border-border bg-card"
-            : "border-amber-500/30 bg-amber-500/5"
-        )}
+      <TelegramConnectionStatus
+        running={running}
+        uptimeSeconds={worker?.process?.uptimeSeconds}
       >
-        <div className="flex items-center gap-3">
-          <span
-            aria-hidden
-            className={cn(
-              "size-2.5 rounded-full",
-              running ? "bg-emerald-600" : "bg-amber-500"
-            )}
-          />
-          <div>
-            <p className="font-semibold text-sm">
-              {running ? "Connected" : "Offline"}
-            </p>
-            <p className="text-muted-foreground text-xs">
-              {running
-                ? formatUptime(worker?.process?.uptimeSeconds)
-                : "Messages are not being answered"}
-            </p>
-          </div>
-        </div>
         {workerActions}
-      </div>
+      </TelegramConnectionStatus>
       <Card className="w-full overflow-hidden shadow-none">
         <CardContent className="divide-y divide-border p-0">
           <TelegramInviteLink />
