@@ -1532,7 +1532,12 @@ function getPlatformWorkerName(name: string): PlatformWorkerName {
 }
 
 function readChannelPlatform(name: string): ChannelPlatform {
-  if (name === "discord" || name === "telegram" || name === "whatsapp") {
+  if (
+    name === "discord" ||
+    name === "slack" ||
+    name === "telegram" ||
+    name === "whatsapp"
+  ) {
     return name;
   }
 

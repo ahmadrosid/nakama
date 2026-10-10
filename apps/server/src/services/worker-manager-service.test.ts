@@ -453,6 +453,7 @@ describe("WorkerManagerService", () => {
 
       expect(status).toEqual({
         cpuPercent: null,
+        error: "PM2 daemon not running",
         managed: false,
         memoryMb: null,
         status: null,
@@ -489,6 +490,22 @@ describe("WorkerManagerService", () => {
       expect(result.telegram.cpuPercent).toBe(3.1);
       expect(result.whatsapp.managed).toBe(true);
       expect(result.whatsapp.status).toBe("stopped");
+    });
+
+    test("returns managed true for profile-scoped statuses including slack", async () => {
+      const mockPm2 = createMockPm2();
+      mockPm2.list = mock((cb: (err: Error | null, list: unknown[]) => void) =>
+        cb(null, [])
+      );
+      const service = new WorkerManagerService(projectRoot, mockPm2);
+
+      const result = await service.getAllWorkerStatuses({
+        orgId: "org_a",
+        profileId: "profile_a",
+      });
+
+      expect(result.telegram.managed).toBe(true);
+      expect(result.slack.managed).toBe(true);
     });
 
     test("returns managed: false for all when PM2 connect fails", async () => {
