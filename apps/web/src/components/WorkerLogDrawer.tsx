@@ -5,16 +5,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@nakama/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@nakama/ui/dropdown-menu";
+import { Input } from "@nakama/ui/input";
 import { cn } from "@nakama/ui/utils";
 import {
   CheckmarkCircle01Icon,
   Copy01Icon,
   Delete02Icon,
   File01Icon,
+  MoreHorizontalIcon,
+  Refresh01Icon,
 } from "hugeicons-react";
 import { useEffect, useRef, useState } from "react";
 import { useClearWorkerLogs, useWorkerLogs } from "@/hooks/use-worker-logs";
 import { formatError } from "@/lib/client";
+import { collapseRepeats, parseWorkerLog } from "@/pages/worker-logs.shared";
 
 interface WorkerLogDrawerProps {
   onOpenChange: (open: boolean) => void;
@@ -141,15 +151,23 @@ function useWorkerLogDrawer(
   };
 }
 
+type LogLevelFilter = "all" | "info" | "other";
+
+function isInfo(level: string | null): boolean {
+  return level === "INFO";
+}
+
 function WorkerLogToolbar({
   activeTab,
   clearPending,
   confirmClear,
   copied,
+  filter,
   isEmpty,
   isLoading,
   onClear,
   onCopy,
+  onFilterChange,
   onRefresh,
   onSelectTab,
 }: {
@@ -157,93 +175,145 @@ function WorkerLogToolbar({
   clearPending: boolean;
   confirmClear: boolean;
   copied: boolean;
+  filter: string;
   isEmpty: boolean;
   isLoading: boolean;
   onClear: () => void;
   onCopy: () => void;
+  onFilterChange: (value: string) => void;
   onRefresh: () => void;
   onSelectTab: (tab: "stdout" | "stderr") => void;
 }) {
   return (
     <div className="flex items-center gap-2">
-      <button
-        className={cn(
-          "rounded-md px-3 py-1.5 font-medium text-xs transition-colors",
-          activeTab === "stdout"
-            ? "bg-primary text-primary-foreground"
-            : "bg-muted text-muted-foreground hover:bg-muted/80"
-        )}
-        onClick={() => onSelectTab("stdout")}
-        type="button"
-      >
-        Stdout
-      </button>
-      <button
-        className={cn(
-          "rounded-md px-3 py-1.5 font-medium text-xs transition-colors",
-          activeTab === "stderr"
-            ? "bg-destructive text-primary-foreground"
-            : "bg-muted text-muted-foreground hover:bg-muted/80"
-        )}
-        onClick={() => onSelectTab("stderr")}
-        type="button"
-      >
-        Stderr
-      </button>
-      <Button
-        className="ml-auto text-xs"
-        disabled={isLoading || isEmpty || clearPending}
-        onClick={onCopy}
-        size="sm"
-        type="button"
-        variant="outline"
-      >
-        {copied ? (
-          <CheckmarkCircle01Icon
-            aria-hidden
-            className="mr-1 size-3 text-emerald-600 dark:text-emerald-400"
-          />
-        ) : (
-          <Copy01Icon aria-hidden className="mr-1 size-3" />
-        )}
-        {copied ? "Copied" : "Copy"}
-      </Button>
-      <Button
-        className="text-xs"
-        disabled={isLoading || clearPending}
-        onClick={onRefresh}
-        size="sm"
-        type="button"
-        variant="outline"
-      >
-        Refresh
-      </Button>
-      <Button
-        className="text-destructive text-xs hover:bg-destructive/10 hover:text-destructive"
-        disabled={isLoading || clearPending}
-        onClick={onClear}
-        size="sm"
-        type="button"
-        variant="outline"
-      >
-        <Delete02Icon aria-hidden className="mr-1 size-3" />
-        {confirmClear ? "Confirm?" : "Clear"}
-      </Button>
+      <div className="flex rounded-lg bg-muted p-0.5">
+        {(["stdout", "stderr"] as const).map((tab) => (
+          <button
+            className={cn(
+              "rounded-md px-3 py-1.5 font-medium text-xs capitalize transition-colors",
+              activeTab === tab
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            key={tab}
+            onClick={() => onSelectTab(tab)}
+            type="button"
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+      <Input
+        aria-label="Filter logs"
+        className="min-w-0 flex-1"
+        onChange={(event) => onFilterChange(event.target.value)}
+        placeholder="Filter"
+        value={filter}
+      />
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              aria-label="Log actions"
+              size="icon"
+              type="button"
+              variant="outline"
+            />
+          }
+        >
+          <MoreHorizontalIcon aria-hidden className="size-4" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            disabled={isLoading || isEmpty || clearPending}
+            onClick={onCopy}
+          >
+            {copied ? (
+              <CheckmarkCircle01Icon
+                aria-hidden
+                className="size-3.5 text-emerald-600 dark:text-emerald-400"
+              />
+            ) : (
+              <Copy01Icon aria-hidden className="size-3.5" />
+            )}
+            {copied ? "Copied" : "Copy"}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={isLoading || clearPending}
+            onClick={onRefresh}
+          >
+            <Refresh01Icon aria-hidden className="size-3.5" />
+            Refresh
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            closeOnClick={confirmClear}
+            disabled={isLoading || clearPending}
+            onClick={onClear}
+          >
+            <Delete02Icon aria-hidden className="size-3.5" />
+            {confirmClear ? "Confirm?" : "Clear"}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
+function LevelChips({
+  counts,
+  onChange,
+  value,
+}: {
+  counts: Record<LogLevelFilter, number>;
+  onChange: (value: LogLevelFilter) => void;
+  value: LogLevelFilter;
+}) {
+  const chips: { id: LogLevelFilter; label: string }[] = [
+    { id: "all", label: "All" },
+    { id: "info", label: "Info" },
+    { id: "other", label: "Other" },
+  ];
+
+  return (
+    <div className="flex gap-2">
+      {chips.map((chip) => (
+        <button
+          aria-pressed={value === chip.id}
+          className={cn(
+            "rounded-full px-3 py-1 font-medium text-xs transition-colors",
+            value === chip.id
+              ? "bg-foreground text-background"
+              : "bg-muted text-muted-foreground hover:bg-muted/80"
+          )}
+          key={chip.id}
+          onClick={() => onChange(chip.id)}
+          type="button"
+        >
+          {chip.label} {counts[chip.id]}
+        </button>
+      ))}
     </div>
   );
 }
 
 function WorkerLogPane({
+  activeTab,
   content,
   errorMessage,
+  filter,
   isEmpty,
   isLoading,
+  level,
   onRetry,
 }: {
+  activeTab: "stdout" | "stderr";
   content: string;
   errorMessage: string | null;
+  filter: string;
   isEmpty: boolean;
   isLoading: boolean;
+  level: LogLevelFilter;
   onRetry: () => void;
 }) {
   if (isLoading) {
@@ -280,10 +350,53 @@ function WorkerLogPane({
     );
   }
 
+  const needle = filter.trim().toLowerCase();
+  const rows = collapseRepeats(
+    parseWorkerLog(content).filter(
+      (row) =>
+        (level === "all" || isInfo(row.level) === (level === "info")) &&
+        (!needle || row.message.toLowerCase().includes(needle))
+    )
+  );
+
+  const hasTime = rows.some((row) => row.time);
+
   return (
-    <pre className="min-h-64 flex-1 overflow-auto rounded-md border border-border bg-muted/20 p-4 font-mono text-foreground text-xs leading-relaxed dark:bg-muted/10">
-      {content}
-    </pre>
+    <div className="min-h-64 flex-1 overflow-auto">
+      {rows.length === 0 ? (
+        <p className="p-4 text-muted-foreground text-sm">No matching lines</p>
+      ) : null}
+      {rows.map((row, index) => (
+        <div
+          className="flex items-start gap-2.5 border-border/60 border-b px-1 py-1.5 last:border-b-0"
+          key={`${index}-${row.message}`}
+        >
+          {hasTime ? (
+            <span className="w-12 shrink-0 pt-0.5 font-mono text-muted-foreground text-xs">
+              {row.time?.slice(0, 5)}
+            </span>
+          ) : null}
+          <span
+            className={cn(
+              "w-11 shrink-0 rounded-md px-1.5 py-0.5 text-center font-semibold text-[11px] tracking-wide",
+              isInfo(row.level)
+                ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                : "bg-muted text-muted-foreground"
+            )}
+          >
+            {row.level ?? (activeTab === "stderr" ? "ERR" : "OUT")}
+          </span>
+          <span className="min-w-0 whitespace-pre-wrap break-words font-mono text-foreground text-xs leading-snug">
+            {row.message}
+          </span>
+          {row.count > 1 ? (
+            <span className="ml-auto shrink-0 rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground text-xs">
+              ×{row.count}
+            </span>
+          ) : null}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -293,6 +406,15 @@ export function WorkerLogDrawer({
   onOpenChange,
 }: WorkerLogDrawerProps) {
   const log = useWorkerLogDrawer(workerName, open, onOpenChange);
+  const [filter, setFilter] = useState("");
+  const [level, setLevel] = useState<LogLevelFilter>("all");
+  const rows = parseWorkerLog(log.content);
+  const infoCount = rows.filter((row) => isInfo(row.level)).length;
+  const counts = {
+    all: rows.length,
+    info: infoCount,
+    other: rows.length - infoCount,
+  };
 
   return (
     <Dialog onOpenChange={log.handleOpenChange} open={open}>
@@ -311,16 +433,20 @@ export function WorkerLogDrawer({
           clearPending={log.clearPending}
           confirmClear={log.confirmClear}
           copied={log.copied}
+          filter={filter}
           isEmpty={log.isEmpty}
           isLoading={log.isLoading}
           onClear={() => void log.handleClearLogs()}
           onCopy={() => void log.copyLogs()}
+          onFilterChange={setFilter}
           onRefresh={() => {
             log.setConfirmClear(false);
             void log.refetch().then(() => log.setCopied(false));
           }}
           onSelectTab={log.selectTab}
         />
+
+        <LevelChips counts={counts} onChange={setLevel} value={level} />
 
         {log.clearErrorMessage ? (
           <div className="flex items-center justify-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2 text-destructive text-sm">
@@ -329,10 +455,13 @@ export function WorkerLogDrawer({
         ) : null}
 
         <WorkerLogPane
+          activeTab={log.activeTab}
           content={log.content}
           errorMessage={log.errorMessage}
+          filter={filter}
           isEmpty={log.isEmpty}
           isLoading={log.isLoading}
+          level={level}
           onRetry={() => void log.refetch()}
         />
       </DialogContent>
