@@ -121,7 +121,7 @@ export function TelegramAllowedUsers({
   }
 
   function displayName(user: AllowedTelegramUser): string {
-    const username = user.username ?? access?.allowedUsernames[user.id];
+    const username = user.username ?? access?.allowedUsernames?.[user.id];
 
     return username ? `@${username}` : "Telegram user";
   }
