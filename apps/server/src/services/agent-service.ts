@@ -4965,7 +4965,8 @@ export class AgentService {
       profile.systemPrompt,
       orgRole,
       skillUsageContext,
-      !cognito
+      !cognito,
+      false
     );
 
     // Per-org override for the tool-output optimiser. Undefined leaves the
@@ -5166,6 +5167,13 @@ export class AgentService {
       },
       resolvePromptContext: async (context) => {
         const parts: string[] = [];
+        parts.push(
+          await composeKnowledgeBaseCatalog(
+            orgId,
+            profileId,
+            await this.profileService.listPublishedKnowledgeBaseDocuments(orgId)
+          )
+        );
 
         const todoContext =
           await this.agentTodoState.formatForPrompt(sessionId);
@@ -5392,7 +5400,8 @@ export class AgentService {
     profilePrompt: string,
     orgRole?: OrgRole | null,
     usageContext?: import("./skills-service").SkillUsageRecordingContext,
-    recordSkillUsage = true
+    recordSkillUsage = true,
+    includeKnowledgeCatalog = true
   ): Promise<{ systemPrompt: string; soulActive: boolean }> {
     const stack = await loadSoulStack(
       getProfileSoulDir(orgId, profileId),
@@ -5427,10 +5436,15 @@ export class AgentService {
       }
     }
 
-    const kbCatalog = await composeKnowledgeBaseCatalog(orgId, profileId);
-
-    if (kbCatalog.trim()) {
-      systemPrompt = `${systemPrompt.trim()}\n\n${kbCatalog.trim()}`;
+    if (includeKnowledgeCatalog) {
+      const kbCatalog = await composeKnowledgeBaseCatalog(
+        orgId,
+        profileId,
+        await this.profileService.listPublishedKnowledgeBaseDocuments(orgId)
+      );
+      if (kbCatalog.trim()) {
+        systemPrompt = `${systemPrompt.trim()}\n\n${kbCatalog.trim()}`;
+      }
     }
 
     if (orgRole !== "viewer") {

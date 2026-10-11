@@ -1337,3 +1337,20 @@ Steps 2 and 3 remain unchecked. This slice does not finish a delivery stage.
 Next: include authorized parent knowledge in prompt catalogs, then connect the remaining resource execution paths.
 No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-parent-search-{focused,final-focused,core-types,server-types,lint}.log.
+
+2026-10-11: Step 2 slice 2r includes published parent knowledge in prompt catalogs.
+Core composition accepts server-authorized references and adds a separate parent count and source organization identifiers.
+The catalog omits document names, file paths, publication IDs, document contents, and failed references. Its size does not grow with document count.
+Chat composition now loads the knowledge catalog before each turn rather than retaining it in the initial system prompt.
+Stored and temporary sessions both recheck live publications. Publication removal clears parent metadata without replacing the session or losing history.
+Later publication and parent rename appear in the same session's next prompt. Existing local catalogs and product documentation sources remain available.
+Automation, subagent, and plugin summary composition resolve current references when each invocation creates its prompt.
+Tests use a local provider stub. No live provider request or API credit was used.
+Initial tests found two fixture errors: system prompts use input.system, and organization reads use getOrganizationById.
+The repaired session tests passed. A separate count test then required a unique publication ID instead of a generic description word.
+Checks: all 123 focused tests passed across four files; complete core and server type checks passed; lint passed all 1532 files.
+git diff --check passed. No new source file, package, or dependency was added.
+Steps 2 and 3 remain unchecked. This slice does not finish a delivery stage.
+Next: connect published parent skills to discovery and assignments, preserving source write protection and team execution context.
+No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-parent-prompt-{focused,core-types,server-types,lint}.log.

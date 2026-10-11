@@ -2,6 +2,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import {
   attachSharedKnowledgeBaseDocument,
+  type GenerateChatInput,
   getKnowledgeBaseDir,
   getKnowledgeBaseExtractedPath,
   getKnowledgeBaseManifestPath,
@@ -588,6 +589,63 @@ async function setupPublishedKnowledge() {
 }
 
 describe("published parent knowledge reads", () => {
+  test.each([false, true])(
+    "cached prompt catalogs recheck publications for cognito=%s",
+    async (cognito) => {
+      const { db, profileService, publication, document } =
+        await setupPublishedKnowledge();
+      const created = await profileService.createProfile("org_team_a", {
+        name: "Prompt reader",
+      });
+      const prompts: string[] = [];
+      const agent = new AgentService(null, null, db);
+      Object.assign(agent, {
+        _providerConfigured: true,
+        resolveProfileTools: async () => [],
+        createHarnessForProfile: () => ({
+          provider: {
+            name: "test",
+            generateChat(input: GenerateChatInput) {
+              prompts.push(input.system ?? "");
+              return Promise.resolve({
+                content: "Done",
+                assistantMessage: { role: "assistant", content: "Done" },
+                toolCalls: [],
+              });
+            },
+          },
+        }),
+      });
+      const id = await agent.createSession(
+        "org_team_a",
+        "web",
+        created.profile.id,
+        null,
+        { cognito, orgRole: "member" }
+      );
+      const session = await agent.resolveSession(id, "org_team_a");
+      expect(session).not.toBeNull();
+      await session!.send("First question");
+      expect(prompts[0]).toContain('"id":"org_parent"');
+      expect(prompts[0]).not.toContain(document.filename);
+      expect(prompts[0]).not.toContain("Published parent bytes");
+      await db.deleteOrgSharedResource("org_parent", publication.id);
+      await session!.send("Second question");
+      expect(prompts[1]).not.toContain('"id":"org_parent"');
+      expect(await agent.resolveSession(id, "org_team_a")).toBe(session);
+      expect(
+        session!.getHistory().filter((message) => message.role === "user")
+      ).toHaveLength(2);
+      const parent = await db.getOrganizationById("org_parent");
+      await db.upsertOrganization({ ...parent!, name: "Renamed parent" });
+      await db.publishOrgSharedResource(publication);
+      await session!.send("Third question");
+      expect(prompts[2]).toContain('"name":"Renamed parent"');
+      expect(
+        session!.getHistory().filter((message) => message.role === "user")
+      ).toHaveLength(3);
+    }
+  );
   test("server tool contexts recheck parent publications during real search", async () => {
     const { db, profileService, publication } = await setupPublishedKnowledge();
     const created = await profileService.createProfile("org_team_a", {
