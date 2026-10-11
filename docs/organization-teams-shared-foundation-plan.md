@@ -1225,3 +1225,13 @@ Earlier repair runs failed with global DOM setup (112 failures) and file isolati
 Automatic approval review previously rejected provider recording because sending the test payload and tool schema to OpenAI lacked explicit human approval. No recording ran. Browser automation, builds, push, and PR remain unchecked.
 Next: obtain the required recording permission, replace the two stale provider recordings with real Responses calls, replay offline, and recheck the stage 1 gate. Runtime composition, UI, portability, and docs remain incomplete.
 Evidence: /tmp/nakama-root-test-setup-final-{focused,node,web,core-types,server-types,web-types,lint,knip}.log.
+
+2026-10-11: Step 2 slice 2j revokes knowledge publications when their organization document is deleted or replaced.
+The core store runs a server callback after manifest removal and file cleanup, under its existing organization document lock. A cleanup failure still runs the callback. A missing-document retry also runs it, so a failed database write cannot leave permanent publication metadata.
+ProfileService removes only matching knowledge publications in the source organization. Other documents, resource kinds, and organizations remain unchanged. Duplicate skip and attachment conflicts retain the source publication. Replacement creates a new unpublished document.
+OrgService uses the same lock from source validation through publication insertion. An in-flight publish finishes before deletion; deletion then revokes it. This prevents a pending database insertion from publishing an already removed document.
+Tests cover deletion, replacement, duplicate skip, attachment protection, unchanged foreign publications, stale publication cleanup after a database failure, and concurrent publication versus deletion. HTTP and agent-service tests cover the existing entry points.
+Checks: all 152 focused tests passed; complete core and server type checks passed; lint passed all 1532 files; knip passed; git diff --check passed. No new package, dependency, or source file was added.
+Step 2 and delivery stage 1 remain unchecked. The existing document lock covers one server process; shared data across server processes still needs a shared lock. The two stale OpenAI recordings still block the full gate. No provider recording, browser automation, build, push, or PR ran.
+Next: audit configured-model source deletion for the remaining step 2 publication invalidation rule. Recheck the full stage 1 gate after the required recording permission is supplied. Runtime resource use, UI, portability, and docs remain incomplete.
+Evidence: /tmp/nakama-knowledge-unpublish-{focused,core-types,server-types,lint,knip}.log.

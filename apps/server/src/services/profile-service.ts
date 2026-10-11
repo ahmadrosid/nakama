@@ -1267,7 +1267,8 @@ export class ProfileService {
         orgId,
         document,
         onDuplicate,
-        await this.orgProfileIds(orgId)
+        await this.orgProfileIds(orgId),
+        (documentId) => this.unpublishKnowledgeDocument(orgId, documentId)
       );
 
       return {
@@ -1305,7 +1306,8 @@ export class ProfileService {
     const deleted = await removeOrganizationKnowledgeBaseDocument(
       orgId,
       documentId,
-      await this.orgProfileIds(orgId)
+      await this.orgProfileIds(orgId),
+      (removedId) => this.unpublishKnowledgeDocument(orgId, removedId)
     );
 
     if (!deleted) {
@@ -1313,6 +1315,20 @@ export class ProfileService {
     }
 
     return { deleted: true, documentId };
+  }
+
+  private async unpublishKnowledgeDocument(
+    orgId: string,
+    documentId: string
+  ): Promise<void> {
+    for (const publication of await this.db.listOrgSharedResources(orgId)) {
+      if (
+        publication.resourceKind === "knowledge" &&
+        publication.resourceId === documentId
+      ) {
+        await this.db.deleteOrgSharedResource(orgId, publication.id);
+      }
+    }
   }
 
   async readOrganizationKnowledgeBaseDocument(

@@ -43,6 +43,7 @@ import {
   saveToolSetup,
 } from "./custom-tool-shared";
 import { OrgService } from "./org-service";
+import { ProfileService } from "./profile-service";
 import { modelExistsOnInstance } from "./provider-instance-helpers";
 
 setupTestConfigDir("nakama-org-service-test-");
@@ -2720,6 +2721,186 @@ describe("OrgService shared resource publications", () => {
     data: Buffer.from(crypto.randomUUID()).toString("base64"),
     filename: `${crypto.randomUUID()}.txt`,
     mediaType: "text/plain",
+  });
+
+  for (const action of ["delete", "replace"] as const) {
+    test(`document ${action} removes only its own publication`, async () => {
+      const { orgService, databaseAdapter: db } = createOrgService();
+      await seedTeamParent(db);
+      const profiles = new ProfileService(db);
+      const attachment = source();
+      const uploaded = await profiles.uploadOrganizationKnowledgeBaseDocument(
+        "org_parent",
+        attachment
+      );
+      const other = await profiles.uploadOrganizationKnowledgeBaseDocument(
+        "org_parent",
+        source()
+      );
+      const publication = await orgService.publishSharedResource(
+        "org_parent",
+        { resourceId: uploaded.document.id, resourceKind: "knowledge" },
+        "user_creator"
+      );
+      const retained = await orgService.publishSharedResource(
+        "org_parent",
+        { resourceId: other.document.id, resourceKind: "knowledge" },
+        "user_creator"
+      );
+      const foreign = await db.publishOrgSharedResource({
+        ...publication,
+        id: `foreign_${publication.id}`,
+        orgId: "org_other",
+      });
+      if (action === "replace") {
+        const skipped = await profiles.uploadOrganizationKnowledgeBaseDocument(
+          "org_parent",
+          attachment,
+          "skip"
+        );
+        expect(skipped.document.id).toBe(uploaded.document.id);
+        expect(
+          await db.getOrgSharedResource("org_parent", publication.id)
+        ).toEqual(publication);
+        const replacement =
+          await profiles.uploadOrganizationKnowledgeBaseDocument(
+            "org_parent",
+            attachment,
+            "replace"
+          );
+        expect(replacement.outcome).toBe("replaced");
+        expect(replacement.document.id).not.toBe(uploaded.document.id);
+      } else {
+        expect(
+          await profiles.deleteOrganizationKnowledgeBaseDocument(
+            "org_parent",
+            uploaded.document.id
+          )
+        ).toEqual({ deleted: true, documentId: uploaded.document.id });
+      }
+      expect(await db.listOrgSharedResources("org_parent")).toEqual([retained]);
+      expect(await db.getOrgSharedResource("org_other", foreign.id)).toEqual(
+        foreign
+      );
+      expect(
+        (
+          await profiles.listOrganizationKnowledgeBase("org_parent")
+        ).documents.some((document) => document.id === uploaded.document.id)
+      ).toBe(false);
+      await expect(
+        orgService.publishSharedResource(
+          "org_parent",
+          {
+            resourceId: uploaded.document.id,
+            resourceKind: "knowledge",
+          },
+          "user_creator"
+        )
+      ).rejects.toMatchObject({ status: 404 });
+    });
+  }
+
+  test("a document deletion retry completes failed publication removal", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    await seedTeamParent(db);
+    const profiles = new ProfileService(db);
+    const uploaded = await profiles.uploadOrganizationKnowledgeBaseDocument(
+      "org_parent",
+      source()
+    );
+    const publication = await orgService.publishSharedResource(
+      "org_parent",
+      {
+        resourceId: uploaded.document.id,
+        resourceKind: "knowledge",
+      },
+      "user_creator"
+    );
+    const failure = spyOn(db, "deleteOrgSharedResource").mockRejectedValueOnce(
+      new Error("database unavailable")
+    );
+    try {
+      await expect(
+        profiles.deleteOrganizationKnowledgeBaseDocument(
+          "org_parent",
+          uploaded.document.id
+        )
+      ).rejects.toThrow();
+      expect(
+        await db.getOrgSharedResource("org_parent", publication.id)
+      ).toEqual(publication);
+      expect(
+        (await profiles.listOrganizationKnowledgeBase("org_parent")).documents
+      ).toEqual([]);
+    } finally {
+      failure.mockRestore();
+    }
+    await expect(
+      profiles.deleteOrganizationKnowledgeBaseDocument(
+        "org_parent",
+        uploaded.document.id
+      )
+    ).rejects.toMatchObject({ status: 404 });
+    expect(await db.listOrgSharedResources("org_parent")).toEqual([]);
+  });
+
+  test("document deletion waits for an in-flight publication and then revokes it", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    await seedTeamParent(db);
+    const profiles = new ProfileService(db);
+    const uploaded = await profiles.uploadOrganizationKnowledgeBaseDocument(
+      "org_parent",
+      source()
+    );
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const publish = db.publishOrgSharedResource.bind(db);
+    const pendingWrite = spyOn(
+      db,
+      "publishOrgSharedResource"
+    ).mockImplementation(async (record) => {
+      entered.resolve();
+      await release.promise;
+      return publish(record);
+    });
+    const publishing = orgService.publishSharedResource(
+      "org_parent",
+      {
+        resourceId: uploaded.document.id,
+        resourceKind: "knowledge",
+      },
+      "user_creator"
+    );
+    await entered.promise;
+    const deleting = profiles.deleteOrganizationKnowledgeBaseDocument(
+      "org_parent",
+      uploaded.document.id
+    );
+    try {
+      expect(
+        await Promise.race([
+          deleting.then(() => true),
+          Bun.sleep(20).then(() => false),
+        ])
+      ).toBe(false);
+      expect(
+        (
+          await profiles.listOrganizationKnowledgeBase("org_parent")
+        ).documents.map((document) => document.id)
+      ).toEqual([uploaded.document.id]);
+    } finally {
+      release.resolve();
+      await Promise.allSettled([publishing, deleting]);
+      pendingWrite.mockRestore();
+    }
+    await expect(publishing).resolves.toMatchObject({
+      resourceId: uploaded.document.id,
+    });
+    await expect(deleting).resolves.toEqual({
+      deleted: true,
+      documentId: uploaded.document.id,
+    });
+    expect(await db.listOrgSharedResources("org_parent")).toEqual([]);
   });
 
   test("publication is explicit, stable on retry, and removal preserves the source", async () => {

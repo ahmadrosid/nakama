@@ -358,12 +358,23 @@ describe("knowledge base store", () => {
       profileId,
       uploaded.document.id
     );
+    let published = true;
+    const unpublish = () => {
+      published = false;
+      return Promise.resolve();
+    };
     await expect(
-      deleteOrganizationKnowledgeBaseDocument(ORG_ID, uploaded.document.id)
+      deleteOrganizationKnowledgeBaseDocument(
+        ORG_ID,
+        uploaded.document.id,
+        undefined,
+        unpublish
+      )
     ).rejects.toMatchObject({
       documentId: uploaded.document.id,
       profileIds: [profileId],
     } satisfies Partial<KnowledgeBaseDocumentInUseError>);
+    expect(published).toBe(true);
 
     expect(
       await detachSharedKnowledgeBaseDocument(
@@ -375,9 +386,12 @@ describe("knowledge base store", () => {
     expect(
       await deleteOrganizationKnowledgeBaseDocument(
         ORG_ID,
-        uploaded.document.id
+        uploaded.document.id,
+        undefined,
+        unpublish
       )
     ).toBe(true);
+    expect(published).toBe(false);
   });
 
   test("rejects duplicate uploads by default and supports skip/replace", async () => {

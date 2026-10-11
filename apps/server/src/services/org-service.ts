@@ -15,6 +15,7 @@ import {
   getUserConfigDir,
   guardFilePath,
   initSoulDirectory,
+  knowledgeBaseMutationLock,
   listOrganizationKnowledgeBaseDocuments,
   loadUserConfig,
   NakamaApiError,
@@ -172,19 +173,27 @@ export class OrgService {
     actorUserId: string
   ): Promise<StoredOrgSharedResourceRecord> {
     await this.requireParentAdmin(parentOrgId, actorUserId);
-    const { resourceId } = await this.validateSharedResourceSource(
-      parentOrgId,
-      request
-    );
-    const now = new Date().toISOString();
-    return this.databaseAdapter.publishOrgSharedResource({
-      createdAt: now,
-      id: `publication_${crypto.randomUUID().replace(/-/g, "")}`,
-      orgId: parentOrgId,
-      resourceId,
-      resourceKind: request.resourceKind,
-      updatedAt: now,
-    });
+    const publish = async () => {
+      const { resourceId } = await this.validateSharedResourceSource(
+        parentOrgId,
+        request
+      );
+      const now = new Date().toISOString();
+      return this.databaseAdapter.publishOrgSharedResource({
+        createdAt: now,
+        id: `publication_${crypto.randomUUID().replace(/-/g, "")}`,
+        orgId: parentOrgId,
+        resourceId,
+        resourceKind: request.resourceKind,
+        updatedAt: now,
+      });
+    };
+    return request.resourceKind === "knowledge"
+      ? knowledgeBaseMutationLock.withLock(
+          getOrgConfigDir(parentOrgId),
+          publish
+        )
+      : publish();
   }
 
   async listSharedResources(
