@@ -2574,3 +2574,13 @@ The cases also check the resulting authenticated user, active tenant, and exact 
 These tests do not prove ordering of concurrent authentication requests. The source audit found that AuthProvider refreshSession accepts its result after waiting, while NakamaClient getMe and setActiveOrg update the client's implicit tenant on completion. That ordering still needs a focused race check before step 5 can close. Import/export/archive/restore compatibility and final delivery checks also remain open. No new file, package, dependency, browser check, full suite, build, paid call, push, or PR was added.
 
 Evidence: /tmp/nakama-auth-cache-{focused,types,format,oxlint,doctor,lint}.log.
+
+### Slice 3aj — Client authentication response ordering
+
+NakamaClient now tracks explicit request-scope changes and the order of active-tenant requests. A delayed getMe response cannot replace a scope selected or cleared after that read began. An unchanged identity read does not invalidate a pending switch. A delayed setActiveOrg response cannot restore cleared scope or replace the newest switch request. Current identity reads still select the server's active tenant. Public method signatures and returned authentication response fields remain unchanged; these guards affect the client's default header only.
+
+Seven new HTTP-mock cases check late identity reads after switching or clearing scope, a delayed switch after clearing an initially empty scope, both switch completion orders, an unchanged identity read during a switch, and normal identity scope selection. They assert the next profile request's X-Org-Id and retained response fields. The initial five-case race check failed four cases before the change. All 58 client tests passed after the change with 222 assertions. Complete client types, scoped anti-slop, Ultracite, and git diff --check passed. No verification repair was needed after implementation.
+
+AuthProvider still accepts returned authentication data after its own waits. Its state updates need the corresponding race guard and component tests in the next slice. The client does not cancel server mutations or change caller response data. Step 5 and delivery stages 3 and 4 remain open. Import/export/archive/restore compatibility and final delivery checks remain required. No new file, package, dependency, browser check, full suite, build, paid call, push, or PR was added.
+
+Evidence: /tmp/nakama-client-auth-race-{before,focused,types,format,oxlint,lint}.log.

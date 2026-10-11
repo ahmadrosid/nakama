@@ -336,6 +336,8 @@ export class NakamaClient {
   private readonly clientOrigin: string | null;
   private authToken: string | null;
   private orgId: string | null;
+  private orgScopeRevision = 0;
+  private activeOrgRequestRevision = 0;
 
   constructor(options: NakamaClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? resolveServerUrl()).replace(/\/$/, "");
@@ -352,6 +354,7 @@ export class NakamaClient {
   }
 
   setOrgId(orgId: string | null): void {
+    this.orgScopeRevision += 1;
     this.orgId = orgId?.trim() || null;
   }
 
@@ -3009,8 +3012,13 @@ export class NakamaClient {
   }
 
   async getMe(): Promise<AuthUserResponse> {
+    const scopeRevision = this.orgScopeRevision;
     const response = await this.request<AuthUserResponse>("/v1/auth/me");
-    this.applyAuthUserResponse(response);
+    const orgId = response.activeOrgId ?? response.orgId ?? null;
+
+    if (scopeRevision === this.orgScopeRevision && orgId !== this.orgId) {
+      this.applyAuthUserResponse(response);
+    }
 
     return response;
   }
@@ -3345,6 +3353,9 @@ export class NakamaClient {
   }
 
   async setActiveOrg(orgId: string): Promise<AuthUserResponse> {
+    const scopeRevision = this.orgScopeRevision;
+    const requestRevision = ++this.activeOrgRequestRevision;
+
     const response = await this.request<AuthUserResponse>(
       "/v1/auth/active-org",
       {
@@ -3353,7 +3364,12 @@ export class NakamaClient {
       }
     );
 
-    this.applyAuthUserResponse(response);
+    if (
+      scopeRevision === this.orgScopeRevision &&
+      requestRevision === this.activeOrgRequestRevision
+    ) {
+      this.applyAuthUserResponse(response);
+    }
 
     return response;
   }

@@ -112,6 +112,174 @@ const organizationRequests = [
   },
 ];
 
+test.each(["switch", "reset"] as const)(
+  "a late identity read cannot replace client scope after %s",
+  async (mode) => {
+    const pending = Promise.withResolvers<Response>();
+    const requests: Request[] = [];
+
+    const client = new NakamaClient({
+      baseUrl: "http://localhost",
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        requests.push(request);
+
+        if (new URL(request.url).pathname === "/v1/auth/me") {
+          return await pending.promise;
+        }
+
+        if (new URL(request.url).pathname === "/v1/auth/active-org") {
+          return Response.json({ activeOrgId: "team-b", id: "user" });
+        }
+
+        return Response.json({ profiles: [] });
+      },
+      orgId: "team-a",
+    });
+
+    const identity = client.getMe();
+
+    if (mode === "switch") {
+      await client.setActiveOrg("team-b");
+    } else {
+      client.setOrgId(null);
+    }
+
+    pending.resolve(Response.json({ activeOrgId: "team-a", id: "user" }));
+    expect((await identity).activeOrgId).toBe("team-a");
+    await client.listProfiles();
+    expect(requests.at(-1)?.headers.get("X-Org-Id")).toBe(
+      mode === "switch" ? "team-b" : null
+    );
+  }
+);
+
+test("a delayed switch cannot restore a cleared client scope", async () => {
+  const pending = Promise.withResolvers<Response>();
+  const requests: Request[] = [];
+
+  const client = new NakamaClient({
+    baseUrl: "http://localhost",
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+
+      if (new URL(request.url).pathname === "/v1/auth/active-org") {
+        return await pending.promise;
+      }
+
+      return Response.json({ profiles: [] });
+    },
+  });
+
+  const switching = client.setActiveOrg("team-a");
+  client.setOrgId(null);
+  pending.resolve(Response.json({ activeOrgId: "team-a", id: "user" }));
+  expect((await switching).activeOrgId).toBe("team-a");
+  await client.listProfiles();
+  expect(requests.at(-1)?.headers.get("X-Org-Id")).toBeNull();
+});
+
+test("an unchanged identity read does not discard a pending team switch", async () => {
+  const pending = Promise.withResolvers<Response>();
+  const requests: Request[] = [];
+
+  const client = new NakamaClient({
+    baseUrl: "http://localhost",
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      const path = new URL(request.url).pathname;
+
+      if (path === "/v1/auth/active-org") {
+        return await pending.promise;
+      }
+
+      if (path === "/v1/auth/me") {
+        return Response.json({ activeOrgId: "team-a", id: "user" });
+      }
+
+      return Response.json({ profiles: [] });
+    },
+    orgId: "team-a",
+  });
+
+  const switching = client.setActiveOrg("team-b");
+  await client.getMe();
+  pending.resolve(Response.json({ activeOrgId: "team-b", id: "user" }));
+  await switching;
+  await client.listProfiles();
+  expect(requests.at(-1)?.headers.get("X-Org-Id")).toBe("team-b");
+});
+
+test("a current identity read still selects the server's active tenant", async () => {
+  const requests: Request[] = [];
+
+  const client = new NakamaClient({
+    baseUrl: "http://localhost",
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+
+      return Response.json(
+        new URL(request.url).pathname === "/v1/auth/me"
+          ? { activeOrgId: "team-b", id: "user" }
+          : { profiles: [] }
+      );
+    },
+    orgId: "team-a",
+  });
+
+  expect((await client.getMe()).activeOrgId).toBe("team-b");
+  await client.listProfiles();
+  expect(requests.at(-1)?.headers.get("X-Org-Id")).toBe("team-b");
+});
+
+test.each([false, true])(
+  "the newest switch owns client scope; newest response first=%s",
+  async (newestFirst) => {
+    const first = Promise.withResolvers<Response>();
+    const second = Promise.withResolvers<Response>();
+    const requests: Request[] = [];
+
+    const client = new NakamaClient({
+      baseUrl: "http://localhost",
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        requests.push(request);
+
+        if (new URL(request.url).pathname === "/v1/auth/active-org") {
+          const body = await request.json();
+
+          return await (body.orgId === "team-b"
+            ? first.promise
+            : second.promise);
+        }
+
+        return Response.json({ profiles: [] });
+      },
+      orgId: "team-a",
+    });
+
+    const switchingFirst = client.setActiveOrg("team-b");
+    const switchingSecond = client.setActiveOrg("team-c");
+
+    if (newestFirst) {
+      second.resolve(Response.json({ activeOrgId: "team-c", id: "user" }));
+      await switchingSecond;
+      first.resolve(Response.json({ activeOrgId: "team-b", id: "user" }));
+    } else {
+      first.resolve(Response.json({ activeOrgId: "team-b", id: "user" }));
+      await switchingFirst;
+      second.resolve(Response.json({ activeOrgId: "team-c", id: "user" }));
+    }
+
+    await Promise.all([switchingFirst, switchingSecond]);
+    await client.listProfiles();
+    expect(requests.at(-1)?.headers.get("X-Org-Id")).toBe("team-c");
+  }
+);
+
 test.each(organizationRequests)(
   "$method $path uses explicit tenant context and preserves the response",
   async ({ call, method, path, body, response }) => {
