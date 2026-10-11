@@ -899,6 +899,14 @@ export class OrgService {
         await guardFilePath(dir, null, undefined, {
           allowedDirs: [getOrgConfigDir(parentOrgId)],
         });
+        await guardFilePath(
+          getKnowledgeBaseManifestPath(dir),
+          null,
+          undefined,
+          {
+            allowedDirs: [dir],
+          }
+        );
 
         const documents =
           await listOrganizationKnowledgeBaseDocuments(parentOrgId);

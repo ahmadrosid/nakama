@@ -289,7 +289,7 @@ These are stated choices, not verified requirements from the screenshot.
 Implementation sequence:
 
 - [x] 1. Add the tenant relationship and publication records.
-- [ ] 2. Extend contracts and organization routes.
+- [x] 2. Extend contracts and organization routes.
 - [x] 3. Connect publication checks to real resource use.
 - [ ] 4. Build the Organization screen.
 - [ ] 5. Update client state and compatibility.
@@ -2380,3 +2380,19 @@ Complete web and server types, scoped anti-slop, Ultracite, and git diff --check
 Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: audit the remaining contract and route requirements for step 2, then shared-template field controls and compatibility labels. No package, dependency, file, or endpoint was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
 
 Evidence: /tmp/nakama-root-skills-{web-tests,api-tests,web-types,server-types,oxlint,lint,doctor}.log.
+
+### Slice 3s — Knowledge catalog boundaries and completed route audit
+
+Knowledge publication validation now checks the document index file before reading it. Organization knowledge catalogs check both their tenant directory and document index file. Links into another tenant return 404. Existing publications remain stored but become unavailable while their source fails validation. The checks preserve source files and use the existing file guard.
+
+Two regression cases replace a valid document index or knowledge directory with a link into another tenant. They assert denied catalog reads and publication, unchanged publication records, unavailable summaries, and unchanged private index and document bytes. All 159 focused service and HTTP tests passed with 1667 assertions. Complete server types passed. No code repair was needed.
+
+The step 2 audit confirmed the existing contract and OpenAPI shapes, active-tenant path checks, server-derived parents, separate read and mutation permissions, and safe summary fields. HTTP tests cover all five publication kinds, team creation and retries, filtered counts and switching, and shared-agent instance selection. Component tests cover root publication selectors, failed mutations and retries, permitted detail actions, and profile refresh before chat selection. Normal profile responses remain separate from template summaries.
+
+The audit also confirmed parent archive and deletion guards, absence of reparenting routes, source validation before publication, and deletion invalidation. Database triggers remove deleted agent, skill, and tool publications. Knowledge deletion removes its publication. Provider deletion removes its model publications. Current source validation makes inaccessible or missing sources unavailable without granting tenant access.
+
+The full test command first failed because local test ports could not open in the sandbox. The same command passed outside the sandbox: 4378 non-web tests, 22 skips, 16352 assertions, and 752 web tests with 2388 assertions. Full knip and bun run check passed. The latter includes Ultracite and anti-slop checks. Step 2 is complete. Steps 4 and 5 and delivery stages 3 and 4 remain open.
+
+Next: finish Organization page access for permitted team readers, then shared-template field controls and compatibility labels. No browser check, build, paid call, push, or PR ran. Final UI, compatibility, documentation, and build checks remain required.
+
+Evidence: /tmp/nakama-knowledge-boundaries-{focused,types,format,format-oxlint}.log and /tmp/nakama-step2-audit-{full-tests,full-tests-outside,knip,check}.log.

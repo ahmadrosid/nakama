@@ -1433,6 +1433,19 @@ export class ProfileService {
   async listOrganizationKnowledgeBase(
     orgId: string
   ): Promise<{ documents: KnowledgeBaseDocument[] }> {
+    const dir = getOrgKnowledgeBaseDir(orgId);
+
+    try {
+      await guardFilePath(dir, null, undefined, {
+        allowedDirs: [getOrgConfigDir(orgId)],
+      });
+      await guardFilePath(getKnowledgeBaseManifestPath(dir), null, undefined, {
+        allowedDirs: [dir],
+      });
+    } catch {
+      throw new NakamaApiError("Knowledge catalog is unavailable.", 404);
+    }
+
     const documents = await listOrganizationKnowledgeBaseDocuments(orgId);
 
     return {

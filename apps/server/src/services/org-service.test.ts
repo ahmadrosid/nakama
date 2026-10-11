@@ -9,7 +9,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   attachSharedKnowledgeBaseDocument,
   type EmailOutboundAdapter,
@@ -5671,6 +5671,88 @@ describe("OrgService shared resource publications", () => {
 
     expect(await db.listOrgSharedResources("org_parent")).toEqual([]);
   });
+
+  for (const kind of ["manifest", "directory"] as const) {
+    test.skipIf(process.platform === "win32")(
+      `foreign knowledge ${kind} links block catalogs and publication`,
+      async () => {
+        const { orgService, databaseAdapter: db } = createOrgService();
+        await seedTeamParent(db);
+        const profileService = new ProfileService(db);
+
+        const { document } = await uploadOrganizationKnowledgeBaseDocument(
+          "org_parent",
+          source()
+        );
+
+        const request = {
+          resourceId: document.id,
+          resourceKind: "knowledge" as const,
+        };
+
+        const publication = await orgService.publishSharedResource(
+          "org_parent",
+          request,
+          "user_creator"
+        );
+
+        const dir = getOrgKnowledgeBaseDir("org_parent");
+        const manifestPath = getKnowledgeBaseManifestPath(dir);
+        const manifest = await readFile(manifestPath, "utf8");
+
+        const original = await readFile(
+          getKnowledgeBaseStoredDocumentPath(
+            dir,
+            document.id,
+            document.filename
+          )
+        );
+
+        const privateDir = join(
+          getOrgConfigDir("org_other"),
+          crypto.randomUUID()
+        );
+
+        const privateManifest = getKnowledgeBaseManifestPath(privateDir);
+
+        const privateStored = getKnowledgeBaseStoredDocumentPath(
+          privateDir,
+          document.id,
+          document.filename
+        );
+
+        await mkdir(dirname(privateStored), { recursive: true });
+        await writeFile(privateManifest, manifest);
+        await writeFile(privateStored, original);
+        const linkedPath = kind === "manifest" ? manifestPath : dir;
+        await rm(linkedPath, { recursive: kind === "directory" });
+        await symlink(
+          kind === "manifest" ? privateManifest : privateDir,
+          linkedPath
+        );
+
+        await expect(
+          profileService.listOrganizationKnowledgeBase("org_parent")
+        ).rejects.toMatchObject({ status: 404 });
+        await expect(
+          orgService.publishSharedResource(
+            "org_parent",
+            request,
+            "user_creator"
+          )
+        ).rejects.toMatchObject({ status: 404 });
+        expect(await db.listOrgSharedResources("org_parent")).toEqual([
+          publication,
+        ]);
+        expect(
+          (await orgService.listSharedResources("org_parent", "user_creator"))
+            .resources
+        ).toMatchObject([{ id: publication.id, readiness: "unavailable" }]);
+        expect(await readFile(privateManifest, "utf8")).toBe(manifest);
+        expect(await readFile(privateStored)).toEqual(original);
+      }
+    );
+  }
 
   test.skipIf(process.platform === "win32")(
     "documents linked outside the parent knowledge store cannot be published",
