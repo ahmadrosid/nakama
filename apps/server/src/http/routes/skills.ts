@@ -102,6 +102,85 @@ export function registerSkillRoutes(
     }
   );
 
+  const skillFilesSchema = z
+    .object({
+      files: z.array(
+        z.object({ path: z.string(), type: z.enum(["file", "directory"]) })
+      ),
+      truncated: z.boolean(),
+    })
+    .openapi("SkillFilesResponse");
+  const skillFileSchema = z
+    .object({
+      content: z.string().nullable(),
+      image: z
+        .object({ mediaType: z.string(), dataBase64: z.string() })
+        .optional(),
+      path: z.string(),
+      unavailableReason: z.string().optional(),
+    })
+    .openapi("SkillFileResponse");
+  for (const [suffix, operationId, summary] of [
+    ["files", "listPublishedSkillFiles", "List published skill files"],
+    ["file", "readPublishedSkillFile", "Read a published skill file"],
+  ] as const) {
+    app.openAPIRegistry.registerPath(
+      createRoute({
+        method: "get",
+        operationId,
+        path: `/v1/orgs/{orgId}/shared-resources/{publicationId}/skill/${suffix}`,
+        request: {
+          params: z.object({ orgId: z.string(), publicationId: z.string() }),
+          query: suffix === "file" ? z.object({ path: z.string() }) : undefined,
+        },
+        responses: {
+          200: {
+            content: {
+              "application/json": {
+                schema: suffix === "file" ? skillFileSchema : skillFilesSchema,
+              },
+            },
+            description: summary,
+          },
+          400: {
+            content: { "application/json": { schema: errorSchema } },
+            description: "Invalid file path",
+          },
+          403: {
+            content: { "application/json": { schema: errorSchema } },
+            description: "File access denied",
+          },
+          404: {
+            content: { "application/json": { schema: errorSchema } },
+            description: "Unavailable skill or file",
+          },
+        },
+        summary,
+        tags: ["Skills"],
+      })
+    );
+    app.get(
+      `/v1/orgs/:orgId/shared-resources/:publicationId/skill/${suffix}`,
+      async (c) => {
+        const auth = getRequestAuth(c);
+        const orgId = decodeURIComponent(c.req.param("orgId"));
+        if (auth.activeOrgId !== orgId) {
+          throw new NakamaApiError("Not found", 404);
+        }
+        const publicationId = decodeURIComponent(c.req.param("publicationId"));
+        return json(
+          suffix === "files"
+            ? await agent.listPublishedSkillFiles(orgId, publicationId)
+            : await agent.readPublishedSkillFile(
+                orgId,
+                publicationId,
+                c.req.query("path") ?? ""
+              )
+        );
+      }
+    );
+  }
+
   const skillSchema = z.object({}).passthrough().openapi("SkillResponse");
 
   const syncSkillsSchema = z

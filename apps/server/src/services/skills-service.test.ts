@@ -318,6 +318,95 @@ describe("SkillsService", () => {
     expect((await service.listSkills("parent")).publishedSkills).toEqual([]);
   });
 
+  test("published file previews stay within the source skill and preserve preview limits", async () => {
+    const { service, skill, publication, privateSkill } =
+      await setupPublishedSkill();
+    await mkdir(join(skill.sourcePath, "references"));
+    await writeFile(
+      join(skill.sourcePath, "references", "guide.md"),
+      "Shared reference"
+    );
+    await writeFile(
+      join(skill.sourcePath, "binary.bin"),
+      Buffer.from([0, 1, 2])
+    );
+    await writeFile(
+      join(skill.sourcePath, "large.txt"),
+      Buffer.alloc(1024 * 1024 + 1, 65)
+    );
+    const image = Buffer.from([137, 80, 78, 71]);
+    await writeFile(join(skill.sourcePath, "image.png"), image);
+    await symlink(
+      join(privateSkill.sourcePath, "SKILL.md"),
+      join(skill.sourcePath, "secret.md")
+    );
+    await symlink(privateSkill.sourcePath, join(skill.sourcePath, "private"));
+    const listing = await service.listPublishedSkillFiles(
+      "team_a",
+      publication.id
+    );
+    expect(listing.files).toContainEqual({
+      path: "references/guide.md",
+      type: "file",
+    });
+    expect(
+      listing.files.some(
+        (file) => file.path.startsWith("private") || file.path === "secret.md"
+      )
+    ).toBe(false);
+    expect(JSON.stringify(listing)).not.toContain(skill.sourcePath);
+    expect(
+      await service.readPublishedSkillFile(
+        "team_a",
+        publication.id,
+        "references/guide.md"
+      )
+    ).toEqual({ content: "Shared reference", path: "references/guide.md" });
+    expect(
+      (
+        await service.readPublishedSkillFile(
+          "team_a",
+          publication.id,
+          "image.png"
+        )
+      ).image
+    ).toEqual({ dataBase64: image.toString("base64"), mediaType: "image/png" });
+    for (const file of ["binary.bin", "large.txt"]) {
+      const result = await service.readPublishedSkillFile(
+        "team_a",
+        publication.id,
+        file
+      );
+      expect(result.content).toBeNull();
+      expect(result.unavailableReason).toBeDefined();
+    }
+    for (const file of [
+      "../private-notes/SKILL.md",
+      "/tmp/secret.md",
+      "references\\guide.md",
+      "bad\0.md",
+      "",
+    ]) {
+      await expect(
+        service.readPublishedSkillFile("team_a", publication.id, file)
+      ).rejects.toMatchObject({ status: 400 });
+    }
+    for (const file of ["secret.md", "private/SKILL.md"]) {
+      await expect(
+        service.readPublishedSkillFile("team_a", publication.id, file)
+      ).rejects.toMatchObject({ status: 403 });
+    }
+    await expect(
+      service.readPublishedSkillFile("team_a", publication.id, "missing.md")
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.readPublishedSkillFile("team_a", publication.id, "references")
+    ).rejects.toMatchObject({ status: 400 });
+    expect(
+      await readFile(join(privateSkill.sourcePath, "SKILL.md"), "utf8")
+    ).toContain("Private instructions");
+  });
+
   test.each([
     "revoke",
     "disabled",
@@ -365,6 +454,12 @@ describe("SkillsService", () => {
       await expect(
         service.getPublishedSkill("team_a", publication.id)
       ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        service.listPublishedSkillFiles("team_a", publication.id)
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        service.readPublishedSkillFile("team_a", publication.id, "SKILL.md")
+      ).rejects.toMatchObject({ status: 404 });
     }
   );
 
@@ -384,6 +479,20 @@ describe("SkillsService", () => {
       await expect(service.listSkills("team_a")).rejects.toThrow();
     } finally {
       read.mockRestore();
+    }
+    const failure = new Error("database unavailable");
+    const publicationRead = spyOn(db, "getOrgSharedResource");
+    try {
+      publicationRead.mockRejectedValueOnce(failure);
+      await expect(
+        service.listPublishedSkillFiles("team_a", "published_skill")
+      ).rejects.toBe(failure);
+      publicationRead.mockRejectedValueOnce(failure);
+      await expect(
+        service.readPublishedSkillFile("team_a", "published_skill", "SKILL.md")
+      ).rejects.toBe(failure);
+    } finally {
+      publicationRead.mockRestore();
     }
   });
 
@@ -405,11 +514,19 @@ describe("SkillsService", () => {
     async (role) => {
       const { db, service, skill, privateSkill, publication } =
         await setupPublishedSkill();
+      await mkdir(join(skill.sourcePath, "references"));
+      await writeFile(
+        join(skill.sourcePath, "references", "guide.md"),
+        "Shared reference"
+      );
       const { app, authService } = createMinimalHonoApp({
         agent: {
           getPublishedSkill: (orgId: string, publicationId: string) =>
             service.getPublishedSkill(orgId, publicationId),
           getSkill: (id: string, orgId?: string) => service.getSkill(id, orgId),
+          listPublishedSkillFiles:
+            service.listPublishedSkillFiles.bind(service),
+          readPublishedSkillFile: service.readPublishedSkillFile.bind(service),
         },
         databaseAdapter: db,
       });
@@ -434,10 +551,15 @@ describe("SkillsService", () => {
         "skill-reader@example.com",
         "password123"
       );
-      const read = (orgId = "team_a", id = publication.id, activeOrg = orgId) =>
+      const read = (
+        orgId = "team_a",
+        id = publication.id,
+        activeOrg = orgId,
+        suffix = ""
+      ) =>
         app.fetch(
           new Request(
-            `http://localhost:4310/v1/orgs/${orgId}/shared-resources/${id}/skill`,
+            `http://localhost:4310/v1/orgs/${orgId}/shared-resources/${id}/skill${suffix}`,
             { headers: session.headers({}, activeOrg) }
           )
         );
@@ -454,6 +576,25 @@ describe("SkillsService", () => {
         expect(body.skill).not.toHaveProperty("sourcePath");
         expect(body.skill).not.toHaveProperty("usage");
         expect(JSON.stringify(body)).not.toContain(skill.sourcePath);
+        const files = await read(orgId, publication.id, orgId, "/files");
+        expect(files.status).toBe(200);
+        const listed = await files.json();
+        expect(listed.files).toContainEqual({
+          path: "references/guide.md",
+          type: "file",
+        });
+        expect(JSON.stringify(listed)).not.toContain(skill.sourcePath);
+        const file = await read(
+          orgId,
+          publication.id,
+          orgId,
+          "/file?path=references%2Fguide.md"
+        );
+        expect(file.status).toBe(200);
+        expect(await file.json()).toEqual({
+          content: "Shared reference",
+          path: "references/guide.md",
+        });
       }
       expect(await db.getOrgMember("parent", "reader")).toBeNull();
       const foreignSkill = await service.createSkill("other", {
@@ -490,6 +631,29 @@ describe("SkillsService", () => {
         "foreign-publication",
       ]) {
         expect((await read("team_a", id)).status).toBe(404);
+        for (const suffix of ["/files", "/file?path=SKILL.md"]) {
+          expect((await read("team_a", id, "team_a", suffix)).status).toBe(404);
+        }
+      }
+      for (const suffix of ["/files", "/file?path=SKILL.md"]) {
+        expect(
+          (await read("other", publication.id, "other", suffix)).status
+        ).toBe(404);
+        expect(
+          (await read("team_b", publication.id, "team_a", suffix)).status
+        ).toBe(404);
+        expect(
+          (await read("parent", publication.id, "parent", suffix)).status
+        ).toBe(404);
+        expect(
+          (
+            await app.fetch(
+              new Request(
+                `http://localhost:4310/v1/orgs/team_a/shared-resources/${publication.id}/skill${suffix}`
+              )
+            )
+          ).status
+        ).toBe(401);
       }
       expect((await read("other")).status).toBe(404);
       expect((await read("team_b", publication.id, "team_a")).status).toBe(404);
@@ -509,8 +673,37 @@ describe("SkillsService", () => {
       expect((await (await read()).json()).skill.body).toContain(
         "New shared instructions"
       );
+      await writeFile(
+        join(skill.sourcePath, "references", "guide.md"),
+        "Updated shared reference"
+      );
+      expect(
+        (
+          await (
+            await read(
+              "team_a",
+              publication.id,
+              "team_a",
+              "/file?path=references%2Fguide.md"
+            )
+          ).json()
+        ).content
+      ).toBe("Updated shared reference");
       await db.deleteOrgSharedResource("parent", publication.id);
       expect((await read()).status).toBe(404);
+      expect(
+        (await read("team_a", publication.id, "team_a", "/files")).status
+      ).toBe(404);
+      expect(
+        (
+          await read(
+            "team_a",
+            publication.id,
+            "team_a",
+            "/file?path=references%2Fguide.md"
+          )
+        ).status
+      ).toBe(404);
       const spec = await (
         await app.fetch(new Request("http://localhost:4310/openapi.json"))
       ).json();
@@ -521,6 +714,22 @@ describe("SkillsService", () => {
       expect(
         spec.components.schemas.PublishedSkillResponse.properties.skill
           .properties.body.type
+      ).toBe("string");
+      expect(
+        spec.paths[
+          "/v1/orgs/{orgId}/shared-resources/{publicationId}/skill/files"
+        ].get
+      ).toBeDefined();
+      expect(
+        spec.paths[
+          "/v1/orgs/{orgId}/shared-resources/{publicationId}/skill/file"
+        ].get
+      ).toBeDefined();
+      expect(
+        spec.components.schemas.SkillFilesResponse.properties.files.type
+      ).toBe("array");
+      expect(
+        spec.components.schemas.SkillFileResponse.properties.path.type
       ).toBe("string");
     }
   );

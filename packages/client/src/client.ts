@@ -3434,6 +3434,27 @@ export class NakamaClient {
     );
   }
 
+  async listPublishedSkillFiles(
+    orgId: string,
+    publicationId: string
+  ): Promise<SkillFilesResponse> {
+    return this.request(
+      `/v1/orgs/${encodeURIComponent(orgId)}/shared-resources/${encodeURIComponent(publicationId)}/skill/files`,
+      { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
+  async readPublishedSkillFile(
+    orgId: string,
+    publicationId: string,
+    filePath: string
+  ): Promise<SkillFileResponse> {
+    return this.request(
+      `/v1/orgs/${encodeURIComponent(orgId)}/shared-resources/${encodeURIComponent(publicationId)}/skill/file?${new URLSearchParams({ path: filePath })}`,
+      { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
   async unpublishOrgSharedResource(
     orgId: string,
     publicationId: string

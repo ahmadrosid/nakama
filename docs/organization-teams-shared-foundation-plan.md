@@ -1433,3 +1433,19 @@ Next: connect published skill prompt discovery and authorized supporting assets,
 Parent assignments remain excluded from runtime discovery until that path is implemented. Shared skill execution is not complete.
 No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-parent-skill-assignment-resumed-{focused,core-types,server-types,client-types,lint}.log.
+
+2026-10-11: Step 2 slice 2v adds guarded published skill file lists and previews.
+GET /v1/orgs/:orgId/shared-resources/:publicationId/skill/files lists relative source paths. GET on skill/file with a path query previews a supporting file.
+Both routes validate the active organization and use the existing published skill resolver on every request. They preserve member and viewer read access through either sibling team.
+The resolver retains its canonical source directory internally. Public skill metadata and file responses do not expose that directory.
+Existing local and published reads share the same bounded listing and preview code. File lists omit symlinks; file reads reject traversal, absolute paths, null bytes, and symlink escapes.
+Image previews retain media type and base64 data. Binary and oversized files retain existing unavailable preview results and the 1 MB limit.
+OpenAPI declares the reused SkillFilesResponse and SkillFileResponse contracts. NakamaClient adds typed operations with explicit team headers and encoded publication IDs and paths.
+Tests cover two siblings without parent membership, unrelated and parent contexts, wrong active context, anonymous access, direct resource IDs, foreign publications, and wrong publication kinds.
+They also cover revocation, disabled and missing sources, source symlinks, archived tenants, supporting-file escapes, current file updates, preview limits, and preserved database failures.
+Local file preview and skill installation tests still pass. Client request tests preserve response data, default context, and denied requests.
+Checks: all 159 focused tests passed across five files, with two platform-specific skips; complete server and client type checks passed; lint passed all 1532 files; git diff --check passed.
+No new source file, package, or dependency was added. Steps 2 and 3 and delivery stage 2 remain unchecked.
+Next: connect published skill prompt discovery and reads through the agent tool context, then script tools with team execution context and live publication checks.
+Shared skill execution remains incomplete. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-shared-skill-assets-{focused,server-types,client-types,lint}.log.

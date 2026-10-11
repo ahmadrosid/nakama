@@ -4128,6 +4128,25 @@ export class AgentService {
     return this.requireSkillsService().listSkillFiles(orgId, skillId);
   }
 
+  async listPublishedSkillFiles(orgId: string, publicationId: string) {
+    return this.requireSkillsService().listPublishedSkillFiles(
+      orgId,
+      publicationId
+    );
+  }
+
+  async readPublishedSkillFile(
+    orgId: string,
+    publicationId: string,
+    filePath: string
+  ) {
+    return this.requireSkillsService().readPublishedSkillFile(
+      orgId,
+      publicationId,
+      filePath
+    );
+  }
+
   async listSkillVersions(orgId: string, skillId: string) {
     return this.requireSkillsService().listSkillVersions(orgId, skillId);
   }

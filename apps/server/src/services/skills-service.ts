@@ -297,7 +297,11 @@ export class SkillsService {
   private async resolvePublishedSkill(
     orgId: string,
     publicationId: string
-  ): Promise<{ summary: PublishedSkillSummary; body: string }> {
+  ): Promise<{
+    summary: PublishedSkillSummary;
+    body: string;
+    directory: string;
+  }> {
     const team = await this.db.getOrganizationById(orgId);
     const parent = team?.parentOrgId
       ? await this.db.getOrganizationById(team.parentOrgId)
@@ -360,6 +364,7 @@ export class SkillsService {
       }
       return {
         body: parsed.body,
+        directory: sourcePath,
         summary: {
           createdAt: record.createdAt,
           createdBy: record.createdBy,
@@ -1231,6 +1236,25 @@ export class SkillsService {
     skillId: string
   ): Promise<SkillFilesResponse> {
     const root = await this.skillFilesRoot(orgId, skillId);
+    return this.listFilesInRoot(root);
+  }
+
+  async listPublishedSkillFiles(
+    orgId: string,
+    publicationId: string
+  ): Promise<SkillFilesResponse> {
+    const { directory } = await this.resolvePublishedSkill(
+      orgId,
+      publicationId
+    );
+    try {
+      return await this.listFilesInRoot(directory);
+    } catch {
+      throw new NakamaApiError("Skill files are unavailable.", 404);
+    }
+  }
+
+  private async listFilesInRoot(root: string): Promise<SkillFilesResponse> {
     const files: SkillFilesResponse["files"] = [];
     let truncated = false;
 
@@ -1289,7 +1313,32 @@ export class SkillsService {
     filePath: string
   ): Promise<SkillFileResponse> {
     const root = await this.skillFilesRoot(orgId, skillId);
+    return this.readFileFromRoot(root, filePath);
+  }
 
+  async readPublishedSkillFile(
+    orgId: string,
+    publicationId: string,
+    filePath: string
+  ): Promise<SkillFileResponse> {
+    const { directory } = await this.resolvePublishedSkill(
+      orgId,
+      publicationId
+    );
+    try {
+      return await this.readFileFromRoot(directory, filePath);
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        throw error;
+      }
+      throw new NakamaApiError("Skill file is unavailable.", 404);
+    }
+  }
+
+  private async readFileFromRoot(
+    root: string,
+    filePath: string
+  ): Promise<SkillFileResponse> {
     if (
       !filePath ||
       filePath.includes("\0") ||

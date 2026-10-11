@@ -10,6 +10,29 @@ const organizationRequests = [
   {
     body: null,
     call: (client: NakamaClient) =>
+      client.listPublishedSkillFiles("team/a?", "publication/a?"),
+    method: "GET",
+    path: "/v1/orgs/team%2Fa%3F/shared-resources/publication%2Fa%3F/skill/files",
+    response: {
+      files: [{ path: "references/guide.md", type: "file" }],
+      truncated: false,
+    },
+  },
+  {
+    body: null,
+    call: (client: NakamaClient) =>
+      client.readPublishedSkillFile(
+        "team/a?",
+        "publication/a?",
+        "references/a b?.md"
+      ),
+    method: "GET",
+    path: "/v1/orgs/team%2Fa%3F/shared-resources/publication%2Fa%3F/skill/file?path=references%2Fa+b%3F.md",
+    response: { content: "Shared reference", path: "references/a b?.md" },
+  },
+  {
+    body: null,
+    call: (client: NakamaClient) =>
       client.getPublishedSkill("team/a?", "publication/a?"),
     method: "GET",
     path: "/v1/orgs/team%2Fa%3F/shared-resources/publication%2Fa%3F/skill",
