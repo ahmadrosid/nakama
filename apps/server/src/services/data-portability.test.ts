@@ -341,6 +341,138 @@ describe("Nakama data portability", () => {
       }
     }
   });
+  test.each([
+    "workspace",
+    "profile",
+    "profile knowledge",
+    "organization knowledge",
+    "attachment",
+  ] as const)(
+    "team exports exclude parent bytes through linked %s paths",
+    async (mode) => {
+      const databasePath = join(rootDir, "sqlite", "nakama.sqlite");
+      const database = await createDatabase(`file:${databasePath}`);
+      const raw = new Database(databasePath);
+      const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+      process.env.NAKAMA_CONFIG_DIR = rootDir;
+
+      try {
+        raw.exec(
+          "INSERT INTO organizations (id,name,slug,created_at,updated_at) VALUES ('parent','Parent','parent','now','now')"
+        );
+        raw.exec(
+          "INSERT INTO organizations (id,name,slug,parent_org_id,created_at,updated_at) VALUES ('team','Team','team','parent','now','now')"
+        );
+        raw.exec(
+          "INSERT INTO profiles (id,name,org_id,created_at,updated_at) VALUES ('source','Source','parent','now','now'),('local','Local','team','now','now')"
+        );
+        const parent = join(rootDir, "orgs", "parent", "profiles", "source");
+        const team = join(rootDir, "orgs", "team", "profiles", "local");
+        const parentKnowledge = join(parent, "knowledge-base");
+        await mkdir(parentKnowledge, { recursive: true });
+        await mkdir(join(parent, "artifacts"));
+        await writeFile(
+          join(parent, "artifacts", "private.txt"),
+          "parent_secret"
+        );
+        await mkdir(join(rootDir, "orgs", "team", "profiles"), {
+          recursive: true,
+        });
+        await writeFile(join(parent, "MEMORY.md"), "parent_secret");
+        await writeFile(
+          join(parentKnowledge, "private.txt"),
+          "parent_unpublished"
+        );
+
+        if (mode === "profile") {
+          await symlink(parent, team, "dir");
+        } else {
+          await mkdir(team, { recursive: true });
+          await writeFile(join(team, "SOUL.md"), "team_identity");
+
+          if (mode === "workspace") {
+            await symlink(join(parent, "MEMORY.md"), join(team, "MEMORY.md"));
+          } else if (mode === "attachment") {
+            await mkdir(join(team, "attachments"));
+            await symlink(
+              join(parent, "MEMORY.md"),
+              join(team, "attachments", "linked")
+            );
+            raw.exec(
+              "INSERT INTO sessions (id,profile_id,channel,org_id,created_at,updated_at) VALUES ('conversation','local','web','team','now','now')"
+            );
+            raw.exec(
+              "INSERT INTO attachments (id,org_id,profile_id,session_id,channel,kind,media_type,size_bytes,storage_path,created_at) VALUES ('linked','team','local','conversation','web','image','image/png',13,'unused','now')"
+            );
+          } else {
+            const destination =
+              mode === "profile knowledge"
+                ? join(team, "knowledge-base")
+                : join(rootDir, "orgs", "team", "knowledge-base");
+
+            await symlink(parentKnowledge, destination, "dir");
+          }
+        }
+
+        const exported = await createNakamaOrgDataExport(
+          database.adapter,
+          "team"
+        );
+
+        const entries = fflate.unzipSync(exported.data);
+        expect(Object.keys(entries)).toEqual(
+          mode === "profile"
+            ? [NAKAMA_ORG_EXPORT_MANIFEST]
+            : ["profiles/local/workspace/SOUL.md", NAKAMA_ORG_EXPORT_MANIFEST]
+        );
+
+        const bytes = Object.values(entries)
+          .map((entry) => Buffer.from(entry).toString("utf8"))
+          .join("\n");
+
+        expect(bytes).not.toContain("parent_secret");
+        expect(bytes).not.toContain("parent_unpublished");
+
+        if (mode === "attachment") {
+          expect(
+            JSON.parse(
+              Buffer.from(entries[NAKAMA_ORG_EXPORT_MANIFEST]!).toString()
+            )
+          ).toMatchObject({
+            sessions: [
+              {
+                attachments: [{ id: "linked", path: null }],
+                id: "conversation",
+              },
+            ],
+          });
+        }
+
+        if (mode !== "profile") {
+          expect(
+            Buffer.from(entries["profiles/local/workspace/SOUL.md"]!).toString()
+          ).toBe("team_identity");
+        }
+
+        expect(await readFile(join(parent, "MEMORY.md"), "utf8")).toBe(
+          "parent_secret"
+        );
+        expect(
+          await readFile(join(parentKnowledge, "private.txt"), "utf8")
+        ).toBe("parent_unpublished");
+      } finally {
+        raw.close();
+        database.release();
+
+        if (previousConfigDir === undefined) {
+          delete process.env.NAKAMA_CONFIG_DIR;
+        } else {
+          process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+        }
+      }
+    }
+  );
+
   test("retirement preserves private bytes outside workspaces and normal exports, including orphan folders", async () => {
     const databasePath = join(rootDir, "sqlite", "nakama.sqlite");
     const database = await createDatabase(`file:${databasePath}`);

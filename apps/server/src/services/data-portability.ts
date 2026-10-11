@@ -30,6 +30,7 @@ import {
   type DataExportManifest,
   type DataExportSkippedItem,
   type DataImportPreviewResponse,
+  getAttachmentFilePath,
   getKnowledgeBaseDir,
   getOrgKnowledgeBaseDir,
   getProfileSoulDir,
@@ -664,10 +665,16 @@ export async function createNakamaOrgDataExport(
   const profiles = [];
 
   for (const profile of await databaseAdapter.listProfilesForOrg(orgId)) {
-    const artifacts = await listArtifacts(orgId, profile.id);
+    const soulDir = getProfileSoulDir(orgId, profile.id);
+
+    const artifacts =
+      (await pathExists(soulDir)) && !(await isDirectExportPath(soulDir))
+        ? []
+        : (await listArtifacts(orgId, profile.id)).artifacts;
+
     const exportedArtifacts = [];
 
-    for (const artifact of artifacts.artifacts) {
+    for (const artifact of artifacts) {
       const archivePath = toZipPath(
         `profiles/${profile.id}/artifacts/${artifact.filename}`
       );
@@ -683,8 +690,6 @@ export async function createNakamaOrgDataExport(
       });
     }
 
-    const soulDir = getProfileSoulDir(orgId, profile.id);
-
     for (const filename of [
       "SOUL.md",
       "STYLE.md",
@@ -693,7 +698,10 @@ export async function createNakamaOrgDataExport(
     ]) {
       const sourcePath = join(soulDir, filename);
 
-      if (await pathExists(sourcePath)) {
+      if (
+        (await pathExists(sourcePath)) &&
+        (await isDirectExportPath(sourcePath))
+      ) {
         const archivePath = `profiles/${profile.id}/workspace/${filename}`;
         validateArchivePath(archivePath);
         entries[archivePath] = await readFile(sourcePath);
@@ -746,11 +754,20 @@ export async function createNakamaOrgDataExport(
       const attachmentPath = `attachments/${attachment.id}`;
       validateArchivePath(attachmentPath);
 
-      const bytes = await readAttachmentBytes(
+      const sourcePath = getAttachmentFilePath(
         orgId,
         attachment.profileId,
         attachment.id
       );
+
+      const bytes =
+        (await pathExists(sourcePath)) && (await isDirectExportPath(sourcePath))
+          ? await readAttachmentBytes(
+              orgId,
+              attachment.profileId,
+              attachment.id
+            )
+          : null;
 
       if (bytes) {
         entries[attachmentPath] = bytes;
@@ -832,12 +849,25 @@ export async function createNakamaOrgDataExport(
   };
 }
 
+export async function isDirectExportPath(sourcePath: string): Promise<boolean> {
+  const rootDir = getUserConfigDir();
+
+  const expected = resolve(
+    await realpath(rootDir),
+    relative(rootDir, sourcePath)
+  );
+
+  return (await realpath(sourcePath)) === expected;
+}
+
 async function addDirectoryFiles(
   entries: Record<string, Uint8Array>,
   sourceDir: string,
   archiveDir: string
 ): Promise<void> {
-  if (!(await pathExists(sourceDir))) {
+  if (
+    !((await pathExists(sourceDir)) && (await isDirectExportPath(sourceDir)))
+  ) {
     return;
   }
 

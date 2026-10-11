@@ -46,6 +46,7 @@ import { unzipSync, zipSync } from "fflate";
 import { getCustomToolHandler, isCustomToolType } from "./custom-tool-handlers";
 import { readHandlerModulePath } from "./custom-tool-shared";
 import {
+  isDirectExportPath,
   MAX_IMPORT_ENTRY_BYTES,
   MAX_IMPORT_UNCOMPRESSED_BYTES,
 } from "./data-portability";
@@ -226,6 +227,14 @@ export async function createProfilePackExport(
   }
 
   const soulDir = getProfileSoulDir(orgId, profileId);
+
+  if ((await pathExists(soulDir)) && !(await isDirectExportPath(soulDir))) {
+    throw new NakamaApiError(
+      "Linked profile workspaces cannot be exported.",
+      400
+    );
+  }
+
   const { files, skipped } = await inventoryProfileSoulDir(soulDir);
   const meta = await buildProfilePackMeta(db, profileId, profile);
   const shared = await db.getSharedAgentInstance(orgId, profileId);
@@ -256,7 +265,12 @@ export async function createProfilePackExport(
   if (await hasProfileAvatar(orgId, profileId)) {
     const avatar = await readProfileAvatar(orgId, profileId);
 
-    if (avatar) {
+    if (
+      avatar &&
+      (await isDirectExportPath(
+        getProfileAvatarPath(orgId, profileId, avatar.mediaType)
+      ))
+    ) {
       const avatarRelative = basename(
         getProfileAvatarPath(orgId, profileId, avatar.mediaType)
       );

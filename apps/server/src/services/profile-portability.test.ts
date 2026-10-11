@@ -5,6 +5,7 @@ import {
   readdir,
   readFile,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import os from "node:os";
@@ -63,6 +64,55 @@ describe("profile portability", () => {
     path.join(root, "orgs", orgId, "profiles", profileId);
 
   const now = () => new Date().toISOString();
+
+  test.each(["workspace", "avatar"] as const)(
+    "profile packs exclude parent bytes through a linked %s",
+    async (mode) => {
+      const { db, service } = await setup();
+
+      const { profile: parent } = await service.createProfile(ORG, {
+        name: "Parent",
+      });
+
+      const { profile: team } = await service.createProfile(DEST, {
+        name: "Team",
+      });
+
+      await writeFile(
+        path.join(soul(ORG, parent.id), "MEMORY.md"),
+        "parent_private"
+      );
+
+      if (mode === "workspace") {
+        await rm(soul(DEST, team.id), { force: true, recursive: true });
+        await symlink(soul(ORG, parent.id), soul(DEST, team.id), "dir");
+        await expect(
+          createProfilePackExport(db, DEST, team.id)
+        ).rejects.toMatchObject({ status: 400 });
+      } else {
+        await symlink(
+          path.join(soul(ORG, parent.id), "MEMORY.md"),
+          path.join(soul(DEST, team.id), "avatar.png")
+        );
+        const exported = await createProfilePackExport(db, DEST, team.id);
+        const entries = unzipSync(exported.data);
+        expect(entries["avatar.png"]).toBeUndefined();
+        expect(
+          Object.values(entries)
+            .map((entry) => Buffer.from(entry).toString())
+            .join("\n")
+        ).not.toContain("parent_private");
+      }
+
+      expect(await db.getProfileForOrg(team.id, DEST)).toMatchObject({
+        id: team.id,
+        orgId: DEST,
+      });
+      expect(
+        await readFile(path.join(soul(ORG, parent.id), "MEMORY.md"), "utf8")
+      ).toBe("parent_private");
+    }
+  );
 
   test("shared packs retain references and require a valid destination publication", async () => {
     const { db, service } = await setup();
