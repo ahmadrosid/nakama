@@ -2594,3 +2594,13 @@ Nine new component cases cover initial reads after logout or refresh, refreshed 
 Step 5 and delivery stages 3 and 4 remain open. The next slice must audit login, setup, organization mutations, and platform-list refreshes for late authentication state updates. Client login, setup, profile updates, and invite acceptance also remain to check. Import/export/archive/restore compatibility and final delivery checks remain required. These guards do not cancel server mutations. No new file, package, dependency, browser check, full suite, build, paid call, push, or PR was added.
 
 Evidence: /tmp/nakama-auth-order-{before,focused,types,format,oxlint,lint,doctor}.log.
+
+### Slice 3al — Authentication mutations preserve the selected client scope
+
+Client login, setup, profile updates, and invite acceptance now use the existing scope revision check before changing the default organization header. Responses still return their existing fields. A response that arrives after a team switch or explicit scope reset cannot restore its earlier tenant. A response without an intervening scope change still selects its returned tenant. Existing callers and request payloads stay unchanged.
+
+Twelve HTTP-mock cases cover all four operations after switching, resetting scope, or retaining the current scope. They check request methods, complete returned response data, and the next profile request's X-Org-Id. Eight cases failed before the change. All 93 client tests passed with 312 assertions. Complete client types, scoped anti-slop, Ultracite, and git diff --check passed. One verification repair completed the authentication response fixtures and narrowed the invite role.
+
+Step 5 and delivery stages 3 and 4 remain open. The next slice must check AuthProvider login and setup continuations after logout or switching. Organization mutations and platform-list refreshes also need review. These client guards preserve scope changes; they do not cancel server mutations or order concurrent account requests before any scope change. Import/export/archive/restore compatibility and final delivery checks remain required. No new file, package, dependency, browser check, full repository suite, build, paid call, push, or PR was added.
+
+Evidence: /tmp/nakama-auth-writer-{before,focused,types,format,oxlint,lint}.log.

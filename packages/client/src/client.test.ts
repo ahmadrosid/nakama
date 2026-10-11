@@ -112,6 +112,101 @@ const organizationRequests = [
   },
 ];
 
+const authScopeUser = {
+  activeOrgId: "team-a",
+  email: "user@example.com",
+  id: "user",
+  isPlatformAdmin: false,
+};
+
+const authScopeRequests = [
+  {
+    call: (client: NakamaClient) =>
+      client.login("user@example.com", "password"),
+    method: "POST",
+    path: "/v1/auth/login",
+    response: authScopeUser,
+  },
+  {
+    call: (client: NakamaClient) =>
+      client.setupUser({
+        admin: {
+          email: "user@example.com",
+          name: "User",
+          password: "password",
+        },
+        organization: { name: "Team A", slug: "team-a" },
+      }),
+    method: "POST",
+    path: "/v1/auth/setup",
+    response: authScopeUser,
+  },
+  {
+    call: (client: NakamaClient) =>
+      client.updateAuthProfile({ name: "Updated" }),
+    method: "PATCH",
+    path: "/v1/auth/me",
+    response: authScopeUser,
+  },
+  {
+    call: (client: NakamaClient) => client.acceptOrgInvite({ token: "invite" }),
+    method: "POST",
+    path: "/v1/auth/accept-invite",
+    response: {
+      email: "user@example.com",
+      orgId: "team-a",
+      role: "member" as const,
+    },
+  },
+];
+
+for (const action of authScopeRequests) {
+  test.each(["switch", "reset", "current"] as const)(
+    `${action.method} ${action.path} preserves client scope after %s`,
+    async (mode) => {
+      const pending = Promise.withResolvers<Response>();
+      const requests: Request[] = [];
+
+      const client = new NakamaClient({
+        baseUrl: "http://localhost",
+        fetch: async (input, init) => {
+          const request = new Request(input, init);
+          requests.push(request);
+          const path = new URL(request.url).pathname;
+
+          if (path === action.path) {
+            expect(request.method).toBe(action.method);
+
+            return await pending.promise;
+          }
+
+          if (path === "/v1/auth/active-org") {
+            return Response.json({ activeOrgId: "team-b", id: "user" });
+          }
+
+          return Response.json({ profiles: [] });
+        },
+        orgId: "original",
+      });
+
+      const updating = action.call(client);
+
+      if (mode === "switch") {
+        await client.setActiveOrg("team-b");
+      } else if (mode === "reset") {
+        client.setOrgId(null);
+      }
+
+      pending.resolve(Response.json(action.response));
+      expect(await updating).toEqual(action.response);
+      await client.listProfiles();
+      expect(requests.at(-1)?.headers.get("X-Org-Id")).toBe(
+        mode === "switch" ? "team-b" : mode === "reset" ? null : "team-a"
+      );
+    }
+  );
+}
+
 test.each(["switch", "reset"] as const)(
   "a late identity read cannot replace client scope after %s",
   async (mode) => {

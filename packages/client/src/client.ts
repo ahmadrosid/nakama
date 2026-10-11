@@ -2874,12 +2874,16 @@ export class NakamaClient {
   }
 
   async setupUser(request: SetupAuthRequest): Promise<AuthUserResponse> {
+    const scopeRevision = this.orgScopeRevision;
+
     const response = await this.request<AuthUserResponse>("/v1/auth/setup", {
       body: JSON.stringify(request),
       method: "POST",
     });
 
-    this.applyAuthUserResponse(response);
+    if (scopeRevision === this.orgScopeRevision) {
+      this.applyAuthUserResponse(response);
+    }
 
     return response;
   }
@@ -2894,12 +2898,16 @@ export class NakamaClient {
       passkeyChallenge?: string;
     }
   ): Promise<AuthUserResponse> {
+    const scopeRevision = this.orgScopeRevision;
+
     const response = await this.request<AuthUserResponse>("/v1/auth/login", {
       body: JSON.stringify({ email, password, ...mfa }),
       method: "POST",
     });
 
-    this.applyAuthUserResponse(response);
+    if (scopeRevision === this.orgScopeRevision) {
+      this.applyAuthUserResponse(response);
+    }
 
     return response;
   }
@@ -2998,6 +3006,8 @@ export class NakamaClient {
   async acceptOrgInvite(
     request: AcceptOrgInviteRequest
   ): Promise<AcceptOrgInviteResponse> {
+    const scopeRevision = this.orgScopeRevision;
+
     const response = await this.request<AcceptOrgInviteResponse>(
       "/v1/auth/accept-invite",
       {
@@ -3006,7 +3016,9 @@ export class NakamaClient {
       }
     );
 
-    this.setOrgId(response.orgId);
+    if (scopeRevision === this.orgScopeRevision) {
+      this.setOrgId(response.orgId);
+    }
 
     return response;
   }
@@ -3026,12 +3038,16 @@ export class NakamaClient {
   async updateAuthProfile(
     request: UpdateAuthProfileRequest
   ): Promise<AuthUserResponse> {
+    const scopeRevision = this.orgScopeRevision;
+
     const response = await this.request<AuthUserResponse>("/v1/auth/me", {
       body: JSON.stringify(request),
       method: "PATCH",
     });
 
-    this.applyAuthUserResponse(response);
+    if (scopeRevision === this.orgScopeRevision) {
+      this.applyAuthUserResponse(response);
+    }
 
     return response;
   }
