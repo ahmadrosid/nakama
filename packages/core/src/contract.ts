@@ -2181,6 +2181,12 @@ export interface ProfileSummary {
   mcpServerCount: number;
   model: string | null;
   name: string;
+  sharedAgent?: {
+    available: boolean;
+    publicationId: string;
+    sourceOrgId: string;
+    sourceProfileId: string;
+  };
   /** null = inherit org default; true/false = force consolidate on/off for this profile */
   skillsCuratorConsolidateEnabled?: boolean | null;
   /** null = inherit org default; true/false = force post-turn review on/off for this profile */

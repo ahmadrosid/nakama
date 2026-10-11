@@ -269,6 +269,11 @@ async function copyKnowledgeBaseTo(
 }
 
 export class ProfileService {
+  private orgService?: import("./org-service").OrgService;
+
+  setOrgService(service: import("./org-service").OrgService): void {
+    this.orgService = service;
+  }
   beforeChannelOwnerDelete?: (
     orgId: string,
     profileId: string
@@ -291,10 +296,19 @@ export class ProfileService {
   }
 
   async getProfile(orgId: string, profileId: string): Promise<ProfileResponse> {
-    const profile = await this.requireProfile(orgId, profileId);
-    const tools = await this.db.listToolsForProfile(profileId);
-    const mcpServers = await this.db.listMcpServersForProfile(profileId);
-    const skills = await this.db.listSkillsForProfile(profileId);
+    const view = await this.resolveProfileView(
+      await this.requireProfile(orgId, profileId)
+    );
+    const profile = view.profile;
+    const tools =
+      view.shared?.assignedTools ??
+      (await this.db.listToolsForProfile(profileId));
+    const mcpServers =
+      view.shared?.assignedMcpServers ??
+      (await this.db.listMcpServersForProfile(profileId));
+    const skills = await this.db.listSkillsForProfile(
+      view.shared ? view.instance!.sourceProfileId : profileId
+    );
     const skillUsage = await this.db.listSkillUsageForProfile(profileId);
     const publishedSkills: PublishedSkillSummary[] = [];
     for (const skill of skills) {
@@ -317,7 +331,7 @@ export class ProfileService {
 
     return {
       profile: {
-        ...(await this.toProfileSummary(profile)),
+        ...(await this.toProfileSummary(profile, view)),
         mcpServers: toMcpServerSummaries(mcpServers),
         publishedSkills,
         skills: toSkillSummaries(
@@ -1711,20 +1725,66 @@ export class ProfileService {
     return tool;
   }
 
+  private async resolveProfileView(profile: StoredProfileRecord) {
+    const instance = profile.orgId
+      ? await this.db.getSharedAgentInstance(profile.orgId, profile.id)
+      : null;
+    let shared: Awaited<
+      ReturnType<
+        import("./org-service").OrgService["resolveSharedAgentProfile"]
+      >
+    > = null;
+    if (instance && this.orgService && profile.orgId) {
+      try {
+        shared = await this.orgService.resolveSharedAgentProfile(
+          profile.orgId,
+          profile.id
+        );
+      } catch (error) {
+        if (
+          !(
+            error instanceof NakamaApiError &&
+            [400, 404, 409].includes(error.status)
+          )
+        ) {
+          throw error;
+        }
+      }
+    }
+    return { instance, profile: shared ?? profile, shared };
+  }
+
   private async toProfileSummary(
-    profile: StoredProfileRecord
+    stored: StoredProfileRecord,
+    resolved?: Awaited<ReturnType<ProfileService["resolveProfileView"]>>
   ): Promise<ProfileSummary> {
+    const view = resolved ?? (await this.resolveProfileView(stored));
+    const profile = view.profile;
     const orgId = profile.orgId;
 
     if (!orgId) {
       throw new Error("Profile is missing orgId.");
     }
 
-    const tools = await this.db.listToolsForProfile(profile.id);
-    const mcpServers = await this.db.listMcpServersForProfile(profile.id);
+    const tools =
+      view.shared?.assignedTools ??
+      (await this.db.listToolsForProfile(profile.id));
+    const mcpServers =
+      view.shared?.assignedMcpServers ??
+      (await this.db.listMcpServersForProfile(profile.id));
     const soulStack = await resolveSoulStackForProfile(orgId, profile.id);
 
     return {
+      ...(view.instance
+        ? {
+            sharedAgent: {
+              available: Boolean(view.shared),
+              publicationId: view.instance.publicationId,
+              sourceOrgId: view.instance.sourceOrgId,
+              sourceProfileId: view.instance.sourceProfileId,
+            },
+          }
+        : {}),
       acpAgent: profile.acpAgent ?? null,
       automationsEnabled: profile.automationsEnabled !== false,
       createdAt: profile.createdAt,
@@ -1739,7 +1799,11 @@ export class ProfileService {
         profile.skillsCuratorConsolidateEnabled ?? null,
       skillsPostTurnReview: profile.skillsPostTurnReview ?? null,
       skillsWriteApproval: profile.skillsWriteApproval ?? null,
-      soulActive: soulStack !== null,
+      soulActive:
+        soulStack !== null ||
+        Boolean(
+          view.shared && Object.values(view.shared.publishedSoul).some(Boolean)
+        ),
       toolCount: tools.length,
       updatedAt: profile.updatedAt,
     };

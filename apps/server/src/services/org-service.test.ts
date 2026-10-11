@@ -2190,6 +2190,11 @@ describe("OrgService shared agent selection", () => {
         const first = (await agent.resolveSession(id, "org_team_a"))!;
         await first.send("First");
         await db.assignMcpServerToProfile("profile_template", server.id);
+        const detail = (await agent.getProfile("org_team_a", profile.id))
+          .profile;
+        expect(detail.mcpServers.map((item) => item.id)).toEqual([server.id]);
+        expect(detail.mcpServerCount).toBe(1);
+        expect(await db.listMcpServersForProfile(profile.id)).toEqual([]);
         const second = (await agent.resolveSession(id, "org_team_a"))!;
         expect(second).not.toBe(first);
         expect(second.getHistory()).toEqual(first.getHistory());
@@ -2418,6 +2423,24 @@ if __name__ == "__main__":
       await db.assignToolToProfile(assignmentProfileId, record.id);
       await db.assignToolToProfile(assignmentProfileId, "global_read");
       const second = (await agent.resolveSession(id, "org_team_a"))!;
+      if (!local) {
+        const detail = (await agent.getProfile("org_team_a", profile.id))
+          .profile;
+        expect(detail.tools.map((tool) => tool.id).sort()).toEqual(
+          ["global_read", record.id].sort()
+        );
+        expect(detail.toolCount).toBe(2);
+        expect(detail.sharedAgent?.available).toBe(true);
+        expect(JSON.stringify(detail)).not.toContain(
+          record.handlerConfig.modulePath
+        );
+        expect(
+          (await agent.listProfiles("org_team_a")).profiles.find(
+            (item) => item.id === profile.id
+          )?.toolCount
+        ).toBe(2);
+        expect(await db.listToolsForProfile(profile.id)).toEqual([]);
+      }
       expect(second).not.toBe(first);
       expect(second.getHistory()).toEqual(first.getHistory());
       await second.send("Second");
@@ -2619,6 +2642,48 @@ if __name__ == "__main__":
       expect(resolved.automationsEnabled).toBe(profile.automationsEnabled);
       expect(resolved.skillsPostTurnReview).toBe(profile.skillsPostTurnReview);
       expect(resolved.skillsWriteApproval).toBe(profile.skillsWriteApproval);
+      const profiles = new ProfileService(db);
+      profiles.setOrgService(orgService);
+      const detail = (await profiles.getProfile("org_team_a", profile.id))
+        .profile;
+      expect(detail).toMatchObject({
+        id: profile.id,
+        model: "shared-provider::shared-model",
+        name: "Updated template",
+        sharedAgent: {
+          available: true,
+          publicationId: publication.id,
+          sourceOrgId: "org_parent",
+          sourceProfileId: source.id,
+        },
+        systemPrompt: resolved.systemPrompt,
+      });
+      expect(
+        (await profiles.listProfiles("org_team_a")).profiles.find(
+          (item) => item.id === profile.id
+        )
+      ).toMatchObject({
+        model: detail.model,
+        name: detail.name,
+        sharedAgent: detail.sharedAgent,
+      });
+      await expect(
+        profiles.getProfile("org_team_b", profile.id)
+      ).rejects.toMatchObject({ status: 404 });
+      await orgService.unpublishSharedResource(
+        "org_parent",
+        publication.id,
+        "user_creator"
+      );
+      expect(
+        (await profiles.getProfile("org_team_a", profile.id)).profile
+          .sharedAgent?.available
+      ).toBe(false);
+      expect(
+        (await profiles.listProfiles("org_team_a")).profiles.find(
+          (item) => item.id === profile.id
+        )?.sharedAgent?.available
+      ).toBe(false);
       expect(await db.getProfileForOrg(profile.id, "org_team_a")).toEqual(
         profile
       );

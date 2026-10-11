@@ -655,6 +655,7 @@ export class AgentService {
 
   setOrgService(service: OrgService): void {
     this.orgService = service;
+    this.profileService.setOrgService(service);
   }
 
   setSkillProposalService(service: SkillProposalService): void {

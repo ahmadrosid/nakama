@@ -1719,3 +1719,13 @@ Checks: 168 focused tests across four files passed, along with the complete serv
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: expose current shared configuration and assignments in profile reads, then complete portability and invocation compatibility paths.
 No new source file, package, or dependency was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-shared-coding-focused.log, /tmp/nakama-shared-coding-types.log, and /tmp/nakama-shared-coding-lint.log.
+
+### Slice 2ar — effective shared profile reads
+ProfileService receives the existing OrgService through AgentService setup. Profile detail and list reads now resolve authorized shared sources before returning current names, models, system prompts, and inherited tool and global MCP counts. Detail reads include current source assignments; skill summaries use source assignments with team usage and existing published-skill checks.
+The optional ProfileSummary.sharedAgent field supplies the stable publication and source relationship plus availability. Missing source resolution and ordinary source validation failures mark the instance unavailable. The instance stays visible with its stored settings so users can retain history access. Other server errors still propagate.
+Source-owned identity is read without updating the team profile row. Team settings and avatar checks stay local. Published soul content contributes to the existing soul-active flag. Inherited tools return summaries without handler paths or keys.
+Tests verify current source settings in detail and list responses, foreign team denial, unavailable status after publication removal, inherited tool and MCP counts and IDs, hidden module paths, and unchanged local assignment rows. Existing global and local profile tests remain passing.
+Checks: 209 focused tests passed across three service files, with two Windows tests skipped. Complete core and server type checks, lint across 1532 files, and git diff --check passed. No repair was needed after validation.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: audit shared profile assignment read routes and portability, then finish invocation compatibility checks before the delivery-stage gate.
+No new source file, package, or dependency was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-shared-profile-focused.log, /tmp/nakama-shared-profile-types.log, /tmp/nakama-shared-profile-core-types.log, and /tmp/nakama-shared-profile-lint.log.
