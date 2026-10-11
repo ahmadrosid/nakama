@@ -12,6 +12,7 @@ import { join } from "node:path";
 import {
   attachSharedKnowledgeBaseDocument,
   type EmailOutboundAdapter,
+  type GenerateChatInput,
   getKnowledgeBaseManifestPath,
   getKnowledgeBaseStoredDocumentPath,
   getOrgConfigDir,
@@ -1924,7 +1925,31 @@ describe("OrgService shared agent selection", () => {
       const teamDir = getProfileSoulDir("org_team_a", profile.id);
       await writeFile(join(teamDir, "MEMORY.md"), "Team memory");
       await writeFile(join(teamDir, "USER.md"), "Team context");
+      const sourceDir = getProfileSoulDir("org_parent", "profile_template");
+      await mkdir(sourceDir, { recursive: true });
+      await writeFile(join(sourceDir, "SOUL.md"), "Published identity");
+      await writeFile(join(sourceDir, "STYLE.md"), "Published style");
+      await writeFile(
+        join(sourceDir, "INSTRUCTIONS.md"),
+        "Published operations"
+      );
+      await mkdir(join(sourceDir, "MEMORY.md"));
+      await writeFile(join(sourceDir, "USER.md"), "Private parent context");
+      await writeFile(join(sourceDir, "private.txt"), "Private parent file");
+      await symlink(
+        join(sourceDir, "missing-examples"),
+        join(sourceDir, "examples")
+      );
+      await writeFile(join(teamDir, "SOUL.md"), "Stale team identity");
+      await writeFile(join(teamDir, "STYLE.md"), "Stale team style");
+      await db.setUserContext(
+        "org_team_a",
+        "user_other",
+        "Team user context",
+        new Date().toISOString()
+      );
       const builds: StoredProfileRecord[] = [];
+      const turns: GenerateChatInput[] = [];
       let failBuild = false;
       const agent = new AgentService(null, null, db);
       agent.setOrgService(orgService);
@@ -1934,12 +1959,14 @@ describe("OrgService shared agent selection", () => {
           builds.push(settings);
           return {
             provider: {
-              generateChat: () =>
-                Promise.resolve({
+              generateChat: (input: GenerateChatInput) => {
+                turns.push(input);
+                return Promise.resolve({
                   assistantMessage: { content: "Done", role: "assistant" },
                   content: "Done",
                   toolCalls: [],
-                }),
+                });
+              },
               name: "test",
             },
           };
@@ -1960,6 +1987,19 @@ describe("OrgService shared agent selection", () => {
       );
       const first = (await agent.resolveSession(id, "org_team_a"))!;
       await first.send("First");
+      expect(turns[0]!.system).toContain("Published identity");
+      expect(turns[0]!.system).toContain("Published style");
+      expect(turns[0]!.system).toContain("Published operations");
+      expect(turns[0]!.system).toContain("Team memory");
+      expect(turns[0]!.system).toContain("Team user context");
+      for (const privateText of [
+        "Private parent context",
+        "Private parent file",
+        "Stale team identity",
+        "Stale team style",
+      ]) {
+        expect(turns[0]!.system).not.toContain(privateText);
+      }
       const history = [...first.getHistory()];
       expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
       const source = (await db.getProfile("profile_template"))!;
@@ -2002,6 +2042,48 @@ describe("OrgService shared agent selection", () => {
           (message) => message.role === "user"
         )
       ).toHaveLength(2);
+      await writeFile(
+        join(sourceDir, "USER.md"),
+        "Changed private parent context"
+      );
+      expect(await agent.resolveSession(id, "org_team_a")).toBe(second);
+      await writeFile(join(sourceDir, "STYLE.md"), "Changed published style");
+      const third = (await agent.resolveSession(id, "org_team_a"))!;
+      expect(third).not.toBe(second);
+      expect(third.getHistory()).toEqual(second.getHistory());
+      await third.send("Third");
+      expect(turns[2]!.system).toContain("Changed published style");
+      expect(turns[2]!.system).toContain("Team memory");
+      expect(turns[2]!.system).toContain("Team user context");
+      await rm(join(sourceDir, "SOUL.md"));
+      await rm(join(sourceDir, "STYLE.md"));
+      await rm(join(sourceDir, "INSTRUCTIONS.md"));
+      const fourth = (await agent.resolveSession(id, "org_team_a"))!;
+      expect(fourth).not.toBe(third);
+      expect(fourth.getHistory()).toEqual(third.getHistory());
+      await fourth.send("Fourth");
+      for (const removedText of [
+        "Published identity",
+        "Changed published style",
+        "Published operations",
+        "Stale team identity",
+        "Stale team style",
+      ]) {
+        expect(turns[3]!.system).not.toContain(removedText);
+      }
+      expect(turns[3]!.system).toContain("Team memory");
+      expect(turns[3]!.system).toContain("Team user context");
+      expect(
+        (await agent.getSessionMessages(id, "org_team_a"))!.messages.filter(
+          (message) => message.role === "user"
+        )
+      ).toHaveLength(4);
+      expect(await readFile(join(teamDir, "SOUL.md"), "utf8")).toBe(
+        "Stale team identity"
+      );
+      expect(await readFile(join(teamDir, "STYLE.md"), "utf8")).toBe(
+        "Stale team style"
+      );
       expect(await db.getProfileForOrg(profile.id, "org_team_a")).toEqual(
         profile
       );
@@ -2015,6 +2097,56 @@ describe("OrgService shared agent selection", () => {
         expect(await db.getSession(id)).toBeNull();
         expect(await db.listMessagesForSession(id)).toEqual([]);
       }
+    }
+  );
+
+  test.each(["SOUL.md", "STYLE.md", "INSTRUCTIONS.md"])(
+    "published %s rejects aliases to private files and non-file sources",
+    async (filename) => {
+      const { orgService, databaseAdapter: db } = createOrgService();
+      const publication = await seedSharedAgentSelection(db, orgService);
+      const profile = await orgService.createSharedAgentInstance(
+        "org_team_a",
+        publication.id,
+        "user_other"
+      );
+      const sourceDir = getProfileSoulDir("org_parent", "profile_template");
+      await mkdir(sourceDir, { recursive: true });
+      await writeFile(join(sourceDir, "MEMORY.md"), "Private parent memory");
+      const filePath = join(sourceDir, filename);
+      await symlink(join(sourceDir, "MEMORY.md"), filePath);
+      await expect(
+        orgService.publishSharedResource(
+          "org_parent",
+          { resourceId: "profile_template", resourceKind: "agent" },
+          "user_creator"
+        )
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        orgService.resolveSharedAgentProfile("org_team_a", profile.id)
+      ).rejects.toMatchObject({ status: 404 });
+      await rm(filePath);
+      await mkdir(filePath);
+      await expect(
+        orgService.resolveSharedAgentProfile("org_team_a", profile.id)
+      ).rejects.toMatchObject({ status: 404 });
+      await rm(filePath, { recursive: true });
+      await writeFile(filePath, "Published configuration");
+      const resolved = (await orgService.resolveSharedAgentProfile(
+        "org_team_a",
+        profile.id
+      ))!;
+      expect(Object.keys(resolved.publishedSoul).sort()).toEqual([
+        "instructions",
+        "soul",
+        "style",
+      ]);
+      expect(Object.values(resolved.publishedSoul).filter(Boolean)).toEqual([
+        "Published configuration",
+      ]);
+      expect(await readFile(join(sourceDir, "MEMORY.md"), "utf8")).toBe(
+        "Private parent memory"
+      );
     }
   );
 

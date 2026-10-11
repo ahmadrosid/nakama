@@ -1559,3 +1559,16 @@ Focused checks passed 139 tests across three service files and 130 tests across 
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: compose published agent soul configuration with team memory and user context, then synchronize permitted assignments and their execution checks.
 No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-shared-config-{focused,runtime,repair-focused,verified-types,lint}.log.
+
+### Slice 2ae — published agent soul configuration
+Shared agent runtime records now include only the current source SOUL.md, STYLE.md, and INSTRUCTIONS.md contents. Missing or blank files produce absent values that also clear stale team identity, style, and instructions during composition.
+The guarded reader uses the existing SOUL_FILES names. It rejects source-directory links, file links, non-file entries, and paths outside the source directory. Opened files use no-follow mode, and handles close after each read. Missing files remain valid; other filesystem failures return a generic unavailable response.
+Agent publication validation and runtime resolution use the same reader. A source identity file linked to private parent memory cannot be published or executed.
+Prompt composition combines these published fields with the existing team soul stack. The memory backend and user context remain in team context. Parent MEMORY.md, USER.md, examples, and arbitrary workspace files are never loaded by the shared reader or copied into the team.
+The existing shared capability revision includes the permitted file contents. File edits and removal rebuild persisted and ephemeral sessions while preserving history. Changes to private parent USER.md do not rebuild the session.
+Tests cover source-only identity and style, operating instructions, local memory and signed-in user context, private parent exclusions, stale team field removal, file-only revisions, four user turns, unchanged local files, three linked-file publication failures, non-file sources, and recovery after replacing an invalid source.
+The first focused checks found test assertions using the wrong provider input field. One repair changed those assertions to GenerateChatInput.system and removed an unnecessary read-only flag combination rejected by lint.
+Checks: 269 focused tests passed across eight service and route files; the complete server type check passed; lint passed 1532 files; git diff --check passed.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: synchronize permitted shared agent assignments and their execution checks, then finish the remaining shared tool and model paths.
+No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-shared-soul-complete-{focused,types,lint}.log.

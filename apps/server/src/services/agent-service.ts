@@ -4789,7 +4789,7 @@ export class AgentService {
   private async resolveSharedAgentProfile(
     orgId: string,
     profileId: string
-  ): Promise<StoredProfileRecord | null> {
+  ): ReturnType<OrgService["resolveSharedAgentProfile"]> {
     if (this.orgService) {
       return this.orgService.resolveSharedAgentProfile(orgId, profileId);
     }
@@ -5537,6 +5537,10 @@ export class AgentService {
       (content) =>
         this.memoryBackend.readMemory(orgId, profileId, "MEMORY.md", content)
     );
+    const shared = await this.resolveSharedAgentProfile(orgId, profileId);
+    if (shared) {
+      stack.files = { ...stack.files, ...shared.publishedSoul };
+    }
 
     let systemPrompt = stack
       ? composeSoulSystemPrompt(stack, { profilePrompt })

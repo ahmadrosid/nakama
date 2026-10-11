@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { readFile, rm, stat } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, open, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   createEmailOutboundAdapter,
@@ -24,6 +25,8 @@ import {
   resolveProfileSkillDirectory,
   resolveWebPublicUrl,
   SKILL_FILE_NAME,
+  SOUL_FILES,
+  type SoulStackFiles,
 } from "@nakama/core";
 import { createChatLock } from "@nakama/core/channel-chat-lock";
 import {
@@ -394,7 +397,12 @@ export class OrgService {
   async resolveSharedAgentProfile(
     teamOrgId: string,
     profileId: string
-  ): Promise<StoredProfileRecord | null> {
+  ): Promise<
+    | (StoredProfileRecord & {
+        publishedSoul: Pick<SoulStackFiles, "soul" | "style" | "instructions">;
+      })
+    | null
+  > {
     const instance = await this.databaseAdapter.getSharedAgentInstance(
       teamOrgId,
       profileId
@@ -443,10 +451,81 @@ export class OrgService {
       isSuper: false,
       model: source.model,
       name: source.name,
+      publishedSoul: await this.readSharedAgentSoul(parent.id, source.id),
       systemPrompt: source.systemPrompt,
       thinkingEffort: source.thinkingEffort,
       thinkingEnabled: source.thinkingEnabled,
     };
+  }
+
+  private async readSharedAgentSoul(
+    parentOrgId: string,
+    profileId: string
+  ): Promise<Pick<SoulStackFiles, "soul" | "style" | "instructions">> {
+    const publishedSoul: Pick<
+      SoulStackFiles,
+      "soul" | "style" | "instructions"
+    > = {
+      instructions: undefined,
+      soul: undefined,
+      style: undefined,
+    };
+    const directory = getProfileSoulDir(parentOrgId, profileId);
+    try {
+      await guardFilePath(directory, null, undefined, {
+        allowedDirs: [getOrgConfigDir(parentOrgId)],
+      });
+      try {
+        const entry = await lstat(directory);
+        if (!entry.isDirectory() || entry.isSymbolicLink()) {
+          throw new NakamaApiError("Shared agent is unavailable.", 404);
+        }
+      } catch (error) {
+        if (
+          !(
+            error instanceof Error &&
+            "code" in error &&
+            error.code === "ENOENT"
+          )
+        ) {
+          throw error;
+        }
+      }
+      for (const key of ["instructions", "soul", "style"] as const) {
+        const filePath = join(directory, SOUL_FILES[key]);
+        await guardFilePath(filePath, null, undefined, {
+          allowedDirs: [directory],
+        });
+        try {
+          if (!(await lstat(filePath)).isFile()) {
+            throw new NakamaApiError("Shared agent is unavailable.", 404);
+          }
+          const handle = await open(filePath, constants.O_NOFOLLOW);
+          try {
+            if (!(await handle.stat()).isFile()) {
+              throw new NakamaApiError("Shared agent is unavailable.", 404);
+            }
+            publishedSoul[key] =
+              (await handle.readFile("utf8")).trim() || undefined;
+          } finally {
+            await handle.close();
+          }
+        } catch (error) {
+          if (
+            !(
+              error instanceof Error &&
+              "code" in error &&
+              error.code === "ENOENT"
+            )
+          ) {
+            throw error;
+          }
+        }
+      }
+    } catch {
+      throw new NakamaApiError("Shared agent is unavailable.", 404);
+    }
+    return publishedSoul;
   }
 
   private async validateSharedResourceSource(
@@ -470,6 +549,7 @@ export class OrgService {
         );
       }
       label = profile.name;
+      await this.readSharedAgentSoul(parentOrgId, profile.id);
       const [tools, skills, servers, toolkits, publications] =
         await Promise.all([
           this.databaseAdapter.listToolsForProfile(profile.id),
