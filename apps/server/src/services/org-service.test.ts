@@ -19,8 +19,10 @@ import {
   getUserConfigDir,
   getUserConfigPath,
   listOrganizationKnowledgeBaseDocuments,
+  loadUserConfig,
   NakamaApiError,
   resolveProfileSkillDirectory,
+  saveUserConfig,
   type ToolSetupPlan,
   uploadKnowledgeBaseDocument,
   uploadOrganizationKnowledgeBaseDocument,
@@ -40,6 +42,7 @@ import {
   saveToolSetup,
 } from "./custom-tool-shared";
 import { OrgService } from "./org-service";
+import { modelExistsOnInstance } from "./provider-instance-helpers";
 
 setupTestConfigDir("nakama-org-service-test-");
 
@@ -1775,6 +1778,130 @@ async function seedTeamParent(db: DatabaseAdapter) {
 }
 
 describe("OrgService shared resource publications", () => {
+  test("model publications retain provider identity and require current configured selections", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    await seedTeamParent(db);
+    const providers = ["provider_first", "provider_second"].map((id) => ({
+      apiKey: "private-provider-key",
+      baseUrl: "http://localhost:11434/v1",
+      createdAt: new Date().toISOString(),
+      customModels: [{ default: true, id: "same-model", name: "Same model" }],
+      id,
+      label: id,
+      type: "ollama" as const,
+    }));
+    const config = {
+      defaultProviderId: providers[0]!.id,
+      providers,
+      thinkingEffort: "medium" as const,
+      thinkingEnabled: true,
+    };
+    await saveUserConfig(config);
+    const sourceConfig = await readFile(getUserConfigPath());
+    const first = await orgService.publishSharedResource(
+      "org_parent",
+      {
+        resourceId: "provider_first::same-model",
+        resourceKind: "model",
+      },
+      "user_creator"
+    );
+    const retry = await orgService.publishSharedResource(
+      "org_parent",
+      {
+        resourceId: " provider_first:: same-model ",
+        resourceKind: "model",
+      },
+      "user_creator"
+    );
+    expect(retry).toEqual(first);
+    const second = await orgService.publishSharedResource(
+      "org_parent",
+      {
+        resourceId: "provider_second::same-model",
+        resourceKind: "model",
+      },
+      "user_creator"
+    );
+    expect(second.id).not.toBe(first.id);
+    expect(second.resourceId).toBe("provider_second::same-model");
+    expect(Object.keys(first).sort()).toEqual([
+      "createdAt",
+      "id",
+      "orgId",
+      "resourceId",
+      "resourceKind",
+      "updatedAt",
+    ]);
+    for (const resourceId of [
+      "",
+      "same-model",
+      "::same-model",
+      "__unknown__::same-model",
+      "missing-provider::same-model",
+      "provider_first::",
+      "provider_first::missing-model",
+    ]) {
+      await expect(
+        orgService.publishSharedResource(
+          "org_parent",
+          {
+            resourceId,
+            resourceKind: "model",
+          },
+          "user_creator"
+        )
+      ).rejects.toMatchObject({ status: 400 });
+    }
+    await expect(
+      orgService.publishSharedResource(
+        "org_parent",
+        {
+          resourceId: first.resourceId,
+          resourceKind: "model",
+        },
+        "user_viewer"
+      )
+    ).rejects.toMatchObject({ status: 403 });
+    expect(await db.listOrgSharedResources("org_parent")).toHaveLength(2);
+    await orgService.unpublishSharedResource(
+      "org_parent",
+      first.id,
+      "user_creator"
+    );
+    expect(await readFile(getUserConfigPath())).toEqual(sourceConfig);
+    const currentConfig = await loadUserConfig();
+    expect(
+      modelExistsOnInstance(currentConfig!.providers[0]!, "same-model")
+    ).toBe(true);
+    await saveUserConfig({ ...config, providers: [providers[1]!] });
+    await expect(
+      orgService.publishSharedResource(
+        "org_parent",
+        {
+          resourceId: first.resourceId,
+          resourceKind: "model",
+        },
+        "user_creator"
+      )
+    ).rejects.toMatchObject({ status: 400 });
+    await saveUserConfig({
+      ...config,
+      providers: [{ ...providers[1]!, customModels: [{ id: "replacement" }] }],
+    });
+    await expect(
+      orgService.publishSharedResource(
+        "org_parent",
+        {
+          resourceId: second.resourceId,
+          resourceKind: "model",
+        },
+        "user_creator"
+      )
+    ).rejects.toMatchObject({ status: 400 });
+    expect(await db.listOrgSharedResources("org_parent")).toEqual([second]);
+  });
+
   test("tools require parent ownership or global scope and keep source configuration", async () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     await seedTeamParent(db);

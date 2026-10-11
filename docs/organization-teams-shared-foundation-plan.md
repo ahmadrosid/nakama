@@ -326,7 +326,7 @@ Status values: `todo`, `doing`, `done`, `blocked`.
 
 | ID | Delivery stage | Step | Test items | Status | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 1. Schema, contracts, access | Tenant relationship and publication records | 1, 2, 3, 17, 18 | doing | ae7404d0 (1a), 47c456c3 (1b), 69fdbb59 (1c), ff81645b (1d), bc7bb682 (1e) | Slices 1a–1f complete; workspace setup and service creation remain |
+| 1 | 1. Schema, contracts, access | Tenant relationship and publication records | 1, 2, 3, 17, 18 | doing | ae7404d0 (1a), 47c456c3 (1b), 69fdbb59 (1c), ff81645b (1d), bc7bb682 (1e), 38f29075 (1f), 1b1d7ab6 (1g), 8ba2b8b5 (1h), e45bdeea (1i) | Slices 1a–1j complete; agent publication validation remains |
 | 2 | 1. Schema, contracts, access | Contracts and organization routes | 15, 16 | todo | | |
 | 3a | 2. Resource paths | Knowledge | 4, 5, 6, 21 | todo | | |
 | 3b | 2. Resource paths | Skills | 4, 5, 20 | todo | | |
@@ -348,6 +348,10 @@ Slice log (one row per commit):
 | 2026-10-11 | 1d | Scoped publication reads and writes; idempotent publish; SQL ownership checks and source-deletion triggers | Active root, wrong scope, retry, default/Super Bot rejection, SQL ownership and deletion; 151 database tests passed | Agent source-link operations and atomic team creation |
 | 2026-10-11 | 1e | Atomic shared agent profile/source-link creation; scoped reads and explicit reconnection | Concurrent selection, sibling isolation, revocation, retained sessions, source deletion, injected rollback; 154 database tests passed | Atomic team creation and request idempotency |
 | 2026-10-11 | 1f | Durable team requests; atomic child/admin insertion, completion, and guarded cleanup | Retry identity, pending visibility, admin checks, archive ordering, migration replay, injected member/request failures; 160 database tests passed | OrgService team setup, compensation, and permission checks |
+| 2026-10-11 | 1g | Team setup, permission checks, retry, and compensation | 221 focused service, HTTP, and database tests passed | Publication source validation |
+| 2026-10-11 | 1h | Parent knowledge publication and scoped removal | 79 focused service and database tests passed | Tool and skill source validation |
+| 2026-10-11 | 1i | Tool ownership and profile skill source validation | 224 focused service and database tests passed | Model source validation |
+| 2026-10-11 | 1j | Configured model publication and stable provider identity | 258 focused service, provider-helper, and database tests passed | Agent dependency validation |
 
 2026-10-11: Slice 1b passed database tests, the database type check, and `bun x ultracite check`.
 The first test run found an incorrect SQL value count. The repaired query passed all database tests.
@@ -1063,3 +1067,14 @@ Step 1 and delivery stage 1 remain incomplete. Agent and model publication check
 No browser or external provider calls ran. Other authorized cleanup changes remain uncommitted; stale provider cassettes, full tests, and builds remain unresolved.
 Next: validate agent publication dependencies and configured model selections in the existing OrgService.
 Evidence: `/tmp/nakama-skill-tool-tests-final.log`, `/tmp/nakama-skill-tool-types.log`, `/tmp/nakama-skill-tool-lint.log`.
+
+2026-10-11: Slice 1j validates model publications through the existing configured-provider and model-selection helpers.
+References keep their provider identity as providerId::modelId. Whitespace normalization returns the same publication on retry.
+Publication rejects blank, malformed, unknown-provider, removed-provider, and unavailable-model selections. Parent administration remains required.
+Tests verify equal model names under two provider instances remain separate, responses contain no provider keys, and unpublishing preserves configuration and global model access.
+The first focused run found an unnecessary attempt to read a nonexistent test config. Removing that read uses the existing isolated test setup.
+Checks: all 258 focused service, provider-helper, and database tests passed across 30 files; complete server type check passed; lint passed all 1532 files; `git diff --check` passed.
+Step 1 and delivery stage 1 remain incomplete. Agent dependency checks, contracts, and HTTP routes remain required.
+Live model catalog and execution checks remain for step 3. No browser or external provider calls ran; stale provider cassettes, full tests, and builds remain unresolved.
+Next: validate shared agent templates and their permitted assignments in the existing OrgService.
+Evidence: `/tmp/nakama-model-publication-tests-final.log`, `/tmp/nakama-model-publication-types.log`, `/tmp/nakama-model-publication-lint.log`.

@@ -13,6 +13,7 @@ import {
   guardFilePath,
   initSoulDirectory,
   listOrganizationKnowledgeBaseDocuments,
+  loadUserConfig,
   NakamaApiError,
   parseSkillMarkdown,
   resolveProfileSkillDirectory,
@@ -62,6 +63,10 @@ import {
 import type { AuthService } from "./auth-service";
 import { deleteOrgToolCredentials } from "./custom-tool-shared";
 import { loadMfaPolicy } from "./mfa-config";
+import {
+  modelExistsOnInstance,
+  resolveConfiguredModelInstance,
+} from "./provider-instance-helpers";
 
 const teamCreationLock = createChatLock();
 
@@ -155,13 +160,31 @@ export class OrgService {
   async publishSharedResource(
     parentOrgId: string,
     request: {
-      resourceKind: "knowledge" | "skill" | "tool";
+      resourceKind: "knowledge" | "skill" | "tool" | "model";
       resourceId: string;
     },
     actorUserId: string
   ): Promise<StoredOrgSharedResourceRecord> {
     await this.requireParentAdmin(parentOrgId, actorUserId);
-    if (request.resourceKind === "tool") {
+    let resourceId = request.resourceId;
+    if (request.resourceKind === "model") {
+      const selected = resolveConfiguredModelInstance(
+        await loadUserConfig(),
+        resourceId,
+        {
+          invalid: "Select a configured model.",
+          missingProvider: "The model provider is unavailable.",
+        }
+      );
+      if (
+        !(
+          selected && modelExistsOnInstance(selected.instance, selected.modelId)
+        )
+      ) {
+        throw new NakamaApiError("Select a configured model.", 400);
+      }
+      resourceId = `${selected.instance.id}::${selected.modelId}`;
+    } else if (request.resourceKind === "tool") {
       const tool = await this.databaseAdapter.getTool(request.resourceId);
       if (!tool || (tool.orgId && tool.orgId !== parentOrgId)) {
         throw new NakamaApiError("Tool is unavailable.", 404);
@@ -239,7 +262,7 @@ export class OrgService {
       createdAt: now,
       id: `publication_${crypto.randomUUID().replace(/-/g, "")}`,
       orgId: parentOrgId,
-      resourceId: request.resourceId,
+      resourceId,
       resourceKind: request.resourceKind,
       updatedAt: now,
     });
