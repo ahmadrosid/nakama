@@ -1507,3 +1507,17 @@ Checks: all 129 focused tests passed across five files; the complete server type
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: session capability refresh for newly assigned or changed shared tools, with persisted and ephemeral history preservation.
 No source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-shared-js-{focused,final-focused,types,lint}.log.
+
+### Slice 2aa — shared skill session refresh checks incomplete
+Uncommitted code computes shared skill capability revisions from current publications, reviewed source files, and source review settings.
+Cached persisted and ephemeral sessions rebuild tools when those revisions change. The old cache remains until a new session builds successfully.
+Turn reservation now precedes refresh. An active session read retains the running session. Refresh failure releases the reserved turn.
+Tests cover assignment, changed tool schemas, publication removal, failed rebuild recovery, persisted and ephemeral history, user context, and pending todos and questionnaires.
+The first checks found a test tool-resolver stub with the wrong arguments, a missing user-context timestamp, and a missing questionnaire field.
+The first repair fixed the stub and questionnaire field, but its text replacement did not match the formatted timestamp call.
+The next test run found an unsupported ephemeral database-summary assertion. The second repair used the session message read operation.
+Final checks: all 146 focused tests passed across five files; lint passed 1532 files; git diff --check passed. The complete server type check still fails at apps/server/src/services/skills-service.test.ts:605 (TS2554: setUserContext requires four arguments).
+The two repair attempts are used. This iteration commits only this progress record. Product code and tests remain uncommitted for the next iteration.
+Next: add the required timestamp to that test call, rerun the checks, and finish the shared skill session refresh slice. Steps 2 and 3 and delivery stage 2 remain unchecked.
+No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-skill-refresh-{focused,repair-focused,final-focused,types,lint}.log.
