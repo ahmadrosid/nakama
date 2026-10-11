@@ -12,6 +12,183 @@ const ORG_A = { id: "org-a", name: "Org A", role: "admin", slug: "org-a" };
 
 const ORG_B = { id: "org-b", name: "Org B", role: "admin", slug: "org-b" };
 
+test.each([
+  "initial logout",
+  "initial refresh",
+  "refresh logout",
+  "refresh switch",
+  "refresh refresh",
+  "switch logout",
+  "switch older first",
+  "switch newer first",
+  "read during switch",
+] as const)(
+  "authentication state keeps the latest identity: %s",
+  async (mode) => {
+    const user: AuthUserResponse = {
+      activeOrgId: ORG_A.id,
+      email: "admin@example.com",
+      id: "user-a",
+      isPlatformAdmin: false,
+    };
+
+    const switched = { ...user, activeOrgId: ORG_B.id };
+    const newest = { ...user, activeOrgId: "team-c", id: "user-c" };
+
+    const orgs: UserOrgSummary[] = [
+      ORG_A,
+      ORG_B,
+      { id: "team-c", name: "Team C", slug: "team-c" },
+    ].map((org) => ({
+      ...org,
+      createdAt: "2026-10-12T00:00:00Z",
+      role: org.id === "team-c" ? "viewer" : "admin",
+      updatedAt: "2026-10-12T00:00:00Z",
+    }));
+
+    const pending = Promise.withResolvers<AuthUserResponse>();
+    const latest = Promise.withResolvers<AuthUserResponse>();
+    const getMe = spyOn(client, "getMe").mockResolvedValue(user);
+
+    const listUserOrgs = spyOn(client, "listUserOrgs").mockResolvedValue({
+      orgs,
+    });
+
+    const logout = spyOn(client, "logout").mockResolvedValue(undefined);
+    const switchOrg = spyOn(client, "setActiveOrg").mockResolvedValue(newest);
+
+    if (mode.startsWith("initial")) {
+      getMe.mockImplementationOnce(() => pending.promise);
+    }
+
+    let auth!: ReturnType<typeof useAuth>;
+
+    function Probe() {
+      auth = useAuth();
+
+      return null;
+    }
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    let previous: Promise<void> | undefined;
+    let next: Promise<void> | undefined;
+    const cacheKey = queryKeys.organizationOverview("parent", "team-c");
+
+    try {
+      await act(async () =>
+        root.render(
+          <AuthProvider>
+            <Probe />
+          </AuthProvider>
+        )
+      );
+
+      if (mode.startsWith("refresh")) {
+        getMe.mockImplementationOnce(() => pending.promise);
+        await act(async () => {
+          previous = auth.refreshSession();
+        });
+      } else if (mode.startsWith("switch") || mode === "read during switch") {
+        switchOrg.mockImplementationOnce(() => pending.promise);
+        await act(async () => {
+          previous = auth.switchOrg(ORG_B.id);
+        });
+      }
+
+      if (mode.endsWith("logout")) {
+        await act(async () => {
+          await auth.logout();
+        });
+      } else if (mode.endsWith("refresh")) {
+        getMe.mockResolvedValue(newest);
+        await act(async () => {
+          await auth.refreshSession();
+        });
+      } else if (mode === "refresh switch") {
+        await act(async () => {
+          await auth.switchOrg("team-c");
+        });
+      } else if (mode === "read during switch") {
+        await act(async () => {
+          await auth.refreshSession();
+        });
+        expect(auth.activeOrg?.id).toBe(ORG_A.id);
+      } else {
+        switchOrg.mockImplementationOnce(() => latest.promise);
+        await act(async () => {
+          next = auth.switchOrg("team-c");
+        });
+
+        if (mode === "switch older first") {
+          pending.resolve(switched);
+          await act(async () => {
+            await previous;
+          });
+        }
+
+        latest.resolve(newest);
+        await act(async () => {
+          await next;
+        });
+      }
+
+      if (!mode.endsWith("logout")) {
+        queryClient.setQueryData(cacheKey, 2);
+      }
+
+      pending.resolve(
+        mode.startsWith("switch") || mode === "read during switch"
+          ? switched
+          : user
+      );
+      await act(async () => {
+        await pending.promise;
+        await previous;
+      });
+
+      const expected = mode.endsWith("logout")
+        ? null
+        : mode === "read during switch"
+          ? switched
+          : newest;
+
+      expect(auth.user?.id).toBe(expected?.id);
+      expect(auth.user?.activeOrgId).toBe(expected?.activeOrgId);
+      expect(auth.isAuthenticated).toBe(Boolean(expected));
+      expect(auth.isLoading).toBe(false);
+      expect(queryClient.getQueryData<number>(cacheKey)).toBe(
+        mode.endsWith("logout") || mode === "read during switch" ? undefined : 2
+      );
+
+      if (expected) {
+        expect(auth.activeOrg?.id).toBe(expected.activeOrgId);
+        expect(auth.activeOrg?.role).toBe(
+          mode === "read during switch" ? "admin" : "viewer"
+        );
+      } else {
+        expect(auth.orgs).toEqual([]);
+        expect(auth.platformOrgs).toEqual([]);
+      }
+    } finally {
+      pending.resolve(user);
+      latest.resolve(newest);
+      await previous;
+      await next;
+      await act(async () => root.unmount());
+      container.remove();
+
+      for (const request of [getMe, listUserOrgs, logout, switchOrg]) {
+        request.mockRestore();
+      }
+
+      queryClient.clear();
+      client.setOrgId(null);
+    }
+  }
+);
+
 test.each(["logout", "revoked logout", "switch", "account"] as const)(
   "%s clears shared and private queries and rejects late cache writes",
   async (mode) => {

@@ -2584,3 +2584,13 @@ Seven new HTTP-mock cases check late identity reads after switching or clearing 
 AuthProvider still accepts returned authentication data after its own waits. Its state updates need the corresponding race guard and component tests in the next slice. The client does not cancel server mutations or change caller response data. Step 5 and delivery stages 3 and 4 remain open. Import/export/archive/restore compatibility and final delivery checks remain required. No new file, package, dependency, browser check, full suite, build, paid call, push, or PR was added.
 
 Evidence: /tmp/nakama-client-auth-race-{before,focused,types,format,oxlint,lint}.log.
+
+### Slice 3ak — Authentication UI response ordering
+
+AuthProvider now rejects late initial and refreshed session reads after logout, a team switch, or a newer session read. Separate request counters let a session read finish during a pending team switch without canceling that switch. Only the latest switch can update the user and clear query data. Logout invalidates earlier reads and switches, including revoked-session logout. Unmount invalidates pending state updates. Accepted session reads and identity actions clear the loading state.
+
+Nine new component cases cover initial reads after logout or refresh, refreshed reads after logout, switching or another refresh, switches after logout, both switch response orders, and a session read during a pending switch. They check user identity, active team, membership role, loading state, and retained or cleared query data. Seven cases failed before the change. All 163 focused authentication and Organization panel tests passed with 1,206 assertions. Complete web types, scoped anti-slop, Ultracite, and git diff --check passed. React Doctor returned 91/100 with the same two existing complexity warnings. One verification repair fixed readable spacing.
+
+Step 5 and delivery stages 3 and 4 remain open. The next slice must audit login, setup, organization mutations, and platform-list refreshes for late authentication state updates. Client login, setup, profile updates, and invite acceptance also remain to check. Import/export/archive/restore compatibility and final delivery checks remain required. These guards do not cancel server mutations. No new file, package, dependency, browser check, full suite, build, paid call, push, or PR was added.
+
+Evidence: /tmp/nakama-auth-order-{before,focused,types,format,oxlint,lint,doctor}.log.

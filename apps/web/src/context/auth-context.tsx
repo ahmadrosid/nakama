@@ -11,6 +11,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -68,6 +69,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [platformOrgs, setPlatformOrgs] = useState<OrganizationSummary[]>([]);
   const [platformOrgsError, setPlatformOrgsError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const authRevision = useRef(0);
+  const sessionRequestRevision = useRef(0);
 
   const refreshPlatformOrgs = useCallback(async () => {
     try {
@@ -81,33 +84,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshSession = useCallback(async () => {
+    const revision = authRevision.current;
+    const requestRevision = ++sessionRequestRevision.current;
     const session = await loadSessionState();
+
+    if (
+      revision !== authRevision.current ||
+      requestRevision !== sessionRequestRevision.current
+    ) {
+      return;
+    }
+
     setUser(session.user);
     setOrgs(session.orgs);
     setPlatformOrgs(session.platformOrgs);
     setPlatformOrgsError(session.platformOrgsError);
+    setIsLoading(false);
     resetQueryCache();
   }, []);
 
   useEffect(() => {
-    loadSessionState()
-      .then((session) => {
-        setUser(session.user);
-        setOrgs(session.orgs);
-        setPlatformOrgs(session.platformOrgs);
-        setPlatformOrgsError(session.platformOrgsError);
-        resetQueryCache();
-      })
+    const revision = authRevision.current;
+    const requestRevision = sessionRequestRevision.current + 1;
+    refreshSession()
       .catch(() => {
+        if (
+          revision !== authRevision.current ||
+          requestRevision !== sessionRequestRevision.current
+        ) {
+          return;
+        }
+
         setUser(null);
         setOrgs([]);
         setPlatformOrgs([]);
         setPlatformOrgsError(false);
       })
       .finally(() => {
-        setIsLoading(false);
+        if (
+          revision === authRevision.current &&
+          requestRevision === sessionRequestRevision.current
+        ) {
+          setIsLoading(false);
+        }
       });
-  }, []);
+
+    return () => {
+      authRevision.current += 1;
+    };
+  }, [refreshSession]);
 
   const activeOrg = useMemo(() => {
     const activeOrgId = user?.activeOrgId ?? user?.orgId ?? null;
@@ -161,6 +186,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
+    const revision = ++authRevision.current;
+
     try {
       await client.logout();
     } catch {
@@ -168,17 +195,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // cookies and revokes every browser session server-side).
     }
 
+    if (revision !== authRevision.current) {
+      return;
+    }
+
+    authRevision.current += 1;
     client.setOrgId(null);
     setUser(null);
     setOrgs([]);
     setPlatformOrgs([]);
     setPlatformOrgsError(false);
+    setIsLoading(false);
     resetQueryCache();
   }, []);
 
   const switchOrg = useCallback(async (orgId: string) => {
+    const revision = ++authRevision.current;
     const nextUser = await client.setActiveOrg(orgId);
+
+    if (revision !== authRevision.current) {
+      return;
+    }
+
+    authRevision.current += 1;
     setUser(nextUser);
+    setIsLoading(false);
     resetQueryCache();
   }, []);
 
