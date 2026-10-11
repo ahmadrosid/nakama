@@ -4794,7 +4794,14 @@ export class AgentService {
     profileId: string
   ): ReturnType<OrgService["resolveSharedAgentProfile"]> {
     if (this.orgService) {
-      return this.orgService.resolveSharedAgentProfile(orgId, profileId);
+      const shared = await this.orgService.resolveSharedAgentProfile(
+        orgId,
+        profileId
+      );
+      if (shared?.model) {
+        this.normalizeSessionModelOverride(shared.model);
+      }
+      return shared;
     }
     if (await this.db.getSharedAgentInstance(orgId, profileId)) {
       throw new NakamaApiError("Shared agent is unavailable.", 503);

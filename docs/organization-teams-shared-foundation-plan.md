@@ -1691,3 +1691,12 @@ This commit includes the existing type corrections in the touched setup test fix
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: complete model use checks and remaining compatibility paths.
 No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran.
 Evidence: /tmp/nakama-setup-authorization-focused.log, /tmp/nakama-setup-authorization-types.log, and /tmp/nakama-setup-authorization-lint.log.
+
+### Slice 2ao — shared agent runtime model validation
+AgentService now validates a shared agent's configured model against its runtime provider list whenever it resolves the source profile. The existing strict model helper rejects a missing provider or unavailable model before session creation or a new cached turn can reach the fallback provider path.
+The check uses the existing providerId::modelId identity and adds no model allowlist. Parent source validation still checks persisted configuration. Existing global access permits use after the model publication is removed.
+Tests cover persisted and ephemeral sessions, equal model names under two providers, publication removal with global access, missing runtime providers, unavailable runtime models, source model changes, team context, and preserved history after rejection and rebuild. The tests use a local provider stub and make no paid provider calls.
+The initial focused run found the test constructor arguments reversed. One repair passes configuration in the correct argument. All 190 focused tests across three service files then passed, along with the complete server type check, lint across 1532 files, and git diff --check.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: audit session override and auxiliary model calls, then complete effective profile and portability compatibility paths.
+No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-shared-model-focused.log, /tmp/nakama-shared-model-types.log, and /tmp/nakama-shared-model-lint.log.

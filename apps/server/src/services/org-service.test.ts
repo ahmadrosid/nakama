@@ -28,6 +28,7 @@ import {
   resolveProfileSkillDirectory,
   saveUserConfig,
   type ToolSetupPlan,
+  type UserConfig,
   uploadKnowledgeBaseDocument,
   uploadOrganizationKnowledgeBaseDocument,
   writeParsedConfigIni,
@@ -2633,6 +2634,126 @@ if __name__ == "__main__":
       }
     }
   });
+
+  test.each([false, true])(
+    "shared model checks preserve global access and history for cognito=%s",
+    async (cognito) => {
+      const { orgService, databaseAdapter: db } = createOrgService();
+      const publication = await seedSharedAgentSelection(db, orgService);
+      const profile = await orgService.createSharedAgentInstance(
+        "org_team_a",
+        publication.id,
+        "user_other"
+      );
+      const previousConfig = await loadUserConfig();
+      const config: UserConfig = {
+        defaultProviderId: "first",
+        providers: ["first", "second"].map((id) => ({
+          apiKey: "",
+          baseUrl: "http://localhost:11434/v1",
+          createdAt: new Date().toISOString(),
+          customModels: [{ default: true, id: "same-model", name: "Model" }],
+          id,
+          label: id,
+          type: "ollama" as const,
+        })),
+        thinkingEffort: "medium",
+        thinkingEnabled: true,
+      };
+      try {
+        await saveUserConfig(config);
+        const source = (await db.getProfile("profile_template"))!;
+        await db.upsertProfile({ ...source, model: "second::same-model" });
+        const modelPublication = await orgService.publishSharedResource(
+          "org_parent",
+          { resourceId: "second::same-model", resourceKind: "model" },
+          "user_creator"
+        );
+        const selections: Array<string | null> = [];
+        const agent = new AgentService(config, null, db);
+        agent.setOrgService(orgService);
+        Object.assign(agent, {
+          _providerConfigured: true,
+          createHarnessForProfile: (
+            settings: StoredProfileRecord,
+            model: string | null
+          ) => {
+            expect(settings.orgId).toBe("org_team_a");
+            selections.push(model);
+            return {
+              provider: {
+                generateChat: () =>
+                  Promise.resolve({
+                    assistantMessage: { content: "Done", role: "assistant" },
+                    content: "Done",
+                    toolCalls: [],
+                  }),
+                name: "test",
+              },
+            };
+          },
+          resolveProfileTools: async () => [],
+        });
+        const id = await agent.createSession(
+          "org_team_a",
+          "web",
+          profile.id,
+          "user_other",
+          { cognito, orgRole: "member" }
+        );
+        const first = (await agent.resolveSession(id, "org_team_a"))!;
+        await first.send("Keep history");
+        const history = [...first.getHistory()];
+        expect(selections).toEqual(["second::same-model"]);
+        await orgService.unpublishSharedResource(
+          "org_parent",
+          modelPublication.id,
+          "user_creator"
+        );
+        expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
+        sessionTurnRegistry.cancelTurn(id);
+        expect(await agent.resolveSession(id, "org_team_a")).toBe(first);
+        Object.assign(agent, {
+          userConfig: { ...config, providers: [config.providers[0]!] },
+        });
+        await expect(
+          agent.beginSessionTurn(id, "org_team_a")
+        ).rejects.toMatchObject({ status: 400 });
+        expect(sessionTurnRegistry.isActive(id)).toBe(false);
+        expect(selections).toHaveLength(1);
+        expect(first.getHistory()).toEqual(history);
+        Object.assign(agent, {
+          userConfig: {
+            ...config,
+            providers: config.providers.map((provider) => ({
+              ...provider,
+              customModels: [
+                { default: true, id: "different-model", name: "Different" },
+              ],
+            })),
+          },
+        });
+        await expect(
+          agent.beginSessionTurn(id, "org_team_a")
+        ).rejects.toMatchObject({ status: 400 });
+        expect(selections).toHaveLength(1);
+        Object.assign(agent, { userConfig: config });
+        await db.upsertProfile({ ...source, model: "first::same-model" });
+        expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
+        sessionTurnRegistry.cancelTurn(id);
+        const second = (await agent.resolveSession(id, "org_team_a"))!;
+        expect(second).not.toBe(first);
+        expect(second.getHistory()).toEqual(history);
+        expect(selections).toEqual(["second::same-model", "first::same-model"]);
+      } finally {
+        if (previousConfig) {
+          await saveUserConfig(previousConfig);
+        } else {
+          await rm(getUserConfigPath(), { force: true });
+        }
+      }
+    }
+  );
 
   test.each([false, true])(
     "shared configuration refresh preserves team history for cognito=%s",
