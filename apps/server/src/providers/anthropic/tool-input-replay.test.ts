@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { asTestFetch } from "../test-helpers";
 import { createAnthropicProvider } from "./index";
 
 const START =
@@ -90,7 +91,7 @@ function providerCapturingBodies(
 
   const provider = createAnthropicProvider({
     apiKey: "sk-ant-test",
-    fetch: fetchMock,
+    fetch: asTestFetch(fetchMock),
     model,
   });
 
@@ -134,29 +135,31 @@ describe("Anthropic tool input replay", () => {
 
       const provider = createAnthropicProvider({
         apiKey: "test-key",
-        fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
-          expect(String(init?.body)).not.toContain("_nakamaPrefixHash");
-          bodies.push(JSON.parse(String(init?.body)));
-          const blocks = responses[bodies.length - 1] ?? [];
-          const stopReason = bodies.length < 3 ? "pause_turn" : "end_turn";
+        fetch: asTestFetch(
+          async (_input: RequestInfo | URL, init?: RequestInit) => {
+            expect(String(init?.body)).not.toContain("_nakamaPrefixHash");
+            bodies.push(JSON.parse(String(init?.body)));
+            const blocks = responses[bodies.length - 1] ?? [];
+            const stopReason = bodies.length < 3 ? "pause_turn" : "end_turn";
 
-          if (stream && bodies.length < 4) {
-            return eventStream([
-              START,
-              ...blocks.flatMap((block, index) => [
-                `event: content_block_start\ndata: ${JSON.stringify({ content_block: block, index, type: "content_block_start" })}\n\n`,
-                `event: content_block_stop\ndata: ${JSON.stringify({ index, type: "content_block_stop" })}\n\n`,
-              ]),
-              `event: message_delta\ndata: ${JSON.stringify({ delta: { stop_reason: stopReason }, type: "message_delta", usage: { output_tokens: 2 } })}\n\n`,
-            ]);
+            if (stream && bodies.length < 4) {
+              return eventStream([
+                START,
+                ...blocks.flatMap((block, index) => [
+                  `event: content_block_start\ndata: ${JSON.stringify({ content_block: block, index, type: "content_block_start" })}\n\n`,
+                  `event: content_block_stop\ndata: ${JSON.stringify({ index, type: "content_block_stop" })}\n\n`,
+                ]),
+                `event: message_delta\ndata: ${JSON.stringify({ delta: { stop_reason: stopReason }, type: "message_delta", usage: { output_tokens: 2 } })}\n\n`,
+              ]);
+            }
+
+            return Response.json({
+              content: blocks,
+              stop_reason: stopReason,
+              usage: { input_tokens: 10, output_tokens: 2 },
+            });
           }
-
-          return Response.json({
-            content: blocks,
-            stop_reason: stopReason,
-            usage: { input_tokens: 10, output_tokens: 2 },
-          });
-        },
+        ),
         model: "claude-sonnet-5-5",
       });
 

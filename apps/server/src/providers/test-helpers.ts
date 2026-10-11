@@ -1,12 +1,4 @@
-type TestFetchHandler = (
-  ...args: Parameters<typeof fetch>
-) => ReturnType<typeof fetch>;
-
-export function asTestFetch<Fetch extends TestFetchHandler>(
-  fetchMock: Fetch
-): Fetch {
-  return fetchMock;
-}
+export { asTestFetch } from "@nakama/core/channel-test-helpers";
 
 export function streamFromChunks(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();

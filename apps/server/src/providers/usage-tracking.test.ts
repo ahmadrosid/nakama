@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatCompletionResult, ProviderClient } from "@nakama/core";
+import type {
+  ChatCompletionResult,
+  LlmToolDefinition,
+  ProviderClient,
+} from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { LlmUsageTracker } from "../services/llm-usage-tracker";
 import { estimateUsageCostUsd } from "./pricing";
@@ -290,7 +294,7 @@ describe("usage tracking", () => {
       "\n"
     );
 
-    const tools = [
+    const tools: LlmToolDefinition[] = [
       {
         description: "b".repeat(80),
         name: "heavy",
@@ -311,7 +315,7 @@ describe("usage tracking", () => {
         {
           content: "ok",
           role: "assistant",
-          toolCalls: [{ arguments: "{}", id: "1", name: "demo" }],
+          toolCalls: [{ arguments: {}, id: "1", name: "demo" }],
         },
         { content: "done", name: "demo", role: "tool", toolCallId: "1" },
       ],

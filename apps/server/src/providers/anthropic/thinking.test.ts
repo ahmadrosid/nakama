@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatMessage, GenerateChatInput } from "@nakama/core";
+import { asTestFetch } from "../test-helpers";
 import { createAnthropicProvider, parseAnthropicContent } from "./index";
 
 type CapturedAnthropicRequest = {
@@ -86,16 +87,18 @@ describe("Anthropic thinking requests", () => {
 
       const provider = createAnthropicProvider({
         apiKey: "test-key",
-        fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
-          body = JSON.parse(String(init?.body));
-          beta = new Headers(init?.headers).get("anthropic-beta");
+        fetch: asTestFetch(
+          async (_input: RequestInfo | URL, init?: RequestInit) => {
+            body = JSON.parse(String(init?.body));
+            beta = new Headers(init?.headers).get("anthropic-beta");
 
-          return Response.json({
-            content: [{ text: "Hello.", type: "text" }],
-            stop_reason: "end_turn",
-            usage: { input_tokens: 3, output_tokens: 2 },
-          });
-        },
+            return Response.json({
+              content: [{ text: "Hello.", type: "text" }],
+              stop_reason: "end_turn",
+              usage: { input_tokens: 3, output_tokens: 2 },
+            });
+          }
+        ),
         model,
       });
 
@@ -157,16 +160,18 @@ test("Sonnet 5.5 generateText uses between-tools without binding fields", async 
 
   const provider = createAnthropicProvider({
     apiKey: "test-key",
-    fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
-      body = JSON.parse(String(init?.body));
-      beta = new Headers(init?.headers).get("anthropic-beta");
+    fetch: asTestFetch(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        body = JSON.parse(String(init?.body));
+        beta = new Headers(init?.headers).get("anthropic-beta");
 
-      return Response.json({
-        content: [{ text: "Hello.", type: "text" }],
-        stop_reason: "end_turn",
-        usage: { input_tokens: 3, output_tokens: 2 },
-      });
-    },
+        return Response.json({
+          content: [{ text: "Hello.", type: "text" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 3, output_tokens: 2 },
+        });
+      }
+    ),
     model: "claude-sonnet-5-5",
   });
 
@@ -183,26 +188,28 @@ test("Sonnet 5.5 keeps valid between-tools thinking and drops it after prefix ed
 
   const provider = createAnthropicProvider({
     apiKey: "test-key",
-    fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
-      requests.push(JSON.parse(String(init?.body)));
-      call += 1;
+    fetch: asTestFetch(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push(JSON.parse(String(init?.body)));
+        call += 1;
 
-      return Response.json({
-        content:
-          call === 1
-            ? [
-                {
-                  signature: "signed-progress",
-                  thinking: "Checking the tool result",
-                  type: "thinking",
-                },
-                { text: "First answer", type: "text" },
-              ]
-            : [{ text: "Done.", type: "text" }],
-        stop_reason: "end_turn",
-        usage: { input_tokens: 5, output_tokens: 2 },
-      });
-    },
+        return Response.json({
+          content:
+            call === 1
+              ? [
+                  {
+                    signature: "signed-progress",
+                    thinking: "Checking the tool result",
+                    type: "thinking",
+                  },
+                  { text: "First answer", type: "text" },
+                ]
+              : [{ text: "Done.", type: "text" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 5, output_tokens: 2 },
+        });
+      }
+    ),
     model: "claude-sonnet-5-5",
   });
 
@@ -284,16 +291,18 @@ test.each(["blocks", "tools"])(
 
     const provider = createAnthropicProvider({
       apiKey: "test-key",
-      fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
-        expect(String(init?.body)).not.toContain("_nakamaPrefixHash");
-        requests.push(JSON.parse(String(init?.body)));
+      fetch: asTestFetch(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+          expect(String(init?.body)).not.toContain("_nakamaPrefixHash");
+          requests.push(JSON.parse(String(init?.body)));
 
-        return Response.json({
-          content: blocks,
-          stop_reason: "end_turn",
-          usage: { input_tokens: 5, output_tokens: 2 },
-        });
-      },
+          return Response.json({
+            content: blocks,
+            stop_reason: "end_turn",
+            usage: { input_tokens: 5, output_tokens: 2 },
+          });
+        }
+      ),
       model: "claude-sonnet-5-5",
     });
 
@@ -358,8 +367,10 @@ test.each([
       choices: ["north", "south"],
       count: 0,
       enabled: false,
-      label: "0",
-      note: null,
+      // SAFETY: This fixture changes a string default to a number to test prefix invalidation.
+      label: "0" as string | number,
+      // SAFETY: This fixture changes a null default to a string to test prefix invalidation.
+      note: null as string | null,
     };
 
     const tools = [
@@ -375,16 +386,18 @@ test.each([
 
     const provider = createAnthropicProvider({
       apiKey: "test-key",
-      fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
-        expect(String(init?.body)).not.toContain("_nakamaPrefixHash");
-        requests.push(JSON.parse(String(init?.body)));
+      fetch: asTestFetch(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+          expect(String(init?.body)).not.toContain("_nakamaPrefixHash");
+          requests.push(JSON.parse(String(init?.body)));
 
-        return Response.json({
-          content: blocks,
-          stop_reason: "end_turn",
-          usage: { input_tokens: 5, output_tokens: 2 },
-        });
-      },
+          return Response.json({
+            content: blocks,
+            stop_reason: "end_turn",
+            usage: { input_tokens: 5, output_tokens: 2 },
+          });
+        }
+      ),
       model: "claude-sonnet-5-5",
     });
 
@@ -461,77 +474,79 @@ test.each([false, true])(
 
     const provider = createAnthropicProvider({
       apiKey: "test-key",
-      fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
-        expect(String(init?.body)).not.toContain("_nakamaPrefixHash");
-        requests.push(JSON.parse(String(init?.body)));
+      fetch: asTestFetch(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+          expect(String(init?.body)).not.toContain("_nakamaPrefixHash");
+          requests.push(JSON.parse(String(init?.body)));
 
-        if (stream) {
-          const events = [
-            {
-              message: { usage: { input_tokens: 3, output_tokens: 0 } },
-              type: "message_start",
-            },
-            ...blocks.flatMap((block, index) =>
-              block.type === "thinking"
-                ? [
-                    {
-                      content_block: {
-                        signature: "",
-                        thinking: "",
-                        type: "thinking",
+          if (stream) {
+            const events = [
+              {
+                message: { usage: { input_tokens: 3, output_tokens: 0 } },
+                type: "message_start",
+              },
+              ...blocks.flatMap((block, index) =>
+                block.type === "thinking"
+                  ? [
+                      {
+                        content_block: {
+                          signature: "",
+                          thinking: "",
+                          type: "thinking",
+                        },
+                        index,
+                        type: "content_block_start",
                       },
-                      index,
-                      type: "content_block_start",
-                    },
-                    {
-                      delta: { thinking: "Progress", type: "thinking_delta" },
-                      index,
-                      type: "content_block_delta",
-                    },
-                    {
-                      delta: {
-                        signature: "signed-progress",
-                        type: "signature_delta",
+                      {
+                        delta: { thinking: "Progress", type: "thinking_delta" },
+                        index,
+                        type: "content_block_delta",
                       },
-                      index,
-                      type: "content_block_delta",
-                    },
-                    { index, type: "content_block_stop" },
-                  ]
-                : [
-                    {
-                      content_block: block,
-                      index,
-                      type: "content_block_start",
-                    },
-                    { index, type: "content_block_stop" },
-                  ]
-            ),
-            {
-              delta: { stop_reason: "tool_use" },
-              type: "message_delta",
-              usage: { output_tokens: 2 },
-            },
-            { type: "message_stop" },
-          ];
+                      {
+                        delta: {
+                          signature: "signed-progress",
+                          type: "signature_delta",
+                        },
+                        index,
+                        type: "content_block_delta",
+                      },
+                      { index, type: "content_block_stop" },
+                    ]
+                  : [
+                      {
+                        content_block: block,
+                        index,
+                        type: "content_block_start",
+                      },
+                      { index, type: "content_block_stop" },
+                    ]
+              ),
+              {
+                delta: { stop_reason: "tool_use" },
+                type: "message_delta",
+                usage: { output_tokens: 2 },
+              },
+              { type: "message_stop" },
+            ];
 
-          return new Response(
-            events
-              .map(
-                (event) =>
-                  `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`
-              )
-              .join(""),
-            { headers: { "Content-Type": "text/event-stream" } }
-          );
+            return new Response(
+              events
+                .map(
+                  (event) =>
+                    `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`
+                )
+                .join(""),
+              { headers: { "Content-Type": "text/event-stream" } }
+            );
+          }
+
+          return Response.json({
+            content: blocks,
+            stop_reason: "tool_use",
+            usage: { input_tokens: 3, output_tokens: 2 },
+          });
         }
-
-        return Response.json({
-          content: blocks,
-          stop_reason: "tool_use",
-          usage: { input_tokens: 3, output_tokens: 2 },
-        });
-      },
+      ),
       model: "claude-sonnet-5-5",
     });
 
@@ -661,16 +676,18 @@ test.each(["low", "medium", "high"] as const)(
 
     const provider = createAnthropicProvider({
       apiKey: "test-key",
-      fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
-        expect(String(init?.body)).not.toContain("_nakamaPrefixHash");
-        requests.push(JSON.parse(String(init?.body)));
+      fetch: asTestFetch(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+          expect(String(init?.body)).not.toContain("_nakamaPrefixHash");
+          requests.push(JSON.parse(String(init?.body)));
 
-        return Response.json({
-          content: [signed, text],
-          stop_reason: "end_turn",
-          usage: { input_tokens: 3, output_tokens: 2 },
-        });
-      },
+          return Response.json({
+            content: [signed, text],
+            stop_reason: "end_turn",
+            usage: { input_tokens: 3, output_tokens: 2 },
+          });
+        }
+      ),
       model: "claude-sonnet-5-5",
     });
 
@@ -739,18 +756,20 @@ test("Opus 5.5 replays signed thinking when the system prefix changes", async ()
 
   const provider = createAnthropicProvider({
     apiKey: "test-key",
-    fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
-      expect(new Headers(init?.headers).get("anthropic-beta")).toBe(
-        "thinking-binding-controls-2026-08-01"
-      );
-      requests.push(JSON.parse(String(init?.body)));
+    fetch: asTestFetch(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        expect(new Headers(init?.headers).get("anthropic-beta")).toBe(
+          "thinking-binding-controls-2026-08-01"
+        );
+        requests.push(JSON.parse(String(init?.body)));
 
-      return Response.json({
-        content: [{ text: "Done.", type: "text" }],
-        stop_reason: "end_turn",
-        usage: { input_tokens: 5, output_tokens: 2 },
-      });
-    },
+        return Response.json({
+          content: [{ text: "Done.", type: "text" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 5, output_tokens: 2 },
+        });
+      }
+    ),
     model: "claude-opus-5-5",
   });
 
@@ -788,8 +807,12 @@ test("Opus 5.5 replays signed thinking when the system prefix changes", async ()
 describe("parseAnthropicContent", () => {
   test("keeps thinking out of assistant content", () => {
     const result = parseAnthropicContent([
-      { thinking: "Plan the answer.", type: "thinking" },
-      { text: "Hello.", type: "text" },
+      {
+        signature: "signed-plan",
+        thinking: "Plan the answer.",
+        type: "thinking",
+      },
+      { citations: null, text: "Hello.", type: "text" },
     ]);
 
     expect(result.content).toBe("Hello.");

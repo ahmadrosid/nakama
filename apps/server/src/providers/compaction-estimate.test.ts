@@ -4,9 +4,18 @@ import { estimateHistoryTokens } from "../../../../packages/agent/src/history-co
 import { createAnthropicProvider, toAnthropicMessages } from "./anthropic";
 import { asTestFetch, streamFromChunks } from "./test-helpers";
 
+test("fetch fixtures retain calls and provide offline preconnect", async () => {
+  const handler = mock(async () => new Response("ok"));
+  const fetcher = asTestFetch(handler);
+  fetcher.preconnect("https://example.invalid");
+  expect(handler).not.toHaveBeenCalled();
+  expect(await (await fetcher()).text()).toBe("ok");
+  expect(handler).toHaveBeenCalledTimes(1);
+});
+
 const j = <Value>(value: Value) => JSON.stringify(value);
 
-const ev = (payload: { type: string }) =>
+const ev = <Payload extends { type: string }>(payload: Payload) =>
   `event: ${payload.type}\r\ndata:${j(payload)}\r\n\r\n`;
 
 // Mirrors TOKEN_ESTIMATE_RATIO = 4 in history-compaction.ts.
