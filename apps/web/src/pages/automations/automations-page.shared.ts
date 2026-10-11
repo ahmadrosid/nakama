@@ -65,10 +65,14 @@ export function automationRunMessages(
 
 const DAILY_CRON = /^(\d{1,2}) (\d{1,2}) \* \* \*$/;
 
-export function describeTrigger(trigger: AutomationTrigger): {
+interface TriggerDescription {
   label: string;
   note?: string;
-} {
+}
+
+export function describeTrigger(
+  trigger: AutomationTrigger
+): TriggerDescription {
   if (trigger.type === "manual") {
     return { label: "Manual only", note: "Starts when you press Run now" };
   }
