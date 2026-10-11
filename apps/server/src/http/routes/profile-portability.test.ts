@@ -18,6 +18,7 @@ import { createMinimalHonoApp } from "../test-app-helpers";
 import {
   createOrgAdminSession,
   loginUserSession,
+  type TestBrowserSession,
 } from "../test-session-helpers";
 
 setupTestConfigDir("nakama-profile-pack-routes-");
@@ -47,10 +48,7 @@ function createApp() {
 }
 
 function jsonHeaders(
-  session: {
-    headers: (extra?: Record<string, string>, orgId?: string) => Headers;
-    csrfToken: string;
-  },
+  session: Pick<TestBrowserSession, "headers" | "csrfToken">,
   orgId: string
 ) {
   return session.headers(

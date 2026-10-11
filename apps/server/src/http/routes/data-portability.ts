@@ -23,6 +23,12 @@ export function registerDataPortabilityRoutes(
   app: HonoApp,
   options: ServerOptions
 ): void {
+  const databaseAdapter = options.databaseAdapter;
+
+  if (!databaseAdapter) {
+    return;
+  }
+
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
@@ -232,12 +238,9 @@ export function registerDataPortabilityRoutes(
     requirePlatformAdminFromContext(c);
     const orgId = decodeURIComponent(c.req.param("orgId"));
 
-    const result = await createNakamaOrgDataExport(
-      options.databaseAdapter,
-      orgId
-    );
+    const result = await createNakamaOrgDataExport(databaseAdapter, orgId);
 
-    return new Response(result.data, {
+    return new Response(new Uint8Array(result.data), {
       headers: {
         "Content-Disposition": `attachment; filename="${result.filename}"`,
         "Content-Type": "application/zip",
@@ -249,12 +252,9 @@ export function registerDataPortabilityRoutes(
     requirePlatformAdminFromContext(c);
     const userId = decodeURIComponent(c.req.param("userId"));
 
-    const result = await createNakamaUserDataExport(
-      options.databaseAdapter,
-      userId
-    );
+    const result = await createNakamaUserDataExport(databaseAdapter, userId);
 
-    return new Response(result.data, {
+    return new Response(new Uint8Array(result.data), {
       headers: {
         "Content-Disposition": `attachment; filename="${result.filename}"`,
         "Content-Type": "application/zip",
@@ -271,7 +271,7 @@ export function registerDataPortabilityRoutes(
         )
       : await createNakamaDataExport();
 
-    return new Response(result.data, {
+    return new Response(new Uint8Array(result.data), {
       headers: {
         "Content-Disposition": `attachment; filename="${result.filename}"`,
         "Content-Type": "application/zip",

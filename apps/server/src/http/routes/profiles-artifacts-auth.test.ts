@@ -10,6 +10,7 @@ import {
   loginPlatformAdminSession,
   loginUserSession,
   setupFreshInstallSession,
+  type TestBrowserSession,
 } from "../test-session-helpers";
 
 setupTestConfigDir("nakama-profiles-artifacts-auth-test-");
@@ -117,7 +118,7 @@ test("workspace rename requires platform admin access and updates pins for every
 
   const request = (
     body: { newName: string; path: string },
-    session = owner,
+    session: TestBrowserSession = owner,
     profile = "rename-profile"
   ) =>
     app.fetch(
@@ -761,8 +762,8 @@ test("personal file pins persist and enforce user, org, profile and path boundar
   await symlink(outside, path.join(root, "outside"));
 
   const request = (
-    session = owner,
-    body?: { path: string; pinned: boolean },
+    session: TestBrowserSession = owner,
+    body?: { path: string; pinned: unknown },
     profile = "pins-profile",
     orgId = owner.orgId
   ) =>

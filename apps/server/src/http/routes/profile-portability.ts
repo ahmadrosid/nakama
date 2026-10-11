@@ -180,7 +180,7 @@ export function registerProfilePortabilityRoutes(
         includeCustomTools: auth.isPlatformAdmin,
       });
 
-      return new Response(result.data, {
+      return new Response(new Uint8Array(result.data), {
         headers: {
           "Content-Disposition": `attachment; filename="${result.filename}"`,
           "Content-Type": "application/zip",

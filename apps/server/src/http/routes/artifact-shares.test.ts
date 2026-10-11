@@ -257,6 +257,9 @@ describe("artifact share routes", () => {
     expect(publicResponse.headers.get("Content-Disposition")).toContain(
       "inline"
     );
+    expect(new Uint8Array(await publicResponse.arrayBuffer())).toEqual(
+      new TextEncoder().encode("fake-mp4-bytes")
+    );
   });
 
   test("publish refuses a clientOrigin off the request host", async () => {
