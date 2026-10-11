@@ -140,6 +140,27 @@ describe("cursor-agent-output", () => {
     expect(formatted.startsWith("...[truncated]")).toBe(true);
   });
 
+  test("summarizes a result after assistant events with no text", () => {
+    const stdout = [
+      {
+        cwd: "/tmp/repo",
+        model: "composer-2",
+        subtype: "init",
+        type: "system",
+      },
+      { message: {}, type: "assistant" },
+      { message: { content: [] }, type: "assistant" },
+      { message: { content: "   " }, type: "assistant" },
+      { result: "Completed the task", subtype: "success", type: "result" },
+    ]
+      .map((event) => JSON.stringify(event))
+      .join("\n");
+
+    const summary = formatCodingAgentBashStdout(stdout, { exitCode: 0 });
+    expect(summary).toContain("Completed the task");
+    expect(summary).not.toContain("## Assistant");
+  });
+
   test("commandLooksLikeCursorAgent matches argv0 agent paths", () => {
     expect(commandLooksLikeCursorAgent("agent -p 'hi' --yolo")).toBe(true);
     expect(commandLooksLikeCursorAgent("./agent -p hi")).toBe(true);
