@@ -2,6 +2,7 @@ import type {
   AddOrgMemberRequest,
   CreateTeamRequest,
   InviteOrgMemberRequest,
+  PublishOrgSharedResourceRequest,
   UpdateOrgMemberRequest,
 } from "@nakama/core/contract";
 import {
@@ -52,6 +53,33 @@ export function useCreateTeam(orgId: string) {
       invalidateQueries(
         queryClient,
         queryKeys.organizationOverview(orgId, orgId)
+      ),
+  });
+}
+
+export function useOrgPublicationMutation(orgId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (
+      request:
+        | { action: "publish"; resource: PublishOrgSharedResourceRequest }
+        | { action: "unpublish"; publicationId: string }
+    ) => {
+      if (request.action === "unpublish") {
+        await client.unpublishOrgSharedResource(orgId, request.publicationId);
+
+        return;
+      }
+
+      return await client.publishOrgSharedResource(orgId, request.resource);
+    },
+    onSuccess: () =>
+      invalidateQueries(
+        queryClient,
+        ["organizationOverview", orgId],
+        ["knowledgeBase"],
+        queryKeys.profiles.all
       ),
   });
 }

@@ -460,7 +460,9 @@ test.each(["creator", "another-user"])(
     const { container, render } = mount(queries, switchOrg, refreshSession);
     await render({ ...organization("parent"), parentOrgId: null });
     await act(async () => {
-      container.querySelector("button")?.click();
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Add team"]')
+        ?.click();
       await settle();
     });
     expect(
@@ -517,7 +519,9 @@ test("failed team creation retains its request ID across dialog close and retry"
   const { container, render } = mount(queries);
   await render({ ...organization("parent"), parentOrgId: null });
   await act(async () => {
-    container.querySelector("button")?.click();
+    container
+      .querySelector<HTMLButtonElement>('button[aria-label="Add team"]')
+      ?.click();
     await settle();
   });
   await fillTeamForm();
@@ -532,7 +536,9 @@ test("failed team creation retains its request ID across dialog close and retry"
     await settle();
   });
   await act(async () => {
-    container.querySelector("button")?.click();
+    container
+      .querySelector<HTMLButtonElement>('button[aria-label="Add team"]')
+      ?.click();
     await settle();
   });
   expect(
@@ -584,7 +590,9 @@ test("failed session refresh retries without creating a second team", async () =
 
   await render({ ...organization("parent"), parentOrgId: null });
   await act(async () => {
-    container.querySelector("button")?.click();
+    container
+      .querySelector<HTMLButtonElement>('button[aria-label="Add team"]')
+      ?.click();
     await settle();
   });
   await fillTeamForm();
@@ -635,7 +643,9 @@ test("team creation blocks repeated submissions and keeps pending input fixed", 
   const { container, render } = mount(queries);
   await render({ ...organization("parent"), parentOrgId: null });
   await act(async () => {
-    container.querySelector("button")?.click();
+    container
+      .querySelector<HTMLButtonElement>('button[aria-label="Add team"]')
+      ?.click();
     await settle();
   });
   await fillTeamForm();
@@ -672,4 +682,265 @@ test("team membership cannot expose parent team creation controls", async () => 
   expect(container.querySelector("button")?.getAttribute("aria-label")).toBe(
     "View Team team-a"
   );
+});
+
+async function mountKnowledgeManager() {
+  const queries = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  const data = overview("parent");
+  data.canManageOrganization = true;
+  data.teams = [];
+  queries.setQueryData(
+    queryKeys.organizationOverview("parent", "parent"),
+    structuredClone(data)
+  );
+
+  const documents = (
+    [
+      { filename: "Brand guide", id: "doc-a", status: "ready" },
+      { filename: "Existing publication", id: "knowledge", status: "ready" },
+      { filename: "Failed extraction", id: "doc-failed", status: "failed" },
+    ] as const
+  ).map((document) => ({
+    ...document,
+    mediaType: "text/plain",
+    scope: "organization" as const,
+    sizeBytes: 42,
+    uploadedAt: "2026-10-12T00:00:00Z",
+  })) satisfies Awaited<
+    ReturnType<typeof client.listOrganizationKnowledgeBase>
+  >["documents"];
+
+  const catalog = spyOn(
+    client,
+    "listOrganizationKnowledgeBase"
+  ).mockResolvedValue({ documents });
+
+  const reload = spyOn(client, "getOrganizationOverview").mockImplementation(
+    async () => ({ ...data, sharedResources: [...data.sharedResources] })
+  );
+
+  cleanups.push(() => {
+    catalog.mockRestore();
+    reload.mockRestore();
+  });
+  const mounted = mount(queries);
+  await mounted.render({ ...organization("parent"), parentOrgId: null });
+
+  return { ...mounted, catalog, data, queries, reload };
+}
+
+async function openKnowledgeManager(container: HTMLElement) {
+  await act(async () => {
+    container
+      .querySelector<HTMLButtonElement>(
+        'button[aria-label="Manage shared knowledge"]'
+      )
+      ?.click();
+    await settle();
+  });
+  await act(async () => {
+    await settle();
+  });
+}
+
+async function selectKnowledgeDocument() {
+  await act(async () => {
+    document.querySelector<HTMLButtonElement>('[role="combobox"]')?.click();
+    await settle();
+  });
+
+  const options = [
+    ...document.querySelectorAll<HTMLElement>('[role="option"]'),
+  ];
+
+  expect(options.map((option) => option.textContent)).toEqual(["Brand guide"]);
+  await act(async () => {
+    options[0]?.click();
+    await settle();
+  });
+}
+
+test("knowledge publication uses ready local document IDs and refreshes the catalog", async () => {
+  const { container, catalog, data, reload } = await mountKnowledgeManager();
+
+  const publication = {
+    ...data.sharedResources[0],
+    id: "pub-a",
+    label: "Brand guide",
+    resourceId: "doc-a",
+  };
+
+  const publish = spyOn(client, "publishOrgSharedResource").mockImplementation(
+    async () => {
+      data.sharedResources.push(publication);
+
+      return { publication };
+    }
+  );
+
+  cleanups.push(() => publish.mockRestore());
+  expect(catalog).not.toHaveBeenCalled();
+  await openKnowledgeManager(container);
+  expect(catalog.mock.calls).toEqual([["parent"]]);
+  await selectKnowledgeDocument();
+  await act(async () => {
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
+      .find((button) => button.textContent === "Publish document")
+      ?.click();
+    await settle();
+  });
+  await act(async () => {
+    await settle();
+  });
+  expect(publish.mock.calls).toEqual([
+    ["parent", { resourceId: "doc-a", resourceKind: "knowledge" }],
+  ]);
+  expect(reload.mock.calls).toEqual([["parent"]]);
+  expect(container.querySelector("dd")?.textContent).toContain("Brand guide");
+  expect(
+    document.querySelector('button[aria-label="Unpublish Brand guide"]')
+  ).not.toBeNull();
+});
+
+test("failed publication keeps the catalog and selected document for retry", async () => {
+  const { container, data } = await mountKnowledgeManager();
+
+  const publication = {
+    ...data.sharedResources[0],
+    id: "pub-a",
+    label: "Brand guide",
+    resourceId: "doc-a",
+  };
+
+  const publish = spyOn(client, "publishOrgSharedResource")
+    .mockRejectedValueOnce(new Error("Publish failed"))
+    .mockResolvedValue({ publication });
+
+  cleanups.push(() => publish.mockRestore());
+  await openKnowledgeManager(container);
+  await selectKnowledgeDocument();
+
+  const submit = [
+    ...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
+  ].find((button) => button.textContent === "Publish document");
+
+  await act(async () => {
+    submit?.click();
+    await settle();
+  });
+  expect(
+    document.querySelector('[role="dialog"] [role="alert"]')
+  ).not.toBeNull();
+  expect(container.querySelector("dd")?.textContent).not.toContain(
+    "Brand guide"
+  );
+  expect(container.querySelector("dd")?.textContent).toContain(
+    "parent knowledge"
+  );
+  await act(async () => {
+    submit?.click();
+    await settle();
+  });
+  expect(publish.mock.calls).toEqual([
+    ["parent", { resourceId: "doc-a", resourceKind: "knowledge" }],
+    ["parent", { resourceId: "doc-a", resourceKind: "knowledge" }],
+  ]);
+});
+
+test("failed unpublication keeps the published resource and permits retry", async () => {
+  const { container, data } = await mountKnowledgeManager();
+
+  const unpublish = spyOn(client, "unpublishOrgSharedResource")
+    .mockRejectedValueOnce(new Error("Unpublish failed"))
+    .mockImplementation(async () => {
+      data.sharedResources = data.sharedResources.filter(
+        (resource) => resource.resourceKind !== "knowledge"
+      );
+    });
+
+  cleanups.push(() => unpublish.mockRestore());
+  await openKnowledgeManager(container);
+
+  const submit = document.querySelector<HTMLButtonElement>(
+    'button[aria-label="Unpublish parent knowledge"]'
+  );
+
+  await act(async () => {
+    submit?.click();
+    await settle();
+  });
+  expect(
+    document.querySelector('[role="dialog"] [role="alert"]')
+  ).not.toBeNull();
+  expect(container.querySelector("dd")?.textContent).toContain(
+    "parent knowledge"
+  );
+  await act(async () => {
+    submit?.click();
+    await settle();
+  });
+  await act(async () => {
+    await settle();
+  });
+  expect(unpublish.mock.calls).toEqual([
+    ["parent", "parent-knowledge"],
+    ["parent", "parent-knowledge"],
+  ]);
+  expect(container.querySelector("dd")?.textContent).not.toContain(
+    "parent knowledge"
+  );
+});
+
+test("catalog refresh failure preserves current publications until retry succeeds", async () => {
+  const { container, data, reload } = await mountKnowledgeManager();
+
+  const unpublish = spyOn(
+    client,
+    "unpublishOrgSharedResource"
+  ).mockImplementation(async () => {
+    data.sharedResources = data.sharedResources.filter(
+      (resource) => resource.resourceKind !== "knowledge"
+    );
+  });
+
+  cleanups.push(() => unpublish.mockRestore());
+  reload.mockRejectedValueOnce(new Error("Overview unavailable"));
+  await openKnowledgeManager(container);
+  await act(async () => {
+    document
+      .querySelector<HTMLButtonElement>(
+        'button[aria-label="Unpublish parent knowledge"]'
+      )
+      ?.click();
+    await settle();
+  });
+  await act(async () => {
+    await settle();
+  });
+  expect(container.querySelector('[role="alert"]')).not.toBeNull();
+  expect(container.querySelector("dd")?.textContent).toContain(
+    "parent knowledge"
+  );
+  await act(async () => {
+    document
+      .querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')
+      ?.click();
+    await settle();
+  });
+  await act(async () => {
+    [...container.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "Retry overview")
+      ?.click();
+    await settle();
+  });
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+  expect(container.querySelector("dd")?.textContent).not.toContain(
+    "parent knowledge"
+  );
+  expect(unpublish).toHaveBeenCalledTimes(1);
 });

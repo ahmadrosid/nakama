@@ -2,6 +2,7 @@ import type {
   CreateTeamRequest,
   OrganizationOverviewResponse,
   OrgSharedResourceKind,
+  OrgSharedResourceSummary,
 } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { Card, CardHeader, CardTitle } from "@nakama/ui/card";
@@ -14,6 +15,13 @@ import {
   DialogTrigger,
 } from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@nakama/ui/select";
 import {
   AiBrain01Icon,
   BookOpen01Icon,
@@ -32,7 +40,9 @@ import { useAuth } from "@/context/use-auth";
 import {
   useCreateTeam,
   useOrganizationOverview,
+  useOrgPublicationMutation,
 } from "@/hooks/use-org-members";
+import { useOrganizationKnowledgeBaseQuery } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
 
 const RESOURCE_ROWS = [
@@ -52,6 +62,154 @@ const READINESS_LABELS = {
   requires_setup: "Requires setup",
   unavailable: "Unavailable",
 };
+
+function KnowledgePublicationDialog({
+  orgId,
+  resources,
+}: {
+  orgId: string;
+  resources: OrgSharedResourceSummary[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [resourceId, setResourceId] = useState<string | null>(null);
+  const documents = useOrganizationKnowledgeBaseQuery(open ? orgId : null);
+  const mutation = useOrgPublicationMutation(orgId);
+
+  const publications = resources.filter(
+    (resource) => resource.resourceKind === "knowledge"
+  );
+
+  const available = (documents.data?.documents ?? []).filter(
+    (document) =>
+      document.status === "ready" &&
+      !publications.some(
+        (publication) => publication.resourceId === document.id
+      )
+  );
+
+  return (
+    <Dialog
+      onOpenChange={(nextOpen) => {
+        if (!mutation.isPending) {
+          mutation.reset();
+          setOpen(nextOpen);
+        }
+      }}
+      open={open}
+    >
+      <DialogTrigger
+        render={
+          <Button
+            aria-label="Manage shared knowledge"
+            size="sm"
+            variant="outline"
+          />
+        }
+      >
+        Manage
+      </DialogTrigger>
+      <DialogContent showCloseButton={!mutation.isPending}>
+        <DialogHeader>
+          <DialogTitle>Shared knowledge</DialogTitle>
+        </DialogHeader>
+        {documents.isError && (
+          <div className="space-y-2" role="alert">
+            <p>{formatError(documents.error)}</p>
+            <Button
+              disabled={documents.isFetching}
+              onClick={() => void documents.refetch()}
+              variant="outline"
+            >
+              Retry documents
+            </Button>
+          </div>
+        )}
+        {documents.isPending && <p role="status">Loading documents…</p>}
+        {documents.data && (
+          <div className="flex flex-col gap-3">
+            <Select
+              disabled={mutation.isPending || documents.isError}
+              items={available.map((document) => ({
+                label: document.filename,
+                value: document.id,
+              }))}
+              onValueChange={setResourceId}
+              value={resourceId}
+            >
+              <SelectTrigger
+                aria-label="Document to publish"
+                className="w-full"
+              >
+                <SelectValue placeholder="Select document" />
+              </SelectTrigger>
+              <SelectContent>
+                {available.map((document) => (
+                  <SelectItem key={document.id} value={document.id}>
+                    {document.filename}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {available.length === 0 && (
+              <p className="text-muted-foreground text-sm">
+                No unpublished ready documents
+              </p>
+            )}
+            <Button
+              disabled={
+                mutation.isPending ||
+                documents.isError ||
+                !available.some((document) => document.id === resourceId)
+              }
+              onClick={() => {
+                if (resourceId) {
+                  mutation.mutate(
+                    {
+                      action: "publish",
+                      resource: { resourceId, resourceKind: "knowledge" },
+                    },
+                    { onSuccess: () => setResourceId(null) }
+                  );
+                }
+              }}
+            >
+              Publish document
+            </Button>
+          </div>
+        )}
+        <ul className="space-y-3">
+          {publications.map((publication) => (
+            <li
+              className="flex items-center justify-between gap-3"
+              key={publication.id}
+            >
+              <span className="min-w-0 break-words">{publication.label}</span>
+              <Button
+                aria-label={`Unpublish ${publication.label}`}
+                disabled={mutation.isPending}
+                onClick={() =>
+                  mutation.mutate({
+                    action: "unpublish",
+                    publicationId: publication.id,
+                  })
+                }
+                size="sm"
+                variant="outline"
+              >
+                Unpublish
+              </Button>
+            </li>
+          ))}
+        </ul>
+        {mutation.isError && (
+          <p className="text-destructive" role="alert">
+            {formatError(mutation.error)}
+          </p>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function AddTeamDialog({
   orgId,
@@ -141,7 +299,9 @@ function AddTeamDialog({
       }}
       open={open}
     >
-      <DialogTrigger render={<Button size="sm" variant="outline" />}>
+      <DialogTrigger
+        render={<Button aria-label="Add team" size="sm" variant="outline" />}
+      >
         Add team
       </DialogTrigger>
       <DialogContent showCloseButton={!pending}>
@@ -327,7 +487,7 @@ export function OrganizationOverview() {
     return null;
   }
 
-  if (overview.isError) {
+  if (overview.isError && !overview.data) {
     return (
       <div className="space-y-3" role="alert">
         <p>{formatError(overview.error)}</p>
@@ -355,6 +515,18 @@ export function OrganizationOverview() {
   return (
     <div className="space-y-6">
       <h2 className="break-words font-semibold text-xl">{organization.name}</h2>
+      {overview.isError && (
+        <div className="space-y-2" role="alert">
+          <p>{formatError(overview.error)}</p>
+          <Button
+            disabled={overview.isFetching}
+            onClick={() => void overview.refetch()}
+            variant="outline"
+          >
+            Retry overview
+          </Button>
+        </div>
+      )}
       <Card className="overflow-hidden">
         <CardHeader className="border-b px-5 py-4">
           <CardTitle className="text-base">Shared with every team</CardTitle>
@@ -365,9 +537,18 @@ export function OrganizationOverview() {
               className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start"
               key={kind}
             >
-              <dt className="flex shrink-0 items-center gap-2 font-medium sm:w-32">
+              <dt className="flex shrink-0 flex-wrap items-center gap-2 font-medium sm:w-32">
                 <Icon aria-hidden className="size-4 text-muted-foreground" />
                 {label}
+                {kind === "knowledge" &&
+                  overview.data.canManageOrganization &&
+                  organization.id === activeOrg.id && (
+                    <KnowledgePublicationDialog
+                      key={activeOrg.id}
+                      orgId={activeOrg.id}
+                      resources={sharedResources}
+                    />
+                  )}
               </dt>
               <dd className="flex min-w-0 flex-wrap gap-2">
                 {sharedResources
