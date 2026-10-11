@@ -2532,3 +2532,15 @@ Eight new cases exercise all four hooks with success and failure responses. They
 Step 5 and delivery stages 3 and 4 remain open. Next: knowledge, tool, and provider source changes, account cache boundaries, and data portability compatibility. No new file, package, dependency, or helper abstraction was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
 
 Evidence: /tmp/nakama-skill-catalog-{focused,types,format,oxlint,doctor,lint}.log.
+
+### Slice 3af — Provider and tool source catalog refresh
+
+The existing provider invalidation helper now refreshes Organization overview queries and publication selectors after provider creation, configuration, update, or deletion. Its existing health, model, and provider readers still refresh. Tool deletion now refreshes shared summaries and selectors, plus profiles whose assignments can lose that tool. Existing tool list, detail, and source queries retain their invalidation. Failed mutations preserve cached data. Private memory queries remain untouched.
+
+Ten new cases exercise the four provider hooks and tool deletion with success and failure responses. They check exact IDs and payloads, active parent and team readers, publication selectors, existing resource readers, inactive summaries, tool source invalidation, and private memory. All 194 focused component and mutation tests passed with 1478 assertions. Complete web types, scoped anti-slop, Ultracite, and git diff --check passed. React Doctor retained 91/100 with the same two assignment complexity warnings and no errors. No verification repair was needed.
+
+The knowledge audit checked OrgService team counts and all web calls to the organization knowledge upload and delete operations. Counts read organization documents, not profile documents. The web app has no organization document upload or delete caller, so changing the profile document hooks would not refresh a changed publication source. No unsupported web mutation was added. Integration and plugin mutation helpers still need a cache audit.
+
+Step 5 and delivery stages 3 and 4 remain open. Next: integration and plugin caches, account cache boundaries, and data portability compatibility. No new file, package, dependency, or helper abstraction was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
+
+Evidence: /tmp/nakama-source-catalog-{focused,types,format,oxlint,doctor,lint}.log.

@@ -701,7 +701,9 @@ async function invalidateProviderQueries(queryClient: QueryClient) {
     queryClient,
     queryKeys.health,
     queryKeys.models,
-    queryKeys.providers
+    queryKeys.providers,
+    ["organizationOverview"],
+    ["organizationPublicationCatalog"]
   );
 }
 

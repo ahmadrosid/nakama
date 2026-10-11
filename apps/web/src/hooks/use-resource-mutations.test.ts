@@ -27,6 +27,12 @@ import { client } from "@/lib/client";
 import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 import {
+  useConfigureProviderMutation,
+  useCreateProviderMutation,
+  useDeleteProviderMutation,
+  useUpdateProviderMutation,
+} from "./use-app-queries";
+import {
   useAddOrgMember,
   useInviteOrgMember,
   useRemoveOrgMember,
@@ -40,6 +46,7 @@ import {
   useCreateSkillMutation,
   useDeleteProfileMutation,
   useDeleteSkillMutation,
+  useDeleteToolMutation,
   useInstallSkillMutation,
   usePatchSkillMutation,
   useRevokeArtifactShareMutation,
@@ -136,6 +143,182 @@ afterAll(() => {
   revoke.mockRestore();
   publish.mockRestore();
 });
+
+for (const kind of [
+  "create",
+  "configure",
+  "update",
+  "delete",
+  "tool",
+] as const) {
+  test.each([false, true])(
+    `${kind} provider or tool refreshes shared catalogs only on success; failure=%s`,
+    async (fails) => {
+      const provider = {
+        createdAt: "2026-10-12T00:00:00Z",
+        hasApiKey: true,
+        id: "provider",
+        label: "New provider label",
+        modelCount: 1,
+        type: "openai" as const,
+      };
+
+      const create = spyOn(client, "createProvider").mockResolvedValue({
+        defaultProviderId: provider.id,
+        initialModel: "provider::model",
+        provider,
+      });
+
+      const configure = spyOn(client, "configureProvider").mockResolvedValue({
+        currentModel: "provider::model",
+        displayName: provider.label,
+        provider: provider.type,
+      });
+
+      const update = spyOn(client, "updateProvider").mockResolvedValue({
+        provider,
+      });
+
+      const remove = spyOn(client, "deleteProvider").mockResolvedValue({
+        defaultProviderId: null,
+      });
+
+      const deleteTool = spyOn(client, "deleteTool").mockResolvedValue(
+        undefined
+      );
+
+      const requests = [create, configure, update, remove, deleteTool];
+
+      if (fails) {
+        for (const request of requests) {
+          request.mockRejectedValue(new Error("Retry source change"));
+        }
+      }
+
+      let createMutation!: ReturnType<typeof useCreateProviderMutation>;
+      let configureMutation!: ReturnType<typeof useConfigureProviderMutation>;
+      let updateMutation!: ReturnType<typeof useUpdateProviderMutation>;
+      let deleteMutation!: ReturnType<typeof useDeleteProviderMutation>;
+      let deleteToolMutation!: ReturnType<typeof useDeleteToolMutation>;
+
+      function Probe() {
+        createMutation = useCreateProviderMutation();
+        configureMutation = useConfigureProviderMutation();
+        updateMutation = useUpdateProviderMutation();
+        deleteMutation = useDeleteProviderMutation();
+        deleteToolMutation = useDeleteToolMutation();
+
+        return null;
+      }
+
+      const keys = [
+        queryKeys.organizationOverview("parent", "parent"),
+        queryKeys.organizationOverview("parent", "team"),
+        queryKeys.organizationPublicationCatalog(
+          "parent",
+          kind === "tool" ? "tool" : "model"
+        ),
+        ...(kind === "tool"
+          ? [queryKeys.tools.all, queryKeys.profiles.all]
+          : [queryKeys.models, queryKeys.providers, queryKeys.health]),
+      ];
+
+      const reads = keys.map(() => mock(async () => 2));
+
+      const stops = keys.map((key, index) =>
+        new QueryObserver(queryClient, {
+          initialData: 1,
+          queryFn: reads[index],
+          queryKey: key,
+          staleTime: Number.POSITIVE_INFINITY,
+        }).subscribe(() => {})
+      );
+
+      const inactive = queryKeys.organizationOverview("parent", "other-team");
+      const memory = queryKeys.orgMemory("team");
+      const source = queryKeys.tools.source("tool");
+      queryClient.setQueryData(inactive, 1);
+      queryClient.setQueryData(memory, { content: "Private memory" });
+      queryClient.setQueryData(source, "Old source");
+
+      const createInput = {
+        apiKey: "test-key",
+        label: provider.label,
+        type: provider.type,
+      };
+
+      const configureInput = { apiKey: "test-key", provider: provider.type };
+      const updateInput = { label: provider.label };
+
+      try {
+        renderToString(
+          createElement(
+            QueryClientProvider,
+            { client: queryClient },
+            createElement(Probe)
+          )
+        );
+
+        const operation =
+          kind === "create"
+            ? createMutation.mutateAsync(createInput)
+            : kind === "configure"
+              ? configureMutation.mutateAsync(configureInput)
+              : kind === "update"
+                ? updateMutation.mutateAsync({
+                    providerId: provider.id,
+                    request: updateInput,
+                  })
+                : kind === "delete"
+                  ? deleteMutation.mutateAsync(provider.id)
+                  : deleteToolMutation.mutateAsync("tool");
+
+        if (fails) {
+          await expect(operation).rejects.toThrow();
+        } else {
+          await operation;
+        }
+
+        expect(keys.map((key) => queryClient.getQueryData(key))).toEqual(
+          keys.map(() => (fails ? 1 : 2))
+        );
+
+        for (const read of reads) {
+          expect(read).toHaveBeenCalledTimes(fails ? 0 : 1);
+        }
+
+        expect(queryClient.getQueryState(inactive)?.isInvalidated).toBe(!fails);
+        expect(queryClient.getQueryState(memory)?.isInvalidated).toBe(false);
+        expect(queryClient.getQueryData<{ content: string }>(memory)).toEqual({
+          content: "Private memory",
+        });
+        expect(queryClient.getQueryState(source)?.isInvalidated).toBe(
+          kind === "tool" && !fails
+        );
+
+        if (kind === "create") {
+          expect(create).toHaveBeenCalledWith(createInput);
+        } else if (kind === "configure") {
+          expect(configure).toHaveBeenCalledWith(configureInput);
+        } else if (kind === "update") {
+          expect(update).toHaveBeenCalledWith(provider.id, updateInput);
+        } else if (kind === "delete") {
+          expect(remove).toHaveBeenCalledWith(provider.id);
+        } else {
+          expect(deleteTool).toHaveBeenCalledWith("tool");
+        }
+      } finally {
+        for (const stop of stops) {
+          stop();
+        }
+
+        for (const request of requests) {
+          request.mockRestore();
+        }
+      }
+    }
+  );
+}
 
 for (const kind of ["create", "install", "patch", "delete"] as const) {
   test.each([false, true])(

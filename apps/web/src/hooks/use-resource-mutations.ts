@@ -56,7 +56,10 @@ export function useDeleteToolMutation() {
         queryClient,
         queryKeys.tools.all,
         queryKeys.tools.detail(toolId),
-        queryKeys.tools.source(toolId)
+        queryKeys.tools.source(toolId),
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
       ),
   });
 }
