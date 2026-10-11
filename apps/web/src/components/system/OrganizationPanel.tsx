@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@nakama/ui/select";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AiBrain01Icon,
   BookOpen01Icon,
@@ -37,7 +37,9 @@ import { OrgMemoryCard } from "@/components/settings/OrgMemoryCard";
 import { SkillsCuratorOrgCard } from "@/components/settings/SkillsCuratorOrgCard";
 import { SkillsPostTurnReviewOrgCard } from "@/components/settings/SkillsPostTurnReviewOrgCard";
 import { SkillsWriteApprovalOrgCard } from "@/components/settings/SkillsWriteApprovalOrgCard";
+import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
+import { useAppNavigation } from "@/hooks/use-app-navigation";
 import {
   useCreateTeam,
   useOrganizationOverview,
@@ -64,6 +66,97 @@ const READINESS_LABELS = {
   requires_setup: "Requires setup",
   unavailable: "Unavailable",
 };
+
+function SharedAgentButton({
+  orgId,
+  resource,
+}: {
+  orgId: string;
+  resource: OrgSharedResourceSummary;
+}) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const running = useRef(false);
+  const trigger = useRef<HTMLButtonElement | null>(null);
+  const queryClient = useQueryClient();
+  const { syncForOrg } = useActiveChatProfile();
+  const { navigateToNewChat } = useAppNavigation();
+
+  async function select() {
+    if (running.current) {
+      return;
+    }
+
+    running.current = true;
+    setPending(true);
+    setError(null);
+
+    try {
+      // oxlint-disable-next-line react-doctor/async-defer-await -- Recheck the team after this request completes.
+      const { profile } = await client.createSharedAgentInstance(
+        orgId,
+        resource.id
+      );
+
+      if (!trigger.current?.isConnected) {
+        return;
+      }
+
+      await queryClient.cancelQueries({ queryKey: queryKeys.profiles.all });
+
+      if (!trigger.current?.isConnected) {
+        return;
+      }
+
+      // oxlint-disable-next-line react-doctor/async-defer-await -- Recheck the team before using the returned profiles.
+      const { profiles } = await client.listProfiles(orgId);
+
+      if (!trigger.current?.isConnected) {
+        return;
+      }
+
+      if (!profiles.some((item) => item.id === profile.id)) {
+        throw new Error("The selected agent is unavailable. Retry selection.");
+      }
+
+      queryClient.setQueryData([...queryKeys.profiles.all, orgId], profiles);
+      queryClient.setQueryData(queryKeys.profiles.all, profiles);
+      syncForOrg({ orgId, preferredProfileId: profile.id, profiles });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.organizationOverview(resource.orgId, orgId),
+      });
+      navigateToNewChat(profile.id);
+    } catch (cause) {
+      if (trigger.current?.isConnected) {
+        setError(formatError(cause));
+      }
+    } finally {
+      running.current = false;
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="min-w-0 max-w-full space-y-2">
+      <Button
+        aria-label={`Open shared agent ${resource.label} from ${resource.sourceOrganization.name}`}
+        className="h-auto max-w-full whitespace-normal break-words text-left"
+        disabled={pending}
+        onClick={() => void select()}
+        ref={trigger}
+        size="sm"
+        variant="secondary"
+      >
+        {pending ? "Opening agent…" : resource.label}
+      </Button>
+      {error && (
+        <p className="break-words text-sm" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
 
 function SharedKnowledgeDialog({
   orgId,
@@ -849,6 +942,18 @@ export function OrganizationOverview() {
                       activeOrg.parentOrgId ? (
                       <SharedKnowledgeDialog
                         key={`${activeOrg.id}:${resource.id}`}
+                        orgId={activeOrg.id}
+                        resource={resource}
+                      />
+                    ) : resource.resourceKind === "agent" &&
+                      resource.readiness === "ready" &&
+                      activeOrg.parentOrgId &&
+                      user &&
+                      (user.isPlatformAdmin ||
+                        activeOrg.role === "admin" ||
+                        activeOrg.role === "member") ? (
+                      <SharedAgentButton
+                        key={`${activeOrg.id}:${user.id}:${resource.id}`}
                         orgId={activeOrg.id}
                         resource={resource}
                       />

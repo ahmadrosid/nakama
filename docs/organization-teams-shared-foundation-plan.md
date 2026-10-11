@@ -2288,3 +2288,17 @@ All 40 component tests passed with 282 assertions. Coverage includes admin, memb
 Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: shared-agent selection into a team chat, then tool/model actions and root resource details. No browser check, full suite, build, paid call, push, or PR ran.
 
 Evidence: /tmp/nakama-knowledge-actions-final-{focused,types,oxlint,lint,doctor}.log.
+
+### Slice 3l — Shared-agent selection into team chat
+
+Ready shared-agent chips now start selection for team members, team admins, and platform admins. Viewers, users without an invocation role, root tenants, and unavailable sources retain static chips. Selection uses the active team ID and publication ID. The server returns the existing or newly created team profile. The parent template ID never becomes the selected chat profile.
+
+The action cancels older profile queries, reads the team profile list through explicit team scope, and requires the returned profile ID in that list. It refreshes both existing profile cache keys before updating the active profile store and opening a new chat. It also invalidates the team overview so local counts can refresh. Pending selection blocks repeated clicks. Creation or refresh failure retains the previous profile and page. Retry repeats the server's idempotent selection operation. Team changes disconnect the old action; late responses cannot update caches, select a profile, or navigate.
+
+All 53 component tests passed with 348 assertions. New tests cover admin and member selection, explicit team and publication IDs, both profile caches, navigation order, viewer denial, and unavailable sources. They also cover creation failure, failed or incomplete refresh, retry, pending clicks, and late creation or refresh after team changes. The complete web type check, scoped anti-slop, Ultracite across 1533 files, and git diff --check passed. React Doctor remained at 91/100 with no issues.
+
+Two verification repairs were used. The first removed unsupported test storage access, typed cache assertions, and fixed spacing. The second wrapped test store restoration in act and documented two narrow async-defer-await exceptions. Those guards must follow completed requests to prevent stale team results; moving them before the requests would remove the required protection. No global rule setting changed.
+
+Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: tool/model actions, root resource details, and shared-template field controls. This slice adds no package, dependency, file, or browser check. No full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
+
+Evidence: /tmp/nakama-agent-selection-{focused,types,oxlint,lint,doctor,rule}.log.

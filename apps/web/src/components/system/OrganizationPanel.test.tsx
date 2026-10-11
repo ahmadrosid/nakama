@@ -2,12 +2,15 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import type {
   OrganizationOverviewResponse,
   OrganizationSummary,
+  ProfileResponse,
   ProfileSummary,
   SkillSummary,
 } from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { MemoryRouter, useLocation } from "react-router-dom";
+import { useActiveChatProfileStore } from "@/context/active-chat-profile-store";
 import {
   AuthContext,
   type AuthContextValue,
@@ -71,6 +74,17 @@ async function settle() {
   await new Promise((resolve) => setTimeout(resolve, 20));
 }
 
+function ChatLocation() {
+  const location = useLocation();
+
+  return (
+    <output data-chat-location>
+      {location.pathname}
+      {location.search}
+    </output>
+  );
+}
+
 function mount(
   queryClient: QueryClient,
   switchOrg: AuthContextValue["switchOrg"] = async () => undefined,
@@ -112,9 +126,12 @@ function mount(
       await act(async () => {
         root.render(
           <QueryClientProvider client={queryClient}>
-            <AuthContext.Provider value={auth}>
-              <OrganizationOverview />
-            </AuthContext.Provider>
+            <MemoryRouter initialEntries={["/system/organization"]}>
+              <AuthContext.Provider value={auth}>
+                <OrganizationOverview />
+                <ChatLocation />
+              </AuthContext.Provider>
+            </MemoryRouter>
           </QueryClientProvider>
         );
         await settle();
@@ -1861,3 +1878,275 @@ test("failed download activation releases original bytes and allows another atte
   ]);
   expect(document.querySelector('[role="dialog"] [role="alert"]')).toBeNull();
 });
+
+function sharedAgentInstance(): ProfileResponse {
+  return {
+    profile: {
+      ...template("team-instance", "Team writer"),
+      mcpServers: [],
+      sharedAgent: {
+        available: true,
+        publicationId: "team-a-agent",
+        sourceOrgId: "parent",
+        sourceProfileId: "agent",
+      },
+      skills: [],
+      systemPrompt: "",
+      tools: [],
+    },
+  };
+}
+
+function observeAgentSelection() {
+  const state = useActiveChatProfileStore.getState();
+  useActiveChatProfileStore.setState({
+    orgId: "team-a",
+    profileId: "old-profile",
+  });
+
+  const create = spyOn(client, "createSharedAgentInstance").mockResolvedValue(
+    sharedAgentInstance()
+  );
+
+  const list = spyOn(client, "listProfiles").mockResolvedValue({
+    profiles: [sharedAgentInstance().profile],
+  });
+
+  const reload = spyOn(client, "getOrganizationOverview").mockImplementation(
+    async (orgId) => overview(orgId)
+  );
+
+  cleanups.push(() => {
+    create.mockRestore();
+    list.mockRestore();
+    reload.mockRestore();
+    act(() => useActiveChatProfileStore.setState(state));
+  });
+
+  return { create, list };
+}
+
+async function selectSharedAgent(container: HTMLElement) {
+  await act(async () => {
+    container
+      .querySelector<HTMLButtonElement>(
+        'button[aria-label^="Open shared agent"]'
+      )
+      ?.click();
+    await settle();
+  });
+  await act(async () => {
+    await settle();
+  });
+}
+
+test.each(["admin", "member"] as const)(
+  "%s selects a team instance after refreshing its profiles",
+  async (role) => {
+    const { create, list } = observeAgentSelection();
+    const { container, queries } = await mountResourceReader(role);
+    expect(create).not.toHaveBeenCalled();
+    expect(list).not.toHaveBeenCalled();
+    await selectSharedAgent(container);
+    expect(create).toHaveBeenCalledWith("team-a", "team-a-agent");
+    expect(list).toHaveBeenCalledWith("team-a");
+    expect(
+      queries.getQueryData<ProfileSummary[]>(queryKeys.profiles.all)
+    ).toEqual([sharedAgentInstance().profile]);
+    expect(
+      queries.getQueryData<ProfileSummary[]>([
+        ...queryKeys.profiles.all,
+        "team-a",
+      ])
+    ).toEqual([sharedAgentInstance().profile]);
+    expect(useActiveChatProfileStore.getState().profileId).toBe(
+      "team-instance"
+    );
+    expect(useActiveChatProfileStore.getState().orgId).toBe("team-a");
+    expect(container.querySelector("[data-chat-location]")?.textContent).toBe(
+      "/chat?new=1&profile=team-instance"
+    );
+  }
+);
+
+test("viewers cannot select shared agents", async () => {
+  const { create, list } = observeAgentSelection();
+  const { container } = await mountResourceReader("viewer");
+  expect(
+    container.querySelector('button[aria-label^="Open shared agent"]')
+  ).toBeNull();
+  expect(create).not.toHaveBeenCalled();
+  expect(list).not.toHaveBeenCalled();
+});
+
+test("agent creation failure retains the selection and permits retry", async () => {
+  const { create, list } = observeAgentSelection();
+  create.mockRejectedValueOnce(new Error("Selection denied"));
+  const { container, queries } = await mountResourceReader();
+  await selectSharedAgent(container);
+  expect(container.querySelector('[role="alert"]')).not.toBeNull();
+  expect(useActiveChatProfileStore.getState().profileId).toBe("old-profile");
+  expect(container.querySelector("[data-chat-location]")?.textContent).toBe(
+    "/system/organization"
+  );
+  expect(list).not.toHaveBeenCalled();
+  expect(
+    queries.getQueryData<ProfileSummary[]>(queryKeys.profiles.all)
+  ).toBeUndefined();
+  await selectSharedAgent(container);
+  expect(create).toHaveBeenCalledTimes(2);
+  expect(useActiveChatProfileStore.getState().profileId).toBe("team-instance");
+});
+
+test.each([{ missing: false }, { missing: true }])(
+  "failed or incomplete profile refresh blocks agent navigation %#",
+  async ({ missing }) => {
+    const { create, list } = observeAgentSelection();
+
+    if (missing) {
+      list.mockResolvedValueOnce({ profiles: [] });
+    } else {
+      list.mockRejectedValueOnce(new Error("Refresh failed"));
+    }
+
+    const { container, queries } = await mountResourceReader();
+    const oldProfiles = [template("old-profile", "Old")];
+    queries.setQueryData(queryKeys.profiles.all, oldProfiles);
+    await selectSharedAgent(container);
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect(useActiveChatProfileStore.getState().profileId).toBe("old-profile");
+    expect(
+      queries.getQueryData<ProfileSummary[]>(queryKeys.profiles.all)
+    ).toEqual(oldProfiles);
+    expect(container.querySelector("[data-chat-location]")?.textContent).toBe(
+      "/system/organization"
+    );
+    await selectSharedAgent(container);
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(useActiveChatProfileStore.getState().profileId).toBe(
+      "team-instance"
+    );
+  }
+);
+
+test("pending profile refresh blocks repeated selection and early navigation", async () => {
+  const { create, list } = observeAgentSelection();
+  let resolve!: (response: { profiles: ProfileSummary[] }) => void;
+  list.mockReturnValueOnce(
+    new Promise((done) => {
+      resolve = done;
+    })
+  );
+  const { container } = await mountResourceReader();
+  await selectSharedAgent(container);
+
+  const button = container.querySelector<HTMLButtonElement>(
+    'button[aria-label^="Open shared agent"]'
+  );
+
+  expect(button?.disabled).toBe(true);
+  await selectSharedAgent(container);
+  expect(create).toHaveBeenCalledTimes(1);
+  expect(useActiveChatProfileStore.getState().profileId).toBe("old-profile");
+  expect(container.querySelector("[data-chat-location]")?.textContent).toBe(
+    "/system/organization"
+  );
+  await act(async () => {
+    resolve({ profiles: [sharedAgentInstance().profile] });
+    await settle();
+  });
+  expect(useActiveChatProfileStore.getState().profileId).toBe("team-instance");
+});
+
+test.each([{ phase: "create" }, { phase: "refresh" }])(
+  "late agent selection cannot change a different team %#",
+  async ({ phase }) => {
+    const { create, list } = observeAgentSelection();
+    let finish!: () => void;
+
+    if (phase === "create") {
+      create.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finish = () => resolve(sharedAgentInstance());
+        })
+      );
+    } else {
+      list.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finish = () => resolve({ profiles: [sharedAgentInstance().profile] });
+        })
+      );
+    }
+
+    const { container, queries, render } = await mountResourceReader();
+    await selectSharedAgent(container);
+    await render({ ...organization("team-b"), role: "member" });
+    act(() => {
+      useActiveChatProfileStore.setState({
+        orgId: "team-b",
+        profileId: "team-b-profile",
+      });
+    });
+    const teamProfiles = [template("team-b-profile", "Team B")];
+    queries.setQueryData(queryKeys.profiles.all, teamProfiles);
+    await act(async () => {
+      finish();
+      await settle();
+    });
+    expect(useActiveChatProfileStore.getState().profileId).toBe(
+      "team-b-profile"
+    );
+    expect(
+      queries.getQueryData<ProfileSummary[]>(queryKeys.profiles.all)
+    ).toEqual(teamProfiles);
+    expect(
+      queries.getQueryData<ProfileSummary[]>([
+        ...queryKeys.profiles.all,
+        "team-a",
+      ])
+    ).toBeUndefined();
+    expect(container.querySelector("[data-chat-location]")?.textContent).toBe(
+      "/system/organization"
+    );
+
+    if (phase === "create") {
+      expect(list).not.toHaveBeenCalled();
+    }
+  }
+);
+
+test.each([
+  { parentOrgId: "parent", readiness: "unavailable", role: "member" },
+  { parentOrgId: "parent", readiness: "requires_setup", role: "member" },
+  { parentOrgId: null, readiness: "ready", role: "admin" },
+  { parentOrgId: "parent", readiness: "ready", role: undefined },
+] as const)(
+  "non-selectable agent chips remain static %#",
+  async ({ readiness, parentOrgId, role }) => {
+    const { create, list } = observeAgentSelection();
+    const { container, queries, render } = await mountResourceReader();
+    const data = overview("team-a");
+    data.sharedResources[2].readiness = readiness;
+    await act(async () => {
+      queries.setQueryData(
+        queryKeys.organizationOverview("parent", "team-a"),
+        data
+      );
+
+      if (!parentOrgId) {
+        queries.setQueryData(
+          queryKeys.organizationOverview("team-a", "team-a"),
+          data
+        );
+      }
+
+      await settle();
+    });
+    await render({ ...organization("team-a"), parentOrgId, role });
+    expect(
+      container.querySelector('button[aria-label^="Open shared agent"]')
+    ).toBeNull();
+    expect(create).not.toHaveBeenCalled();
+    expect(list).not.toHaveBeenCalled();
+  }
+);
