@@ -3,6 +3,7 @@ import { readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { zipSync } from "fflate";
+import { asTestFetch } from "../../providers/test-helpers";
 import { SkillsService } from "../../services/skills-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
@@ -64,18 +65,20 @@ describe("POST /v1/skills/install", () => {
 
   test("platform admin installs a valid public SKILL.md and assigns it", async () => {
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = mock(
-      async () =>
-        new Response(
-          zipSync({
-            "skills-main/weather/SKILL.md": new TextEncoder().encode(
-              VALID_SKILL
-            ),
-            "skills-main/weather/references/explainer.md":
-              new TextEncoder().encode("Explainer instructions"),
-          })
-        )
-    ) as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            zipSync({
+              "skills-main/weather/SKILL.md": new TextEncoder().encode(
+                VALID_SKILL
+              ),
+              "skills-main/weather/references/explainer.md":
+                new TextEncoder().encode("Explainer instructions"),
+            })
+          )
+      )
+    );
 
     const { app, databaseAdapter, skillsService } = createApp();
 
@@ -173,17 +176,19 @@ describe("POST /v1/skills/install", () => {
   test("installs a skill from an npx skills add command", async () => {
     let requestedUrl = "";
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = mock(async (input) => {
-      requestedUrl = String(input);
+    globalThis.fetch = asTestFetch(
+      mock(async (input) => {
+        requestedUrl = String(input);
 
-      return new Response(
-        zipSync({
-          "agent-skills-main/pdf/SKILL.md": new TextEncoder().encode(
-            VALID_SKILL.replace("github-weather", "pdf")
-          ),
-        })
-      );
-    }) as typeof fetch;
+        return new Response(
+          zipSync({
+            "agent-skills-main/pdf/SKILL.md": new TextEncoder().encode(
+              VALID_SKILL.replace("github-weather", "pdf")
+            ),
+          })
+        );
+      })
+    );
 
     const { app, databaseAdapter } = createApp();
 
@@ -221,16 +226,18 @@ describe("POST /v1/skills/install", () => {
 
   test("invalid frontmatter returns 400 and writes no skill", async () => {
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = mock(
-      async () =>
-        new Response(
-          zipSync({
-            "skills-main/broken/SKILL.md": new TextEncoder().encode(
-              INVALID_SKILL
-            ),
-          })
-        )
-    ) as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            zipSync({
+              "skills-main/broken/SKILL.md": new TextEncoder().encode(
+                INVALID_SKILL
+              ),
+            })
+          )
+      )
+    );
 
     const { app, databaseAdapter } = createApp();
 
@@ -410,16 +417,18 @@ describe("POST /v1/skills/install", () => {
 
   test("installing the same skill onto a second profile returns 409", async () => {
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = mock(
-      async () =>
-        new Response(
-          zipSync({
-            "skills-main/weather/SKILL.md": new TextEncoder().encode(
-              VALID_SKILL
-            ),
-          })
-        )
-    ) as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            zipSync({
+              "skills-main/weather/SKILL.md": new TextEncoder().encode(
+                VALID_SKILL
+              ),
+            })
+          )
+      )
+    );
 
     const { app, databaseAdapter } = createApp();
 
