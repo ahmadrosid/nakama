@@ -32,6 +32,7 @@ import {
   useDeleteProviderMutation,
   useUpdateProviderMutation,
 } from "./use-app-queries";
+import { useUpdateProfileComposioToolkitsMutation } from "./use-composio";
 import {
   useAddOrgMember,
   useInviteOrgMember,
@@ -43,15 +44,20 @@ import {
   useArtifactsExist,
   useAssignToolMutation,
   useCloneProfileMutation,
+  useConnectMcpServerMutation,
+  useCreateMcpServerMutation,
   useCreateProfileMutation,
   useCreateSkillMutation,
+  useDeleteMcpServerMutation,
   useDeleteProfileMutation,
   useDeleteSkillMutation,
   useDeleteToolMutation,
   useInstallSkillMutation,
   usePatchSkillMutation,
   useRevokeArtifactShareMutation,
+  useSyncMcpServerMutation,
   useUnassignToolMutation,
+  useUpdateMcpServerMutation,
   useUpdateProfileMutation,
 } from "./use-resource-mutations";
 
@@ -144,6 +150,211 @@ afterAll(() => {
   revoke.mockRestore();
   publish.mockRestore();
 });
+
+for (const kind of [
+  "create",
+  "update",
+  "delete",
+  "connect",
+  "sync",
+  "composio",
+] as const) {
+  test.each([false, true])(
+    `${kind} integration refreshes shared readiness only on success; failure=%s`,
+    async (fails) => {
+      const server = {
+        cachedTools: [{ description: "Search data", name: "search" }],
+        config: { url: "https://example.com/mcp" },
+        createdAt: "2026-10-12T00:00:00Z",
+        enabled: true,
+        id: "server",
+        lastError: null,
+        name: "Updated server",
+        status: "connected" as const,
+        toolCount: 1,
+        transport: "http" as const,
+        updatedAt: "2026-10-12T00:00:00Z",
+        usesOAuth: false,
+      };
+
+      const create = spyOn(client, "createMcpServer").mockResolvedValue({
+        server,
+      });
+
+      const update = spyOn(client, "updateMcpServer").mockResolvedValue({
+        server,
+      });
+
+      const remove = spyOn(client, "deleteMcpServer").mockResolvedValue(
+        undefined
+      );
+
+      const connect = spyOn(client, "connectMcpServer").mockResolvedValue({
+        server,
+      });
+
+      const sync = spyOn(client, "syncMcpServer").mockResolvedValue({ server });
+
+      const composio = spyOn(
+        client,
+        "updateProfileComposioToolkits"
+      ).mockResolvedValue({ assignments: [] });
+
+      const requests = [create, update, remove, connect, sync, composio];
+
+      if (fails) {
+        for (const request of requests) {
+          request.mockRejectedValue(new Error("Retry integration change"));
+        }
+      }
+
+      let createMutation!: ReturnType<typeof useCreateMcpServerMutation>;
+      let updateMutation!: ReturnType<typeof useUpdateMcpServerMutation>;
+      let deleteMutation!: ReturnType<typeof useDeleteMcpServerMutation>;
+      let connectMutation!: ReturnType<typeof useConnectMcpServerMutation>;
+      let syncMutation!: ReturnType<typeof useSyncMcpServerMutation>;
+
+      let composioMutation!: ReturnType<
+        typeof useUpdateProfileComposioToolkitsMutation
+      >;
+
+      function Probe() {
+        createMutation = useCreateMcpServerMutation();
+        updateMutation = useUpdateMcpServerMutation();
+        deleteMutation = useDeleteMcpServerMutation();
+        connectMutation = useConnectMcpServerMutation();
+        syncMutation = useSyncMcpServerMutation();
+        composioMutation = useUpdateProfileComposioToolkitsMutation();
+
+        return null;
+      }
+
+      const keys = [
+        queryKeys.organizationOverview("parent", "parent"),
+        queryKeys.organizationOverview("parent", "team"),
+        queryKeys.organizationPublicationCatalog("parent", "agent"),
+        queryKeys.profiles.all,
+        kind === "composio"
+          ? queryKeys.composio.profileToolkits("profile")
+          : queryKeys.mcp.all,
+      ];
+
+      const reads = keys.map(() => mock(async () => 2));
+
+      const stops = keys.map((key, index) =>
+        new QueryObserver(queryClient, {
+          initialData: 1,
+          queryFn: reads[index],
+          queryKey: key,
+          staleTime: Number.POSITIVE_INFINITY,
+        }).subscribe(() => {})
+      );
+
+      const memory = queryKeys.orgMemory("team");
+
+      const otherAssignments =
+        queryKeys.composio.profileToolkits("other-profile");
+
+      const detail = queryKeys.mcp.detail(server.id);
+      queryClient.setQueryData(memory, { content: "Private memory" });
+      queryClient.setQueryData(otherAssignments, []);
+      queryClient.setQueryData(detail, { ...server, name: "Old server" });
+
+      const createInput = {
+        config: server.config,
+        name: server.name,
+        transport: server.transport,
+      };
+
+      const updateInput = { enabled: false };
+
+      const assignments = [
+        { allowedActions: ["SEARCH"], toolkitId: "toolkit" },
+      ];
+
+      try {
+        renderToString(
+          createElement(
+            QueryClientProvider,
+            { client: queryClient },
+            createElement(Probe)
+          )
+        );
+
+        const operation =
+          kind === "create"
+            ? createMutation.mutateAsync(createInput)
+            : kind === "update"
+              ? updateMutation.mutateAsync({
+                  request: updateInput,
+                  serverId: server.id,
+                })
+              : kind === "delete"
+                ? deleteMutation.mutateAsync({
+                    force: false,
+                    serverId: server.id,
+                  })
+                : kind === "connect"
+                  ? connectMutation.mutateAsync(server.id)
+                  : kind === "sync"
+                    ? syncMutation.mutateAsync(server.id)
+                    : composioMutation.mutateAsync({
+                        assignments,
+                        profileId: "profile",
+                      });
+
+        if (fails) {
+          await expect(operation).rejects.toThrow();
+        } else {
+          await operation;
+        }
+
+        expect(keys.map((key) => queryClient.getQueryData(key))).toEqual(
+          keys.map(() => (fails ? 1 : 2))
+        );
+
+        for (const read of reads) {
+          expect(read).toHaveBeenCalledTimes(fails ? 0 : 1);
+        }
+
+        expect(queryClient.getQueryState(memory)?.isInvalidated).toBe(false);
+        expect(queryClient.getQueryData<{ content: string }>(memory)).toEqual({
+          content: "Private memory",
+        });
+        expect(queryClient.getQueryState(otherAssignments)?.isInvalidated).toBe(
+          false
+        );
+        expect(queryClient.getQueryData<{ name: string }>(detail)?.name).toBe(
+          fails || kind === "delete" || kind === "composio"
+            ? "Old server"
+            : server.name
+        );
+
+        if (kind === "create") {
+          expect(create).toHaveBeenCalledWith(createInput);
+        } else if (kind === "update") {
+          expect(update).toHaveBeenCalledWith(server.id, updateInput);
+        } else if (kind === "delete") {
+          expect(remove).toHaveBeenCalledWith(server.id, false);
+        } else if (kind === "connect") {
+          expect(connect).toHaveBeenCalledWith(server.id);
+        } else if (kind === "sync") {
+          expect(sync).toHaveBeenCalledWith(server.id);
+        } else {
+          expect(composio).toHaveBeenCalledWith("profile", { assignments });
+        }
+      } finally {
+        for (const stop of stops) {
+          stop();
+        }
+
+        for (const request of requests) {
+          request.mockRestore();
+        }
+      }
+    }
+  );
+}
 
 for (const kind of ["enable", "disable"] as const) {
   test.each([false, true])(

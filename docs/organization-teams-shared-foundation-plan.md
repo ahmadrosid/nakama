@@ -2554,3 +2554,13 @@ Four new cases cover enable and disable hooks with success and failure responses
 The integration audit found another dependent read: shared-agent source validation checks MCP server state and Composio assignments. MCP server configuration and lifecycle mutations and Composio assignment mutations need their own cache slice. Step 5 and delivery stages 3 and 4 remain open. Next: those integration reads, account cache boundaries, and data portability compatibility. No new file, package, dependency, or helper abstraction was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
 
 Evidence: /tmp/nakama-plugin-catalog-{focused,types,format,oxlint,doctor,lint}.log.
+
+### Slice 3ah — Integration readiness cache refresh
+
+The existing MCP create, update, delete, connect, and sync hooks now refresh Organization overviews, publication selectors, and profile queries after success. They retain their MCP catalog invalidation and returned server detail updates. Composio assignment updates now refresh the same dependent reads alongside the selected profile's assignment query. No personal OAuth or credential authority changed. Unrelated Composio assignments and private memory caches remain untouched. Failed mutations preserve cached readiness and server detail.
+
+Twelve new cases cover all six hooks with success and failure responses. Query observers prove active parent and team summaries, shared-agent publication selectors, profile queries, and the affected integration queries refresh before completion. The cases check exact server IDs, delete force flags, profile IDs, assignment actions, returned server detail, and retained unrelated data. All 210 focused component and mutation tests passed with 1674 assertions. Complete web types, scoped anti-slop, Ultracite, and git diff --check passed. React Doctor retained 91/100 with the same two assignment complexity warnings and no errors. No verification repair was needed.
+
+Step 5 and delivery stages 3 and 4 remain open. Next: account cache boundaries, late responses during team switches, and import/export/archive/restore compatibility. No new file, package, dependency, or helper abstraction was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
+
+Evidence: /tmp/nakama-integration-catalog-{focused,types,format,oxlint,doctor,lint}.log.

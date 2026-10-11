@@ -254,7 +254,13 @@ export function useCreateMcpServerMutation() {
         queryKeys.mcp.detail(data.server.id),
         data.server
       );
-      await invalidateQueries(queryClient, queryKeys.mcp.all);
+      await invalidateQueries(
+        queryClient,
+        queryKeys.mcp.all,
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
+      );
     },
   });
 }
@@ -272,7 +278,13 @@ export function useUpdateMcpServerMutation() {
     }) => client.updateMcpServer(serverId, request),
     onSuccess: async (data, { serverId }) => {
       queryClient.setQueryData(queryKeys.mcp.detail(serverId), data.server);
-      await invalidateQueries(queryClient, queryKeys.mcp.all);
+      await invalidateQueries(
+        queryClient,
+        queryKeys.mcp.all,
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
+      );
     },
   });
 }
@@ -288,7 +300,9 @@ export function useDeleteMcpServerMutation() {
         queryClient,
         queryKeys.mcp.all,
         queryKeys.mcp.detail(serverId),
-        queryKeys.profiles.all
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
       ),
   });
 }
@@ -300,7 +314,13 @@ export function useConnectMcpServerMutation() {
     mutationFn: (serverId: string) => client.connectMcpServer(serverId),
     onSuccess: async (data, serverId) => {
       queryClient.setQueryData(queryKeys.mcp.detail(serverId), data.server);
-      await invalidateQueries(queryClient, queryKeys.mcp.all);
+      await invalidateQueries(
+        queryClient,
+        queryKeys.mcp.all,
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
+      );
     },
   });
 }
@@ -312,7 +332,13 @@ export function useSyncMcpServerMutation() {
     mutationFn: (serverId: string) => client.syncMcpServer(serverId),
     onSuccess: async (data, serverId) => {
       queryClient.setQueryData(queryKeys.mcp.detail(serverId), data.server);
-      await invalidateQueries(queryClient, queryKeys.mcp.all);
+      await invalidateQueries(
+        queryClient,
+        queryKeys.mcp.all,
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
+      );
     },
   });
 }
