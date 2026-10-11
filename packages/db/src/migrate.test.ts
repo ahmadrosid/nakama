@@ -92,6 +92,97 @@ test.each(["fresh", "upgrade"])(
   }
 );
 
+test.each(["fresh", "upgrade"])(
+  "shared resource migration preserves explicit publications and source links: %s",
+  (scenario) => {
+    const db = new Database(":memory:");
+    try {
+      migrateDatabase(db);
+      if (scenario === "upgrade") {
+        db.exec(
+          "DROP TABLE shared_agent_instances; DROP TABLE org_shared_resources;"
+        );
+      }
+      db.exec(`
+        INSERT INTO organizations (id, name, slug, created_at, updated_at)
+          VALUES ('parent', 'Parent', 'parent', 'now', 'now'), ('team', 'Team', 'team', 'now', 'now');
+        UPDATE organizations SET parent_org_id = 'parent' WHERE id = 'team';
+        INSERT INTO profiles (id, name, org_id, is_default, created_at, updated_at)
+          VALUES ('source', 'Source', 'parent', 1, 'now', 'now'), ('instance', 'Instance', 'team', 1, 'now', 'now'), ('duplicate', 'Duplicate', 'team', 0, 'now', 'now');
+      `);
+      const profiles = db.query("SELECT * FROM profiles ORDER BY id").all();
+      migrateDatabase(db);
+      migrateDatabase(db);
+      expect(db.query("SELECT * FROM org_shared_resources").all()).toEqual([]);
+      expect(db.query("SELECT * FROM shared_agent_instances").all()).toEqual(
+        []
+      );
+      expect(db.query("SELECT * FROM profiles ORDER BY id").all()).toEqual(
+        profiles
+      );
+      const publish = db.query(
+        "INSERT INTO org_shared_resources (id, org_id, resource_kind, resource_id, created_at, updated_at) VALUES (?, ?, ?, ?, 'now', 'now')"
+      );
+      for (const kind of ["knowledge", "skill", "agent", "tool", "model"]) {
+        publish.run(
+          kind,
+          "parent",
+          kind,
+          kind === "agent" ? "source" : "resource"
+        );
+      }
+      expect(() =>
+        publish.run("duplicate", "parent", "agent", "source")
+      ).toThrow();
+      expect(() =>
+        publish.run("invalid", "parent", "secret", "resource")
+      ).toThrow();
+      expect(() =>
+        publish.run("missing", "missing", "agent", "source")
+      ).toThrow();
+      const instance = db.query(
+        "INSERT INTO shared_agent_instances (profile_id, team_org_id, source_org_id, source_profile_id, publication_id, created_at) VALUES (?, ?, 'parent', 'source', 'agent', 'now')"
+      );
+      instance.run("instance", "team");
+      expect(() => instance.run("duplicate", "team")).toThrow();
+      expect(() => instance.run("missing", "team")).toThrow();
+      expect(() => instance.run("duplicate", "missing")).toThrow();
+      const publications = db
+        .query("SELECT * FROM org_shared_resources ORDER BY id")
+        .all();
+      const instances = db.query("SELECT * FROM shared_agent_instances").all();
+      migrateDatabase(db);
+      migrateDatabase(db);
+      expect(
+        db.query("SELECT * FROM org_shared_resources ORDER BY id").all()
+      ).toEqual(publications);
+      expect(db.query("SELECT * FROM shared_agent_instances").all()).toEqual(
+        instances
+      );
+      db.exec(
+        "DELETE FROM org_shared_resources WHERE id = 'agent'; DELETE FROM profiles WHERE id = 'source';"
+      );
+      expect(db.query("SELECT * FROM shared_agent_instances").all()).toEqual(
+        instances
+      );
+      expect(
+        db.query("SELECT id FROM profiles WHERE id = 'instance'").get()
+      ).toEqual({ id: "instance" });
+      db.exec("DELETE FROM profiles WHERE id = 'instance';");
+      expect(db.query("SELECT * FROM shared_agent_instances").all()).toEqual(
+        []
+      );
+      db.exec(
+        "DELETE FROM organizations WHERE id = 'team'; DELETE FROM organizations WHERE id = 'parent';"
+      );
+      expect(db.query("SELECT * FROM org_shared_resources").all()).toEqual([]);
+      expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
+    } finally {
+      db.close();
+    }
+  }
+);
+
 test.each(["normal upgrade", "retry after failed cleanup"])(
   "removes legacy Google Meet plugin records: %s",
   (scenario) => {

@@ -715,3 +715,24 @@ CREATE TABLE IF NOT EXISTS file_pins (
   path TEXT NOT NULL,
   PRIMARY KEY (org_id, user_id, profile_id, path)
 );
+
+-- Source links survive publication removal so shared instances remain managed.
+CREATE TABLE IF NOT EXISTS org_shared_resources (
+  id TEXT PRIMARY KEY NOT NULL,
+  org_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+  resource_kind TEXT NOT NULL CHECK (resource_kind IN ('knowledge', 'skill', 'agent', 'tool', 'model')),
+  resource_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (org_id, resource_kind, resource_id)
+);
+
+CREATE TABLE IF NOT EXISTS shared_agent_instances (
+  profile_id TEXT PRIMARY KEY NOT NULL REFERENCES profiles (id) ON DELETE CASCADE,
+  team_org_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+  source_org_id TEXT NOT NULL,
+  source_profile_id TEXT NOT NULL,
+  publication_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE (team_org_id, source_profile_id)
+);

@@ -77,6 +77,32 @@ export function migrateDatabase(db: Database): void {
   atomic((database) =>
     addNullableTextColumnIfMissing(database, "profiles", "acp_settings")
   );
+  atomic(migrateOrgSharedResources);
+}
+
+function migrateOrgSharedResources(db: Database): void {
+  // Retain source links after revocation; a missing publication blocks use.
+  db.exec(`
+CREATE TABLE IF NOT EXISTS org_shared_resources (
+  id TEXT PRIMARY KEY NOT NULL,
+  org_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+  resource_kind TEXT NOT NULL CHECK (resource_kind IN ('knowledge', 'skill', 'agent', 'tool', 'model')),
+  resource_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (org_id, resource_kind, resource_id)
+);
+
+CREATE TABLE IF NOT EXISTS shared_agent_instances (
+  profile_id TEXT PRIMARY KEY NOT NULL REFERENCES profiles (id) ON DELETE CASCADE,
+  team_org_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+  source_org_id TEXT NOT NULL,
+  source_profile_id TEXT NOT NULL,
+  publication_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE (team_org_id, source_profile_id)
+);
+  `);
 }
 
 function migrateSessionAppUserId(db: Database): void {
