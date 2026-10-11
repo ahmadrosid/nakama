@@ -1029,3 +1029,14 @@ The saved todo and questionnaire provider responses still need repair. Full test
 This slice includes earlier checked consolidation content and test fixture repairs in the same files. Other feature and type cleanup changes remain uncommitted.
 Next: verify and commit the remaining authorized type cleanup and feature slice 1g, then resume the first implementation step.
 Evidence: `/tmp/nakama-server-entry-types-tests.log`, `/tmp/nakama-server-entry-types-{server,agent}.log`, `/tmp/nakama-server-entry-types-lint-final.log`.
+
+2026-10-11: Slice 1g passed its complete type gate after the authorized server cleanup.
+OrgService creates teams through durable requests, seeds profiles and workspaces, and removes only the failed child's data.
+Concurrent and later retries return one team. A selected first admin receives membership; selecting another user does not add the creator.
+Pending teams cannot switch, change settings, or use tenant HTTP routes. Parent archive and deletion guards run before external cleanup.
+Checks: all 221 focused service, HTTP, and database tests passed across 30 files; complete server and database type checks passed.
+Lint passed all 1532 files; `git diff --check` passed. The slice retains the two earlier checked OrgService test fixture repairs.
+Step 1 and delivery stage 1 remain incomplete. Publication source validation, contracts, and organization routes are still required.
+Other authorized type cleanup changes remain uncommitted. Stale provider cassettes, full tests, and builds remain unresolved.
+Next: implement parent publication source validation and its access tests within the existing OrgService.
+Evidence: `/tmp/nakama-team-service-ready-tests.log`, `/tmp/nakama-team-service-ready-{server,db}-types.log`, `/tmp/nakama-team-service-ready-lint.log`.

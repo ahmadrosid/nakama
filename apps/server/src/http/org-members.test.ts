@@ -329,3 +329,48 @@ describe("org member management (AE2)", () => {
     expect(invalidMemberPathResponse.status).toBe(400);
   });
 });
+
+test("pending team setup blocks tenant requests even for platform admins", async () => {
+  const { app, authService, databaseAdapter } = createMinimalHonoApp();
+  const session = await loginPlatformAdminSession(
+    app,
+    authService,
+    databaseAdapter
+  );
+  const user = (await databaseAdapter.listPlatformAdminUsers())[0];
+  expect(user).toBeTruthy();
+  const now = new Date().toISOString();
+  await databaseAdapter.upsertOrganization({
+    createdAt: now,
+    id: "org_parent",
+    name: "Parent",
+    slug: "parent",
+    updatedAt: now,
+  });
+  await databaseAdapter.beginOrgTeamCreation({
+    adminUserId: user!.id,
+    creatorUserId: user!.id,
+    organization: {
+      createdAt: now,
+      id: "org_pending",
+      name: "Pending",
+      parentOrgId: "org_parent",
+      slug: "pending",
+      updatedAt: now,
+    },
+    requestHash: "hash",
+    requestId: "pending-request",
+  });
+  const pending = await app.fetch(
+    new Request("http://localhost:4310/v1/profiles", {
+      headers: session.headers({}, "org_pending"),
+    })
+  );
+  expect(pending.status).toBe(404);
+  const parent = await app.fetch(
+    new Request("http://localhost:4310/v1/profiles", {
+      headers: session.headers({}, "org_parent"),
+    })
+  );
+  expect(parent.status).toBe(200);
+});

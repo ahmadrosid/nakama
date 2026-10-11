@@ -1054,6 +1054,10 @@ export interface DatabaseAdapter {
     orgId: string,
     id: string
   ): Promise<StoredOrgSharedResourceRecord | null>;
+  getOrgTeamCreation(
+    parentOrgId: string,
+    requestId: string
+  ): Promise<StoredOrgTeamCreationRecord | null>;
   getPasskey(
     userId: string,
     credentialId: string

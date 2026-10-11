@@ -145,7 +145,7 @@ export function createOrgContextMiddleware(
 
     const organization = await databaseAdapter.getOrganizationById(orgId);
 
-    if (!organization || organization.archivedAt) {
+    if (!organization || organization.archivedAt || organization.setupPending) {
       c.res = errorResponse("Not found", 404);
 
       return;

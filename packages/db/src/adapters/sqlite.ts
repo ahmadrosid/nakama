@@ -4723,6 +4723,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async getOrgSharedResource(orgId, id) {
       return getOrgSharedResourceStmt.get(orgId, id) ?? null;
     },
+
+    async getOrgTeamCreation(parentOrgId, requestId) {
+      return getOrgTeamCreationStmt.get(parentOrgId, requestId) ?? null;
+    },
     async getPasskey(userId, credentialId) {
       const row = getPasskeyStmt.get(userId, credentialId);
 

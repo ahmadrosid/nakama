@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -12,7 +12,10 @@ import {
   writeParsedConfigIni,
 } from "@nakama/core";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import {
+  createInMemoryDatabaseAdapter,
+  type DatabaseAdapter,
+} from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AuthService } from "./auth-service";
 import {
@@ -197,7 +200,7 @@ describe("OrgService", () => {
       ["*.acme.com"],
       [""],
       // SAFETY: This deliberately wrong input tests runtime validation.
-      "acme.com" as string[],
+      "acme.com" as unknown as string[],
     ]) {
       await expect(
         orgService.updateOrganization(created.organization.id, {
@@ -565,7 +568,7 @@ describe("OrgService", () => {
     const { databaseAdapter, orgService } = createOrgService();
 
     const created = await orgService.createOrganization({
-      admin: { email: "admin@acme.com", name: "Acme Admin" },
+      admin: { email: "admin@acme.com", name: "Acme Admin", phone: "" },
       name: "Acme",
       slug: "acme-email-reauth",
     });
@@ -1718,5 +1721,321 @@ describe("OrgService", () => {
     expect(
       listed.members.some((member) => member.userId === added.member.userId)
     ).toBe(false);
+  });
+});
+
+async function seedTeamParent(db: DatabaseAdapter) {
+  const now = new Date().toISOString();
+  for (const id of ["org_parent", "org_other"]) {
+    await db.upsertOrganization({
+      createdAt: now,
+      id,
+      name: id,
+      slug: id.replace(/_/g, "-"),
+      updatedAt: now,
+    });
+  }
+  for (const id of ["user_creator", "user_other", "user_viewer"]) {
+    await db.createUser({
+      createdAt: now,
+      email: `${id}@example.com`,
+      id,
+      passwordHash: "test",
+      updatedAt: now,
+    });
+  }
+  await db.upsertOrgMember({
+    createdAt: now,
+    orgId: "org_parent",
+    role: "admin",
+    userId: "user_creator",
+  });
+  await db.upsertOrgMember({
+    createdAt: now,
+    orgId: "org_parent",
+    role: "viewer",
+    userId: "user_viewer",
+  });
+  return { name: "Team", requestId: "team-request", slug: "team" };
+}
+
+describe("OrgService team setup", () => {
+  test("concurrent and later retries return one fully seeded team", async () => {
+    const { orgService, databaseAdapter } = createOrgService();
+    const request = await seedTeamParent(databaseAdapter);
+    const [first, retry] = await Promise.all([
+      orgService.createTeam("org_parent", request, "user_creator"),
+      orgService.createTeam("org_parent", request, "user_creator"),
+    ]);
+    expect(retry.organization.id).toBe(first.organization.id);
+    expect(
+      (await orgService.createTeam("org_parent", request, "user_creator"))
+        .organization.id
+    ).toBe(first.organization.id);
+    expect(first.adminMember?.member.userId).toBe("user_creator");
+    expect(first.adminMember?.temporaryPassword).toBeNull();
+    const team = await databaseAdapter.getOrganizationById(
+      first.organization.id
+    );
+    expect(team?.parentOrgId).toBe("org_parent");
+    expect(team?.setupPending).toBe(false);
+    const profiles = await databaseAdapter.listProfilesForOrg(
+      first.organization.id
+    );
+    expect(profiles).toHaveLength(2);
+    expect(profiles.some((profile) => profile.isDefault)).toBe(true);
+    expect(profiles.some((profile) => profile.isSuper)).toBe(true);
+    for (const profile of profiles) {
+      expect(
+        await readFile(
+          join(getProfileSoulDir(first.organization.id, profile.id), "SOUL.md"),
+          "utf8"
+        )
+      ).toBeTruthy();
+    }
+    await expect(
+      orgService.createTeam(
+        "org_parent",
+        { ...request, name: "Changed" },
+        "user_creator"
+      )
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      orgService.createTeam(
+        first.organization.id,
+        { ...request, requestId: "nested", slug: "nested" },
+        "user_creator"
+      )
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      orgService.archiveOrganization("org_parent")
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  test("another first admin gets team access without adding the creator", async () => {
+    const { orgService, databaseAdapter } = createOrgService();
+    const request = await seedTeamParent(databaseAdapter);
+    const created = await orgService.createTeam(
+      "org_parent",
+      { ...request, adminUserId: "user_other" },
+      "user_creator"
+    );
+    expect(created.adminMember?.member.userId).toBe("user_other");
+    expect(
+      await databaseAdapter.getOrgMember(
+        created.organization.id,
+        "user_creator"
+      )
+    ).toBeNull();
+    expect(
+      (
+        await databaseAdapter.getOrgMember(
+          created.organization.id,
+          "user_other"
+        )
+      )?.role
+    ).toBe("admin");
+    await expect(
+      orgService.setActiveOrg({
+        orgId: created.organization.id,
+        userId: "user_creator",
+      })
+    ).rejects.toMatchObject({ status: 404 });
+    expect(
+      (
+        await orgService.setActiveOrg({
+          orgId: created.organization.id,
+          userId: "user_other",
+        })
+      ).id
+    ).toBe(created.organization.id);
+    for (const actor of ["user_viewer", "user_other", "missing"]) {
+      await expect(
+        orgService.createTeam(
+          "org_parent",
+          { ...request, requestId: actor, slug: actor.replace(/_/g, "-") },
+          actor
+        )
+      ).rejects.toMatchObject({ status: 403 });
+    }
+    await expect(
+      orgService.createTeam(
+        "org_parent",
+        {
+          ...request,
+          adminUserId: "missing",
+          requestId: "invalid-admin",
+          slug: "invalid-admin",
+        },
+        "user_creator"
+      )
+    ).rejects.toMatchObject({ status: 400 });
+    expect(
+      (await databaseAdapter.listOrganizations()).filter(
+        (org) => org.parentOrgId === "org_parent"
+      )
+    ).toHaveLength(1);
+  });
+
+  test.each(["seed", "complete"])(
+    "failed %s cleans only the new team and permits retry",
+    async (stage) => {
+      const { orgService, databaseAdapter } = createOrgService();
+      const request = await seedTeamParent(databaseAdapter);
+      await mkdir(getOrgConfigDir("org_parent"), { recursive: true });
+      const parentFile = join(getOrgConfigDir("org_parent"), "private.txt");
+      await writeFile(parentFile, "Parent private data");
+      let failedTeamId = "";
+      const original = databaseAdapter.upsertProfile.bind(databaseAdapter);
+      const profileSpy = spyOn(
+        databaseAdapter,
+        "upsertProfile"
+      ).mockImplementation(async (profile) => {
+        failedTeamId = profile.orgId ?? "";
+        if (stage === "seed" && profile.isSuper) {
+          throw new Error("Injected profile failure");
+        }
+        await original(profile);
+      });
+      const completeSpy =
+        stage === "complete"
+          ? spyOn(
+              databaseAdapter,
+              "completeOrgTeamCreation"
+            ).mockResolvedValueOnce(false)
+          : null;
+      try {
+        await expect(
+          orgService.createTeam("org_parent", request, "user_creator")
+        ).rejects.toThrow();
+      } finally {
+        profileSpy.mockRestore();
+        completeSpy?.mockRestore();
+      }
+      expect(failedTeamId).toBeTruthy();
+      expect(
+        await databaseAdapter.getOrganizationById(failedTeamId)
+      ).toBeNull();
+      expect(await databaseAdapter.listProfilesForOrg(failedTeamId)).toEqual(
+        []
+      );
+      expect(
+        await databaseAdapter.getOrgTeamCreation(
+          "org_parent",
+          request.requestId
+        )
+      ).toBeNull();
+      await expect(access(getOrgConfigDir(failedTeamId))).rejects.toThrow();
+      expect(await readFile(parentFile, "utf8")).toBe("Parent private data");
+      expect(await databaseAdapter.getUserById("user_creator")).not.toBeNull();
+      const retry = await orgService.createTeam(
+        "org_parent",
+        request,
+        "user_creator"
+      );
+      expect(
+        (await databaseAdapter.getOrganizationById(retry.organization.id))
+          ?.setupPending
+      ).toBe(false);
+      expect(
+        (await databaseAdapter.listOrganizations()).filter(
+          (org) => org.parentOrgId === "org_parent"
+        )
+      ).toHaveLength(1);
+    }
+  );
+
+  test("a failed cleanup keeps the request recoverable with the same team ID", async () => {
+    const { orgService, databaseAdapter } = createOrgService();
+    const request = await seedTeamParent(databaseAdapter);
+    const completion = spyOn(
+      databaseAdapter,
+      "completeOrgTeamCreation"
+    ).mockResolvedValueOnce(false);
+    const cleanup = spyOn(
+      databaseAdapter,
+      "abortOrgTeamCreation"
+    ).mockRejectedValueOnce(new Error("Injected cleanup failure"));
+    try {
+      await expect(
+        orgService.createTeam("org_parent", request, "user_creator")
+      ).rejects.toThrow();
+    } finally {
+      completion.mockRestore();
+      cleanup.mockRestore();
+    }
+    const pending = await databaseAdapter.getOrgTeamCreation(
+      "org_parent",
+      request.requestId
+    );
+    expect(pending?.completedAt).toBeNull();
+    expect(pending?.teamOrgId).toBeTruthy();
+    expect(
+      (await databaseAdapter.getOrganizationById(pending!.teamOrgId))
+        ?.setupPending
+    ).toBe(true);
+    const retry = await orgService.createTeam(
+      "org_parent",
+      request,
+      "user_creator"
+    );
+    expect(retry.organization.id).toBe(pending!.teamOrgId);
+    expect(
+      await databaseAdapter.listProfilesForOrg(retry.organization.id)
+    ).toHaveLength(2);
+    expect(
+      (await databaseAdapter.getOrganizationById(retry.organization.id))
+        ?.setupPending
+    ).toBe(false);
+  });
+
+  test("pending teams cannot switch or update; parent deletion preserves files while children remain", async () => {
+    const { orgService, databaseAdapter } = createOrgService();
+    const request = await seedTeamParent(databaseAdapter);
+    const now = new Date().toISOString();
+    await databaseAdapter.beginOrgTeamCreation({
+      adminUserId: "user_creator",
+      creatorUserId: "user_creator",
+      organization: {
+        createdAt: now,
+        id: "org_pending",
+        name: "Pending",
+        parentOrgId: "org_parent",
+        slug: "pending",
+        updatedAt: now,
+      },
+      requestHash: "hash",
+      requestId: request.requestId,
+    });
+    await expect(
+      orgService.setActiveOrg({ orgId: "org_pending", userId: "user_creator" })
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      orgService.updateOrganization("org_pending", { name: "Changed" })
+    ).rejects.toMatchObject({ status: 404 });
+    expect(
+      (await orgService.listOrganizations()).some(
+        (org) => org.id === "org_pending"
+      )
+    ).toBe(false);
+    await databaseAdapter.abortOrgTeamCreation(
+      "org_parent",
+      request.requestId,
+      "org_pending"
+    );
+    const created = await orgService.createTeam(
+      "org_parent",
+      request,
+      "user_creator"
+    );
+    await orgService.archiveOrganization(created.organization.id);
+    await orgService.archiveOrganization("org_parent");
+    await mkdir(getOrgConfigDir("org_parent"), { recursive: true });
+    const parentFile = join(getOrgConfigDir("org_parent"), "private.txt");
+    await writeFile(parentFile, "Parent data");
+    await expect(
+      orgService.permanentlyDeleteOrganization("org_parent")
+    ).rejects.toMatchObject({ status: 409 });
+    expect(await readFile(parentFile, "utf8")).toBe("Parent data");
   });
 });

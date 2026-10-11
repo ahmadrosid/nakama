@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -11,6 +12,7 @@ import {
   NakamaApiError,
   resolveWebPublicUrl,
 } from "@nakama/core";
+import { createChatLock } from "@nakama/core/channel-chat-lock";
 import {
   listChannelOwners,
   removeChannelConnection,
@@ -52,6 +54,8 @@ import {
 import type { AuthService } from "./auth-service";
 import { deleteOrgToolCredentials } from "./custom-tool-shared";
 import { loadMfaPolicy } from "./mfa-config";
+
+const teamCreationLock = createChatLock();
 
 const LAST_MEMBERSHIP_MESSAGE =
   "Cannot archive your last remaining organization.";
@@ -97,7 +101,9 @@ export class OrgService {
   async listOrganizations(): Promise<OrganizationSummary[]> {
     const organizations = await this.databaseAdapter.listOrganizations();
 
-    return organizations.map(toOrganizationSummary);
+    return organizations
+      .filter((org) => !org.setupPending)
+      .map(toOrganizationSummary);
   }
 
   async getOrganization(orgId: string): Promise<OrganizationSummary | null> {
@@ -111,7 +117,7 @@ export class OrgService {
   ): Promise<StoredOrganizationRecord> {
     const org = await this.databaseAdapter.getOrganizationById(orgId);
 
-    if (!org || org.archivedAt) {
+    if (!org || org.archivedAt || org.setupPending) {
       throw new NakamaApiError("Not found", 404);
     }
 
@@ -123,6 +129,17 @@ export class OrgService {
     actorUserId?: string
   ): Promise<OrganizationSummary> {
     const org = await this.requireActiveOrganization(orgId);
+
+    if (
+      (await this.databaseAdapter.listOrganizations()).some(
+        (child) => child.parentOrgId === orgId && !child.archivedAt
+      )
+    ) {
+      throw new NakamaApiError(
+        "Archive active teams before archiving their parent.",
+        409
+      );
+    }
 
     if (actorUserId) {
       const memberships =
@@ -179,6 +196,17 @@ export class OrgService {
     if (!organization.archivedAt) {
       throw new NakamaApiError(
         "Archive the organization before deleting it permanently.",
+        409
+      );
+    }
+
+    if (
+      (await this.databaseAdapter.listOrganizations()).some(
+        (child) => child.parentOrgId === orgId
+      )
+    ) {
+      throw new NakamaApiError(
+        "Delete teams before deleting their parent.",
         409
       );
     }
@@ -380,6 +408,122 @@ export class OrgService {
     return { organization };
   }
 
+  async createTeam(
+    parentOrgId: string,
+    request: {
+      name: string;
+      slug: string;
+      requestId: string;
+      adminUserId?: string;
+    },
+    creatorUserId: string
+  ): Promise<CreateOrganizationResponse> {
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(request.requestId)) {
+      throw new NakamaApiError("Invalid team request ID.", 400);
+    }
+    const name = request.name.trim();
+    const slug = request.slug.trim().toLowerCase();
+    if (!(name && SLUG_PATTERN.test(slug))) {
+      throw new NakamaApiError("Invalid team name or slug.", 400);
+    }
+    const adminUserId = request.adminUserId ?? creatorUserId;
+    const requestHash = createHash("sha256")
+      .update(JSON.stringify({ adminUserId, name, slug }))
+      .digest("hex");
+    return await teamCreationLock.withLock(
+      JSON.stringify([parentOrgId, request.requestId]),
+      async () => {
+        const parent = await this.requireActiveOrganization(parentOrgId);
+        if (parent.parentOrgId) {
+          throw new NakamaApiError("Teams require a root organization.", 409);
+        }
+        const creator = await this.databaseAdapter.getUserById(creatorUserId);
+        const membership = await this.databaseAdapter.getOrgMember(
+          parentOrgId,
+          creatorUserId
+        );
+        if (
+          !creator ||
+          creator.disabledAt ||
+          (!creator.isPlatformAdmin && membership?.role !== "admin")
+        ) {
+          throw new NakamaApiError("Forbidden", 403);
+        }
+        const previous = await this.databaseAdapter.getOrgTeamCreation(
+          parentOrgId,
+          request.requestId
+        );
+        if (
+          previous &&
+          (previous.requestHash !== requestHash ||
+            previous.creatorUserId !== creatorUserId)
+        ) {
+          throw new NakamaApiError(
+            "Team request already has another result.",
+            409
+          );
+        }
+        const admin = await this.databaseAdapter.getUserById(adminUserId);
+        if (!admin || admin.disabledAt) {
+          throw new NakamaApiError("Team admin is unavailable.", 400);
+        }
+        const organization = previous
+          ? await this.databaseAdapter.getOrganizationById(previous.teamOrgId)
+          : {
+              ...(await this.buildOrganizationRecord({ name, slug })),
+              parentOrgId,
+            };
+        if (!organization || organization.parentOrgId !== parentOrgId) {
+          throw new NakamaApiError("Team is unavailable.", 404);
+        }
+        const pending = await this.databaseAdapter.beginOrgTeamCreation({
+          adminUserId,
+          creatorUserId,
+          organization: { ...organization, parentOrgId },
+          requestHash,
+          requestId: request.requestId,
+        });
+        if (!pending.completedAt) {
+          try {
+            await this.seedOrgProfiles(organization.id);
+            await ensureLocalClientAccess(this.databaseAdapter);
+            if (
+              !(await this.databaseAdapter.completeOrgTeamCreation(
+                parentOrgId,
+                request.requestId,
+                organization.id,
+                new Date().toISOString()
+              ))
+            ) {
+              throw new NakamaApiError("Team setup could not complete.", 409);
+            }
+          } catch (error) {
+            // Keep the pending request if disk cleanup fails, so a retry can recover it.
+            await rm(getOrgConfigDir(organization.id), {
+              force: true,
+              recursive: true,
+            });
+            await deleteOrgToolCredentials(organization.id);
+            await this.databaseAdapter.abortOrgTeamCreation(
+              parentOrgId,
+              request.requestId,
+              organization.id
+            );
+            throw error;
+          }
+        }
+        const ready = await this.requireActiveOrganization(organization.id);
+        return {
+          adminMember: {
+            member: toOrgMemberSummary(admin, "admin", pending.createdAt),
+            temporaryPassword: null,
+          },
+          organization: toOrganizationSummary(ready),
+        };
+      }
+    );
+  }
+
   async listUserOrgs(userId: string): Promise<ListUserOrgsResponse> {
     const memberships =
       await this.databaseAdapter.listUserOrganizations(userId);
@@ -461,7 +605,8 @@ export class OrgService {
       );
     }
 
-    const summary = toOrganizationSummary(organization);
+    const summary: OrganizationSummary & { role?: OrgRole } =
+      toOrganizationSummary(organization);
 
     if (membership) {
       summary.role = membership.role;
