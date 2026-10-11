@@ -326,7 +326,7 @@ Status values: `todo`, `doing`, `done`, `blocked`.
 
 | ID | Delivery stage | Step | Test items | Status | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 1. Schema, contracts, access | Tenant relationship and publication records | 1, 2, 3, 17, 18 | doing | ae7404d0 (1a), 47c456c3 (1b), 69fdbb59 (1c), ff81645b (1d) | Slices 1a–1e complete; team creation work remains |
+| 1 | 1. Schema, contracts, access | Tenant relationship and publication records | 1, 2, 3, 17, 18 | doing | ae7404d0 (1a), 47c456c3 (1b), 69fdbb59 (1c), ff81645b (1d), bc7bb682 (1e) | Slices 1a–1f complete; workspace setup and service creation remain |
 | 2 | 1. Schema, contracts, access | Contracts and organization routes | 15, 16 | todo | | |
 | 3a | 2. Resource paths | Knowledge | 4, 5, 6, 21 | todo | | |
 | 3b | 2. Resource paths | Skills | 4, 5, 20 | todo | | |
@@ -347,6 +347,7 @@ Slice log (one row per commit):
 | 2026-10-11 | 1c | Publication and shared agent source-link tables; repeatable migration | Five resource kinds, uniqueness, references, revocation survival, cleanup; 149 database tests passed | Publication adapter operations |
 | 2026-10-11 | 1d | Scoped publication reads and writes; idempotent publish; SQL ownership checks and source-deletion triggers | Active root, wrong scope, retry, default/Super Bot rejection, SQL ownership and deletion; 151 database tests passed | Agent source-link operations and atomic team creation |
 | 2026-10-11 | 1e | Atomic shared agent profile/source-link creation; scoped reads and explicit reconnection | Concurrent selection, sibling isolation, revocation, retained sessions, source deletion, injected rollback; 154 database tests passed | Atomic team creation and request idempotency |
+| 2026-10-11 | 1f | Durable team requests; atomic child/admin insertion, completion, and guarded cleanup | Retry identity, pending visibility, admin checks, archive ordering, migration replay, injected member/request failures; 160 database tests passed | OrgService team setup, compensation, and permission checks |
 
 2026-10-11: Slice 1b passed database tests, the database type check, and `bun x ultracite check`.
 The first test run found an incorrect SQL value count. The repaired query passed all database tests.
@@ -380,3 +381,13 @@ A deletion trigger cleans local instance links even when test adapters disable f
 Two test repairs corrected session API use and empty-session summary assumptions. No failed check remains.
 Checks: all 154 database tests passed; database type check and `bun x ultracite check` passed.
 Stage 1 remains incomplete. Next: atomic team creation and request idempotency.
+
+2026-10-11: Slice 1f adds durable request records for team creation.
+The immediate write transaction checks the parent, creator authority, and first admin before inserting the child, membership, and request.
+Pending requests produce derived `setupPending` state. Membership lists hide incomplete teams until setup completes.
+Completion requires active parent/team records, the assigned admin, and seeded default/Super Bot profiles.
+Guarded cleanup deletes only an incomplete matching request and child. Completed requests survive team deletion and prevent duplicate creation on retry.
+The existing foreign-key deletion guard now serves normal deletion and failed-setup compensation.
+Checks: all 160 database tests passed; database type check and `bun x ultracite check` passed.
+Service workspace setup, filesystem cleanup, HTTP authorization, and readiness enforcement remain incomplete.
+Stage 1 remains incomplete. Next: connect OrgService team creation and workspace compensation.

@@ -555,6 +555,25 @@ export interface PublishOrgPluginReleaseInput {
   selectedVersion: string;
 }
 
+export interface StoredOrgTeamCreationRecord {
+  adminUserId: string;
+  completedAt: string | null;
+  createdAt: string;
+  creatorUserId: string;
+  parentOrgId: string;
+  requestHash: string;
+  requestId: string;
+  teamOrgId: string;
+}
+
+export interface BeginOrgTeamCreationInput {
+  adminUserId: string;
+  creatorUserId: string;
+  organization: StoredOrganizationRecord & { parentOrgId: string };
+  requestHash: string;
+  requestId: string;
+}
+
 export interface StoredSharedAgentInstanceRecord {
   createdAt: string;
   profileId: string;
@@ -583,6 +602,7 @@ export interface StoredOrganizationRecord {
   monthlyLlmWarningPercent?: number;
   name: string;
   parentOrgId?: string | null;
+  setupPending?: boolean;
   skillsCuratorArchiveAfterDays?: number;
   skillsCuratorConsolidateEnabled?: boolean;
   skillsCuratorEnabled?: boolean;
@@ -784,6 +804,12 @@ export interface StoredAuditEvent {
 }
 
 export interface DatabaseAdapter {
+  abortOrgTeamCreation(
+    parentOrgId: string,
+    requestId: string,
+    teamOrgId: string
+  ): Promise<boolean>;
+
   activateUserMfa(
     id: string,
     totpSecretEnc: string,
@@ -797,6 +823,9 @@ export interface DatabaseAdapter {
   assignMcpServerToProfile(profileId: string, serverId: string): Promise<void>;
   assignSkillToProfile(profileId: string, skillId: string): Promise<void>;
   assignToolToProfile(profileId: string, toolId: string): Promise<void>;
+  beginOrgTeamCreation(
+    input: BeginOrgTeamCreationInput
+  ): Promise<StoredOrgTeamCreationRecord>;
   /**
    * First-admin claim. Writes the org, the admin and the membership in one
    * transaction, and returns false without writing anything when a human user
@@ -836,6 +865,12 @@ export interface DatabaseAdapter {
     result: string,
     completedAt: string
   ): Promise<void>;
+  completeOrgTeamCreation(
+    parentOrgId: string,
+    requestId: string,
+    teamOrgId: string,
+    completedAt: string
+  ): Promise<boolean>;
   consumeMfaBackupCode(
     userId: string,
     codeHash: string,

@@ -183,6 +183,55 @@ test.each(["fresh", "upgrade"])(
   }
 );
 
+test.each(["fresh", "upgrade"])(
+  "team request migration retains recovery records: %s",
+  (scenario) => {
+    const db = new Database(":memory:");
+    try {
+      migrateDatabase(db);
+      if (scenario === "upgrade") {
+        db.exec("DROP TABLE org_team_creation_requests;");
+      }
+      db.exec(
+        "INSERT INTO organizations (id, name, slug, created_at, updated_at) VALUES ('parent', 'Parent', 'parent', 'now', 'now'), ('team', 'Team', 'team', 'now', 'now');"
+      );
+      migrateDatabase(db);
+      migrateDatabase(db);
+      expect(
+        db.query("SELECT * FROM org_team_creation_requests").all()
+      ).toEqual([]);
+      db.exec(
+        "INSERT INTO org_team_creation_requests (parent_org_id, request_id, request_hash, creator_user_id, admin_user_id, team_org_id, created_at) VALUES ('parent', 'request', 'hash', 'creator', 'admin', 'team', 'now');"
+      );
+      const requests = db
+        .query("SELECT * FROM org_team_creation_requests")
+        .all();
+      migrateDatabase(db);
+      migrateDatabase(db);
+      expect(
+        db.query("SELECT * FROM org_team_creation_requests").all()
+      ).toEqual(requests);
+      db.exec(
+        "UPDATE org_team_creation_requests SET completed_at = 'done'; DELETE FROM organizations WHERE id = 'team';"
+      );
+      migrateDatabase(db);
+      expect(
+        db
+          .query(
+            "SELECT team_org_id, completed_at FROM org_team_creation_requests"
+          )
+          .get()
+      ).toEqual({ completed_at: "done", team_org_id: "team" });
+      db.exec("DELETE FROM organizations WHERE id = 'parent';");
+      expect(
+        db.query("SELECT * FROM org_team_creation_requests").all()
+      ).toEqual([]);
+    } finally {
+      db.close();
+    }
+  }
+);
+
 test.each(["normal upgrade", "retry after failed cleanup"])(
   "removes legacy Google Meet plugin records: %s",
   (scenario) => {

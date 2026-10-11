@@ -45,6 +45,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateOrganizationArchivedAt);
   atomic(migrateOrganizationParent);
   atomic(migrateOrgSharedResources);
+  atomic(migrateOrgTeamCreationRequests);
   atomic(migrateSkillUsageTables);
   atomic(migrateTenantOrgScope);
   atomic(migrateSkillOrgIds);
@@ -78,6 +79,22 @@ export function migrateDatabase(db: Database): void {
   atomic((database) =>
     addNullableTextColumnIfMissing(database, "profiles", "acp_settings")
   );
+}
+
+function migrateOrgTeamCreationRequests(db: Database): void {
+  db.exec(`
+CREATE TABLE IF NOT EXISTS org_team_creation_requests (
+  parent_org_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  creator_user_id TEXT NOT NULL,
+  admin_user_id TEXT NOT NULL,
+  team_org_id TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  completed_at TEXT,
+  PRIMARY KEY (parent_org_id, request_id)
+);
+  `);
 }
 
 function migrateOrgSharedResources(db: Database): void {

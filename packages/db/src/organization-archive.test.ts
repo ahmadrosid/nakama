@@ -8,6 +8,7 @@ import {
   createSqliteMemoryAdapter,
 } from "./adapters/sqlite";
 import type {
+  BeginOrgTeamCreationInput,
   DatabaseAdapter,
   StoredOrgSharedResourceRecord,
   StoredSkillRecord,
@@ -662,4 +663,200 @@ describe("shared agent instance persistence", () => {
       rmSync(directory, { force: true, recursive: true });
     }
   });
+});
+
+async function seedTeamCreation(
+  db: DatabaseAdapter
+): Promise<BeginOrgTeamCreationInput> {
+  const now = "2026-10-11T00:00:00.000Z";
+  await seedTwoActiveOrgs(db, now);
+  for (const id of ["creator", "admin", "viewer"]) {
+    await db.createUser({
+      createdAt: now,
+      email: `${id}@example.com`,
+      id,
+      passwordHash: "test",
+      updatedAt: now,
+    });
+  }
+  await db.upsertOrgMember({
+    createdAt: now,
+    orgId: "org_a",
+    role: "admin",
+    userId: "creator",
+  });
+  await db.upsertOrgMember({
+    createdAt: now,
+    orgId: "org_a",
+    role: "viewer",
+    userId: "viewer",
+  });
+  return {
+    adminUserId: "admin",
+    creatorUserId: "creator",
+    organization: {
+      createdAt: now,
+      id: "team",
+      name: "Team",
+      parentOrgId: "org_a",
+      slug: "team",
+      updatedAt: now,
+    },
+    requestHash: "hash",
+    requestId: "request",
+  };
+}
+
+describe("atomic team creation records", () => {
+  test("retries retain one team and keep incomplete setup outside memberships", async () => {
+    const db = createSqliteMemoryAdapter();
+    const input = await seedTeamCreation(db);
+    const [first, retry] = await Promise.all([
+      db.beginOrgTeamCreation(input),
+      db.beginOrgTeamCreation({
+        ...input,
+        organization: { ...input.organization, id: "retry", slug: "retry" },
+      }),
+    ]);
+    expect(first).toEqual(retry);
+    expect(first.completedAt).toBeNull();
+    expect(first.teamOrgId).toBe("team");
+    expect(await db.getOrganizationById("retry")).toBeNull();
+    expect((await db.getOrganizationById("team"))?.setupPending).toBe(true);
+    expect(await db.listUserOrganizations("admin")).toEqual([]);
+    expect(await db.getOrgMember("team", "admin")).toEqual(
+      expect.objectContaining({ role: "admin" })
+    );
+    expect(await db.getOrgMember("team", "creator")).toBeNull();
+    await expect(
+      db.beginOrgTeamCreation({ ...input, requestHash: "other" })
+    ).rejects.toThrow();
+    expect(
+      await db.completeOrgTeamCreation("org_a", "request", "team", "done")
+    ).toBe(false);
+    for (const [id, isDefault, isSuper] of [
+      ["default", true, false],
+      ["super", false, true],
+    ] as const) {
+      await db.upsertProfile({
+        createdAt: "now",
+        id,
+        isDefault,
+        isSuper,
+        model: null,
+        name: id,
+        orgId: "team",
+        systemPrompt: "",
+        updatedAt: "now",
+      });
+    }
+    expect(
+      await db.completeOrgTeamCreation("org_a", "request", "wrong-team", "done")
+    ).toBe(false);
+    expect(
+      await db.completeOrgTeamCreation("org_a", "request", "team", "done")
+    ).toBe(true);
+    expect(
+      await db.completeOrgTeamCreation("org_a", "request", "team", "later")
+    ).toBe(true);
+    expect((await db.getOrganizationById("team"))?.setupPending).toBe(false);
+    expect(
+      (await db.listUserOrganizations("admin")).map(
+        (row) => row.organization.id
+      )
+    ).toEqual(["team"]);
+    expect((await db.beginOrgTeamCreation(input)).completedAt).toBe("done");
+    expect(await db.abortOrgTeamCreation("org_a", "request", "team")).toBe(
+      false
+    );
+    expect(await db.deleteOrganization("team")).toBe(true);
+    expect((await db.beginOrgTeamCreation(input)).teamOrgId).toBe("team");
+    expect(await db.getOrganizationById("team")).toBeNull();
+  });
+
+  test("failed setup cleanup preserves the parent and user accounts; archive serializes with creation", async () => {
+    const db = createSqliteMemoryAdapter();
+    const input = await seedTeamCreation(db);
+    await expect(
+      db.beginOrgTeamCreation({ ...input, creatorUserId: "viewer" })
+    ).rejects.toThrow();
+    await expect(
+      db.beginOrgTeamCreation({ ...input, adminUserId: "missing" })
+    ).rejects.toThrow();
+    await db.disableUser("admin", "now");
+    await expect(db.beginOrgTeamCreation(input)).rejects.toThrow();
+    await db.enableUser("admin");
+    const [request, archived] = await Promise.all([
+      db.beginOrgTeamCreation(input),
+      db.tryMarkOrganizationArchived("org_a", "now"),
+    ]);
+    expect(request.teamOrgId).toBe("team");
+    expect(archived).toBe(false);
+    await db.upsertProfile({
+      createdAt: "now",
+      id: "partial-profile",
+      isDefault: true,
+      isSuper: false,
+      model: null,
+      name: "Partial",
+      orgId: "team",
+      systemPrompt: "",
+      updatedAt: "now",
+    });
+    expect(await db.abortOrgTeamCreation("org_b", "request", "team")).toBe(
+      false
+    );
+    expect(
+      await db.abortOrgTeamCreation("org_a", "request", "wrong-team")
+    ).toBe(false);
+    expect(await db.abortOrgTeamCreation("org_a", "request", "team")).toBe(
+      true
+    );
+    expect(await db.getOrganizationById("team")).toBeNull();
+    expect(await db.getProfile("partial-profile")).toBeNull();
+    expect(await db.getOrgMember("team", "admin")).toBeNull();
+    expect(await db.getUserById("admin")).not.toBeNull();
+    expect(await db.getOrgMember("org_a", "creator")).not.toBeNull();
+    expect((await db.beginOrgTeamCreation(input)).teamOrgId).toBe("team");
+    expect(await db.abortOrgTeamCreation("org_a", "request", "team")).toBe(
+      true
+    );
+    expect(await db.tryMarkOrganizationArchived("org_a", "now")).toBe(true);
+    await expect(db.beginOrgTeamCreation(input)).rejects.toThrow();
+    expect(await db.getOrganizationById("team")).toBeNull();
+  });
+
+  test.each(["org_members", "org_team_creation_requests"])(
+    "failure writing %s rolls back the child and admin",
+    async (table) => {
+      const directory = mkdtempSync(join(tmpdir(), "nakama-team-creation-"));
+      const path = join(directory, "test.sqlite");
+      const database = await createSqliteDatabase(`file:${path}`);
+      const raw = new Database(path);
+      try {
+        const input = await seedTeamCreation(database.adapter);
+        raw.exec(
+          `CREATE TRIGGER reject_team_creation BEFORE INSERT ON ${table} BEGIN SELECT RAISE(ABORT, 'injected failure'); END;`
+        );
+        await expect(
+          database.adapter.beginOrgTeamCreation(input)
+        ).rejects.toThrow();
+        expect(await database.adapter.getOrganizationById("team")).toBeNull();
+        expect(await database.adapter.getOrgMember("team", "admin")).toBeNull();
+        expect(
+          raw.query("SELECT * FROM org_team_creation_requests").all()
+        ).toEqual([]);
+        expect(await database.adapter.getUserById("admin")).not.toBeNull();
+        raw.exec("DROP TRIGGER reject_team_creation;");
+        expect(
+          (await database.adapter.beginOrgTeamCreation(input)).teamOrgId
+        ).toBe("team");
+        expect(raw.query("PRAGMA foreign_key_check").all()).toEqual([]);
+      } finally {
+        raw.close();
+        database.close();
+        rmSync(directory, { force: true, recursive: true });
+      }
+    }
+  );
 });
