@@ -32,6 +32,20 @@ On a fresh install, you can also restore during [First-time setup](/first-time-s
 
 Restored plugins stay **disabled** until an organization admin enables them in **Control center → Agent tools → Plugins**. If a restored package no longer matches its stored hash, that release stays unavailable and must be installed again.
 
+### Teams and shared resources
+
+A full backup retains organization and team relationships, saved team conversations, and memory.
+Restore does not revive publications removed after the backup.
+Only matching publications that are still authorized remain available.
+Restoring into a fresh installation leaves shared references inactive because no existing publication authority can be verified.
+
+After restore, a parent admin can review resources in **System → Organization** and publish permitted sources again.
+Shared agents keep their saved team work when access is unavailable.
+New turns use restored configuration after the server reloads its sessions.
+
+An organization export contains that organization's work. It does not include parent secrets or unpublished parent files.
+Organization exports cannot replace a whole installation through restore.
+
 ## Profile packs (single agent)
 
 To move **one** profile without a full-root backup, open **Agent**, select the profile, and choose **Export** or **Import**. See [Export and import an agent pack](/profiles#export-and-import-a-profile-pack).

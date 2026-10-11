@@ -299,7 +299,7 @@ Delivery order:
 - [x] 1. Deliver schema, contracts, access rules, and migration tests.
 - [x] 2. Deliver all five resource paths and execution checks.
 - [x] 3. Deliver the Organization page, client state, and component tests.
-- [ ] 4. Document the UI path and roles in existing user docs.
+- [x] 4. Document the UI path and roles in existing user docs.
 
 2026-10-11: First iteration stopped at the required feature-issue gate. GitHub searches found no matching feature issue.
 Searches covered shared foundation, team organization, shared issue titles, teams issue titles, and parent organization.
@@ -2656,3 +2656,15 @@ All 251 focused tests passed with two Windows-only skips and 1,848 assertions. C
 Implementation step 5 and delivery stage 3 are complete. Delivery stage 4 remains open. Next: document System → Organization, parent publications, team additions, roles, and team-local connections in existing user docs. Final builds and release checks remain required. No browser check, new file, package, dependency, paid call, push, or PR ran in this slice.
 
 Evidence: /tmp/nakama-compatibility-{focused,server-types,client-types,core-types,db-types,web-types,lint}.log; /tmp/nakama-stage3-{full-test,knip-confirm,check-confirm}.log.
+
+### Slice 4a — User documentation and final checks
+
+Existing multi-tenancy, profiles, and backup documentation now explain shared resources and private team work. The instructions use System → Organization and the actual publication, team creation, selection, and settings labels. They cover parent and team roles, filtered summaries, first-admin assignment, team-local connections, shared-agent updates and revocation, inactive pack references, and restore publication rules. No new documentation page or product abstraction was needed. The supplied design remains attached to this plan. No browser capture was requested or performed.
+
+The documentation pipeline passed for 45 pages, 35 referenced screenshots, and nine capture scripts. Documentation types and the documentation build passed. The generated Markdown contains all added sections. Complete server, agent, client, core, and database types passed; the web build includes its complete type check. Server and web builds passed. The web build retains a large-chunk warning. No generated build output or type cache was added to the commit.
+
+Final bun run check, bun run knip, and git diff --check passed. The canonical bun run test passed with 4,404 server and package tests, 22 skips, and 16,438 assertions, plus 942 web tests and 4,248 assertions. Both suites reported zero failures. No verification repair was needed. No paid provider call or browser check ran.
+
+Delivery stage 4 is complete. All five implementation steps and all four delivery stages are complete. Push and a ready PR remain required. The current branch is main, as previously requested. GitHub main matches the local origin/main reference. A main-to-main PR cannot carry these changes. Publication needs a user choice of review branch before pushing. The prepared PR description uses the repository ADHD format. Browser behavior and live OAuth delivery remain unverified.
+
+Evidence: /tmp/nakama-stage4-{pipeline,docs-types,docs-build,lint,check,knip,full-test}.log; /tmp/nakama-final-{server-build,web-build,server-types,agent-types,client-types,core-types,db-types}.log. Prepared PR body: /tmp/nakama-organization-teams-pr.md.
