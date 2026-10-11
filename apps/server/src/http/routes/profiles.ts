@@ -231,7 +231,23 @@ export function registerProfileRoutes(
     .openapi("DeleteArtifactResponse");
 
   const listKnowledgeBaseSchema = z
-    .object({})
+    .object({
+      publishedDocuments: z
+        .array(
+          z.object({
+            id: z.string(),
+            filename: z.string(),
+            mediaType: z.string(),
+            sizeBytes: z.number(),
+            status: z.enum(["ready", "failed"]),
+            uploadedAt: z.string(),
+            scope: z.literal("parent"),
+            publicationId: z.string(),
+            sourceOrganization: z.object({ id: z.string(), name: z.string() }),
+          })
+        )
+        .optional(),
+    })
     .passthrough()
     .openapi("ListKnowledgeBaseResponse");
 

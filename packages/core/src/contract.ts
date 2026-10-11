@@ -2735,9 +2735,20 @@ export interface KnowledgeBaseSource {
   url: string;
 }
 
+export interface PublishedKnowledgeBaseDocument
+  extends Pick<
+    KnowledgeBaseDocument,
+    "id" | "filename" | "mediaType" | "sizeBytes" | "status" | "uploadedAt"
+  > {
+  publicationId: string;
+  scope: "parent";
+  sourceOrganization: { id: string; name: string };
+}
+
 export interface ListKnowledgeBaseResponse {
   documents: KnowledgeBaseDocument[];
   profileId: string;
+  publishedDocuments?: PublishedKnowledgeBaseDocument[];
   sources: KnowledgeBaseSource[];
 }
 

@@ -1305,3 +1305,18 @@ Steps 2 and 3 remain unchecked. Knowledge catalogs, profile assignments, indexed
 Next: supply published parent document references to team knowledge catalogs and searches, with live publication checks.
 No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran.
 Evidence: /tmp/nakama-published-knowledge-{focused,types,lint}.log.
+
+2026-10-11: Step 2 slice 2p adds published parent document metadata to the existing profile knowledge response.
+ListKnowledgeBaseResponse declares an optional publishedDocuments field. The server returns it separately from local documents and attached team documents.
+Each parent entry includes its publication ID, source organization, parent scope, and permitted document metadata. It excludes internal errors and private paths.
+The existing content resolver now supplies both catalog entries and downloads. Both paths recheck current publication, source status, and file boundaries.
+Unavailable entries are omitted. Unexpected database failures remain errors rather than an empty success response.
+Standalone catalogs keep their local documents and sources. Parent publications do not become local attachments or copy parent files into team workspaces.
+The existing profile knowledge endpoint keeps its platform-admin requirement. Team readers retain the published resource list and content endpoints from earlier slices.
+Tests cover sibling catalogs without parent membership, foreign profile denial, local attachment preservation, publication removal, missing files, failed metadata, and private error omission.
+Existing download and symlink tests now also verify catalog removal. OpenAPI declares the separate parent metadata field.
+Checks: all 108 focused tests passed across four files; complete core and server type checks passed; lint passed all 1532 files; git diff --check passed.
+Steps 2 and 3 remain unchecked. This catalog slice does not finish a delivery stage.
+Next: pass these authorized references into regex and indexed search, then include them in prompt catalogs after actual search use passes access tests.
+No new source file, dependency, or package was added. No full-suite rerun, browser check, build, push, or PR ran.
+Evidence: /tmp/nakama-published-catalog-{focused,core-types,server-types,lint}.log.

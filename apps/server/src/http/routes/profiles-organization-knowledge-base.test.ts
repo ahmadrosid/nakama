@@ -585,6 +585,148 @@ async function setupPublishedKnowledge() {
 }
 
 describe("published parent knowledge reads", () => {
+  test("team profile catalogs separate live parent publications from local attachments", async () => {
+    const { db, profileService, document, publication, privateDocument } =
+      await setupPublishedKnowledge();
+    const team = await profileService.createProfile("org_team_a", {
+      name: "Reader A",
+    });
+    const sibling = await profileService.createProfile("org_team_b", {
+      name: "Reader B",
+    });
+    const unrelated = await profileService.createProfile("org_other", {
+      name: "Other",
+    });
+    const local = await profileService.uploadKnowledgeBaseDocument(
+      "org_team_a",
+      team.profile.id,
+      textDocument("Team private bytes")
+    );
+    const attached =
+      await profileService.uploadOrganizationKnowledgeBaseDocument(
+        "org_team_a",
+        textDocument("Team attached bytes")
+      );
+    await attachSharedKnowledgeBaseDocument(
+      "org_team_a",
+      team.profile.id,
+      attached.document.id
+    );
+    const result = await profileService.listKnowledgeBase(
+      "org_team_a",
+      team.profile.id
+    );
+    expect(result.documents.map((entry) => entry.id).sort()).toEqual(
+      [local.document.id, attached.document.id].sort()
+    );
+    expect(result.publishedDocuments).toEqual([
+      {
+        id: document.id,
+        filename: document.filename,
+        mediaType: document.mediaType,
+        sizeBytes: document.sizeBytes,
+        status: "ready",
+        uploadedAt: document.uploadedAt,
+        scope: "parent",
+        publicationId: publication.id,
+        sourceOrganization: { id: "org_parent", name: "org_parent" },
+      },
+    ]);
+    expect(JSON.stringify(result)).not.toContain(privateDocument.id);
+    expect(
+      (await profileService.listKnowledgeBase("org_team_b", sibling.profile.id))
+        .publishedDocuments
+    ).toEqual(result.publishedDocuments);
+    expect(
+      (await profileService.listKnowledgeBase("org_team_b", sibling.profile.id))
+        .documents
+    ).toEqual([]);
+    expect(
+      (
+        await profileService.listKnowledgeBase(
+          "org_other",
+          unrelated.profile.id
+        )
+      ).publishedDocuments
+    ).toEqual([]);
+    await expect(
+      profileService.listKnowledgeBase("org_team_a", sibling.profile.id)
+    ).rejects.toMatchObject({ status: 404 });
+    await db.deleteOrgSharedResource("org_parent", publication.id);
+    const revoked = await profileService.listKnowledgeBase(
+      "org_team_a",
+      team.profile.id
+    );
+    expect(revoked.publishedDocuments).toEqual([]);
+    expect(revoked.documents).toEqual(result.documents);
+    expect(revoked.sources).toEqual(result.sources);
+  });
+
+  test("catalogs omit unavailable files and keep unexpected database failures visible", async () => {
+    const { db, document, profileService } = await setupPublishedKnowledge();
+    const original =
+      await profileService.listPublishedKnowledgeBaseDocuments("org_team_a");
+    expect(original).toHaveLength(1);
+    const lookup = spyOn(db, "getOrgSharedResource");
+    try {
+      lookup.mockRejectedValueOnce(new Error("database unavailable"));
+      await expect(
+        profileService.listPublishedKnowledgeBaseDocuments("org_team_a")
+      ).rejects.toThrow("database unavailable");
+    } finally {
+      lookup.mockRestore();
+    }
+    const dir = getOrgKnowledgeBaseDir("org_parent");
+    const manifestPath = getKnowledgeBaseManifestPath(dir);
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    const entry = manifest.documents.find(
+      (item: { id: string }) => item.id === document.id
+    );
+    entry.status = "failed";
+    entry.error = "/private/source/path";
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    expect(
+      await profileService.listPublishedKnowledgeBaseDocuments("org_team_a")
+    ).toEqual([]);
+    entry.status = "ready";
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    expect(
+      JSON.stringify(
+        await profileService.listPublishedKnowledgeBaseDocuments("org_team_a")
+      )
+    ).not.toContain("/private/source/path");
+    await rm(
+      getKnowledgeBaseStoredDocumentPath(dir, document.id, document.filename)
+    );
+    expect(
+      await profileService.listPublishedKnowledgeBaseDocuments("org_team_a")
+    ).toEqual([]);
+  });
+
+  test("standalone profile responses retain local fields and declare published metadata", async () => {
+    const { app, orgId, profileId, session } = await setupSession(
+      "platform-kb-catalog@example.com"
+    );
+    const response = await app.fetch(
+      new Request(`${BASE}/v1/profiles/${profileId}/knowledge-base`, {
+        headers: session.headers({}, orgId),
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      profileId,
+      documents: [],
+      publishedDocuments: [],
+    });
+    const spec = await (
+      await app.fetch(new Request(`${BASE}/openapi.json`))
+    ).json();
+    expect(
+      spec.components.schemas.ListKnowledgeBaseResponse.properties
+        .publishedDocuments.items.properties.scope.enum
+    ).toEqual(["parent"]);
+  });
+
   test("viewers in sibling teams can download and preview published parent bytes without parent membership", async () => {
     const { db, read } = await setupPublishedKnowledge();
     expect(await db.getOrgMember("org_parent", "user_reader")).toBeNull();
@@ -656,6 +798,9 @@ describe("published parent knowledge reads", () => {
     expect((await read()).status).toBe(200);
     await db.deleteOrgSharedResource("org_parent", publication.id);
     expect((await read()).status).toBe(404);
+    expect(
+      await profileService.listPublishedKnowledgeBaseDocuments("org_team_a")
+    ).toEqual([]);
     await db.publishOrgSharedResource(publication);
     const team = await db.getOrganizationById("org_team_a");
     const sibling = await db.getOrganizationById("org_team_b");
@@ -714,7 +859,8 @@ describe("published parent knowledge reads", () => {
   test.each(["stored", "extracted", "manifest", "directory"])(
     "rejects a %s symlink outside the source directory",
     async (kind) => {
-      const { document, read } = await setupPublishedKnowledge();
+      const { document, read, profileService } =
+        await setupPublishedKnowledge();
       const dir = getOrgKnowledgeBaseDir("org_parent");
       const privateDir = getOrgKnowledgeBaseDir("org_other");
       const secretPath = `${privateDir}/secret.txt`;
@@ -737,6 +883,9 @@ describe("published parent knowledge reads", () => {
       const response = await read("org_team_a", undefined, "?render=text");
       expect(response.status).toBe(404);
       expect(await response.text()).not.toContain("Sibling secret");
+      expect(
+        await profileService.listPublishedKnowledgeBaseDocuments("org_team_a")
+      ).toEqual([]);
     }
   );
 });

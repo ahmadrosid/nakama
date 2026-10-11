@@ -24,6 +24,7 @@ import type {
   MoveProfileRequest,
   ProfileResponse,
   ProfileSummary,
+  PublishedKnowledgeBaseDocument,
   ToolDetail,
   ToolResponse,
   ToolSourceResponse,
@@ -1072,6 +1073,7 @@ export class ProfileService {
         ...shared,
       ],
       profileId,
+      publishedDocuments: await this.listPublishedKnowledgeBaseDocuments(orgId),
       sources,
     };
   }
@@ -1358,11 +1360,60 @@ export class ProfileService {
     }
   }
 
+  async listPublishedKnowledgeBaseDocuments(
+    orgId: string
+  ): Promise<PublishedKnowledgeBaseDocument[]> {
+    const organization = await this.db.getOrganizationById(orgId);
+    if (!organization || organization.archivedAt || !organization.parentOrgId) {
+      return [];
+    }
+    const documents: PublishedKnowledgeBaseDocument[] = [];
+    for (const publication of await this.db.listOrgSharedResources(
+      organization.parentOrgId
+    )) {
+      if (publication.resourceKind !== "knowledge") {
+        continue;
+      }
+      try {
+        documents.push(
+          await this.resolvePublishedKnowledgeBaseDocument(
+            orgId,
+            publication.id
+          )
+        );
+      } catch (error) {
+        if (!(error instanceof NakamaApiError && error.status === 404)) {
+          throw error;
+        }
+      }
+    }
+    return documents;
+  }
+
   async readPublishedKnowledgeBaseDocument(
     orgId: string,
     publicationId: string,
     options: { render?: "text" } = {}
   ): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
+    const document = await this.resolvePublishedKnowledgeBaseDocument(
+      orgId,
+      publicationId
+    );
+    try {
+      return await readOrganizationKnowledgeBaseDocumentContent(
+        document.sourceOrganization.id,
+        document.id,
+        options
+      );
+    } catch {
+      throw new NakamaApiError("Not found", 404);
+    }
+  }
+
+  private async resolvePublishedKnowledgeBaseDocument(
+    orgId: string,
+    publicationId: string
+  ): Promise<PublishedKnowledgeBaseDocument> {
     const organization = await this.db.getOrganizationById(orgId);
     if (!organization || organization.archivedAt) {
       throw new NakamaApiError("Not found", 404);
@@ -1412,11 +1463,17 @@ export class ProfileService {
         undefined,
         { allowedDirs: [dir] }
       );
-      return await readOrganizationKnowledgeBaseDocumentContent(
-        sourceOrgId,
-        document.id,
-        options
-      );
+      return {
+        filename: document.filename,
+        id: document.id,
+        mediaType: document.mediaType,
+        publicationId: publication.id,
+        scope: "parent",
+        sizeBytes: document.sizeBytes,
+        sourceOrganization: { id: source.id, name: source.name },
+        status: document.status,
+        uploadedAt: document.uploadedAt,
+      };
     } catch {
       throw new NakamaApiError("Not found", 404);
     }
