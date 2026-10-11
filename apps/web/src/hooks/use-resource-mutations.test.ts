@@ -38,6 +38,7 @@ import {
   useRemoveOrgMember,
   useUpdateOrgMember,
 } from "./use-org-members";
+import { useDisableOrgPlugin, useEnableOrgPlugin } from "./use-plugins";
 import {
   useArtifactsExist,
   useAssignToolMutation,
@@ -143,6 +144,171 @@ afterAll(() => {
   revoke.mockRestore();
   publish.mockRestore();
 });
+
+for (const kind of ["enable", "disable"] as const) {
+  test.each([false, true])(
+    `${kind} plugin refreshes shared catalogs only on success; failure=%s`,
+    async (fails) => {
+      const plugin = {
+        actions: [],
+        availableVersions: ["1.0.0"],
+        databaseGeneration: null,
+        description: "Shared tools",
+        installed: true,
+        lastLifecycleError: null,
+        lifecycleState:
+          kind === "enable" ? ("enabled" as const) : ("disabled" as const),
+        name: "Plugin",
+        pendingOperation: null,
+        pluginId: "plugin",
+        revision: 2,
+        selectedVersion: "1.0.0",
+        ui: null,
+        updatedAt: "2026-10-12T00:00:00Z",
+      };
+
+      const enable = spyOn(client, "enableOrgPlugin").mockResolvedValue(plugin);
+
+      const disable = spyOn(client, "disableOrgPlugin").mockResolvedValue(
+        plugin
+      );
+
+      const requests = [enable, disable];
+
+      if (fails) {
+        for (const request of requests) {
+          request.mockRejectedValue(new Error("Retry plugin change"));
+        }
+      }
+
+      const action = mock(async () => {});
+
+      const auth: AuthContextValue = {
+        activeOrg: {
+          createdAt: plugin.updatedAt,
+          id: "parent",
+          name: "Parent",
+          role: "admin",
+          slug: "parent",
+          updatedAt: plugin.updatedAt,
+        },
+        archiveOrg: action,
+        createOrg: action,
+        isAuthenticated: true,
+        isLoading: false,
+        login: async () => ({ email: "admin@example.com", id: "admin" }),
+        logout: action,
+        orgs: [],
+        platformOrgs: [],
+        platformOrgsError: false,
+        refreshPlatformOrgs: action,
+        refreshSession: action,
+        setup: action,
+        switchOrg: action,
+        updateOrg: action,
+        user: {
+          email: "admin@example.com",
+          id: "admin",
+          isPlatformAdmin: false,
+        },
+      };
+
+      let mutation!: ReturnType<typeof useEnableOrgPlugin>;
+
+      function Probe() {
+        const enableMutation = useEnableOrgPlugin();
+        const disableMutation = useDisableOrgPlugin();
+        mutation = kind === "enable" ? enableMutation : disableMutation;
+
+        return null;
+      }
+
+      const keys = [
+        queryKeys.organizationOverview("parent", "parent"),
+        queryKeys.organizationOverview("parent", "team"),
+        queryKeys.organizationPublicationCatalog("parent", "tool"),
+        queryKeys.organizationPublicationCatalog("parent", "skill"),
+        queryKeys.plugins.all("parent"),
+        queryKeys.tools.all,
+        queryKeys.skills.all,
+        queryKeys.profiles.all,
+      ];
+
+      const reads = keys.map(() => mock(async () => 2));
+
+      const stops = keys.map((key, index) =>
+        new QueryObserver(queryClient, {
+          initialData: 1,
+          queryFn: reads[index],
+          queryKey: key,
+          staleTime: Number.POSITIVE_INFINITY,
+        }).subscribe(() => {})
+      );
+
+      const memory = queryKeys.orgMemory("team");
+      const otherPlugins = queryKeys.plugins.all("other");
+      const inactive = queryKeys.organizationOverview("parent", "other-team");
+      queryClient.setQueryData(memory, { content: "Private memory" });
+      queryClient.setQueryData(otherPlugins, 1);
+      queryClient.setQueryData(inactive, 1);
+
+      try {
+        renderToString(
+          createElement(
+            QueryClientProvider,
+            { client: queryClient },
+            createElement(
+              AuthContext.Provider,
+              { value: auth },
+              createElement(Probe)
+            )
+          )
+        );
+
+        const operation = mutation.mutateAsync({
+          expectedRevision: 1,
+          pluginId: plugin.pluginId,
+        });
+
+        if (fails) {
+          await expect(operation).rejects.toThrow();
+        } else {
+          await operation;
+        }
+
+        expect(keys.map((key) => queryClient.getQueryData(key))).toEqual(
+          keys.map(() => (fails ? 1 : 2))
+        );
+
+        for (const read of reads) {
+          expect(read).toHaveBeenCalledTimes(fails ? 0 : 1);
+        }
+
+        expect(queryClient.getQueryState(inactive)?.isInvalidated).toBe(!fails);
+        expect(queryClient.getQueryState(otherPlugins)?.isInvalidated).toBe(
+          false
+        );
+        expect(queryClient.getQueryState(memory)?.isInvalidated).toBe(false);
+        expect(queryClient.getQueryData<{ content: string }>(memory)).toEqual({
+          content: "Private memory",
+        });
+        expect(kind === "enable" ? enable : disable).toHaveBeenCalledWith(
+          plugin.pluginId,
+          1,
+          "parent"
+        );
+      } finally {
+        for (const stop of stops) {
+          stop();
+        }
+
+        for (const request of requests) {
+          request.mockRestore();
+        }
+      }
+    }
+  );
+}
 
 for (const kind of [
   "create",

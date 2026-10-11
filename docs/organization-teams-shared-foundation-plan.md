@@ -2544,3 +2544,13 @@ The knowledge audit checked OrgService team counts and all web calls to the orga
 Step 5 and delivery stages 3 and 4 remain open. Next: integration and plugin caches, account cache boundaries, and data portability compatibility. No new file, package, dependency, or helper abstraction was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
 
 Evidence: /tmp/nakama-source-catalog-{focused,types,format,oxlint,doctor,lint}.log.
+
+### Slice 3ag — Plugin source catalog refresh
+
+The existing plugin cache helper now invalidates Organization overview queries and publication selectors alongside its plugin, tool, skill, and profile queries. Its ten existing package and tenant lifecycle callers use the same path. Active shared readers refresh before a successful mutation finishes. Inactive summaries become stale for the next read. Unrelated tenant plugin and private memory queries remain untouched. Failed lifecycle mutations preserve cached shared data.
+
+Four new cases cover enable and disable hooks with success and failure responses. They check exact plugin IDs, expected revisions, and explicit parent scope. Query observers cover parent and team summaries, tool and skill publication selectors, and existing resource catalogs. The cases also check inactive summaries, unrelated plugin caches, and private memory. All 201 focused component and mutation tests passed with 1540 assertions. Complete web types, scoped anti-slop, Ultracite, and git diff --check passed. React Doctor retained 91/100 with the same two assignment complexity warnings and no errors. No verification repair was needed.
+
+The integration audit found another dependent read: shared-agent source validation checks MCP server state and Composio assignments. MCP server configuration and lifecycle mutations and Composio assignment mutations need their own cache slice. Step 5 and delivery stages 3 and 4 remain open. Next: those integration reads, account cache boundaries, and data portability compatibility. No new file, package, dependency, or helper abstraction was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
+
+Evidence: /tmp/nakama-plugin-catalog-{focused,types,format,oxlint,doctor,lint}.log.
