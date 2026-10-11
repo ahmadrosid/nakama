@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import {
   createEmailOutboundAdapter,
   type EmailOutboundAdapter,
+  ensureDir,
   generateTemporaryPassword,
   getKnowledgeBaseDir,
   getKnowledgeBaseManifestPath,
@@ -58,6 +59,7 @@ import type {
   StoredOrgInviteRecord,
   StoredOrgSharedResourceRecord,
   StoredPasswordResetTokenRecord,
+  StoredProfileRecord,
   StoredUserRecord,
 } from "@nakama/db";
 import {
@@ -320,6 +322,59 @@ export class OrgService {
       sharedResources: resources,
       teams,
     };
+  }
+
+  async createSharedAgentInstance(
+    teamOrgId: string,
+    publicationId: string,
+    actorUserId: string
+  ): Promise<StoredProfileRecord> {
+    const team = await this.requireActiveOrganization(teamOrgId);
+    const [user, membership] = await Promise.all([
+      this.databaseAdapter.getUserById(actorUserId),
+      this.databaseAdapter.getOrgMember(teamOrgId, actorUserId),
+    ]);
+    if (!user || user.disabledAt || !(membership || user.isPlatformAdmin)) {
+      throw new NakamaApiError("Not found", 404);
+    }
+    if (!membership || membership.role === "viewer") {
+      throw new NakamaApiError("Forbidden", 403);
+    }
+    if (!team.parentOrgId) {
+      throw new NakamaApiError("Shared agents require a team.", 409);
+    }
+    const parent = await this.requireActiveOrganization(team.parentOrgId);
+    if (parent.parentOrgId) {
+      throw new NakamaApiError("Not found", 404);
+    }
+    const publication = await this.databaseAdapter.getOrgSharedResource(
+      parent.id,
+      publicationId
+    );
+    if (publication?.resourceKind !== "agent") {
+      throw new NakamaApiError("Shared agent is unavailable.", 404);
+    }
+    await this.validateSharedResourceSource(parent.id, publication);
+    const profile = await this.databaseAdapter.createSharedAgentInstance(
+      team.id,
+      publication.id,
+      `profile_${crypto.randomUUID().replace(/-/g, "")}`,
+      new Date().toISOString()
+    );
+    try {
+      const soulDir = getProfileSoulDir(team.id, profile.id);
+      const { resolved } = await guardFilePath(soulDir, null, undefined, {
+        allowedDirs: [getOrgConfigDir(team.id)],
+      });
+      await ensureDir(resolved);
+    } catch {
+      // Keep the stable source link so a retry cannot replace existing team work.
+      throw new NakamaApiError(
+        "Team workspace setup failed. Retry the selection.",
+        500
+      );
+    }
+    return profile;
   }
 
   private async validateSharedResourceSource(

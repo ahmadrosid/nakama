@@ -1147,3 +1147,16 @@ Step 2 and delivery stage 1 remain incomplete. Shared-agent instance routes and 
 No browser or external provider calls ran. Other authorized cleanup remains uncommitted; stale provider cassettes, full tests, and builds remain unresolved.
 Next: create a shared-agent instance through authorized team context and return the existing team profile on retry.
 Evidence: /tmp/nakama-overview-tests-final.log, /tmp/nakama-overview-{server,core,db}-types.log, /tmp/nakama-overview-lint.log.
+
+2026-10-11: Slice 2e adds guarded shared-agent selection to the existing OrgService.
+The service derives the parent from an active team, checks an enabled actor and existing team invocation permission, and revalidates the scoped agent publication and its dependencies.
+Parent administration alone grants no team selection access. Viewers and platform accounts without the existing team invocation role cannot create instances.
+The existing atomic database operation returns one stable team profile during concurrent selection, retries, and unpublish/republish recovery. It now rejects pending tenants at the SQL write boundary.
+Workspace setup uses the existing private-directory helper on the guarded team path. It creates an empty workspace and copies no parent memory, user context, files, sessions, or credentials.
+Failed workspace setup retains the stable source link for retry. Repeated selection preserves existing team files and does not delete or replace the profile.
+Tests cover concurrent selection, separate sibling instances, source preservation, actor denial, wrong resource kind, direct source IDs, dependency revocation, republish recovery, disabled users, pending/archive denial, partial setup failure, and directory-link rejection.
+Checks: all 98 focused service, database, and HTTP tests passed; complete server and database type checks passed; lint passed all 1532 files; git diff --check passed.
+Step 2 and delivery stage 1 remain incomplete. The selection service has no HTTP entry yet; shared-profile write guards must precede that route. Assignment loading, source soul composition, and execution refresh remain in step 3.
+No browser or external provider calls ran. Other authorized cleanup remains uncommitted; stale provider cassettes, full tests, and builds remain unresolved.
+Next: add shared-profile write guards before exposing selection and its normal team ProfileResponse through HTTP.
+Evidence: /tmp/nakama-shared-selection-tests-final.log, /tmp/nakama-shared-selection-{server,db}-types.log, /tmp/nakama-shared-selection-lint.log.

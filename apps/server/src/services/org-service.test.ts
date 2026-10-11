@@ -1778,6 +1778,387 @@ async function seedTeamParent(db: DatabaseAdapter) {
   return { name: "Team", requestId: "team-request", slug: "team" };
 }
 
+async function seedSharedAgentSelection(
+  db: DatabaseAdapter,
+  service: OrgService
+) {
+  await seedTeamParent(db);
+  const now = new Date().toISOString();
+  for (const id of ["org_team_a", "org_team_b"]) {
+    await db.upsertOrganization({
+      createdAt: now,
+      id,
+      name: id,
+      parentOrgId: "org_parent",
+      slug: id.replace(/_/g, "-"),
+      updatedAt: now,
+    });
+    await db.upsertOrgMember({
+      createdAt: now,
+      orgId: id,
+      role: "member",
+      userId: "user_other",
+    });
+  }
+  await db.upsertOrgMember({
+    createdAt: now,
+    orgId: "org_team_a",
+    role: "viewer",
+    userId: "user_viewer",
+  });
+  await db.upsertProfile({
+    createdAt: now,
+    id: "profile_template",
+    isDefault: false,
+    isSuper: false,
+    model: null,
+    name: "Template",
+    orgId: "org_parent",
+    systemPrompt: "Published instructions",
+    updatedAt: now,
+  });
+  return service.publishSharedResource(
+    "org_parent",
+    { resourceId: "profile_template", resourceKind: "agent" },
+    "user_creator"
+  );
+}
+
+describe("OrgService shared agent selection", () => {
+  test("concurrent selection creates one team profile without copying parent work", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    const publication = await seedSharedAgentSelection(db, orgService);
+    const sourceDir = getProfileSoulDir("org_parent", "profile_template");
+    await mkdir(sourceDir, { recursive: true });
+    await writeFile(join(sourceDir, "MEMORY.md"), "Private parent memory");
+    await writeFile(join(sourceDir, "USER.md"), "Private parent user context");
+    await writeFile(join(sourceDir, "private.txt"), "Private parent file");
+    const selected = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        orgService.createSharedAgentInstance(
+          "org_team_a",
+          publication.id,
+          "user_other"
+        )
+      )
+    );
+    expect(new Set(selected.map((profile) => profile.id)).size).toBe(1);
+    const profile = selected[0];
+    expect(profile).toMatchObject({
+      isDefault: false,
+      isSuper: false,
+      model: null,
+      name: "Template",
+      orgId: "org_team_a",
+      systemPrompt: "Published instructions",
+    });
+    expect(profile.id).not.toBe("profile_template");
+    expect(
+      (await db.listProfilesForOrg("org_team_a")).map((entry) => entry.id)
+    ).toEqual([profile.id]);
+    expect(await db.getProfileForOrg(profile.id, "org_parent")).toBeNull();
+    expect(
+      await db.getSharedAgentInstance("org_team_a", profile.id)
+    ).toMatchObject({
+      publicationId: publication.id,
+      sourceOrgId: "org_parent",
+      sourceProfileId: "profile_template",
+      teamOrgId: "org_team_a",
+    });
+    const teamDir = getProfileSoulDir("org_team_a", profile.id);
+    expect(await readdir(teamDir)).toEqual([]);
+    expect(await db.listSessions()).toEqual([]);
+    await writeFile(join(teamDir, "MEMORY.md"), "Private team memory");
+    await writeFile(join(teamDir, "USER.md"), "Private team user context");
+    await writeFile(join(teamDir, "private.txt"), "Private team file");
+    expect(
+      (
+        await orgService.createSharedAgentInstance(
+          "org_team_a",
+          publication.id,
+          "user_other"
+        )
+      ).id
+    ).toBe(profile.id);
+    expect(await readFile(join(teamDir, "MEMORY.md"), "utf8")).toBe(
+      "Private team memory"
+    );
+    expect(await readFile(join(teamDir, "USER.md"), "utf8")).toBe(
+      "Private team user context"
+    );
+    expect(await readFile(join(teamDir, "private.txt"), "utf8")).toBe(
+      "Private team file"
+    );
+    const sibling = await orgService.createSharedAgentInstance(
+      "org_team_b",
+      publication.id,
+      "user_other"
+    );
+    expect(sibling.id).not.toBe(profile.id);
+    expect(sibling.orgId).toBe("org_team_b");
+    expect(await readdir(getProfileSoulDir("org_team_b", sibling.id))).toEqual(
+      []
+    );
+    expect(await readFile(join(sourceDir, "MEMORY.md"), "utf8")).toBe(
+      "Private parent memory"
+    );
+    expect(await readFile(join(sourceDir, "USER.md"), "utf8")).toBe(
+      "Private parent user context"
+    );
+    expect(await readFile(join(sourceDir, "private.txt"), "utf8")).toBe(
+      "Private parent file"
+    );
+  });
+
+  test("selection requires existing team invocation access and a current agent publication", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    const publication = await seedSharedAgentSelection(db, orgService);
+    for (const [userId, status] of [
+      ["user_creator", 404],
+      ["user_viewer", 403],
+      ["missing", 404],
+    ] as const) {
+      await expect(
+        orgService.createSharedAgentInstance(
+          "org_team_a",
+          publication.id,
+          userId
+        )
+      ).rejects.toMatchObject({ status });
+    }
+    const now = new Date().toISOString();
+    await db.createUser({
+      createdAt: now,
+      email: "platform@example.com",
+      id: "user_platform",
+      isPlatformAdmin: true,
+      passwordHash: "test",
+      updatedAt: now,
+    });
+    await expect(
+      orgService.createSharedAgentInstance(
+        "org_team_a",
+        publication.id,
+        "user_platform"
+      )
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      orgService.createSharedAgentInstance(
+        "org_parent",
+        publication.id,
+        "user_creator"
+      )
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      orgService.createSharedAgentInstance(
+        "org_other",
+        publication.id,
+        "user_other"
+      )
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      orgService.createSharedAgentInstance(
+        "org_team_a",
+        "profile_template",
+        "user_other"
+      )
+    ).rejects.toMatchObject({ status: 404 });
+    await db.upsertTool({
+      createdAt: now,
+      description: "Test",
+      handlerConfig: {},
+      handlerType: "bash",
+      id: "tool_parent",
+      name: "parent-tool",
+      orgId: "org_parent",
+      updatedAt: now,
+    });
+    const toolPublication = await orgService.publishSharedResource(
+      "org_parent",
+      { resourceId: "tool_parent", resourceKind: "tool" },
+      "user_creator"
+    );
+    await expect(
+      orgService.createSharedAgentInstance(
+        "org_team_a",
+        toolPublication.id,
+        "user_other"
+      )
+    ).rejects.toMatchObject({ status: 404 });
+    await db.assignToolToProfile("profile_template", "tool_parent");
+    await orgService.unpublishSharedResource(
+      "org_parent",
+      toolPublication.id,
+      "user_creator"
+    );
+    await expect(
+      orgService.createSharedAgentInstance(
+        "org_team_a",
+        publication.id,
+        "user_other"
+      )
+    ).rejects.toMatchObject({ status: 409 });
+    expect(await db.listProfilesForOrg("org_team_a")).toEqual([]);
+    await orgService.publishSharedResource(
+      "org_parent",
+      { resourceId: "tool_parent", resourceKind: "tool" },
+      "user_creator"
+    );
+    const profile = await orgService.createSharedAgentInstance(
+      "org_team_a",
+      publication.id,
+      "user_other"
+    );
+    await orgService.unpublishSharedResource(
+      "org_parent",
+      publication.id,
+      "user_creator"
+    );
+    await expect(
+      orgService.createSharedAgentInstance(
+        "org_team_a",
+        publication.id,
+        "user_other"
+      )
+    ).rejects.toMatchObject({ status: 404 });
+    expect((await db.getProfileForOrg(profile.id, "org_team_a"))?.id).toBe(
+      profile.id
+    );
+    const republished = await orgService.publishSharedResource(
+      "org_parent",
+      { resourceId: "profile_template", resourceKind: "agent" },
+      "user_creator"
+    );
+    expect(republished.id).not.toBe(publication.id);
+    expect(
+      (
+        await orgService.createSharedAgentInstance(
+          "org_team_a",
+          republished.id,
+          "user_other"
+        )
+      ).id
+    ).toBe(profile.id);
+    expect(
+      (await db.getSharedAgentInstance("org_team_a", profile.id))?.publicationId
+    ).toBe(republished.id);
+    await db.disableUser("user_other", now);
+    await expect(
+      orgService.createSharedAgentInstance(
+        "org_team_a",
+        republished.id,
+        "user_other"
+      )
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  test("workspace failure keeps the stable record for retry and rejects links outside the team", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    const publication = await seedSharedAgentSelection(db, orgService);
+    const profilesDir = join(getOrgConfigDir("org_team_a"), "profiles");
+    await mkdir(getOrgConfigDir("org_team_a"), { recursive: true });
+    await writeFile(profilesDir, "Blocks setup");
+    await expect(
+      orgService.createSharedAgentInstance(
+        "org_team_a",
+        publication.id,
+        "user_other"
+      )
+    ).rejects.toMatchObject({ status: 500 });
+    const [stored] = await db.listProfilesForOrg("org_team_a");
+    expect(stored).toBeTruthy();
+    await rm(profilesDir);
+    const recovered = await orgService.createSharedAgentInstance(
+      "org_team_a",
+      publication.id,
+      "user_other"
+    );
+    expect(recovered.id).toBe(stored.id);
+    const teamDir = getProfileSoulDir("org_team_a", stored.id);
+    const foreignDir = getProfileSoulDir("org_parent", "profile_template");
+    await mkdir(foreignDir, { recursive: true });
+    await writeFile(join(foreignDir, "MEMORY.md"), "Private source memory");
+    await rm(teamDir, { recursive: true });
+    await symlink(foreignDir, teamDir);
+    await expect(
+      orgService.createSharedAgentInstance(
+        "org_team_a",
+        publication.id,
+        "user_other"
+      )
+    ).rejects.toMatchObject({ status: 500 });
+    expect(await readFile(join(foreignDir, "MEMORY.md"), "utf8")).toBe(
+      "Private source memory"
+    );
+    await rm(teamDir);
+    expect(
+      (
+        await orgService.createSharedAgentInstance(
+          "org_team_a",
+          publication.id,
+          "user_other"
+        )
+      ).id
+    ).toBe(stored.id);
+    expect(await readdir(teamDir)).toEqual([]);
+    expect((await db.listProfilesForOrg("org_team_a")).length).toBe(1);
+  });
+
+  test("pending and archived teams cannot create shared instances at either write boundary", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    const publication = await seedSharedAgentSelection(db, orgService);
+    const now = new Date().toISOString();
+    await db.beginOrgTeamCreation({
+      adminUserId: "user_other",
+      creatorUserId: "user_creator",
+      organization: {
+        createdAt: now,
+        id: "org_pending",
+        name: "Pending",
+        parentOrgId: "org_parent",
+        slug: "pending",
+        updatedAt: now,
+      },
+      requestHash: "hash",
+      requestId: "pending",
+    });
+    await expect(
+      orgService.createSharedAgentInstance(
+        "org_pending",
+        publication.id,
+        "user_other"
+      )
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      db.createSharedAgentInstance(
+        "org_pending",
+        publication.id,
+        "pending_profile",
+        now
+      )
+    ).rejects.toThrow();
+    expect(await db.listProfilesForOrg("org_pending")).toEqual([]);
+    const team = await db.getOrganizationById("org_team_a");
+    await db.upsertOrganization({ ...team!, archivedAt: now });
+    await expect(
+      orgService.createSharedAgentInstance(
+        "org_team_a",
+        publication.id,
+        "user_other"
+      )
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      db.createSharedAgentInstance(
+        "org_team_a",
+        publication.id,
+        "archived_profile",
+        now
+      )
+    ).rejects.toThrow();
+    expect(await db.listProfilesForOrg("org_team_a")).toEqual([]);
+  });
+});
+
 describe("OrgService shared resource publications", () => {
   test("agent publication requires published assignments and preserves private source files", async () => {
     const { orgService, databaseAdapter: db } = createOrgService();

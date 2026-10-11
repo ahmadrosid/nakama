@@ -3518,8 +3518,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       if (
         !team ||
         team.archived_at ||
+        team.setup_pending ||
         !parent ||
         parent.archived_at ||
+        parent.setup_pending ||
         parent.parent_org_id
       ) {
         throw new Error("Shared agent requires an active team and parent");
