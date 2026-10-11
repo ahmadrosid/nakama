@@ -115,6 +115,7 @@ describe("knowledge base store", () => {
   test("bounds published catalog metadata and excludes failed references", async () => {
     const profileId = "profile_parent_catalog";
     await setupProfile(profileId);
+
     const document: PublishedKnowledgeBaseDocument = {
       filename: "private-file-label.txt",
       id: "parent_document",
@@ -126,9 +127,11 @@ describe("knowledge base store", () => {
       status: "ready",
       uploadedAt: "2026-10-11T00:00:00.000Z",
     };
+
     const one = await composeKnowledgeBaseCatalog(ORG_ID, profileId, [
       document,
     ]);
+
     const many = await composeKnowledgeBaseCatalog(ORG_ID, profileId, [
       ...Array.from({ length: 200 }, (_, index) => ({
         ...document,
@@ -140,6 +143,7 @@ describe("knowledge base store", () => {
         status: "failed",
       },
     ]);
+
     expect(many.match(/\b(\d+) published documents\b/)?.[1]).toBe("200");
     expect(Buffer.byteLength(many) - Buffer.byteLength(one)).toBe(2);
     expect(many).toContain(JSON.stringify(document.sourceOrganization));
@@ -399,10 +403,13 @@ describe("knowledge base store", () => {
       uploaded.document.id
     );
     let published = true;
+
     const unpublish = () => {
       published = false;
+
       return Promise.resolve();
     };
+
     await expect(
       deleteOrganizationKnowledgeBaseDocument(
         ORG_ID,

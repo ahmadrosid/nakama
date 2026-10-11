@@ -581,6 +581,7 @@ async function deleteDocumentFrom(
 
   if (index < 0) {
     await onDocumentRemoved?.(documentId);
+
     return false;
   }
 
@@ -604,6 +605,7 @@ async function deleteDocumentFrom(
     if (await pathExists(storedPath)) {
       await removeFile(storedPath);
     }
+
     if (await pathExists(extractedPath)) {
       await removeFile(extractedPath);
     }

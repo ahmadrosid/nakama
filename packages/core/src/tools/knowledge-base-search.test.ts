@@ -184,6 +184,7 @@ describe("knowledge_base_search tool", () => {
         getKnowledgeBaseExtractedPath(parentRoot, "kb_private"),
         extractedContent("same.txt", "privateneedle unpublished secret")
       );
+
       const document: PublishedKnowledgeBaseDocument = {
         filename: "same.txt",
         id: "kb_published",
@@ -195,11 +196,14 @@ describe("knowledge_base_search tool", () => {
         status: "ready",
         uploadedAt: UPLOADED_AT,
       };
+
       let publications = [document];
       let lookups = 0;
+
       const context = {
         listPublishedKnowledgeDocuments: async () => {
           lookups++;
+
           return publications;
         },
         orgId: ORG_ID,
@@ -213,13 +217,16 @@ describe("knowledge_base_search tool", () => {
             })
           : undefined,
       };
+
       const initial = await runKnowledgeBaseSearch(
         { query: "parentneedle", regex },
         context
       );
+
       const parentMatches = initial.matches.filter(
         (match) => match.scope === "parent"
       );
+
       expect(parentMatches).toHaveLength(1);
       expect(parentMatches[0]).toMatchObject({
         publicationId: "publication_1",
@@ -230,26 +237,32 @@ describe("knowledge_base_search tool", () => {
       expect(
         initial.matches.filter((match) => match.scope === "profile")
       ).toHaveLength(memory ? 1 : 0);
+
       const filtered = await runKnowledgeBaseSearch(
         { filename: "same.txt", query: "parentneedle", regex },
         context
       );
+
       expect(
         filtered.matches.filter((match) => match.scope === "parent")
       ).toHaveLength(1);
+
       const privateResult = await runKnowledgeBaseSearch(
         { query: "privateneedle", regex },
         context
       );
+
       expect(
         privateResult.matches.filter((match) => match.scope === "parent")
       ).toEqual([]);
       expect(JSON.stringify(privateResult)).not.toContain("unpublished secret");
       publications = [];
+
       const revoked = await runKnowledgeBaseSearch(
         { query: "parentneedle", regex },
         context
       );
+
       expect(
         revoked.matches.filter((match) => match.scope === "parent")
       ).toEqual([]);

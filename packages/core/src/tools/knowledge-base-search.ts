@@ -258,19 +258,24 @@ async function resolveParentSearchTarget(
   filename: string | null
 ): Promise<SearchTarget> {
   const documents = (await context.listPublishedKnowledgeDocuments?.()) ?? [];
+
   if (!documents.length) {
     return { kind: "missing", root: "", scope: "parent", unreadable: [] };
   }
+
   const sourceOrgId = documents[0]!.sourceOrganization.id;
+
   if (
     documents.some((document) => document.sourceOrganization.id !== sourceOrgId)
   ) {
     throw new Error("Published knowledge must have one source organization.");
   }
+
   const root = getOrgKnowledgeBaseDir(sourceOrgId);
   await guardFilePath(root, null, undefined, {
     allowedDirs: [getOrgConfigDir(sourceOrgId)],
   });
+
   for (const document of documents) {
     await guardFilePath(
       getKnowledgeBaseExtractedPath(root, document.id),
@@ -279,6 +284,7 @@ async function resolveParentSearchTarget(
       { allowedDirs: [root] }
     );
   }
+
   return {
     ...pickSearchTarget(root, "parent", documents, filename),
     publishedDocuments: documents,
@@ -292,13 +298,16 @@ function scopeSearchMatch(
   if (target.scope !== "parent") {
     return [{ ...match, scope: target.scope }];
   }
+
   const document = target.publishedDocuments?.find(
     (entry) =>
       basename(match.file) === `${entry.id}${KNOWLEDGE_BASE_EXTRACTED_SUFFIX}`
   );
+
   if (!document) {
     return [];
   }
+
   return [
     {
       ...match,
@@ -498,6 +507,7 @@ async function runQmdSearchTargets(
         if (target.scope === "parent" && target.kind !== "missing") {
           await store.removeCollection("parent");
         }
+
         if (target.kind === "missing") {
           await store.removeCollection(target.scope);
           continue;

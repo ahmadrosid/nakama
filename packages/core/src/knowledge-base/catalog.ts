@@ -26,6 +26,7 @@ export async function composeKnowledgeBaseCatalog(
   ];
 
   const sources = DEFAULT_KNOWLEDGE_SOURCES;
+
   const readyPublishedDocuments = publishedDocuments.filter(
     (document) => document.status === "ready"
   );
@@ -60,6 +61,7 @@ export async function composeKnowledgeBaseCatalog(
         ])
       ).values(),
     ];
+
     sections.push(
       "# Published parent documents",
       `${readyPublishedDocuments.length} published documents. Use knowledge_base_search to find facts. Results identify the publication and source organization.`,
