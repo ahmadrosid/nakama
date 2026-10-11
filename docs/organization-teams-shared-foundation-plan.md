@@ -2512,3 +2512,13 @@ Eight new cases exercise all four existing mutation hooks with success and failu
 One verification repair completed the typed member and invitation response fixtures and supplied the cache value's type. No production repair, new file, package, dependency, or helper abstraction was needed. Step 5 and delivery stages 3 and 4 remain open. Next: source catalog invalidation, account cache boundaries, and data portability compatibility. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
 
 Evidence: /tmp/nakama-member-overview-{focused,types,format,oxlint,doctor,lint}.log.
+
+### Slice 3ad — Profile source catalog refresh
+
+Profile creation and copying now invalidate Organization summaries and publication selectors alongside the existing profile and soul queries. The existing profile invalidation helper refreshes these shared queries after profile updates and deletion. Its existing avatar and assignment callers use the same refresh path, including partial assignment failures. Active readers finish their refresh before the mutation completes. Inactive summaries become stale for the next read. Private memory queries remain untouched.
+
+Eight new cases exercise create, clone, update, and delete hooks with success and failure responses. They check exact request IDs and payloads, active parent and team summary refresh, publication catalog refresh, profile list refresh, inactive summary invalidation, and retained private memory. Failed profile changes retain the cached summaries and catalogs. All 176 focused component and mutation tests passed with 1277 assertions. Complete web types, scoped anti-slop, Ultracite, and git diff --check passed. React Doctor retained 91/100 with the same two assignment complexity warnings and no errors. No verification repair was needed.
+
+Step 5 and delivery stages 3 and 4 remain open. Next: the remaining resource source mutations, account cache boundaries, and data portability compatibility. No new file, package, dependency, or helper abstraction was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
+
+Evidence: /tmp/nakama-profile-catalog-{focused,types,format,oxlint,doctor,lint}.log.

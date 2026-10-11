@@ -35,8 +35,12 @@ import {
 import {
   useArtifactsExist,
   useAssignToolMutation,
+  useCloneProfileMutation,
+  useCreateProfileMutation,
+  useDeleteProfileMutation,
   useRevokeArtifactShareMutation,
   useUnassignToolMutation,
+  useUpdateProfileMutation,
 } from "./use-resource-mutations";
 
 const revoke = spyOn(client, "revokeProfileArtifactShare");
@@ -128,6 +132,153 @@ afterAll(() => {
   revoke.mockRestore();
   publish.mockRestore();
 });
+
+for (const kind of ["create", "clone", "update", "delete"] as const) {
+  test.each([false, true])(
+    `${kind} profile refreshes shared catalogs only on success; failure=%s`,
+    async (fails) => {
+      const profile = {
+        createdAt: "2026-10-12T00:00:00Z",
+        hasAvatar: false,
+        id: "profile",
+        isSuper: false,
+        mcpServerCount: 0,
+        mcpServers: [],
+        model: null,
+        name: "Updated agent",
+        skills: [],
+        soulActive: false,
+        systemPrompt: "",
+        toolCount: 0,
+        tools: [],
+        updatedAt: "2026-10-12T00:00:00Z",
+      };
+
+      const create = spyOn(client, "createProfile").mockResolvedValue({
+        profile,
+      });
+
+      const clone = spyOn(client, "cloneProfile").mockResolvedValue({
+        profile,
+      });
+
+      const update = spyOn(client, "updateProfile").mockResolvedValue({
+        profile,
+      });
+
+      const remove = spyOn(client, "deleteProfile").mockResolvedValue(
+        undefined
+      );
+
+      const requests = [create, clone, update, remove];
+
+      if (fails) {
+        for (const request of requests) {
+          request.mockRejectedValue(new Error("Retry profile change"));
+        }
+      }
+
+      let createMutation!: ReturnType<typeof useCreateProfileMutation>;
+      let cloneMutation!: ReturnType<typeof useCloneProfileMutation>;
+      let updateMutation!: ReturnType<typeof useUpdateProfileMutation>;
+      let deleteMutation!: ReturnType<typeof useDeleteProfileMutation>;
+
+      function Probe() {
+        createMutation = useCreateProfileMutation();
+        cloneMutation = useCloneProfileMutation();
+        updateMutation = useUpdateProfileMutation();
+        deleteMutation = useDeleteProfileMutation();
+
+        return null;
+      }
+
+      const keys = [
+        queryKeys.organizationOverview("parent", "parent"),
+        queryKeys.organizationOverview("parent", "team"),
+        queryKeys.organizationPublicationCatalog("parent", "agent"),
+        queryKeys.profiles.all,
+      ];
+
+      const reads = keys.map(() => mock(async () => 2));
+
+      const stops = keys.map((key, index) =>
+        new QueryObserver(queryClient, {
+          initialData: 1,
+          queryFn: reads[index],
+          queryKey: key,
+          staleTime: Number.POSITIVE_INFINITY,
+        }).subscribe(() => {})
+      );
+
+      const inactive = queryKeys.organizationOverview("parent", "other-team");
+      const memory = queryKeys.orgMemory("team");
+      queryClient.setQueryData(inactive, 1);
+      queryClient.setQueryData(memory, { content: "Private memory" });
+
+      try {
+        renderToString(
+          createElement(
+            QueryClientProvider,
+            { client: queryClient },
+            createElement(Probe)
+          )
+        );
+
+        const operation =
+          kind === "create"
+            ? createMutation.mutateAsync({ name: profile.name })
+            : kind === "clone"
+              ? cloneMutation.mutateAsync(profile.id)
+              : kind === "update"
+                ? updateMutation.mutateAsync({
+                    input: { name: profile.name },
+                    profileId: profile.id,
+                  })
+                : deleteMutation.mutateAsync(profile.id);
+
+        if (fails) {
+          await expect(operation).rejects.toThrow();
+        } else {
+          await operation;
+        }
+
+        expect(keys.map((key) => queryClient.getQueryData(key))).toEqual(
+          fails ? [1, 1, 1, 1] : [2, 2, 2, 2]
+        );
+
+        for (const read of reads) {
+          expect(read).toHaveBeenCalledTimes(fails ? 0 : 1);
+        }
+
+        expect(queryClient.getQueryState(inactive)?.isInvalidated).toBe(!fails);
+        expect(queryClient.getQueryState(memory)?.isInvalidated).toBe(false);
+        expect(queryClient.getQueryData<{ content: string }>(memory)).toEqual({
+          content: "Private memory",
+        });
+
+        if (kind === "create") {
+          expect(create).toHaveBeenCalledWith({ name: profile.name });
+        } else if (kind === "clone") {
+          expect(clone).toHaveBeenCalledWith(profile.id);
+        } else if (kind === "update") {
+          expect(update).toHaveBeenCalledWith(profile.id, {
+            name: profile.name,
+          });
+        } else {
+          expect(remove).toHaveBeenCalledWith(profile.id);
+        }
+      } finally {
+        for (const stop of stops) {
+          stop();
+        }
+
+        for (const request of requests) {
+          request.mockRestore();
+        }
+      }
+    }
+  );
+}
 
 for (const kind of ["add", "invite", "update", "remove"] as const) {
   test.each([false, true])(

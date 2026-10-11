@@ -70,6 +70,8 @@ export function useCreateProfileMutation() {
       invalidateQueries(
         queryClient,
         queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"],
         queryKeys.soul.profile(data.profile.id)
       ),
   });
@@ -126,6 +128,8 @@ export function useCloneProfileMutation() {
       invalidateQueries(
         queryClient,
         queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"],
         queryKeys.soul.profile(data.profile.id)
       ),
   });
@@ -136,7 +140,8 @@ export function useDeleteProfileMutation() {
 
   return useMutation({
     mutationFn: (profileId: string) => client.deleteProfile(profileId),
-    onSuccess: () => invalidateQueries(queryClient, queryKeys.profiles.all),
+    onSuccess: (_data, profileId) =>
+      invalidateProfileQueries(queryClient, profileId),
   });
 }
 
@@ -147,7 +152,9 @@ async function invalidateProfileQueries(
   await invalidateQueries(
     queryClient,
     queryKeys.profiles.all,
-    queryKeys.profiles.detail(profileId)
+    queryKeys.profiles.detail(profileId),
+    ["organizationOverview"],
+    ["organizationPublicationCatalog"]
   );
 }
 
