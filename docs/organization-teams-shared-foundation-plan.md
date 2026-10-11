@@ -326,7 +326,7 @@ Status values: `todo`, `doing`, `done`, `blocked`.
 
 | ID | Delivery stage | Step | Test items | Status | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 1. Schema, contracts, access | Tenant relationship and publication records | 1, 2, 3, 17, 18 | doing | | Slice 1a complete; adapter and publication work remain |
+| 1 | 1. Schema, contracts, access | Tenant relationship and publication records | 1, 2, 3, 17, 18 | doing | ae7404d0 (1a) | Slices 1a–1b complete; publication work remains |
 | 2 | 1. Schema, contracts, access | Contracts and organization routes | 15, 16 | todo | | |
 | 3a | 2. Resource paths | Knowledge | 4, 5, 6, 21 | todo | | |
 | 3b | 2. Resource paths | Skills | 4, 5, 20 | todo | | |
@@ -343,3 +343,12 @@ Slice log (one row per commit):
 | Date | Step ID | Change | Tests added | Next |
 | --- | --- | --- | --- | --- |
 | 2026-10-11 | 1a | Parent schema and idempotent migration; repaired existing database type errors | Fresh and upgrade migration, reference constraints; 145 database tests passed | Parent adapter persistence and archive guards |
+
+| 2026-10-11 | 1b | Persist parent relationships; reject reparenting, nested teams, inactive parents, unsafe archive and deletion | Lookups, memberships, ordinary updates, lifecycle guards; 147 database tests passed | Publication records and migration |
+
+2026-10-11: Slice 1b passed database tests, the database type check, and `bun x ultracite check`.
+The first test run found an incorrect SQL value count. The repaired query passed all database tests.
+A later lint check required a simpler condition. The formatter fixed it, and the check passed.
+The parent check runs inside the organization write transaction. Archived teams cannot become active under an archived parent.
+Parent deletion returns false before deleting dependent resources when any child remains.
+Stage 1 remains incomplete. Next: publication records and migration.

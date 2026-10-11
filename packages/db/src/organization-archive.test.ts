@@ -23,6 +23,100 @@ async function seedTwoActiveOrgs(db: DatabaseAdapter, createdAt: string) {
 }
 
 describe("organization archive persistence", () => {
+  test("parent round-trips through lookups and survives ordinary updates", async () => {
+    const db = createSqliteMemoryAdapter();
+    const now = "2026-10-11T00:00:00.000Z";
+    await seedTwoActiveOrgs(db, now);
+    const team = {
+      createdAt: now,
+      id: "team",
+      name: "Team",
+      parentOrgId: "org_a",
+      slug: "team",
+      updatedAt: now,
+    };
+    await db.upsertOrganization(team);
+    await db.upsertOrgMember({
+      createdAt: now,
+      orgId: "team",
+      role: "admin",
+      userId: "user_1",
+    });
+    expect((await db.getOrganizationById("team"))?.parentOrgId).toBe("org_a");
+    expect((await db.getOrganizationBySlug("team"))?.parentOrgId).toBe("org_a");
+    expect(
+      (await db.listOrganizations()).find((org) => org.id === "team")
+        ?.parentOrgId
+    ).toBe("org_a");
+    expect(
+      (await db.listUserOrganizations("user_1"))[0]?.organization.parentOrgId
+    ).toBe("org_a");
+    await db.upsertOrganization({
+      ...team,
+      name: "Updated",
+      parentOrgId: undefined,
+    });
+    expect((await db.getOrganizationById("team"))?.parentOrgId).toBe("org_a");
+    await expect(
+      db.upsertOrganization({ ...team, parentOrgId: "org_b" })
+    ).rejects.toThrow();
+    await expect(
+      db.upsertOrganization({ ...team, parentOrgId: null })
+    ).rejects.toThrow();
+    for (const parentOrgId of ["missing", "team"]) {
+      await expect(
+        db.upsertOrganization({
+          ...team,
+          id: "child",
+          parentOrgId,
+          slug: "child",
+        })
+      ).rejects.toThrow();
+    }
+  });
+
+  test("active teams prevent parent archive; all teams prevent parent deletion", async () => {
+    const db = createSqliteMemoryAdapter();
+    const now = "2026-10-11T00:00:00.000Z";
+    await seedTwoActiveOrgs(db, now);
+    const parent = await db.getOrganizationById("org_a");
+    expect(parent).not.toBeNull();
+    const team = {
+      createdAt: now,
+      id: "team",
+      name: "Team",
+      parentOrgId: "org_a",
+      slug: "team",
+      updatedAt: now,
+    };
+    await db.upsertOrganization(team);
+    await db.upsertTool({
+      createdAt: now,
+      description: "",
+      handlerConfig: {},
+      handlerType: "javascript",
+      id: "parent_tool",
+      name: "parent_tool",
+      orgId: "org_a",
+      updatedAt: now,
+    });
+    expect(await db.tryMarkOrganizationArchived("org_a", now)).toBe(false);
+    await expect(
+      db.upsertOrganization({ ...parent!, archivedAt: now })
+    ).rejects.toThrow();
+    expect(await db.deleteOrganization("org_a")).toBe(false);
+    expect(await db.getTool("parent_tool")).not.toBeNull();
+    expect(await db.tryMarkOrganizationArchived("team", now)).toBe(true);
+    expect(await db.tryMarkOrganizationArchived("org_a", now)).toBe(true);
+    expect(await db.deleteOrganization("org_a")).toBe(false);
+    await expect(db.upsertOrganization(team)).rejects.toThrow();
+    await expect(
+      db.upsertOrganization({ ...team, id: "new_team", slug: "new-team" })
+    ).rejects.toThrow();
+    expect(await db.deleteOrganization("team")).toBe(true);
+    expect(await db.deleteOrganization("org_a")).toBe(true);
+  });
+
   test("upsert and get round-trip archivedAt", async () => {
     const db = createSqliteMemoryAdapter();
     const archivedAt = "2026-08-21T00:00:00.000Z";

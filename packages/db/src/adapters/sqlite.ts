@@ -433,6 +433,7 @@ interface OrganizationRow {
   monthly_llm_turn_limit: number | null;
   monthly_llm_warning_percent: number;
   name: string;
+  parent_org_id: string | null;
   skills_curator_archive_after_days: number;
   skills_curator_consolidate_enabled: number;
   skills_curator_enabled: number;
@@ -2719,11 +2720,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   );
 
   const tryMarkOrganizationArchivedStmt = db.prepare(`
-    UPDATE organizations
+    UPDATE organizations AS target
     SET archived_at = ?, updated_at = ?
     WHERE id = ?
       AND archived_at IS NULL
       AND (SELECT COUNT(*) FROM organizations WHERE archived_at IS NULL) > 1
+      AND NOT EXISTS (SELECT 1 FROM organizations WHERE parent_org_id = target.id AND archived_at IS NULL)
   `);
 
   const deleteOrganizationStmt = db.prepare(
@@ -2734,8 +2736,15 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     "SELECT 1 FROM organizations WHERE id = ?"
   );
 
+  const organizationChildrenStmt = db.prepare(
+    "SELECT 1 FROM organizations WHERE parent_org_id = ? LIMIT 1"
+  );
+
   const deleteOrganizationTransaction = db.transaction((orgId: string) => {
-    if (!organizationExistsStmt.get(orgId)) {
+    if (
+      !organizationExistsStmt.get(orgId) ||
+      organizationChildrenStmt.get(orgId)
+    ) {
       return false;
     }
 
@@ -2764,8 +2773,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   });
 
   const upsertOrganizationStmt = db.prepare(`
-    INSERT INTO organizations (id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO organizations (id, parent_org_id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       slug = excluded.slug,
@@ -2816,7 +2825,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     OrganizationRow,
     SQLQueryBindings[]
   >(`
-    SELECT id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
+    SELECT id, parent_org_id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     ORDER BY name ASC
   `);
@@ -2825,7 +2834,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     OrganizationRow,
     SQLQueryBindings[]
   >(`
-    SELECT id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
+    SELECT id, parent_org_id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     WHERE slug = ?
     LIMIT 1
@@ -2835,7 +2844,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     OrganizationRow,
     SQLQueryBindings[]
   >(`
-    SELECT id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
+    SELECT id, parent_org_id, name, slug, allowed_invite_domains, monthly_llm_token_limit, monthly_llm_turn_limit, monthly_llm_warning_percent, skills_write_approval, skills_post_turn_review, skills_curator_enabled, skills_curator_stale_after_days, skills_curator_archive_after_days, skills_curator_consolidate_enabled, skills_curator_last_run_at, archived_at, created_at, updated_at
     FROM organizations
     WHERE id = ?
     LIMIT 1
@@ -3248,27 +3257,55 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     );
   };
 
-  const runUpsertOrganizationStmt = (record: StoredOrganizationRecord) => {
-    upsertOrganizationStmt.run(
-      record.id,
-      record.name,
-      record.slug,
-      JSON.stringify(record.allowedInviteDomains ?? []),
-      record.monthlyLlmTokenLimit ?? null,
-      record.monthlyLlmTurnLimit ?? 0,
-      record.monthlyLlmWarningPercent ?? 80,
-      record.skillsWriteApproval ? 1 : 0,
-      record.skillsPostTurnReview ? 1 : 0,
-      record.skillsCuratorEnabled ? 1 : 0,
-      record.skillsCuratorStaleAfterDays ?? 30,
-      record.skillsCuratorArchiveAfterDays ?? 90,
-      record.skillsCuratorConsolidateEnabled ? 1 : 0,
-      record.skillsCuratorLastRunAt ?? null,
-      record.archivedAt ?? null,
-      record.createdAt,
-      record.updatedAt
-    );
-  };
+  const runUpsertOrganizationStmt = db.transaction(
+    (record: StoredOrganizationRecord) => {
+      const existing = getOrganizationByIdStmt.get(record.id);
+      if (
+        existing &&
+        record.parentOrgId !== undefined &&
+        record.parentOrgId !== existing.parent_org_id
+      ) {
+        throw new Error("Organization parent cannot change");
+      }
+      const parentOrgId = record.parentOrgId ?? existing?.parent_org_id ?? null;
+      if (parentOrgId && !(existing && record.archivedAt)) {
+        const parent = getOrganizationByIdStmt.get(parentOrgId);
+        if (!parent || parent.parent_org_id || parent.archived_at) {
+          throw new Error("Team requires an active root organization");
+        }
+      }
+      if (
+        record.archivedAt &&
+        db
+          .query(
+            "SELECT 1 FROM organizations WHERE parent_org_id = ? AND archived_at IS NULL LIMIT 1"
+          )
+          .get(record.id)
+      ) {
+        throw new Error("Organization has active teams");
+      }
+      upsertOrganizationStmt.run(
+        record.id,
+        parentOrgId,
+        record.name,
+        record.slug,
+        JSON.stringify(record.allowedInviteDomains ?? []),
+        record.monthlyLlmTokenLimit ?? null,
+        record.monthlyLlmTurnLimit ?? 0,
+        record.monthlyLlmWarningPercent ?? 80,
+        record.skillsWriteApproval ? 1 : 0,
+        record.skillsPostTurnReview ? 1 : 0,
+        record.skillsCuratorEnabled ? 1 : 0,
+        record.skillsCuratorStaleAfterDays ?? 30,
+        record.skillsCuratorArchiveAfterDays ?? 90,
+        record.skillsCuratorConsolidateEnabled ? 1 : 0,
+        record.skillsCuratorLastRunAt ?? null,
+        record.archivedAt ?? null,
+        record.createdAt,
+        record.updatedAt
+      );
+    }
+  );
 
   const runUpsertOrgMemberStmt = (record: StoredOrgMemberRecord) => {
     upsertOrgMemberStmt.run(
@@ -3319,6 +3356,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const listUserOrganizationsStmt = db.prepare(`
     SELECT
       o.id,
+      o.parent_org_id,
       o.name,
       o.slug,
       o.allowed_invite_domains,
@@ -6405,6 +6443,7 @@ function toOrganizationRecord(row: OrganizationRow): StoredOrganizationRecord {
     monthlyLlmTurnLimit: row.monthly_llm_turn_limit ?? 0,
     monthlyLlmWarningPercent: row.monthly_llm_warning_percent ?? 80,
     name: row.name,
+    parentOrgId: row.parent_org_id,
     skillsCuratorArchiveAfterDays: row.skills_curator_archive_after_days,
     skillsCuratorConsolidateEnabled:
       row.skills_curator_consolidate_enabled !== 0,
