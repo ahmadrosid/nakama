@@ -1757,3 +1757,12 @@ Checks: 127 focused service and HTTP route tests passed across three files. Comp
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: audit tenant archive export and import, including shared references and conversation history, then invocation compatibility and the delivery-stage gate.
 No new source file, package, or dependency was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-import-shared-ref-focused.log, /tmp/nakama-import-shared-ref-server-types.log, /tmp/nakama-import-shared-ref-core-types.log, /tmp/nakama-import-shared-ref-db-types.log, and /tmp/nakama-import-shared-ref-lint.log.
+
+### Slice 2av — tenant archive shared references and history
+Organization data exports now include each local shared instance's publication, source organization, and source profile IDs. References remain present after publication removal. Export reads local profile rows and workspaces; it does not resolve or copy the parent template. Existing session IDs and stored messages remain in the tenant archive.
+Tests cover a parent and two sibling teams. The team archive contains only its own workspace and conversation data. Parent and sibling memory and messages stay outside the archive. Export leaves source rows, shared links, and history unchanged. Existing preview and restore reject this tenant archive format before changing live data; there is no tenant archive import endpoint to grant parent links or publications.
+Checks: 37 data portability service tests and 11 HTTP route tests passed. The complete server type check, lint across 1532 files, and git diff --check passed. No verification repair was needed.
+The touched test file includes three previously authorized type corrections: close the restored database without an unsupported argument, capture callback observations in an array, and assert that array. Other type cleanup remains uncommitted.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: audit installation backup restore for publication activation and source revision refresh, then invocation compatibility and the delivery-stage gate.
+No new source file, package, or dependency was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran.
+Evidence: /tmp/nakama-org-export-ref-focused.log, /tmp/nakama-org-export-ref-http.log, /tmp/nakama-org-export-ref-types.log, and /tmp/nakama-org-export-ref-lint.log.

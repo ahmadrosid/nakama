@@ -705,9 +705,20 @@ export async function createNakamaOrgDataExport(
       getKnowledgeBaseDir(orgId, profile.id),
       `profiles/${profile.id}/knowledge-base`
     );
+    const shared = await databaseAdapter.getSharedAgentInstance(
+      orgId,
+      profile.id
+    );
     profiles.push({
       ...profile,
       artifacts: exportedArtifacts,
+      sharedAgent: shared
+        ? {
+            publicationId: shared.publicationId,
+            sourceOrgId: shared.sourceOrgId,
+            sourceProfileId: shared.sourceProfileId,
+          }
+        : undefined,
     });
   }
 
