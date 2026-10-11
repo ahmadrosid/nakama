@@ -14,12 +14,15 @@ import {
   ensureBundledSkillFiles,
   type GenerateChatInput,
   getProfileSoulDir,
+  getUserConfigPath,
   loadDiscordConfigFile,
   loadTelegramConfigFile,
+  loadUserConfig,
   loadWhatsAppConfigFile,
   type ProfileResponse,
   type ProviderClient,
   type ProviderInstance,
+  saveUserConfig,
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
@@ -37,11 +40,225 @@ import { asTestFetch } from "../providers/test-helpers";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
+import { AuthService } from "./auth-service";
 import { LlmUsageTracker } from "./llm-usage-tracker";
+import { OrgService } from "./org-service";
 import { resolveDefaultModelForInstance } from "./provider-instance-helpers";
 import { sessionTurnRegistry } from "./session-turn-registry";
 
 const TEST_ORG_ID = "org_test";
+
+describe("provider model publication removal", () => {
+  setupTestConfigDir("nakama-provider-publication-removal-");
+
+  async function setup() {
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+    const config = {
+      defaultProviderId: "provider-one",
+      providers: ["provider-one", "provider-one-extra", "provider-two"].map(
+        (id) => ({
+          apiKey: "private-provider-key",
+          createdAt: now,
+          id,
+          label: id,
+          type: "openai" as const,
+        })
+      ),
+    };
+    await saveUserConfig(config);
+    await db.createUser({
+      createdAt: now,
+      email: "provider-admin@example.com",
+      id: "admin",
+      passwordHash: "test",
+      updatedAt: now,
+    });
+    for (const id of ["root", "archived", "other"]) {
+      await db.upsertOrganization({
+        archivedAt: null,
+        createdAt: now,
+        id,
+        name: id,
+        slug: id,
+        updatedAt: now,
+      });
+      await db.upsertOrgMember({
+        createdAt: now,
+        orgId: id,
+        role: "admin",
+        userId: "admin",
+      });
+      for (const [kind, resourceId] of [
+        ["model", "provider-one::gpt-4o-mini"],
+        ["model", "provider-two::gpt-4o-mini"],
+        ["model", "provider-one-extra::gpt-4o-mini"],
+        ["knowledge", "provider-one::gpt-4o-mini"],
+      ] as const) {
+        await db.publishOrgSharedResource({
+          createdAt: now,
+          id: `${id}_${kind}_${resourceId}`,
+          orgId: id,
+          resourceId,
+          resourceKind: kind,
+          updatedAt: now,
+        });
+      }
+      if (id === "archived") {
+        await db.upsertOrganization({
+          archivedAt: now,
+          createdAt: now,
+          id,
+          name: id,
+          slug: id,
+          updatedAt: now,
+        });
+      }
+    }
+    return {
+      config,
+      db,
+      orgService: new OrgService(db, new AuthService()),
+      service: new AgentService(config, null, db),
+    };
+  }
+
+  test("deletion revokes every organization reference but preserves other providers and resource kinds", async () => {
+    const { db, service } = await setup();
+    expect(await service.deleteProvider("provider-one")).toEqual({
+      defaultProviderId: "provider-one-extra",
+    });
+    for (const id of ["root", "archived", "other"]) {
+      const publications = await db.listOrgSharedResources(id);
+      expect(publications).toHaveLength(3);
+      expect(
+        publications.some(
+          (entry) =>
+            entry.resourceKind === "model" &&
+            entry.resourceId === "provider-one::gpt-4o-mini"
+        )
+      ).toBe(false);
+      expect(
+        publications.some(
+          (entry) =>
+            entry.resourceKind === "knowledge" &&
+            entry.resourceId === "provider-one::gpt-4o-mini"
+        )
+      ).toBe(true);
+    }
+    expect(
+      (await loadUserConfig())?.providers.map((entry) => entry.id)
+    ).toEqual(["provider-one-extra", "provider-two"]);
+    expect(
+      (await service.getModels()).providers.map((entry) => entry.id)
+    ).toEqual(["provider-one-extra", "provider-two"]);
+    await service.deleteProvider("provider-one-extra");
+    expect(await service.deleteProvider("provider-two")).toEqual({
+      defaultProviderId: null,
+    });
+    expect((await loadUserConfig())?.providers).toEqual([]);
+    expect((await service.listProviders()).providers).toEqual([]);
+  });
+
+  test("a deletion retry revokes references after a database failure", async () => {
+    const { db, service } = await setup();
+    const failure = spyOn(db, "deleteOrgSharedResource").mockRejectedValueOnce(
+      new Error("database unavailable")
+    );
+    try {
+      await expect(service.deleteProvider("provider-one")).rejects.toThrow();
+      expect(
+        (await loadUserConfig())?.providers.some(
+          (entry) => entry.id === "provider-one"
+        )
+      ).toBe(false);
+      expect(
+        (await service.listProviders()).providers.some(
+          (entry) => entry.id === "provider-one"
+        )
+      ).toBe(false);
+    } finally {
+      failure.mockRestore();
+    }
+    await expect(service.deleteProvider("provider-one")).rejects.toThrow();
+    for (const org of await db.listOrganizations()) {
+      expect(
+        (await db.listOrgSharedResources(org.id)).filter(
+          (entry) =>
+            entry.resourceKind === "model" &&
+            entry.resourceId.startsWith("provider-one::")
+        )
+      ).toEqual([]);
+    }
+  });
+
+  test("a failed configuration write preserves cached providers and publications", async () => {
+    const { config, db, service } = await setup();
+    const before = await db.listOrgSharedResources("root");
+    const configPath = getUserConfigPath();
+    await rm(configPath);
+    await mkdir(configPath);
+    try {
+      await expect(service.deleteProvider("provider-one")).rejects.toThrow();
+      expect(
+        (await service.listProviders()).providers.map((entry) => entry.id)
+      ).toEqual(config.providers.map((entry) => entry.id));
+      expect(await db.listOrgSharedResources("root")).toEqual(before);
+    } finally {
+      await rm(configPath, { recursive: true });
+      await saveUserConfig(config);
+    }
+    await expect(service.deleteProvider("provider-one")).resolves.toMatchObject(
+      { defaultProviderId: "provider-one-extra" }
+    );
+  });
+
+  test("provider deletion waits for publication insertion and then revokes it", async () => {
+    const { db, orgService, service } = await setup();
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const publish = db.publishOrgSharedResource.bind(db);
+    const pending = spyOn(db, "publishOrgSharedResource").mockImplementation(
+      async (record) => {
+        entered.resolve();
+        await release.promise;
+        return publish(record);
+      }
+    );
+    const publishing = orgService.publishSharedResource(
+      "root",
+      { resourceId: "provider-one::gpt-4o-mini", resourceKind: "model" },
+      "admin"
+    );
+    await entered.promise;
+    const deleting = service.deleteProvider("provider-one");
+    try {
+      expect(
+        await Promise.race([
+          deleting.then(() => true),
+          Bun.sleep(20).then(() => false),
+        ])
+      ).toBe(false);
+    } finally {
+      release.resolve();
+      await Promise.allSettled([publishing, deleting]);
+      pending.mockRestore();
+    }
+    await expect(publishing).resolves.toMatchObject({
+      resourceId: "provider-one::gpt-4o-mini",
+    });
+    await expect(deleting).resolves.toMatchObject({
+      defaultProviderId: "provider-one-extra",
+    });
+    expect(
+      (await db.listOrgSharedResources("root")).filter(
+        (entry) =>
+          entry.resourceKind === "model" &&
+          entry.resourceId.startsWith("provider-one::")
+      )
+    ).toEqual([]);
+  });
+});
 
 describe("shared agent direct configuration", () => {
   setupTestConfigDir("nakama-shared-direct-config-");

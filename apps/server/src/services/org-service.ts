@@ -75,6 +75,7 @@ import { deleteOrgToolCredentials } from "./custom-tool-shared";
 import { loadMfaPolicy } from "./mfa-config";
 import {
   modelExistsOnInstance,
+  providerPublicationLock,
   resolveConfiguredModelInstance,
 } from "./provider-instance-helpers";
 
@@ -188,12 +189,16 @@ export class OrgService {
         updatedAt: now,
       });
     };
-    return request.resourceKind === "knowledge"
-      ? knowledgeBaseMutationLock.withLock(
-          getOrgConfigDir(parentOrgId),
-          publish
-        )
-      : publish();
+    if (request.resourceKind === "knowledge") {
+      return knowledgeBaseMutationLock.withLock(
+        getOrgConfigDir(parentOrgId),
+        publish
+      );
+    }
+    if (request.resourceKind === "model") {
+      return providerPublicationLock.withLock("providers", publish);
+    }
+    return publish();
   }
 
   async listSharedResources(

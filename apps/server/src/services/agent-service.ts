@@ -358,6 +358,7 @@ import {
   countModelsForInstance,
   mergeModelsForConfig,
   modelExistsOnInstance,
+  providerPublicationLock,
   resolveConfiguredModelInstance,
   resolveDefaultModelForInstance,
   resolveInitialModel,
@@ -3548,34 +3549,52 @@ export class AgentService {
   }
 
   async deleteProvider(providerId: string): Promise<DeleteProviderResponse> {
-    if (!this.userConfig) {
-      throw new Error("Provider is not configured.");
+    return providerPublicationLock.withLock("providers", async () => {
+      if (!this.userConfig) {
+        throw new Error("Provider is not configured.");
+      }
+
+      const providers = this.userConfig.providers.filter(
+        (instance) => instance.id !== providerId
+      );
+
+      if (providers.length === this.userConfig.providers.length) {
+        await this.unpublishProviderModels(providerId);
+        throw new Error("Provider not found.");
+      }
+
+      let defaultProviderId = this.userConfig.defaultProviderId;
+
+      if (defaultProviderId === providerId) {
+        defaultProviderId = providers[0]?.id ?? null;
+      }
+
+      const config = {
+        ...this.userConfig,
+        defaultProviderId,
+        providers,
+      };
+
+      await saveUserConfig(config);
+      this.userConfig = config;
+      this.refreshProviderConfig();
+      await this.unpublishProviderModels(providerId);
+
+      return { defaultProviderId };
+    });
+  }
+
+  private async unpublishProviderModels(providerId: string): Promise<void> {
+    for (const org of await this.db.listOrganizations()) {
+      for (const publication of await this.db.listOrgSharedResources(org.id)) {
+        if (
+          publication.resourceKind === "model" &&
+          publication.resourceId.startsWith(`${providerId}::`)
+        ) {
+          await this.db.deleteOrgSharedResource(org.id, publication.id);
+        }
+      }
     }
-
-    const providers = this.userConfig.providers.filter(
-      (instance) => instance.id !== providerId
-    );
-
-    if (providers.length === this.userConfig.providers.length) {
-      throw new Error("Provider not found.");
-    }
-
-    let defaultProviderId = this.userConfig.defaultProviderId;
-
-    if (defaultProviderId === providerId) {
-      defaultProviderId = providers[0]?.id ?? null;
-    }
-
-    this.userConfig = {
-      ...this.userConfig,
-      defaultProviderId,
-      providers,
-    };
-
-    await saveUserConfig(this.userConfig);
-    this.refreshProviderConfig();
-
-    return { defaultProviderId };
   }
 
   async persistXaiOAuth(
