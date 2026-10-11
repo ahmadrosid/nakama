@@ -119,6 +119,27 @@ describe("readToolSource", () => {
     expect(source.content).toContain("readFileTool");
   });
 
+  test("rejects unmapped built-in names", async () => {
+    for (const name of [
+      "missing_tool",
+      "toString",
+      "constructor",
+      "__proto__",
+    ]) {
+      await expect(
+        readToolSource({
+          createdAt: new Date().toISOString(),
+          description: "Unmapped tool",
+          handlerConfig: {},
+          handlerType: "builtin",
+          id: "tool_unmapped",
+          name,
+          updatedAt: new Date().toISOString(),
+        })
+      ).rejects.toMatchObject({ status: 404 });
+    }
+  });
+
   test("reads bash tool source", async () => {
     const source = await readToolSource({
       createdAt: new Date().toISOString(),

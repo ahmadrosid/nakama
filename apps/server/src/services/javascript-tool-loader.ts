@@ -53,9 +53,11 @@ export async function loadJavascriptSkillTool(
   context: ToolContext
 ): Promise<ToolDefinition | null> {
   const modulePath = skill.toolPath;
+
   if (!modulePath) {
     return null;
   }
+
   const metadata = z
     .object({
       description: z.string().optional(),
@@ -74,6 +76,7 @@ export async function loadJavascriptSkillTool(
         workspaceRoot: context.workspaceRoot,
       })
     );
+
   return {
     description: metadata.description?.trim() || skill.description,
     name: metadata.name?.trim() || skill.name,
@@ -138,9 +141,11 @@ async function runJavascriptTool<T>(
   // (RetryableToolError / exit 75). executeToolCall converts the throw into
   // `{ error: message }`.
   const cwd = shared ? context.workspaceRoot : path.dirname(modulePath);
+
   if (!cwd) {
     throw new Error("Shared tool workspace is unavailable.");
   }
+
   const result = await spawnJsonTool({
     args: [RUNNER_PATH, modulePath],
     bin: BUN_BIN,

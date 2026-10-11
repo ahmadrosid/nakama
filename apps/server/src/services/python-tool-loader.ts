@@ -214,9 +214,11 @@ async function runPythonTool<T>(
   // (RetryableToolError / exit 75). executeToolCall converts the throw into
   // `{ error: message }`.
   const cwd = shared ? context.workspaceRoot : path.dirname(modulePath);
+
   if (!cwd) {
     throw new Error("Shared tool workspace is unavailable.");
   }
+
   const result = await spawnJsonTool({
     args: [modulePath],
     bin: resolvePythonBin(),

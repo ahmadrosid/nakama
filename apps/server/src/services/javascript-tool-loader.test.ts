@@ -4,6 +4,7 @@ import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   getUserConfigPath,
+  type JsonValue,
   parseIniWithSections,
   writeParsedConfigIni,
 } from "@nakama/core";
@@ -122,9 +123,14 @@ describe("javascript tool loader", () => {
       echo: "[REDACTED]",
     });
 
-    for (const invalid of ["", " \n", "key\n[provider.evil]", "key\0", 123]) {
+    for (const invalid of ["", " \n", "key\n[provider.evil]", "key\0"]) {
       expect(() => saveToolApiKey("org_a", record.id, invalid)).toThrow();
     }
+
+    expect(() => {
+      // @ts-expect-error Invalid external input must fail runtime validation.
+      saveToolApiKey("org_a", record.id, 123);
+    }).toThrow();
 
     await writeFile(
       path.join(toolsDir, "credential.py"),
@@ -203,7 +209,7 @@ if __name__ == "__main__":
     }`
     );
 
-    const env = [
+    const env: JsonValue[] = [
       { name: "WEATHER_API_URL" },
       { name: "WEATHER_API_KEY", secret: true },
     ];
