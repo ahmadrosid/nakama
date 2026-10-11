@@ -5,13 +5,13 @@ import { z } from "zod";
 const CatalogToolkitItemSchema = z.object({
   meta: z
     .object({
-      description: z.string().catch(undefined).optional(),
-      logo: z.string().catch(undefined).optional(),
+      description: z.string().optional().catch(undefined),
+      logo: z.string().optional().catch(undefined),
     })
     .catch({})
     .optional(),
-  name: z.string().catch(undefined).optional(),
-  slug: z.string().catch(undefined).optional(),
+  name: z.string().optional().catch(undefined),
+  slug: z.string().optional().catch(undefined),
 });
 
 const ComposioRecordSchema = z.record(z.string(), z.json());
@@ -20,30 +20,30 @@ const LinkResponseSchema = z.union([
   z.string().transform((directUrl) => ({ directUrl })),
   z
     .object({
-      authorization_url: z.string().catch(undefined).optional(),
-      authorizationUrl: z.string().catch(undefined).optional(),
-      connected_account_id: z.string().catch(undefined).optional(),
-      connectedAccountId: z.string().catch(undefined).optional(),
+      authorization_url: z.string().optional().catch(undefined),
+      authorizationUrl: z.string().optional().catch(undefined),
+      connected_account_id: z.string().optional().catch(undefined),
+      connectedAccountId: z.string().optional().catch(undefined),
       connection: z.union([z.string(), z.object({}).passthrough()]).optional(),
       connectionRequest: z
         .union([z.string(), z.object({}).passthrough()])
         .optional(),
       data: z.union([z.string(), z.object({}).passthrough()]).optional(),
-      id: z.string().catch(undefined).optional(),
-      redirect_url: z.string().catch(undefined).optional(),
-      redirectUrl: z.string().catch(undefined).optional(),
-      url: z.string().catch(undefined).optional(),
+      id: z.string().optional().catch(undefined),
+      redirect_url: z.string().optional().catch(undefined),
+      redirectUrl: z.string().optional().catch(undefined),
+      url: z.string().optional().catch(undefined),
     })
     .passthrough()
     .transform((response) => ({ ...response, directUrl: undefined })),
 ]);
 
 const SessionToolItemSchema = z.object({
-  description: z.string().catch(undefined).optional(),
-  input_parameters: ComposioRecordSchema.catch(undefined).optional(),
-  inputParameters: ComposioRecordSchema.catch(undefined).optional(),
-  name: z.string().catch(undefined).optional(),
-  slug: z.string().catch(undefined).optional(),
+  description: z.string().optional().catch(undefined),
+  input_parameters: ComposioRecordSchema.optional().catch(undefined),
+  inputParameters: ComposioRecordSchema.optional().catch(undefined),
+  name: z.string().optional().catch(undefined),
+  slug: z.string().optional().catch(undefined),
 });
 
 export interface ComposioCatalogToolkit {
@@ -79,7 +79,8 @@ export function extractComposioListItems<T>(
 }
 
 export function parseCatalogToolkitItem(
-  input: z.input<typeof CatalogToolkitItemSchema>
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This I/O parser validates untrusted SDK responses with CatalogToolkitItemSchema.
+  input: unknown
 ): ComposioCatalogToolkit | null {
   const item = CatalogToolkitItemSchema.parse(input);
   const slug = item.slug ?? item.name?.toLowerCase() ?? null;
@@ -97,12 +98,13 @@ export function parseCatalogToolkitItem(
 }
 
 export function parseLinkRedirectUrl(
-  input: z.input<typeof LinkResponseSchema>
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This I/O parser validates untrusted SDK responses with LinkResponseSchema.
+  input: unknown
 ): string | null {
   const response = LinkResponseSchema.parse(input);
 
-  if (response.directUrl?.startsWith("http")) {
-    return response.directUrl;
+  if (response.directUrl !== undefined) {
+    return response.directUrl.startsWith("http") ? response.directUrl : null;
   }
 
   for (const key of [
@@ -111,7 +113,7 @@ export function parseLinkRedirectUrl(
     "authorizationUrl",
     "authorization_url",
     "url",
-  ]) {
+  ] as const) {
     const value = response[key];
 
     if (value) {
@@ -119,7 +121,11 @@ export function parseLinkRedirectUrl(
     }
   }
 
-  for (const nestedKey of ["connectionRequest", "data", "connection"]) {
+  for (const nestedKey of [
+    "connectionRequest",
+    "data",
+    "connection",
+  ] as const) {
     const nested = response[nestedKey];
 
     if (nested) {
@@ -135,9 +141,14 @@ export function parseLinkRedirectUrl(
 }
 
 function parseConnectionRequestId(
-  input: z.input<typeof LinkResponseSchema>
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This I/O parser validates untrusted SDK responses with LinkResponseSchema.
+  input: unknown
 ): string | undefined {
   const response = LinkResponseSchema.parse(input);
+
+  if (response.directUrl !== undefined) {
+    return undefined;
+  }
 
   return (
     response.id ?? response.connectedAccountId ?? response.connected_account_id
@@ -194,7 +205,7 @@ export async function resolveAuthConfigId(
 }
 
 export function parseSessionToolItems(
-  inputs: Array<z.input<typeof SessionToolItemSchema>>
+  inputs: unknown[]
 ): ComposioCachedToolSummary[] {
   return inputs.flatMap((input) => {
     const tool = SessionToolItemSchema.parse(input);
@@ -228,7 +239,7 @@ export class ComposioApiClient {
     limit?: number;
   }): Promise<ComposioCatalogToolkit[]> {
     const limit = options?.limit ?? 200;
-    const response = await this.composio.toolkits.getToolkits({ limit });
+    const response = await this.composio.toolkits.get({ limit });
     const items = extractComposioListItems(response);
 
     return items
