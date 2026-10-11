@@ -184,6 +184,7 @@ export class SkillCuratorService {
         if (skill.orgId && skill.orgId !== orgId) {
           continue;
         }
+
         counts.scanned += 1;
 
         if (isExemptFromCurator(skill)) {
@@ -304,6 +305,7 @@ export class SkillCuratorService {
         if (skill.orgId && skill.orgId !== input.orgId) {
           continue;
         }
+
         if (isExemptFromCurator(skill)) {
           continue;
         }

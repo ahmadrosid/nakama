@@ -83,6 +83,7 @@ export function composeMatchedSkillsPrompt(
     const source = skill.sourceOrganization
       ? `Shared from ${JSON.stringify(skill.sourceOrganization.name)}. The source is read-only. Use the published-skill paths only with read_file.`
       : "";
+
     return [header, description, source, location, loading, body]
       .filter(Boolean)
       .join("\n");

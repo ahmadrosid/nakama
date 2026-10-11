@@ -29,6 +29,7 @@ describe("createTelegramOutboundAdapter", () => {
     } else {
       process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
     }
+
     homedirSpy?.mockRestore();
     homedirSpy = null;
 

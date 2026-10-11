@@ -35,6 +35,7 @@ export async function withTempHomedir(
     } else {
       process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
     }
+
     homedirSpy.mockRestore();
     await rm(tempHome, { force: true, recursive: true });
   }

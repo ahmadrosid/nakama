@@ -1837,14 +1837,17 @@ export function registerProfileRoutes(
     async (c) => {
       const auth = getRequestAuth(c);
       const orgId = decodeURIComponent(c.req.param("orgId"));
+
       if (auth.activeOrgId !== orgId) {
         throw new NakamaApiError("Not found", 404);
       }
+
       const document = await agent.readPublishedKnowledgeBaseDocument(
         orgId,
         decodeURIComponent(c.req.param("publicationId")),
         { render: c.req.query("render") === "text" ? "text" : undefined }
       );
+
       return new Response(new Uint8Array(document.bytes), {
         headers: {
           "Content-Disposition": `${c.req.query("inline") === "1" ? "inline" : "attachment"}; filename="${document.filename.replace(/["\\]/g, "_")}"`,
