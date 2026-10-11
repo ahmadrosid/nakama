@@ -491,7 +491,8 @@ const app = createHonoApp({
 const server = startServer({
   canFallbackToNextPort,
   // The limiter needs the peer address, and Bun only exposes it on `server`.
-  fetch: (request: Request, server: Server) => app.fetch(request, { server }),
+  fetch: (request: Request, server: Server<unknown>) =>
+    app.fetch(request, { server }),
   host,
   preferredPort: requestedPort,
 });
@@ -607,7 +608,10 @@ function startServer(options: {
   host: string;
   preferredPort: number;
   canFallbackToNextPort: boolean;
-  fetch: (request: Request, server: Server) => Response | Promise<Response>;
+  fetch: (
+    request: Request,
+    server: Server<unknown>
+  ) => Response | Promise<Response>;
 }): ReturnType<typeof Bun.serve> {
   const lastPort = options.canFallbackToNextPort
     ? Math.min(options.preferredPort + 2000, 65_535)
@@ -618,7 +622,7 @@ function startServer(options: {
   for (let port = options.preferredPort; port <= lastPort; port += 1) {
     try {
       return Bun.serve({
-        async fetch(request, server: Server) {
+        async fetch(request, server: Server<unknown>) {
           disableBunIdleTimeoutForLongHeldRequest(request, server);
           const response = await options.fetch(request, server);
           disableBunIdleTimeoutForSse(request, response, server);

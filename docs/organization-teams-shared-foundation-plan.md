@@ -391,3 +391,641 @@ The existing foreign-key deletion guard now serves normal deletion and failed-se
 Checks: all 160 database tests passed; database type check and `bun x ultracite check` passed.
 Service workspace setup, filesystem cleanup, HTTP authorization, and readiness enforcement remain incomplete.
 Stage 1 remains incomplete. Next: connect OrgService team creation and workspace compensation.
+
+2026-10-11: Slice 1g is implemented but uncommitted. The full server type gate stops this iteration.
+Changes connect `OrgService.createTeam()` to durable requests, existing profile/workspace setup, guarded failure cleanup, and first-admin selection.
+The existing process lock serializes retries. Completed requests return the same team without changing active organization selection.
+Pending setup blocks organization switching, settings writes, and tenant HTTP requests, including platform-admin requests.
+Parent archive and deletion checks now run before channel, file, or credential changes.
+Checks: 234 focused service, HTTP, and database tests passed; database and affected OrgService source type checks passed; `bun x ultracite check` passed.
+The full server type check reported 607 existing diagnostics before these edits.
+Two code repair attempts corrected five existing errors and the new test type error. The full check still reports 602 existing diagnostics.
+After path/line normalization, the remaining diagnostics contain no new errors compared with the baseline.
+Full command: `bun apps/web/node_modules/typescript/bin/tsc --project /tmp/nakama-server-typecheck.json --noEmit --pretty false`.
+Config: extends root `tsconfig.json`; includes `apps/server/src/**/*.ts`; uses `ESNext`, `DOM`, and root `node_modules/@types`.
+Evidence logs: `/tmp/nakama-server-baseline-types.log`, `/tmp/nakama-team-service-full-types.log`, `/tmp/nakama-team-service-tests.log`.
+The loop stops under goal step 12. No commit, push, or PR ran for slice 1g.
+Next: obtain a verification decision before committing slice 1g or starting another slice.
+
+2026-10-11: The user selected option 2: fix all existing server type errors before continuing feature work.
+Two repair passes removed 72 diagnostics, reducing the full server check from 602 errors to 530.
+Composio parsers now accept unknown SDK input and validate it with Zod; optional fallback types match their output.
+Toolkit listing uses the installed SDK's public method. Redirect parsing narrows direct-string and object responses.
+Provider fields use optional output types; explicit Ollama labels survive field merging; provider lookup uses the available provider list.
+Four HTTP test files reuse the existing `AppFetch` type rather than requiring Bun's global fetch properties.
+Regression tests cover malformed catalog fields, redirect variants, and explicit Ollama labels.
+Checks: 151 tests passed across six files. Full server type checks still failed after both repair passes.
+Evidence: `/tmp/nakama-type-repair-1.log`, `/tmp/nakama-type-repair-2.log`, and `/tmp/nakama-type-repair-tests.log`.
+Step 12 stops this iteration. All new repairs and slice 1g remain uncommitted; no push or PR ran.
+Next: continue the authorized type-error cleanup after restarting the stopped loop; retain the full passing type-check requirement.
+
+2026-10-11: The next repair group removed 132 more server diagnostics; 398 remain, with no new diagnostics against the 530-error baseline.
+The existing `asTestFetch` helper now adds offline `preconnect` while retaining mock call tracking and identity.
+`NoInfer` prevents assignment context from requiring fetch properties on the original mock input.
+Affected provider, service, and HTTP fixtures now use this helper rather than incomplete casts or direct fetch assignments.
+The compaction event fixture accepts typed extra event fields. Its fetch helper regression checks calls and offline preconnect.
+Focused runs passed: 249 tests across 16 files, 69 across six files, and 45 across four files.
+The first test run failed four port-binding fixtures inside the sandbox. The same run passed with local port access.
+Evidence: `/tmp/nakama-fetch-repair-types-final.log`, `/tmp/nakama-fetch-repair-tests.log`, `/tmp/nakama-fetch-repair-extra-tests.log`, `/tmp/nakama-fetch-repair-spy-tests.log`.
+The full server type gate remains unmet. No commit, push, or PR ran. Next: repair the remaining source and fixture types.
+The import formatter corrected three files after the first lint check. `bun x ultracite check` passed all 1532 files.
+
+2026-10-11: HTTP fixture and boundary repairs removed 56 more server diagnostics; 342 remain, with no new diagnostics against the 398-error baseline.
+Setup fixtures allow partial admin fields and expose the required setup organization ID. Browser sessions without organization scope remain supported.
+The automation fixture requires its database; the shared auth helper uses the correct import path. Session-only caller parameters use `TestBrowserSession`.
+Database-backed settings, notification, and export routes now capture validated dependencies before registering handlers.
+Polling validation checks the number type before integer/range checks. ZIP responses use an explicit byte array with the same payload.
+The ChatGPT JWT result type comes from its existing validation schema.
+Regression coverage checks missing database route registration; existing tests check permissions, invalid polling values, downloads, sessions, and OAuth.
+Focused runs passed: 66 tests across two files, 144 across four files, 73 across three files, and 15 across two files.
+The final server check still fails with 342 existing diagnostics. `bun x ultracite check` passed all 1532 files.
+Evidence: `/tmp/nakama-http-boundary-types-final.log`, `/tmp/nakama-http-fixture-repair-tests.log`, `/tmp/nakama-http-boundary-repair-tests.log`, `/tmp/nakama-http-boundary-extra-tests.log`, `/tmp/nakama-http-session-caller-tests.log`.
+No commit, push, or PR ran. Next: continue the authorized cleanup before committing slice 1g or resuming feature work.
+
+2026-10-11: Request and response boundary repairs removed 20 more server diagnostics; 322 remain, with no new diagnostics.
+Profile creation, soul updates, knowledge uploads, images, and session attachments now declare their existing contract fields in Zod.
+The knowledge duplicate actions remain `error`, `skip`, and `replace`. Existing source and access checks remain in the service methods.
+Binary download responses use byte arrays with the same payload. Error reporting accepts unknown thrown values and retains existing normalization.
+The affected core package type check had 125 baseline diagnostics before this group; 123 remain, with no new diagnostics.
+Regression tests verify malformed profile requests return 400 without calling the service, and unknown non-Error values receive fingerprints.
+Focused runs passed: 186 tests across 11 files and 76 across two files. `bun x ultracite check` passed all 1532 files.
+Full server and core type checks still fail on existing diagnostics; no commit, push, or PR ran.
+Evidence: `/tmp/nakama-request-schema-server-final.log`, `/tmp/nakama-core-before-boundary-types.log`, `/tmp/nakama-request-schema-core-final.log`, `/tmp/nakama-request-schema-tests.log`, `/tmp/nakama-request-schema-regression-tests.log`.
+Next: continue the authorized type cleanup, including affected core-package errors, before completing slice 1g.
+
+2026-10-11: Tool input repairs reduced the core type errors from 123 to 63, with no new diagnostics.
+Search, knowledge search, read-file, and email input types now describe values before runtime defaults are applied.
+Internal knowledge and email operations retain schema output types after validation. Runtime validation, defaults, and access checks are unchanged.
+Email input permits cross-action fields already advertised by its flat LLM schema; the existing parser still removes them.
+Readonly edit fixtures copy their edit arrays; the invalid email-body fixture explicitly exercises runtime rejection.
+The temporary checks retain root strict settings and complete package source/test scope. They include `DOM.Iterable` with the existing Web API declarations.
+The root config has only `ESNext`; checking without Web API declarations produced missing `RequestInfo` errors in existing fixtures.
+DOM iterator declarations remove seven server diagnostics for supported Web API iteration; 315 server errors remain, with no new diagnostics.
+Checks: 99 focused tests passed, two existing tests skipped, database type check passed, and `bun x ultracite check` passed all 1532 files.
+Server and core type checks still fail. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-tool-input-server-final.log`, `/tmp/nakama-tool-input-core-final.log`, `/tmp/nakama-tool-input-db-final.log`, `/tmp/nakama-tool-input-all-tests.log`.
+Next: continue the authorized type cleanup before completing slice 1g and resuming feature implementation.
+
+2026-10-11: Channel and fetch fixture repairs reduced core type errors from 63 to 22, with no new diagnostics.
+The existing shared channel test helper now supplies Bun's offline `preconnect` method while preserving each mock's call signature and history.
+Server provider fixtures re-export that helper; core fetch fixtures reuse it without casts or duplicate implementations.
+Channel configuration fixtures now include required profile and handshake-expiry fields. Discord worker fixtures include the invite URL field.
+Checks: 181 tests passed across 11 files, including the shared fetch regression. `bun x ultracite check` passed all 1532 files.
+The full server check remains at 315 errors, with no new diagnostics. The core check still fails on 22 existing errors.
+No commit, push, or PR ran. Feature slice 1g remains pending until the complete type checks pass.
+Evidence: `/tmp/nakama-channel-fixture-core-1.log`, `/tmp/nakama-channel-fixture-server-final.log`, `/tmp/nakama-channel-fixture-tests.log`, `/tmp/nakama-channel-fixture-lint.log`.
+Next: repair the remaining core fixtures, then continue the authorized server type cleanup.
+
+2026-10-11: Remaining core fixture repairs reduced its 22 diagnostics to zero. The full core type check passed.
+Profile fixtures include current summary fields; automation fixtures use the existing function arguments and contract import.
+Artifact registries use the exported delivery type. Missing-byte fixtures omit the field instead of putting undefined in JSON.
+Document tests narrow text results before reading text; token and soul tests retain failure checks for missing values.
+Plugin schemas and script layouts have explicit input types. Hot-session fixtures request their stored session type.
+Slack public settings always return a nullable handshake code; regression coverage checks missing, live, and expired configurations.
+The first type check found an incorrect delivery-type import; the corrected import passed the complete core check.
+Checks: 135 focused tests passed across 12 files; 20 regression tests passed across two files; lint passed all 1532 files.
+The server type check has 314 remaining diagnostics, with no new errors against the prior 315-error result.
+No commit, push, or PR ran. Slice 1g remains pending until the server gate passes.
+Evidence: `/tmp/nakama-core-final-fixtures-types-final.log`, `/tmp/nakama-core-final-fixtures-server.log`, `/tmp/nakama-core-final-fixtures-tests.log`, `/tmp/nakama-core-final-fixtures-regression.log`, `/tmp/nakama-core-final-fixtures-lint.log`.
+Next: continue the authorized server type cleanup; core type checking now passes.
+
+2026-10-11: Provider fixture repairs reduced server type diagnostics from 314 to 286, with no new diagnostics.
+Provider routing and Gemini empty-response fixtures supply the required system input. Gemini fetch and one-use spy callbacks reuse `asTestFetch`.
+Anthropic fixtures include required SDK block fields and explicitly allow the null/string/number changes their cache tests exercise.
+The OpenAI stream mock declares request arguments so its recorded request can be checked. OpenCode fixtures retain a string URL.
+Usage fixtures use typed tool definitions and structured tool arguments, matching the existing provider contract.
+A formatter check found one duplicate system field; the existing nonempty prompt was retained before repeating the routing tests.
+Checks: 71 tests passed across six files; routing and Gemini rechecks each passed 10 tests. Lint passed all 1532 files.
+The full server type check still fails on 286 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-provider-fixture-types-final.log`, `/tmp/nakama-provider-fixture-tests.log`, `/tmp/nakama-provider-create-recheck.log`, `/tmp/nakama-provider-gemini-recheck.log`, `/tmp/nakama-provider-fixture-lint-final.log`.
+Next: continue the authorized server cleanup before committing feature slice 1g.
+
+2026-10-11: Composio service fixture repairs reduced server type errors from 286 to 278, with no new diagnostics.
+The mock client declares the five public methods it supplies, rather than requiring private SDK fields.
+Partial catalog overrides merge with the existing complete mock client; profile fixtures include required update timestamps.
+Checks: all 12 Composio service tests passed; lint passed all 1532 files. The full server type check still fails.
+No commit, push, or PR ran. Feature slice 1g remains pending.
+Evidence: `/tmp/nakama-composio-fixture-types-1.log`, `/tmp/nakama-composio-fixture-tests.log`, `/tmp/nakama-composio-fixture-lint.log`.
+Next: repair remaining service dependency and worker fixture types, then repeat the complete server check.
+
+2026-10-11: Shared schema repairs reduced server diagnostics from 278 to 266, with no new errors.
+`JsonSchema` is a structural type alias with the existing fields plus numeric bounds and the schema marker used by current tool fixtures.
+Its JSON record compatibility removes tool-catalog and OpenAI SDK assignment errors without runtime conversion.
+Gemini uses the installed SDK's `parametersJsonSchema` field for JSON Schema inputs; the existing bound sanitizer remains active.
+Regression tests check the SDK-generated request field, converted numeric bound, and absence of the incompatible `parameters` field.
+Checks: 96 focused tests passed across six files; 15 Gemini request/config tests passed; core and database type checks passed; lint passed all 1532 files.
+The full server type check still fails on 266 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-schema-repair-server-final.log`, `/tmp/nakama-schema-repair-core-1.log`, `/tmp/nakama-schema-repair-db.log`, `/tmp/nakama-schema-repair-tests.log`, `/tmp/nakama-schema-repair-wire-tests.log`, `/tmp/nakama-schema-repair-lint.log`.
+Next: continue the authorized server type cleanup before committing feature slice 1g.
+
+2026-10-11: Auth request boundary repairs reduced server type errors from 266 to 257, with no new diagnostics.
+Passkey schemas declare the current credential contract fields and JSON extension values, while preserving additional browser fields.
+Login, backup-code renewal, passkey enrollment, and passkey removal share this credential validation.
+Five MFA handlers check both database and authentication dependencies before CSRF validation.
+The new regression rejects malformed login/enrollment credentials with 400, preserves stored factors, and rejects a valid-shaped unknown credential with 401.
+The first regression run lacked the required CSRF header; the corrected requests passed all 15 focused tests across four files.
+Lint passed all 1532 files. The complete server type check still fails on 257 existing diagnostics.
+No commit, push, or PR ran. Feature slice 1g remains pending.
+Evidence: `/tmp/nakama-auth-schema-types-final.log`, `/tmp/nakama-auth-schema-tests-final.log`, `/tmp/nakama-auth-schema-lint.log`.
+Next: continue the authorized server type cleanup before resuming feature implementation.
+
+2026-10-11: Route dependency and request validation repairs reduced server type errors from 257 to 248, with no new diagnostics.
+Token optimization routes capture the database dependency before registration. Internal automation filters narrow nonempty organization IDs.
+Image, audio transcription, and thinking-setting schemas declare their existing request fields and reject malformed input before service calls.
+Regression tests cover missing database routes and malformed model requests. Internal automation fixtures use temporary configuration storage.
+The first test run exposed a fixture using the user configuration directory; the corrected fixture passed the repeated checks.
+Checks: 162 tests passed across three files. Lint passed all 1532 files. `git diff --check` passed.
+The complete server type check still fails on 248 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-route-boundaries-types-final.log`, `/tmp/nakama-route-boundaries-tests-final.log`, `/tmp/nakama-route-boundaries-lint.log`.
+Next: continue the authorized server type cleanup before committing feature slice 1g.
+
+2026-10-11: Tool input repairs reduced server type errors from 248 to 235, with no new diagnostics.
+Questionnaire parsing accepts unknown input at its validation boundary and keeps all-or-nothing question validation.
+Tool activity uses validated details in every branch, preventing crashes when write, edit, delete, or custom tools omit input.
+Tests verify invalid questionnaires leave stored state unchanged and every activity branch accepts missing input.
+Sub-agent result assertions check returned behavior without reading properties of unknown values. The questionnaire provider test checks stored state.
+Checks: all 12 unit tests passed across two files; lint passed all 1532 files; `git diff --check` passed.
+The provider cassette test failed: its recorded Chat Completions endpoint does not intercept the current Responses request, which failed DNS lookup.
+The cassette remains unchanged. Its provider request coverage needs repair before the complete test gate can pass.
+The complete server type check still fails on 235 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-tool-boundaries-types.log`, `/tmp/nakama-tool-boundaries-unit.log`, `/tmp/nakama-tool-boundaries-tests.log`, `/tmp/nakama-tool-boundaries-lint.log`.
+Next: repair provider cassette coverage and continue the authorized server type cleanup before committing feature slice 1g.
+
+2026-10-11: Cassette response validation reduced server type errors from 235 to 234, with no new diagnostics.
+Stored response bodies use the inferred JSON schema type; loading validates JSON values before MSW serves them.
+All 17 existing cassettes passed validation. The first type check found an unavailable Zod type name; schema inference corrected it.
+The questionnaire test now intercepts the current Responses endpoint. Its obsolete cassette still requires one real recording.
+Automatic approval review rejected the recording request because the user had not explicitly authorized sending its test payload and tool schema to OpenAI.
+No network recording ran and the existing cassette remains unchanged. Explicit approval is needed only for that external request.
+Checks: all 29 offline tests passed across three files; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 234 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-cassette-types-final.log`, `/tmp/nakama-cassette-local-tests-final.log`, `/tmp/nakama-cassette-validation.log`, `/tmp/nakama-cassette-lint-final.log`.
+Next: continue local type repairs; record and replay the questionnaire cassette only after explicit approval.
+
+2026-10-11: Composio bridge fixture repairs reduced server type errors from 234 to 225, with no new diagnostics.
+Bridge parameters declare the three public service methods each function uses. The real service remains compatible.
+Fixtures use those parameter types instead of casting incomplete objects to the service class with private fields.
+The missing-user fixture throws if assignment or session methods run, preserving its early-return coverage.
+Checks: all 25 bridge and service tests passed across two files; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 225 existing diagnostics. No commit, push, or PR ran.
+The external questionnaire recording request remains pending; no network recording was attempted in this iteration.
+Evidence: `/tmp/nakama-bridge-fixtures-types.log`, `/tmp/nakama-bridge-fixtures-tests.log`, `/tmp/nakama-bridge-fixtures-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Output handling repairs reduced server type errors from 225 to 222, with no new diagnostics.
+Cursor summaries skip assistant events with absent or empty text and preserve later result events.
+The static content-type table allows extension lookup while retaining the existing Bun file-type fallback.
+Regression tests cover missing assistant content and serving a file outside the explicit content-type table.
+Checks: all 16 tests passed across two files; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 222 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-output-boundaries-types.log`, `/tmp/nakama-output-boundaries-tests.log`, `/tmp/nakama-output-boundaries-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Worker service and fixture repairs reduced server type errors from 222 to 199, with no new diagnostics.
+The service declares the eight PM2 methods it uses, with nullable errors and optional results on failed process queries.
+The installed PM2 module satisfies this contract without a cast. Fixtures retain mock types and use the same callback and start-option contracts.
+Worker script maps allow existing string lookups. The environment type retains named fields and is compatible with PM2 start options.
+The Supermemory fixture includes the required model field and preserves provider names as typed values.
+Telegram migration now updates only Telegram notification destinations. Regression coverage preserves other channels with empty legacy agent IDs.
+The first check exposed callback error-result and regression-fixture field mismatches; corrected fields passed repeated tests and removed all worker diagnostics.
+Checks: all 44 worker tests passed; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 199 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-worker-types-final-2.log`, `/tmp/nakama-worker-types-tests-final.log`, `/tmp/nakama-worker-types-lint-final.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: MCP storage boundary repairs reduced server type errors from 199 to 189, with no new diagnostics.
+OAuth grant reads accept unknown stored input and validate grant fields with Zod and the installed SDK schemas.
+Configuration resolution declares transport-specific return types. Grant writes preserve existing fields after checking the stored HTTP configuration shape.
+Regression coverage rejects malformed stored grants and preserves valid tokens and pending sign-in fields.
+The first OAuth test run could not bind a local port in the sandbox. The same tests passed with isolated local port access.
+Checks: all 26 MCP service and OAuth tests passed across two files; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 189 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-mcp-storage-types.log`, `/tmp/nakama-mcp-storage-tests-final.log`, `/tmp/nakama-mcp-storage-lint.log`.
+Next: continue local server type repairs, including MCP request schemas, before committing feature slice 1g.
+
+2026-10-11: MCP request schema repairs reduced server type errors from 189 to 186, with no new diagnostics.
+Create, update, assignment, and connection-test routes validate request fields before calling services.
+Connection tests still accept unnamed servers. Transport parsing preserves the command alias, whitespace, and case normalization.
+Configuration parsing preserves extra fields and the existing service checks and secret merging.
+Regression tests reject malformed requests before service calls and verify the unnamed command connection flow.
+The first type check found an untyped test callback; its declared service parameter types removed that diagnostic.
+Checks: all 154 HTTP and settings tests passed; both MCP regressions passed again; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 186 existing diagnostics. No commit, push, or PR ran.
+The external questionnaire recording request remains pending. No network recording ran in this iteration.
+Evidence: `/tmp/nakama-mcp-request-types-final.log`, `/tmp/nakama-mcp-request-tests.log`, `/tmp/nakama-mcp-request-regressions.log`, `/tmp/nakama-mcp-request-lint-final.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Memory backend repairs reduced server type errors from 186 to 178, with no new diagnostics.
+The search request type is compatible with the existing JSON transport without a cast.
+Document reads reject invalid provider responses before recall or ownership checks. Save acknowledgments require a valid document ID.
+Test fixtures include the existing task type field. Two regression cases verify malformed read and save responses retain retry state.
+Retries reuse the saved document without a second upload. Tests use the local transport fixture and send no external requests.
+Checks: all 17 memory backend tests passed; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 178 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-memory-boundary-types.log`, `/tmp/nakama-memory-boundary-tests.log`, `/tmp/nakama-memory-boundary-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Coding harness repairs reduced server type errors from 178 to 167, with no new diagnostics.
+Claude Code and Codex environment builders declare their existing string-map return contract, including the empty inactive result.
+The light readiness probe accepts only the stored harness kind and name that it reads.
+Six harness fixtures use the existing workspace settings merge helper to supply required defaults and retain explicit overrides.
+No runtime behavior changed. Existing tests cover environment routing, disabled passthrough, readiness caching, and descendant termination.
+Checks: all 23 harness and spawn-environment tests passed across two files; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 167 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-harness-types.log`, `/tmp/nakama-harness-types-tests.log`, `/tmp/nakama-harness-types-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Session fixture repairs reduced server type errors from 167 to 156, with no new diagnostics.
+The cognito HTTP helper accepts partial request fields because it supplies the channel and profile defaults itself.
+Profile pack tests reuse the existing browser-session header contract instead of declaring an incompatible Headers return type.
+No production behavior changed. Tests preserve ephemeral session privacy, sender authorization, profile selection, and import access checks.
+Checks: all 13 session and profile pack tests passed across two files; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 156 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-session-fixtures-types.log`, `/tmp/nakama-session-fixtures-tests.log`, `/tmp/nakama-session-fixtures-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: MCP client repairs reduced server type errors from 156 to 151, with no new diagnostics.
+Transport creation accepts unknown stored configuration and validates transport fields with Zod before starting a client.
+Existing URL, command, workspace, OAuth, and connection cleanup behavior remains in place.
+SDK tool fixtures declare object schemas. Service and bridge assertions retain secret-redaction and parameter-removal coverage with current types.
+The new regression rejects six invalid stored configurations before client connection and preserves an empty connection cache.
+The first type check found a removed import used by another method; restoring it removed the new diagnostic.
+Checks: all 36 MCP client, service, and bridge tests passed across three files; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 151 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-mcp-client-types-final.log`, `/tmp/nakama-mcp-client-types-tests-final.log`, `/tmp/nakama-mcp-client-types-lint-final.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Provider mapping repairs reduced server type errors from 151 to 140, with no new diagnostics.
+Gemini function arguments enter the existing record parser as unknown values rather than tool parameter schemas.
+The streaming merge uses the installed SDK FunctionCall type and retains its existing parsing and delta behavior.
+Responses image and document tests assert complete mapped message objects without assuming every response item has message fields.
+No runtime behavior changed. Existing tests cover tool IDs, text, images, documents, thinking, and streaming calls.
+Checks: all 29 provider mapping and Gemini tests passed across three files; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 140 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-provider-mapping-types.log`, `/tmp/nakama-provider-mapping-tests-final.log`, `/tmp/nakama-provider-mapping-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Organization memory fixture repairs reduced server type errors from 140 to 133, with no new diagnostics.
+Proposal tests assert returned outcomes and validate proposal IDs before reading stored proposals.
+Tests retain viewer denial, missing-context denial, document ID resolution, and attached organization document coverage.
+No production behavior changed. No casts or weaker assertions were added.
+Checks: all 11 organization memory tool tests passed; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 133 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-org-memory-fixture-types.log`, `/tmp/nakama-org-memory-fixture-tests.log`, `/tmp/nakama-org-memory-fixture-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Workspace fixture repairs reduced server type errors from 133 to 123, with no new diagnostics.
+Ten agent service, image generation, and coding environment fixtures reuse the existing workspace settings merge helper.
+The helper supplies required defaults and retains each fixture's explicit harness, model, and disabled-passthrough settings.
+No production behavior changed. Existing tests cover settings persistence, provider routing, image model rejection, and agent execution.
+Checks: all 75 tests passed across three files; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 123 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-workspace-fixture-types.log`, `/tmp/nakama-workspace-fixture-tests.log`, `/tmp/nakama-workspace-fixture-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Provider selection repairs reduced server type errors from 123 to 119, with no new diagnostics.
+Image provider lookup passes the existing full user configuration instead of constructing an incomplete copy.
+The private API-key provider factory excludes OAuth providers already handled by its public caller. Its switch now covers every permitted provider type.
+The avatar fixture declares its absent default provider explicitly. No runtime behavior changed.
+The first routing test run could not bind local ports in the sandbox. All ten routing tests passed with local mock-server access.
+Checks: all 41 distinct image selection, avatar access, and provider routing tests passed across three files; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 119 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-provider-selection-types.log`, `/tmp/nakama-provider-selection-tests.log`, `/tmp/nakama-provider-selection-routing-tests.log`, `/tmp/nakama-provider-selection-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: String lookup repairs reduced server type errors from 119 to 114, with no new diagnostics.
+Timezone alias, built-in tool source, and avatar media-type tables declare their existing string lookup contracts.
+The timezone test runner receives a mutable copy of its readonly seasonal data.
+No runtime behavior changed. Existing tests cover seasonal offsets, source reads, avatars, and profile pack access rules.
+Checks: all 23 timezone, tool source, and profile portability tests passed across three files; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 114 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-string-lookups-types.log`, `/tmp/nakama-string-lookups-tests.log`, `/tmp/nakama-string-lookups-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: System status repairs reduced server type errors from 114 to 110, with no new diagnostics.
+The service declares the agent methods it uses and each channel status return type.
+The model fixture now includes required provider fields. The HTTP schema describes the existing checkedAt and server.ok response fields.
+Organization status now supplies a null WhatsApp QR code while hiding channel details.
+A regression test checks organization channel redaction. Its first run used profile scope; the corrected organization scope passed.
+Checks: all 68 system status and HTTP tests passed; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 110 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-system-status-types-final.log`, `/tmp/nakama-system-status-types-tests-final.log`, `/tmp/nakama-system-status-types-lint-final.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Worker log fixture repairs reduced server type errors from 110 to 106, with no new diagnostics.
+The fixture requires worker validation and accepts the log method each request calls, including clearWorkerLogs.
+No production behavior changed. Existing tests cover log reads, line limits, unknown workers, clearing, and service failures.
+Checks: all 14 app tests passed; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 106 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-worker-log-fixture-types.log`, `/tmp/nakama-worker-log-fixture-tests.log`, `/tmp/nakama-worker-log-fixture-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Provider request repairs reduced server type errors from 106 to 104, with no new diagnostics.
+Provider creation and configuration validate names against the existing provider list and require string API keys when supplied.
+Missing keys become empty strings, preserving local and OAuth provider behavior. Existing extra request fields remain available to service validation.
+A regression rejects eight malformed requests before service calls and verifies key-free Ollama requests retain their model fields.
+The first test run found a stale transcription fixture using mimeType. Its corrected mediaType input restores the upstream error test.
+Checks: all 134 provider, HTTP error, and role tests passed; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 104 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-provider-request-types-final.log`, `/tmp/nakama-provider-request-tests-final.log`, `/tmp/nakama-provider-request-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Route fixture repairs reduced server type errors from 104 to 101, with no new diagnostics.
+Composio route tests use the public client method contract and the existing service-test cache injection pattern.
+Automation route tests reuse createMinimalHonoApp instead of casting incomplete services to ServerOptions.
+The first automation run failed during setup because it used the user configuration directory. The existing temporary configuration helper fixed test isolation.
+No production behavior changed. Tests retain Composio role and OAuth coverage and automation destination authorization checks.
+Checks: all six route tests passed; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 101 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-route-fixture-types.log`, `/tmp/nakama-route-fixture-tests-final.log`, `/tmp/nakama-route-fixture-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Profile service repairs reduced server type errors from 101 to 96, with no new diagnostics.
+Profile tool lists use the existing detail mapper to satisfy ListToolsResponse. A regression verifies detail fields and denial of a foreign organization.
+ZIP import entries declare their existing result contract. Transfer session fixtures supply required empty state fields.
+The first type check rejected null todo arrays; empty arrays fixed those fixture errors.
+ZIP checks found recursive OpenAPI generation in the passkey JSON schema. Explicit JSON type metadata fixes generation while retaining z.json runtime validation.
+Checks: all 77 profile, tool HTTP, knowledge ZIP, and MFA tests passed; two Windows-only tests skipped; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 96 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-profile-types-final.log`, `/tmp/nakama-profile-types-tests-final.log`, `/tmp/nakama-profile-types-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Compatible provider repairs reduced server type errors from 96 to 90, with no new diagnostics.
+The reasoning detail reader declares the array shape its existing runtime guard produces.
+The thinking request builder declares the installed SDK reasoning_effort contract and existing compatible-provider fields.
+No runtime behavior changed. Tests retain Netra continuation, reasoning controls, tool restrictions, and streamed whitespace coverage.
+Checks: all 15 compatible provider tests passed; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 90 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-compatible-reasoning-types.log`, `/tmp/nakama-compatible-reasoning-tests.log`, `/tmp/nakama-compatible-reasoning-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: OpenRouter repairs reduced server type errors from 90 to 84, with no new diagnostics.
+Chat and text requests reject unexpected streams. Streaming requests reject ordinary responses before callbacks.
+Result parsing uses the installed SDK ChatResult type. Its text reader supports both strings and structured text parts.
+Two regressions verify structured text and all three response-mode checks. Routing assertions retain field values and absence checks.
+The first tests found incorrect undefined-field assertions and a blocked local port. Corrected assertions and isolated local mock-server access passed.
+Checks: all 38 OpenRouter tests passed; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 84 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-openrouter-types.log`, `/tmp/nakama-openrouter-types-tests-final.log`, `/tmp/nakama-openrouter-types-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Command environment repairs reduced server type errors from 84 to 81, with no new diagnostics.
+The shared environment merge removes undefined base values and returns string values. Existing override order and credential protection remain in place.
+Its regression checks inherited HOME, protected credentials, caller flags, and absence of undefined values.
+The installer environment table declares its string lookup contract. The mock registry supplies an ArrayBuffer-backed byte copy to Response.
+Checks: all 94 installer, harness, environment, and bash tests passed across six files; one platform-specific test skipped; lint passed all 1532 files; `git diff --check` passed.
+Installer and harness tests used isolated local mock-server access. No external provider calls ran.
+The complete server type check still fails on 81 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-command-env-types.log`, `/tmp/nakama-command-env-tests.log`, `/tmp/nakama-command-env-bash-tests.log`, `/tmp/nakama-command-env-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Plugin route repairs reduced server type errors from 81 to 75, with no new diagnostics.
+Path and query schemas declare their existing object shape. UI context declares both registered route paths and their required parameters.
+Media and error tables declare their string lookup contracts. The lifecycle fixture uses the existing plugin response type.
+No runtime behavior changed. Tests cover role and CSRF checks, plugin lifecycle, UI asset boundaries, and OpenAPI generation.
+Checks: all 12 plugin route tests passed with an isolated local package registry; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 75 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-plugin-route-types.log`, `/tmp/nakama-plugin-route-types-tests.log`, `/tmp/nakama-plugin-route-types-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Notification fixture repairs reduced server type errors from 75 to 73, with no new diagnostics.
+The service fixture uses the existing TelegramOutboundAdapter send input type. The HTTP fixture declares the parse_mode field it checks.
+No production behavior changed. Existing tests cover formatted delivery, authentication, idempotency, channel isolation, and archived organizations.
+Checks: all 23 notification tests passed; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 73 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-notification-fixture-types.log`, `/tmp/nakama-notification-fixture-tests.log`, `/tmp/nakama-notification-fixture-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Provider assertion repairs reduced server type errors from 73 to 70, with no new diagnostics.
+OpenAI request fixtures declare the tool description, parameters, and reasoning summary fields their assertions check.
+ChatGPT tests check enabled reasoning values and absent reasoning separately. No production behavior changed.
+Checks: all 37 OpenAI and ChatGPT tests passed; lint passed all 1532 files; `git diff --check` passed.
+Tests used mocked fetch responses. No external provider calls ran.
+The complete server type check still fails on 70 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-provider-assertion-types.log`, `/tmp/nakama-provider-assertion-tests.log`, `/tmp/nakama-provider-assertion-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Custom tool type repairs reduced server type errors from 70 to 67, with no new diagnostics.
+The subprocess JSON type uses an indexed object shape. IPC reply results match the existing host callback contract.
+Loader fixtures declare JSON environment data and use Reflect.apply for deliberate invalid credential inputs.
+The first type check exposed the IPC result mismatch. Its repair passed the second type check for these files.
+No runtime behavior changed. Tests cover credential isolation, redaction, retries, process cleanup, and plugin runtime boundaries.
+Checks: all 64 custom tool and plugin runtime tests passed; four platform-specific tests skipped; lint passed all 1532 files after a formatting repair; `git diff --check` passed.
+Plugin runtime tests used an isolated local package registry. No external provider calls ran.
+The complete server type check still fails on 67 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-custom-tool-types-final.log`, `/tmp/nakama-custom-tool-types-tests-final.log`, `/tmp/nakama-custom-tool-plugin-runtime-tests.log`, `/tmp/nakama-custom-tool-types-lint-final.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Automation type repairs reduced server type errors from 67 to 61, with no new diagnostics.
+Delivery normalization accepts typed or untrusted inputs through its existing schema validation.
+Run conversion validates stored delivery states before returning them. A regression rejects an invalid state and verifies the stored run remains unchanged.
+Runner assertions compare result fields through object matchers. Existing tests retain concurrent execution and error propagation checks.
+The first type check found a missing description in the new test. The corrected fixture passed the second check for these files.
+Checks: all 103 automation tests passed across four files; the complete core type check passed; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 61 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-automation-server-types-final.log`, `/tmp/nakama-automation-core-types.log`, `/tmp/nakama-automation-types-tests-final.log`, `/tmp/nakama-automation-types-lint-final.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Composio request repairs reduced server type errors from 61 to 59, with no new diagnostics.
+Both request normalizers accept typed or untrusted inputs through their existing schema checks.
+No runtime behavior changed. Tests retain slug validation, assignment checks, organization boundaries, personal OAuth ownership, and route authorization.
+Checks: all 41 Composio tests passed across four files; the complete core type check passed; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 59 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-composio-request-server-types.log`, `/tmp/nakama-composio-request-core-types.log`, `/tmp/nakama-composio-request-types-tests.log`, `/tmp/nakama-composio-request-types-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Session fixture repairs reduced server type errors from 59 to 55, with no new diagnostics.
+Stream handling declares the three session methods it uses. Its fixtures use that contract without incomplete session casts.
+The clear regression uses a real session and database. It checks empty history and absence of a database delete.
+Timer spies observe actual timer creation and clearing. The first replacement wrappers failed on mixed runtime timer overloads; ordinary spies resolved those errors.
+No production behavior changed. Tests retain cancellation, deadline cleanup, history persistence, archive access, and profile deletion coverage.
+Checks: all 30 session tests passed; lint passed all 1532 files; `git diff --check` passed.
+The complete server type check still fails on 55 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-session-fixture-types-final.log`, `/tmp/nakama-session-fixture-tests-final.log`, `/tmp/nakama-session-fixture-lint-final.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Meeting fixture repairs reduced server type errors from 55 to 50, with no new diagnostics.
+Extension storage methods declare the keys they store. Audio fixtures accept binary frames and flush signals while checking exact PCM16 samples.
+The transcription test uses Reflect.apply to verify rejection of an unsupported configuration field.
+No production behavior changed. Tests retain capture authorization, extension connection state, audio flushing, transcript delivery, and safe popup rendering.
+Checks: all 20 meeting tests passed; lint passed all 1532 files; `git diff --check` passed.
+Tests used VM and fetch fixtures. No browser checks or external provider calls ran.
+The complete server type check still fails on 50 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-meet-fixture-types.log`, `/tmp/nakama-meet-fixture-types-tests.log`, `/tmp/nakama-meet-fixture-types-lint.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Portability repairs reduced server type errors from 50 to 47, with no new diagnostics.
+Profile pack metadata requires a string handler type before its custom tool lookup. Four malformed values fail preview without creating profiles.
+Backup fixtures use the current MeetingStore close signature and verify the live configuration observed by the single close callback.
+Checks: all 56 data backup, profile pack, and route tests passed; lint passed all 1532 files after a formatting repair; `git diff --check` passed.
+Existing tests retain rollback, private file boundaries, role checks, and snapshot restoration coverage.
+The complete server type check still fails on 47 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-portability-types.log`, `/tmp/nakama-portability-types-tests.log`, `/tmp/nakama-portability-types-lint-final.log`.
+Next: continue authorized local server type repairs before committing feature slice 1g.
+
+2026-10-11: Agent prompt repairs reduced server type errors from 47 to 44, with no new diagnostics.
+Skill consolidation reads the current provider content field instead of the obsolete text field.
+Regressions verify plain, fenced, and empty results in both consolidation modes with an offline provider fixture.
+The private learn-content helper keeps its existing union signature and drops unused overloads. Existing attachment and text tests passed.
+The complete agent check includes every package source and test. Its baseline had 20 diagnostics; the repair reduced them to 17, with no new diagnostics.
+Checks: all 18 focused prompt tests passed; lint passed all 1532 files after a formatting repair; `git diff --check` passed.
+The complete server and agent type checks still fail on 44 and 17 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-agent-prompt-server-types.log`, `/tmp/nakama-agent-prompt-types-baseline.log`, `/tmp/nakama-agent-prompt-types.log`, `/tmp/nakama-agent-prompt-tests.log`, `/tmp/nakama-agent-prompt-lint-final.log`.
+Next: continue authorized local type repairs before committing feature slice 1g.
+
+2026-10-11: Agent tool repairs reduced server type errors from 44 to 41 and agent type errors from 17 to 14.
+No new diagnostics appeared. Tool execution validates JSON results before passing them to the optimizer.
+The regression rejects a non-JSON result and verifies that the optimizer receives no call.
+Discovery reuses the existing Zod schema conversion. Tests reject blank, oversized, and extra-field inputs without loading tools.
+Post-turn review fixtures use object arguments under the current tool-call contract.
+Checks: all 43 focused tests passed across four files; the complete core type check passed; lint passed all 1532 files; `git diff --check` passed.
+An existing optimizer test exceeded the default five-second limit. It passed with a twenty-second limit; the full focused run took 5.41 seconds.
+The first lint check found one unsorted fixture object. Its correction passed the second check.
+The complete server and agent type checks still fail on 41 and 14 existing diagnostics. No commit, push, or PR ran.
+Evidence: `/tmp/nakama-agent-tool-tests-final.log`, `/tmp/nakama-agent-tool-server-types.log`, `/tmp/nakama-agent-tool-agent-types.log`, `/tmp/nakama-agent-tool-core-types.log`, `/tmp/nakama-agent-tool-lint-final.log`.
+Next: continue authorized local type repairs before committing feature slice 1g.
+
+2026-10-11: Agent chat fixture repairs reduced agent type errors from 14 to 6, with no new diagnostics.
+Cancellation fixtures declare their provider contract. Prompt fixtures include the required tool handler.
+Image references include their byte size. The file tool fixture parses input through the existing schema before its typed helper call.
+Vision capture uses the actual message content type. Title fixtures use a supported provider name.
+No production behavior changed. Tests retain cancellation, tool ordering, image delivery, vision fallback, and title generation coverage.
+Checks: all 62 focused tests passed across five files; lint passed all 1532 files; `git diff --check` passed.
+The complete agent check now reports only six existing chat implementation errors. The server check still reports 41 errors, with no new diagnostics.
+No commit, push, PR, browser check, or external provider call ran.
+Evidence: `/tmp/nakama-agent-chat-fixture-tests.log`, `/tmp/nakama-agent-chat-fixture-agent-types.log`, `/tmp/nakama-agent-chat-fixture-server-types.log`, `/tmp/nakama-agent-chat-fixture-lint.log`.
+Next: repair chat implementation types before committing feature slice 1g.
+
+2026-10-11: Chat implementation repairs resolved all six remaining agent type errors and reduced server errors from 41 to 35.
+Turn totals use the existing ChatTurnUsage contract. Usage reporting checks the optional tool context.
+Visual results parse their image array through the existing image schema. Text preparation narrows strings directly and preserves attachment parts.
+Five regressions keep empty, null, and malformed image results in JSON without creating attachments or changing message order.
+Existing tests cover valid image delivery, preprocessing failures, image replay, cancellation, usage totals, and separate per-call billing.
+Checks: all 62 focused tests passed across four files; the complete agent type check passed; lint passed all 1532 files after a formatting repair; `git diff --check` passed.
+No new server diagnostics appeared. Its complete check still reports 35 existing errors.
+No commit, push, PR, browser check, or external provider call ran.
+Evidence: `/tmp/nakama-chat-implementation-tests-final.log`, `/tmp/nakama-chat-implementation-agent-types.log`, `/tmp/nakama-chat-implementation-server-types.log`, `/tmp/nakama-chat-implementation-lint-final.log`.
+Next: continue authorized server type repairs before committing feature slice 1g.
+
+2026-10-11: HTTP fixture repairs reduced server type errors from 35 to 29, with no new diagnostics.
+Settings and worker error fixtures use the existing minimal app helper without incomplete service casts.
+Tool fixtures include required profile and tool response fields. Both knowledge OpenAPI fixtures accept method keys such as delete.
+No production behavior changed. Tests retain role denial, organization isolation, credential privacy, idempotent setup approval, and safe error responses.
+Checks: all 125 focused tests passed across four files; lint passed all 1532 files; `git diff --check` passed.
+The first type check found the second OpenAPI fixture still used its old shape. Its correction passed the second check for all four changed files.
+The complete server check still reports 29 existing errors. No commit, push, PR, browser check, or external provider call ran.
+Evidence: `/tmp/nakama-http-fixture-tests.log`, `/tmp/nakama-http-fixture-types-final.log`, `/tmp/nakama-http-fixture-lint-final.log`.
+Next: continue authorized server type repairs before committing feature slice 1g.
+
+2026-10-11: Plugin validation repairs reduced server type errors from 29 to 26, with no new diagnostics.
+Manifest and instance-schema validators accept typed or untrusted inputs through their existing schema checks.
+Package metadata fixtures declare JSON records without inferred optional undefined fields.
+No runtime behavior changed. Tests retain schema limits, path checks, package integrity, dependency rejection, organization isolation, and side-effect prevention.
+Checks: all 41 plugin tests passed across two files; the complete core type check passed; lint passed all 1532 files; `git diff --check` passed.
+Server plugin tests used an isolated local package registry with local port access. No external provider calls ran.
+The complete server check still reports 26 existing errors. No commit, push, PR, or browser check ran.
+Evidence: `/tmp/nakama-plugin-validation-core-tests.log`, `/tmp/nakama-plugin-validation-server-tests.log`, `/tmp/nakama-plugin-validation-core-types.log`, `/tmp/nakama-plugin-validation-server-types.log`, `/tmp/nakama-plugin-validation-lint.log`.
+Next: continue authorized server type repairs before committing feature slice 1g.
+
+2026-10-11: Gemini content repairs reduced server type errors from 26 to 24, with no new diagnostics.
+User-part mapping requires inline image or document data after text handling. Unresolved attachment references fail before a provider request.
+Two regressions reject image and document references. Existing tests retain valid inline data, function-call IDs, signed history replay, and provider response handling.
+The signed continuation assertion compares the containing content object under the current SDK type.
+Checks: all 32 focused tests passed across four files; lint passed all 1532 files; `git diff --check` passed.
+The signed Gemini test replayed its committed cassette with LLM_VCR_MODE=replay. No external provider calls ran.
+The complete server check still reports 24 existing errors. No commit, push, PR, or browser check ran.
+Evidence: `/tmp/nakama-gemini-content-tests.log`, `/tmp/nakama-gemini-content-types.log`, `/tmp/nakama-gemini-content-lint.log`.
+Next: continue authorized server type repairs before committing feature slice 1g.
+
+2026-10-11: ACP stream repairs reduced server type errors from 24 to 22, with no new diagnostics.
+Production and fake-agent byte streams explicitly cross the Node/DOM declaration boundary after Readable.toWeb.
+Node and DOM BYOB overloads conflict despite the same web stream at runtime. Removing the conversion first exposed that conflict; the second repair documents it.
+No runtime behavior changed. Existing process tests verify initialization, text and thought delivery, settings, cancellation, permissions, and tool communication.
+Checks: all 35 ACP tests passed across nine files; lint passed all 1532 files; `git diff --check` passed.
+The initial sandbox test failed to bind its local MCP endpoint. The same tests passed with isolated local port access.
+The complete server check still reports 22 existing errors. No commit, push, PR, browser check, or external provider call ran.
+Evidence: `/tmp/nakama-acp-stream-tests-final.log`, `/tmp/nakama-acp-stream-types-final.log`, `/tmp/nakama-acp-stream-lint-final.log`.
+Next: continue authorized server type repairs before committing feature slice 1g.
+
+2026-10-11: Agent profile repairs reduced server type errors from 22 to 18, with no new diagnostics.
+The private profile helper returns a required organization ID after its existing validation. Branch and resume callers retain that validated scope.
+The vision billing fixture uses the current images field and a text message. It verifies separate vision and primary-model costs.
+Existing profile validation and session behavior remain unchanged. Tests retain branch history, model selection, persistence, and rejection of foreign organization sessions.
+Checks: all 95 focused tests passed across three files; lint passed all 1532 files; `git diff --check` passed.
+Provider fixtures handled the vision calls locally. No external provider calls ran.
+The complete server check still reports 18 existing errors. No commit, push, PR, or browser check ran.
+Evidence: `/tmp/nakama-agent-profile-scope-tests.log`, `/tmp/nakama-agent-profile-scope-types.log`, `/tmp/nakama-agent-profile-scope-lint.log`.
+Next: continue authorized server type repairs before committing feature slice 1g.
+
+2026-10-11: Provider absence repairs reduced server type errors from 18 to 14, with no new diagnostics.
+Vision preprocessing checks provider creation before wrapping or calling it. Missing vision credentials return a controlled 400 response.
+Primary provider wrapping requires a provider instance. Missing primary credentials retain the existing offline chat behavior.
+The coding harness context declares UserConfig directly instead of using this in a nested type.
+Two regressions verify zero provider calls and zero billed requests. Missing vision credentials leave chat history empty; offline text retains user and assistant messages.
+The first test run exposed a missing temporary config directory in the new image test. Adding the existing setup helper made the second run pass.
+Checks: all 52 focused tests passed across two files; lint passed all 1532 files; `git diff --check` passed.
+The complete server check still reports 14 existing errors. No commit, push, PR, browser check, or external provider call ran.
+Evidence: `/tmp/nakama-provider-absence-tests-final.log`, `/tmp/nakama-provider-absence-types.log`, `/tmp/nakama-provider-absence-lint.log`.
+Next: continue authorized server type repairs before committing feature slice 1g.
+
+2026-10-11: Workflow and session event fixture repairs reduced server type errors from 14 to 11, with no new diagnostics.
+The legacy workflow fixture supplies required creation and update timestamps. Its host responses validate JSON at the existing transport boundary.
+The todo fixture uses satisfies to retain its JSON object shape while checking AgentTodo compatibility.
+Production behavior did not change. Existing tests retain organization isolation, installation recovery, tool permissions, and event replay order.
+Checks: all 12 focused tests passed across two files; lint passed all 1532 files; `git diff --check` passed.
+The complete server check still reports 11 existing errors. No commit, push, PR, browser check, or external provider call ran.
+Evidence: `/tmp/nakama-workflow-event-fixture-tests.log`, `/tmp/nakama-workflow-event-fixture-types.log`, `/tmp/nakama-workflow-event-fixture-lint.log`.
+Next: continue authorized server type repairs before committing feature slice 1g.
+
+2026-10-11: Skill proposal input repair reduced server type errors from 11 to 10, with no new diagnostics.
+The private insert input omits consolidateLoserSkillNames before redefining its nullable storage type. The previous intersection rejected null despite its declaration.
+No runtime behavior changed. Existing tests retain pending storage, approval, rejection, organization isolation, and consolidation archive behavior.
+Checks: all 11 focused tests passed; lint passed all 1532 files; `git diff --check` passed.
+The complete server check still reports 10 existing errors. No commit, push, PR, browser check, or external provider call ran.
+Evidence: `/tmp/nakama-skill-proposal-input-tests.log`, `/tmp/nakama-skill-proposal-input-types.log`, `/tmp/nakama-skill-proposal-input-lint.log`.
+Next: continue authorized server type repairs before committing feature slice 1g.
+
+2026-10-11: Super Bot type repairs reduced server type errors from 10 to 7, with no new diagnostics.
+JsonSchema accepts a string or string array for type, matching the existing nullable model schema. Runtime schemas did not change.
+Tool setup fixtures return full profile responses through the existing fixture helper. Assignment retry and credential isolation remain covered.
+Checks: all 106 focused tests passed across four files; two Windows tests skipped on macOS; complete core and agent type checks passed.
+Lint passed all 1532 files; `git diff --check` passed. The complete server check still reports seven existing errors.
+No commit, push, PR, browser check, or external provider call ran.
+Evidence: `/tmp/nakama-super-bot-types-tests.log`, `/tmp/nakama-super-bot-schema-tests.log`, `/tmp/nakama-super-bot-types-{server,core,agent}.log`, `/tmp/nakama-super-bot-types-lint.log`.
+Next: continue authorized server type repairs before committing feature slice 1g.
+
+2026-10-11: Bash tool type repair reduced server type errors from seven to six, with no new diagnostics.
+The coding-agent Bash wrapper declares ToolDefinition<BashInput>, matching its existing Bash handler and enrichment function.
+No runtime behavior changed. Existing tests retain workspace guards, cancellation, sandbox limits, credential isolation, and coding-agent environment handling.
+Checks: all 60 focused tests passed across four files; lint passed all 1532 files; `git diff --check` passed.
+The complete server check still reports six existing errors. No commit, push, PR, browser check, or external provider call ran.
+Evidence: `/tmp/nakama-bash-tool-type-tests.log`, `/tmp/nakama-bash-tool-type-types.log`, `/tmp/nakama-bash-tool-type-lint.log`.
+Next: continue authorized server type repairs before committing feature slice 1g.
+
+2026-10-11: Telegram update ID repair reduced server type errors from six to five, with no new diagnostics.
+Polling requires a numeric update ID before its existing finite-value check. Missing IDs remain ignored without changing valid pairing behavior.
+A regression verifies mixed missing, null, string, and out-of-order IDs across three polls. The offset retains the highest valid ID plus one.
+Checks: all seven focused tests passed; lint passed all 1532 files; `git diff --check` passed.
+The complete server check still reports five existing errors. Tests used injected local responses; no external Telegram or provider calls ran.
+No commit, push, PR, or browser check ran.
+Evidence: `/tmp/nakama-telegram-update-id-tests.log`, `/tmp/nakama-telegram-update-id-types.log`, `/tmp/nakama-telegram-update-id-lint.log`.
+Next: continue authorized server type repairs before committing feature slice 1g.
+
+2026-10-11: Todo storage assertion repair reduced server type errors from five to four, with no new diagnostics.
+The test validates the containing tool result with its existing schema before reading todos. Its MSW handler targets the current Responses endpoint.
+Focused replay failed twice. The first attempt used the old endpoint and failed DNS resolution inside the sandbox.
+The second attempt intercepted the current endpoint locally, but the committed Chat Completions response cannot satisfy the Responses parser.
+The session requirement test passed. The provider schema test remains failed; no cassette was fabricated or recorded, and no external call succeeded.
+Lint passed all 1532 files; `git diff --check` passed. The complete server check still reports four errors in index.ts.
+This iteration stops after two failed focused-test attempts. No commit, push, PR, or browser check ran.
+External recording permission remains unresolved. Next: repair index.ts locally, then resolve stale provider cassettes before the full test gate.
+Evidence: `/tmp/nakama-todo-storage-type-tests.log`, `/tmp/nakama-todo-storage-type-tests-final.log`, `/tmp/nakama-todo-storage-type-types.log`, `/tmp/nakama-todo-storage-type-lint.log`.
+
+2026-10-11: Server entry type repairs cleared the final four server diagnostics. The complete server and agent type checks now pass.
+Server callbacks declare Bun's required WebSocket data type parameter. Server runtime behavior remains unchanged.
+Skill consolidation returns null when provider creation fails, matching the curator's existing no-generation result. A regression covers both consolidation modes.
+Checks: all 38 focused tests passed across three files; lint passed all 1532 files after one formatting correction; `git diff --check` passed.
+The saved todo and questionnaire provider responses still need repair. Full tests and builds remain unchecked; no external provider calls ran.
+This slice includes earlier checked consolidation content and test fixture repairs in the same files. Other feature and type cleanup changes remain uncommitted.
+Next: verify and commit the remaining authorized type cleanup and feature slice 1g, then resume the first implementation step.
+Evidence: `/tmp/nakama-server-entry-types-tests.log`, `/tmp/nakama-server-entry-types-{server,agent}.log`, `/tmp/nakama-server-entry-types-lint-final.log`.
