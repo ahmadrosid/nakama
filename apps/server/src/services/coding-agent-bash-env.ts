@@ -31,9 +31,11 @@ async function resolveProfileModelId(
   const profile = context.orgId
     ? await db.getProfileForOrg(profileId, context.orgId)
     : await db.getProfile(profileId);
+
   if (!profile) {
     throw new NakamaApiError("Profile not found.", 404);
   }
+
   if (
     profile.orgId &&
     (await db.getSharedAgentInstance(profile.orgId, profileId))
@@ -41,23 +43,28 @@ async function resolveProfileModelId(
     if (!(context.orgId && orgService)) {
       throw new NakamaApiError("Shared agent is unavailable.", 503);
     }
+
     const shared = await orgService.resolveSharedAgentProfile(
       context.orgId,
       profileId
     );
+
     if (!shared) {
       throw new NakamaApiError("Shared agent is unavailable.", 404);
     }
+
     const selected = resolveConfiguredModelInstance(userConfig, shared.model, {
       invalid: "Select a configured model.",
       missingProvider: "The model provider is unavailable.",
     });
+
     if (
       selected &&
       !modelExistsOnInstance(selected.instance, selected.modelId)
     ) {
       throw new NakamaApiError("Select a configured model.", 400);
     }
+
     return shared.model?.trim() || null;
   }
 

@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import {
+  createInMemoryDatabaseAdapter,
+  mergeWorkspaceSettings,
+} from "@nakama/db";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
 import {
   makeAnthropicProvider,
@@ -13,24 +16,26 @@ const openaiProvider = makeOpenAIProvider();
 describe("enrichCodingAgentBashInput", () => {
   test("merges provider passthrough env when coding agent command is detected", async () => {
     const db = createInMemoryDatabaseAdapter();
-    await db.upsertWorkspaceSettings({
-      codingAgentHarnesses: [
-        {
-          args: [],
-          command: "echo",
-          enabled: true,
-          id: "coding-harness-claude-code",
-          kind: "claude_code",
-          name: "Claude Code",
-        },
-      ],
-      id: "workspace-settings",
-      imageModel: null,
-      selectedCodingAgentHarness: null,
-      transcriptionModel: null,
-      updatedAt: new Date().toISOString(),
-      visionModel: null,
-    });
+    await db.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(null, {
+        codingAgentHarnesses: [
+          {
+            args: [],
+            command: "echo",
+            enabled: true,
+            id: "coding-harness-claude-code",
+            kind: "claude_code",
+            name: "Claude Code",
+          },
+        ],
+        id: "workspace-settings",
+        imageModel: null,
+        selectedCodingAgentHarness: null,
+        transcriptionModel: null,
+        updatedAt: new Date().toISOString(),
+        visionModel: null,
+      })
+    );
     await db.upsertProfile({
       createdAt: new Date().toISOString(),
       id: "profile_test",
@@ -60,32 +65,34 @@ describe("enrichCodingAgentBashInput", () => {
 
   test("resolves spawn env from command binary even when another harness is selected", async () => {
     const db = createInMemoryDatabaseAdapter();
-    await db.upsertWorkspaceSettings({
-      codingAgentHarnesses: [
-        {
-          args: [],
-          command: "claude",
-          enabled: true,
-          id: "coding-harness-claude-code",
-          kind: "claude_code",
-          name: "Claude Code",
-        },
-        {
-          args: [],
-          command: "echo",
-          enabled: true,
-          id: "coding-harness-codex",
-          kind: "codex",
-          name: "Codex",
-        },
-      ],
-      id: "workspace-settings",
-      imageModel: null,
-      selectedCodingAgentHarness: "coding-harness-claude-code",
-      transcriptionModel: null,
-      updatedAt: new Date().toISOString(),
-      visionModel: null,
-    });
+    await db.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(null, {
+        codingAgentHarnesses: [
+          {
+            args: [],
+            command: "claude",
+            enabled: true,
+            id: "coding-harness-claude-code",
+            kind: "claude_code",
+            name: "Claude Code",
+          },
+          {
+            args: [],
+            command: "echo",
+            enabled: true,
+            id: "coding-harness-codex",
+            kind: "codex",
+            name: "Codex",
+          },
+        ],
+        id: "workspace-settings",
+        imageModel: null,
+        selectedCodingAgentHarness: "coding-harness-claude-code",
+        transcriptionModel: null,
+        updatedAt: new Date().toISOString(),
+        visionModel: null,
+      })
+    );
     await db.upsertProfile({
       createdAt: new Date().toISOString(),
       id: "profile_test",
@@ -115,24 +122,26 @@ describe("enrichCodingAgentBashInput", () => {
 
   test("fails closed when codingAgent is set without a known harness binary", async () => {
     const db = createInMemoryDatabaseAdapter();
-    await db.upsertWorkspaceSettings({
-      codingAgentHarnesses: [
-        {
-          args: [],
-          command: "claude",
-          enabled: true,
-          id: "coding-harness-claude-code",
-          kind: "claude_code",
-          name: "Claude Code",
-        },
-      ],
-      id: "workspace-settings",
-      imageModel: null,
-      selectedCodingAgentHarness: "coding-harness-claude-code",
-      transcriptionModel: null,
-      updatedAt: new Date().toISOString(),
-      visionModel: null,
-    });
+    await db.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(null, {
+        codingAgentHarnesses: [
+          {
+            args: [],
+            command: "claude",
+            enabled: true,
+            id: "coding-harness-claude-code",
+            kind: "claude_code",
+            name: "Claude Code",
+          },
+        ],
+        id: "workspace-settings",
+        imageModel: null,
+        selectedCodingAgentHarness: "coding-harness-claude-code",
+        transcriptionModel: null,
+        updatedAt: new Date().toISOString(),
+        visionModel: null,
+      })
+    );
 
     await expect(
       enrichCodingAgentBashInput(
@@ -149,24 +158,26 @@ describe("enrichCodingAgentBashInput", () => {
 
   test("does not merge provider credentials for Cursor Agent when routing is active", async () => {
     const db = createInMemoryDatabaseAdapter();
-    await db.upsertWorkspaceSettings({
-      codingAgentHarnesses: [
-        {
-          args: [],
-          command: "echo",
-          enabled: true,
-          id: "coding-harness-cursor-agent",
-          kind: "cursor_agent",
-          name: "Cursor Agent",
-        },
-      ],
-      id: "workspace-settings",
-      imageModel: null,
-      selectedCodingAgentHarness: null,
-      transcriptionModel: null,
-      updatedAt: new Date().toISOString(),
-      visionModel: null,
-    });
+    await db.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(null, {
+        codingAgentHarnesses: [
+          {
+            args: [],
+            command: "echo",
+            enabled: true,
+            id: "coding-harness-cursor-agent",
+            kind: "cursor_agent",
+            name: "Cursor Agent",
+          },
+        ],
+        id: "workspace-settings",
+        imageModel: null,
+        selectedCodingAgentHarness: null,
+        transcriptionModel: null,
+        updatedAt: new Date().toISOString(),
+        visionModel: null,
+      })
+    );
     await db.upsertProfile({
       createdAt: new Date().toISOString(),
       id: "profile_test",
@@ -200,25 +211,27 @@ describe("enrichCodingAgentBashInput", () => {
 
   test("does not merge provider credentials when harness-native login is enabled", async () => {
     const db = createInMemoryDatabaseAdapter();
-    await db.upsertWorkspaceSettings({
-      codingAgentHarnesses: [
-        {
-          args: [],
-          command: "echo",
-          enabled: true,
-          id: "coding-harness-claude-code",
-          kind: "claude_code",
-          name: "Claude Code",
-        },
-      ],
-      codingAgentProviderPassthrough: false,
-      id: "workspace-settings",
-      imageModel: null,
-      selectedCodingAgentHarness: null,
-      transcriptionModel: null,
-      updatedAt: new Date().toISOString(),
-      visionModel: null,
-    });
+    await db.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(null, {
+        codingAgentHarnesses: [
+          {
+            args: [],
+            command: "echo",
+            enabled: true,
+            id: "coding-harness-claude-code",
+            kind: "claude_code",
+            name: "Claude Code",
+          },
+        ],
+        codingAgentProviderPassthrough: false,
+        id: "workspace-settings",
+        imageModel: null,
+        selectedCodingAgentHarness: null,
+        transcriptionModel: null,
+        updatedAt: new Date().toISOString(),
+        visionModel: null,
+      })
+    );
     await db.upsertProfile({
       createdAt: new Date().toISOString(),
       id: "profile_test",

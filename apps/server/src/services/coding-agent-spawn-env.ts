@@ -181,7 +181,7 @@ export function mapNakamaProviderToPi(
 export function buildClaudeCodeSpawnEnv(
   routing: CodingAgentProviderRouting,
   providerType: ProviderName = "anthropic"
-) {
+): CodingAgentSpawnEnvResult["env"] {
   if (!(routing.active && routing.baseUrl && routing.apiKey)) {
     return {};
   }
@@ -211,7 +211,7 @@ export function buildClaudeCodeSpawnEnv(
 export function buildCodexSpawnEnv(
   routing: CodingAgentProviderRouting,
   providerType: ProviderName = "openai"
-) {
+): CodingAgentSpawnEnvResult["env"] {
   if (!(routing.active && routing.baseUrl && routing.apiKey)) {
     return {};
   }
@@ -336,9 +336,15 @@ export function mergeCodingAgentSpawnEnv(
     protectCredentialKeys?: boolean;
     callerEnv?: Record<string, string>;
   } = {}
-): NodeJS.ProcessEnv {
+): CodingAgentSpawnEnvResult["env"] {
   const callerEnv = options.callerEnv ?? {};
   const merged: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(baseEnv)) {
+    if (value !== undefined) {
+      merged[key] = value;
+    }
+  }
 
   for (const [key, value] of Object.entries(spawnEnv)) {
     if (!HIJACKING_ENV_KEY.test(key)) {
@@ -363,7 +369,7 @@ export function mergeCodingAgentSpawnEnv(
     merged[key] = value;
   }
 
-  return { ...baseEnv, ...merged };
+  return merged;
 }
 
 export function redactSpawnEnvForPrompt(env: Record<string, string>) {
