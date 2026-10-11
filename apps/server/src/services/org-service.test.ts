@@ -2307,16 +2307,28 @@ describe("OrgService shared agent selection", () => {
     { cognito: true, handlerType: "javascript" },
     { cognito: false, handlerType: "python" },
     { cognito: true, handlerType: "python" },
+    { cognito: false, handlerType: "javascript", local: true },
+    { cognito: true, handlerType: "javascript", local: true },
+    { cognito: false, handlerType: "python", local: true },
+    { cognito: true, handlerType: "python", local: true },
   ])(
     "shared stored tools use current definitions and team credentials for %j",
-    async ({ cognito, handlerType }) => {
+    async ({ cognito, handlerType, local = false }) => {
       const { orgService, databaseAdapter: db } = createOrgService();
       const publication = await seedSharedAgentSelection(db, orgService);
-      const profile = await orgService.createSharedAgentInstance(
+      let profile = await orgService.createSharedAgentInstance(
         "org_team_a",
         publication.id,
         "user_other"
       );
+      if (local) {
+        profile = { ...profile, id: "local_tool_agent", name: "Local tools" };
+        await db.upsertProfile(profile);
+        await mkdir(getProfileSoulDir("org_team_a", profile.id), {
+          recursive: true,
+        });
+      }
+      const assignmentProfileId = local ? profile.id : "profile_template";
       const now = new Date().toISOString();
       await mkdir(getCustomToolsDir(), { recursive: true });
       const filename = handlerType === "javascript" ? "shared.js" : "shared.py";
@@ -2366,7 +2378,7 @@ if __name__ == "__main__":
         orgId: null,
         updatedAt: now,
       });
-      await orgService.publishSharedResource(
+      const toolPublication = await orgService.publishSharedResource(
         "org_parent",
         { resourceId: record.id, resourceKind: "tool" },
         "user_creator"
@@ -2400,8 +2412,8 @@ if __name__ == "__main__":
       );
       const first = (await agent.resolveSession(id, "org_team_a"))!;
       await first.send("First");
-      await db.assignToolToProfile("profile_template", record.id);
-      await db.assignToolToProfile("profile_template", "global_read");
+      await db.assignToolToProfile(assignmentProfileId, record.id);
+      await db.assignToolToProfile(assignmentProfileId, "global_read");
       const second = (await agent.resolveSession(id, "org_team_a"))!;
       expect(second).not.toBe(first);
       expect(second.getHistory()).toEqual(first.getHistory());
@@ -2446,7 +2458,7 @@ if __name__ == "__main__":
       expect(
         await read.run(
           { path: "note.txt" },
-          { ...context, workspaceRoot: parentDir }
+          local ? context : { ...context, workspaceRoot: parentDir }
         )
       ).toHaveProperty("content", "Team note");
       for (const denied of [
@@ -2487,20 +2499,48 @@ if __name__ == "__main__":
         version: "updated",
       });
       await third.send("Third");
-      await db.unassignToolFromProfile("profile_template", record.id);
+      await db.upsertTool({
+        ...record,
+        handlerType: handlerType === "python" ? "javascript" : "python",
+      });
       await expect(tool.run({}, context)).rejects.toMatchObject({
         status: 404,
       });
-      expect(await db.listToolsForProfile(profile.id)).toEqual([]);
+      await db.unassignToolFromProfile(assignmentProfileId, record.id);
+      await expect(tool.run({}, context)).rejects.toMatchObject({
+        status: 404,
+      });
+      expect(
+        (await db.listToolsForProfile(profile.id)).map((item) => item.id)
+      ).toEqual(local ? ["global_read"] : []);
       expect(await loadToolApiKey("org_parent", record.id)).toBe("parent-key");
       await orgService.unpublishSharedResource(
         "org_parent",
         publication.id,
         "user_creator"
       );
-      await expect(
-        read.run({ path: "note.txt" }, context)
-      ).rejects.toMatchObject({ status: 404 });
+      if (local) {
+        expect(await read.run({ path: "note.txt" }, context)).toHaveProperty(
+          "content",
+          "Team note"
+        );
+        await db.assignToolToProfile(assignmentProfileId, record.id);
+        await orgService.unpublishSharedResource(
+          "org_parent",
+          toolPublication.id,
+          "user_creator"
+        );
+        await expect(tool.run({}, context)).rejects.toMatchObject({
+          status: 404,
+        });
+        await expect(
+          agent.resolveSession(id, "org_team_a")
+        ).rejects.toMatchObject({ status: 404 });
+      } else {
+        await expect(
+          read.run({ path: "note.txt" }, context)
+        ).rejects.toMatchObject({ status: 404 });
+      }
       expect(
         (await agent.getSessionMessages(id, "org_team_a"))!.messages.filter(
           (message) => message.role === "user"

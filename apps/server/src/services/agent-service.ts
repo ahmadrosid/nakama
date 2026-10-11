@@ -229,6 +229,7 @@ import {
   type StoredProfileRecord,
   type StoredSessionRecord,
   type StoredSessionSummaryRecord,
+  type StoredToolRecord,
   SUPER_BOT_TOOL_AUTHORING_RULES,
 } from "@nakama/db";
 import { z } from "zod";
@@ -4821,7 +4822,55 @@ export class AgentService {
         orgId,
         profileId
       )) ?? "";
-    return shared ? JSON.stringify([shared, skills]) : skills;
+    const tools =
+      shared?.assignedTools ?? (await this.db.listToolsForProfile(profileId));
+    const publishedTools = await this.publishedToolRevisionForRecords(
+      orgId,
+      tools
+    );
+    return shared || publishedTools
+      ? JSON.stringify([shared, skills, publishedTools])
+      : skills;
+  }
+
+  private async publishedToolRevisionForRecords(
+    orgId: string,
+    records: StoredToolRecord[]
+  ): Promise<string> {
+    const foreign = records.filter(
+      (record) => record.orgId && record.orgId !== orgId
+    );
+    if (!foreign.length) {
+      return "";
+    }
+    if (new Set(records.map((record) => record.name)).size !== records.length) {
+      throw new NakamaApiError("Conflicting tool names are assigned.", 409);
+    }
+    const team = await this.db.getOrganizationById(orgId);
+    const parent =
+      team?.parentOrgId && !team.archivedAt
+        ? await this.db.getOrganizationById(team.parentOrgId)
+        : null;
+    if (
+      !parent ||
+      parent.archivedAt ||
+      parent.parentOrgId ||
+      foreign.some((record) => record.orgId !== parent.id)
+    ) {
+      throw new NakamaApiError("Tool is unavailable.", 404);
+    }
+    const catalog = await this.db.listOrgSharedResources(parent.id);
+    const publications = foreign.map((record) => {
+      const detail = catalog.find(
+        (entry) =>
+          entry.resourceId === record.id && entry.resourceKind === "tool"
+      );
+      if (!detail) {
+        throw new NakamaApiError("Tool is unavailable.", 404);
+      }
+      return detail.id;
+    });
+    return JSON.stringify([foreign, publications]);
   }
 
   private async requireProfile(
@@ -4887,33 +4936,59 @@ export class AgentService {
       : null;
     const storedTools =
       shared?.assignedTools ?? (await this.db.listToolsForProfile(profile.id));
+    const publishedTools = profile.orgId
+      ? await this.publishedToolRevisionForRecords(profile.orgId, storedTools)
+      : "";
+    const guarded = Boolean(shared || publishedTools);
     const resolveOptions = {
       actorRole: options.actorRole ?? undefined,
       pluginService: this.pluginService,
       serverTools: this.serverTools,
-      sharedContext: shared
-        ? buildToolExecutionContext({
-            orgId: profile.orgId!,
-            profileId: profile.id,
-          })
-        : undefined,
       userConfig: this.userConfig,
     };
-    const tools = await resolveProfileStoredTools(
-      shared
-        ? storedTools.map((record) => ({
-            ...record,
-            orgId: record.orgId ? profile.orgId : null,
-          }))
-        : storedTools,
-      this.db,
-      [],
-      resolveOptions
-    );
-    if (shared) {
+    const tools = guarded
+      ? (
+          await Promise.all(
+            storedTools.map((record) => {
+              const inherited = Boolean(
+                shared || (record.orgId && record.orgId !== profile.orgId)
+              );
+              return resolveProfileStoredTools(
+                [
+                  {
+                    ...record,
+                    orgId:
+                      inherited && record.orgId ? profile.orgId : record.orgId,
+                  },
+                ],
+                this.db,
+                [],
+                {
+                  ...resolveOptions,
+                  sharedContext: inherited
+                    ? buildToolExecutionContext({
+                        orgId: profile.orgId!,
+                        profileId: profile.id,
+                      })
+                    : undefined,
+                }
+              );
+            })
+          )
+        ).flat()
+      : await resolveProfileStoredTools(
+          storedTools,
+          this.db,
+          [],
+          resolveOptions
+        );
+    if (guarded) {
       for (let index = 0; index < tools.length; index++) {
         const tool = tools[index]!;
         const record = storedTools.find((item) => item.name === tool.name)!;
+        if (!shared && (!record.orgId || record.orgId === profile.orgId)) {
+          continue;
+        }
         tools[index] = {
           ...tool,
           // The source can replace its handler after the caller selects a batch.
@@ -4931,17 +5006,34 @@ export class AgentService {
               context.orgId,
               profile.id
             );
-            const assigned = current?.assignedTools.find(
+            if (shared && !current) {
+              throw new NakamaApiError("Tool is unavailable.", 404);
+            }
+            const currentRecords =
+              current?.assignedTools ??
+              (await this.db.listToolsForProfile(profile.id));
+            await this.publishedToolRevisionForRecords(
+              context.orgId,
+              currentRecords
+            );
+            const assigned = currentRecords.find(
               (item) => item.id === record.id && item.name === tool.name
             );
-            if (!assigned) {
+            // A new handler needs a new approval policy before execution.
+            if (!assigned || assigned.handlerType !== record.handlerType) {
               throw new NakamaApiError("Tool is unavailable.", 404);
             }
             const [definition] = await resolveProfileStoredTools(
               [{ ...assigned, orgId: assigned.orgId ? context.orgId : null }],
               this.db,
               [],
-              resolveOptions
+              {
+                ...resolveOptions,
+                sharedContext: buildToolExecutionContext({
+                  orgId: context.orgId,
+                  profileId: profile.id,
+                }),
+              }
             );
             if (!definition) {
               throw new NakamaApiError("Tool is unavailable.", 404);
@@ -5142,7 +5234,7 @@ export class AgentService {
     }
 
     if (
-      shared &&
+      guarded &&
       new Set(resolved.map((tool) => tool.name)).size !== resolved.length
     ) {
       throw new NakamaApiError("Conflicting tool names are assigned.", 409);

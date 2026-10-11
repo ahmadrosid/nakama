@@ -1652,3 +1652,17 @@ Checks: 214 focused tests passed across four service and HTTP route files, with 
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: resolve published parent tool assignments during local agent execution, including cached sessions and retained definitions, then cover playground execution.
 No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-tool-detail-complete-focused.log, /tmp/nakama-tool-detail-complete-types.log, and /tmp/nakama-tool-detail-complete-lint.log.
+
+### Slice 2al — published tools on local agents
+Local agents now resolve parent-owned tool assignments through current publications. A shared check validates the active team, active root parent, current source ownership, publications, and duplicate stored executable names.
+The check reads database records without initializing or changing built-in definitions. Shared template tools use the same publication check alongside their existing source-agent guard.
+Published tool records and current publication IDs participate in session capability revisions. Assignment additions and source schema changes rebuild persisted and ephemeral sessions while preserving history. Invalid publications block new session resolution.
+Only inherited records receive rebound team ownership and shared subprocess context. Existing local and global definitions retain their loader behavior on local agents.
+Retained inherited tools check their current assignment, name, publication, team, and profile before loading the current definition. Viewers and foreign contexts are denied. Removed assignments and publications block execution.
+Inherited execution rebuilds the team workspace context and uses team credentials. Retained tools reject handler-type changes until a new definition can supply its approval policy. Shared tools remain sequential because their handlers can change between calls.
+Tests extend both script languages and both session modes to local agents. They verify missing team keys, parent key preservation, team working directories, changed code and schemas, helper conflicts, handler changes, assignment removal, publication revocation, preserved history, and continued global built-in access after agent publication removal.
+The first focused run found runtime catalog initialization conflicting with the existing global tool fixture and a duplicate local profile name. One repair uses read-only database publication checks and a distinct local profile name.
+Checks: 270 focused tests passed across eight service and HTTP route files, with two Windows tests skipped. The complete server type check, lint across 1532 files, and git diff --check passed.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: connect direct playground and parameter suggestion calls to published tool authorization and team execution context, then complete model and compatibility checks.
+No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-local-published-tools-final-focused.log, /tmp/nakama-local-published-tools-types.log, and /tmp/nakama-local-published-tools-lint.log.
