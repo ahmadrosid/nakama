@@ -109,17 +109,20 @@ test.each(organizationRequests)(
   "$method $path uses explicit tenant context and preserves the response",
   async ({ call, method, path, body, response }) => {
     const requests: Request[] = [];
+
     const client = new NakamaClient({
       authToken: "test-token",
       baseUrl: "https://nakama.example.com",
       fetch: async (input, init) => {
         requests.push(new Request(input, init));
+
         return response === undefined
           ? new Response(null, { status: 204 })
           : Response.json(response);
       },
       orgId: "other-team",
     });
+
     expect<unknown>(await call(client)).toEqual(response);
     expect(requests).toHaveLength(1);
     const request = requests[0]!;
@@ -127,12 +130,14 @@ test.each(organizationRequests)(
     expect(request.method).toBe(method);
     expect(request.headers.get("X-Org-Id")).toBe("team/a?");
     expect(request.headers.get("Authorization")).toBe("Bearer test-token");
+
     if (body) {
       expect(request.headers.get("Content-Type")).toBe("application/json");
       expect(await request.json()).toEqual(body);
     } else {
       expect(await request.text()).toBe("");
     }
+
     await client.listOrgMembers("other-team");
     expect(requests[1]?.headers.get("X-Org-Id")).toBe("other-team");
   }
@@ -145,6 +150,7 @@ test.each(organizationRequests)(
       baseUrl: "https://nakama.example.com",
       fetch: async () => Response.json({ error: "denied" }, { status: 403 }),
     });
+
     await expect(call(client)).rejects.toMatchObject({ status: 403 });
   }
 );
@@ -290,6 +296,7 @@ test("chat stream request includes cookie CSRF protection", async () => {
     globalThis,
     "document"
   );
+
   Object.defineProperty(globalThis, "document", {
     configurable: true,
     value: { cookie: "nakama_csrf=csrf-token-123; other=value" },

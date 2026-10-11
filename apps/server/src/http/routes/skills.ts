@@ -54,13 +54,16 @@ export function registerSkillRoutes(
     scope: z.literal("parent"),
     sourceOrganization: z.object({ id: z.string(), name: z.string() }),
   });
+
   const listSkillsSchema = z
     .object({ publishedSkills: z.array(publishedSkillSchema).optional() })
     .passthrough()
     .openapi("ListSkillsResponse");
+
   const publishedSkillResponseSchema = z
     .object({ skill: publishedSkillSchema.extend({ body: z.string() }) })
     .openapi("PublishedSkillResponse");
+
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
@@ -90,9 +93,11 @@ export function registerSkillRoutes(
     async (c) => {
       const auth = getRequestAuth(c);
       const orgId = decodeURIComponent(c.req.param("orgId"));
+
       if (auth.activeOrgId !== orgId) {
         throw new NakamaApiError("Not found", 404);
       }
+
       return json<PublishedSkillResponse>(
         await agent.getPublishedSkill(
           orgId,
@@ -110,6 +115,7 @@ export function registerSkillRoutes(
       truncated: z.boolean(),
     })
     .openapi("SkillFilesResponse");
+
   const skillFileSchema = z
     .object({
       content: z.string().nullable(),
@@ -120,6 +126,7 @@ export function registerSkillRoutes(
       unavailableReason: z.string().optional(),
     })
     .openapi("SkillFileResponse");
+
   for (const [suffix, operationId, summary] of [
     ["files", "listPublishedSkillFiles", "List published skill files"],
     ["file", "readPublishedSkillFile", "Read a published skill file"],
@@ -164,10 +171,13 @@ export function registerSkillRoutes(
       async (c) => {
         const auth = getRequestAuth(c);
         const orgId = decodeURIComponent(c.req.param("orgId"));
+
         if (auth.activeOrgId !== orgId) {
           throw new NakamaApiError("Not found", 404);
         }
+
         const publicationId = decodeURIComponent(c.req.param("publicationId"));
+
         return json(
           suffix === "files"
             ? await agent.listPublishedSkillFiles(orgId, publicationId)

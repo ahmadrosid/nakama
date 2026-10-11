@@ -27,6 +27,7 @@ test.each(["fresh", "upgrade"])(
 
     try {
       migrateDatabase(db);
+
       if (scenario === "upgrade") {
         db.exec(`
           DROP INDEX organizations_parent_org_id;
@@ -96,13 +97,16 @@ test.each(["fresh", "upgrade"])(
   "shared resource migration preserves explicit publications and source links: %s",
   (scenario) => {
     const db = new Database(":memory:");
+
     try {
       migrateDatabase(db);
+
       if (scenario === "upgrade") {
         db.exec(
           "DROP TABLE shared_agent_instances; DROP TABLE org_shared_resources;"
         );
       }
+
       db.exec(`
         INSERT INTO organizations (id, name, slug, created_at, updated_at)
           VALUES ('parent', 'Parent', 'parent', 'now', 'now'), ('team', 'Team', 'team', 'now', 'now');
@@ -120,9 +124,11 @@ test.each(["fresh", "upgrade"])(
       expect(db.query("SELECT * FROM profiles ORDER BY id").all()).toEqual(
         profiles
       );
+
       const publish = db.query(
         "INSERT INTO org_shared_resources (id, org_id, resource_kind, resource_id, created_at, updated_at) VALUES (?, ?, ?, ?, 'now', 'now')"
       );
+
       for (const kind of ["knowledge", "skill", "agent", "tool", "model"]) {
         publish.run(
           kind,
@@ -131,6 +137,7 @@ test.each(["fresh", "upgrade"])(
           kind === "agent" ? "source" : "resource"
         );
       }
+
       expect(() =>
         publish.run("duplicate", "parent", "agent", "source")
       ).toThrow();
@@ -140,16 +147,20 @@ test.each(["fresh", "upgrade"])(
       expect(() =>
         publish.run("missing", "missing", "agent", "source")
       ).toThrow();
+
       const instance = db.query(
         "INSERT INTO shared_agent_instances (profile_id, team_org_id, source_org_id, source_profile_id, publication_id, created_at) VALUES (?, ?, 'parent', 'source', 'agent', 'now')"
       );
+
       instance.run("instance", "team");
       expect(() => instance.run("duplicate", "team")).toThrow();
       expect(() => instance.run("missing", "team")).toThrow();
       expect(() => instance.run("duplicate", "missing")).toThrow();
+
       const publications = db
         .query("SELECT * FROM org_shared_resources ORDER BY id")
         .all();
+
       const instances = db.query("SELECT * FROM shared_agent_instances").all();
       migrateDatabase(db);
       migrateDatabase(db);
@@ -187,11 +198,14 @@ test.each(["fresh", "upgrade"])(
   "team request migration retains recovery records: %s",
   (scenario) => {
     const db = new Database(":memory:");
+
     try {
       migrateDatabase(db);
+
       if (scenario === "upgrade") {
         db.exec("DROP TABLE org_team_creation_requests;");
       }
+
       db.exec(
         "INSERT INTO organizations (id, name, slug, created_at, updated_at) VALUES ('parent', 'Parent', 'parent', 'now', 'now'), ('team', 'Team', 'team', 'now', 'now');"
       );
@@ -203,9 +217,11 @@ test.each(["fresh", "upgrade"])(
       db.exec(
         "INSERT INTO org_team_creation_requests (parent_org_id, request_id, request_hash, creator_user_id, admin_user_id, team_org_id, created_at) VALUES ('parent', 'request', 'hash', 'creator', 'admin', 'team', 'now');"
       );
+
       const requests = db
         .query("SELECT * FROM org_team_creation_requests")
         .all();
+
       migrateDatabase(db);
       migrateDatabase(db);
       expect(

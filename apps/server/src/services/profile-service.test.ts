@@ -310,6 +310,7 @@ describe("profile service createProfile", () => {
     expect(tools.map((tool) => tool.name)).not.toContain("web_search");
     const listed = await service.listProfileTools(ORG_ID, created.profile.id);
     expect(listed.tools).toHaveLength(tools.length);
+
     for (const tool of tools) {
       expect(listed.tools).toContainEqual(
         expect.objectContaining({
@@ -320,6 +321,7 @@ describe("profile service createProfile", () => {
         })
       );
     }
+
     await expect(
       service.listProfileTools("other_org", created.profile.id)
     ).rejects.toThrow();
@@ -1374,6 +1376,7 @@ describe("shared profile configuration", () => {
     const db = createInMemoryDatabaseAdapter();
     const service = new ProfileService(db);
     const now = new Date().toISOString();
+
     for (const id of ["parent", "team", "other"]) {
       await db.upsertOrganization({
         createdAt: now,
@@ -1384,11 +1387,13 @@ describe("shared profile configuration", () => {
         updatedAt: now,
       });
     }
+
     const source = await service.createProfile("parent", {
       id: "template",
       name: "Template",
       systemPrompt: "Published instructions",
     });
+
     const publication = await db.publishOrgSharedResource({
       createdAt: now,
       id: "publication",
@@ -1397,14 +1402,17 @@ describe("shared profile configuration", () => {
       resourceKind: "agent",
       updatedAt: now,
     });
+
     const profile = await db.createSharedAgentInstance(
       "team",
       publication.id,
       "shared_instance",
       now
     );
+
     const teamDir = getProfileSoulDir("team", profile.id);
     await mkdir(teamDir, { recursive: true });
+
     for (const file of [
       "SOUL.md",
       "STYLE.md",
@@ -1414,12 +1422,14 @@ describe("shared profile configuration", () => {
     ]) {
       await writeFile(path.join(teamDir, file), `Team ${file}`);
     }
+
     return { db, profile, publication, service, source, teamDir };
   }
 
   test("template field changes fail before records, files, or audit history change", async () => {
     const { db, profile, service, teamDir } = await setup();
     const stored = await db.getProfile(profile.id);
+
     const requests: UpdateProfileRequest[] = [
       { name: "Changed" },
       { model: "changed-provider::model" },
@@ -1441,6 +1451,7 @@ describe("shared profile configuration", () => {
       },
       { name: "Changed", soulFiles: { "MEMORY.md": "Changed memory" } },
     ];
+
     for (const request of requests) {
       await expect(
         service.updateProfile("team", profile.id, request, {
@@ -1449,8 +1460,10 @@ describe("shared profile configuration", () => {
         })
       ).rejects.toMatchObject({ status: 403 });
     }
+
     expect(await db.getProfile(profile.id)).toEqual(stored);
     expect(await db.listProfileChangeEvents("team", profile.id)).toEqual([]);
+
     for (const file of [
       "SOUL.md",
       "STYLE.md",
@@ -1462,6 +1475,7 @@ describe("shared profile configuration", () => {
         `Team ${file}`
       );
     }
+
     await db.deleteOrgSharedResource("parent", "publication");
     await expect(
       service.updateProfile("team", profile.id, { name: "Local copy" })
@@ -1514,6 +1528,7 @@ describe("shared profile configuration", () => {
     await db.assignSkillToProfile(profile.id, "skill_local");
     await db.assignMcpServerToProfile(profile.id, "server");
     const before = await db.getProfile(profile.id);
+
     const actions = [
       () => service.assignTool("team", profile.id, { toolId: "tool_local" }),
       () => service.unassignTool("team", profile.id, "tool_local"),
@@ -1531,9 +1546,11 @@ describe("shared profile configuration", () => {
         }),
       () => service.deleteProfileAvatar("team", profile.id),
     ];
+
     for (const action of actions) {
       await expect(action()).rejects.toMatchObject({ status: 403 });
     }
+
     expect(await db.getProfile(profile.id)).toEqual(before);
     expect(
       (await db.listToolsForProfile(profile.id)).map((tool) => tool.id)
@@ -1558,16 +1575,19 @@ describe("shared profile configuration", () => {
   test("team memory remains writable and shared instances cannot become the default profile", async () => {
     const { db, profile, service, source, teamDir } = await setup();
     const sourceDir = getProfileSoulDir("parent", source.profile.id);
+
     const parentMemory = await readFile(
       path.join(sourceDir, "MEMORY.md"),
       "utf8"
     );
+
     const updated = await service.updateProfile(
       "team",
       profile.id,
       { soulFiles: { "MEMORY.md": "New private memory" } },
       { actorUserId: "actor", source: "dashboard" }
     );
+
     expect(updated.profile.name).toBe("Template");
     expect(updated.profile.systemPrompt).toBe("Published instructions");
     expect(await readFile(path.join(teamDir, "MEMORY.md"), "utf8")).toBe(
@@ -1581,10 +1601,12 @@ describe("shared profile configuration", () => {
         (event) => event.field
       )
     ).toEqual(["soul.memory"]);
+
     const local = await service.createProfile("team", {
       id: "default",
       name: "Default",
     });
+
     await db.upsertProfile({
       ...(await db.getProfile(local.profile.id))!,
       isDefault: true,

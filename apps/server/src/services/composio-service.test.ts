@@ -146,6 +146,7 @@ async function createConfiguredService() {
 describe("ComposioService", () => {
   test("teams use only their own personal connections and invalidate removed accounts", async () => {
     const { db, service, restore } = await createConfiguredService();
+
     try {
       const now = "2026-01-01T00:00:00.000Z";
       await seedOrgWithAdmin(db);
@@ -156,19 +157,23 @@ describe("ComposioService", () => {
         passwordHash: "hash",
         updatedAt: now,
       });
+
       const sessionCalls: Array<{
         userId: string;
         accounts: Record<string, string>;
       }> = [];
+
       injectMockComposioClient(service, {
         async createProfileSession(userId, _slugs, _actions, accounts = {}) {
           sessionCalls.push({ accounts, userId });
+
           return {
             sessionId: `session_${sessionCalls.length}`,
             url: `https://mcp.example.com/session_${sessionCalls.length}`,
           };
         },
       });
+
       for (const orgId of [ORG_ID, "team_a", "team_b"]) {
         if (orgId !== ORG_ID) {
           await db.upsertOrganization({
@@ -179,6 +184,7 @@ describe("ComposioService", () => {
             slug: orgId,
             updatedAt: now,
           });
+
           for (const userId of [USER_ID, "user_member"]) {
             await db.upsertOrgMember({
               createdAt: now,
@@ -188,6 +194,7 @@ describe("ComposioService", () => {
             });
           }
         }
+
         const profileId = `profile_${orgId}`;
         await db.upsertProfile({
           createdAt: now,
@@ -200,9 +207,11 @@ describe("ComposioService", () => {
           systemPrompt: "",
           updatedAt: now,
         });
+
         const toolkit = await service.enableToolkit(orgId, {
           toolkitSlug: "gmail",
         });
+
         await db.replaceProfileComposioToolkits(profileId, [
           {
             allowedActions: ["GMAIL_SEND_EMAIL"],
@@ -224,40 +233,48 @@ describe("ComposioService", () => {
           userId: USER_ID,
         });
       }
+
       for (const orgId of [ORG_ID, "team_a", "team_b"]) {
         const profileId = `profile_${orgId}`;
+
         const assigned = await service.getAssignedToolkitRecords(
           orgId,
           USER_ID,
           profileId
         );
+
         expect(assigned).toHaveLength(1);
         expect(assigned[0]?.userConnection).toMatchObject({
           connectedAccountId: `account_${orgId}`,
           orgId,
           userId: USER_ID,
         });
+
         const endpoint = await service.getProfileSessionEndpoint(
           orgId,
           USER_ID,
           profileId
         );
+
         expect(endpoint).not.toBeNull();
         expect(
           await service.getProfileSessionEndpoint(orgId, USER_ID, profileId)
         ).toEqual(endpoint);
       }
+
       expect(sessionCalls).toEqual(
         [ORG_ID, "team_a", "team_b"].map((orgId) => ({
           accounts: { gmail: `account_${orgId}` },
           userId: `nakama:user:${USER_ID}`,
         }))
       );
+
       const missing = await service.getAssignedToolkitRecords(
         "team_a",
         "user_member",
         "profile_team_a"
       );
+
       expect(missing).toHaveLength(1);
       expect(missing[0]?.userConnection).toBeNull();
       expect(
@@ -312,8 +329,10 @@ describe("ComposioService", () => {
   });
   test("shared profiles reject integration assignments and default auto-assignment after revocation", async () => {
     const { db, service, restore } = await createConfiguredService();
+
     try {
       const now = new Date().toISOString();
+
       for (const id of ["parent", ORG_ID]) {
         await db.upsertOrganization({
           createdAt: now,
@@ -324,6 +343,7 @@ describe("ComposioService", () => {
           updatedAt: now,
         });
       }
+
       await db.upsertProfile({
         createdAt: now,
         id: "template",
@@ -335,6 +355,7 @@ describe("ComposioService", () => {
         systemPrompt: "",
         updatedAt: now,
       });
+
       const publication = await db.publishOrgSharedResource({
         createdAt: now,
         id: "publication",
@@ -343,22 +364,28 @@ describe("ComposioService", () => {
         resourceKind: "agent",
         updatedAt: now,
       });
+
       const profile = await db.createSharedAgentInstance(
         ORG_ID,
         publication.id,
         "shared",
         now
       );
+
       // Existing databases can contain a shared profile marked as the default.
       await db.upsertProfile({ ...profile, isDefault: true });
+
       for (const revoked of [false, true]) {
         if (revoked) {
           await db.deleteOrgSharedResource("parent", publication.id);
         }
+
         const toolkit = await service.enableToolkit(ORG_ID, {
           toolkitSlug: "gmail",
         });
+
         expect(await db.listProfileComposioToolkits(profile.id)).toEqual([]);
+
         for (const assignments of [
           [],
           [{ allowedActions: null, toolkitId: toolkit.id }],
@@ -367,9 +394,11 @@ describe("ComposioService", () => {
             service.updateProfileAssignments(ORG_ID, profile, { assignments })
           ).rejects.toMatchObject({ status: 403 });
         }
+
         expect(await db.listProfileComposioToolkits(profile.id)).toEqual([]);
         await service.disableToolkit(ORG_ID, "gmail");
       }
+
       await expect(
         service.updateProfileAssignments("parent", profile, { assignments: [] })
       ).rejects.toMatchObject({ status: 404 });
