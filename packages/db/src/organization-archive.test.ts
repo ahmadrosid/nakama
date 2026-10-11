@@ -542,6 +542,13 @@ describe("shared agent instance persistence", () => {
       updatedAt: now,
     });
     await db.assignToolToProfile(source.id, "private-tool");
+    await db.upsertProfile({
+      ...source,
+      automationsEnabled: false,
+      skillsCuratorConsolidateEnabled: true,
+      skillsPostTurnReview: false,
+      skillsWriteApproval: false,
+    });
     const [first, second] = await Promise.all([
       db.createSharedAgentInstance("team_a", publication.id, "instance_a", now),
       db.createSharedAgentInstance("team_a", publication.id, "retry_a", now),

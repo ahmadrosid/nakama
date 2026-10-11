@@ -1829,3 +1829,12 @@ Checks: 128 ComposioService and OrgService tests passed across two files. The co
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: verify shared agent approval policy isolation, then audit all resource paths and run the delivery-stage gate.
 No new source file, package, dependency, or runtime abstraction was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-team-oauth-focused.log, /tmp/nakama-team-oauth-types.log, and /tmp/nakama-team-oauth-lint.log.
+
+### Slice 2bd — team policy defaults for new shared instances
+Fixed shared instance creation in the existing SQLite transaction. New instances no longer copy parent approval, post-turn review, curator, or automation policy overrides. Skill policy fields start as null and use team defaults; automation starts enabled, matching ordinary profile defaults. Template identity, instructions, thinking, and model configuration still come from the source.
+The previous source spread could copy a false approval override into a team that requires approval. A regression test now uses two sibling teams with different approval defaults and a parent with explicit policy overrides. Effective approval follows each team, remains unchanged after parent policy updates, and preserves an explicit local override across source resolution and repeated selection. Foreign team policy reads fail with status 404.
+The database concurrency test now seeds parent policy overrides and verifies that concurrent selections still create one instance with team policy defaults. Existing instance rows and their local overrides remain unchanged on retry; this slice does not reset existing policies.
+Checks: 133 OrgService and database organization tests passed across two files. Complete server and database type checks, lint across 1532 files, and git diff --check passed. No verification repair was needed.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: audit the five resource paths and remaining approval execution checks, then run the delivery-stage gate before starting the Organization UI.
+No new source file, package, dependency, or runtime abstraction was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-shared-policy-focused.log, /tmp/nakama-shared-policy-server-types.log, /tmp/nakama-shared-policy-db-types.log, and /tmp/nakama-shared-policy-lint.log.

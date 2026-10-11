@@ -70,6 +70,7 @@ import { OrgUsageQuotaService } from "./org-usage-quota-service";
 import { ProfileService } from "./profile-service";
 import { modelExistsOnInstance } from "./provider-instance-helpers";
 import { sessionTurnRegistry } from "./session-turn-registry";
+import { isSkillWriteApprovalRequired } from "./skill-write-approval";
 
 setupTestConfigDir("nakama-org-service-test-");
 
@@ -3163,6 +3164,74 @@ if __name__ == "__main__":
     }
   );
 
+  test("shared instances inherit team approval policy and retain local overrides", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    const publication = await seedSharedAgentSelection(db, orgService);
+    const source = (await db.getProfile("profile_template"))!;
+    await db.upsertProfile({
+      ...source,
+      automationsEnabled: false,
+      skillsCuratorConsolidateEnabled: true,
+      skillsPostTurnReview: false,
+      skillsWriteApproval: false,
+    });
+    for (const teamId of ["org_team_a", "org_team_b"]) {
+      await db.upsertOrganization({
+        ...(await db.getOrganizationById(teamId))!,
+        skillsWriteApproval: teamId === "org_team_a",
+      });
+    }
+    const first = await orgService.createSharedAgentInstance(
+      "org_team_a",
+      publication.id,
+      "user_other"
+    );
+    const sibling = await orgService.createSharedAgentInstance(
+      "org_team_b",
+      publication.id,
+      "user_other"
+    );
+    for (const profile of [first, sibling]) {
+      expect(profile).toMatchObject({
+        automationsEnabled: true,
+        skillsCuratorConsolidateEnabled: null,
+        skillsPostTurnReview: null,
+        skillsWriteApproval: null,
+      });
+    }
+    expect(await isSkillWriteApprovalRequired(db, "org_team_a", first.id)).toBe(
+      true
+    );
+    expect(
+      await isSkillWriteApprovalRequired(db, "org_team_b", sibling.id)
+    ).toBe(false);
+    await db.upsertProfile({ ...source, skillsWriteApproval: true });
+    expect(await isSkillWriteApprovalRequired(db, "org_team_a", first.id)).toBe(
+      true
+    );
+    expect(
+      await isSkillWriteApprovalRequired(db, "org_team_b", sibling.id)
+    ).toBe(false);
+    await db.upsertProfile({ ...first, skillsWriteApproval: false });
+    expect(await isSkillWriteApprovalRequired(db, "org_team_a", first.id)).toBe(
+      false
+    );
+    const resolved = await orgService.resolveSharedAgentProfile(
+      "org_team_a",
+      first.id
+    );
+    expect(resolved?.skillsWriteApproval).toBe(false);
+    const retry = await orgService.createSharedAgentInstance(
+      "org_team_a",
+      publication.id,
+      "user_other"
+    );
+    expect(retry.id).toBe(first.id);
+    expect(retry.skillsWriteApproval).toBe(false);
+    await expect(
+      isSkillWriteApprovalRequired(db, "org_team_b", first.id)
+    ).rejects.toMatchObject({ status: 404 });
+  });
   test("shared profile resolution uses only permitted current source settings", async () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     const publication = await seedSharedAgentSelection(db, orgService);

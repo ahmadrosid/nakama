@@ -3569,11 +3569,15 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       }
       const profile: StoredProfileRecord = {
         ...toProfileRecord(source),
+        automationsEnabled: true,
         createdAt,
         id: profileId,
         isDefault: false,
         isSuper: false,
         orgId: teamOrgId,
+        skillsCuratorConsolidateEnabled: null,
+        skillsPostTurnReview: null,
+        skillsWriteApproval: null,
         updatedAt: createdAt,
       };
       runUpsertProfileStmt(profile);
