@@ -47,6 +47,8 @@ import {
   saveToolApiKey,
   saveToolSetup,
 } from "./custom-tool-shared";
+import { McpClientManager } from "./mcp-client-manager";
+import { McpService } from "./mcp-service";
 import { OrgService } from "./org-service";
 import { ProfileService } from "./profile-service";
 import { modelExistsOnInstance } from "./provider-instance-helpers";
@@ -1832,6 +1834,182 @@ async function seedSharedAgentSelection(
 }
 
 describe("OrgService shared agent selection", () => {
+  test.each([false, true])(
+    "shared MCP assignments refresh and check execution for cognito=%s",
+    async (cognito) => {
+      const { orgService, databaseAdapter: db } = createOrgService();
+      const publication = await seedSharedAgentSelection(db, orgService);
+      const profile = await orgService.createSharedAgentInstance(
+        "org_team_a",
+        publication.id,
+        "user_other"
+      );
+      const now = new Date().toISOString();
+      const server = {
+        cachedTools: [
+          {
+            description: "Probe",
+            inputSchema: { properties: {}, type: "object" },
+            name: "probe",
+          },
+        ],
+        config: { url: "https://example.com/mcp" },
+        createdAt: now,
+        enabled: true,
+        id: "mcp_shared",
+        lastError: null,
+        name: "Shared",
+        orgId: null,
+        status: "disconnected" as const,
+        transport: "http" as const,
+        updatedAt: now,
+      };
+      await db.upsertMcpServer(server);
+      const mcp = new McpService(db, new McpClientManager());
+      const call = spyOn(mcp, "callTool").mockResolvedValue({ ok: true });
+      const agent = new AgentService(null, null, db);
+      agent.setOrgService(orgService);
+      agent.setMcpService(mcp);
+      Object.assign(agent, {
+        _providerConfigured: true,
+        createHarnessForProfile: () => ({
+          provider: {
+            generateChat: () =>
+              Promise.resolve({
+                assistantMessage: { content: "Done", role: "assistant" },
+                content: "Done",
+                toolCalls: [],
+              }),
+            name: "test",
+          },
+        }),
+      });
+      try {
+        const id = await agent.createSession(
+          "org_team_a",
+          "web",
+          profile.id,
+          "user_other",
+          { cognito, orgRole: "member" }
+        );
+        const first = (await agent.resolveSession(id, "org_team_a"))!;
+        await first.send("First");
+        await db.assignMcpServerToProfile("profile_template", server.id);
+        const second = (await agent.resolveSession(id, "org_team_a"))!;
+        expect(second).not.toBe(first);
+        expect(second.getHistory()).toEqual(first.getHistory());
+        await second.send("Second");
+        const tool = (
+          await agent.resolvePluginExecutionTools("org_team_a", profile.id)
+        ).find((item) => item.name === "Shared__probe")!;
+        expect(tool).toBeDefined();
+        const context = agent.buildPluginToolContext("org_team_a", {
+          profileId: profile.id,
+          runId: "run",
+          workflowId: "workflow",
+        });
+        expect(await tool.run({}, context)).toEqual({ ok: true });
+        expect(call.mock.calls[0]?.slice(3)).toEqual([
+          "org_team_a",
+          profile.id,
+        ]);
+        for (const denied of [
+          { ...context, orgRole: "viewer" as const },
+          { ...context, orgId: "org_team_b" },
+          { ...context, profileId: "profile_template" },
+        ]) {
+          await expect(tool.run({}, denied)).rejects.toMatchObject({
+            status: denied.orgRole === "viewer" ? 403 : 404,
+          });
+        }
+        expect(call).toHaveBeenCalledTimes(1);
+        await db.upsertMcpServer({
+          ...server,
+          cachedTools: [
+            {
+              description: "Probe",
+              inputSchema: {
+                properties: { value: { type: "string" } },
+                type: "object",
+              },
+              name: "probe",
+            },
+          ],
+        });
+        const third = (await agent.resolveSession(id, "org_team_a"))!;
+        expect(third).not.toBe(second);
+        expect(third.getHistory()).toEqual(second.getHistory());
+        expect(
+          (
+            await agent.resolvePluginExecutionTools("org_team_a", profile.id)
+          ).find((item) => item.name === tool.name)?.parameters
+        ).toMatchObject({ properties: { value: { type: "string" } } });
+        await third.send("Third");
+        await db.unassignMcpServerFromProfile("profile_template", server.id);
+        await expect(tool.run({}, context)).rejects.toMatchObject({
+          status: 404,
+        });
+        expect(call).toHaveBeenCalledTimes(1);
+        expect(await db.listMcpServersForProfile(profile.id)).toEqual([]);
+        await db.assignMcpServerToProfile("profile_template", server.id);
+        await db.upsertMcpServer({ ...server, enabled: false });
+        await expect(tool.run({}, context)).rejects.toMatchObject({
+          status: 404,
+        });
+        await db.upsertMcpServer({
+          ...server,
+          cachedTools: [
+            { description: "Probe", name: "probe" },
+            { description: "Probe", name: "probe" },
+          ],
+        });
+        await expect(tool.run({}, context)).rejects.toMatchObject({
+          status: 409,
+        });
+        await expect(
+          agent.resolvePluginExecutionTools("org_team_a", profile.id)
+        ).rejects.toMatchObject({ status: 409 });
+        await expect(
+          orgService.publishSharedResource(
+            "org_parent",
+            { resourceId: "profile_template", resourceKind: "agent" },
+            "user_creator"
+          )
+        ).rejects.toMatchObject({ status: 409 });
+        await db.upsertMcpServer(server);
+        const scoped = spyOn(
+          db,
+          "listMcpServersForProfile"
+        ).mockResolvedValueOnce([{ ...server, orgId: "org_parent" }]);
+        try {
+          await expect(tool.run({}, context)).rejects.toMatchObject({
+            status: 409,
+          });
+        } finally {
+          scoped.mockRestore();
+        }
+        await orgService.unpublishSharedResource(
+          "org_parent",
+          publication.id,
+          "user_creator"
+        );
+        await expect(tool.run({}, context)).rejects.toMatchObject({
+          status: 404,
+        });
+        expect(call).toHaveBeenCalledTimes(1);
+        expect(
+          (await agent.getSessionMessages(id, "org_team_a"))!.messages.filter(
+            (item) => item.role === "user"
+          )
+        ).toHaveLength(3);
+        if (cognito) {
+          expect(await db.getSession(id)).toBeNull();
+        }
+      } finally {
+        call.mockRestore();
+      }
+    }
+  );
   test.each([
     { cognito: false, handlerType: "javascript" },
     { cognito: true, handlerType: "javascript" },

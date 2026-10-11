@@ -1599,3 +1599,16 @@ The touched tool-resolver file also includes its previously authorized BashInput
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: implement permitted shared agent integration assignments and shared tool catalog and credential setup access.
 No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran.
 Evidence: /tmp/nakama-shared-tools-final-focused.log, /tmp/nakama-shared-tools-verified-org.log, /tmp/nakama-shared-tools-verified-runtime.log, /tmp/nakama-shared-tools-verified-types-final.log, and /tmp/nakama-shared-tools-lint.log.
+
+### Slice 2ah — live shared agent global MCP assignments
+Shared agent runtime records now include current source MCP assignments. Existing publication validation permits enabled global servers and rejects parent-owned connections and unsupported Composio assignments.
+The shared capability revision includes these records. Assignment and cached schema changes rebuild persisted and ephemeral sessions while preserving history.
+AgentService builds shared MCP tools from source references without copying team assignment rows. Each retained tool checks the team, profile, viewer role, source publication, current server assignment, and current tool definition before execution.
+MCP calls use the team organization and instance profile. The existing bridge handles current chat attachments and transport failures. Local agent MCP resolution retains its existing behavior.
+Publication validation rejects conflicting MCP executable names, including names that collide after normalization. These names also participate in existing stored tool and skill conflict checks.
+Tests verify two session modes, assignment additions and removals, schema changes, three preserved user turns, team call context, viewer and foreign-context denial, disabled servers, duplicate names, unsupported parent connections, publication removal, and empty team assignment rows.
+The first focused run expected the wrong status for a disabled server. Repair one checks its unavailable response and adds conflict and parent-connection tests. The next run found an incorrect history response field. Repair two uses messages and supplies required MCP test descriptions identified by the type check.
+Checks: 204 focused tests passed across six service and session route files. The complete server type check, lint across 1532 files, and git diff --check passed.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: implement shared tool catalog, assignment, and team credential setup access, then finish model and compatibility checks.
+No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-shared-mcp-final-focused.log, /tmp/nakama-shared-mcp-final-types.log, and /tmp/nakama-shared-mcp-lint.log.

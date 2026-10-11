@@ -4967,23 +4967,71 @@ export class AgentService {
     let resolved = [...tools];
 
     if (this.mcpService) {
-      const mcpServers = await this.db.listMcpServersForProfile(profile.id);
+      const mcpServers =
+        shared?.assignedMcpServers ??
+        (await this.db.listMcpServersForProfile(profile.id));
       const orgId = profile.orgId;
 
       if (!orgId) {
         throw new Error("Profile organization is missing.");
       }
 
-      resolved = [
-        ...resolved,
-        ...buildMcpToolDefinitions(
-          mcpServers,
-          this.mcpService,
-          this.db,
-          orgId,
-          profile.id
-        ),
-      ];
+      const mcpTools = shared
+        ? mcpServers.flatMap((server) =>
+            buildMcpToolDefinitions(
+              [server],
+              this.mcpService!,
+              this.db,
+              orgId,
+              profile.id
+            ).map<ToolDefinition>((tool) => ({
+              ...tool,
+              run: async (input, context) => {
+                requireToolNotViewer(context);
+                if (
+                  !context.orgId ||
+                  context.orgId !== orgId ||
+                  context.profileId !== profile.id
+                ) {
+                  throw new NakamaApiError("Tool is unavailable.", 404);
+                }
+                const current = await this.resolveSharedAgentProfile(
+                  orgId,
+                  profile.id
+                );
+                const assigned = current?.assignedMcpServers.find(
+                  (item) => item.id === server.id
+                );
+                const definition =
+                  assigned &&
+                  buildMcpToolDefinitions(
+                    [assigned],
+                    this.mcpService!,
+                    this.db,
+                    orgId,
+                    profile.id
+                  ).find((item) => item.name === tool.name);
+                if (!definition) {
+                  throw new NakamaApiError("Tool is unavailable.", 404);
+                }
+                return definition.run(
+                  input,
+                  buildToolExecutionContext({
+                    ...context,
+                    workspaceRoot: undefined,
+                  })
+                );
+              },
+            }))
+          )
+        : buildMcpToolDefinitions(
+            mcpServers,
+            this.mcpService,
+            this.db,
+            orgId,
+            profile.id
+          );
+      resolved = [...resolved, ...mcpTools];
     }
 
     if (this.composioService && this.mcpClientManager && options.userId) {

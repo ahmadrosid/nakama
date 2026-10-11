@@ -59,6 +59,7 @@ import type {
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import type {
   DatabaseAdapter,
+  StoredMcpServerRecord,
   StoredOrganizationRecord,
   StoredOrgInviteRecord,
   StoredOrgSharedResourceRecord,
@@ -76,6 +77,7 @@ import {
 } from "@nakama/db";
 import type { AuthService } from "./auth-service";
 import { deleteOrgToolCredentials } from "./custom-tool-shared";
+import { namespacedMcpToolName } from "./mcp-tool-bridge";
 import { loadMfaPolicy } from "./mfa-config";
 import {
   modelExistsOnInstance,
@@ -401,6 +403,7 @@ export class OrgService {
   ): Promise<
     | (StoredProfileRecord & {
         assignedTools: StoredToolRecord[];
+        assignedMcpServers: StoredMcpServerRecord[];
         publishedSoul: Pick<SoulStackFiles, "soul" | "style" | "instructions">;
       })
     | null
@@ -449,6 +452,9 @@ export class OrgService {
       ...profile,
       acpAgent: null,
       acpSettings: null,
+      assignedMcpServers: await this.databaseAdapter.listMcpServersForProfile(
+        source.id
+      ),
       assignedTools: await this.databaseAdapter.listToolsForProfile(source.id),
       isDefault: false,
       isSuper: false,
@@ -574,6 +580,18 @@ export class OrgService {
         publications.map((entry) => `${entry.resourceKind}:${entry.resourceId}`)
       );
       const toolNames = new Set<string>();
+      for (const server of servers) {
+        for (const tool of server.cachedTools) {
+          const name = namespacedMcpToolName(server.name, tool.name);
+          if (toolNames.has(name)) {
+            throw new NakamaApiError(
+              "Agent tool assignments are conflicting.",
+              409
+            );
+          }
+          toolNames.add(name);
+        }
+      }
       for (const tool of tools) {
         if (
           toolNames.has(tool.name) ||
