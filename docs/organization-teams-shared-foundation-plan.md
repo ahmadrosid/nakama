@@ -2264,3 +2264,15 @@ All 76 client and document route tests passed with 391 assertions. Five new clie
 Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: connect this operation to knowledge chips with preview, download, pending, retry, and team-change handling. This slice adds no UI, server route, package, dependency, or file. No browser check, full suite, build, paid call, push, or PR ran.
 
 Evidence: /tmp/nakama-published-document-client-{focused,types,oxlint,lint}.log.
+
+### Slice 3j — Knowledge actions verification stopped
+
+The working tree adds team-context knowledge preview and download controls in the existing Organization component. Preview requests extracted text through the active tenant and publication ID. Download requests original bytes again through that scope. Tests cover admin, member, and viewer reads, escaped preview, original byte preservation, object URL cleanup, retry, repeated clicks, unavailable resources, publication removal on reopening, and late responses after team changes. Root document chips remain static.
+
+All 39 component tests passed with 275 assertions. The complete web type check, scoped anti-slop, Ultracite across 1533 files, and git diff --check passed. Verification used both allowed repair rounds. The first repair narrowed test download arguments to Blob. The second repair changed download control flow, reset its loading flag unconditionally in finally, and placed anchor setup and activation inside the object URL cleanup boundary.
+
+React Doctor improved from 88/100 to 90/100 but remains below the 91/100 baseline. The remaining `react-doctor/no-create-object-url-without-revoke` warning points to `OrganizationPanel.tsx:115`. The download handler calls `URL.revokeObjectURL(url)` in finally, but the required diagnostic still does not accept this lifetime. No third repair or rule suppression was attempted. Verification stopped under the two-repair limit.
+
+Only this progress entry is committed. The component, its tests, and query keys remain unstaged for the next iteration. Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: resolve the remaining object URL diagnostic, then verify and commit knowledge actions. No browser check, full suite, build, paid call, push, or PR ran.
+
+Evidence: /tmp/nakama-knowledge-actions-{focused,types,oxlint,lint,doctor,rule}.log.
