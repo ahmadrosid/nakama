@@ -179,10 +179,7 @@ export function resolveImageGenerationSelection(
   const preferred =
     preferredId &&
     openaiInstances.some((instance) => instance.id === preferredId)
-      ? findProviderInstance(
-          { providers: userConfig?.providers ?? [] },
-          preferredId
-        )
+      ? findProviderInstance(userConfig, preferredId)
       : null;
 
   const instance = preferred ?? openaiInstances[0] ?? null;
@@ -236,10 +233,7 @@ function resolveCompatibleImageGenerationSelection(
   const decoded = decodeStoredModelSelection(imageModel);
 
   const instance = decoded
-    ? findProviderInstance(
-        { providers: userConfig?.providers ?? [] },
-        decoded.providerId
-      )
+    ? findProviderInstance(userConfig, decoded.providerId)
     : null;
 
   const baseUrl = instance?.baseUrl?.trim();

@@ -2,10 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { NakamaApiError, type UserConfig } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
+  mergeWorkspaceSettings,
   WORKSPACE_SETTINGS_ID,
 } from "@nakama/db";
 import { IMAGE_GENERATION_SELECTION } from "../providers/models";
 import { estimateUsageCostUsd } from "../providers/pricing";
+import { asTestFetch } from "../providers/test-helpers";
 import { withMswCassette } from "../testing/llm-msw-cassette";
 import { AgentService } from "./agent-service";
 import {
@@ -59,6 +61,8 @@ const gatewayConfig = (overrides?: Partial<UserConfig>): UserConfig => ({
 describe("resolveImageGenerationSelection", () => {
   test("returns null when image model is not configured", () => {
     expect(resolveImageGenerationSelection(openaiConfig())).toBeNull();
+    expect(resolveImageGenerationSelection(null)).toBeNull();
+    expect(resolveImageGenerationSelection(undefined)).toBeNull();
   });
 
   test("resolves allowlisted openai::gpt-image-2 selection", () => {
@@ -128,6 +132,34 @@ describe("resolveImageGenerationSelection", () => {
     expect(resolved?.model).toBe("cb/gpt-image-2");
     expect(resolved?.baseUrl).toBe("https://gateway.example/v1");
     expect(resolved?.apiKey).toBe("gateway-key");
+  });
+
+  test("selects the provider ID when compatible providers list the same model", () => {
+    const config = gatewayConfig({ imageModel: "p-second::cb/gpt-image-2" });
+
+    const gateway = config.providers.find(
+      (provider) => provider.id === "p-gateway"
+    );
+
+    if (!gateway) {
+      throw new Error("Gateway fixture is missing");
+    }
+
+    config.providers.push({
+      ...gateway,
+      apiKey: "second-key",
+      baseUrl: "https://second.example/v1",
+      id: "p-second",
+    });
+    const resolved = resolveImageGenerationSelection(config, {});
+
+    expect(resolved).toMatchObject({
+      apiKey: "second-key",
+      baseUrl: "https://second.example/v1",
+      instance: { id: "p-second" },
+      model: "cb/gpt-image-2",
+      selection: "p-second::cb/gpt-image-2",
+    });
   });
 
   test("rejects a model the compatible provider does not list", () => {
@@ -342,15 +374,17 @@ describe("AgentService image generation settings", () => {
 
   test("rejects non-allowlisted PUT and leaves stored model unchanged (AE1)", async () => {
     const db = createInMemoryDatabaseAdapter();
-    await db.upsertWorkspaceSettings({
-      codingAgentHarnesses: [],
-      id: WORKSPACE_SETTINGS_ID,
-      imageModel: IMAGE_GENERATION_SELECTION,
-      selectedCodingAgentHarness: null,
-      transcriptionModel: null,
-      updatedAt: new Date().toISOString(),
-      visionModel: null,
-    });
+    await db.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(null, {
+        codingAgentHarnesses: [],
+        id: WORKSPACE_SETTINGS_ID,
+        imageModel: IMAGE_GENERATION_SELECTION,
+        selectedCodingAgentHarness: null,
+        transcriptionModel: null,
+        updatedAt: new Date().toISOString(),
+        visionModel: null,
+      })
+    );
 
     const service = new AgentService(
       openaiConfig({ imageModel: IMAGE_GENERATION_SELECTION }),
@@ -465,14 +499,16 @@ describe("AgentService image generation usage (AE5)", () => {
       const service = new AgentService(config, null, db, tracker);
       const originalFetch = globalThis.fetch;
       // SAFETY: The test fixture matches the contract used by this test.
-      globalThis.fetch = (async () =>
-        new Response(
-          JSON.stringify({
-            data: [{ b64_json: Buffer.from("png").toString("base64") }],
-            usage: { input_tokens: 10, output_tokens: 100 },
-          }),
-          { headers: { "Content-Type": "application/json" }, status: 200 }
-        )) as typeof fetch;
+      globalThis.fetch = asTestFetch(
+        async () =>
+          new Response(
+            JSON.stringify({
+              data: [{ b64_json: Buffer.from("png").toString("base64") }],
+              usage: { input_tokens: 10, output_tokens: 100 },
+            }),
+            { headers: { "Content-Type": "application/json" }, status: 200 }
+          )
+      );
 
       try {
         await service.generateImage({ prompt: "a cat" }, ORG_ID);
