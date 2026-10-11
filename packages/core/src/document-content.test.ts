@@ -118,6 +118,11 @@ describe("resolveDocumentPartForProvider", () => {
     );
 
     expect(result.type).toBe("text");
+
+    if (result.type !== "text") {
+      throw new Error("Expected document text");
+    }
+
     expect(result.text).toStartWith("[File: report.pdf]\n");
     expect(result.text.toLowerCase()).toContain("dummy");
   });
@@ -134,6 +139,11 @@ describe("resolveDocumentPartForProvider", () => {
     );
 
     expect(result.type).toBe("text");
+
+    if (result.type !== "text") {
+      throw new Error("Expected document text");
+    }
+
     expect(result.text).toStartWith("[File: budget.xlsx]\n");
     expect(result.text).toContain("Widget");
   });

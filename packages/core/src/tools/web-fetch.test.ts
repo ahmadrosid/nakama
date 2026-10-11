@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { asTestFetch } from "../channel-test-helpers";
 
 // Node's dns/promises must be stubbed BEFORE web-fetch is imported, so register
 // the mock at module-eval time and load web-fetch dynamically afterwards.
@@ -49,8 +50,6 @@ import type { ToolContext } from "../contract";
 
 const CTX: ToolContext = {};
 
-type FetchImpl = typeof fetch;
-
 const originalFetch = globalThis.fetch;
 
 function stubFetch(
@@ -58,8 +57,7 @@ function stubFetch(
 ): void {
   const testFetch = mock(impl);
 
-  // SAFETY: The test mock accepts the same request and response values used by fetch.
-  globalThis.fetch = testFetch as FetchImpl;
+  globalThis.fetch = asTestFetch(testFetch);
 }
 
 function htmlResponse(
