@@ -1306,22 +1306,26 @@ export function OrganizationOverview() {
 }
 
 export function OrganizationPanel() {
-  const { activeOrg } = useAuth();
+  const { activeOrg, user } = useAuth();
 
   return (
     <div className="min-w-0 space-y-8">
       <OrganizationOverview />
-      <h2 className="font-semibold text-xl">
-        {activeOrg?.parentOrgId
-          ? "Current team settings"
-          : "Organization settings"}
-      </h2>
-      <OrgMembersCard />
-      <SkillsWriteApprovalOrgCard />
-      <SkillsPostTurnReviewOrgCard />
-      <SkillsCuratorOrgCard />
-      <OrgMemoryCard />
-      <OrgArchiveCard />
+      {canAccessSystemPage(user?.isPlatformAdmin === true, activeOrg?.role) && (
+        <>
+          <h2 className="font-semibold text-xl">
+            {activeOrg?.parentOrgId
+              ? "Current team settings"
+              : "Organization settings"}
+          </h2>
+          <OrgMembersCard />
+          <SkillsWriteApprovalOrgCard />
+          <SkillsPostTurnReviewOrgCard />
+          <SkillsCuratorOrgCard />
+          <OrgMemoryCard />
+          <OrgArchiveCard />
+        </>
+      )}
     </div>
   );
 }

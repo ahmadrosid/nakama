@@ -2396,3 +2396,15 @@ The full test command first failed because local test ports could not open in th
 Next: finish Organization page access for permitted team readers, then shared-template field controls and compatibility labels. No browser check, build, paid call, push, or PR ran. Final UI, compatibility, documentation, and build checks remain required.
 
 Evidence: /tmp/nakama-knowledge-boundaries-{focused,types,format,format-oxlint}.log and /tmp/nakama-step2-audit-{full-tests,full-tests-outside,knip,check}.log.
+
+### Slice 3t — Organization page access for tenant readers
+
+The Organization route now uses the existing authenticated route boundary without the admin-only wrapper. Members and viewers can reach the overview. Authentication, MFA, setup, and server tenant checks remain in place. The existing navigation catalog and user menu share an Organization access check for known tenant roles or platform authority. Control center and command palette destinations inherit the catalog change. Other system destinations retain their existing admin restrictions.
+
+OrganizationPanel mounts settings only under the existing tenant-admin-or-platform-admin rule. Members and viewers see the overview without an empty settings heading. Their page does not mount member, skill policy, curator, memory, or archive controls, and does not start their admin queries. Admin settings remain available. A role change removes settings while retaining the overview.
+
+All 119 focused component and navigation tests passed with 723 assertions. Four new full-page cases cover root and team members and viewers, active-tenant overview requests, five resource rows, stored team summaries, and absence of admin requests. Another case checks retained admin requests and removal after a viewer role change. Navigation tests check known roles, absent and invalid roles, platform authority, and retained system restrictions. One verification repair narrowed a resource-row selector that also counted team details.
+
+The complete web type check passed. React Doctor stayed at 91/100 with no issues. Steps 4 and 5 and delivery stages 3 and 4 remain open. Next: shared-template field controls, accessible team settings actions, and compatibility labels. No new file, package, dependency, server permission, or browser check was added. Full release checks, builds, docs, push, and PR remain required.
+
+Evidence: /tmp/nakama-overview-access-{focused,types,format,oxlint,doctor,lint}.log.

@@ -276,12 +276,7 @@ function AppShell() {
                     element={<IntegrationsPage />}
                     path="/customize/connections/:section"
                   />
-                  <Route element={<PlatformAdminGuard allowOrgAdmin />}>
-                    <Route
-                      element={<OrganizationPage />}
-                      path="/organization"
-                    />
-                  </Route>
+                  <Route element={<OrganizationPage />} path="/organization" />
                   <Route
                     element={<NotificationsPage />}
                     path="/notifications"

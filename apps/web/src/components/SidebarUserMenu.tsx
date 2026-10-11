@@ -32,7 +32,7 @@ import { useAppContext } from "@/context/use-app-context";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
 import { client, formatError } from "@/lib/client";
-import { canAccessSystemPage, PAGE_PATHS } from "@/lib/navigation";
+import { canAccessOrganizationPage, PAGE_PATHS } from "@/lib/navigation";
 import type { Theme } from "@/lib/theme";
 
 const THEME_OPTIONS: {
@@ -121,7 +121,7 @@ export function SidebarUserMenu() {
                       <SparklesIcon className="size-4 text-muted-foreground" />
                       Personalisation
                     </DropdownMenuItem>
-                    {canAccessSystemPage(
+                    {canAccessOrganizationPage(
                       user.isPlatformAdmin === true,
                       activeOrg?.role
                     ) && (

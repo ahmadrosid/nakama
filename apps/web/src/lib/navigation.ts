@@ -203,6 +203,18 @@ export function canAccessIntegrationsPage(
   return orgRole === "admin" || orgRole === "member";
 }
 
+export function canAccessOrganizationPage(
+  isPlatformAdmin: boolean,
+  orgRole: string | undefined
+): boolean {
+  return (
+    isPlatformAdmin ||
+    orgRole === "admin" ||
+    orgRole === "member" ||
+    orgRole === "viewer"
+  );
+}
+
 export function canManagePluginReleases(isPlatformAdmin: boolean): boolean {
   return isPlatformAdmin;
 }
@@ -226,6 +238,13 @@ export function visibleNavGroups(access: {
         return canAccessIntegrationsPage(access.orgRole);
       }
 
+      if (item.id === "organization") {
+        return canAccessOrganizationPage(
+          access.isPlatformAdmin,
+          access.orgRole
+        );
+      }
+
       if (
         item.id === "usage" ||
         item.id === "plugin-management" ||
@@ -233,7 +252,6 @@ export function visibleNavGroups(access: {
         item.id === "tools" ||
         item.id === "soul" ||
         item.id === "profiles" ||
-        item.id === "organization" ||
         item.id === "workers"
       ) {
         return canAccessSystemPage(access.isPlatformAdmin, access.orgRole);

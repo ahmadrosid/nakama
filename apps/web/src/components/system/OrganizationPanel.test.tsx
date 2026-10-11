@@ -19,6 +19,7 @@ import {
 } from "@/context/auth-context-shared";
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
+import { OrganizationPage } from "@/pages/OrganizationPage";
 import { OrganizationOverview } from "./OrganizationPanel";
 
 const cleanups: Array<() => void> = [];
@@ -107,7 +108,10 @@ function mount(
 
   return {
     container,
-    async render(org: NonNullable<AuthContextValue["activeOrg"]>) {
+    async render(
+      org: NonNullable<AuthContextValue["activeOrg"]>,
+      page = false
+    ) {
       const auth: AuthContextValue = {
         activeOrg: org,
         archiveOrg: async () => undefined,
@@ -134,7 +138,7 @@ function mount(
           <QueryClientProvider client={queryClient}>
             <MemoryRouter initialEntries={["/system/organization"]}>
               <AuthContext.Provider value={auth}>
-                <OrganizationOverview />
+                {page ? <OrganizationPage /> : <OrganizationOverview />}
                 <ChatLocation />
               </AuthContext.Provider>
             </MemoryRouter>
@@ -148,6 +152,114 @@ function mount(
     },
   };
 }
+
+for (const role of ["member", "viewer"] as const) {
+  for (const context of ["team", "root"] as const) {
+    test(`${context} ${role} can read the page without admin requests`, async () => {
+      const queries = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+        },
+      });
+
+      const org = {
+        ...organization(context),
+        parentOrgId: context === "team" ? "parent" : null,
+        role,
+      };
+
+      const data = overview(org.id);
+
+      if (context === "root") {
+        data.organization = { id: org.id, name: org.name };
+      }
+
+      const request = spyOn(
+        client,
+        "getOrganizationOverview"
+      ).mockResolvedValue(data);
+
+      const members = spyOn(client, "listOrgMembers");
+      const memory = spyOn(client, "getOrgMemory");
+      const proposals = spyOn(client, "listSkillProposals");
+      const curator = spyOn(client, "getOrgSkillCuratorLatest");
+      const profiles = spyOn(client, "listProfiles");
+      cleanups.push(() => {
+        request.mockRestore();
+        members.mockRestore();
+        memory.mockRestore();
+        proposals.mockRestore();
+        curator.mockRestore();
+        profiles.mockRestore();
+      });
+
+      const { container, render } = mount(queries);
+      await render(org, true);
+      expect(request).toHaveBeenCalledWith(org.id);
+      expect(container.querySelector("h2")?.textContent).toBe(
+        data.organization.name
+      );
+      expect(
+        container.querySelector("dl")?.querySelectorAll("dt")
+      ).toHaveLength(5);
+      expect(container.querySelectorAll("li")).toHaveLength(data.teams.length);
+      expect(container.querySelectorAll("h2")).toHaveLength(1);
+      expect(members).not.toHaveBeenCalled();
+      expect(memory).not.toHaveBeenCalled();
+      expect(proposals).not.toHaveBeenCalled();
+      expect(curator).not.toHaveBeenCalled();
+      expect(profiles).not.toHaveBeenCalled();
+    });
+  }
+}
+
+test("admin settings remain available and disappear after a role change", async () => {
+  const queries = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  const org = { ...organization("team-a"), role: "admin" as const };
+  queries.setQueryData(
+    queryKeys.organizationOverview("parent", org.id),
+    overview(org.id)
+  );
+  const pending = new Promise<never>(() => undefined);
+
+  const reads = [
+    spyOn(client, "listOrgMembers").mockReturnValue(pending),
+    spyOn(client, "getOrgMemory").mockReturnValue(pending),
+    spyOn(client, "listSkillProposals").mockReturnValue(pending),
+    spyOn(client, "getOrgSkillCuratorLatest").mockReturnValue(pending),
+    spyOn(client, "listProfiles").mockReturnValue(pending),
+    spyOn(client, "listOrgMemoryProposals").mockReturnValue(pending),
+  ];
+
+  cleanups.push(() => {
+    for (const read of reads) {
+      read.mockRestore();
+    }
+  });
+  const { container, render } = mount(queries);
+  await render(org, true);
+  expect(container.querySelectorAll("h2")).toHaveLength(2);
+  expect(reads[0]).toHaveBeenCalledWith(org.id);
+  expect(reads[1]).toHaveBeenCalledWith(org.id);
+  expect(reads[3]).toHaveBeenCalledWith(org.id);
+
+  for (const read of reads) {
+    read.mockClear();
+  }
+
+  await render({ ...org, role: "viewer" }, true);
+  expect(container.querySelectorAll("h2")).toHaveLength(1);
+  expect(container.querySelector("dl")?.querySelectorAll("dt")).toHaveLength(5);
+
+  for (const read of reads) {
+    expect(read).not.toHaveBeenCalled();
+  }
+});
 
 test("renders all published resource kinds and stored team counts", async () => {
   const queries = new QueryClient({
