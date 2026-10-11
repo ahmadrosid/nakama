@@ -1416,3 +1416,20 @@ Product changes and tests remain uncommitted. Only this failure record is commit
 Shared prompt discovery, supporting assets, script tools, and runtime authorization remain incomplete.
 No full lint, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-parent-skill-assignment-{baseline,repair,final-focused,core-types,server-types}.log.
+
+2026-10-11: Step 2 slice 2u completes shared skill assignment records after the failed iteration.
+The curator test now supplies trigger: manual. All 115 focused tests passed across four files, with two platform-specific skips.
+ProfileService validates foreign skill assignments against the active team's current parent publication and existing source guards before writes.
+Assignments retain stable parent skill IDs. Repeated assignment is idempotent. Different skills with the same name return 409 without changing assignments.
+ProfileDetail and OpenAPI add separate optional publishedSkills metadata. Parent entries exclude private source paths, body contents, and usage records.
+Profile reads omit revoked parent metadata while retaining the stored assignment. Teams can remove that reference after revocation.
+Existing assignment routes now permit team admins and platform admins. Members and viewers remain denied; foreign profiles and private sources remain inaccessible.
+Local summary and discovery paths omit foreign sources. The name-fallback test verifies discovery does not replace a parent reference with a same-name local skill.
+Curator archive and consolidation exclude foreign source records before reads and mutations. The maintenance test preserves the parent file, publication, assignment, and proposal state.
+Existing shared-agent configuration tests preserve read-only assignments. Global skill compatibility and standalone profile behavior remain covered.
+Checks: focused tests, complete core/server/client type checks, lint across all 1532 files, and git diff --check passed.
+No new source file, package, or dependency was added. Steps 2 and 3 and delivery stage 2 remain unchecked.
+Next: connect published skill prompt discovery and authorized supporting assets, then script tools with team context and live publication checks.
+Parent assignments remain excluded from runtime discovery until that path is implemented. Shared skill execution is not complete.
+No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-parent-skill-assignment-resumed-{focused,core-types,server-types,client-types,lint}.log.

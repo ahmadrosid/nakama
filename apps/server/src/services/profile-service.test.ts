@@ -740,7 +740,7 @@ describe("profile service assignSkill", () => {
       service.assignSkill(ORG_ID, created.profile.id, {
         skillId: "other-skill",
       })
-    ).rejects.toThrow("Skill not found.");
+    ).rejects.toMatchObject({ status: 404 });
 
     const updated = await service.assignSkill(ORG_ID, created.profile.id, {
       skillId: "shared-skill",

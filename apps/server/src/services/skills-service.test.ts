@@ -17,6 +17,8 @@ import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createMinimalHonoApp } from "../http/test-app-helpers";
 import { loginUserSession } from "../http/test-session-helpers";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
+import { ProfileService } from "./profile-service";
+import { SkillCuratorService } from "./skill-curator-service";
 import { SkillsService } from "./skills-service";
 
 const ORG_ID = "org_test";
@@ -109,6 +111,183 @@ describe("SkillsService", () => {
     });
     return { db, local, privateSkill, publication, service, sibling, skill };
   }
+
+  test("published assignments keep source references and remove revoked summaries", async () => {
+    const { db, skill, publication, service } = await setupPublishedSkill();
+    const profiles = new ProfileService(db);
+    const assigned = await profiles.assignSkill("team_a", "profile_team_a", {
+      skillId: skill.id,
+    });
+    expect(assigned.profile.skills).toEqual([]);
+    expect(assigned.profile.publishedSkills).toMatchObject([
+      { id: skill.id, publicationId: publication.id, scope: "parent" },
+    ]);
+    expect(JSON.stringify(assigned)).not.toContain(skill.sourcePath);
+    await profiles.assignSkill("team_a", "profile_team_a", {
+      skillId: skill.id,
+    });
+    expect(
+      (await db.listSkillsForProfile("profile_team_a")).map((item) => item.id)
+    ).toEqual([skill.id]);
+    expect(
+      await service.listSkillSummariesForProfile("team_a", "profile_team_a")
+    ).toEqual([]);
+    expect(await service.listSkillsForProfile("profile_team_a")).toEqual([]);
+    expect(
+      await service.composeCatalogForProfile("team_a", "profile_team_a")
+    ).toBe("");
+    expect(
+      (await db.listSkillsForProfile("profile_team_a")).map((item) => item.id)
+    ).toEqual([skill.id]);
+    await expect(
+      service.listSkillSummariesForProfile("team_b", "profile_team_a")
+    ).rejects.toMatchObject({ status: 404 });
+    await db.deleteOrgSharedResource("parent", publication.id);
+    expect(
+      (await profiles.getProfile("team_a", "profile_team_a")).profile
+        .publishedSkills
+    ).toEqual([]);
+    expect(await db.listSkillsForProfile("profile_team_a")).toHaveLength(1);
+    await profiles.unassignSkill("team_a", "profile_team_a", skill.id);
+    expect(await db.listSkillsForProfile("profile_team_a")).toEqual([]);
+    expect(await db.getSkill(skill.id)).not.toBeNull();
+    expect(
+      await readFile(join(skill.sourcePath, "SKILL.md"), "utf8")
+    ).toContain("Published instructions");
+  });
+
+  test.each(["parent-first", "local-first"] as const)(
+    "same-name assignments fail without changing references: %s",
+    async (order) => {
+      const { db, local, skill } = await setupPublishedSkill();
+      const profiles = new ProfileService(db);
+      const [first, second] =
+        order === "parent-first" ? [skill, local] : [local, skill];
+      await profiles.assignSkill("team_a", "profile_team_a", {
+        skillId: first.id,
+      });
+      await expect(
+        profiles.assignSkill("team_a", "profile_team_a", { skillId: second.id })
+      ).rejects.toMatchObject({ status: 409 });
+      expect(
+        (await db.listSkillsForProfile("profile_team_a")).map((item) => item.id)
+      ).toEqual([first.id]);
+    }
+  );
+
+  test("private, sibling, and revoked sources cannot create team assignments", async () => {
+    const { db, privateSkill, sibling, skill, publication } =
+      await setupPublishedSkill();
+    const profiles = new ProfileService(db);
+    await db.deleteOrgSharedResource("parent", publication.id);
+    for (const source of [privateSkill, sibling, skill]) {
+      await expect(
+        profiles.assignSkill("team_a", "profile_team_a", { skillId: source.id })
+      ).rejects.toMatchObject({ status: 404 });
+    }
+    expect(await db.listSkillsForProfile("profile_team_a")).toEqual([]);
+  });
+
+  test("team maintenance omits parent sources before archive and consolidation", async () => {
+    const { db, skill, service, publication } = await setupPublishedSkill();
+    await db.assignSkillToProfile("profile_team_a", skill.id);
+    await db.upsertSkill({
+      ...(await db.getSkill(skill.id))!,
+      createdAt: "2020-01-01T00:00:00.000Z",
+      createdBy: "agent",
+    });
+    await db.upsertOrganization({
+      ...(await db.getOrganizationById("team_a"))!,
+      skillsCuratorConsolidateEnabled: true,
+    });
+    const original = await readFile(join(skill.sourcePath, "SKILL.md"), "utf8");
+    const result = await new SkillCuratorService(db, service).run("team_a", {
+      now: new Date("2026-10-11T00:00:00.000Z"),
+      trigger: "manual",
+    });
+    expect(result.scanned).toBe(0);
+    expect(await readFile(join(skill.sourcePath, "SKILL.md"), "utf8")).toBe(
+      original
+    );
+    expect(await db.listSkillsForProfile("profile_team_a")).toHaveLength(1);
+    expect(
+      await db.getOrgSharedResource("parent", publication.id)
+    ).not.toBeNull();
+    expect(
+      await db.listSkillProposals("team_a", { profileId: "profile_team_a" })
+    ).toEqual([]);
+  });
+
+  test.each(["admin", "member", "viewer"] as const)(
+    "%s can change skill assignments only with the team admin role",
+    async (role) => {
+      const { db, skill, privateSkill } = await setupPublishedSkill();
+      const profiles = new ProfileService(db);
+      const { app, authService } = createMinimalHonoApp({
+        agent: {
+          assignSkill: profiles.assignSkill.bind(profiles),
+          unassignSkill: profiles.unassignSkill.bind(profiles),
+        },
+        databaseAdapter: db,
+      });
+      const now = new Date().toISOString();
+      await db.createUser({
+        createdAt: now,
+        email: "skill-admin@example.com",
+        id: "team-admin",
+        passwordHash: await authService.hashPassword("password123"),
+        updatedAt: now,
+      });
+      await db.upsertOrgMember({
+        createdAt: now,
+        orgId: "team_a",
+        role,
+        userId: "team-admin",
+      });
+      const session = await loginUserSession(
+        app,
+        "skill-admin@example.com",
+        "password123"
+      );
+      const assign = (skillId: string, profileId = "profile_team_a") =>
+        app.fetch(
+          new Request(`http://localhost:4310/v1/profiles/${profileId}/skills`, {
+            body: JSON.stringify({ skillId }),
+            headers: session.headers(
+              {
+                "content-type": "application/json",
+                "X-CSRF-Token": session.csrfToken,
+              },
+              "team_a"
+            ),
+            method: "POST",
+          })
+        );
+      const response = await assign(skill.id);
+      expect(response.status).toBe(role === "admin" ? 200 : 403);
+      if (role === "admin") {
+        expect((await response.json()).profile.publishedSkills[0].id).toBe(
+          skill.id
+        );
+        expect((await assign(privateSkill.id)).status).toBe(404);
+        expect((await assign(skill.id, "profile_team_b")).status).toBe(404);
+      }
+      const removed = await app.fetch(
+        new Request(
+          `http://localhost:4310/v1/profiles/profile_team_a/skills/${skill.id}`,
+          {
+            headers: session.headers(
+              { "X-CSRF-Token": session.csrfToken },
+              "team_a"
+            ),
+            method: "DELETE",
+          }
+        )
+      );
+      expect(removed.status).toBe(role === "admin" ? 200 : 403);
+      expect(await db.listSkillsForProfile("profile_team_a")).toEqual([]);
+    }
+  );
 
   test("team catalogs separate parent publications and preserve local and global skills", async () => {
     const { service, skill, privateSkill, local, sibling } =

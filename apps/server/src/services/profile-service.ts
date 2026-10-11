@@ -25,6 +25,7 @@ import type {
   ProfileResponse,
   ProfileSummary,
   PublishedKnowledgeBaseDocument,
+  PublishedSkillSummary,
   ToolDetail,
   ToolResponse,
   ToolSourceResponse,
@@ -111,7 +112,7 @@ import {
   sessionHistoryArchivePath,
 } from "./session-persistence";
 import { sessionTurnRegistry } from "./session-turn-registry";
-import { toSkillSummaries } from "./skills-service";
+import { SkillsService, toSkillSummaries } from "./skills-service";
 import { readToolSource } from "./tool-source";
 
 const PROFILE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
@@ -270,8 +271,10 @@ export class ProfileService {
     profileId: string
   ) => Promise<void>;
   private readonly memoryBackend: MemoryBackendService;
+  private readonly skillsService: SkillsService;
   constructor(private readonly db: DatabaseAdapter) {
     this.memoryBackend = new MemoryBackendService(db);
+    this.skillsService = new SkillsService(db);
   }
 
   async listProfiles(orgId: string): Promise<ListProfilesResponse> {
@@ -290,12 +293,34 @@ export class ProfileService {
     const mcpServers = await this.db.listMcpServersForProfile(profileId);
     const skills = await this.db.listSkillsForProfile(profileId);
     const skillUsage = await this.db.listSkillUsageForProfile(profileId);
+    const publishedSkills: PublishedSkillSummary[] = [];
+    for (const skill of skills) {
+      if (!skill.orgId || skill.orgId === orgId) {
+        continue;
+      }
+      try {
+        publishedSkills.push(
+          await this.skillsService.getPublishedSkillSummaryForResource(
+            orgId,
+            skill.id
+          )
+        );
+      } catch (error) {
+        if (!(error instanceof NakamaApiError && error.status === 404)) {
+          throw error;
+        }
+      }
+    }
 
     return {
       profile: {
         ...(await this.toProfileSummary(profile)),
         mcpServers: toMcpServerSummaries(mcpServers),
-        skills: toSkillSummaries(skills, skillUsage),
+        publishedSkills,
+        skills: toSkillSummaries(
+          skills.filter((skill) => !skill.orgId || skill.orgId === orgId),
+          skillUsage
+        ),
         systemPrompt: profile.systemPrompt,
         tools: tools.map(toToolSummary),
       },
@@ -940,8 +965,25 @@ export class ProfileService {
 
     const skill = await this.db.getSkill(request.skillId);
 
-    if (!skill || (skill.orgId != null && skill.orgId !== orgId)) {
+    if (!skill) {
       throw new Error("Skill not found.");
+    }
+    if (skill.orgId != null && skill.orgId !== orgId) {
+      await this.skillsService.getPublishedSkillSummaryForResource(
+        orgId,
+        skill.id
+      );
+    }
+    const assigned = await this.db.listSkillsForProfile(profileId);
+    if (
+      assigned.some(
+        (existing) => existing.id !== skill.id && existing.name === skill.name
+      )
+    ) {
+      throw new NakamaApiError(
+        "A different skill with this name is assigned.",
+        409
+      );
     }
 
     await withAssignmentChange(

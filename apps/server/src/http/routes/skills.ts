@@ -11,6 +11,7 @@ import {
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
+  requireOrgAdminOrPlatformAdminFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
 import { getRequestAuth, json, readJson } from "../shared";
@@ -532,7 +533,7 @@ export function registerSkillRoutes(
   });
 
   app.post("/v1/profiles/:profileId/skills", async (c) => {
-    const auth = requirePlatformAdminFromContext(c);
+    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson(c.req.raw, assignSkillSchema);
 
@@ -547,7 +548,7 @@ export function registerSkillRoutes(
   });
 
   app.delete("/v1/profiles/:profileId/skills/:skillId", async (c) => {
-    const auth = requirePlatformAdminFromContext(c);
+    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
 
     return json<ProfileResponse>(

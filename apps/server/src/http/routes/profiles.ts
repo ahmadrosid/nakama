@@ -167,7 +167,36 @@ export function registerProfileRoutes(
     .passthrough()
     .openapi("ListProfilesResponse");
 
-  const profileSchema = z.object({}).passthrough().openapi("ProfileResponse");
+  const profileSchema = z
+    .object({
+      profile: z
+        .object({
+          publishedSkills: z
+            .array(
+              z.object({
+                createdAt: z.string(),
+                createdBy: z.enum(["agent", "human", "bundled"]),
+                description: z.string(),
+                disableModelInvocation: z.boolean(),
+                enabled: z.boolean(),
+                hasTool: z.boolean(),
+                id: z.string(),
+                name: z.string(),
+                updatedAt: z.string(),
+                publicationId: z.string(),
+                scope: z.literal("parent"),
+                sourceOrganization: z.object({
+                  id: z.string(),
+                  name: z.string(),
+                }),
+              })
+            )
+            .optional(),
+        })
+        .passthrough(),
+    })
+    .passthrough()
+    .openapi("ProfileResponse");
 
   const createProfileSchema = z
     .object({

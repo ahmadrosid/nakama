@@ -277,6 +277,23 @@ export class SkillsService {
     return { skill: { ...source.summary, body: source.body } };
   }
 
+  async getPublishedSkillSummaryForResource(
+    orgId: string,
+    skillId: string
+  ): Promise<PublishedSkillSummary> {
+    const team = await this.db.getOrganizationById(orgId);
+    const publication = team?.parentOrgId
+      ? (await this.db.listOrgSharedResources(team.parentOrgId)).find(
+          (entry) =>
+            entry.resourceKind === "skill" && entry.resourceId === skillId
+        )
+      : null;
+    if (!publication) {
+      throw new NakamaApiError("Skill is unavailable.", 404);
+    }
+    return (await this.resolvePublishedSkill(orgId, publication.id)).summary;
+  }
+
   private async resolvePublishedSkill(
     orgId: string,
     publicationId: string
@@ -1434,7 +1451,13 @@ export class SkillsService {
     orgId: string,
     profileId: string
   ): Promise<SkillSummary[]> {
-    const records = await this.db.listSkillsForProfile(profileId);
+    const profile = await this.db.getProfile(profileId);
+    if (profile?.orgId !== orgId) {
+      throw new NakamaApiError("Profile not found.", 404);
+    }
+    const records = (await this.db.listSkillsForProfile(profileId)).filter(
+      (record) => !record.orgId || record.orgId === orgId
+    );
     const usage = await this.listSkillUsageForProfile(profileId);
 
     return toSkillSummaries(records, usage);
@@ -1646,8 +1669,10 @@ export class SkillsService {
 
   async listSkillsForProfile(profileId: string): Promise<SkillSummary[]> {
     const skills = await this.db.listSkillsForProfile(profileId);
-
-    return skills.map((record) => toSkillSummary(record));
+    const profile = await this.db.getProfile(profileId);
+    return skills
+      .filter((record) => !record.orgId || record.orgId === profile?.orgId)
+      .map((record) => toSkillSummary(record));
   }
 
   async recordCatalogViews(
@@ -1872,6 +1897,9 @@ export class SkillsService {
     }> = [];
 
     for (const record of assigned) {
+      if (record.orgId && record.orgId !== orgId) {
+        continue;
+      }
       if (isPluginOwnedSkill(record)) {
         const directory = await this.copyPluginSkillToProfile(
           orgId,

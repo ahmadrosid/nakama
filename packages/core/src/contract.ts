@@ -2194,6 +2194,7 @@ export interface ProfileSummary {
 
 export interface ProfileDetail extends ProfileSummary {
   mcpServers: McpServerSummary[];
+  publishedSkills?: PublishedSkillSummary[];
   skills: SkillSummary[];
   systemPrompt: string;
   tools: ToolSummary[];
