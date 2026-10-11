@@ -3420,6 +3420,25 @@ export class NakamaClient {
     );
   }
 
+  async readPublishedKnowledgeBaseDocument(
+    orgId: string,
+    publicationId: string,
+    options: { render?: "text" } = {}
+  ): Promise<{ contentType: string; data: ArrayBuffer }> {
+    const query = options.render === "text" ? "?render=text" : "";
+
+    const response = await this.fetchRaw(
+      `/v1/orgs/${encodeURIComponent(orgId)}/shared-resources/${encodeURIComponent(publicationId)}/content${query}`,
+      { headers: { "X-Org-Id": orgId } }
+    );
+
+    return {
+      contentType:
+        response.headers.get("Content-Type") ?? "application/octet-stream",
+      data: await response.arrayBuffer(),
+    };
+  }
+
   async publishOrgSharedResource(
     orgId: string,
     request: PublishOrgSharedResourceRequest

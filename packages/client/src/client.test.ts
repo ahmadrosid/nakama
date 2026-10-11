@@ -1042,3 +1042,78 @@ test("artifact download cancellation aborts a pending body read and forwards the
   expect(requestSignal).toBe(controller.signal);
   expect(cancelled).toBe(true);
 });
+
+test.each([
+  { contentType: "application/pdf", options: {}, query: "" },
+  {
+    contentType: "text/plain; charset=utf-8",
+    options: { render: "text" as const },
+    query: "?render=text",
+  },
+  { contentType: null, options: {}, query: "" },
+])(
+  "published document reads preserve bytes and explicit scope in case %#",
+  async ({ contentType, options, query }) => {
+    const bytes = new Uint8Array([0, 1, 127, 128, 255]);
+    const requests: Request[] = [];
+    const headers = new Headers();
+
+    if (contentType) {
+      headers.set("Content-Type", contentType);
+    }
+
+    const client = new NakamaClient({
+      authToken: "test-token",
+      baseUrl: "https://nakama.example.com",
+      fetch: async (input, init) => {
+        requests.push(new Request(input, init));
+
+        return new Response(bytes, { headers });
+      },
+      orgId: "other-team",
+    });
+
+    const document = await client.readPublishedKnowledgeBaseDocument(
+      "team/a?",
+      "publication/a?",
+      options
+    );
+
+    expect(document.contentType).toBe(
+      contentType ?? "application/octet-stream"
+    );
+    expect(new Uint8Array(document.data)).toEqual(bytes);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.url).toBe(
+      `https://nakama.example.com/v1/orgs/team%2Fa%3F/shared-resources/publication%2Fa%3F/content${query}`
+    );
+    expect(requests[0]?.method).toBe("GET");
+    expect(requests[0]?.headers.get("X-Org-Id")).toBe("team/a?");
+    expect(requests[0]?.headers.get("Authorization")).toBe("Bearer test-token");
+    expect(await requests[0]?.text()).toBe("");
+    await client.readPublishedKnowledgeBaseDocument(
+      "other-team",
+      "other-publication"
+    );
+    expect(requests[1]?.headers.get("X-Org-Id")).toBe("other-team");
+  }
+);
+
+test.each([403, 404])(
+  "published document reads preserve denial status %s",
+  async (status) => {
+    const client = new NakamaClient({
+      baseUrl: "https://nakama.example.com",
+      fetch: async () => Response.json({ error: "Unavailable" }, { status }),
+    });
+
+    await expect(
+      client.readPublishedKnowledgeBaseDocument("team-a", "publication-a")
+    ).rejects.toMatchObject({ status });
+    await expect(
+      client.readPublishedKnowledgeBaseDocument("team-a", "publication-a", {
+        render: "text",
+      })
+    ).rejects.toMatchObject({ status });
+  }
+);

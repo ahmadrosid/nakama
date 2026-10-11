@@ -2254,3 +2254,13 @@ All 31 component tests passed with 210 assertions. Tests cover admin, member, an
 Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: knowledge detail/download actions, then remaining resource actions and shared-agent selection. Root resource details remain open. No browser check, full suite, build, paid call, push, or PR ran.
 
 Evidence: /tmp/nakama-shared-skill-{focused,types,oxlint,lint,doctor}.log.
+
+### Slice 3i — Typed published knowledge reads
+
+Added `NakamaClient.readPublishedKnowledgeBaseDocument` in the existing client module. It requests the existing publication content route with the active tenant ID, publication ID, and explicit `X-Org-Id`. Default reads return original bytes for download; `render: "text"` requests extracted text for preview. Both return the content type and an ArrayBuffer. Existing raw-response authentication and error handling remain in use.
+
+All 76 client and document route tests passed with 391 assertions. Five new client cases cover encoded IDs, text and binary requests, unchanged bytes, missing content type, explicit tenant context, unchanged client context, and 403/404 denial. Existing HTTP cases verify viewer reads without parent membership, sibling access, denied foreign and private IDs, revocation, source removal, archive, and symlink boundaries. The complete client type check, scoped anti-slop, Ultracite across 1533 files, and git diff --check passed. No verification repair was needed.
+
+Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: connect this operation to knowledge chips with preview, download, pending, retry, and team-change handling. This slice adds no UI, server route, package, dependency, or file. No browser check, full suite, build, paid call, push, or PR ran.
+
+Evidence: /tmp/nakama-published-document-client-{focused,types,oxlint,lint}.log.
