@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { NakamaApiError } from "@nakama/core";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { getCustomToolsDir, NakamaApiError } from "@nakama/core";
 import type { AgentService } from "../../services/agent-service";
 import {
   loadToolApiKey,
@@ -54,7 +56,11 @@ describe("tool playground routes", () => {
       app,
       authService,
       databaseAdapter: db,
-    } = createApp({ listTools: (orgId) => service.listTools(orgId) });
+    } = createApp({
+      listTools: (orgId) => service.listTools(orgId),
+      getTool: (toolId, orgId) => service.getTool(toolId, orgId),
+      getToolSource: (toolId, orgId) => service.getToolSource(toolId, orgId),
+    });
     service = new ProfileService(db);
     const { orgId: parentOrgId, adminSession } = await createOrgAdminSession(
       app,
@@ -80,13 +86,19 @@ describe("tool playground routes", () => {
       role: "admin",
       createdAt: now,
     });
+    await mkdir(getCustomToolsDir(), { recursive: true });
+    const modulePath = join(getCustomToolsDir(), "published-http.js");
+    await writeFile(
+      modulePath,
+      'export const parameters = {type: "object", properties: {}}; export async function run(input) {return input;}'
+    );
     await db.upsertTool({
       id: "published_parent_tool",
       orgId: parentOrgId,
       name: "Published",
       description: "Probe",
       handlerType: "javascript",
-      handlerConfig: { modulePath: "/private/tool.js", requiresApiKey: true },
+      handlerConfig: { modulePath, requiresApiKey: true },
       createdAt: now,
       updatedAt: now,
     });
@@ -104,6 +116,29 @@ describe("tool playground routes", () => {
     const status = () =>
       app.fetch(new Request(url, { headers: adminSession.headers({}, orgId) }));
     const before = await status();
+    const detailUrl = "http://localhost:4310/v1/tools/published_parent_tool";
+    const detail = await app.fetch(
+      new Request(detailUrl, { headers: adminSession.headers({}, orgId) })
+    );
+    expect(detail.status).toBe(200);
+    const payload = await detail.json();
+    expect(payload).toMatchObject({
+      tool: {
+        id: "published_parent_tool",
+        scope: "parent",
+        publicationId: publication.id,
+      },
+    });
+    expect(JSON.stringify(payload)).not.toContain(modulePath);
+    expect(
+      (
+        await app.fetch(
+          new Request(`${detailUrl}/source`, {
+            headers: adminSession.headers({}, orgId),
+          })
+        )
+      ).status
+    ).toBe(404);
     expect(before.status).toBe(200);
     expect(await before.json()).toEqual({ configured: false });
     const saved = await app.fetch(
@@ -129,6 +164,13 @@ describe("tool playground routes", () => {
     const after = await status();
     expect(await after.json()).toEqual({ configured: true });
     await db.deleteOrgSharedResource(parentOrgId, publication.id);
+    expect(
+      (
+        await app.fetch(
+          new Request(detailUrl, { headers: adminSession.headers({}, orgId) })
+        )
+      ).status
+    ).toBe(404);
     expect((await status()).status).toBe(404);
     const denied = await app.fetch(
       new Request(url, {

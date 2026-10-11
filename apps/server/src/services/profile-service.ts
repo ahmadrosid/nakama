@@ -791,13 +791,31 @@ export class ProfileService {
     return { tools: details };
   }
 
-  async getTool(toolId: string): Promise<ToolResponse> {
+  async getTool(toolId: string, orgId?: string): Promise<ToolResponse> {
+    const detail = orgId
+      ? (await this.listTools(orgId)).tools.find((tool) => tool.id === toolId)
+      : undefined;
+    if (orgId && !detail) {
+      throw new NakamaApiError("Tool not found.", 404);
+    }
     const tool = await this.requireTool(toolId);
-
-    return { tool: await enrichToolParameters(toToolDetail(tool)) };
+    return {
+      tool: await enrichToolParameters(detail ?? toToolDetail(tool), tool),
+    };
   }
 
-  async getToolSource(toolId: string): Promise<ToolSourceResponse> {
+  async getToolSource(
+    toolId: string,
+    orgId?: string
+  ): Promise<ToolSourceResponse> {
+    if (orgId) {
+      const detail = (await this.listTools(orgId)).tools.find(
+        (tool) => tool.id === toolId
+      );
+      if (!detail || detail.scope === "parent") {
+        throw new NakamaApiError("Tool source is unavailable.", 404);
+      }
+    }
     const tool = await this.requireTool(toolId);
 
     return readToolSource(tool);
@@ -809,8 +827,20 @@ export class ProfileService {
   ): Promise<ListToolsResponse> {
     await this.requireProfile(orgId, profileId);
     const tools = await this.db.listToolsForProfile(profileId);
-
-    return { tools: tools.map(toToolDetail) };
+    const sharedCatalog = tools.some(
+      (tool) => tool.orgId && tool.orgId !== orgId
+    )
+      ? (await this.listTools(orgId)).tools
+      : [];
+    return {
+      tools: tools.flatMap((tool) => {
+        if (!tool.orgId || tool.orgId === orgId) {
+          return [toToolDetail(tool)];
+        }
+        const shared = sharedCatalog.find((entry) => entry.id === tool.id);
+        return shared ? [shared] : [];
+      }),
+    };
   }
 
   async deleteTool(toolId: string): Promise<void> {
@@ -897,14 +927,19 @@ export class ProfileService {
   ): Promise<ProfileResponse> {
     await this.requireMutableProfile(orgId, profileId);
 
-    const tool = await this.db.getTool(request.toolId);
+    const tool = (await this.listTools(orgId)).tools.find(
+      (item) => item.id === request.toolId
+    );
 
     if (!tool) {
-      throw new Error("Tool not found.");
+      throw new NakamaApiError("Tool not found.", 404);
     }
 
-    if (tool.orgId && tool.orgId !== orgId) {
-      throw new NakamaApiError("Tool not found.", 404);
+    const assigned = await this.db.listToolsForProfile(profileId);
+    if (
+      assigned.some((item) => item.id !== tool.id && item.name === tool.name)
+    ) {
+      throw new NakamaApiError("Conflicting tool names are assigned.", 409);
     }
 
     await withAssignmentChange(

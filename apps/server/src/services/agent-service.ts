@@ -4009,12 +4009,15 @@ export class AgentService {
     return this.profileService.listTools(orgId);
   }
 
-  async getTool(toolId: string): Promise<ToolResponse> {
-    return this.profileService.getTool(toolId);
+  async getTool(toolId: string, orgId?: string): Promise<ToolResponse> {
+    return this.profileService.getTool(toolId, orgId);
   }
 
-  async getToolSource(toolId: string): Promise<ToolSourceResponse> {
-    return this.profileService.getToolSource(toolId);
+  async getToolSource(
+    toolId: string,
+    orgId?: string
+  ): Promise<ToolSourceResponse> {
+    return this.profileService.getToolSource(toolId, orgId);
   }
 
   async createTool(request: CreateToolRequest) {

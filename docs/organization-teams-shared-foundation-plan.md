@@ -1639,3 +1639,16 @@ Only this progress record is committed. The five touched source and test files r
 Next: correct the remaining status assertion, verify the full slice, and commit it. Then connect parent tool assignments to normal agent and playground execution checks.
 No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-tool-detail-final-focused.log and /tmp/nakama-tool-detail-initial-types.log.
+
+### Slice 2ak — published tool details and assignments verified
+The remaining shared template assignment assertion now checks the existing 403 response. This slice commits the tool detail and assignment code left uncommitted by slice 2aj.
+HTTP detail and source requests pass the active organization through AgentService to ProfileService. Scoped reads use the current catalog; unavailable or unpublished IDs return 404.
+Published details keep sanitized configuration and source labels while resolving parameters from the source tool record. Team source-file requests cannot return parent code or private paths. Existing local and global source access remains unchanged.
+Profile assignments accept current parent publications by stable tool ID. They reject private or revoked IDs, foreign profiles, and different tools with the same executable name. Repeated assignment remains idempotent.
+Shared template assignments retain their existing read-only guard. Team users can remove a revoked assignment from a local profile without restoring publication access.
+Assigned-tool detail lists preserve existing local and global records. Published entries use the sanitized catalog, and revoked entries disappear from the returned list.
+Tests verify resolved custom tool schemas, safe HTTP details, denied parent source requests, private IDs, publication revocation, stable assignment references, unchanged source ownership, equal-name conflicts, repeated assignment, removal after revocation, and global compatibility.
+Checks: 214 focused tests passed across four service and HTTP route files, with two Windows tests skipped. The complete server type check, lint across 1532 files, and git diff --check passed.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: resolve published parent tool assignments during local agent execution, including cached sessions and retained definitions, then cover playground execution.
+No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-tool-detail-complete-focused.log, /tmp/nakama-tool-detail-complete-types.log, and /tmp/nakama-tool-detail-complete-lint.log.

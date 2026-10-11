@@ -1834,6 +1834,149 @@ async function seedSharedAgentSelection(
 }
 
 describe("OrgService shared agent selection", () => {
+  test("published tool details and local assignments keep parent sources private", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    const agentPublication = await seedSharedAgentSelection(db, orgService);
+    const service = new ProfileService(db);
+    const now = new Date().toISOString();
+    await db.upsertProfile({
+      createdAt: now,
+      id: "local_agent",
+      isDefault: false,
+      isSuper: false,
+      model: null,
+      name: "Local",
+      orgId: "org_team_a",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+    const modulePath = join(getCustomToolsDir(), "published-details.js");
+    await mkdir(getCustomToolsDir(), { recursive: true });
+    await writeFile(
+      modulePath,
+      'export const parameters = {type: "object", properties: {value: {type: "string"}}}; export async function run(input) {return input;}'
+    );
+    const record = {
+      createdAt: now,
+      description: "Probe",
+      handlerConfig: {
+        env: [{ name: "TOKEN", secret: true }],
+        modulePath,
+        parameters: {
+          properties: { value: { type: "string" } },
+          type: "object",
+        },
+        requiresApiKey: true,
+      },
+      handlerType: "javascript",
+      id: "detail_shared",
+      name: "Shared",
+      orgId: "org_parent",
+      updatedAt: now,
+    };
+    await db.upsertTool(record);
+    await db.upsertTool({ ...record, id: "detail_private", name: "Private" });
+    const publication = await orgService.publishSharedResource(
+      "org_parent",
+      { resourceId: record.id, resourceKind: "tool" },
+      "user_creator"
+    );
+    const detail = (await service.getTool(record.id, "org_team_a")).tool;
+    expect(detail).toMatchObject({
+      parameters: { properties: { value: { type: "string" } } },
+      publicationId: publication.id,
+      scope: "parent",
+    });
+    expect(JSON.stringify(detail)).not.toContain(modulePath);
+    await expect(
+      service.getTool("detail_private", "org_team_a")
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.getToolSource(record.id, "org_team_a")
+    ).rejects.toMatchObject({ status: 404 });
+    const assigned = await service.assignTool("org_team_a", "local_agent", {
+      toolId: record.id,
+    });
+    expect(assigned.profile.tools.map((tool) => tool.id)).toContain(record.id);
+    expect(await db.getTool(record.id)).toMatchObject({
+      handlerConfig: { modulePath },
+      orgId: "org_parent",
+    });
+    expect(
+      (await service.listProfileTools("org_team_a", "local_agent")).tools
+    ).toMatchObject([{ id: record.id, publicationId: publication.id }]);
+    expect(
+      JSON.stringify(
+        await service.listProfileTools("org_team_a", "local_agent")
+      )
+    ).not.toContain(modulePath);
+    await service.assignTool("org_team_a", "local_agent", {
+      toolId: record.id,
+    });
+    expect(await db.listToolsForProfile("local_agent")).toHaveLength(1);
+    await expect(
+      service.assignTool("org_team_a", "local_agent", {
+        toolId: "detail_private",
+      })
+    ).rejects.toMatchObject({ status: 404 });
+    await db.upsertTool({
+      ...record,
+      handlerConfig: {},
+      handlerType: "builtin",
+      id: "detail_local",
+      orgId: "org_team_a",
+    });
+    await expect(
+      service.assignTool("org_team_a", "local_agent", {
+        toolId: "detail_local",
+      })
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      service.assignTool("org_team_b", "local_agent", { toolId: record.id })
+    ).rejects.toMatchObject({ status: 404 });
+    const instance = await orgService.createSharedAgentInstance(
+      "org_team_a",
+      agentPublication.id,
+      "user_other"
+    );
+    await expect(
+      service.assignTool("org_team_a", instance.id, { toolId: record.id })
+    ).rejects.toMatchObject({ status: 403 });
+    await orgService.unpublishSharedResource(
+      "org_parent",
+      publication.id,
+      "user_creator"
+    );
+    await expect(
+      service.getTool(record.id, "org_team_a")
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.assignTool("org_team_a", "local_agent", { toolId: record.id })
+    ).rejects.toMatchObject({ status: 404 });
+    expect(
+      (await service.listProfileTools("org_team_a", "local_agent")).tools
+    ).toEqual([]);
+    await service.unassignTool("org_team_a", "local_agent", record.id);
+    expect(await db.listToolsForProfile("local_agent")).toEqual([]);
+    expect(
+      (await service.getTool(record.id, "org_parent")).tool.handlerConfig
+    ).toMatchObject({ modulePath });
+    expect(
+      (await service.getToolSource(record.id, "org_parent")).content
+    ).toContain("export async function run");
+    await db.upsertTool({ ...record, id: "detail_global", orgId: null });
+    expect(
+      (await service.getTool("detail_global", "org_team_a")).tool.scope
+    ).toBeUndefined();
+    await service.assignTool("org_team_a", "local_agent", {
+      toolId: "detail_global",
+    });
+    expect(
+      (await service.listProfileTools("org_team_a", "local_agent")).tools.map(
+        (tool) => tool.id
+      )
+    ).toEqual(["detail_global"]);
+  });
   test("team tool catalogs show current published sources without parent paths or secrets", async () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     await seedSharedAgentSelection(db, orgService);
