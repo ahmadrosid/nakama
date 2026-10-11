@@ -27,6 +27,12 @@ import { client } from "@/lib/client";
 import { invalidateQueries } from "@/lib/query-client";
 import { queryKeys } from "@/lib/query-keys";
 import {
+  useAddOrgMember,
+  useInviteOrgMember,
+  useRemoveOrgMember,
+  useUpdateOrgMember,
+} from "./use-org-members";
+import {
   useArtifactsExist,
   useAssignToolMutation,
   useRevokeArtifactShareMutation,
@@ -122,6 +128,178 @@ afterAll(() => {
   revoke.mockRestore();
   publish.mockRestore();
 });
+
+for (const kind of ["add", "invite", "update", "remove"] as const) {
+  test.each([false, true])(
+    `${kind} member refreshes summaries only on success; failure=%s`,
+    async (fails) => {
+      const member = {
+        createdAt: "2026-10-12T00:00:00Z",
+        email: "member@example.com",
+        name: "Member",
+        phone: null,
+        role: "member" as const,
+        userId: "member",
+      };
+
+      const add = spyOn(client, "addOrgMember").mockResolvedValue({
+        member,
+        temporaryPassword: null,
+      });
+
+      const invite = spyOn(client, "inviteOrgMember").mockResolvedValue({
+        delivered: true,
+        invite: {
+          createdAt: member.createdAt,
+          email: member.email,
+          expiresAt: "2026-10-19T00:00:00Z",
+          id: "invite",
+          orgId: "team",
+          role: "member",
+        },
+        token: null,
+      });
+
+      const update = spyOn(client, "updateOrgMember").mockResolvedValue({
+        member,
+      });
+
+      const remove = spyOn(client, "removeOrgMember").mockResolvedValue(
+        undefined
+      );
+
+      const requests = [add, invite, update, remove];
+
+      if (fails) {
+        for (const request of requests) {
+          request.mockRejectedValue(new Error("Retry member change"));
+        }
+      }
+
+      let addMutation!: ReturnType<typeof useAddOrgMember>;
+      let inviteMutation!: ReturnType<typeof useInviteOrgMember>;
+      let updateMutation!: ReturnType<typeof useUpdateOrgMember>;
+      let removeMutation!: ReturnType<typeof useRemoveOrgMember>;
+
+      function Probe() {
+        addMutation = useAddOrgMember("team");
+        inviteMutation = useInviteOrgMember("team");
+        updateMutation = useUpdateOrgMember("team");
+        removeMutation = useRemoveOrgMember("team");
+
+        return null;
+      }
+
+      const summaryKeys = [
+        queryKeys.organizationOverview("parent", "parent"),
+        queryKeys.organizationOverview("parent", "team"),
+      ];
+
+      const reads = summaryKeys.map(() => mock(async () => 15));
+
+      const stops = summaryKeys.map((key, index) =>
+        new QueryObserver(queryClient, {
+          initialData: 14,
+          queryFn: reads[index],
+          queryKey: key,
+          staleTime: Number.POSITIVE_INFINITY,
+        }).subscribe(() => {})
+      );
+
+      const membersKey = queryKeys.orgMembers("team");
+      const otherMembers = queryKeys.orgMembers("other");
+      const otherMemory = queryKeys.orgMemory("other");
+      queryClient.setQueryData(membersKey, { members: [] });
+      queryClient.setQueryData(otherMembers, { members: [] });
+      queryClient.setQueryData(otherMemory, { content: "Private memory" });
+
+      try {
+        renderToString(
+          createElement(
+            QueryClientProvider,
+            { client: queryClient },
+            createElement(Probe)
+          )
+        );
+
+        const operation =
+          kind === "add"
+            ? addMutation.mutateAsync({
+                email: member.email,
+                name: member.name,
+                role: "member",
+              })
+            : kind === "invite"
+              ? inviteMutation.mutateAsync({
+                  email: member.email,
+                  role: "member",
+                })
+              : kind === "update"
+                ? updateMutation.mutateAsync({
+                    request: { role: "viewer" },
+                    userId: member.userId,
+                  })
+                : removeMutation.mutateAsync(member.userId);
+
+        if (fails) {
+          await expect(operation).rejects.toThrow();
+        } else {
+          await operation;
+        }
+
+        expect(queryClient.getQueryState(membersKey)?.isInvalidated).toBe(
+          !fails
+        );
+        expect(summaryKeys.map((key) => queryClient.getQueryData(key))).toEqual(
+          fails ? [14, 14] : [15, 15]
+        );
+
+        for (const read of reads) {
+          expect(read).toHaveBeenCalledTimes(fails ? 0 : 1);
+        }
+
+        expect(queryClient.getQueryState(otherMembers)?.isInvalidated).toBe(
+          false
+        );
+        expect(queryClient.getQueryState(otherMemory)?.isInvalidated).toBe(
+          false
+        );
+        expect(
+          queryClient.getQueryData<{ content: string }>(otherMemory)
+        ).toEqual({
+          content: "Private memory",
+        });
+
+        if (kind === "add") {
+          expect(add).toHaveBeenCalledWith("team", {
+            email: member.email,
+            name: member.name,
+            role: "member",
+          });
+        } else if (kind === "invite") {
+          expect(invite).toHaveBeenCalledWith("team", {
+            email: member.email,
+            role: "member",
+          });
+        } else if (kind === "update") {
+          expect(update).toHaveBeenCalledWith("team", member.userId, {
+            role: "viewer",
+          });
+        } else {
+          expect(remove).toHaveBeenCalledWith("team", member.userId);
+        }
+      } finally {
+        for (const stop of stops) {
+          stop();
+        }
+
+        for (const request of requests) {
+          request.mockRestore();
+        }
+      }
+    }
+  );
+}
 
 function renderMutation() {
   let mutation: ReturnType<typeof useRevokeArtifactShareMutation>;

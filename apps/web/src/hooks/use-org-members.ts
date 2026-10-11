@@ -92,7 +92,9 @@ function invalidateOrgMembers(
   queryClient: ReturnType<typeof useQueryClient>,
   orgId: string
 ) {
-  return invalidateQueries(queryClient, queryKeys.orgMembers(orgId));
+  return invalidateQueries(queryClient, queryKeys.orgMembers(orgId), [
+    "organizationOverview",
+  ]);
 }
 
 export function useInviteOrgMember(orgId: string) {

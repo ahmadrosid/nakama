@@ -2502,3 +2502,13 @@ Two component cases cover expanded and collapsed modes with an organization and 
 Step 5 and delivery stages 3 and 4 remain open. Next: audit explicit client scope, query keys, cache invalidation, and data portability compatibility. No server permission, file, package, dependency, or helper abstraction was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
 
 Evidence: /tmp/nakama-switcher-teams-{focused,types,format,oxlint,doctor,lint}.log.
+
+### Slice 3ac — Overview refresh after member changes
+
+The existing member cache helper now invalidates Organization overview queries after successful additions, invitations, updates, or removals. Active parent and team overviews refresh before the mutation finishes. Inactive overview queries become stale for their next read. Each overview reader retains its explicit tenant header. Unrelated member and private memory caches remain untouched. Failed member mutations retain existing member and overview data.
+
+Eight new cases exercise all four existing mutation hooks with success and failure responses. Query observers prove parent and team summaries refresh on success and retain their prior values on failure. The cases also check exact tenant-scoped requests and retained unrelated member and memory data. All 168 focused component and mutation tests passed with 1201 assertions. Complete web types, scoped anti-slop, Ultracite, and git diff --check passed. React Doctor retained 91/100 with the same two assignment complexity warnings and no errors.
+
+One verification repair completed the typed member and invitation response fixtures and supplied the cache value's type. No production repair, new file, package, dependency, or helper abstraction was needed. Step 5 and delivery stages 3 and 4 remain open. Next: source catalog invalidation, account cache boundaries, and data portability compatibility. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
+
+Evidence: /tmp/nakama-member-overview-{focused,types,format,oxlint,doctor,lint}.log.
