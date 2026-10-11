@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { AuthService } from "../services/auth-service";
 import { setupTestConfigDir } from "../test-config-dir";
 import { createMinimalHonoApp } from "./test-app-helpers";
-import { setupFreshInstallSession } from "./test-session-helpers";
+import {
+  type AppFetch,
+  setupFreshInstallSession,
+} from "./test-session-helpers";
 
 setupTestConfigDir("nakama-login-timing-test-");
 
@@ -16,7 +19,7 @@ class CountingAuthService extends AuthService {
   }
 }
 
-async function login(app: { fetch: typeof fetch }, email: string) {
+async function login(app: AppFetch, email: string) {
   return await app.fetch(
     new Request("http://localhost:4310/v1/auth/login", {
       body: JSON.stringify({ email, password: "wrong-password" }),

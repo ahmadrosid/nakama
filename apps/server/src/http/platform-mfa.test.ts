@@ -648,6 +648,19 @@ test("malformed passkey credentials cannot change authentication factors", async
     );
 
     expect(enrollment.status).toBe(400);
+
+    const removal = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/mfa/passkey/disable", {
+        body: JSON.stringify({ challenge: "fake", credential }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(removal.status).toBe(400);
   }
 
   expect(await databaseAdapter.listPasskeys(user.id)).toEqual(before);
