@@ -20,6 +20,42 @@ function fakeStdioServer(id = "stdio-server"): StoredMcpServerRecord {
 }
 
 describe("McpClientManager", () => {
+  test("invalid stored configuration cannot start a client", async () => {
+    let connections = 0;
+
+    using _connect = spyOn(Client.prototype, "connect").mockImplementation(
+      async () => {
+        connections += 1;
+      }
+    );
+
+    const manager = new McpClientManager();
+
+    const cases: Array<Pick<StoredMcpServerRecord, "config" | "transport">> = [
+      { config: null, transport: "stdio" },
+      { config: { command: 7 }, transport: "stdio" },
+      { config: { args: [7], command: "fake-mcp" }, transport: "stdio" },
+      {
+        config: { command: "fake-mcp", env: { TOKEN: 7 } },
+        transport: "stdio",
+      },
+      { config: { url: 7 }, transport: "http" },
+      {
+        config: { headers: { Authorization: 7 }, url: "https://example.com" },
+        transport: "http",
+      },
+    ];
+
+    for (const input of cases) {
+      await expect(
+        manager.connect({ ...fakeStdioServer(), ...input })
+      ).rejects.toThrow();
+    }
+
+    expect(connections).toBe(0);
+    expect(manager.getConnectedCount()).toBe(0);
+  });
+
   test("forgets a connection when its transport closes", async () => {
     const clients: Client[] = [];
 
@@ -81,7 +117,13 @@ describe("McpClientManager", () => {
         await listToolsGate;
 
         return {
-          tools: [{ description: "Demo", inputSchema: {}, name: "demo_tool" }],
+          tools: [
+            {
+              description: "Demo",
+              inputSchema: { type: "object" as const },
+              name: "demo_tool",
+            },
+          ],
         };
       }
     );
@@ -183,7 +225,13 @@ describe("McpClientManager", () => {
         await listToolsGate;
 
         return {
-          tools: [{ description: "Demo", inputSchema: {}, name: "demo_tool" }],
+          tools: [
+            {
+              description: "Demo",
+              inputSchema: { type: "object" as const },
+              name: "demo_tool",
+            },
+          ],
         };
       }
     );

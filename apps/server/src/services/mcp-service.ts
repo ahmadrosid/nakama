@@ -81,16 +81,21 @@ function buildOAuthProvider(
   return provider;
 }
 
-function withOAuthGrant(config: McpServerConfig, grant?: McpOAuthGrant) {
+function withOAuthGrant(
+  config: StoredMcpServerRecord["config"],
+  grant?: McpOAuthGrant
+) {
   if (!grant) {
     return config;
   }
 
-  if (!("url" in config)) {
+  const record = readUnknownRecord(config);
+
+  if (!record?.has("url")) {
     throw new Error("OAuth grants require an HTTP MCP server config.");
   }
 
-  return { ...config, oauth: grant };
+  return { ...Object.fromEntries(record), oauth: grant };
 }
 
 export class McpService {
@@ -700,9 +705,21 @@ function formatMcpServerInUseMessage(profiles: ProfileRef[]): string {
 
 const REDACTED_SECRET_VALUE = "••••••••";
 
-function resolveMcpConfig<T>(
+function resolveMcpConfig(
+  transport: "http",
+  config: StoredMcpServerRecord["config"]
+): StoredMcpHttpConfig;
+function resolveMcpConfig(
+  transport: "stdio",
+  config: StoredMcpServerRecord["config"]
+): McpStdioConfig;
+function resolveMcpConfig(
   transport: McpTransport,
-  config: T
+  config: StoredMcpServerRecord["config"]
+): McpServerConfig;
+function resolveMcpConfig(
+  transport: McpTransport,
+  config: StoredMcpServerRecord["config"]
 ): McpServerConfig {
   const record = readUnknownRecord(config);
 

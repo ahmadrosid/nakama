@@ -16,6 +16,7 @@ import type {
 } from "@nakama/core";
 import { getProfileSoulDir } from "@nakama/core";
 import type { CachedMcpTool, StoredMcpServerRecord } from "@nakama/db";
+import { z } from "zod";
 
 /** A server that does not answer `initialize` must not hold a connect open. */
 const CONNECT_TIMEOUT_MS = 30_000;
@@ -452,10 +453,10 @@ function connectionKey(
 
 function createTransport(
   transport: McpTransport,
-  config: McpServerConfig,
+  config: StoredMcpServerRecord["config"],
   options?: ConnectOptions
 ): Transport {
-  if (transport === "http" && "url" in config) {
+  if (transport === "http") {
     const http = readHttpConfig(config);
 
     const requestInit = { headers: http.headers };
@@ -468,7 +469,7 @@ function createTransport(
     );
   }
 
-  if (transport === "stdio" && "command" in config) {
+  if (transport === "stdio") {
     const stdio = readStdioConfig(config);
 
     const cwd =
@@ -482,7 +483,17 @@ function createTransport(
   throw new Error(`Unsupported MCP transport: ${transport}`);
 }
 
-function readStdioConfig(config: McpStdioConfig): McpStdioConfig {
+function readStdioConfig(
+  value: StoredMcpServerRecord["config"]
+): McpStdioConfig {
+  const config = z
+    .object({
+      args: z.array(z.string()).optional(),
+      command: z.string(),
+      env: z.record(z.string(), z.string()).optional(),
+    })
+    .parse(value);
+
   const command = config.command.trim();
 
   if (!command) {
@@ -502,7 +513,14 @@ function readStdioConfig(config: McpStdioConfig): McpStdioConfig {
   return result;
 }
 
-function readHttpConfig(config: McpHttpConfig): McpHttpConfig {
+function readHttpConfig(value: StoredMcpServerRecord["config"]): McpHttpConfig {
+  const config = z
+    .object({
+      headers: z.record(z.string(), z.string()).optional(),
+      url: z.string(),
+    })
+    .parse(value);
+
   const url = config.url.trim();
 
   if (!url) {

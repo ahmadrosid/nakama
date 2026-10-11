@@ -8,8 +8,14 @@ import type {
   OAuthClientMetadata,
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
+import {
+  OAuthClientInformationFullSchema,
+  OAuthTokensSchema,
+} from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { McpHttpConfig } from "@nakama/core";
 import { nanoid } from "@nakama/core";
+import type { StoredMcpServerRecord } from "@nakama/db";
+import { z } from "zod";
 
 /**
  * OAuth grant for one HTTP MCP server. It lives inside the server's config
@@ -31,10 +37,24 @@ export interface McpOAuthGrant {
 
 export type StoredMcpHttpConfig = McpHttpConfig & { oauth?: McpOAuthGrant };
 
+const StoredOAuthConfigSchema = z.object({
+  oauth: z
+    .object({
+      callbackBaseUrl: z.string().optional(),
+      clientInformation: OAuthClientInformationFullSchema.optional(),
+      codeVerifier: z.string().optional(),
+      state: z.string().optional(),
+      tokens: OAuthTokensSchema.optional(),
+    })
+    .optional(),
+});
+
 export function readMcpOAuthGrant(
-  config: StoredMcpHttpConfig | undefined
+  config: StoredMcpServerRecord["config"]
 ): McpOAuthGrant | undefined {
-  return config?.oauth;
+  const parsed = StoredOAuthConfigSchema.safeParse(config);
+
+  return parsed.success ? parsed.data.oauth : undefined;
 }
 
 /** A stalled well-known endpoint must not hold a Test connection open (#326). */
