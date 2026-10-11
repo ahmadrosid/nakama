@@ -778,7 +778,7 @@ interface CustomToolHandlerConfig {
   requiresApiKey?: boolean;
 }
 
-function readHandlerConfig(
+export function readHandlerConfig(
   handlerConfig: StoredToolRecord["handlerConfig"]
 ): CustomToolHandlerConfig | null {
   const parsed = HandlerConfigSchema.safeParse(handlerConfig);

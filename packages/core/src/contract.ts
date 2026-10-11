@@ -666,7 +666,7 @@ export interface OrgSharedResourceResponse {
 
 export interface OrgSharedResourceSummary extends OrgSharedResourcePublication {
   label: string;
-  readiness: "ready" | "unavailable";
+  readiness: "ready" | "requires_setup" | "unavailable";
   sourceOrganization: { id: string; name: string };
 }
 

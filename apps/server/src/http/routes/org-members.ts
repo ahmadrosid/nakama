@@ -194,7 +194,7 @@ export function registerOrgMemberRoutes(
       resources: z.array(
         sharedResourceResponseSchema.shape.publication.extend({
           label: z.string(),
-          readiness: z.enum(["ready", "unavailable"]),
+          readiness: z.enum(["ready", "requires_setup", "unavailable"]),
           sourceOrganization: z.object({ id: z.string(), name: z.string() }),
         })
       ),

@@ -54,9 +54,11 @@ import { AutomationRunner } from "./automation-runner";
 import { AutomationService } from "./automation-service";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
 import {
+  deleteOrgToolCredentials,
   loadToolApiKey,
   loadToolSetup,
   saveToolApiKey,
+  saveToolEnv,
   saveToolSetup,
 } from "./custom-tool-shared";
 import {
@@ -4284,6 +4286,111 @@ if __name__ == "__main__":
 });
 
 describe("OrgService shared resource publications", () => {
+  test("published tool readiness requires the active team's credentials", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    await seedSharedAgentSelection(db, orgService);
+    const now = new Date().toISOString();
+    for (const handlerType of ["javascript", "python"] as const) {
+      const id = `credential_tool_${handlerType}`;
+      await db.upsertTool({
+        createdAt: now,
+        description: "Credential probe",
+        handlerConfig: {
+          env: [{ name: "SERVICE_TOKEN", secret: true }],
+          modulePath: handlerType === "javascript" ? "probe.js" : "probe.py",
+          requiresApiKey: true,
+        },
+        handlerType,
+        id,
+        name: id,
+        orgId: "org_parent",
+        updatedAt: now,
+      });
+      const publication = await orgService.publishSharedResource(
+        "org_parent",
+        { resourceId: id, resourceKind: "tool" },
+        "user_creator"
+      );
+      await saveToolApiKey("org_parent", id, "private-parent-key");
+      await saveToolEnv(
+        "org_parent",
+        id,
+        [{ name: "SERVICE_TOKEN", secret: true }],
+        {
+          SERVICE_TOKEN: "private-parent-token",
+        }
+      );
+      const parent = await orgService.listSharedResources(
+        "org_parent",
+        "user_creator"
+      );
+      expect(
+        parent.resources.find((item) => item.id === publication.id)?.readiness
+      ).toBe("ready");
+      const first = await orgService.listSharedResources(
+        "org_team_a",
+        "user_other"
+      );
+      expect(
+        first.resources.find((item) => item.id === publication.id)?.readiness
+      ).toBe("requires_setup");
+      expect(JSON.stringify(first)).not.toContain("private-parent");
+      await saveToolApiKey("org_team_a", id, "private-team-key");
+      expect(
+        (
+          await orgService.listSharedResources("org_team_a", "user_other")
+        ).resources.find((item) => item.id === publication.id)?.readiness
+      ).toBe("requires_setup");
+      await saveToolEnv(
+        "org_team_a",
+        id,
+        [{ name: "SERVICE_TOKEN", secret: true }],
+        {
+          SERVICE_TOKEN: "private-team-token",
+        }
+      );
+      const ready = await orgService.getOrganizationOverview(
+        "org_team_a",
+        "user_other"
+      );
+      expect(
+        ready.sharedResources.find((item) => item.id === publication.id)
+          ?.readiness
+      ).toBe("ready");
+      expect(JSON.stringify(ready)).not.toContain("private-team");
+      expect(
+        (
+          await orgService.listSharedResources("org_team_b", "user_other")
+        ).resources.find((item) => item.id === publication.id)?.readiness
+      ).toBe("requires_setup");
+      await deleteOrgToolCredentials("org_team_a");
+      expect(
+        (
+          await orgService.listSharedResources("org_team_a", "user_other")
+        ).resources.find((item) => item.id === publication.id)?.readiness
+      ).toBe("requires_setup");
+      const tool = (await db.getTool(id))!;
+      for (const handlerConfig of [
+        null,
+        [],
+        { modulePath: "probe.js", requiresApiKey: "true" },
+      ]) {
+        await db.upsertTool({ ...tool, handlerConfig });
+        expect(
+          (
+            await orgService.listSharedResources("org_team_a", "user_other")
+          ).resources.find((item) => item.id === publication.id)?.readiness
+        ).toBe("unavailable");
+      }
+      await db.upsertTool(tool);
+      await db.deleteTool(id);
+      expect(
+        (
+          await orgService.listSharedResources("org_team_a", "user_other")
+        ).resources.some((item) => item.id === publication.id)
+      ).toBe(false);
+    }
+  });
   test("agent publication requires published assignments and preserves private source files", async () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     await seedTeamParent(db);

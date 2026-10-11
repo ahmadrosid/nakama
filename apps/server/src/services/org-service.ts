@@ -76,7 +76,12 @@ import {
   seedOrgSuperBotProfile,
 } from "@nakama/db";
 import type { AuthService } from "./auth-service";
-import { deleteOrgToolCredentials } from "./custom-tool-shared";
+import {
+  deleteOrgToolCredentials,
+  loadToolApiKey,
+  loadToolEnv,
+  readHandlerConfig,
+} from "./custom-tool-shared";
 import { namespacedMcpToolName } from "./mcp-tool-bridge";
 import { loadMfaPolicy } from "./mfa-config";
 import {
@@ -231,12 +236,37 @@ export class OrgService {
     const resources: ListOrgSharedResourcesResponse["resources"] = [];
     for (const publication of publications) {
       let label = publication.resourceId;
-      let readiness: "ready" | "unavailable" = "ready";
+      let readiness: ListOrgSharedResourcesResponse["resources"][number]["readiness"] =
+        "ready";
       try {
         ({ label } = await this.validateSharedResourceSource(
           parent.id,
           publication
         ));
+        if (publication.resourceKind === "tool") {
+          const tool = await this.databaseAdapter.getTool(
+            publication.resourceId
+          );
+          if (tool && ["javascript", "python"].includes(tool.handlerType)) {
+            const config = readHandlerConfig(tool.handlerConfig);
+            if (!config) {
+              throw new NakamaApiError(
+                "Tool configuration is unavailable.",
+                404
+              );
+            }
+            const [apiKey, env] = await Promise.all([
+              loadToolApiKey(orgId, tool.id),
+              loadToolEnv(orgId, tool.id),
+            ]);
+            if (
+              (config.requiresApiKey === true && !apiKey) ||
+              config.env.some((entry) => !env[entry.name])
+            ) {
+              readiness = "requires_setup";
+            }
+          }
+        }
       } catch (error) {
         if (
           !(

@@ -1031,7 +1031,7 @@ test("publication lists derive the active team's parent and enforce read access"
   expect(
     spec.components.schemas.ListOrgSharedResourcesResponse.properties.resources
       .items.properties.readiness.enum
-  ).toEqual(["ready", "unavailable"]);
+  ).toEqual(["ready", "requires_setup", "unavailable"]);
 });
 
 test("publication HTTP mutations deny team admins, members, viewers, and wrong tenant context", async () => {
