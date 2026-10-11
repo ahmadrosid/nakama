@@ -53,6 +53,135 @@ afterEach(async () => {
 }, 30_000);
 
 describe("Nakama data portability", () => {
+  test("backup restore preserves current publication authority and shared history", async () => {
+    const databasePath = join(rootDir, "sqlite", "nakama.sqlite");
+    const database = await createDatabase(`file:${databasePath}`);
+    const raw = new Database(databasePath);
+    try {
+      raw.exec(
+        "INSERT INTO organizations (id,name,slug,created_at,updated_at) VALUES ('parent','Parent','parent','now','now')"
+      );
+      raw.exec(
+        "INSERT INTO organizations (id,name,slug,parent_org_id,created_at,updated_at) VALUES ('team','Team','team','parent','now','now')"
+      );
+      for (const id of ["active", "revoked", "deleted", "replaced"]) {
+        raw
+          .query(
+            "INSERT INTO profiles (id,name,org_id,created_at,updated_at) VALUES (?,?,'parent','now','now')"
+          )
+          .run(id, id);
+        await database.adapter.publishOrgSharedResource({
+          createdAt: "now",
+          id: `${id}_publication`,
+          orgId: "parent",
+          resourceId: id,
+          resourceKind: "agent",
+          updatedAt: "now",
+        });
+      }
+      const instance = await database.adapter.createSharedAgentInstance(
+        "team",
+        "revoked_publication",
+        "shared_instance",
+        "now"
+      );
+      raw.exec(
+        "INSERT INTO profiles (id,name,org_id,created_at,updated_at) VALUES ('unpublished','Unpublished','parent','now','now')"
+      );
+      raw
+        .query(
+          "INSERT INTO sessions (id,profile_id,channel,org_id,created_at,updated_at) VALUES ('history',?,'web','team','now','now')"
+        )
+        .run(instance.id);
+      raw.exec(
+        "INSERT INTO session_messages (id,session_id,seq,payload,created_at) VALUES ('message','history',0,'{\"role\":\"user\",\"content\":\"Team history\"}','now')"
+      );
+      const workspace = join(rootDir, "orgs", "team", "profiles", instance.id);
+      await mkdir(workspace, { recursive: true });
+      await writeFile(join(workspace, "MEMORY.md"), "Team memory");
+      const backup = await createNakamaDataExport({ databasePath, rootDir });
+      raw.exec("DELETE FROM profiles WHERE id = 'deleted'");
+      raw.exec(
+        "UPDATE org_shared_resources SET resource_id = 'unpublished' WHERE id = 'replaced_publication'"
+      );
+      await restoreNakamaDataImport(backup.data, {
+        beforeReplace: () => {
+          raw.exec(
+            "DELETE FROM org_shared_resources WHERE id = 'revoked_publication'"
+          );
+          raw.close();
+          database.release();
+        },
+        confirm: true,
+        databasePath,
+        rootDir,
+      });
+      const restored = new Database(databasePath);
+      try {
+        expect(
+          restored
+            .query("SELECT id FROM org_shared_resources ORDER BY id")
+            .all()
+        ).toEqual([{ id: "active_publication" }]);
+        expect(
+          restored.query("SELECT id FROM profiles WHERE id = 'deleted'").get()
+        ).toEqual({ id: "deleted" });
+        expect(
+          restored
+            .query(
+              "SELECT profile_id, team_org_id, source_profile_id, publication_id FROM shared_agent_instances"
+            )
+            .all()
+        ).toEqual([
+          {
+            profile_id: instance.id,
+            publication_id: "revoked_publication",
+            source_profile_id: "revoked",
+            team_org_id: "team",
+          },
+        ]);
+        expect(
+          restored
+            .query("SELECT session_id, payload FROM session_messages")
+            .all()
+        ).toEqual([
+          {
+            payload: '{"role":"user","content":"Team history"}',
+            session_id: "history",
+          },
+        ]);
+        expect(await readFile(join(workspace, "MEMORY.md"), "utf8")).toBe(
+          "Team memory"
+        );
+      } finally {
+        restored.close();
+      }
+      const freshRoot = join(rootDir, "fresh");
+      const freshDatabasePath = join(freshRoot, "sqlite", "nakama.sqlite");
+      await restoreNakamaDataImport(backup.data, {
+        confirm: true,
+        databasePath: freshDatabasePath,
+        rootDir: freshRoot,
+      });
+      const fresh = new Database(freshDatabasePath);
+      try {
+        expect(
+          fresh.query("SELECT id FROM org_shared_resources").all()
+        ).toEqual([]);
+        expect(
+          fresh.query("SELECT profile_id FROM shared_agent_instances").all()
+        ).toEqual([{ profile_id: instance.id }]);
+        expect(fresh.query("SELECT id FROM session_messages").all()).toEqual([
+          { id: "message" },
+        ]);
+      } finally {
+        fresh.close();
+      }
+    } finally {
+      raw.close();
+      database.release();
+    }
+  });
   test("team archives retain shared references and local history without parent or sibling data", async () => {
     const databasePath = join(rootDir, "sqlite", "nakama.sqlite");
     const database = await createDatabase(`file:${databasePath}`);

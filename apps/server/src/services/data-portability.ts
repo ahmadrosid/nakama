@@ -1002,6 +1002,99 @@ export async function restoreNakamaDataImport(
       await options.beforeReplace();
     }
 
+    // Read after requests drain, so a publication revoked during staging stays revoked.
+    const permittedPublications = new Set<string>();
+    if (liveDatabasePath && (await pathExists(liveDatabasePath))) {
+      const live = new Database(liveDatabasePath, { readonly: true });
+      try {
+        if (
+          live
+            .query(
+              "SELECT 1 FROM sqlite_master WHERE type='table' AND name='org_shared_resources'"
+            )
+            .get()
+        ) {
+          const publications = live
+            .query<
+              {
+                id: string;
+                org_id: string;
+                resource_kind: string;
+                resource_id: string;
+              },
+              []
+            >(
+              "SELECT id, org_id, resource_kind, resource_id FROM org_shared_resources"
+            )
+            .all();
+          for (const publication of publications) {
+            permittedPublications.add(
+              JSON.stringify([
+                publication.id,
+                publication.org_id,
+                publication.resource_kind,
+                publication.resource_id,
+              ])
+            );
+          }
+        }
+      } finally {
+        live.close();
+      }
+    }
+    for (const candidate of stagedDatabases) {
+      if (!(candidate && (await pathExists(candidate)))) {
+        continue;
+      }
+      const staged = new Database(candidate);
+      try {
+        if (
+          staged
+            .query(
+              "SELECT 1 FROM sqlite_master WHERE type='table' AND name='org_shared_resources'"
+            )
+            .get()
+        ) {
+          staged
+            .transaction(() => {
+              const publications = staged
+                .query<
+                  {
+                    id: string;
+                    org_id: string;
+                    resource_kind: string;
+                    resource_id: string;
+                  },
+                  []
+                >(
+                  "SELECT id, org_id, resource_kind, resource_id FROM org_shared_resources"
+                )
+                .all();
+              const remove = staged.query(
+                "DELETE FROM org_shared_resources WHERE id = ?"
+              );
+              for (const publication of publications) {
+                if (
+                  !permittedPublications.has(
+                    JSON.stringify([
+                      publication.id,
+                      publication.org_id,
+                      publication.resource_kind,
+                      publication.resource_id,
+                    ])
+                  )
+                ) {
+                  remove.run(publication.id);
+                }
+              }
+            })
+            .immediate();
+        }
+      } finally {
+        staged.close();
+      }
+    }
+
     const existingEntries = await listMovableTopLevelEntries(
       rootDir,
       keptEntries

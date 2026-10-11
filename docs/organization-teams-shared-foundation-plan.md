@@ -1766,3 +1766,12 @@ The touched test file includes three previously authorized type corrections: clo
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: audit installation backup restore for publication activation and source revision refresh, then invocation compatibility and the delivery-stage gate.
 No new source file, package, or dependency was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran.
 Evidence: /tmp/nakama-org-export-ref-focused.log, /tmp/nakama-org-export-ref-http.log, /tmp/nakama-org-export-ref-types.log, and /tmp/nakama-org-export-ref-lint.log.
+
+### Slice 2aw — backup restore publication authority
+Installation backup restore now filters staged publications against the destination's current publication IDs, owner IDs, resource kinds, and resource IDs. It reads destination authority after the existing beforeReplace hook drains active requests. A publication removed during staging cannot return through the backup. A changed source under the same publication ID cannot regain the old grant.
+Fresh destinations receive no active publications. Existing matching publications remain available subject to normal source checks. Restored shared instance links stay intact; a missing publication keeps the reference unavailable. Restoring a deleted profile does not republish it. Team workspace memory and stored session messages remain intact.
+Tests cover matching grants, revocation inside beforeReplace, deleted sources, changed source IDs, fresh destinations, and retained references, memory, and conversation data. Legacy backups without publication tables still pass. The change runs before live files move and retains existing rollback and reopen handling.
+Checks: 62 focused service, platform route, and setup import tests passed across three files. The complete server type check, lint across 1532 files, and git diff --check passed. One test repair changed its replacement resource to an unpublished profile, avoiding a fixture collision with the existing unique publication constraint.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: verify source revision refresh after restore, then invocation compatibility and the delivery-stage gate.
+No new source file, package, or dependency was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-restore-publications-focused.log, /tmp/nakama-restore-publications-types.log, and /tmp/nakama-restore-publications-lint.log.
