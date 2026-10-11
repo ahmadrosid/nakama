@@ -2,6 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { asTestFetch } from "../../providers/test-helpers";
 import { privateJson } from "./actions";
 import { MeetingStore } from "./store";
 import * as transcription from "./transcription";
@@ -14,7 +15,7 @@ test.each([true, false])(
     const store = new MeetingStore(directory, "org");
 
     const request = spyOn(globalThis, "fetch").mockImplementation(
-      async (_url, options) => {
+      asTestFetch(async (_url, options) => {
         const body = JSON.parse(String(options?.body));
         expect(body.messages[1].content).toContain("Plan the September launch");
 
@@ -23,7 +24,7 @@ test.each([true, false])(
               choices: [{ message: { content: "September Launch Plan" } }],
             })
           : new Response(null, { status: 503 });
-      }
+      })
     );
 
     try {
