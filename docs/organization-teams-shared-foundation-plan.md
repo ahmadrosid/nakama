@@ -2492,3 +2492,13 @@ The step 4 audit inspected OrganizationPage, OrganizationOverview, OrganizationT
 Step 4 is complete. Step 5 and delivery stages 3 and 4 remain open. Next: client labels, query scope, cache invalidation, and import/export/archive/restore compatibility. Pixel layout remains unverified because browser checks are excluded by the goal. No new file, package, dependency, server permission, full suite, build, paid call, push, or PR was added. Final delivery checks remain required.
 
 Evidence: /tmp/nakama-org-layout-{focused,types,format,oxlint,doctor,lint}.log.
+
+### Slice 3ab — Team labels in the existing switcher
+
+The existing organization switcher now identifies the active child tenant as a team in both expanded and collapsed accessible names. Mixed lists identify team rows and use a matching selection heading. Each selectable row has an accessible action name that distinguishes organization and team destinations. The switcher still uses stored tenant IDs and each row's own membership role. Existing platform creation, standalone organization behavior, and edit permissions remain in place.
+
+Two component cases cover expanded and collapsed modes with an organization and team that share the same name. They confirm current-team selection sends no request, selecting the organization sends its exact ID, the active root receives the organization label, and each row retains its own edit permission. All 147 component tests passed with 1091 assertions. Complete web types, scoped anti-slop, Ultracite, and git diff --check passed. React Doctor retained 91/100 with the same two assignment complexity warnings and no errors. No verification repair was needed.
+
+Step 5 and delivery stages 3 and 4 remain open. Next: audit explicit client scope, query keys, cache invalidation, and data portability compatibility. No server permission, file, package, dependency, or helper abstraction was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
+
+Evidence: /tmp/nakama-switcher-teams-{focused,types,format,oxlint,doctor,lint}.log.

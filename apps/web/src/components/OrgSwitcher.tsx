@@ -68,15 +68,17 @@ function OrgSwitcherTrigger({
   collapsed,
   initial,
   label,
+  isTeam,
   ...props
 }: {
   collapsed: boolean;
   initial: string;
   label: string;
+  isTeam: boolean;
 } & ComponentProps<typeof Button>) {
   return (
     <Button
-      aria-label={collapsed ? `Current organization: ${label}` : undefined}
+      aria-label={`Current ${isTeam ? "team" : "organization"}: ${label}`}
       className={cn(
         "font-normal hover:bg-sidebar-accent/60 motion-reduce:transition-none",
         collapsed
@@ -378,6 +380,7 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
             <OrgSwitcherTrigger
               collapsed={collapsed}
               initial={initial}
+              isTeam={Boolean(activeOrg?.parentOrgId)}
               label={label}
             />
           }
@@ -391,7 +394,9 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
         >
           <div className="border-border/50 border-b px-2 py-1.5">
             <p className="font-medium text-muted-foreground text-xs">
-              Select organization
+              {orgs.some((org) => org.parentOrgId)
+                ? "Select organization or team"
+                : "Select organization"}
             </p>
           </div>
           <div className="p-1">
@@ -400,6 +405,7 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
             ) : null}
             {orgs.map((org) => (
               <DropdownMenuItem
+                aria-label={`Switch to ${org.parentOrgId ? "team" : "organization"} ${org.name}`}
                 className="pr-1"
                 key={org.id}
                 onClick={() => {
@@ -409,6 +415,11 @@ export function OrgSwitcher({ collapsed = false }: OrgSwitcherProps) {
                 }}
               >
                 <span className="min-w-0 flex-1 truncate">{org.name}</span>
+                {org.parentOrgId ? (
+                  <span className="shrink-0 text-muted-foreground text-xs">
+                    Team
+                  </span>
+                ) : null}
                 {canEditOrg(org, Boolean(user.isPlatformAdmin)) ? (
                   <Button
                     aria-label={`Edit ${org.name}`}

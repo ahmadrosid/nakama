@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, type ReactNode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, useLocation } from "react-router-dom";
+import { OrgSwitcher } from "@/components/OrgSwitcher";
 import { OrgSettingsProfileBooleanOverrideField } from "@/components/profiles/ProfileOrgBooleanOverrideField";
 import { ProfileSkillsSettingsSection } from "@/components/profiles/ProfileSkillsSettingsSection";
 import { OrgMembersCard } from "@/components/settings/OrgMembersCard";
@@ -109,7 +110,8 @@ function mount(
     email: "creator@example.com",
     id: "creator",
   },
-  content?: ReactNode
+  content?: ReactNode,
+  orgs: AuthContextValue["orgs"] = []
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -136,7 +138,7 @@ function mount(
           throw new Error("Unused login");
         },
         logout: async () => undefined,
-        orgs: [],
+        orgs,
         platformOrgs: [],
         platformOrgsError: false,
         refreshPlatformOrgs: async () => undefined,
@@ -227,6 +229,91 @@ for (const role of ["member", "viewer"] as const) {
     });
   }
 }
+
+test.each([true, false])(
+  "team switcher retains scoped selection when collapsed=%s",
+  async (collapsed) => {
+    const queries = new QueryClient();
+
+    const team = {
+      ...organization("team-a"),
+      name: "Shared name",
+      role: "admin" as const,
+    };
+
+    const root = {
+      ...organization("root"),
+      name: "Shared name",
+      parentOrgId: null,
+      role: "viewer" as const,
+    };
+
+    const switchOrg = mock(async (_id: string) => undefined);
+
+    const { container, render } = mount(
+      queries,
+      switchOrg,
+      undefined,
+      undefined,
+      <OrgSwitcher collapsed={collapsed} />,
+      [team, root]
+    );
+
+    await render(team);
+
+    const trigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Current team: Shared name"]'
+    )!;
+
+    expect(trigger).not.toBeNull();
+    await act(async () => {
+      trigger.focus();
+      trigger.click();
+      await settle();
+    });
+
+    const current = document.querySelector<HTMLElement>(
+      '[role="menuitem"][aria-label="Switch to team Shared name"]'
+    )!;
+
+    const other = document.querySelector<HTMLElement>(
+      '[role="menuitem"][aria-label="Switch to organization Shared name"]'
+    )!;
+
+    expect(current).not.toBeNull();
+    expect(other).not.toBeNull();
+    expect(
+      current.querySelector('button[aria-label="Edit Shared name"]')
+    ).not.toBeNull();
+    expect(
+      other.querySelector('button[aria-label="Edit Shared name"]')
+    ).toBeNull();
+    await act(async () => {
+      current.click();
+      await settle();
+    });
+    expect(switchOrg).not.toHaveBeenCalled();
+    await act(async () => {
+      trigger.click();
+      await settle();
+    });
+    await act(async () => {
+      document
+        .querySelector<HTMLElement>(
+          '[role="menuitem"][aria-label="Switch to organization Shared name"]'
+        )!
+        .click();
+      await settle();
+    });
+    expect(switchOrg.mock.calls).toEqual([[root.id]]);
+    await render(root);
+    expect(
+      container.querySelector(
+        'button[aria-label="Current organization: Shared name"]'
+      )
+    ).not.toBeNull();
+  }
+);
 
 test.each(["team", "parent", "standalone"] as const)(
   "%s settings keep scoped IDs and accessible member actions",
