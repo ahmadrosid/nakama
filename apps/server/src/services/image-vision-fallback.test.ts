@@ -27,18 +27,22 @@ describe("resolveVisionProviderSelection", () => {
       })),
       visionModel: "second::same-model",
     };
+
     expect(resolveVisionProviderSelection(config)?.instance.id).toBe("second");
+
     for (const changed of [
       { ...config, providers: [config.providers[0]!] },
       { ...config, visionModel: "second::removed-model" },
       { ...config, visionModel: "same-model" },
     ]) {
       let error: unknown;
+
       try {
         resolveVisionProviderSelection(changed);
       } catch (caught) {
         error = caught;
       }
+
       expect(error).toMatchObject({ status: 400 });
       expect(JSON.stringify(error)).not.toContain("private-key");
     }

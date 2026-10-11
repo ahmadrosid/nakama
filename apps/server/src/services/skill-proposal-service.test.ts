@@ -45,14 +45,17 @@ describe("SkillProposalService", () => {
       name: "deploy-notes",
       profileId: profile.id,
     });
+
     const codePath = join(
       getProfileSoulDir(ORG_ID, profile.id),
       "skills",
       "deploy-notes",
       "tool.js"
     );
+
     const code = 'export async function run() { return "local"; }';
     await writeFile(codePath, code);
+
     const staged = await service.stageProposal({
       action: "approve_code",
       orgId: ORG_ID,
@@ -60,6 +63,7 @@ describe("SkillProposalService", () => {
       relativePath: "tool.js",
       skillName: "deploy-notes",
     });
+
     const proposal = (await db.getSkillProposal(ORG_ID, staged.proposalId!))!;
     expect(proposal.status).toBe("pending");
     const now = new Date().toISOString();
@@ -71,6 +75,7 @@ describe("SkillProposalService", () => {
       sourceProfileId: "unavailable-template",
       teamOrgId: ORG_ID,
     });
+
     for (const action of [
       "create",
       "patch",
@@ -91,6 +96,7 @@ describe("SkillProposalService", () => {
         })
       ).rejects.toMatchObject({ status: 403 });
     }
+
     await expect(
       service.approveProposal(ORG_ID, proposal.id, "admin")
     ).rejects.toMatchObject({ status: 403 });

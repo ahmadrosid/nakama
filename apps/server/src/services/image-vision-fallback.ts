@@ -26,6 +26,7 @@ export function resolveVisionProviderSelection(
         "Configured image parsing provider is missing. Update it in Settings.",
     }
   );
+
   if (!selected) {
     return null;
   }

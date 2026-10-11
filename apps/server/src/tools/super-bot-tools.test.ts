@@ -114,6 +114,7 @@ describe("super bot create_tool", () => {
           async getTool(toolId, orgId) {
             expect(toolId).toBe("tool_setup_test");
             expect(orgId).toBe(ORG_ID);
+
             return { tool: stored };
           },
         }),
@@ -224,6 +225,7 @@ describe("super bot create_tool", () => {
       "export async function run(input) { return input; }"
     );
     let reads = 0;
+
     const tools = createSuperBotTools(
       asProfileService({
         async getTool(toolId, orgId) {
@@ -235,6 +237,7 @@ describe("super bot create_tool", () => {
       }),
       new SuperBotSessionState()
     );
+
     const create = tools.find((tool) => tool.name === "create_tool")!;
     await expect(
       create.run(

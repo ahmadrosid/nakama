@@ -85,6 +85,7 @@ export class SkillProposalService {
     if (!profile) {
       throw new NakamaApiError("Profile not found.", 404);
     }
+
     if (await db.getSharedAgentInstance(input.orgId, input.profileId)) {
       throw new NakamaApiError("Shared agent skills are read-only.", 403);
     }
@@ -153,6 +154,7 @@ export class SkillProposalService {
     if (proposal.status !== "pending") {
       throw new NakamaApiError("Only pending proposals can be approved.", 400);
     }
+
     if (await db.getSharedAgentInstance(orgId, proposal.profileId)) {
       throw new NakamaApiError("Shared agent skills are read-only.", 403);
     }
