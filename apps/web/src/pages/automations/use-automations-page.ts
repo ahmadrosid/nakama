@@ -299,13 +299,11 @@ export function useAutomationsPage() {
     navigateToNewChat(superBotProfile.id);
   }
 
-  const runScheduleHint = selected
-    ? selected.nextRunAt
-      ? `Next run ${formatFutureRelativeTime(selected.nextRunAt)}`
-      : selected.lastRunAt
-        ? `Last run ${formatSessionRelativeTime(selected.lastRunAt)}`
-        : "Not run yet"
-    : "";
+  const runScheduleHint = selected?.nextRunAt
+    ? `Next run ${formatFutureRelativeTime(selected.nextRunAt)}`
+    : selected?.lastRunAt
+      ? `Last run ${formatSessionRelativeTime(selected.lastRunAt)}`
+      : "Not run yet";
 
   const selectedSubtitle = selected
     ? [
