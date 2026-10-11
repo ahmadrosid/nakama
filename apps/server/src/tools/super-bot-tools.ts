@@ -461,7 +461,8 @@ export function createSuperBotTools(
         await handler.validateModule(modulePath);
 
         const tool = setup?.toolId
-          ? (await profileService.getTool(setup.toolId)).tool
+          ? (await profileService.getTool(setup.toolId, requireOrgId(context)))
+              .tool
           : await profileService.createTool({
               description,
               handlerConfig,

@@ -1680,3 +1680,14 @@ Checks: 258 focused tests passed across six service and HTTP route files, with s
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: audit tool setup approval authorization, then complete model use checks and remaining compatibility paths.
 No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-published-playground-final-focused.log, /tmp/nakama-published-playground-types.log, and /tmp/nakama-published-playground-lint.log.
+
+### Slice 2an — tool setup retry authorization
+The setup approval route already validates the selected profile in the active tenant before staging a key. Setup storage uses organization-specific sections; new proposals do not name an existing tool.
+The completion retry path had an unscoped lookup for a previously saved tool ID. It now passes the executing organization to ProfileService.getTool, which checks the current catalog and publication before completion can move the staged team key.
+Existing setup tests verify the scoped retry and successful single creation, assignment, and key transfer. A new test retries an approved setup with no profile assignment, denies its tool lookup, and confirms the plan remains approved, the staged key stays in the team, and neither team nor parent tool credentials are created.
+The existing HTTP and ProfileService tests cover current catalog authorization and setup profile scope. No paid provider call runs in these tests.
+Checks: 91 focused tests passed across three files, with two Windows tests skipped. The complete server type check and git diff --check passed. Lint initially found two formatting errors; one formatting repair passed lint across 1532 files.
+This commit includes the existing type corrections in the touched setup test fixtures. Other authorized type cleanup remains uncommitted.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: complete model use checks and remaining compatibility paths.
+No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran.
+Evidence: /tmp/nakama-setup-authorization-focused.log, /tmp/nakama-setup-authorization-types.log, and /tmp/nakama-setup-authorization-lint.log.

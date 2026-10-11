@@ -15,6 +15,7 @@ import {
   approveToolSetup,
   loadToolApiKey,
   loadToolSetup,
+  saveToolSetup,
 } from "../services/custom-tool-shared";
 import type { ProfileService } from "../services/profile-service";
 import {
@@ -91,6 +92,8 @@ describe("super bot create_tool", () => {
             }
 
             assigned.push(profileId);
+
+            return profileResponse({ id: profileId });
           },
           async createTool(request: CreateToolRequest) {
             created.push(request);
@@ -106,9 +109,11 @@ describe("super bot create_tool", () => {
             return stored;
           },
           async getProfile() {
-            return { profile: { id: "target" } };
+            return profileResponse({ id: "target" });
           },
-          async getTool() {
+          async getTool(toolId, orgId) {
+            expect(toolId).toBe("tool_setup_test");
+            expect(orgId).toBe(ORG_ID);
             return { tool: stored };
           },
         }),
@@ -197,6 +202,54 @@ describe("super bot create_tool", () => {
       expect(assigned).toHaveLength(1);
     }
   );
+
+  test("setup retry rejects an unavailable tool before moving its key", async () => {
+    tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-tool-setup-"));
+    process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
+    const setupId = crypto.randomUUID();
+    await saveToolSetup(ORG_ID, {
+      description: "Parent tool",
+      id: setupId,
+      name: "parent_tool",
+      plan: "Read provider data",
+      requiresApiKey: true,
+      sessionId: SESSION_ID,
+      status: "pending",
+      toolId: "parent_tool_id",
+    });
+    await approveToolSetup(ORG_ID, setupId, { apiKey: "team-key" });
+    await mkdir(path.join(tempConfigDir, "tools"), { recursive: true });
+    await writeFile(
+      path.join(tempConfigDir, "tools", "echo.js"),
+      "export async function run(input) { return input; }"
+    );
+    let reads = 0;
+    const tools = createSuperBotTools(
+      asProfileService({
+        async getTool(toolId, orgId) {
+          reads += 1;
+          expect(toolId).toBe("parent_tool_id");
+          expect(orgId).toBe(ORG_ID);
+          throw new Error("Tool unavailable");
+        },
+      }),
+      new SuperBotSessionState()
+    );
+    const create = tools.find((tool) => tool.name === "create_tool")!;
+    await expect(
+      create.run(
+        { handlerConfig: { modulePath: "echo.js" }, setupId },
+        { orgId: ORG_ID, sessionId: SESSION_ID }
+      )
+    ).rejects.toThrow();
+    expect(reads).toBe(1);
+    expect((await loadToolSetup(ORG_ID, setupId)).status).toBe("approved");
+    expect(await loadToolApiKey(ORG_ID, setupId)).toBe("team-key");
+    expect(await loadToolApiKey(ORG_ID, "parent_tool_id")).toBeUndefined();
+    expect(
+      await loadToolApiKey("parent_org", "parent_tool_id")
+    ).toBeUndefined();
+  });
 
   test.each([false, true])(
     "defaults to javascript and returns credential setup when required: %s",
