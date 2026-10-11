@@ -1,6 +1,17 @@
-import type { OrgSharedResourceKind } from "@nakama/core/contract";
+import type {
+  OrganizationOverviewResponse,
+  OrgSharedResourceKind,
+} from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { Card, CardHeader, CardTitle } from "@nakama/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@nakama/ui/dialog";
 import {
   AiBrain01Icon,
   BookOpen01Icon,
@@ -8,6 +19,7 @@ import {
   TaskEdit01Icon,
   UserGroupIcon,
 } from "hugeicons-react";
+import { useRef, useState } from "react";
 import { OrgArchiveCard } from "@/components/settings/OrgArchiveCard";
 import { OrgMembersCard } from "@/components/settings/OrgMembersCard";
 import { OrgMemoryCard } from "@/components/settings/OrgMemoryCard";
@@ -35,6 +47,121 @@ const READINESS_LABELS = {
   requires_setup: "Requires setup",
   unavailable: "Unavailable",
 };
+
+function OrganizationTeamRow({
+  team,
+  activeOrgId,
+}: {
+  team: OrganizationOverviewResponse["teams"][number];
+  activeOrgId: string;
+}) {
+  const { switchOrg } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const running = useRef(false);
+
+  async function handleSwitch() {
+    if (running.current || !team.canSwitch || team.id === activeOrgId) {
+      return;
+    }
+
+    running.current = true;
+    setPending(true);
+    setError(null);
+
+    try {
+      await switchOrg(team.id);
+      setOpen(false);
+    } catch (cause) {
+      setError(formatError(cause));
+    } finally {
+      running.current = false;
+      setPending(false);
+    }
+  }
+
+  return (
+    <li className="space-y-2 px-5 py-4">
+      <Dialog
+        onOpenChange={(nextOpen) => {
+          if (!running.current) {
+            setError(null);
+            setOpen(nextOpen);
+          }
+        }}
+        open={open}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <DialogTrigger
+            render={
+              <Button
+                aria-label={`View ${team.name}`}
+                className="h-auto max-w-full justify-start whitespace-normal px-0 py-0 text-left"
+                variant="link"
+              />
+            }
+          >
+            {team.name}
+          </DialogTrigger>
+          {team.id === activeOrgId && (
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary text-xs">
+              Current
+            </span>
+          )}
+        </div>
+        <DialogContent showCloseButton={!pending}>
+          <DialogHeader>
+            <DialogTitle className="break-words">{team.name}</DialogTitle>
+          </DialogHeader>
+          <dl className="space-y-2">
+            <div>
+              <dt className="text-muted-foreground">Team ID</dt>
+              <dd className="break-all font-mono text-xs">{team.id}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Slug</dt>
+              <dd className="break-words">{team.slug}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Members</dt>
+              <dd className="tabular-nums">{team.memberCount}</dd>
+            </div>
+            {Object.entries(team.localResourceCounts).map(([kind, count]) => (
+              <div className="flex gap-2" key={kind}>
+                <dt className="text-muted-foreground">{kind}</dt>
+                <dd className="tabular-nums">{count}</dd>
+              </div>
+            ))}
+          </dl>
+          {error && (
+            <p className="text-destructive" role="alert">
+              {error}
+            </p>
+          )}
+          {team.canSwitch && team.id !== activeOrgId && (
+            <DialogFooter>
+              <Button disabled={pending} onClick={() => void handleSwitch()}>
+                {pending ? "Switching…" : "Switch to team"}
+              </Button>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
+      <p className="text-muted-foreground text-sm tabular-nums">
+        {team.memberCount} members
+      </p>
+      <dl className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground text-sm tabular-nums">
+        {Object.entries(team.localResourceCounts).map(([kind, count]) => (
+          <div className="flex gap-1" key={kind}>
+            <dt>{kind}</dt>
+            <dd>{count}</dd>
+          </div>
+        ))}
+      </dl>
+    </li>
+  );
+}
 
 export function OrganizationOverview() {
   const { activeOrg } = useAuth();
@@ -125,29 +252,11 @@ export function OrganizationOverview() {
         </CardHeader>
         <ul className="divide-y">
           {teams.map((team) => (
-            <li className="space-y-2 px-5 py-4" key={team.id}>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="break-words font-medium">{team.name}</span>
-                {team.id === activeOrg.id && (
-                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary text-xs">
-                    Current
-                  </span>
-                )}
-              </div>
-              <p className="text-muted-foreground text-sm tabular-nums">
-                {team.memberCount} members
-              </p>
-              <dl className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground text-sm tabular-nums">
-                {Object.entries(team.localResourceCounts).map(
-                  ([kind, count]) => (
-                    <div className="flex gap-1" key={kind}>
-                      <dt>{kind}</dt>
-                      <dd>{count}</dd>
-                    </div>
-                  )
-                )}
-              </dl>
-            </li>
+            <OrganizationTeamRow
+              activeOrgId={activeOrg.id}
+              key={`${activeOrg.id}:${team.id}`}
+              team={team}
+            />
           ))}
         </ul>
         {teams.length === 0 && (

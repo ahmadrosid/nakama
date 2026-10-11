@@ -1,4 +1,4 @@
-import { afterEach, expect, spyOn, test } from "bun:test";
+import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import type {
   OrganizationOverviewResponse,
   OrganizationSummary,
@@ -69,7 +69,10 @@ async function settle() {
   await new Promise((resolve) => setTimeout(resolve, 20));
 }
 
-function mount(queryClient: QueryClient) {
+function mount(
+  queryClient: QueryClient,
+  switchOrg: AuthContextValue["switchOrg"] = async () => undefined
+) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -98,7 +101,7 @@ function mount(queryClient: QueryClient) {
         refreshPlatformOrgs: async () => undefined,
         refreshSession: async () => undefined,
         setup: async () => undefined,
-        switchOrg: async () => undefined,
+        switchOrg,
         updateOrg: async () => undefined,
         user: null,
       };
@@ -151,7 +154,7 @@ test("renders all published resource kinds and stored team counts", async () => 
   expect(
     [...container.querySelectorAll("li dd")].map((node) => node.textContent)
   ).toEqual(["3", "5", "4", "2"]);
-  expect(container.querySelectorAll("button")).toHaveLength(0);
+  expect(container.querySelectorAll("dd button")).toHaveLength(0);
 });
 
 test("a standalone organization with no publications or teams remains readable", async () => {
@@ -231,4 +234,158 @@ test("late overview responses cannot replace the newly selected team", async () 
   expect(container.textContent).not.toContain("team-a knowledge");
   expect(container.textContent).toContain("team-b knowledge");
   expect(request.mock.calls).toEqual([["team-a"], ["team-b"]]);
+});
+
+test("team details open without switching and permitted switching waits for success", async () => {
+  const queries = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  const data = overview("team-a");
+  data.teams[0].id = "team-b";
+  data.teams[0].slug = "sales";
+  data.teams[0].name = "Sales";
+  data.teams[0].isCurrent = false;
+  queries.setQueryData(
+    queryKeys.organizationOverview("parent", "team-a"),
+    data
+  );
+  const pending = Promise.withResolvers<void>();
+  const switchOrg = mock((_id: string) => pending.promise);
+  const { container, render } = mount(queries, switchOrg);
+  await render(organization("team-a"));
+  const trigger = container.querySelector("button");
+  trigger?.focus();
+  expect(document.activeElement).toBe(trigger);
+  await act(async () => {
+    trigger?.click();
+    await settle();
+  });
+  expect(switchOrg).not.toHaveBeenCalled();
+  const dialog = document.querySelector('[role="dialog"]');
+  expect(dialog?.textContent).toContain("team-b");
+  expect(dialog?.textContent).toContain("sales");
+  expect(
+    [...dialog!.querySelectorAll("dd")].map((node) => node.textContent)
+  ).toEqual(["team-b", "sales", "14", "3", "5", "4", "2"]);
+  const submit = dialog?.querySelector("button");
+  await act(async () => {
+    submit?.click();
+    submit?.click();
+    await settle();
+  });
+  expect(switchOrg.mock.calls).toEqual([["team-b"]]);
+  expect(submit?.disabled).toBe(true);
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  await act(async () => {
+    pending.resolve();
+    await settle();
+  });
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+});
+
+test.each([true, false])(
+  "team details prevent switching when permitted is %s",
+  async (canSwitch) => {
+    const queries = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+      },
+    });
+
+    const data = overview("team-a");
+    data.teams[0].canSwitch = canSwitch;
+    data.teams[0].id = canSwitch ? "team-a" : "team-b";
+    data.teams[0].isCurrent = !canSwitch;
+    queries.setQueryData(
+      queryKeys.organizationOverview("parent", "team-a"),
+      data
+    );
+    const switchOrg = mock(async () => undefined);
+    const { container, render } = mount(queries, switchOrg);
+    await render(organization("team-a"));
+    await act(async () => {
+      container.querySelector("button")?.click();
+      await settle();
+    });
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog).not.toBeNull();
+    expect(dialog?.querySelectorAll("button")).toHaveLength(1);
+    expect(switchOrg).not.toHaveBeenCalled();
+  }
+);
+
+test("failed switching retains team details and permits retry", async () => {
+  const queries = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  const data = overview("team-a");
+  data.teams[0].id = "team-b";
+  queries.setQueryData(
+    queryKeys.organizationOverview("parent", "team-a"),
+    data
+  );
+
+  const switchOrg = mock(
+    async (_id: string) => undefined
+  ).mockRejectedValueOnce(new Error("Switch failed"));
+
+  const { container, render } = mount(queries, switchOrg);
+  await render(organization("team-a"));
+  await act(async () => {
+    container.querySelector("button")?.click();
+    await settle();
+  });
+  await act(async () => {
+    document
+      .querySelector<HTMLButtonElement>('[role="dialog"] button')
+      ?.click();
+    await settle();
+  });
+  expect(
+    document.querySelector('[role="dialog"] [role="alert"]')
+  ).not.toBeNull();
+  expect(container.querySelector("h2")?.textContent).toBe(
+    data.organization.name
+  );
+  await act(async () => {
+    document
+      .querySelector<HTMLButtonElement>('[role="dialog"] button')
+      ?.click();
+    await settle();
+  });
+  expect(switchOrg.mock.calls).toEqual([["team-b"], ["team-b"]]);
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+});
+
+test("team changes discard open details from the previous organization", async () => {
+  const queries = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  queries.setQueryData(
+    queryKeys.organizationOverview("parent", "team-a"),
+    overview("team-a")
+  );
+  queries.setQueryData(
+    queryKeys.organizationOverview("parent", "team-b"),
+    overview("team-b")
+  );
+  const { container, render } = mount(queries);
+  await render(organization("team-a"));
+  await act(async () => {
+    container.querySelector("button")?.click();
+    await settle();
+  });
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  await render(organization("team-b"));
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(container.textContent).not.toContain("Team team-a");
 });
