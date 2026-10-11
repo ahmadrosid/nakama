@@ -79,7 +79,7 @@ function SoulFileEditorBody({
   onEditContentChange: (value: string) => void;
 }) {
   const showMissingHint = Boolean(
-    openFile && status && !status.files[openFile] && !editContent
+    isWritable && openFile && status && !status.files[openFile] && !editContent
   );
 
   return (
@@ -111,7 +111,7 @@ function SoulFileEditorBody({
             placeholder={
               isWritable
                 ? `Write ${openFileMeta?.label ?? "file"} content…`
-                : "Examples are loaded from markdown files under examples/."
+                : "File content is read-only."
             }
             readOnly={!isWritable || dialogLoading}
             value={editContent}

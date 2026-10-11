@@ -2422,3 +2422,15 @@ One verification repair corrected the prompt assertion to use the existing previ
 Steps 4 and 5 and delivery stages 3 and 4 remain open. Next: verify shared assignment controls, keep template soul files read-only while retaining team memory, and review clone and transfer controls. Accessible team settings actions and compatibility labels also remain open. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
 
 Evidence: /tmp/nakama-template-identity-{focused,types,format,oxlint,doctor,lint}.log.
+
+### Slice 3v — Shared-agent soul editor permissions
+
+The existing soul editor now requires a loaded profile before offering writes. Shared instances can edit only MEMORY.md. SOUL.md, STYLE.md, and INSTRUCTIONS.md remain read-only, including after publication removal. Local profiles retain their existing file controls. An ownership change updates an already open dialog. Read-only missing files no longer invite users to start writing, and the placeholder no longer points to unrelated example files.
+
+Thirteen new cases cover all four files on local profiles and available or unavailable shared instances. They check read-only state, file content, exact team profile IDs, absence of forbidden writes, and successful local or memory saves. They also check denied edits while ownership is unknown and removal of save controls when an open local file becomes shared. All 120 component tests passed with 779 assertions. The existing server regression passed with 20 assertions, confirming source-file write denial after revocation and retained team-memory writes.
+
+The complete web type check passed. React Doctor remained at 91/100 with no issues. Two verification repairs corrected test code: the DOM fixture needs the editor's prototype rather than a global textarea constructor, and an optional file value needs the reader's empty-string fallback. No production repair, new file, package, dependency, or rule suppression was needed.
+
+Steps 4 and 5 and delivery stages 3 and 4 remain open. Next: verify shared assignment controls and remove forbidden clone and transfer actions. Accessible team settings actions and compatibility labels remain open. No server permission changed. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
+
+Evidence: /tmp/nakama-template-soul-{focused,api,types,format,oxlint,doctor,lint}.log.

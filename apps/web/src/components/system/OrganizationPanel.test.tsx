@@ -6,12 +6,15 @@ import type {
   ProfileResponse,
   ProfileSummary,
   SkillSummary,
+  SoulStatusResponse,
   ToolResponse,
 } from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, useLocation } from "react-router-dom";
+import { SoulTab } from "@/components/soul-tools/SoulTab";
+import { SOUL_FILES } from "@/components/soul-tools/soul-files";
 import { useActiveChatProfileStore } from "@/context/active-chat-profile-store";
 import {
   AuthContext,
@@ -2282,6 +2285,182 @@ function sharedAgentInstance(): ProfileResponse {
     },
   };
 }
+
+function observeSoulEditor(shared: boolean, available = true) {
+  const queries = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  const profile = sharedAgentInstance().profile;
+
+  if (shared) {
+    profile.sharedAgent!.available = available;
+  } else {
+    delete profile.sharedAgent;
+  }
+
+  const status: SoulStatusResponse = {
+    active: true,
+    contents: {
+      instructions: "Team instructions",
+      memory: "Team memory",
+      soul: "Team identity",
+      style: "Team style",
+    },
+    directory: "/team/workspace",
+    files: {
+      examples: false,
+      instructions: true,
+      memory: true,
+      soul: true,
+      style: true,
+    },
+    profileId: profile.id,
+  };
+
+  queries.setQueryData(queryKeys.profiles.all, [profile]);
+  queries.setQueryData(queryKeys.soul.profile(profile.id), status);
+  const reads = spyOn(client, "getProfileSoulStatus").mockResolvedValue(status);
+
+  const profiles = spyOn(client, "listProfiles").mockResolvedValue({
+    profiles: [profile],
+  });
+
+  const write = spyOn(client, "writeProfileSoulFile").mockResolvedValue(
+    undefined
+  );
+
+  cleanups.push(() => {
+    reads.mockRestore();
+    profiles.mockRestore();
+    write.mockRestore();
+  });
+
+  return {
+    ...mount(
+      queries,
+      undefined,
+      undefined,
+      { email: "admin@example.com", id: "admin", isPlatformAdmin: true },
+      <SoulTab profileId={profile.id} />
+    ),
+    profile,
+    queries,
+    reads,
+    status,
+    write,
+  };
+}
+
+for (const scenario of [
+  { available: true, shared: true },
+  { available: false, shared: true },
+  { available: true, shared: false },
+]) {
+  for (const file of SOUL_FILES) {
+    test(`soul ${file.key} follows ownership ${JSON.stringify(scenario)}`, async () => {
+      const { container, render, profile, reads, status, write } =
+        observeSoulEditor(scenario.shared, scenario.available);
+
+      await render({ ...organization("team-a"), role: "admin" });
+
+      const trigger = [
+        ...container.querySelectorAll<HTMLButtonElement>("li button"),
+      ].find(
+        (button) => button.querySelector("p")?.textContent === file.label
+      )!;
+
+      await act(async () => {
+        trigger.click();
+        await settle();
+      });
+      await act(async () => {
+        await settle();
+      });
+      expect(reads).toHaveBeenCalledWith(profile.id, { includeContents: true });
+
+      const editor = document.querySelector<HTMLTextAreaElement>(
+        '[role="dialog"] textarea'
+      )!;
+
+      const writable = !scenario.shared || file.key === "memory";
+      expect(editor.readOnly).toBe(!writable);
+      expect(editor.value).toBe(status.contents?.[file.key] ?? "");
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(
+          Object.getPrototypeOf(editor),
+          "value"
+        )?.set?.call(editor, "Changed team file");
+        editor.dispatchEvent(new window.Event("input", { bubbles: true }));
+      });
+
+      const save = [
+        ...document.querySelectorAll<HTMLButtonElement>(
+          '[role="dialog"] button'
+        ),
+      ].find((button) => button.textContent === "Save file");
+
+      if (writable) {
+        expect(save).toBeDefined();
+        expect(save!.disabled).toBe(false);
+        await act(async () => {
+          save!.click();
+          await settle();
+        });
+        expect(write).toHaveBeenCalledTimes(1);
+        expect(write).toHaveBeenCalledWith(
+          profile.id,
+          file.key,
+          "Changed team file"
+        );
+      } else {
+        expect(save).toBeUndefined();
+        expect(write).not.toHaveBeenCalled();
+      }
+    });
+  }
+}
+
+test("soul editing waits for profile ownership and rechecks an open dialog", async () => {
+  const { container, render, profile, queries, write } =
+    observeSoulEditor(false);
+
+  queries.setQueryData(queryKeys.profiles.all, []);
+  await render({ ...organization("team-a"), role: "admin" });
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>("li button")!.click();
+    await settle();
+  });
+  await act(async () => {
+    await settle();
+  });
+
+  const editor = document.querySelector<HTMLTextAreaElement>(
+    '[role="dialog"] textarea'
+  )!;
+
+  expect(editor.readOnly).toBe(true);
+  await act(async () => {
+    queries.setQueryData(queryKeys.profiles.all, [profile]);
+    await settle();
+  });
+  expect(editor.readOnly).toBe(false);
+  await act(async () => {
+    queries.setQueryData(queryKeys.profiles.all, [
+      { ...profile, sharedAgent: sharedAgentInstance().profile.sharedAgent },
+    ]);
+    await settle();
+  });
+  expect(editor.readOnly).toBe(true);
+  expect(
+    [
+      ...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
+    ].some((button) => button.textContent === "Save file")
+  ).toBe(false);
+  expect(write).not.toHaveBeenCalled();
+});
 
 function ProfileIdentityProbe() {
   const state = useProfilesPage();
