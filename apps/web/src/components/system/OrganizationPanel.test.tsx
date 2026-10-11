@@ -10,7 +10,7 @@ import type {
   ToolResponse,
 } from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, type ReactNode } from "react";
+import { act, type ReactNode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { OrgSettingsProfileBooleanOverrideField } from "@/components/profiles/ProfileOrgBooleanOverrideField";
@@ -2697,6 +2697,253 @@ for (const action of ["Duplicate", "Move agent"] as const) {
     });
     expect(clone).not.toHaveBeenCalled();
     expect(move).not.toHaveBeenCalled();
+  });
+}
+
+function ProfileAssignmentsProbe({
+  capture,
+}: {
+  capture: (state: ReturnType<typeof useProfilesPage>) => void;
+}) {
+  const state = useProfilesPage();
+  useEffect(() => {
+    capture(state);
+  }, [capture, state]);
+
+  return <ProfilesDialogs {...state} />;
+}
+
+test.each([
+  { available: true, platformAdmin: true, shared: true },
+  { available: false, platformAdmin: true, shared: true },
+  { available: true, platformAdmin: false, shared: true },
+  { available: true, platformAdmin: false, shared: false },
+  { available: true, platformAdmin: true, shared: false },
+])(
+  "assignment handlers check current ownership and authority %j",
+  async (scenario) => {
+    let state!: ReturnType<typeof useProfilesPage>;
+
+    const { render, profile, queries } = observeProfileActions(
+      scenario.shared,
+      scenario.available,
+      scenario.platformAdmin,
+      <ProfileAssignmentsProbe
+        capture={(next) => {
+          state = next;
+        }}
+      />
+    );
+
+    queries.setQueryData(queryKeys.skills.all, [skill("skill", "Local skill")]);
+
+    const assignTool = spyOn(client, "assignTool").mockResolvedValue({
+      profile,
+    });
+
+    const assignSkill = spyOn(client, "assignSkill").mockResolvedValue({
+      profile,
+    });
+
+    const assignMcp = spyOn(client, "assignMcpServer").mockResolvedValue({
+      profile,
+    });
+
+    const unassignTool = spyOn(client, "unassignTool").mockResolvedValue({
+      profile,
+    });
+
+    const unassignSkill = spyOn(client, "unassignSkill").mockResolvedValue({
+      profile,
+    });
+
+    const unassignMcp = spyOn(client, "unassignMcpServer").mockResolvedValue({
+      profile,
+    });
+
+    const composio = spyOn(
+      client,
+      "updateProfileComposioToolkits"
+    ).mockResolvedValue({ assignments: [] });
+
+    const createSkill = spyOn(client, "createSkill").mockRejectedValue(
+      new Error("Retry creation")
+    );
+
+    const installSkill = spyOn(client, "installSkill").mockRejectedValue(
+      new Error("Retry installation")
+    );
+
+    const createMcp = spyOn(client, "createMcpServer").mockRejectedValue(
+      new Error("Retry creation")
+    );
+
+    const deleteSkill = spyOn(client, "deleteSkill").mockResolvedValue(
+      undefined
+    );
+
+    const requests = [
+      assignTool,
+      assignSkill,
+      assignMcp,
+      unassignTool,
+      unassignSkill,
+      unassignMcp,
+      composio,
+      createSkill,
+      installSkill,
+      createMcp,
+      deleteSkill,
+    ];
+
+    cleanups.push(() => {
+      for (const request of requests) {
+        request.mockRestore();
+      }
+    });
+    await render({ ...organization("team-a"), role: "admin" });
+
+    for (const attempt of [
+      () => state.handleAssignTool("tool"),
+      () => state.handleAssignBash(),
+      () => state.handleAssignSkill("skill"),
+      () => state.handleAssignMcpServer("mcp"),
+      () => state.handleAssignComposioToolkit("app"),
+      () =>
+        state.handleCreateSkill({
+          description: "Test",
+          name: "Created",
+          profileId: profile.id,
+        }),
+      () =>
+        state.handleInstallSkill({
+          profileId: profile.id,
+          url: "https://example.com/skill",
+        }),
+      () =>
+        state.handleCreateMcpServer({
+          config: { command: "server" },
+          name: "Created",
+          transport: "stdio",
+        }),
+      () => state.handleDeleteSkill("skill"),
+    ]) {
+      await act(async () => {
+        await attempt().catch(() => undefined);
+        await settle();
+      });
+    }
+
+    for (const kind of ["tool", "skill", "mcp", "composio"] as const) {
+      await act(async () => {
+        state.setRemoveConfirm({
+          id: kind === "composio" ? "app" : kind,
+          kind,
+          name: kind,
+        });
+        await settle();
+      });
+      await act(async () => {
+        await state.handleRemoveAssignmentConfirm();
+        await settle();
+      });
+    }
+
+    if (scenario.shared || !scenario.platformAdmin) {
+      for (const request of requests) {
+        expect(request).not.toHaveBeenCalled();
+      }
+
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+    } else {
+      expect(assignTool).toHaveBeenCalledWith(profile.id, { toolId: "tool" });
+      expect(assignTool).toHaveBeenCalledTimes(2);
+      expect(assignSkill).toHaveBeenCalledWith(profile.id, {
+        skillId: "skill",
+      });
+      expect(assignMcp).toHaveBeenCalledWith(profile.id, { serverId: "mcp" });
+      expect(composio).toHaveBeenCalledWith(profile.id, {
+        assignments: [{ toolkitId: "app" }],
+      });
+      expect(composio).toHaveBeenCalledWith(profile.id, { assignments: [] });
+      expect(unassignTool).toHaveBeenCalledWith(profile.id, "tool");
+      expect(unassignSkill).toHaveBeenCalledWith(profile.id, "skill");
+      expect(unassignMcp).toHaveBeenCalledWith(profile.id, "mcp");
+
+      for (const request of [
+        createSkill,
+        installSkill,
+        createMcp,
+        deleteSkill,
+      ]) {
+        expect(request).toHaveBeenCalledTimes(1);
+      }
+    }
+  }
+);
+
+for (const dialog of [
+  "skill-create",
+  "skill-install",
+  "mcp",
+  "remove",
+] as const) {
+  test(`${dialog} assignment dialog closes after shared ownership changes`, async () => {
+    let state!: ReturnType<typeof useProfilesPage>;
+
+    const { render, profile, queries } = observeProfileActions(
+      false,
+      true,
+      true,
+      <ProfileAssignmentsProbe
+        capture={(next) => {
+          state = next;
+        }}
+      />
+    );
+
+    const unassign = spyOn(client, "unassignTool").mockResolvedValue({
+      profile,
+    });
+
+    const assign = spyOn(client, "assignTool").mockResolvedValue({ profile });
+    cleanups.push(() => {
+      unassign.mockRestore();
+      assign.mockRestore();
+    });
+    await render({ ...organization("team-a"), role: "admin" });
+    await act(async () => {
+      if (dialog === "skill-create") {
+        state.setSkillCreateOpen(true);
+      } else if (dialog === "skill-install") {
+        state.setSkillInstallOpen(true);
+      } else if (dialog === "mcp") {
+        state.setMcpCreateOpen(true);
+      } else {
+        state.setRemoveConfirm({ id: "tool", kind: "tool", name: "Tool" });
+      }
+
+      await settle();
+    });
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    await act(async () => {
+      const shared = {
+        ...profile,
+        sharedAgent: sharedAgentInstance().profile.sharedAgent,
+      };
+
+      queries.setQueryData(queryKeys.profiles.all, [shared]);
+      queries.setQueryData(queryKeys.profiles.detail(profile.id), shared);
+      await settle();
+    });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    await act(async () => {
+      await state.handleAssignTool("tool");
+      await state.handleRemoveAssignmentConfirm();
+      await settle();
+    });
+    expect(assign).not.toHaveBeenCalled();
+    expect(unassign).not.toHaveBeenCalled();
   });
 }
 

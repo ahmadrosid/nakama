@@ -2456,3 +2456,15 @@ Five new component cases cover available and unavailable shared instances, platf
 Steps 4 and 5 and delivery stages 3 and 4 remain open. Next: verify assignment controls and delayed assignment handlers, then accessible team settings actions and compatibility labels. No server permission, file, package, dependency, or helper abstraction was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
 
 Evidence: /tmp/nakama-template-behavior-{focused,api,types,format,oxlint,doctor,lint}.log.
+
+### Slice 3y — Shared-agent assignment handlers and dialogs
+
+The existing profile assignment handlers now require the loaded profile's edit permission before adding or removing tools, skills, MCP servers, or Composio toolkits. Bash assignment uses the same check. Profile skill creation, installation, deletion, and MCP creation also check permission before resource writes start. Existing skill and Bash callers receive a rejected promise when assignments are read-only. Local platform-admin operations retain their existing behavior. Tool, skill, MCP, and removal dialogs no longer remain actionable when ownership or authority changes.
+
+Nine new component cases cover available and unavailable shared instances, platform authority, ordinary tenant admins, all assignment and removal handlers, denied resource creation, and retained local requests. Four cases open existing skill creation, skill installation, MCP, or removal dialogs before changing ownership. They confirm the dialogs close and subsequent assignment and removal requests do not start. All 141 component tests passed with 993 assertions. The existing server assignment regression passed with 19 assertions. Complete web types, scoped anti-slop, Ultracite, and git diff --check passed.
+
+React Doctor retained 91/100 with no errors. Two complexity warnings remain in the existing assignment section and dialog collection after adding permission checks. No rule was suppressed and no new component abstraction was added. Two verification repairs corrected a test cleanup callback and moved the test's state capture from render into an effect. Tests and types passed after both repairs.
+
+Steps 4 and 5 and delivery stages 3 and 4 remain open. Next: audit remaining assignment surfaces, then accessible team settings actions and compatibility labels. No server permission, file, package, or dependency was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
+
+Evidence: /tmp/nakama-template-assignments-{focused,api,types,format,oxlint,doctor,lint}.log.

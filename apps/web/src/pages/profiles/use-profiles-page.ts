@@ -920,7 +920,7 @@ export function useProfilesPage() {
   }
 
   async function handleAssignTool(toolId: string) {
-    if (!selectedId) {
+    if (!(selectedId && canManageProfile)) {
       return;
     }
 
@@ -942,7 +942,7 @@ export function useProfilesPage() {
   }
 
   async function handleAssignMcpServer(serverId: string) {
-    if (!selectedId) {
+    if (!(selectedId && canManageProfile)) {
       return;
     }
 
@@ -960,7 +960,7 @@ export function useProfilesPage() {
   }
 
   async function handleCreateMcpServer(request: CreateMcpServerRequest) {
-    if (!selectedId) {
+    if (!(selectedId && canManageProfile)) {
       return;
     }
 
@@ -989,6 +989,10 @@ export function useProfilesPage() {
       throw new Error("Select a profile first.");
     }
 
+    if (!canManageProfile) {
+      throw new Error("Profile assignments are read-only.");
+    }
+
     setError(null);
 
     try {
@@ -1004,6 +1008,10 @@ export function useProfilesPage() {
       throw new Error("Select a profile first.");
     }
 
+    if (!canManageProfile) {
+      throw new Error("Profile assignments are read-only.");
+    }
+
     await assignMutation.mutateAsync({
       profileId: selectedId,
       toolId: [BASH_TOOL_ID],
@@ -1013,7 +1021,7 @@ export function useProfilesPage() {
   async function handleDeleteSkill(skillId: string) {
     const skill = allSkills.find((entry) => entry.id === skillId);
 
-    if (!skill) {
+    if (!(skill && canManageProfile)) {
       return;
     }
 
@@ -1028,7 +1036,7 @@ export function useProfilesPage() {
   }
 
   async function handleCreateSkill(request: CreateSkillRequest) {
-    if (!selectedId) {
+    if (!(selectedId && canManageProfile)) {
       return;
     }
 
@@ -1049,7 +1057,7 @@ export function useProfilesPage() {
   }
 
   async function handleInstallSkill(request: InstallSkillRequest) {
-    if (!selectedId) {
+    if (!(selectedId && canManageProfile)) {
       return;
     }
 
@@ -1066,7 +1074,7 @@ export function useProfilesPage() {
   }
 
   async function handleAssignComposioToolkit(toolkitId: string) {
-    if (!(selectedId && profileComposioData)) {
+    if (!(selectedId && profileComposioData && canManageProfile)) {
       return;
     }
 
@@ -1089,7 +1097,7 @@ export function useProfilesPage() {
   }
 
   async function handleRemoveAssignmentConfirm() {
-    if (!(selectedId && removeConfirm)) {
+    if (!(selectedId && removeConfirm && canManageProfile)) {
       return;
     }
 

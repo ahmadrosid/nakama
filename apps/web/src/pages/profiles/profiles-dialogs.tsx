@@ -279,6 +279,7 @@ export function ProfilesDialogs(state: ProfilesPageState) {
     handleRemoveAssignmentConfirm,
     profiles,
     acpAgentPresets,
+    canManageProfile,
   } = state;
 
   const { navigateToNewChat } = useAppNavigation();
@@ -309,7 +310,7 @@ export function ProfilesDialogs(state: ProfilesPageState) {
         busy={createSkillMutation.isPending || assignSkillMutation.isPending}
         onOpenChange={setSkillCreateOpen}
         onSubmit={handleCreateSkill}
-        open={skillCreateOpen}
+        open={skillCreateOpen && canManageProfile}
         profileId={selectedId}
       />
 
@@ -326,7 +327,7 @@ export function ProfilesDialogs(state: ProfilesPageState) {
         onDelete={handleDeleteSkill}
         onInstall={handleInstallSkill}
         onOpenChange={setSkillInstallOpen}
-        open={skillInstallOpen}
+        open={skillInstallOpen && canManageProfile}
         orgId={activeOrg?.id ?? null}
         profileId={selectedId}
         skills={allSkills.filter((skill) => !skill.pluginId)}
@@ -342,7 +343,7 @@ export function ProfilesDialogs(state: ProfilesPageState) {
           setMcpCreateOpen(open);
         }}
         onSubmit={handleCreateMcpServer}
-        open={mcpCreateOpen}
+        open={mcpCreateOpen && canManageProfile}
       />
 
       <CloneProfileDialog
@@ -380,7 +381,7 @@ export function ProfilesDialogs(state: ProfilesPageState) {
         }
         onCancel={() => setRemoveConfirm(null)}
         onConfirm={() => void handleRemoveAssignmentConfirm()}
-        removeConfirm={removeConfirm}
+        removeConfirm={canManageProfile ? removeConfirm : null}
       />
     </>
   );

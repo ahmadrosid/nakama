@@ -118,7 +118,7 @@ export function ProfileConfigAssignmentsSection({
           hideTrigger
           onAssign={handleAssignTool}
           onOpenChange={setToolAssignOpen}
-          open={toolAssignOpen}
+          open={toolAssignOpen && canManageProfile}
           tools={toolsToAdd}
         />
       </div>
