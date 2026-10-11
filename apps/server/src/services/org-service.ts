@@ -391,6 +391,36 @@ export class OrgService {
     return profile;
   }
 
+  async assertSharedAgentAvailable(
+    teamOrgId: string,
+    profileId: string
+  ): Promise<void> {
+    const instance = await this.databaseAdapter.getSharedAgentInstance(
+      teamOrgId,
+      profileId
+    );
+    if (!instance) {
+      return;
+    }
+    const team = await this.requireActiveOrganization(teamOrgId);
+    if (team.parentOrgId !== instance.sourceOrgId) {
+      throw new NakamaApiError("Shared agent is unavailable.", 404);
+    }
+    const parent = await this.requireActiveOrganization(instance.sourceOrgId);
+    const publication = await this.databaseAdapter.getOrgSharedResource(
+      parent.id,
+      instance.publicationId
+    );
+    if (
+      parent.parentOrgId ||
+      publication?.resourceKind !== "agent" ||
+      publication.resourceId !== instance.sourceProfileId
+    ) {
+      throw new NakamaApiError("Shared agent is unavailable.", 404);
+    }
+    await this.validateSharedResourceSource(parent.id, publication);
+  }
+
   private async validateSharedResourceSource(
     parentOrgId: string,
     request: PublishOrgSharedResourceRequest

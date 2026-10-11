@@ -345,6 +345,7 @@ import type { McpService } from "./mcp-service";
 import { buildMcpToolDefinitions } from "./mcp-tool-bridge";
 import { MemoryBackendService } from "./memory-backend-service";
 import { OrgMemoryService } from "./org-memory-service";
+import type { OrgService } from "./org-service";
 import { OrgUsageQuotaService } from "./org-usage-quota-service";
 import type { PluginService } from "./plugin-service";
 import type { ProfileChangeMeta } from "./profile-change-history";
@@ -449,6 +450,7 @@ export class AgentService {
   private skillProposalService: SkillProposalService | null = null;
   private skillSuggestionService: SkillSuggestionService | null = null;
   private orgMemoryService: OrgMemoryService | null = null;
+  private orgService: OrgService | null = null;
   private readonly memoryBackend: MemoryBackendService;
   private readonly sessions = new Map<string, StoredSession>();
   private readonly ephemeralSessions = new EphemeralSessionStore((entry) =>
@@ -647,6 +649,10 @@ export class AgentService {
   setSkillsService(service: SkillsService): void {
     this.skillsService = service;
     this.sessions.clear();
+  }
+
+  setOrgService(service: OrgService): void {
+    this.orgService = service;
   }
 
   setSkillProposalService(service: SkillProposalService): void {
@@ -1754,6 +1760,7 @@ export class AgentService {
 
     const profile = await this.requireProfile(orgId, profileId);
 
+    await this.assertSharedAgentAvailable(orgId, profileId);
     const tools = [
       ...(await this.resolveProfileTools(profile, {
         includeAutomationTools: false,
@@ -1940,6 +1947,7 @@ export class AgentService {
     profileId: string
   ): Promise<ToolDefinition[]> {
     const profile = await this.requireProfile(orgId, profileId);
+    await this.assertSharedAgentAvailable(orgId, profileId);
 
     const tools = await this.resolveProfileTools(profile, {
       includeAutomationTools: false,
@@ -2003,6 +2011,7 @@ export class AgentService {
     }
 
     const profile = await this.requireProfile(orgId, profileId);
+    await this.assertSharedAgentAvailable(orgId, profileId);
 
     const { systemPrompt, soulActive } = await this.resolveProfileSystemPrompt(
       orgId,
@@ -2060,6 +2069,7 @@ export class AgentService {
 
     const timeoutMs = clampSubAgentTimeout(input.timeoutMs);
     const profile = await this.requireProfile(input.orgId, input.profileId);
+    await this.assertSharedAgentAvailable(input.orgId, input.profileId);
 
     const tools = await this.resolveProfileTools(profile, {
       includeAutomationTools: false,
@@ -2218,6 +2228,7 @@ export class AgentService {
 
     const profile = await this.requireProfile(orgId, resolvedProfileId);
     this.assertChatProfileAccess(profile, options ?? {});
+    await this.assertSharedAgentAvailable(orgId, resolvedProfileId);
 
     const sessionId = nanoid();
     const modelOverride = this.normalizeSessionModelOverride(options?.model);
@@ -2497,7 +2508,9 @@ export class AgentService {
       this.ephemeralSessions.has(sessionId) ||
       (!options?.persistedOnly && sessionTurnRegistry.isActive(sessionId))
     ) {
-      const liveSession = await this.resolveSession(sessionId, orgId);
+      const liveSession =
+        this.ephemeralSessions.get(sessionId)?.session ??
+        (await this.resolveSession(sessionId, orgId));
 
       if (liveSession) {
         const history = liveSession.getHistory();
@@ -2777,6 +2790,7 @@ export class AgentService {
         return active;
       }
     }
+    await this.assertSharedAgentAvailable(orgId, record.profileId);
     const sharedSkillRevision =
       (await this.skillsService?.capabilityRevisionForProfile(
         orgId,
@@ -2931,6 +2945,7 @@ export class AgentService {
       return false;
     }
     try {
+      await this.assertSharedAgentAvailable(orgId, record.profileId);
       if (
         this.sessions.has(sessionId) ||
         this.ephemeralSessions.has(sessionId)
@@ -4777,6 +4792,17 @@ export class AgentService {
     return profile ? record : null;
   }
 
+  private async assertSharedAgentAvailable(
+    orgId: string,
+    profileId: string
+  ): Promise<void> {
+    if (this.orgService) {
+      await this.orgService.assertSharedAgentAvailable(orgId, profileId);
+    } else if (await this.db.getSharedAgentInstance(orgId, profileId)) {
+      throw new NakamaApiError("Shared agent is unavailable.", 503);
+    }
+  }
+
   private async requireProfile(
     orgId: string,
     profileId: string
@@ -4995,6 +5021,7 @@ export class AgentService {
     cognito?: CognitoSessionOptions
   ): Promise<AgentChatSession> {
     await this.ensureVisionSettingsLoaded();
+    await this.assertSharedAgentAvailable(orgId, profileId);
     const profile = await this.requireProfile(orgId, profileId);
     // skill_manage writes skills and expands /learn, both of which outlive the
     // chat, so a cognito session never gets it whatever the channel allows.

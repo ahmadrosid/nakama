@@ -326,6 +326,7 @@ agent.setChannelOwnerCleanup((orgId, profileId) =>
 );
 
 const orgService = new OrgService(database.adapter, authService);
+agent.setOrgService(orgService);
 
 orgService.beforeArchiveChannels = async (orgId) => {
   const releaseMeet = googleMeetService.pauseOrganization(orgId);

@@ -35,6 +35,7 @@ import {
   type DatabaseAdapter,
 } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
+import { AgentService } from "./agent-service";
 import { AuthService } from "./auth-service";
 import {
   loadToolApiKey,
@@ -45,6 +46,7 @@ import {
 import { OrgService } from "./org-service";
 import { ProfileService } from "./profile-service";
 import { modelExistsOnInstance } from "./provider-instance-helpers";
+import { sessionTurnRegistry } from "./session-turn-registry";
 
 setupTestConfigDir("nakama-org-service-test-");
 
@@ -1826,6 +1828,152 @@ async function seedSharedAgentSelection(
 }
 
 describe("OrgService shared agent selection", () => {
+  test.each([false, true])(
+    "new turns reject unavailable shared agents and preserve history for cognito=%s",
+    async (cognito) => {
+      const { orgService, databaseAdapter: db } = createOrgService();
+      const publication = await seedSharedAgentSelection(db, orgService);
+      const profile = await orgService.createSharedAgentInstance(
+        "org_team_a",
+        publication.id,
+        "user_other"
+      );
+      const agent = new AgentService(null, null, db);
+      agent.setOrgService(orgService);
+      Object.assign(agent, {
+        _providerConfigured: true,
+        createHarnessForProfile: () => ({
+          provider: {
+            generateChat: () =>
+              Promise.resolve({
+                assistantMessage: { content: "Done", role: "assistant" },
+                content: "Done",
+                toolCalls: [],
+              }),
+            name: "test",
+          },
+        }),
+        resolveProfileTools: async () => [],
+      });
+      const id = await agent.createSession(
+        "org_team_a",
+        "web",
+        profile.id,
+        "user_other",
+        { cognito, orgRole: "member" }
+      );
+      const session = (await agent.resolveSession(id, "org_team_a"))!;
+      await session.send("Keep this history");
+      const history = [...session.getHistory()];
+      const source = (await db.getProfile("profile_template"))!;
+      await db.upsertProfile({ ...source, isSuper: true });
+      await expect(
+        agent.beginSessionTurn(id, "org_team_a")
+      ).rejects.toMatchObject({ status: 404 });
+      expect(sessionTurnRegistry.isActive(id)).toBe(false);
+      await db.upsertProfile(source);
+      expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
+      sessionTurnRegistry.cancelTurn(id);
+      await orgService.unpublishSharedResource(
+        "org_parent",
+        publication.id,
+        "user_creator"
+      );
+      await expect(
+        agent.beginSessionTurn(id, "org_team_a")
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        agent.resolveSession(id, "org_team_a")
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        agent.createSession("org_team_a", "web", profile.id, "user_other")
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        agent.runAutomationPrompt("org_team_a", profile.id, "Task")
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        agent.resolvePluginExecutionTools("org_team_a", profile.id)
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        agent.runPluginSummarize("org_team_a", profile.id, "Task", {})
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        agent.runSubAgentPrompt({
+          agentDepth: 1,
+          orgId: "org_team_a",
+          profileId: profile.id,
+          task: "Task",
+          userId: "user_other",
+        })
+      ).rejects.toMatchObject({ status: 404 });
+      expect(sessionTurnRegistry.isActive(id)).toBe(false);
+      expect(session.getHistory()).toEqual(history);
+      expect(
+        (await agent.getSessionMessages(id, "org_team_a"))?.profileId
+      ).toBe(profile.id);
+      expect(await db.getProfileForOrg(profile.id, "org_team_a")).toEqual(
+        profile
+      );
+      if (cognito) {
+        expect(await db.getSession(id)).toBeNull();
+      }
+    }
+  );
+
+  test.each(["parent-archive", "team-archive", "team-pending", "reparent"])(
+    "shared runtime rejects %s without removing the instance",
+    async (change) => {
+      const { orgService, databaseAdapter: db } = createOrgService();
+      const publication = await seedSharedAgentSelection(db, orgService);
+      const profile = await orgService.createSharedAgentInstance(
+        "org_team_a",
+        publication.id,
+        "user_other"
+      );
+      await orgService.assertSharedAgentAvailable("org_team_a", profile.id);
+      const org = (await db.getOrganizationById(
+        change === "parent-archive" ? "org_parent" : "org_team_a"
+      ))!;
+      const unavailable = {
+        ...org,
+        archivedAt: change.endsWith("archive")
+          ? new Date().toISOString()
+          : null,
+        parentOrgId: change === "reparent" ? null : org.parentOrgId,
+        setupPending: change === "team-pending",
+      };
+      const getOrganization = db.getOrganizationById.bind(db);
+      const read = spyOn(db, "getOrganizationById").mockImplementation((id) =>
+        id === org.id ? Promise.resolve(unavailable) : getOrganization(id)
+      );
+      try {
+        await expect(
+          orgService.assertSharedAgentAvailable("org_team_a", profile.id)
+        ).rejects.toMatchObject({ status: 404 });
+      } finally {
+        read.mockRestore();
+      }
+      expect(await db.getProfileForOrg(profile.id, "org_team_a")).toEqual(
+        profile
+      );
+    }
+  );
+
+  test("shared runtime fails closed without the organization service", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    const publication = await seedSharedAgentSelection(db, orgService);
+    const profile = await orgService.createSharedAgentInstance(
+      "org_team_a",
+      publication.id,
+      "user_other"
+    );
+    const agent = new AgentService(null, null, db);
+    await expect(
+      agent.createSession("org_team_a", "web", profile.id, "user_other")
+    ).rejects.toMatchObject({ status: 503 });
+    expect(await db.listSessions()).toHaveLength(0);
+  });
+
   test("concurrent selection creates one team profile without copying parent work", async () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     const publication = await seedSharedAgentSelection(db, orgService);

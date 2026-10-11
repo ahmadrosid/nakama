@@ -1533,3 +1533,16 @@ Checks: 146 focused service tests passed across five files; 54 session route and
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: synchronize shared agent configuration and published soul data before new turns, with capability refresh and history preservation.
 No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-skill-refresh-complete-{focused,routes,types,lint}.log.
+
+### Slice 2ac — shared agent availability before new execution
+Shared agent instances now recheck the active team, its recorded parent, the exact agent publication, and the current source validation before new execution.
+The server connects AgentService to OrgService. A shared instance fails closed when this service is absent; local profiles retain their existing behavior.
+Checks run before new session persistence, initial chat construction, cached session resolution, turn reservation completion, automation prompts, plugin tool resolution and summaries, and delegated agent prompts.
+Publication removal or an invalid source blocks new execution. A failed turn check releases the turn reservation. An active session read retains the running session.
+Ephemeral message reads use their existing in-memory session without rebuilding capabilities. Persisted and ephemeral history and team profile records remain readable after revocation.
+Tests cover both session modes, source invalidation and recovery, publication removal, execution entry points, missing service wiring, archived or pending tenant reads, and an invalid parent relationship.
+The first checks found an ephemeral history read that attempted runtime resolution, invalid database writes in test setup, and an incorrect session-list method. Two repair batches corrected these issues and test formatting.
+Checks: 194 focused tests passed across seven files; the complete server type check passed; lint passed 1532 files; git diff --check passed.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: synchronize permitted shared agent configuration, soul data, and assignments before new turns; rebuild cached sessions while preserving team history.
+No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-shared-agent-guard-final-focused.log and /tmp/nakama-shared-agent-guard-verified-{types,lint}.log.
