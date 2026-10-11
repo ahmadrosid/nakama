@@ -15,7 +15,7 @@ describe("ChannelSessionStore hot session cache", () => {
     });
     store.setHotSession("chat_1", session);
 
-    expect(store.getHotSession("chat_1")).toBe(session);
+    expect(store.getHotSession<typeof session>("chat_1")).toBe(session);
 
     store.set("chat_1", {
       profileId: "default",

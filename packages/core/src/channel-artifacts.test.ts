@@ -166,14 +166,22 @@ describe("extractPairedTurnArtifacts", () => {
   });
 
   test("does not infer artifacts without a valid byte count", () => {
-    for (const bytesWritten of [undefined, -1, 1.5, "934"]) {
+    for (const bytesWritten of [undefined, null, -1, 1.5, "934"]) {
+      const result: Parameters<typeof toolMessage>[0]["result"] = {
+        path: `${ARTIFACTS_ROOT}/report.csv`,
+      };
+
+      if (bytesWritten !== undefined) {
+        result.bytesWritten = bytesWritten;
+      }
+
       expect(
         extractPairedTurnArtifacts([
           toolMessage({
             id: "content",
             input: {},
             name: "write_file",
-            result: { bytesWritten, path: `${ARTIFACTS_ROOT}/report.csv` },
+            result,
           }),
         ])
       ).toEqual([]);

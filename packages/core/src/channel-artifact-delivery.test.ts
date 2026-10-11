@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  type DeliverableChannelArtifact,
   deliverTurnArtifactShares,
   formatArtifactShareFooter,
   isAttachIntent,
@@ -305,15 +306,7 @@ describe("deliverTurnArtifactShares", () => {
 
     const shareUrls: Record<string, string> = {};
 
-    let registry: Array<{
-      filename: string;
-      mimeType: string;
-      path: string;
-      savedAt: string;
-      sharePath: string;
-      shareUrl: string | null;
-      sizeBytes: number;
-    }> = [];
+    let registry: DeliverableChannelArtifact[] = [];
 
     let saved = false;
     const footers: string[] = [];

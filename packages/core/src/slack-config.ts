@@ -218,7 +218,9 @@ export function toSlackSettingsPublic(
     configured: Boolean(file?.botToken && file.appToken),
     // An expired code is worse than none: the dashboard would offer a secret
     // that no longer works.
-    handshakeCode: hasActiveHandshakeCode(file) ? file?.handshakeCode : null,
+    handshakeCode: hasActiveHandshakeCode(file)
+      ? (file?.handshakeCode ?? null)
+      : null,
     pairedUserIds: file?.pairedUserIds ?? [],
     profileId: file?.profileId ?? DEFAULT_SLACK_PROFILE_ID,
   };

@@ -454,6 +454,7 @@ describe("resolveWhatsAppConfigFromSources", () => {
         pairedJid: "9876543210@s.whatsapp.net",
         pairedLid: null,
         pairingCode: "ABCD1234",
+        pairingCodeExpiresAt: null,
         phoneNumber: "",
         profileId: "profile_from_file",
         requireGroupMention: false,

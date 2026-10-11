@@ -109,6 +109,24 @@ describe("slack config", () => {
       profileId: "default",
     };
 
+    expect(toSlackSettingsPublic(null).handshakeCode).toBeNull();
+    expect(
+      toSlackSettingsPublic({
+        ...base,
+        appToken: "xapp-1",
+        handshakeCode: "A".repeat(32),
+        handshakeExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+      }).handshakeCode
+    ).toBe("A".repeat(32));
+    expect(
+      toSlackSettingsPublic({
+        ...base,
+        appToken: "xapp-1",
+        handshakeCode: "A".repeat(32),
+        handshakeExpiresAt: "2000-01-01T00:00:00.000Z",
+      }).handshakeCode
+    ).toBeNull();
+
     expect(toSlackSettingsPublic({ ...base, appToken: "" }).configured).toBe(
       false
     );
