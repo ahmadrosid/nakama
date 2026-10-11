@@ -3142,6 +3142,11 @@ export interface ToolContext {
   /** Org role of the invoking user. Org-memory tools gate on this; undefined means deny-by-default. */
   orgRole?: OrgRole;
   profileId?: string;
+  /** Reads assigned parent skill files after live server publication checks. */
+  readPublishedSkillFile?: (
+    publicationId: string,
+    filePath: string
+  ) => Promise<SkillFileResponse>;
   /**
    * Records bytes an optimiser removed from a tool result before insertion.
    * Passed in rather than imported because the database lives in the server and

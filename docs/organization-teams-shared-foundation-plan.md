@@ -1449,3 +1449,22 @@ No new source file, package, or dependency was added. Steps 2 and 3 and delivery
 Next: connect published skill prompt discovery and reads through the agent tool context, then script tools with team execution context and live publication checks.
 Shared skill execution remains incomplete. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-shared-skill-assets-{focused,server-types,client-types,lint}.log.
+
+2026-10-11: Step 2 slice 2w connects assigned parent skills to prompts and guarded agent file reads.
+Prompt discovery resolves current parent publications by stable assignment ID. Parent entries use published-skill://publicationId paths and source labels, without private source directories.
+Explicit invocation includes current parent instructions. Matching preserves the source's disableModelInvocation and includeBodyOnMatch flags. Conflicting executable names return 409 before prompt composition.
+ToolContext adds a server-owned shared file callback. The existing read_file tool routes publication references through that callback and preserves text line limits, image attachments, blocked file names, and configured size limits.
+The server callback checks the executing profile, its assignment, the current publication, active tenants, and existing source/file guards on every read. It does not grant general access to parent directories.
+All six existing server tool contexts receive the callback through their common context builder. A real plugin-context file test covers assignment removal, publication removal, and denial of direct source paths.
+Shared catalogs and shared browser capability text now resolve before each chat turn. They are excluded from the captured initial prompt in cached chats.
+Persisted and cognito session tests revoke and republish a skill, update its instructions and source label, and preserve the session object and three user history entries.
+Shared skill usage keeps the executing team and profile context. Source files are not copied or edited during prompt discovery.
+The first check found a patch in the wrong file function. The first repair restored the unchanged edit implementation and placed the new branch in runReadFile.
+The next check found six old fixtures without profile records and one test using an unsupported size option. The second repair supplied profiles and used the existing default file-guard setting.
+Checks: all 273 focused tests passed across seven files, with four platform-specific skips; complete core and server type checks passed; lint passed all 1532 files; git diff --check passed.
+The commit retains the previously authorized ReadFileInput input type correction and readonly edit-fixture array copies in the two affected file-tool modules.
+No new source file, package, or dependency was added. Steps 2 and 3 and delivery stage 2 remain unchecked.
+Next: load shared script tools with team execution context and live invocation guards; extend shared binary/Word asset reads beyond the existing preview contract.
+Shared code remains explicitly blocked in discovery. Shared agent configuration synchronization and other resource execution checks remain incomplete.
+No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-published-skill-prompts-{focused,repair-focused,final-focused,core-types,server-types,lint}.log.

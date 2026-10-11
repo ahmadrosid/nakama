@@ -11,11 +11,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   ensureBundledSkillFiles,
+  type GenerateChatInput,
+  runReadFile,
   uploadOrganizationKnowledgeBaseDocument,
 } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createMinimalHonoApp } from "../http/test-app-helpers";
 import { loginUserSession } from "../http/test-session-helpers";
+import { AgentService } from "./agent-service";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
 import { ProfileService } from "./profile-service";
 import { SkillCuratorService } from "./skill-curator-service";
@@ -135,7 +138,7 @@ describe("SkillsService", () => {
     expect(await service.listSkillsForProfile("profile_team_a")).toEqual([]);
     expect(
       await service.composeCatalogForProfile("team_a", "profile_team_a")
-    ).toBe("");
+    ).toContain("published-skill://published_skill/SKILL.md");
     expect(
       (await db.listSkillsForProfile("profile_team_a")).map((item) => item.id)
     ).toEqual([skill.id]);
@@ -172,6 +175,163 @@ describe("SkillsService", () => {
       expect(
         (await db.listSkillsForProfile("profile_team_a")).map((item) => item.id)
       ).toEqual([first.id]);
+    }
+  );
+
+  test("prompt discovery matches parent instructions without exposing source paths", async () => {
+    const { db, service, skill, local, privateSkill, sibling } =
+      await setupPublishedSkill();
+    await db.assignSkillToProfile("profile_team_a", skill.id);
+    const catalog = await service.composeCatalogForProfile(
+      "team_a",
+      "profile_team_a"
+    );
+    expect(catalog).toContain("published-skill://published_skill/SKILL.md");
+    for (const source of [skill, local, privateSkill, sibling]) {
+      expect(catalog).not.toContain(source.sourcePath);
+    }
+    const explicit = await service.formatMatchedSkillsForPrompt(
+      "team_a",
+      "profile_team_a",
+      "/skill shared-notes"
+    );
+    expect(explicit).toContain("Published instructions");
+    expect(explicit).not.toContain(skill.sourcePath);
+    expect(explicit).toContain('"parent"');
+    await db.assignSkillToProfile("profile_team_a", local.id);
+    await expect(
+      service.composeCatalogForProfile("team_a", "profile_team_a")
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      service.formatMatchedSkillsForPrompt(
+        "team_a",
+        "profile_team_a",
+        "/skill shared-notes"
+      )
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  test("agent file contexts check assignments and publications on every read", async () => {
+    const { db, service, skill, publication } = await setupPublishedSkill();
+    await mkdir(join(skill.sourcePath, "references"));
+    await writeFile(
+      join(skill.sourcePath, "references", "guide.md"),
+      "First\nSecond\nThird"
+    );
+    const agent = new AgentService(null, null, db);
+    agent.setSkillsService(service);
+    const context = agent.buildPluginToolContext("team_a", {
+      profileId: "profile_team_a",
+      runId: "run",
+      workflowId: "workflow",
+    });
+    const instruction = { path: "published-skill://published_skill/SKILL.md" };
+    await expect(runReadFile(instruction, context)).rejects.toMatchObject({
+      status: 404,
+    });
+    await db.assignSkillToProfile("profile_team_a", skill.id);
+    expect((await runReadFile(instruction, context)).content).toContain(
+      "Published instructions"
+    );
+    const reference = await runReadFile(
+      {
+        limit: 1,
+        offset: 2,
+        path: "published-skill://published_skill/references/guide.md",
+      },
+      context
+    );
+    expect(reference).toMatchObject({
+      content: "Second",
+      endLine: 2,
+      path: "published-skill://published_skill/references/guide.md",
+      startLine: 2,
+      totalLines: 3,
+      truncated: true,
+    });
+    expect(JSON.stringify(reference)).not.toContain(skill.sourcePath);
+    await expect(
+      runReadFile({ path: skill.sourcePath + "/SKILL.md" }, context)
+    ).rejects.toThrow();
+    const siblingContext = agent.buildPluginToolContext("team_b", {
+      profileId: "profile_team_b",
+      runId: "run",
+      workflowId: "workflow",
+    });
+    await expect(
+      runReadFile(instruction, siblingContext)
+    ).rejects.toMatchObject({ status: 404 });
+    await db.unassignSkillFromProfile("profile_team_a", skill.id);
+    await expect(runReadFile(instruction, context)).rejects.toMatchObject({
+      status: 404,
+    });
+    await db.assignSkillToProfile("profile_team_a", skill.id);
+    await db.deleteOrgSharedResource("parent", publication.id);
+    await expect(runReadFile(instruction, context)).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+
+  test.each([false, true])(
+    "cached skill catalogs recheck publications for cognito=%s",
+    async (cognito) => {
+      const { db, service, skill, publication } = await setupPublishedSkill();
+      await db.assignSkillToProfile("profile_team_a", skill.id);
+      const prompts: string[] = [];
+      const agent = new AgentService(null, null, db);
+      agent.setSkillsService(service);
+      Object.assign(agent, {
+        _providerConfigured: true,
+        createHarnessForProfile: () => ({
+          provider: {
+            generateChat(input: GenerateChatInput) {
+              prompts.push(input.system ?? "");
+              return Promise.resolve({
+                assistantMessage: { content: "Done", role: "assistant" },
+                content: "Done",
+                toolCalls: [],
+              });
+            },
+            name: "test",
+          },
+        }),
+        resolveProfileTools: async () => [],
+      });
+      const id = await agent.createSession(
+        "team_a",
+        "web",
+        "profile_team_a",
+        null,
+        { cognito, orgRole: "member" }
+      );
+      const session = await agent.resolveSession(id, "team_a");
+      expect(session).not.toBeNull();
+      await session!.send("First question");
+      expect(prompts[0]).toContain(
+        "published-skill://published_skill/SKILL.md"
+      );
+      expect(prompts[0]).not.toContain(skill.sourcePath);
+      expect(prompts[0]).not.toContain("Published instructions");
+      await db.deleteOrgSharedResource("parent", publication.id);
+      await session!.send("Second question");
+      expect(prompts[1]).not.toContain("published-skill://published_skill");
+      await db.upsertOrganization({
+        ...(await db.getOrganizationById("parent"))!,
+        name: "Renamed parent",
+      });
+      await writeFile(
+        join(skill.sourcePath, "SKILL.md"),
+        "---\nname: shared-notes\ndescription: Current source description\n---\n\nCurrent instructions\n"
+      );
+      await db.publishOrgSharedResource(publication);
+      await session!.send("/skill shared-notes");
+      expect(prompts[2]).toContain("Renamed parent");
+      expect(prompts[2]).toContain("Current instructions");
+      expect(prompts[2]).not.toContain("Published instructions");
+      expect(await agent.resolveSession(id, "team_a")).toBe(session);
+      expect(
+        session!.getHistory().filter((message) => message.role === "user")
+      ).toHaveLength(3);
     }
   );
 
@@ -877,6 +1037,11 @@ describe("SkillsService", () => {
 
   test("matches weather skill instructions for weather questions", async () => {
     const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile({
+      ...createDefaultProfile(),
+      id: PROFILE_ID,
+      orgId: ORG_ID,
+    });
     const service = new SkillsService(db);
     await service.syncDiscoveredSkills();
 
@@ -901,6 +1066,11 @@ describe("SkillsService", () => {
 
   test("includes full skill body for explicit skill activation", async () => {
     const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile({
+      ...createDefaultProfile(),
+      id: PROFILE_ID,
+      orgId: ORG_ID,
+    });
     const service = new SkillsService(db);
     await service.syncDiscoveredSkills();
 
@@ -924,6 +1094,11 @@ describe("SkillsService", () => {
 
   test("includes full body for bundled create-automation matches", async () => {
     const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile({
+      ...createDefaultProfile(),
+      id: PROFILE_ID,
+      orgId: ORG_ID,
+    });
     const service = new SkillsService(db);
     await ensureBundledSkillFiles();
     await service.syncDiscoveredSkills();
@@ -949,6 +1124,11 @@ describe("SkillsService", () => {
 
   test("does not include create-automation body for unrelated messages", async () => {
     const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile({
+      ...createDefaultProfile(),
+      id: PROFILE_ID,
+      orgId: ORG_ID,
+    });
     const service = new SkillsService(db);
     await ensureBundledSkillFiles();
     await service.syncDiscoveredSkills();
@@ -972,6 +1152,11 @@ describe("SkillsService", () => {
 
   test("can append context only for matched skills", async () => {
     const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile({
+      ...createDefaultProfile(),
+      id: PROFILE_ID,
+      orgId: ORG_ID,
+    });
     const service = new SkillsService(db);
     await ensureBundledSkillFiles();
     await service.syncDiscoveredSkills();
@@ -1069,6 +1254,11 @@ describe("SkillsService", () => {
 
   test("composes always-on agent-browser capability prompt when assigned", async () => {
     const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile({
+      ...createDefaultProfile(),
+      id: PROFILE_ID,
+      orgId: ORG_ID,
+    });
     const service = new SkillsService(db);
     await ensureBundledSkillFiles();
     await service.syncDiscoveredSkills();

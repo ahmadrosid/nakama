@@ -94,7 +94,7 @@ export type DeleteFileInput = z.infer<typeof deleteFileInputSchema>;
 
 export type EditFileInput = z.infer<typeof editFileInputSchema>;
 
-export type ReadFileInput = z.infer<typeof readFileInputSchema>;
+export type ReadFileInput = z.input<typeof readFileInputSchema>;
 
 export interface WriteFileOutput {
   bytesWritten: number;
@@ -893,69 +893,138 @@ export async function runReadFile(
   guardOptions.allowedDirs!.push(getGlobalSkillsDir());
   const maxBytes = guardOptions.maxFileBytes ?? 10 * 1024 * 1024;
 
-  const guarded = await guardFilePath(
-    parsed.path,
-    parsed.cwd ?? null,
-    undefined,
-    guardOptions
-  );
-
-  const filePath = guarded.resolved;
-
-  if (BLOCKED_READ_BASENAMES.includes(path.basename(filePath).toLowerCase())) {
-    throw new PathGuardError(
-      `Reading ${path.basename(filePath)} is not allowed`,
-      "SPECIAL_FILE"
-    );
-  }
-
-  let fileStat;
-
-  try {
-    fileStat = await stat(filePath);
-  } catch {
-    throw new Error(`File not found: ${filePath}`);
-  }
-
-  if (!fileStat.isFile()) {
-    throw new Error(`Path is not a file: ${filePath}`);
-  }
-
-  if (fileStat.size > maxBytes) {
-    throw new PathGuardError(
-      `File content exceeds max ${maxBytes} bytes (got ${fileStat.size})`,
-      "TOO_LARGE"
-    );
-  }
-
-  const bytes = await readFile(filePath);
-  const mediaType = detectImageMediaType(bytes);
-
-  if (mediaType) {
-    if (bytes.length > MAX_IMAGE_BYTES) {
+  let filePath: string;
+  let rawContent: string;
+  if (parsed.path.startsWith("published-skill://")) {
+    if (
+      !(context.orgId && context.profileId && context.readPublishedSkillFile) ||
+      parsed.cwd
+    ) {
+      throw new Error(
+        "Published skill reads require profile context and no cwd."
+      );
+    }
+    const reference = /^published-skill:\/\/([^/]+)\/(.+)$/.exec(parsed.path);
+    if (!reference) {
+      throw new Error("Invalid published skill reference.");
+    }
+    const publicationId = decodeURIComponent(reference[1]!);
+    const relativePath = decodeURIComponent(reference[2]!);
+    if (
+      BLOCKED_READ_BASENAMES.includes(path.basename(relativePath).toLowerCase())
+    ) {
       throw new PathGuardError(
-        `Image exceeds max ${MAX_IMAGE_BYTES} bytes (got ${bytes.length})`,
+        "Reading this file is not allowed",
+        "SPECIAL_FILE"
+      );
+    }
+    const file = await context.readPublishedSkillFile(
+      publicationId,
+      relativePath
+    );
+    filePath = parsed.path;
+    if (file.image) {
+      const bytes = Buffer.from(file.image.dataBase64, "base64");
+      const mediaType = detectImageMediaType(bytes);
+      if (!mediaType) {
+        throw new Error("Unsupported shared skill image.");
+      }
+      if (bytes.length > Math.min(maxBytes, MAX_IMAGE_BYTES)) {
+        throw new PathGuardError(
+          "Shared skill image exceeds the size limit",
+          "TOO_LARGE"
+        );
+      }
+      return {
+        bytesRead: bytes.length,
+        content: `Read image file [${mediaType}]`,
+        endLine: 0,
+        images: [{ data: file.image.dataBase64, mediaType }],
+        path: filePath,
+        startLine: 0,
+        totalLines: 0,
+        truncated: false,
+      };
+    }
+    if (file.content === null) {
+      throw new Error(
+        file.unavailableReason ?? "Shared skill file cannot be read."
+      );
+    }
+    if (Buffer.byteLength(file.content, "utf8") > maxBytes) {
+      throw new PathGuardError(
+        "Shared skill file exceeds the size limit",
+        "TOO_LARGE"
+      );
+    }
+    rawContent = file.content;
+  } else {
+    const guarded = await guardFilePath(
+      parsed.path,
+      parsed.cwd ?? null,
+      undefined,
+      guardOptions
+    );
+
+    filePath = guarded.resolved;
+
+    if (
+      BLOCKED_READ_BASENAMES.includes(path.basename(filePath).toLowerCase())
+    ) {
+      throw new PathGuardError(
+        `Reading ${path.basename(filePath)} is not allowed`,
+        "SPECIAL_FILE"
+      );
+    }
+
+    let fileStat;
+
+    try {
+      fileStat = await stat(filePath);
+    } catch {
+      throw new Error(`File not found: ${filePath}`);
+    }
+
+    if (!fileStat.isFile()) {
+      throw new Error(`Path is not a file: ${filePath}`);
+    }
+
+    if (fileStat.size > maxBytes) {
+      throw new PathGuardError(
+        `File content exceeds max ${maxBytes} bytes (got ${fileStat.size})`,
         "TOO_LARGE"
       );
     }
 
-    return {
-      bytesRead: bytes.length,
-      content: `Read image file [${mediaType}]`,
-      endLine: 0,
-      images: [{ data: bytes.toString("base64"), mediaType }],
-      path: filePath,
-      startLine: 0,
-      totalLines: 0,
-      truncated: false,
-    };
+    const bytes = await readFile(filePath);
+    const mediaType = detectImageMediaType(bytes);
+
+    if (mediaType) {
+      if (bytes.length > MAX_IMAGE_BYTES) {
+        throw new PathGuardError(
+          `Image exceeds max ${MAX_IMAGE_BYTES} bytes (got ${bytes.length})`,
+          "TOO_LARGE"
+        );
+      }
+
+      return {
+        bytesRead: bytes.length,
+        content: `Read image file [${mediaType}]`,
+        endLine: 0,
+        images: [{ data: bytes.toString("base64"), mediaType }],
+        path: filePath,
+        startLine: 0,
+        totalLines: 0,
+        truncated: false,
+      };
+    }
+
+    const localContent = await readFileAsText(filePath, bytes);
+
+    rawContent = context.memoryFiles
+      ? await context.memoryFiles.read(filePath, localContent)
+      : localContent;
   }
-
-  const localContent = await readFileAsText(filePath, bytes);
-
-  const rawContent = context.memoryFiles
-    ? await context.memoryFiles.read(filePath, localContent)
-    : localContent;
 
   const lines = rawContent.length === 0 ? [] : rawContent.split("\n");
   const totalLines = lines.length;

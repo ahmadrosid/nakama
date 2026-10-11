@@ -1956,6 +1956,15 @@ export class AgentService {
         await this.requireProfile(orgId, profileId);
         return this.profileService.listPublishedKnowledgeBaseDocuments(orgId);
       },
+      readPublishedSkillFile: async (publicationId, filePath) => {
+        await this.requireProfile(orgId, profileId);
+        return this.requireSkillsService().readPublishedSkillFileForProfile(
+          orgId,
+          profileId,
+          publicationId,
+          filePath
+        );
+      },
     };
   }
 
@@ -5194,6 +5203,16 @@ export class AgentService {
       },
       resolvePromptContext: async (context) => {
         const parts: string[] = [];
+        if (this.skillsService) {
+          parts.push(
+            await this.skillsService.composePublishedSkillsCatalogForProfile(
+              orgId,
+              profileId,
+              skillUsageContext,
+              !cognito
+            )
+          );
+        }
         parts.push(
           await composeKnowledgeBaseCatalog(
             orgId,
@@ -5445,7 +5464,8 @@ export class AgentService {
         orgId,
         profileId,
         usageContext,
-        recordSkillUsage
+        recordSkillUsage,
+        includeKnowledgeCatalog
       );
 
       if (skillsCatalog.trim()) {
@@ -5455,7 +5475,8 @@ export class AgentService {
       const agentBrowserCapability =
         await this.skillsService.composeAgentBrowserCapabilityForProfile(
           orgId,
-          profileId
+          profileId,
+          includeKnowledgeCatalog
         );
 
       if (agentBrowserCapability.trim()) {

@@ -301,6 +301,7 @@ export class SkillsService {
     summary: PublishedSkillSummary;
     body: string;
     directory: string;
+    includeBodyOnMatch: boolean;
   }> {
     const team = await this.db.getOrganizationById(orgId);
     const parent = team?.parentOrgId
@@ -365,6 +366,7 @@ export class SkillsService {
       return {
         body: parsed.body,
         directory: sourcePath,
+        includeBodyOnMatch: parsed.frontmatter.includeBodyOnMatch ?? false,
         summary: {
           createdAt: record.createdAt,
           createdBy: record.createdBy,
@@ -1335,6 +1337,24 @@ export class SkillsService {
     }
   }
 
+  async readPublishedSkillFileForProfile(
+    orgId: string,
+    profileId: string,
+    publicationId: string,
+    filePath: string
+  ): Promise<SkillFileResponse> {
+    const profile = await this.db.getProfile(profileId);
+    if (profile?.orgId !== orgId) {
+      throw new NakamaApiError("Profile not found.", 404);
+    }
+    const { skill } = await this.getPublishedSkill(orgId, publicationId);
+    const assigned = await this.db.listSkillsForProfile(profileId);
+    if (!assigned.some((item) => item.id === skill.id)) {
+      throw new NakamaApiError("Skill is unavailable.", 404);
+    }
+    return this.readPublishedSkillFile(orgId, publicationId, filePath);
+  }
+
   private async readFileFromRoot(
     root: string,
     filePath: string
@@ -1429,9 +1449,12 @@ export class SkillsService {
     usageContext?: SkillUsageRecordingContext,
     // False in a cognito session: a usage row records which skills the chat
     // touched, which is a durable trace of what it was about.
-    recordUsage = true
+    recordUsage = true,
+    includeParent = true
   ): Promise<string> {
-    const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
+    const assigned = includeParent
+      ? await this.getPromptSkills(orgId, profileId)
+      : await this.getAssignedDiscoveredSkills(orgId, profileId);
 
     const skillIds = assigned
       .map((item) => item.record.id)
@@ -1444,11 +1467,40 @@ export class SkillsService {
     return composeSkillsCatalog(assigned.map((item) => item.discovered));
   }
 
+  async composePublishedSkillsCatalogForProfile(
+    orgId: string,
+    profileId: string,
+    usageContext?: SkillUsageRecordingContext,
+    recordUsage = true
+  ): Promise<string> {
+    const assigned = (await this.getPromptSkills(orgId, profileId)).filter(
+      (item) => item.discovered.sourceOrganization
+    );
+    if (recordUsage) {
+      void this.recordCatalogViews(
+        orgId,
+        profileId,
+        assigned.map((item) => item.record.id),
+        usageContext
+      );
+    }
+    const discovered = assigned.map((item) => item.discovered);
+    return [
+      composeSkillsCatalog(discovered),
+      composeAgentBrowserCapabilityPrompt(discovered),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  }
+
   async composeAgentBrowserCapabilityForProfile(
     orgId: string,
-    profileId: string
+    profileId: string,
+    includeParent = true
   ): Promise<string> {
-    const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
+    const assigned = includeParent
+      ? await this.getPromptSkills(orgId, profileId)
+      : await this.getAssignedDiscoveredSkills(orgId, profileId);
 
     return composeAgentBrowserCapabilityPrompt(
       assigned.map((item) => item.discovered)
@@ -1466,7 +1518,7 @@ export class SkillsService {
       usageContext?: SkillUsageRecordingContext;
     } = {}
   ): Promise<string> {
-    const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
+    const assigned = await this.getPromptSkills(orgId, profileId);
     const discovered = assigned.map((item) => item.discovered);
     const matched = matchSkillsForMessage(discovered, userMessage);
     const explicitSkillName = extractExplicitSkillName(userMessage);
@@ -1921,6 +1973,73 @@ export class SkillsService {
         this.profileSkillSyncs.delete(key);
       }
     }
+  }
+
+  private async getPromptSkills(
+    orgId: string,
+    profileId: string
+  ): Promise<
+    Array<{ discovered: DiscoveredSkill; record: StoredSkillRecord }>
+  > {
+    const profile = await this.db.getProfile(profileId);
+    if (profile?.orgId !== orgId) {
+      throw new NakamaApiError("Profile not found.", 404);
+    }
+    const result = await this.getAssignedDiscoveredSkills(orgId, profileId);
+    const team = await this.db.getOrganizationById(orgId);
+    const publications = team?.parentOrgId
+      ? await this.db.listOrgSharedResources(team.parentOrgId)
+      : [];
+    for (const record of await this.db.listSkillsForProfile(profileId)) {
+      if (!record.orgId || record.orgId === orgId) {
+        continue;
+      }
+      const publication = publications.find(
+        (item) => item.resourceKind === "skill" && item.resourceId === record.id
+      );
+      if (!publication) {
+        continue;
+      }
+      try {
+        const source = await this.resolvePublishedSkill(orgId, publication.id);
+        const directory = `published-skill://${encodeURIComponent(publication.id)}`;
+        result.push({
+          discovered: {
+            body: source.body,
+            description: source.summary.description,
+            directory,
+            disableModelInvocation: source.summary.disableModelInvocation,
+            // shortcut: shared code stays blocked until team execution and invocation checks are connected.
+            hasTool: false,
+            includeBodyOnMatch: source.includeBodyOnMatch,
+            name: source.summary.name,
+            scriptIssues: source.summary.hasTool
+              ? [
+                  {
+                    path: "shared-code",
+                    reason: "Shared skill code execution is unavailable.",
+                  },
+                ]
+              : [],
+            scriptTools: [],
+            skillFilePath: `${directory}/${SKILL_FILE_NAME}`,
+            sourceOrganization: source.summary.sourceOrganization,
+            toolPath: null,
+          },
+          record,
+        });
+      } catch (error) {
+        if (!(error instanceof NakamaApiError && error.status === 404)) {
+          throw error;
+        }
+      }
+    }
+    if (
+      new Set(result.map((item) => item.discovered.name)).size !== result.length
+    ) {
+      throw new NakamaApiError("Conflicting skill names are assigned.", 409);
+    }
+    return result;
   }
 
   private async syncAssignedDiscoveredSkills(
