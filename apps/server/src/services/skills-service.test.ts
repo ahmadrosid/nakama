@@ -307,18 +307,25 @@ export async function run(input, context) {
         sourcePath: globalDirectory,
       });
       await db.assignSkillToProfile("profile_parent", "global_skill");
+      expect(
+        (await service.listSkillsForProfile(instance.id)).map((item) => item.id)
+      ).toEqual(["global_skill"]);
       const fourth = (await agent.resolveSession(id, "team_a"))!;
       expect(fourth).not.toBe(third);
       expect(fourth.getHistory()).toEqual(third.getHistory());
       await fourth.send("Fourth");
       expect(turns[3]!.tools?.map((tool) => tool.name)).toContain("weather");
       await db.unassignSkillFromProfile("profile_parent", "global_skill");
+      expect(await service.listSkillsForProfile(instance.id)).toEqual([]);
       const fifth = (await agent.resolveSession(id, "team_a"))!;
       expect(fifth).not.toBe(fourth);
       expect(fifth.getHistory()).toEqual(fourth.getHistory());
       await fifth.send("Fifth");
       expect(turns[4]!.tools ?? []).toEqual([]);
       await db.deleteOrgSharedResource("parent", publication.id);
+      await expect(
+        service.listSkillsForProfile(instance.id)
+      ).rejects.toMatchObject({ status: 404 });
       await expect(
         service.loadToolsForProfile("team_a", instance.id)
       ).rejects.toMatchObject({ status: 404 });

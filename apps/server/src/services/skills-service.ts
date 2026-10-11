@@ -1978,8 +1978,10 @@ export class SkillsService {
   }
 
   async listSkillsForProfile(profileId: string): Promise<SkillSummary[]> {
-    const skills = await this.db.listSkillsForProfile(profileId);
     const profile = await this.db.getProfile(profileId);
+    const skills = profile?.orgId
+      ? await this.getAssignedSkills(profile.orgId, profileId)
+      : await this.db.listSkillsForProfile(profileId);
     return skills
       .filter((record) => !record.orgId || record.orgId === profile?.orgId)
       .map((record) => toSkillSummary(record));

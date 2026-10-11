@@ -2431,6 +2431,20 @@ if __name__ == "__main__":
         );
         expect(detail.toolCount).toBe(2);
         expect(detail.sharedAgent?.available).toBe(true);
+        const assigned = await agent.listProfileTools("org_team_a", profile.id);
+        expect(assigned.tools.map((tool) => tool.id).sort()).toEqual(
+          ["global_read", record.id].sort()
+        );
+        expect(
+          assigned.tools.find((tool) => tool.id === record.id)
+        ).toMatchObject({
+          handlerConfig: { requiresApiKey: true },
+          publicationId: toolPublication.id,
+          scope: "parent",
+        });
+        expect(JSON.stringify(assigned)).not.toContain(
+          record.handlerConfig.modulePath
+        );
         expect(JSON.stringify(detail)).not.toContain(
           record.handlerConfig.modulePath
         );
@@ -2563,6 +2577,9 @@ if __name__ == "__main__":
           agent.resolveSession(id, "org_team_a")
         ).rejects.toMatchObject({ status: 404 });
       } else {
+        expect(
+          (await agent.listProfileTools("org_team_a", profile.id)).tools
+        ).toEqual([]);
         await expect(
           read.run({ path: "note.txt" }, context)
         ).rejects.toMatchObject({ status: 404 });

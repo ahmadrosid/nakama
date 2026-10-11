@@ -1729,3 +1729,13 @@ Checks: 209 focused tests passed across three service files, with two Windows te
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: audit shared profile assignment read routes and portability, then finish invocation compatibility checks before the delivery-stage gate.
 No new source file, package, or dependency was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-shared-profile-focused.log, /tmp/nakama-shared-profile-types.log, /tmp/nakama-shared-profile-core-types.log, and /tmp/nakama-shared-profile-lint.log.
+
+### Slice 2as — shared assignment read paths
+The profile tool list now uses current authorized source assignments for shared instances. Unavailable instances return no active tool assignments. Published parent tool details pass through the existing credential and path redaction, with current publication and source labels.
+Parent catalog filtering is reused by catalog and assignment reads. Assignment reads no longer initialize built-in definitions merely to read a foreign assigned tool. Pending teams and parents do not supply published tools. Ordinary local and global assignment behavior stays unchanged.
+SkillsService.listSkillsForProfile now resolves effective shared assignments through its existing publication guard. Its global-or-team-owned filter stays intact; the interactive management-skill check can see inherited global assignments, while parent-owned skills remain on the published-skill read path. Removed source assignments or publications cannot provide management eligibility.
+Tests cover shared JavaScript and Python tool lists, current publication metadata, hidden source paths, empty lists after source revocation, inherited global skill additions and removals, and denied reads after agent revocation. Existing HTTP tool route and skill scope tests pass. MCP has no separate profile assignment GET route; profile detail already supplies current inherited summaries.
+Checks: 228 focused tests passed across five files, with two Windows tests skipped. The complete server type check, lint across 1532 files, and git diff --check passed. No repair was needed after validation.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: audit shared profile portability and invocation compatibility, then run the delivery-stage gate.
+No new source file, package, or dependency was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-assignment-reads-focused.log, /tmp/nakama-assignment-reads-types.log, and /tmp/nakama-assignment-reads-lint.log.

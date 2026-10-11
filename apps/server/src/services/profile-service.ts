@@ -768,12 +768,27 @@ export class ProfileService {
     const records = await this.db.listTools();
     const tools = records.filter((tool) => !tool.orgId || tool.orgId === orgId);
     const details = tools.map(toToolDetail);
+    return {
+      tools: [...details, ...(await this.listPublishedTools(orgId, records))],
+    };
+  }
+
+  private async listPublishedTools(
+    orgId: string,
+    records: StoredToolRecord[]
+  ): Promise<ToolDetail[]> {
+    const details: ToolDetail[] = [];
     const team = await this.db.getOrganizationById(orgId);
     const parent =
-      team?.parentOrgId && !team.archivedAt
+      team?.parentOrgId && !team.archivedAt && !team.setupPending
         ? await this.db.getOrganizationById(team.parentOrgId)
         : null;
-    if (parent && !parent.archivedAt && !parent.parentOrgId) {
+    if (
+      parent &&
+      !parent.archivedAt &&
+      !parent.setupPending &&
+      !parent.parentOrgId
+    ) {
       const publications = await this.db.listOrgSharedResources(parent.id);
       for (const publication of publications) {
         if (publication.resourceKind !== "tool") {
@@ -802,7 +817,7 @@ export class ProfileService {
         });
       }
     }
-    return { tools: details };
+    return details;
   }
 
   async getTool(toolId: string, orgId?: string): Promise<ToolResponse> {
@@ -839,12 +854,16 @@ export class ProfileService {
     orgId: string,
     profileId: string
   ): Promise<ListToolsResponse> {
-    await this.requireProfile(orgId, profileId);
-    const tools = await this.db.listToolsForProfile(profileId);
+    const view = await this.resolveProfileView(
+      await this.requireProfile(orgId, profileId)
+    );
+    const tools = view.instance
+      ? (view.shared?.assignedTools ?? [])
+      : await this.db.listToolsForProfile(profileId);
     const sharedCatalog = tools.some(
       (tool) => tool.orgId && tool.orgId !== orgId
     )
-      ? (await this.listTools(orgId)).tools
+      ? await this.listPublishedTools(orgId, tools)
       : [];
     return {
       tools: tools.flatMap((tool) => {
