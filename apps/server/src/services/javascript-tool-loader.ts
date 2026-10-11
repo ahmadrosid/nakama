@@ -1,7 +1,12 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ToolContext, ToolDefinition } from "@nakama/core";
+import type {
+  DiscoveredSkill,
+  JsonSchema,
+  ToolContext,
+  ToolDefinition,
+} from "@nakama/core";
 import { pathExists } from "@nakama/core";
 import type { StoredToolRecord } from "@nakama/db";
 import { z } from "zod";
@@ -32,6 +37,63 @@ export async function loadJavascriptTool(
     run: runJavascriptTool,
     validateModule: validateJavascriptToolModule,
   });
+}
+
+/** Caller must verify published code against approved source files before loading. */
+export async function loadJavascriptSkillTool(
+  skill: DiscoveredSkill,
+  context: ToolContext
+): Promise<ToolDefinition | null> {
+  const modulePath = skill.toolPath;
+  if (!modulePath) {
+    return null;
+  }
+  const metadata = z
+    .object({
+      description: z.string().optional(),
+      name: z.string().optional(),
+      parameters: z.record(z.string(), z.json()).optional(),
+    })
+    .parse(
+      await spawnJsonTool({
+        args: [RUNNER_PATH, modulePath, "--describe-skill"],
+        bin: BUN_BIN,
+        context,
+        cwd: context.workspaceRoot!,
+        input: {},
+        label: "JavaScript skill tool",
+        transport: { includeConfigDir: false },
+        workspaceRoot: context.workspaceRoot,
+      })
+    );
+  return {
+    description: metadata.description?.trim() || skill.description,
+    name: metadata.name?.trim() || skill.name,
+    // SAFETY: The metadata schema confirms a JSON object before exposing it as JSON Schema.
+    parameters: (metadata.parameters as JsonSchema | undefined) ?? {
+      additionalProperties: true,
+      type: "object",
+    },
+    async run(input, executionContext) {
+      return spawnJsonTool({
+        args: [RUNNER_PATH, modulePath, "--run-skill"],
+        bin: BUN_BIN,
+        context: executionContext,
+        cwd: executionContext.workspaceRoot!,
+        input: {
+          context: {
+            orgId: executionContext.orgId,
+            orgRole: executionContext.orgRole,
+            profileId: executionContext.profileId,
+          },
+          input: customToolJsonValueSchema.parse(input),
+        },
+        label: "JavaScript skill tool",
+        transport: { includeConfigDir: false },
+        workspaceRoot: executionContext.workspaceRoot,
+      });
+    },
+  };
 }
 
 export async function validateJavascriptToolModule(

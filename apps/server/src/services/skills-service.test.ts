@@ -117,6 +117,123 @@ describe("SkillsService", () => {
     return { db, local, privateSkill, publication, service, sibling, skill };
   }
 
+  test.each(["tool.js", "tool.ts"])(
+    "shared JavaScript %s runs current reviewed code in the team",
+    async (file) => {
+      const { db, skill, publication, service } = await setupPublishedSkill();
+      const modulePath = join(skill.sourcePath, file);
+      const source = `import { writeFile } from "node:fs/promises";
+process.env.NAKAMA_SHARED_JS_CHILD = "child";
+export const name = "shared-notes";
+export const description = "Probe team context";
+export const parameters = {type: "object", properties: {message: {type: "string"}}};
+export async function run(input, context) {
+  await writeFile("executed.marker", "team");
+  return { cwd: process.cwd(), workspace: context.workspaceRoot, orgId: context.orgId, profileId: context.profileId, config: process.env.NAKAMA_CONFIG_DIR ?? null, value: "original", message: input.message };
+}
+`;
+      const originalChild = process.env.NAKAMA_SHARED_JS_CHILD;
+      await writeFile(modulePath, source);
+      await db.assignSkillToProfile("profile_team_a", skill.id);
+      const agent = new AgentService(null, null, db);
+      agent.setSkillsService(service);
+      const context = agent.buildPluginToolContext("team_a", {
+        profileId: "profile_team_a",
+        runId: "run",
+        workflowId: "workflow",
+      });
+      const root = context.workspaceRoot!;
+      await mkdir(root, { recursive: true });
+      const blocked = (
+        await service.loadToolsForProfile("team_a", "profile_team_a")
+      )[0]!;
+      expect(await blocked.run({}, context)).toHaveProperty("error");
+      expect(process.env.NAKAMA_SHARED_JS_CHILD).toBe(originalChild);
+      await expect(readFile(join(root, "executed.marker"))).rejects.toThrow();
+      await db.upsertOrganization({
+        ...(await db.getOrganizationById("parent"))!,
+        skillsWriteApproval: true,
+      });
+      const proposals = new SkillProposalService(db, service);
+      const approve = async () => {
+        const staged = await proposals.stageProposal({
+          action: "approve_code",
+          orgId: "parent",
+          profileId: "profile_parent",
+          relativePath: file,
+          skillName: "shared-notes",
+        });
+        await proposals.approveProposal("parent", staged.proposalId!, "admin");
+      };
+      await approve();
+      const tool = (
+        await service.loadToolsForProfile("team_a", "profile_team_a")
+      )[0]!;
+      expect(tool.parameters).toEqual({
+        properties: { message: { type: "string" } },
+        type: "object",
+      });
+      expect(process.env.NAKAMA_SHARED_JS_CHILD).toBe(originalChild);
+      await expect(readFile(join(root, "executed.marker"))).rejects.toThrow();
+      expect(
+        await tool.run(
+          { message: "hello" },
+          { ...context, workspaceRoot: skill.sourcePath }
+        )
+      ).toMatchObject({
+        config: null,
+        cwd: await realpath(root),
+        message: "hello",
+        orgId: "team_a",
+        profileId: "profile_team_a",
+        value: "original",
+        workspace: root,
+      });
+      expect(process.env.NAKAMA_SHARED_JS_CHILD).toBe(originalChild);
+      expect(await readFile(join(root, "executed.marker"), "utf8")).toBe(
+        "team"
+      );
+      await expect(
+        readFile(join(skill.sourcePath, "executed.marker"))
+      ).rejects.toThrow();
+      await writeFile(modulePath, source.replace('"original"', '"updated"'));
+      expect(await tool.run({}, context)).toHaveProperty("error");
+      await approve();
+      expect(await tool.run({}, context)).toMatchObject({ value: "updated" });
+      await expect(
+        tool.run({}, { ...context, orgRole: "viewer" })
+      ).rejects.toMatchObject({ status: 403 });
+      await expect(
+        tool.run({}, { ...context, orgId: "team_b" })
+      ).rejects.toMatchObject({ status: 404 });
+      for (const broken of [
+        source + "\n(",
+        source.replace(
+          "return { cwd:",
+          "throw new Error(import.meta.url); return { cwd:"
+        ),
+      ]) {
+        await writeFile(modulePath, broken);
+        await approve();
+        try {
+          await tool.run({}, context);
+          throw new Error("Expected failure");
+        } catch (error) {
+          expect(error).toMatchObject({ status: 503 });
+          expect(String(error)).not.toContain(skill.sourcePath);
+          expect(String(error)).not.toContain("tool.");
+        }
+      }
+      await db.deleteOrgSharedResource("parent", publication.id);
+      await expect(tool.run({}, context)).rejects.toMatchObject({
+        status: 404,
+      });
+      expect(
+        await service.loadToolsForProfile("team_a", "profile_team_a")
+      ).toEqual([]);
+    }
+  );
+
   test.each(["tool.py", "scripts/probe.py"])(
     "shared Python %s keeps review and team execution checks",
     async (file) => {

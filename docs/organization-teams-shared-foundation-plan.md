@@ -1493,3 +1493,17 @@ Checks: all 109 focused tests passed across four files; the complete server type
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: shared JavaScript skill loading and invocation checks, then session capability refresh for added tools.
 No source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-shared-python-{focused,repair-focused,types,lint}.log.
+
+### Slice 2z — shared JavaScript skill execution
+Assigned parent JavaScript and TypeScript entrypoints now use the existing subprocess runner. The source review gate runs before metadata loading or invocation.
+Shared module metadata loads in a child process under the team workspace. Callable definitions preserve exported names, descriptions, and JSON parameters.
+Each invocation resolves the current source and approved code again. New subprocesses read current code rather than a cached host import.
+The runner receives team IDs and workspace context. Its existing environment allowlist omits deployment configuration and server credentials for shared skills.
+Python execution retains the same review, role, assignment, publication, and team workspace guards. Local JavaScript and custom tool behavior remains on its existing path.
+Shared prompt discovery now includes all discovered tooling metadata through virtual publication paths. The temporary JavaScript execution block was removed.
+Module load and invocation failures return a generic 503 without private parent file paths. The existing shared wrapper still denies viewer, wrong-context, and revoked calls before execution.
+Tests cover JavaScript and TypeScript entrypoints, approved metadata, input parameters, separate process state, team file writes, workspace override denial, unreviewed updates, current reviewed updates, viewer denial, wrong tenant context, revocation, syntax failure, and runtime failure.
+Checks: all 129 focused tests passed across five files; the complete server type check passed; lint passed 1532 files; git diff --check passed. No failed check required a repair.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: session capability refresh for newly assigned or changed shared tools, with persisted and ephemeral history preservation.
+No source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-shared-js-{focused,final-focused,types,lint}.log.

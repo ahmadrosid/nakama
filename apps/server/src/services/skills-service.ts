@@ -28,6 +28,7 @@ import type {
   SkillSummary,
   SkillUsageSummary,
   SyncSkillsResponse,
+  ToolContext,
   ToolDefinition,
 } from "@nakama/core";
 import {
@@ -82,6 +83,7 @@ import type {
   StoredSkillRecord,
   StoredSkillUsageRecord,
 } from "@nakama/db";
+import { loadJavascriptSkillTool } from "./javascript-tool-loader";
 import type { PluginService } from "./plugin-service";
 import {
   type ProfileChangeMeta,
@@ -1611,7 +1613,7 @@ export class SkillsService {
         orgId,
         item.record.id
       );
-      for (const tool of await this.loadPublishedPythonTools(
+      for (const tool of await this.loadPublishedSkillTools(
         orgId,
         profileId,
         publication.publicationId
@@ -1624,7 +1626,7 @@ export class SkillsService {
               throw new NakamaApiError("Skill is unavailable.", 404);
             }
             const current = (
-              await this.loadPublishedPythonTools(
+              await this.loadPublishedSkillTools(
                 orgId,
                 profileId,
                 publication.publicationId
@@ -1633,13 +1635,20 @@ export class SkillsService {
             if (!current) {
               throw new NakamaApiError("Skill tool is unavailable.", 404);
             }
-            return current.run(
-              input,
-              buildToolExecutionContext({
-                ...context,
-                workspaceRoot: undefined,
-              })
-            );
+            try {
+              return await current.run(
+                input,
+                buildToolExecutionContext({
+                  ...context,
+                  workspaceRoot: undefined,
+                })
+              );
+            } catch {
+              throw new NakamaApiError(
+                "Shared skill code is unavailable.",
+                503
+              );
+            }
           },
         });
       }
@@ -1653,7 +1662,7 @@ export class SkillsService {
     return tools;
   }
 
-  private async loadPublishedPythonTools(
+  private async loadPublishedSkillTools(
     orgId: string,
     profileId: string,
     publicationId: string
@@ -1672,25 +1681,23 @@ export class SkillsService {
     if (!discovered) {
       throw new NakamaApiError("Skill is unavailable.", 404);
     }
-    // shortcut: JavaScript shared entrypoints stay blocked until their loader refreshes code and isolates team execution.
-    discovered.toolPath = discovered.toolPath?.endsWith(".py")
-      ? discovered.toolPath
-      : null;
-    discovered.hasTool =
-      Boolean(discovered.toolPath) || discovered.scriptTools.length > 0;
-    return this.loadAssignedSkillTools(
-      source.summary.sourceOrganization.id,
-      source.sourceProfileId,
-      [{ discovered, record }],
-      true
-    );
+    try {
+      return await this.loadAssignedSkillTools(
+        source.summary.sourceOrganization.id,
+        source.sourceProfileId,
+        [{ discovered, record }],
+        buildToolExecutionContext({ orgId, profileId })
+      );
+    } catch {
+      throw new NakamaApiError("Shared skill code is unavailable.", 503);
+    }
   }
 
   private async loadAssignedSkillTools(
     orgId: string,
     profileId: string,
     assigned: Array<{ discovered: DiscoveredSkill; record: StoredSkillRecord }>,
-    shared = false
+    sharedContext?: ToolContext
   ): Promise<ToolDefinition[]> {
     // What a member asks the agent to write lands under this profile's own
     // skills dir, and a skill's tool module and `scripts:` entries are host
@@ -1825,11 +1832,18 @@ export class SkillsService {
 
     const skillTools = loadable.filter((item) => item.discovered.hasTool);
 
-    const javascriptTools = await loadSkillTools(
-      skillTools
-        .filter((item) => !item.discovered.toolPath?.endsWith(".py"))
-        .map((item) => item.discovered)
-    );
+    const javascriptSkills = skillTools
+      .filter((item) => !item.discovered.toolPath?.endsWith(".py"))
+      .map((item) => item.discovered);
+    const javascriptTools = sharedContext
+      ? (
+          await Promise.all(
+            javascriptSkills.map((skill) =>
+              loadJavascriptSkillTool(skill, sharedContext)
+            )
+          )
+        ).filter((tool): tool is ToolDefinition => tool !== null)
+      : await loadSkillTools(javascriptSkills);
 
     const pythonTools = await Promise.all(
       skillTools
@@ -1837,7 +1851,7 @@ export class SkillsService {
         .map((item) =>
           loadPythonSkillTool(item.discovered, undefined, {
             exposeConfigDir: isGlobalSkillSourcePath(item.discovered.directory),
-            useWorkspaceCwd: shared,
+            useWorkspaceCwd: Boolean(sharedContext),
           })
         )
     );
@@ -1849,7 +1863,7 @@ export class SkillsService {
         item.discovered.scriptTools.map((script) =>
           loadPythonSkillTool(item.discovered, script, {
             exposeConfigDir: isGlobalSkillSourcePath(item.discovered.directory),
-            useWorkspaceCwd: shared,
+            useWorkspaceCwd: Boolean(sharedContext),
           })
         )
       )
@@ -2134,28 +2148,17 @@ export class SkillsService {
             description: source.summary.description,
             directory,
             disableModelInvocation: source.summary.disableModelInvocation,
-            hasTool:
-              Boolean(code?.toolPath?.endsWith(".py")) ||
-              Boolean(code?.scriptTools.length),
+            hasTool: code?.hasTool ?? false,
             includeBodyOnMatch: source.includeBodyOnMatch,
             name: source.summary.name,
-            scriptIssues:
-              code?.toolPath && !code.toolPath.endsWith(".py")
-                ? [
-                    {
-                      path: "shared-code",
-                      reason:
-                        "Shared JavaScript skill code execution is unavailable.",
-                    },
-                  ]
-                : [],
+            scriptIssues: code?.scriptIssues ?? [],
             scriptTools: (code?.scriptTools ?? []).map((script) => ({
               ...script,
               path: `${directory}/${path.relative(source.directory, script.path).split(path.sep).join("/")}`,
             })),
             skillFilePath: `${directory}/${SKILL_FILE_NAME}`,
             sourceOrganization: source.summary.sourceOrganization,
-            toolPath: code?.toolPath?.endsWith(".py")
+            toolPath: code?.toolPath
               ? `${directory}/${path.basename(code.toolPath)}`
               : null,
           },
