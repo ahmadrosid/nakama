@@ -58,6 +58,7 @@ import type {
   CreateSessionRequest,
   CreateSessionResponse,
   CreateSkillRequest,
+  CreateTeamRequest,
   CreateToolRequest,
   CreateWorkflowRequest,
   DataImportPreviewResponse,
@@ -103,6 +104,7 @@ import type {
   ListOrgMemoryHistoryResponse,
   ListOrgMemoryProposalsResponse,
   ListOrgPluginsResponse,
+  ListOrgSharedResourcesResponse,
   ListPluginReleasesResponse,
   ListPluginUpdatesResponse,
   ListProfileChangeHistoryResponse,
@@ -131,6 +133,7 @@ import type {
   MoveProfileRequest,
   NotificationDestinationSummary,
   NotificationDestinationWithSecret,
+  OrganizationOverviewResponse,
   OrganizationResponse,
   OrgInviteCreatedResponse,
   OrgLlmQuotaStatusResponse,
@@ -142,6 +145,7 @@ import type {
   OrgMemorySearchResponse,
   OrgPluginDetail,
   OrgPluginSummary,
+  OrgSharedResourceResponse,
   PasskeyAuthenticationOptionsResponse,
   PasskeyCredentialResponse,
   PasskeyRegistrationOptionsResponse,
@@ -160,6 +164,7 @@ import type {
   ProfileResponse,
   PublishArtifactShareRequest,
   PublishArtifactShareResponse,
+  PublishOrgSharedResourceRequest,
   RegenerateNotificationDestinationKeyResponse,
   RenameWorkspaceEntryRequest,
   RequestPasswordResetRequest,
@@ -325,7 +330,7 @@ export class NakamaClient {
   }
 
   readonly baseUrl: string;
-  private readonly fetchImpl: typeof fetch;
+  private readonly fetchImpl: NonNullable<NakamaClientOptions["fetch"]>;
   private readonly credentials: RequestCredentials;
   private readonly clientOrigin: string | null;
   private authToken: string | null;
@@ -3367,6 +3372,72 @@ export class NakamaClient {
   async listOrgMembers(orgId: string): Promise<ListOrgMembersResponse> {
     return this.request<ListOrgMembersResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/members`
+    );
+  }
+
+  async getOrganizationOverview(
+    orgId: string
+  ): Promise<OrganizationOverviewResponse> {
+    return this.request<OrganizationOverviewResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/overview`,
+      { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
+  async createTeam(
+    orgId: string,
+    request: CreateTeamRequest
+  ): Promise<CreateOrganizationResponse> {
+    return this.request<CreateOrganizationResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/teams`,
+      {
+        body: JSON.stringify(request),
+        headers: { "X-Org-Id": orgId },
+        method: "POST",
+      }
+    );
+  }
+
+  async listOrgSharedResources(
+    orgId: string
+  ): Promise<ListOrgSharedResourcesResponse> {
+    return this.request<ListOrgSharedResourcesResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/shared-resources`,
+      { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
+  async publishOrgSharedResource(
+    orgId: string,
+    request: PublishOrgSharedResourceRequest
+  ): Promise<OrgSharedResourceResponse> {
+    return this.request<OrgSharedResourceResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/shared-resources`,
+      {
+        body: JSON.stringify(request),
+        headers: { "X-Org-Id": orgId },
+        method: "POST",
+      }
+    );
+  }
+
+  async unpublishOrgSharedResource(
+    orgId: string,
+    publicationId: string
+  ): Promise<void> {
+    await this.request(
+      `/v1/orgs/${encodeURIComponent(orgId)}/shared-resources/${encodeURIComponent(publicationId)}`,
+      { headers: { "X-Org-Id": orgId }, method: "DELETE" }
+    );
+  }
+
+  async createSharedAgentInstance(
+    orgId: string,
+    publicationId: string
+  ): Promise<ProfileResponse> {
+    return this.request<ProfileResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/shared-agents/${encodeURIComponent(publicationId)}/instance`,
+      { headers: { "X-Org-Id": orgId }, method: "POST" }
     );
   }
 

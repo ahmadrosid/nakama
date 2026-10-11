@@ -1273,3 +1273,18 @@ Implementation step 2 remains unchecked because its root setup and publication c
 Next: connect published resources to execution, then complete the screen and client controls. Stages 2 through 4 remain incomplete.
 No browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-approved-tool-{recordings,replay}.log and /tmp/nakama-approved-recordings-{types,lint,knip,full}.log.
+
+2026-10-11: Step 2 slice 2n connects the organization routes to the existing typed client.
+NakamaClient now supports overview, team creation, publication listing, publish, unpublish, and shared agent instance creation.
+Each operation sends its explicit organization ID in both the encoded path and X-Org-Id. Calls preserve the client's default organization.
+Team requests retain requestId and first-admin selection. Model IDs retain providerId::modelId. Agent selection returns the existing ProfileResponse contract.
+Twelve request tests cover all six operations, encoded IDs, explicit scope, default scope preservation, response data, empty 204 results, and denied access.
+The complete client type check found existing fetch mocks that lacked Bun's preconnect property and incomplete browser fixtures.
+The fetch option now describes the function signature used by the client. Existing CSRF tests install and restore browser fixtures through property descriptors.
+The existing token-refresh test checks the successful health field without requiring an incomplete response to match the entire HealthResponse type.
+Checks: all 60 client tests passed; complete client type check passed; lint passed all 1532 files; git diff --check passed.
+No new source file, dependency, or abstraction was added. Other authorized type cleanup remains uncommitted.
+Steps 2 and 5 remain unchecked. The screen, query state, resource execution, portability, and docs still require implementation.
+Next: add authorized shared resource reads through the active team, then complete execution checks before the Organization screen.
+This slice does not finish a delivery stage. No full-suite rerun, browser check, build, push, or PR ran.
+Evidence: /tmp/nakama-client-foundation-{focused,types,lint}.log.

@@ -16,7 +16,7 @@ export interface NakamaClientOptions {
   /** Browser-style origin for OAuth callbacks when this client has no window (e.g. Telegram bridge). */
   clientOrigin?: string;
   credentials?: RequestCredentials;
-  fetch?: typeof fetch;
+  fetch?: (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>;
   orgId?: string | null;
 }
 

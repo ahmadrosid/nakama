@@ -6,6 +6,112 @@ import { join } from "node:path";
 import { getUserConfigDir, saveUserConfig } from "@nakama/core";
 import { NakamaAuthExpiredError, NakamaClient } from "./index";
 
+const organizationRequests = [
+  {
+    body: null,
+    call: (client: NakamaClient) => client.getOrganizationOverview("team/a?"),
+    method: "GET",
+    path: "/v1/orgs/team%2Fa%3F/overview",
+    response: { activeOrgId: "team/a?", sharedResources: [], teams: [] },
+  },
+  {
+    body: {
+      adminUserId: "user-2",
+      name: "Sales",
+      requestId: "retry-1",
+      slug: "sales",
+    },
+    call: (client: NakamaClient) =>
+      client.createTeam("team/a?", {
+        adminUserId: "user-2",
+        name: "Sales",
+        requestId: "retry-1",
+        slug: "sales",
+      }),
+    method: "POST",
+    path: "/v1/orgs/team%2Fa%3F/teams",
+    response: { organization: { id: "sales" } },
+  },
+  {
+    body: null,
+    call: (client: NakamaClient) => client.listOrgSharedResources("team/a?"),
+    method: "GET",
+    path: "/v1/orgs/team%2Fa%3F/shared-resources",
+    response: { resources: [] },
+  },
+  {
+    body: { resourceId: "provider::model", resourceKind: "model" },
+    call: (client: NakamaClient) =>
+      client.publishOrgSharedResource("team/a?", {
+        resourceId: "provider::model",
+        resourceKind: "model",
+      }),
+    method: "POST",
+    path: "/v1/orgs/team%2Fa%3F/shared-resources",
+    response: { publication: { id: "publication/a?" } },
+  },
+  {
+    body: null,
+    call: (client: NakamaClient) =>
+      client.unpublishOrgSharedResource("team/a?", "publication/a?"),
+    method: "DELETE",
+    path: "/v1/orgs/team%2Fa%3F/shared-resources/publication%2Fa%3F",
+    response: undefined,
+  },
+  {
+    body: null,
+    call: (client: NakamaClient) =>
+      client.createSharedAgentInstance("team/a?", "publication/a?"),
+    method: "POST",
+    path: "/v1/orgs/team%2Fa%3F/shared-agents/publication%2Fa%3F/instance",
+    response: { profile: { id: "team-agent" } },
+  },
+];
+
+test.each(organizationRequests)(
+  "$method $path uses explicit tenant context and preserves the response",
+  async ({ call, method, path, body, response }) => {
+    const requests: Request[] = [];
+    const client = new NakamaClient({
+      authToken: "test-token",
+      baseUrl: "https://nakama.example.com",
+      fetch: async (input, init) => {
+        requests.push(new Request(input, init));
+        return response === undefined
+          ? new Response(null, { status: 204 })
+          : Response.json(response);
+      },
+      orgId: "other-team",
+    });
+    expect<unknown>(await call(client)).toEqual(response);
+    expect(requests).toHaveLength(1);
+    const request = requests[0]!;
+    expect(request.url).toBe(`https://nakama.example.com${path}`);
+    expect(request.method).toBe(method);
+    expect(request.headers.get("X-Org-Id")).toBe("team/a?");
+    expect(request.headers.get("Authorization")).toBe("Bearer test-token");
+    if (body) {
+      expect(request.headers.get("Content-Type")).toBe("application/json");
+      expect(await request.json()).toEqual(body);
+    } else {
+      expect(await request.text()).toBe("");
+    }
+    await client.listOrgMembers("other-team");
+    expect(requests[1]?.headers.get("X-Org-Id")).toBe("other-team");
+  }
+);
+
+test.each(organizationRequests)(
+  "$method $path preserves denied access",
+  async ({ call }) => {
+    const client = new NakamaClient({
+      baseUrl: "https://nakama.example.com",
+      fetch: async () => Response.json({ error: "denied" }, { status: 403 }),
+    });
+    await expect(call(client)).rejects.toMatchObject({ status: 403 });
+  }
+);
+
 test.each(["http://localhost:4310", "https://nakama.example.com"])(
   "CLI images are uploaded in the request body to %s",
   async (baseUrl) => {
@@ -143,17 +249,14 @@ test("official plugin reinstall sends revision and explicit organization", async
 });
 
 test("chat stream request includes cookie CSRF protection", async () => {
-  const originalDocument =
-    // SAFETY: These tests read only the cookie field from a minimal browser fixture.
-    (globalThis as typeof globalThis & { document?: { cookie: string } })
-      .document;
-
-  // SAFETY: These tests read only the cookie field from a minimal browser fixture.
-  (
-    globalThis as typeof globalThis & { document?: { cookie: string } }
-  ).document = {
-    cookie: "nakama_csrf=csrf-token-123; other=value",
-  };
+  const originalDocument = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "document"
+  );
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: { cookie: "nakama_csrf=csrf-token-123; other=value" },
+  });
 
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
@@ -186,28 +289,27 @@ test("chat stream request includes cookie CSRF protection", async () => {
         .idleTimeout
     ).toBe(0);
   } finally {
-    // SAFETY: These tests read only the cookie field from a minimal browser fixture.
-    (
-      globalThis as typeof globalThis & { document?: { cookie: string } }
-    ).document = originalDocument;
+    if (originalDocument) {
+      Object.defineProperty(globalThis, "document", originalDocument);
+    } else {
+      Reflect.deleteProperty(globalThis, "document");
+    }
   }
 });
 
 test("CSRF header prefers the host-bound cookie a sibling host cannot set", async () => {
-  const originalDocument =
-    // SAFETY: These tests read only the cookie field from a minimal browser fixture.
-    (globalThis as typeof globalThis & { document?: { cookie: string } })
-      .document;
+  const originalDocument = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "document"
+  );
 
   // An attacker-planted parent-domain cookie is still readable from JS, so the
   // client must send the host-bound one the server actually trusts.
 
-  // SAFETY: These tests read only the cookie field from a minimal browser fixture.
-  (
-    globalThis as typeof globalThis & { document?: { cookie: string } }
-  ).document = {
-    cookie: "nakama_csrf=planted; __Host-nakama_csrf=host-bound",
-  };
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: { cookie: "nakama_csrf=planted; __Host-nakama_csrf=host-bound" },
+  });
 
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
@@ -232,10 +334,11 @@ test("CSRF header prefers the host-bound cookie a sibling host cannot set", asyn
       "host-bound"
     );
   } finally {
-    // SAFETY: These tests read only the cookie field from a minimal browser fixture.
-    (
-      globalThis as typeof globalThis & { document?: { cookie: string } }
-    ).document = originalDocument;
+    if (originalDocument) {
+      Object.defineProperty(globalThis, "document", originalDocument);
+    } else {
+      Reflect.deleteProperty(globalThis, "document");
+    }
   }
 });
 
@@ -611,7 +714,7 @@ test("non-browser clients reload the local auth token once after a 401", async (
       },
     });
 
-    await expect(client.health()).resolves.toEqual({ ok: true });
+    await expect(client.health()).resolves.toMatchObject({ ok: true });
     expect(attempts).toBe(2);
   } finally {
     delete process.env.NAKAMA_CONFIG_DIR;
