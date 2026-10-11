@@ -2624,3 +2624,13 @@ Thirty new component cases cover tenant and platform updates, delays during muta
 Step 5 and delivery stages 3 and 4 remain open. Next, protect organization creation and archive continuations before they select a tenant or write authentication state. Import/export/archive/restore compatibility and final delivery checks remain required. These guards do not cancel server mutations. No new file, package, dependency, browser check, full repository suite, build, paid call, push, or PR was added.
 
 Evidence: /tmp/nakama-auth-list-{before,focused,types,format,oxlint,lint,doctor}.log.
+
+### Slice 3ao — Creation and archive retain the latest authentication action
+
+Organization creation and archive now advance the existing authentication revision and capture the session-read revision. They check these revisions after each wait before selecting a tenant, writing authentication lists or user state, or clearing queries. Accepted changes advance the revision again and end loading. Archive applies its lists together with the accepted selection, including the existing no-organization identity fallback. A failed selection leaves the previous lists intact and propagates the failure. Existing platform authorization, request payloads, and ordinary completion behavior remain unchanged.
+
+Thirty-nine new component cases cover creation, archive with a remaining tenant, and archive without a remaining tenant. They delay each mutation, membership read, or selection, then log out, switch, replace the account, finish normally, or fail selection. The tests check identity, active tenant, membership and platform lists, loading, query data, request inputs, and absence of obsolete follow-up reads or selections. Twenty-nine of the initial 36 cases failed before the change. All 240 focused authentication and Organization panel tests passed with 1,923 assertions. Complete web types, scoped anti-slop, Ultracite, and git diff --check passed. React Doctor retained 91/100 with the same three warnings and no errors. No verification repair was needed.
+
+Step 5 and delivery stages 3 and 4 remain open. Next, review import, export, clone, archive, and restore compatibility against the plan's tenant and publication requirements. Final delivery checks and user documentation remain required. Authentication response checks do not cancel server mutations or control browser-cookie ordering. No new file, package, dependency, browser check, full repository suite, build, paid call, push, or PR was added.
+
+Evidence: /tmp/nakama-auth-org-transition-{before,focused,types,format,oxlint,lint,doctor}.log.

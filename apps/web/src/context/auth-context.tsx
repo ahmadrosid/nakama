@@ -255,27 +255,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error("Only platform admins can delete organizations.");
       }
 
+      const revision = ++authRevision.current;
+      const sessionRevision = sessionRequestRevision.current;
       await client.archivePlatformOrganization(orgId);
+
+      if (
+        revision !== authRevision.current ||
+        sessionRevision !== sessionRequestRevision.current
+      ) {
+        return;
+      }
 
       const [{ orgs: nextOrgs }, { organizations }] = await Promise.all([
         client.listUserOrgs(),
         client.listPlatformOrganizations(),
       ]);
 
+      if (
+        revision !== authRevision.current ||
+        sessionRevision !== sessionRequestRevision.current
+      ) {
+        return;
+      }
+
       const nextOrgId =
         nextOrgIdAfterArchive(nextOrgs, orgId) ??
         organizations.find((org) => !org.archivedAt && org.id !== orgId)?.id;
 
-      setOrgs(nextOrgs);
-      setPlatformOrgs(organizations);
+      let nextUser: AuthUserResponse;
 
       if (nextOrgId) {
-        setUser(await client.setActiveOrg(nextOrgId));
+        nextUser = await client.setActiveOrg(nextOrgId);
       } else {
         client.setOrgId(null);
-        setUser(await client.getMe());
+        nextUser = await client.getMe();
       }
 
+      if (
+        revision !== authRevision.current ||
+        sessionRevision !== sessionRequestRevision.current
+      ) {
+        return;
+      }
+
+      authRevision.current += 1;
+      setOrgs(nextOrgs);
+      setPlatformOrgs(organizations);
+      setUser(nextUser);
+      setIsLoading(false);
       resetQueryCache();
     },
     [user?.isPlatformAdmin]
@@ -287,16 +314,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error("Only platform admins can create organizations.");
       }
 
+      const revision = ++authRevision.current;
+      const sessionRevision = sessionRequestRevision.current;
       const created = await client.createUserOrganization(input);
+
+      if (
+        revision !== authRevision.current ||
+        sessionRevision !== sessionRequestRevision.current
+      ) {
+        return;
+      }
 
       const [{ orgs: nextOrgs }, nextUser] = await Promise.all([
         client.listUserOrgs(),
         client.setActiveOrg(created.organization.id),
       ]);
 
+      if (
+        revision !== authRevision.current ||
+        sessionRevision !== sessionRequestRevision.current
+      ) {
+        return;
+      }
+
+      authRevision.current += 1;
       setOrgs(nextOrgs);
       setPlatformOrgs((current) => [...current, created.organization]);
       setUser(nextUser);
+      setIsLoading(false);
       resetQueryCache();
     },
     [user?.isPlatformAdmin]

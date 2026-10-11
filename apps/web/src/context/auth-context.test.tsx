@@ -12,6 +12,289 @@ const ORG_A = { id: "org-a", name: "Org A", role: "admin", slug: "org-a" };
 
 const ORG_B = { id: "org-b", name: "Org B", role: "admin", slug: "org-b" };
 
+for (const operation of ["create", "archive", "archive empty"] as const) {
+  for (const stage of ["mutation", "list", "selection"] as const) {
+    const modes =
+      stage === "selection"
+        ? (["logout", "switch", "account", "current", "failure"] as const)
+        : (["logout", "switch", "account", "current"] as const);
+
+    test.each([...modes])(
+      `${operation} delayed at ${stage} preserves the latest identity after %s`,
+      async (mode) => {
+        const user: AuthUserResponse = {
+          activeOrgId: ORG_A.id,
+          email: "admin@example.com",
+          id: "user-a",
+          isPlatformAdmin: true,
+        };
+
+        const account = {
+          ...user,
+          activeOrgId: ORG_B.id,
+          id: "user-b",
+          isPlatformAdmin: false,
+        };
+
+        const orgs: UserOrgSummary[] = [ORG_A, ORG_B].map((org) => ({
+          ...org,
+          createdAt: "2026-10-12T00:00:00Z",
+          role: org.id === ORG_B.id ? "viewer" : "admin",
+          updatedAt: "2026-10-12T00:00:00Z",
+        }));
+
+        const created = {
+          ...orgs[0]!,
+          id: "org-c",
+          name: "Org C",
+          slug: "org-c",
+        };
+
+        const remaining =
+          operation === "create"
+            ? [...orgs, created]
+            : operation === "archive"
+              ? [orgs[1]!]
+              : [];
+
+        const selected = {
+          ...user,
+          activeOrgId:
+            operation === "create"
+              ? created.id
+              : operation === "archive"
+                ? ORG_B.id
+                : null,
+        };
+
+        const pendingCreate =
+          Promise.withResolvers<
+            Awaited<ReturnType<typeof client.createUserOrganization>>
+          >();
+
+        const pendingArchive =
+          Promise.withResolvers<
+            Awaited<ReturnType<typeof client.archivePlatformOrganization>>
+          >();
+
+        const pendingList =
+          Promise.withResolvers<
+            Awaited<ReturnType<typeof client.listUserOrgs>>
+          >();
+
+        const pendingSelection = Promise.withResolvers<AuthUserResponse>();
+        const getMe = spyOn(client, "getMe").mockResolvedValue(user);
+
+        const listUserOrgs = spyOn(client, "listUserOrgs").mockResolvedValue({
+          orgs,
+        });
+
+        const platform = spyOn(
+          client,
+          "listPlatformOrganizations"
+        ).mockResolvedValue({ organizations: orgs });
+
+        const create = spyOn(
+          client,
+          "createUserOrganization"
+        ).mockResolvedValue({ organization: created });
+
+        const archive = spyOn(
+          client,
+          "archivePlatformOrganization"
+        ).mockResolvedValue({ organization: orgs[0]! });
+
+        const logout = spyOn(client, "logout").mockResolvedValue(undefined);
+
+        const switchOrg = spyOn(client, "setActiveOrg").mockImplementation(
+          async (orgId) => ({ ...user, activeOrgId: orgId })
+        );
+
+        let auth!: ReturnType<typeof useAuth>;
+
+        function Probe() {
+          auth = useAuth();
+
+          return null;
+        }
+
+        const container = document.createElement("div");
+        document.body.append(container);
+        const root = createRoot(container);
+        let previous: Promise<void> | undefined;
+        const cacheKey = queryKeys.organizationOverview("parent", ORG_B.id);
+
+        try {
+          await act(async () =>
+            root.render(
+              <AuthProvider>
+                <Probe />
+              </AuthProvider>
+            )
+          );
+          listUserOrgs.mockResolvedValue({ orgs: remaining });
+          platform.mockResolvedValue({ organizations: remaining });
+
+          if (operation === "archive empty") {
+            getMe.mockResolvedValue(selected);
+          }
+
+          if (stage === "mutation") {
+            if (operation === "create") {
+              create.mockImplementationOnce(() => pendingCreate.promise);
+            } else {
+              archive.mockImplementationOnce(() => pendingArchive.promise);
+            }
+          } else if (stage === "list") {
+            listUserOrgs.mockImplementationOnce(() => pendingList.promise);
+          } else if (operation === "archive empty") {
+            getMe.mockImplementationOnce(() => pendingSelection.promise);
+          } else {
+            switchOrg.mockImplementationOnce(() => pendingSelection.promise);
+          }
+
+          await act(async () => {
+            previous =
+              operation === "create"
+                ? auth.createOrg({ name: created.name, slug: created.slug })
+                : auth.archiveOrg(ORG_A.id);
+          });
+
+          if (stage === "selection") {
+            expect(auth.orgs).toEqual(orgs);
+          }
+
+          if (mode === "logout") {
+            await act(async () => {
+              await auth.logout();
+            });
+          } else if (mode === "switch") {
+            await act(async () => {
+              await auth.switchOrg(ORG_B.id);
+            });
+          } else if (mode === "account") {
+            getMe.mockResolvedValue(account);
+            listUserOrgs.mockResolvedValue({ orgs: [orgs[1]!] });
+            await act(async () => {
+              await auth.refreshSession();
+            });
+          }
+
+          queryClient.setQueryData(cacheKey, 2);
+          pendingCreate.resolve({ organization: created });
+          pendingArchive.resolve({ organization: orgs[0]! });
+          pendingList.resolve({ orgs: remaining });
+
+          if (mode === "failure") {
+            const error = new Error("selection unavailable");
+            await act(async () => {
+              pendingSelection.reject(error);
+              await expect(previous).rejects.toBe(error);
+            });
+          } else {
+            pendingSelection.resolve(selected);
+            await act(async () => {
+              await previous;
+            });
+          }
+
+          expect(auth.user?.id).toBe(
+            mode === "logout"
+              ? undefined
+              : mode === "account"
+                ? account.id
+                : user.id
+          );
+          expect(auth.user?.activeOrgId).toBe(
+            mode === "logout"
+              ? undefined
+              : mode === "current"
+                ? selected.activeOrgId
+                : mode === "failure"
+                  ? ORG_A.id
+                  : ORG_B.id
+          );
+          expect(auth.orgs).toEqual(
+            mode === "logout"
+              ? []
+              : mode === "account"
+                ? [orgs[1]!]
+                : mode === "current"
+                  ? remaining
+                  : orgs
+          );
+          expect(auth.platformOrgs).toEqual(
+            mode === "logout" || mode === "account"
+              ? []
+              : mode === "current"
+                ? remaining
+                : orgs
+          );
+          expect(auth.isLoading).toBe(false);
+          expect(queryClient.getQueryData<number>(cacheKey)).toBe(
+            mode === "current" ? undefined : 2
+          );
+          expect(listUserOrgs).toHaveBeenCalledTimes(
+            mode !== "current" && stage === "mutation"
+              ? mode === "account"
+                ? 2
+                : 1
+              : mode === "account"
+                ? 3
+                : 2
+          );
+
+          const selectedDuringWait =
+            stage === "selection" ||
+            (operation === "create" && stage === "list");
+
+          expect(switchOrg).toHaveBeenCalledTimes(
+            (mode === "switch" ? 1 : 0) +
+              (operation !== "archive empty" &&
+              (mode === "current" || selectedDuringWait)
+                ? 1
+                : 0)
+          );
+
+          if (operation === "create") {
+            expect(create).toHaveBeenCalledWith({
+              name: created.name,
+              slug: created.slug,
+            });
+            expect(archive).not.toHaveBeenCalled();
+          } else {
+            expect(archive).toHaveBeenCalledWith(ORG_A.id);
+            expect(create).not.toHaveBeenCalled();
+          }
+        } finally {
+          pendingCreate.resolve({ organization: created });
+          pendingArchive.resolve({ organization: orgs[0]! });
+          pendingList.resolve({ orgs: remaining });
+          pendingSelection.resolve(selected);
+          await previous?.catch(() => undefined);
+          await act(async () => root.unmount());
+          container.remove();
+
+          for (const request of [
+            getMe,
+            listUserOrgs,
+            platform,
+            create,
+            archive,
+            logout,
+            switchOrg,
+          ]) {
+            request.mockRestore();
+          }
+
+          queryClient.clear();
+          client.setOrgId(null);
+        }
+      }
+    );
+  }
+}
+
 for (const operation of [
   "platform",
   "platform failure",
