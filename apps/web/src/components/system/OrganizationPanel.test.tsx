@@ -423,6 +423,53 @@ test("renders all published resource kinds and stored team counts", async () => 
   expect(container.querySelectorAll("dd button")).toHaveLength(2);
 });
 
+test("long organization, resource, and team names retain accessible detail actions", async () => {
+  const queries = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  const data = overview("team-a");
+  data.organization.name = "Organization".repeat(30);
+
+  for (const resource of data.sharedResources) {
+    resource.label = `${resource.resourceKind}${"Resource".repeat(30)}`;
+  }
+
+  data.teams[0].name = "Team".repeat(60);
+  queries.setQueryData(
+    queryKeys.organizationOverview("parent", "team-a"),
+    data
+  );
+  const switchOrg = mock(async (_id: string) => undefined);
+  const { container, render } = mount(queries, switchOrg);
+  await render(organization("team-a"));
+  expect(container.querySelector("h2")?.textContent).toBe(
+    data.organization.name
+  );
+  const rows = [...container.querySelector("dl")!.querySelectorAll("dd")];
+  expect(rows).toHaveLength(5);
+
+  for (const [index, resource] of data.sharedResources.entries()) {
+    expect(rows[index].textContent).toContain(resource.label);
+  }
+
+  const team = container.querySelector<HTMLButtonElement>("li button")!;
+  expect(team.textContent).toBe(data.teams[0].name);
+  expect(team.getAttribute("aria-label")).toBe(`View ${data.teams[0].name}`);
+  await act(async () => team.focus());
+  expect(document.activeElement).toBe(team);
+  await act(async () => {
+    team.click();
+    await settle();
+  });
+  const dialog = document.querySelector('[role="dialog"]')!;
+  expect(dialog.querySelector("h2")?.textContent).toBe(data.teams[0].name);
+  expect(dialog.textContent).toContain(data.teams[0].id);
+  expect(switchOrg).not.toHaveBeenCalled();
+});
+
 test("a standalone organization with no publications or teams remains readable", async () => {
   const queries = new QueryClient({
     defaultOptions: {

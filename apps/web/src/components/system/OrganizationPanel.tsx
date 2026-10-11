@@ -1014,7 +1014,7 @@ function OrganizationTeamRow({
             render={
               <Button
                 aria-label={`View ${team.name}`}
-                className="h-auto max-w-full justify-start whitespace-normal px-0 py-0 text-left"
+                className="h-auto max-w-full justify-start whitespace-normal break-words px-0 py-0 text-left"
                 variant="link"
               />
             }

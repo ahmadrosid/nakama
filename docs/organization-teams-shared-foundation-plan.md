@@ -291,7 +291,7 @@ Implementation sequence:
 - [x] 1. Add the tenant relationship and publication records.
 - [x] 2. Extend contracts and organization routes.
 - [x] 3. Connect publication checks to real resource use.
-- [ ] 4. Build the Organization screen.
+- [x] 4. Build the Organization screen.
 - [ ] 5. Update client state and compatibility.
 
 Delivery order:
@@ -2480,3 +2480,15 @@ One verification repair gave the header a distinct key from its sibling invite-d
 Steps 4 and 5 and delivery stages 3 and 4 remain open. Next: audit the remaining Organization screen requirements, including layout, wrapping, keyboard actions, and retained settings. Client labels and compatibility also remain open. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
 
 Evidence: /tmp/nakama-team-settings-{focused,types,format,oxlint,doctor,lint}.log.
+
+### Slice 3aa — Organization layout and completed screen audit
+
+The Organization page now uses the existing 5xl width limit instead of 3xl. Team detail triggers allow long unbroken names to wrap. Resource rows already stack on small screens, wrap chips, and use full-width limits and word wrapping. Existing resource actions retain their permitted dialogs and links; static chips remain non-actionable.
+
+A new component case uses long organization, resource, and team names. It confirms all five rows retain their full labels, the team trigger retains its accessible name and focus, and selecting details opens the correct stored team without switching tenants. All 145 component tests passed with 1075 assertions. Complete web types, scoped anti-slop, Ultracite, and git diff --check passed. React Doctor retained 91/100 with the same two assignment complexity warnings and no errors. No verification repair was needed.
+
+The step 4 audit inspected OrganizationPage, OrganizationOverview, OrganizationTeamRow, OrganizationPanel, and the member settings components. The page places the parent name above five resource rows and a Teams card. Stored counts and active-tenant badges drive team summaries. Row selection opens details; a separate permitted action switches teams. Root admins receive publication selectors and Add team. Members and viewers receive permitted reads without management controls. Existing settings remain under the correct root or team heading, including members, invitations, skill policy, curator, memory, and archive controls. Loading, empty, failed-read retry, failed-mutation retry, and pending submission behavior have component coverage. Earlier HTTP and service tests enforce the corresponding access rules.
+
+Step 4 is complete. Step 5 and delivery stages 3 and 4 remain open. Next: client labels, query scope, cache invalidation, and import/export/archive/restore compatibility. Pixel layout remains unverified because browser checks are excluded by the goal. No new file, package, dependency, server permission, full suite, build, paid call, push, or PR was added. Final delivery checks remain required.
+
+Evidence: /tmp/nakama-org-layout-{focused,types,format,oxlint,doctor,lint}.log.
