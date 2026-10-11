@@ -24,6 +24,7 @@ import {
   previewProfilePackImport,
 } from "./profile-portability";
 import { ProfileService } from "./profile-service";
+import { SkillsService } from "./skills-service";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 
@@ -574,6 +575,100 @@ describe("profile portability", () => {
       )
     ).toBe(true);
   });
+
+  test.each([false, true])(
+    "tenant export excludes parent tool source with publication=%s",
+    async (published) => {
+      const { db, service } = await setup();
+      const timestamp = now();
+      for (const id of [VICTIM, ORG]) {
+        await db.upsertOrganization({
+          createdAt: timestamp,
+          id,
+          name: id,
+          parentOrgId: id === ORG ? VICTIM : null,
+          slug: id,
+          updatedAt: timestamp,
+        });
+      }
+      const { profile } = await service.createProfile(ORG, {
+        name: "Team agent",
+      });
+      const { profile: source } = await service.createProfile(VICTIM, {
+        name: "Parent source",
+      });
+      const skill = (
+        await new SkillsService(db).createSkill(VICTIM, {
+          body: "parent-private-instructions",
+          description: "Parent notes",
+          name: "parent-only",
+          profileId: source.id,
+        })
+      ).skill;
+      await db.assignSkillToProfile(profile.id, skill.id);
+      await mkdir(getCustomToolsDir(), { recursive: true });
+      await writeFile(
+        path.join(getCustomToolsDir(), "parent.js"),
+        "export async function run() { return 'parent-private-source'; }\n"
+      );
+      await db.upsertTool({
+        createdAt: timestamp,
+        description: "Parent tool",
+        handlerConfig: { modulePath: "parent.js" },
+        handlerType: "javascript",
+        id: "parent_tool",
+        name: "parent_tool",
+        orgId: VICTIM,
+        updatedAt: timestamp,
+      });
+      await db.assignToolToProfile(profile.id, "parent_tool");
+      if (published) {
+        await db.publishOrgSharedResource({
+          createdAt: timestamp,
+          id: "published_tool",
+          orgId: VICTIM,
+          resourceId: "parent_tool",
+          resourceKind: "tool",
+          updatedAt: timestamp,
+        });
+      }
+      const exported = await createProfilePackExport(db, ORG, profile.id, {
+        includeCustomTools: true,
+      });
+      expect(exported.manifest.meta.toolNames).not.toContain("parent_tool");
+      expect(exported.manifest.meta.profileSkillNames).not.toContain(
+        "parent-only"
+      );
+      expect(exported.manifest.meta.bundledSkillNames).not.toContain(
+        "parent-only"
+      );
+      expect(exported.manifest.meta.customTools).toEqual([]);
+      const entries = unzipSync(new Uint8Array(exported.data));
+      expect(
+        Object.keys(entries).some((name) => name.startsWith("custom-tools/"))
+      ).toBe(false);
+      expect(
+        Object.values(entries).some((bytes) =>
+          Buffer.from(bytes).includes("parent-private-source")
+        )
+      ).toBe(false);
+      expect(
+        Object.values(entries).some((bytes) =>
+          Buffer.from(bytes).includes("parent-private-instructions")
+        )
+      ).toBe(false);
+      expect(
+        await readFile(path.join(getCustomToolsDir(), "parent.js"), "utf8")
+      ).toContain("parent-private-source");
+      expect(await db.listToolsForProfile(profile.id)).toHaveLength(1);
+      const imported = await importProfilePack(db, ORG, exported.data, {
+        confirm: true,
+        name: "Imported team agent",
+      });
+      expect(await db.listToolsForProfile(imported.profileId)).toEqual([]);
+      expect(await db.listSkillsForProfile(imported.profileId)).toEqual([]);
+    }
+  );
 
   test("custom tool source is omitted when export is not privileged", async () => {
     const { db, service } = await setup();

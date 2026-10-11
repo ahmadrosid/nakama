@@ -1739,3 +1739,12 @@ Checks: 228 focused tests passed across five files, with two Windows tests skipp
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: audit shared profile portability and invocation compatibility, then run the delivery-stage gate.
 No new source file, package, or dependency was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-assignment-reads-focused.log, /tmp/nakama-assignment-reads-types.log, and /tmp/nakama-assignment-reads-lint.log.
+
+### Slice 2at — tenant-local profile pack source boundary
+Profile pack export now filters foreign tenant tool and skill assignment names from metadata. A team cannot export a parent-owned module merely because its local profile has that tool assigned. Custom tool collection checks ownership before resolving or reading the module and records a skipped item for foreign code.
+Local resources and existing global resources keep their existing export behavior. The change preserves assigned rows and source files. Import cannot resolve the omitted parent assignment names into another destination resource with the same name.
+Tests export a team profile with an assigned parent custom tool, with and without a publication. Both packs omit custom code, the foreign assignment name, and private parent skill data and names. Import creates no corresponding assignments. Existing custom tool export and restore tests continue to pass.
+Checks: 23 focused service and HTTP route tests passed, along with the complete server type check, lint across 1532 files, and git diff --check. No repair was needed after validation.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Shared instance import still needs an inactive source reference; this slice does not complete portability. Next: retain shared source identity during export and import without converting instances into local agents, then audit tenant archives and invocation compatibility.
+No new source file, package, or dependency was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-pack-source-boundary-focused.log, /tmp/nakama-pack-source-boundary-types.log, and /tmp/nakama-pack-source-boundary-lint.log.

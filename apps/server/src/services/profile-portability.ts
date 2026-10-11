@@ -237,7 +237,7 @@ export async function createProfilePackExport(
   }
 
   if (options.includeCustomTools ?? true) {
-    const packedTools = await collectPackedCustomTools(db, profileId);
+    const packedTools = await collectPackedCustomTools(db, orgId, profileId);
     meta.customTools = packedTools.tools;
     skipped.push(...packedTools.skipped);
     Object.assign(entries, packedTools.entries);
@@ -621,7 +621,7 @@ async function buildProfilePackMeta(
   const profileSkillNames: string[] = [];
 
   for (const skill of skills) {
-    if (skill.pluginId) {
+    if (skill.pluginId || (skill.orgId && skill.orgId !== profile.orgId)) {
       continue;
     }
 
@@ -657,7 +657,10 @@ async function buildProfilePackMeta(
     thinkingEffort: profile.thinkingEffort ?? null,
     thinkingEnabled: profile.thinkingEnabled ?? null,
     toolNames: tools
-      .filter((tool) => !tool.pluginId)
+      .filter(
+        (tool) =>
+          !tool.pluginId && (!tool.orgId || tool.orgId === profile.orgId)
+      )
       .map((tool) => tool.name)
       .sort(),
   };
@@ -665,6 +668,7 @@ async function buildProfilePackMeta(
 
 async function collectPackedCustomTools(
   db: DatabaseAdapter,
+  orgId: string,
   profileId: string
 ): Promise<{
   entries: Record<string, Uint8Array>;
@@ -678,6 +682,13 @@ async function collectPackedCustomTools(
 
   for (const tool of tools) {
     if (tool.pluginId || !isCustomToolType(tool.handlerType)) {
+      continue;
+    }
+
+    if (tool.orgId && tool.orgId !== orgId) {
+      skipped.push(
+        customToolSkip(tool.name, "Tool belongs to another organization.")
+      );
       continue;
     }
 
