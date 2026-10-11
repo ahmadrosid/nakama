@@ -13,6 +13,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, useLocation } from "react-router-dom";
+import { OrgSettingsProfileBooleanOverrideField } from "@/components/profiles/ProfileOrgBooleanOverrideField";
+import { ProfileSkillsSettingsSection } from "@/components/profiles/ProfileSkillsSettingsSection";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
 import { SOUL_FILES } from "@/components/soul-tools/soul-files";
 import { useActiveChatProfileStore } from "@/context/active-chat-profile-store";
@@ -2489,7 +2491,8 @@ function ProfileActionsProbe() {
 function observeProfileActions(
   shared: boolean,
   available = true,
-  platformAdmin = true
+  platformAdmin = true,
+  content: ReactNode = <ProfileActionsProbe />
 ) {
   const queries = new QueryClient({
     defaultOptions: {
@@ -2553,7 +2556,7 @@ function observeProfileActions(
         id: "admin",
         isPlatformAdmin: platformAdmin,
       },
-      <ProfileActionsProbe />
+      content
     ),
     clone,
     destinations,
@@ -2696,6 +2699,159 @@ for (const action of ["Duplicate", "Move agent"] as const) {
     expect(move).not.toHaveBeenCalled();
   });
 }
+
+function ProfileBehaviorProbe() {
+  const state = useProfilesPage();
+
+  if (!state.detail) {
+    return null;
+  }
+
+  return (
+    <>
+      <div data-profile-behavior>
+        <ProfileSkillsSettingsSection profile={state.detail} />
+      </div>
+      <div data-org-profile-behavior>
+        {(
+          [
+            "skillsWriteApproval",
+            "skillsPostTurnReview",
+            "skillsCuratorConsolidateEnabled",
+          ] as const
+        ).map((field) => (
+          <OrgSettingsProfileBooleanOverrideField
+            field={field}
+            key={field}
+            profiles={[state.detail!]}
+            savedToast="Saved"
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
+test.each([
+  { available: true, platformAdmin: true, shared: true },
+  { available: false, platformAdmin: true, shared: true },
+  { available: true, platformAdmin: false, shared: true },
+  { available: true, platformAdmin: false, shared: false },
+])("behavior controls respect shared ownership %j", async (scenario) => {
+  const { container, render, profile } = observeProfileActions(
+    scenario.shared,
+    scenario.available,
+    scenario.platformAdmin,
+    <ProfileBehaviorProbe />
+  );
+
+  profile.skillsWriteApproval = true;
+  profile.skillsPostTurnReview = true;
+  profile.skillsCuratorConsolidateEnabled = true;
+  const update = spyOn(client, "updateProfile").mockResolvedValue({ profile });
+  cleanups.push(() => update.mockRestore());
+
+  await render({ ...organization("team-a"), role: "admin" });
+
+  const switches = [
+    ...container.querySelectorAll<HTMLButtonElement>('[role="switch"]'),
+  ];
+
+  const reset = [
+    ...container.querySelectorAll<HTMLButtonElement>("button"),
+  ].filter((button) => button.textContent === "Use org default");
+
+  expect(switches).toHaveLength(7);
+  expect(reset).toHaveLength(6);
+
+  for (const control of [...switches, ...reset]) {
+    expect(control.disabled).toBe(scenario.shared);
+  }
+
+  for (const control of switches) {
+    await act(async () => {
+      control.click();
+      await settle();
+    });
+  }
+
+  if (scenario.shared) {
+    for (const control of reset) {
+      await act(async () => control.click());
+    }
+
+    expect(update).not.toHaveBeenCalled();
+  } else {
+    expect(update).toHaveBeenCalledTimes(7);
+
+    for (const field of [
+      "automationsEnabled",
+      "skillsWriteApproval",
+      "skillsPostTurnReview",
+      "skillsCuratorConsolidateEnabled",
+    ]) {
+      expect(update).toHaveBeenCalledWith(profile.id, { [field]: false });
+    }
+
+    for (const control of reset) {
+      await act(async () => {
+        control.click();
+        await settle();
+      });
+    }
+
+    expect(update).toHaveBeenCalledTimes(13);
+
+    for (const field of [
+      "skillsWriteApproval",
+      "skillsPostTurnReview",
+      "skillsCuratorConsolidateEnabled",
+    ]) {
+      expect(update).toHaveBeenCalledWith(profile.id, { [field]: null });
+    }
+  }
+});
+
+test("open behavior controls become read-only when ownership changes", async () => {
+  const { container, render, profile, queries } = observeProfileActions(
+    false,
+    true,
+    true,
+    <ProfileBehaviorProbe />
+  );
+
+  const update = spyOn(client, "updateProfile").mockResolvedValue({ profile });
+  cleanups.push(() => update.mockRestore());
+  await render({ ...organization("team-a"), role: "admin" });
+  expect(
+    [...container.querySelectorAll<HTMLButtonElement>('[role="switch"]')].every(
+      (control) => !control.disabled
+    )
+  ).toBe(true);
+  await act(async () => {
+    const shared = {
+      ...profile,
+      sharedAgent: sharedAgentInstance().profile.sharedAgent,
+    };
+
+    queries.setQueryData(queryKeys.profiles.all, [shared]);
+    queries.setQueryData(queryKeys.profiles.detail(profile.id), shared);
+    await settle();
+  });
+
+  const controls = [
+    ...container.querySelectorAll<HTMLButtonElement>('[role="switch"]'),
+  ];
+
+  expect(controls).toHaveLength(7);
+
+  for (const control of controls) {
+    expect(control.disabled).toBe(true);
+    await act(async () => control.click());
+  }
+
+  expect(update).not.toHaveBeenCalled();
+});
 
 function ProfileIdentityProbe() {
   const state = useProfilesPage();

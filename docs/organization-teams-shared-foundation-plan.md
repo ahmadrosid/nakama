@@ -2446,3 +2446,13 @@ The complete web type check passed. React Doctor remained at 91/100 with no issu
 Steps 4 and 5 and delivery stages 3 and 4 remain open. Next: verify shared assignment and behavior controls, then accessible team settings actions and compatibility labels. No server permission, package, dependency, or file was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
 
 Evidence: /tmp/nakama-template-actions-{focused,api,types,format,oxlint,doctor,lint}.log.
+
+### Slice 3x — Shared-agent behavior controls
+
+Shared-agent automation and skill-policy controls now remain read-only in the profile behavior panel. The existing skill-policy field also disables shared profile switches and reset actions in Organization settings. Its save handler checks shared ownership and the current tenant-admin role before changing drafts or sending requests. The automation handler checks read-only state before saving. Local tenant-admin behavior controls retain their existing permissions, including reset to organization defaults.
+
+Five new component cases cover available and unavailable shared instances, platform and ordinary tenant admins, retained local saves and resets, and an open panel becoming read-only after ownership changes. All 132 component tests passed with 916 assertions. The existing server template-field regression passed with 24 assertions, confirming denied behavior writes preserve records, files, and audit history. Complete web types passed. React Doctor remained at 91/100 with no issues. Scoped anti-slop, Ultracite, and git diff --check passed. No verification repair was needed.
+
+Steps 4 and 5 and delivery stages 3 and 4 remain open. Next: verify assignment controls and delayed assignment handlers, then accessible team settings actions and compatibility labels. No server permission, file, package, dependency, or helper abstraction was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
+
+Evidence: /tmp/nakama-template-behavior-{focused,api,types,format,oxlint,doctor,lint}.log.
