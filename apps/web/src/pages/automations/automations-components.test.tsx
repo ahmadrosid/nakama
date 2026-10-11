@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import type {
   AutomationRunRecord,
   StoredAutomation,
@@ -13,6 +13,7 @@ import {
   AuthContext,
   type AuthContextValue,
 } from "@/context/auth-context-shared";
+import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 import { RunHistoryList } from "./automations-components";
 import {
@@ -151,6 +152,23 @@ test("automations follow the selected agent and Super Bot shows all", async () =
     expect(page.automations).toEqual([]);
     expect(page.selected).toBeNull();
     expect(page.selectedId).toBeNull();
+
+    await act(async () => {
+      await queryClient
+        .fetchQuery({
+          queryFn: () => Promise.reject(new Error("Request failed")),
+          queryKey: queryKeys.automations.all,
+          staleTime: 0,
+        })
+        .catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(page.error).not.toBeNull();
+    await act(async () => {
+      queryClient.setQueryData(queryKeys.automations.all, { automations });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(page.error).toBeNull();
   } finally {
     await act(async () => root.unmount());
     useActiveChatProfileStore.setState(previousState);
@@ -243,5 +261,160 @@ test("keeps the run conversation mounted until the drawer finishes closing", asy
     } else {
       Reflect.deleteProperty(Element.prototype, "getAnimations");
     }
+  }
+});
+
+test("marking runs read avoids duplicate requests and recovers after failure", async () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  const run: AutomationRunRecord = {
+    automationId: "automation",
+    completedAt: "2026-10-01T00:01:00Z",
+    error: null,
+    id: "run",
+    output: null,
+    read: false,
+    startedAt: "2026-10-01T00:00:00Z",
+    status: "completed",
+  };
+
+  const automation: StoredAutomation = {
+    createdAt: run.startedAt,
+    description: "",
+    enabled: true,
+    id: run.automationId,
+    name: "Automation",
+    profileId: "agent-a",
+    prompt: "Run task",
+    steps: [],
+    trigger: { type: "manual" },
+    updatedAt: run.startedAt,
+    version: 1,
+  };
+
+  const runsKey = queryKeys.automations.runs(run.automationId);
+  queryClient.setQueryData(queryKeys.automations.all, {
+    automations: [automation],
+    unread: { byAutomationId: { [automation.id]: 1 }, totalUnread: 1 },
+  });
+
+  const listAutomations = spyOn(client, "listAutomations").mockResolvedValue({
+    automations: [automation],
+    unread: { byAutomationId: {}, totalUnread: 0 },
+  });
+
+  queryClient.setQueryData(queryKeys.profiles.all, [{ id: "agent-a" }]);
+  queryClient.setQueryData(runsKey, [run]);
+  const marking = Promise.withResolvers<string>();
+  const refreshing = Promise.withResolvers<AutomationRunRecord[]>();
+
+  const markRead = spyOn(client, "markAutomationRunsRead").mockReturnValue(
+    marking.promise
+  );
+
+  const listRuns = spyOn(client, "listAutomationRuns").mockReturnValue(
+    refreshing.promise
+  );
+
+  const previousState = useActiveChatProfileStore.getState();
+  useActiveChatProfileStore.setState({ profileId: "agent-a" });
+  const container = document.createElement("div");
+  const root = createRoot(container);
+
+  function Probe() {
+    useAutomationsPage();
+
+    return null;
+  }
+
+  async function settle() {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+  }
+
+  try {
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <AuthContext.Provider
+              value={
+                /* SAFETY: This test only needs the authentication flags. */
+                { isAuthenticated: true, isLoading: false } as AuthContextValue
+              }
+            >
+              <Probe />
+            </AuthContext.Provider>
+          </QueryClientProvider>
+        </MemoryRouter>
+      )
+    );
+    expect(markRead).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      queryClient.setQueryData(runsKey, [{ ...run, output: "Updated output" }]);
+    });
+    await settle();
+    expect(markRead).toHaveBeenCalledTimes(1);
+
+    await act(async () => marking.resolve("2026-10-01T00:02:00Z"));
+    await settle();
+    expect(listRuns).toHaveBeenCalledTimes(1);
+    expect(listAutomations).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      queryClient.setQueryData(runsKey, [
+        { ...run, output: "Refresh pending" },
+      ]);
+    });
+    await settle();
+    expect(markRead).toHaveBeenCalledTimes(1);
+    await act(async () => refreshing.resolve([{ ...run, read: true }]));
+    await settle();
+    expect(markRead).toHaveBeenCalledTimes(1);
+
+    // A delayed list response must not turn already-read history into another write.
+    await act(async () => {
+      queryClient.setQueryData(queryKeys.automations.all, {
+        automations: [automation],
+        unread: { byAutomationId: { [automation.id]: 1 }, totalUnread: 1 },
+      });
+      queryClient.setQueryData(runsKey, [{ ...run, read: true }]);
+    });
+    await settle();
+    expect(markRead).toHaveBeenCalledTimes(1);
+
+    await act(async () =>
+      queryClient.setQueryData(runsKey, [{ ...run, id: "new-run" }])
+    );
+    await settle();
+    expect(markRead).toHaveBeenCalledTimes(2);
+
+    markRead.mockRejectedValueOnce(new Error("Request failed"));
+    await act(async () =>
+      queryClient.setQueryData(runsKey, [{ ...run, id: "retry-run" }])
+    );
+    await settle();
+    expect(markRead).toHaveBeenCalledTimes(3);
+    await settle();
+    expect(markRead).toHaveBeenCalledTimes(3);
+    // The next poll can return identical unread data after a failed write.
+    await act(async () =>
+      queryClient.setQueryData(runsKey, [{ ...run, id: "retry-run" }])
+    );
+    await settle();
+    expect(markRead).toHaveBeenCalledTimes(4);
+  } finally {
+    marking.resolve("2026-10-01T00:02:00Z");
+    refreshing.resolve([{ ...run, read: true }]);
+    await act(async () => root.unmount());
+    useActiveChatProfileStore.setState(previousState);
+    markRead.mockRestore();
+    listRuns.mockRestore();
+    listAutomations.mockRestore();
+    queryClient.clear();
   }
 });

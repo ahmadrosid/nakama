@@ -39,11 +39,15 @@ function invalidateAutomationQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   automationId: string
 ) {
-  return invalidateQueries(
-    queryClient,
-    queryKeys.automations.all,
-    queryKeys.automations.runs(automationId)
-  );
+  return Promise.all([
+    queryClient.invalidateQueries({
+      exact: true,
+      queryKey: queryKeys.automations.all,
+    }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.automations.runs(automationId),
+    }),
+  ]);
 }
 
 export function useMarkAutomationRunsReadMutation() {

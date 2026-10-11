@@ -3,7 +3,7 @@ import type {
   AutomationRunRecord,
   StoredAutomation,
 } from "@nakama/core/contract";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
@@ -67,6 +67,7 @@ export function useAutomationsPage() {
 
   const {
     data: runs = [],
+    dataUpdatedAt: runsUpdatedAt,
     isLoading: runsLoading,
     isSuccess: runsLoaded,
     refetch: refetchRuns,
@@ -77,6 +78,7 @@ export function useAutomationsPage() {
   const deleteRunMutation = useDeleteAutomationRunMutation();
   const runMutation = useRunAutomationMutation();
   const markReadMutation = useMarkAutomationRunsReadMutation();
+  const markingRead = useRef(new Set<string>());
   const [searchQuery, setSearchQuery] = useState("");
   const [runningId, setRunningId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -135,12 +137,6 @@ export function useAutomationsPage() {
   }, [runs]);
 
   useEffect(() => {
-    if (automationsError) {
-      setError(formatError(automationsError));
-    }
-  }, [automationsError]);
-
-  useEffect(() => {
     if (automations.length === 0) {
       setSelectedId(null);
 
@@ -169,24 +165,28 @@ export function useAutomationsPage() {
   }, [automations, selectedId, searchParams]);
 
   useEffect(() => {
-    if (!(selectedId && runsLoaded)) {
+    if (!(selectedId && runsLoaded) || markingRead.current.has(selectedId)) {
       return;
     }
 
     const hasUnreadRuns = runs.some((run) => run.read === false);
-    const hasListUnread = (unreadByAutomationId[selectedId] ?? 0) > 0;
 
-    if (!(hasUnreadRuns || hasListUnread)) {
+    if (!hasUnreadRuns) {
       return;
     }
 
-    void markReadMutation.mutate(selectedId);
+    // Keep the guard through invalidation, while cached runs can still be unread.
+    markingRead.current.add(selectedId);
+    void markReadMutation.mutateAsync(selectedId).then(
+      () => markingRead.current.delete(selectedId),
+      () => markingRead.current.delete(selectedId)
+    );
   }, [
     runs,
     runsLoaded,
+    runsUpdatedAt,
     selectedId,
-    unreadByAutomationId,
-    markReadMutation.mutate,
+    markReadMutation.mutateAsync,
   ]);
 
   async function handleSaveEdit() {
@@ -325,7 +325,7 @@ export function useAutomationsPage() {
     deleteRunTarget,
     deleteTarget,
     editDraft,
-    error,
+    error: error ?? (automationsError ? formatError(automationsError) : null),
     filteredAutomations,
     goToCreateAutomation,
     handleDeleteConfirm,
