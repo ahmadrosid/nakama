@@ -34,6 +34,7 @@ import {
   assertNotBundledSkillName,
   assertValidSkillName,
   BUNDLED_SKILL_NAMES,
+  buildToolExecutionContext,
   composeAgentBrowserCapabilityPrompt,
   composeMatchedSkillsPrompt,
   composeSkillMarkdown,
@@ -65,6 +66,7 @@ import {
   pickPreferredSkillSourcePath,
   readUploadedSkillBundle,
   removeProfileSkillSupportingFile,
+  requireToolNotViewer,
   resolveProfileSkillDirectory,
   resolveProfileSkillSupportingFilePath,
   resolveSkillCodeExecutionPolicy,
@@ -302,6 +304,7 @@ export class SkillsService {
     body: string;
     directory: string;
     includeBodyOnMatch: boolean;
+    sourceProfileId: string;
   }> {
     const team = await this.db.getOrganizationById(orgId);
     const parent = team?.parentOrgId
@@ -341,13 +344,12 @@ export class SkillsService {
         undefined,
         { allowedDirs: [getOrgConfigDir(parent.id)] }
       );
-      if (
-        !profiles.some(
-          (profile) =>
-            sourcePath ===
-            resolveProfileSkillDirectory(parent.id, profile.id, record.name)
-        )
-      ) {
+      const owner = profiles.find(
+        (profile) =>
+          sourcePath ===
+          resolveProfileSkillDirectory(parent.id, profile.id, record.name)
+      );
+      if (!owner) {
         throw new NakamaApiError("Skill is unavailable.", 404);
       }
       const { resolved } = await guardFilePath(
@@ -367,6 +369,7 @@ export class SkillsService {
         body: parsed.body,
         directory: sourcePath,
         includeBodyOnMatch: parsed.frontmatter.includeBodyOnMatch ?? false,
+        sourceProfileId: owner.id,
         summary: {
           createdAt: record.createdAt,
           createdBy: record.createdBy,
@@ -1595,8 +1598,100 @@ export class SkillsService {
     orgId: string,
     profileId: string
   ): Promise<ToolDefinition[]> {
-    const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
+    const assigned = await this.getPromptSkills(orgId, profileId);
+    const tools = await this.loadAssignedSkillTools(
+      orgId,
+      profileId,
+      assigned.filter((item) => !item.discovered.sourceOrganization)
+    );
+    for (const item of assigned.filter(
+      (entry) => entry.discovered.sourceOrganization
+    )) {
+      const publication = await this.getPublishedSkillSummaryForResource(
+        orgId,
+        item.record.id
+      );
+      for (const tool of await this.loadPublishedPythonTools(
+        orgId,
+        profileId,
+        publication.publicationId
+      )) {
+        tools.push({
+          ...tool,
+          run: async (input, context) => {
+            requireToolNotViewer(context);
+            if (context.orgId !== orgId || context.profileId !== profileId) {
+              throw new NakamaApiError("Skill is unavailable.", 404);
+            }
+            const current = (
+              await this.loadPublishedPythonTools(
+                orgId,
+                profileId,
+                publication.publicationId
+              )
+            ).find((entry) => entry.name === tool.name);
+            if (!current) {
+              throw new NakamaApiError("Skill tool is unavailable.", 404);
+            }
+            return current.run(
+              input,
+              buildToolExecutionContext({
+                ...context,
+                workspaceRoot: undefined,
+              })
+            );
+          },
+        });
+      }
+    }
+    if (new Set(tools.map((tool) => tool.name)).size !== tools.length) {
+      throw new NakamaApiError(
+        "Conflicting skill tool names are assigned.",
+        409
+      );
+    }
+    return tools;
+  }
 
+  private async loadPublishedPythonTools(
+    orgId: string,
+    profileId: string,
+    publicationId: string
+  ): Promise<ToolDefinition[]> {
+    const profile = await this.db.getProfile(profileId);
+    if (profile?.orgId !== orgId) {
+      throw new NakamaApiError("Profile not found.", 404);
+    }
+    const source = await this.resolvePublishedSkill(orgId, publicationId);
+    const assigned = await this.db.listSkillsForProfile(profileId);
+    const record = assigned.find((item) => item.id === source.summary.id);
+    if (!record) {
+      throw new NakamaApiError("Skill is unavailable.", 404);
+    }
+    const discovered = await discoverSkillDirectory(source.directory);
+    if (!discovered) {
+      throw new NakamaApiError("Skill is unavailable.", 404);
+    }
+    // shortcut: JavaScript shared entrypoints stay blocked until their loader refreshes code and isolates team execution.
+    discovered.toolPath = discovered.toolPath?.endsWith(".py")
+      ? discovered.toolPath
+      : null;
+    discovered.hasTool =
+      Boolean(discovered.toolPath) || discovered.scriptTools.length > 0;
+    return this.loadAssignedSkillTools(
+      source.summary.sourceOrganization.id,
+      source.sourceProfileId,
+      [{ discovered, record }],
+      true
+    );
+  }
+
+  private async loadAssignedSkillTools(
+    orgId: string,
+    profileId: string,
+    assigned: Array<{ discovered: DiscoveredSkill; record: StoredSkillRecord }>,
+    shared = false
+  ): Promise<ToolDefinition[]> {
     // What a member asks the agent to write lands under this profile's own
     // skills dir, and a skill's tool module and `scripts:` entries are host
     // code. The setting alone cannot approve files written before it was on:
@@ -1742,6 +1837,7 @@ export class SkillsService {
         .map((item) =>
           loadPythonSkillTool(item.discovered, undefined, {
             exposeConfigDir: isGlobalSkillSourcePath(item.discovered.directory),
+            useWorkspaceCwd: shared,
           })
         )
     );
@@ -1753,6 +1849,7 @@ export class SkillsService {
         item.discovered.scriptTools.map((script) =>
           loadPythonSkillTool(item.discovered, script, {
             exposeConfigDir: isGlobalSkillSourcePath(item.discovered.directory),
+            useWorkspaceCwd: shared,
           })
         )
       )
@@ -2029,6 +2126,7 @@ export class SkillsService {
       }
       try {
         const source = await this.resolvePublishedSkill(orgId, publication.id);
+        const code = await discoverSkillDirectory(source.directory);
         const directory = `published-skill://${encodeURIComponent(publication.id)}`;
         result.push({
           discovered: {
@@ -2036,22 +2134,30 @@ export class SkillsService {
             description: source.summary.description,
             directory,
             disableModelInvocation: source.summary.disableModelInvocation,
-            // shortcut: shared code stays blocked until team execution and invocation checks are connected.
-            hasTool: false,
+            hasTool:
+              Boolean(code?.toolPath?.endsWith(".py")) ||
+              Boolean(code?.scriptTools.length),
             includeBodyOnMatch: source.includeBodyOnMatch,
             name: source.summary.name,
-            scriptIssues: source.summary.hasTool
-              ? [
-                  {
-                    path: "shared-code",
-                    reason: "Shared skill code execution is unavailable.",
-                  },
-                ]
-              : [],
-            scriptTools: [],
+            scriptIssues:
+              code?.toolPath && !code.toolPath.endsWith(".py")
+                ? [
+                    {
+                      path: "shared-code",
+                      reason:
+                        "Shared JavaScript skill code execution is unavailable.",
+                    },
+                  ]
+                : [],
+            scriptTools: (code?.scriptTools ?? []).map((script) => ({
+              ...script,
+              path: `${directory}/${path.relative(source.directory, script.path).split(path.sep).join("/")}`,
+            })),
             skillFilePath: `${directory}/${SKILL_FILE_NAME}`,
             sourceOrganization: source.summary.sourceOrganization,
-            toolPath: null,
+            toolPath: code?.toolPath?.endsWith(".py")
+              ? `${directory}/${path.basename(code.toolPath)}`
+              : null,
           },
           record,
         });

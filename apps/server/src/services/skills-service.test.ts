@@ -3,6 +3,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
   symlink,
   writeFile,
@@ -22,6 +23,7 @@ import { AgentService } from "./agent-service";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
 import { ProfileService } from "./profile-service";
 import { SkillCuratorService } from "./skill-curator-service";
+import { SkillProposalService } from "./skill-proposal-service";
 import { SkillsService } from "./skills-service";
 
 const ORG_ID = "org_test";
@@ -114,6 +116,127 @@ describe("SkillsService", () => {
     });
     return { db, local, privateSkill, publication, service, sibling, skill };
   }
+
+  test.each(["tool.py", "scripts/probe.py"])(
+    "shared Python %s keeps review and team execution checks",
+    async (file) => {
+      const { db, skill, publication, service } = await setupPublishedSkill();
+      const modulePath = join(skill.sourcePath, file);
+      await mkdir(join(skill.sourcePath, "scripts"), { recursive: true });
+      const source = `"""Report execution context."""
+import json
+import os
+import sys
+
+def run(payload, context):
+    with open("executed.marker", "w") as handle:
+        handle.write("team")
+    return {"cwd": os.getcwd(), "workspace": os.environ.get("NAKAMA_WORKSPACE_ROOT"), "config": os.environ.get("NAKAMA_CONFIG_DIR"), "value": "original"}
+
+if __name__ == "__main__":
+    print(json.dumps(run(json.loads(sys.stdin.read() or "{}"), {})))
+`;
+      await writeFile(modulePath, source);
+      if (file.startsWith("scripts/")) {
+        await writeFile(
+          join(skill.sourcePath, "SKILL.md"),
+          "---\nname: shared-notes\ndescription: Shared Python\nscripts: scripts/probe.py\n---\n\nPublished instructions\n"
+        );
+      }
+      await db.assignSkillToProfile("profile_team_a", skill.id);
+      const agent = new AgentService(null, null, db);
+      agent.setSkillsService(service);
+      const context = agent.buildPluginToolContext("team_a", {
+        profileId: "profile_team_a",
+        runId: "run",
+        workflowId: "workflow",
+      });
+      const teamRoot = context.workspaceRoot!;
+      await mkdir(teamRoot, { recursive: true });
+      const expectedName =
+        file === "tool.py" ? "shared-notes" : "shared_notes_probe";
+      const blocked = (
+        await service.loadToolsForProfile("team_a", "profile_team_a")
+      ).find((tool) => tool.name === expectedName)!;
+      expect(blocked).toBeDefined();
+      expect(await blocked.run({}, context)).toHaveProperty("error");
+      await expect(
+        readFile(join(teamRoot, "executed.marker"))
+      ).rejects.toThrow();
+      const parent = (await db.getOrganizationById("parent"))!;
+      await db.upsertOrganization({ ...parent, skillsWriteApproval: true });
+      const proposals = new SkillProposalService(db, service);
+      const approve = async () => {
+        const staged = await proposals.stageProposal({
+          action: "approve_code",
+          orgId: "parent",
+          profileId: "profile_parent",
+          relativePath: file,
+          skillName: "shared-notes",
+        });
+        await proposals.approveProposal("parent", staged.proposalId!, "admin");
+      };
+      await approve();
+      const tool = (
+        await service.loadToolsForProfile("team_a", "profile_team_a")
+      ).find((entry) => entry.name === expectedName)!;
+      const result = await tool.run(
+        {},
+        { ...context, workspaceRoot: skill.sourcePath }
+      );
+      expect(result).toMatchObject({
+        config: null,
+        cwd: await realpath(teamRoot),
+        value: "original",
+        workspace: teamRoot,
+      });
+      expect(await readFile(join(teamRoot, "executed.marker"), "utf8")).toBe(
+        "team"
+      );
+      await expect(
+        readFile(join(skill.sourcePath, "executed.marker"))
+      ).rejects.toThrow();
+      expect(
+        await service.composeCatalogForProfile("team_a", "profile_team_a")
+      ).not.toContain(skill.sourcePath);
+      for (const denied of [
+        { ...context, orgRole: "viewer" as const },
+        { ...context, orgRole: undefined },
+        { ...context, orgId: "team_b" },
+        { ...context, profileId: "profile_team_b" },
+      ]) {
+        await expect(tool.run({}, denied)).rejects.toMatchObject({
+          status: denied.orgRole === "viewer" || !denied.orgRole ? 403 : 404,
+        });
+      }
+      await writeFile(modulePath, source.replace('"original"', '"updated"'));
+      expect(await tool.run({}, context)).toHaveProperty("error");
+      await approve();
+      expect(await tool.run({}, context)).toMatchObject({ value: "updated" });
+      await db.unassignSkillFromProfile("profile_team_a", skill.id);
+      await expect(tool.run({}, context)).rejects.toMatchObject({
+        status: 404,
+      });
+      await db.assignSkillToProfile("profile_team_a", skill.id);
+      await db.deleteOrgSharedResource("parent", publication.id);
+      await expect(tool.run({}, context)).rejects.toMatchObject({
+        status: 404,
+      });
+      expect(
+        (await service.loadToolsForProfile("team_a", "profile_team_a")).map(
+          (entry) => entry.name
+        )
+      ).not.toContain(expectedName);
+      expect(
+        (await db.listSkillsForProfile("profile_team_a")).map(
+          (entry) => entry.id
+        )
+      ).toEqual([skill.id]);
+      expect(await readFile(modulePath, "utf8")).toBe(
+        source.replace('"original"', '"updated"')
+      );
+    }
+  );
 
   test("published assignments keep source references and remove revoked summaries", async () => {
     const { db, skill, publication, service } = await setupPublishedSkill();

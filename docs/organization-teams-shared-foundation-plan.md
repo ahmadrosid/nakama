@@ -1479,3 +1479,17 @@ Checks: 168 focused tests passed across three files, with two Windows-specific s
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: load shared script tools with team execution context and current publication checks at invocation.
 No package, dependency, or source file was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-skill-bytes-{focused,repair-focused,core-types,server-types,lint}.log.
+
+### Slice 2y — shared Python skill execution
+Assigned parent Python entrypoints and declared Python scripts now load through the existing skill tool resolver.
+The existing source-profile review policy and approved file hashes are reused for local and shared tools. Publication does not approve code.
+Each shared call checks the invoking role, team and profile IDs, current assignment, active source publication, source owner, and current reviewed code before spawning.
+The wrapper derives the team workspace again. Shared Python processes use that workspace as cwd and receive no deployment configuration directory.
+Cached definitions read current Python code on invocation. Changed code is blocked until a new review; unassignment and unpublication return 404.
+Prompt discovery includes Python tool metadata with virtual source paths. JavaScript entrypoints remain blocked until their loader supports current code and team execution isolation.
+Tests cover both entrypoint and declared-script forms, source review, team file writes, hostile workspace overrides, viewer and missing-role denial, wrong tenant/profile IDs, changed-code review, cached revocation, and unchanged source files.
+The initial formatter found an invalid bound-method expression. The first repair used an arrow function. The first test run then found macOS path aliases; the second repair compared cwd with realpath.
+Checks: all 109 focused tests passed across four files; the complete server type check passed; lint passed 1532 files; git diff --check passed.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: shared JavaScript skill loading and invocation checks, then session capability refresh for added tools.
+No source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-shared-python-{focused,repair-focused,types,lint}.log.
