@@ -588,30 +588,25 @@ interface TrackedDatabaseHandle {
  * prepared statement exists — including never-executed ones — and the throw
  * leaves the database open, so callers that need a real close (tests, the
  * restore flow's file moves) fail or silently leak the handle. Finalizing the
- * adapter's statements first makes close() actually close. Statements are
- * tracked with a prepare()-intercepting proxy; every other property passes
- * straight through to the underlying Database.
+ * statements first makes close() actually close. Statements are tracked by
+ * overriding `prepare` on this instance; every other Database member is
+ * untouched, so migrateDatabase() and the adapter are covered as-is.
  */
 function openTrackedDatabase(databasePath: string): TrackedDatabaseHandle {
-  const raw = openPrivateDatabase(databasePath);
+  const db = openPrivateDatabase(databasePath);
   const statements = new Set<{ finalize: () => void }>();
 
-  const db = new Proxy(raw, {
-    get(target, property) {
-      if (property === "prepare") {
-        return (...args: Parameters<Database["prepare"]>) => {
-          const statement = target.prepare(...args);
-          statements.add(statement as { finalize: () => void });
-          return statement;
-        };
-      }
+  const prepare = db.prepare.bind(db);
 
-      const value = Reflect.get(target, property, target) as unknown;
-      return value instanceof Function
-        ? (value as (...args: unknown[]) => unknown).bind(target)
-        : value;
-    },
-  }) as Database;
+  // SAFETY: own-property override shadows the prototype method, and the
+  // wrapped call forwards the exact argument list to the original prepare.
+  db.prepare = ((...args: Parameters<Database["prepare"]>) => {
+    const statement = prepare(...args);
+
+    statements.add(statement);
+
+    return statement;
+  }) as Database["prepare"];
 
   return {
     close() {
@@ -622,8 +617,9 @@ function openTrackedDatabase(databasePath: string): TrackedDatabaseHandle {
           // Already finalized or the database is gone; close proceeds.
         }
       }
+
       statements.clear();
-      raw.close(true);
+      db.close(true);
     },
     db,
   };
