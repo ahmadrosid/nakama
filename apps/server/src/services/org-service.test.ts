@@ -37,11 +37,13 @@ import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import {
   createInMemoryDatabaseAdapter,
   type DatabaseAdapter,
+  mergeWorkspaceSettings,
   type StoredProfileRecord,
 } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
 import { AuthService } from "./auth-service";
+import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
 import {
   loadToolApiKey,
   loadToolSetup,
@@ -2649,13 +2651,13 @@ if __name__ == "__main__":
       const config: UserConfig = {
         defaultProviderId: "first",
         providers: ["first", "second"].map((id) => ({
-          apiKey: "",
-          baseUrl: "http://localhost:11434/v1",
+          apiKey: `${id}-key`,
+          baseUrl: `https://${id}.example.com/v1`,
           createdAt: new Date().toISOString(),
           customModels: [{ default: true, id: "same-model", name: "Model" }],
           id,
           label: id,
-          type: "ollama" as const,
+          type: "openai_compatible" as const,
         })),
         thinkingEffort: "medium",
         thinkingEnabled: true,
@@ -2664,6 +2666,50 @@ if __name__ == "__main__":
         await saveUserConfig(config);
         const source = (await db.getProfile("profile_template"))!;
         await db.upsertProfile({ ...source, model: "second::same-model" });
+        const codingContext = { orgId: "org_team_a", profileId: profile.id };
+        await db.upsertWorkspaceSettings(
+          mergeWorkspaceSettings(null, {
+            codingAgentHarnesses: [
+              {
+                args: [],
+                command: "echo",
+                enabled: true,
+                id: "coding-harness-codex",
+                kind: "codex",
+                name: "Codex",
+              },
+            ],
+            codingAgentProviderPassthrough: true,
+            id: "workspace-settings",
+            imageModel: null,
+            selectedCodingAgentHarness: null,
+            transcriptionModel: null,
+            updatedAt: new Date().toISOString(),
+            visionModel: null,
+          })
+        );
+        const codingInput = { command: "echo task" };
+        const initialCoding = await enrichCodingAgentBashInput(
+          db,
+          codingInput,
+          codingContext,
+          config,
+          orgService
+        );
+        expect(initialCoding.env?.OPENAI_API_KEY).toBe("second-key");
+        expect(initialCoding.env?.OPENAI_MODEL).toBe("same-model");
+        await expect(
+          enrichCodingAgentBashInput(
+            db,
+            codingInput,
+            { ...codingContext, orgId: "org_team_b" },
+            config,
+            orgService
+          )
+        ).rejects.toMatchObject({ status: 404 });
+        await expect(
+          enrichCodingAgentBashInput(db, codingInput, codingContext, config)
+        ).rejects.toMatchObject({ status: 503 });
         const modelPublication = await orgService.publishSharedResource(
           "org_parent",
           { resourceId: "second::same-model", resourceKind: "model" },
@@ -2739,6 +2785,15 @@ if __name__ == "__main__":
         expect(selections).toHaveLength(1);
         Object.assign(agent, { userConfig: config });
         await db.upsertProfile({ ...source, model: "first::same-model" });
+        const changedCoding = await enrichCodingAgentBashInput(
+          db,
+          codingInput,
+          codingContext,
+          config,
+          orgService
+        );
+        expect(changedCoding.env?.OPENAI_API_KEY).toBe("first-key");
+        expect((await db.getProfile(profile.id))!.model).toBe(profile.model);
         expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
         sessionTurnRegistry.cancelTurn(id);
         const second = (await agent.resolveSession(id, "org_team_a"))!;
@@ -2767,6 +2822,20 @@ if __name__ == "__main__":
         expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
         sessionTurnRegistry.cancelTurn(id);
         expect(await agent.resolveSession(id, "org_team_a")).toBe(overridden);
+        await orgService.unpublishSharedResource(
+          "org_parent",
+          publication.id,
+          "user_creator"
+        );
+        await expect(
+          enrichCodingAgentBashInput(
+            db,
+            codingInput,
+            codingContext,
+            config,
+            orgService
+          )
+        ).rejects.toMatchObject({ status: 404 });
       } finally {
         if (previousConfig) {
           await saveUserConfig(previousConfig);

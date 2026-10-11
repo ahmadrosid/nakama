@@ -18,6 +18,7 @@ import type { DatabaseAdapter, StoredToolRecord } from "@nakama/db";
 import { type BashInput, bashTool, runBash } from "../tools/bash";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
 import { getCustomToolHandler } from "./custom-tool-handlers";
+import type { OrgService } from "./org-service";
 import type { PluginService } from "./plugin-service";
 import { actorMayInvoke, PluginHostError } from "./plugin-service";
 
@@ -29,6 +30,7 @@ export type ServerToolOverrides = {
 };
 
 export type ResolveStoredToolsOptions = {
+  orgService?: OrgService;
   actorRole?: PluginActorRole;
   pluginService?: PluginService | null;
   serverTools?: ServerToolOverrides;
@@ -89,7 +91,8 @@ export async function resolveToolsFromStorage(
   const serverTools = buildServerTools(
     db,
     options.userConfig,
-    options.serverTools
+    options.serverTools,
+    options.orgService
   );
 
   const resolved: ToolDefinition[] = [];
@@ -149,9 +152,12 @@ async function resolveStoredTool(
 function buildServerTools(
   db?: DatabaseAdapter,
   userConfig?: UserConfig | null,
-  overrides: ServerToolOverrides = {}
+  overrides: ServerToolOverrides = {},
+  orgService?: OrgService
 ): Map<string, ToolDefinition> {
-  const bash = db ? createCodingAgentAwareBashTool(db, userConfig) : bashTool;
+  const bash = db
+    ? createCodingAgentAwareBashTool(db, userConfig, orgService)
+    : bashTool;
   const map = new Map<string, ToolDefinition>([[bash.name, bash]]);
 
   if (overrides.subAgent) {
@@ -171,7 +177,8 @@ function buildServerTools(
 
 function createCodingAgentAwareBashTool(
   db: DatabaseAdapter,
-  userConfig?: UserConfig | null
+  userConfig?: UserConfig | null,
+  orgService?: OrgService
 ): ToolDefinition<BashInput> {
   return {
     ...bashTool,
@@ -180,7 +187,8 @@ function createCodingAgentAwareBashTool(
         db,
         input,
         context,
-        userConfig
+        userConfig,
+        orgService
       );
 
       return runBash(enriched, context);

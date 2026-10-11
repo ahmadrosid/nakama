@@ -4951,6 +4951,7 @@ export class AgentService {
     const guarded = Boolean(shared || publishedTools);
     const resolveOptions = {
       actorRole: options.actorRole ?? undefined,
+      orgService: this.orgService ?? undefined,
       pluginService: this.pluginService,
       serverTools: this.serverTools,
       userConfig: this.userConfig,
@@ -5661,7 +5662,7 @@ export class AgentService {
     profileId: string,
     codingWorkspaceRoot?: string
   ): Promise<string> {
-    const profile = await this.db.getProfile(profileId);
+    const profile = await this.requireExecutionProfile(orgId, profileId);
     const installed = await listInstalledCodingAgentHarnesses(this.db);
 
     const workspaceRoot =

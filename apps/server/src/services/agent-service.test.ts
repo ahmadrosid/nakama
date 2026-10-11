@@ -1576,6 +1576,7 @@ describe("AgentService coding delegation context", () => {
 
   test("includes harness command template and backend guidance for bash delegation", async () => {
     const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile({ ...createDefaultProfile(), id: "profile_test" });
     await installFakeOpenCode(tempBinDir);
     await db.upsertWorkspaceSettings(
       mergeWorkspaceSettings(null, {
@@ -1613,6 +1614,7 @@ describe("AgentService coding delegation context", () => {
 
   test("lists install commands when no coding agent CLI is installed", async () => {
     const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile({ ...createDefaultProfile(), id: "profile_test" });
     await db.upsertWorkspaceSettings(
       mergeWorkspaceSettings(null, {
         codingAgentHarnesses: [],
@@ -1642,6 +1644,7 @@ describe("AgentService coding delegation context", () => {
 
   test("asks the user when multiple coding agent CLIs are installed", async () => {
     const db = createInMemoryDatabaseAdapter();
+    await db.upsertProfile({ ...createDefaultProfile(), id: "profile_test" });
     await installFakeOpenCode(tempBinDir);
     await Bun.write(
       path.join(

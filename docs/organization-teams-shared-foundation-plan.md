@@ -1709,3 +1709,13 @@ Checks: 165 focused tests across three files passed, along with the complete ser
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: audit effective profile settings and template model consumers, then complete portability and invocation compatibility paths.
 No new source file, package, or dependency was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-model-paths-focused.log, /tmp/nakama-model-paths-types.log, and /tmp/nakama-model-paths-lint.log.
+
+### Slice 2aq — coding command template model resolution
+Coding command environment resolution now checks the requested profile within its team. Shared instances resolve their current published source through OrgService before selecting provider settings. Missing publication or organization service blocks setup; missing configured models cannot fall back to another provider.
+The existing stored-tool resolver passes OrgService from AgentService to the coding-aware bash tool. Ordinary profiles retain their stored model and existing provider settings. Shared commands retain team execution context and install-wide provider credentials; no parent tenant key is delegated.
+Coding delegation context now reads the current authorized execution profile instead of the raw instance record. Source model changes affect both the command guidance and command provider settings without updating stored team configuration.
+Shared model tests now verify command provider keys follow source changes, the stored instance model stays unchanged, foreign team profiles are denied, absent source resolution fails closed, and publication removal blocks command setup. The fixture uses a configured echo command rather than the host coding CLI. Three existing delegation tests now supply their required team profile.
+Checks: 168 focused tests across four files passed, along with the complete server type check, lint across 1532 files, and git diff --check. One repair replaced unintended host CLI probing and supplied missing profile fixtures.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: expose current shared configuration and assignments in profile reads, then complete portability and invocation compatibility paths.
+No new source file, package, or dependency was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-shared-coding-focused.log, /tmp/nakama-shared-coding-types.log, and /tmp/nakama-shared-coding-lint.log.
