@@ -12,7 +12,6 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { ToolContext } from "../contract";
 import { convertDocxToMarkdown } from "../docx-text";
 import { getGlobalSkillsDir } from "../skills/paths";
 import { getProfileSoulDir } from "../soul/resolve";
@@ -572,17 +571,21 @@ describe("file builtin tools", () => {
   test("published skill reads use the host callback and keep line limits", async () => {
     const reads: Array<[string, string]> = [];
     const reference = "published-skill://publication%2Fa/references/a%20b.md";
+
     const context = {
       ...PROFILE_CONTEXT,
       readPublishedSkillFile: (id: string, filePath: string) => {
         reads.push([id, filePath]);
+
         return Promise.resolve(Buffer.from("First\nSecond\nThird"));
       },
     };
+
     const result = await runReadFile(
       { limit: 1, offset: 2, path: reference },
       context
     );
+
     expect(reads).toEqual([["publication/a", "references/a b.md"]]);
     expect(result).toMatchObject({
       bytesRead: 6,
@@ -594,6 +597,7 @@ describe("file builtin tools", () => {
       truncated: true,
     });
     setDefaultFileGuardOptions({ maxFileBytes: 2 });
+
     try {
       await expect(
         runReadFile({ path: reference }, context)
@@ -605,10 +609,13 @@ describe("file builtin tools", () => {
 
   test("published skill reads deny missing context and ambiguous references before host reads", async () => {
     let reads = 0;
+
     const readPublishedSkillFile = () => {
       reads += 1;
+
       return Promise.resolve(Buffer.from("unused"));
     };
+
     for (const input of [
       { cwd: "/tmp", path: "published-skill://pub/SKILL.md" },
       { path: "published-skill://pub" },
@@ -619,6 +626,7 @@ describe("file builtin tools", () => {
         runReadFile(input, { ...PROFILE_CONTEXT, readPublishedSkillFile })
       ).rejects.toThrow();
     }
+
     await expect(
       runReadFile({ path: "published-skill://pub/SKILL.md" }, PROFILE_CONTEXT)
     ).rejects.toThrow();
@@ -633,6 +641,7 @@ describe("file builtin tools", () => {
 
   test("published skill bytes use image detection and propagate host errors", async () => {
     const image = Buffer.from("89504e470d0a1a0a", "hex");
+
     const result = await runReadFile(
       { path: "published-skill://pub/image.bin" },
       {
@@ -640,6 +649,7 @@ describe("file builtin tools", () => {
         readPublishedSkillFile: () => Promise.resolve(image),
       }
     );
+
     expect(result.images).toEqual([
       { data: image.toString("base64"), mediaType: "image/png" },
     ]);
@@ -661,18 +671,24 @@ describe("file builtin tools", () => {
     const bytes = await readFile(
       path.join(import.meta.dir, "..", "__fixtures__", "sample.docx")
     );
+
+    const refuseLocalMemory = () => {
+      throw new Error("Local memory must not access parent assets");
+    };
+
     const result = await runReadFile(
       { path: "published-skill://pub/report%2Edocx" },
       {
         ...PROFILE_CONTEXT,
         memoryFiles: {
-          read: () => {
-            throw new Error("Local memory must not read parent assets");
-          },
-        } as unknown as ToolContext["memoryFiles"],
+          read: refuseLocalMemory,
+          remove: refuseLocalMemory,
+          write: refuseLocalMemory,
+        },
         readPublishedSkillFile: () => Promise.resolve(bytes),
       }
     );
+
     expect(result.content).toContain("Laporan Mingguan");
     expect(result.content).toContain("**teks tebal**");
     expect(result.path).toBe("published-skill://pub/report%2Edocx");

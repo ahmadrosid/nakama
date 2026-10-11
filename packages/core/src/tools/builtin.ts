@@ -897,6 +897,7 @@ export async function runReadFile(
   let contentPath: string;
   let bytes: Buffer;
   const shared = parsed.path.startsWith("published-skill://");
+
   if (shared) {
     if (
       !(context.orgId && context.profileId && context.readPublishedSkillFile) ||
@@ -906,12 +907,16 @@ export async function runReadFile(
         "Published skill reads require profile context and no cwd."
       );
     }
+
     const reference = /^published-skill:\/\/([^/]+)\/(.+)$/.exec(parsed.path);
+
     if (!reference) {
       throw new Error("Invalid published skill reference.");
     }
+
     const publicationId = decodeURIComponent(reference[1]!);
     const relativePath = decodeURIComponent(reference[2]!);
+
     if (
       BLOCKED_READ_BASENAMES.includes(path.basename(relativePath).toLowerCase())
     ) {
@@ -920,6 +925,7 @@ export async function runReadFile(
         "SPECIAL_FILE"
       );
     }
+
     bytes = Buffer.from(
       await context.readPublishedSkillFile(
         publicationId,
@@ -974,11 +980,14 @@ export async function runReadFile(
   if (bytes.length > maxBytes) {
     throw new PathGuardError("File exceeds the size limit", "TOO_LARGE");
   }
+
   const mediaType = detectImageMediaType(bytes);
+
   if (mediaType) {
     if (bytes.length > MAX_IMAGE_BYTES) {
       throw new PathGuardError("Image exceeds the size limit", "TOO_LARGE");
     }
+
     return {
       bytesRead: bytes.length,
       content: `Read image file [${mediaType}]`,
@@ -990,7 +999,9 @@ export async function runReadFile(
       truncated: false,
     };
   }
+
   const localContent = await readFileAsText(contentPath, bytes);
+
   const rawContent =
     !shared && context.memoryFiles
       ? await context.memoryFiles.read(filePath, localContent)
