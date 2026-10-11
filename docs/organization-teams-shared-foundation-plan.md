@@ -1811,3 +1811,12 @@ Checks: 121 OrgService and quota service tests passed across two files. The comp
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: verify CLI and channel revocation and personal credential ownership, then run the delivery-stage gate.
 No new source file, package, dependency, or runtime abstraction was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-shared-team-quota-focused.log, /tmp/nakama-shared-team-quota-types.log, and /tmp/nakama-shared-team-quota-lint.log.
+
+### Slice 2bb — local-token client shared session revocation
+Added real NakamaClient integration checks for CLI, Telegram, Discord, WhatsApp, and Slack session requests. The client uses local-token authentication and the real HTTP session routes through an in-process fetch adapter. Each shared team session completes a normal turn and a streamed turn with a fake provider. Stored sessions use the selected channel, team profile, and local client user.
+After parent publication removal, new sessions, normal turns, and streamed turns fail with status 404. No additional provider call occurs, and no turn reservation remains active. The owning team can still read saved history. A sibling team cannot read that history, even with the same local token. Shared local profile rows remain unchanged.
+No runtime change was needed. These checks cover the client and server boundary used by CLI and channel workers. They do not start external channel bridges or test platform message delivery.
+Checks: 114 OrgService tests passed, including five channel cases. The complete server type check, lint across 1532 files, and git diff --check passed. One verification repair removed an orgId assertion from StoredSessionRecord, which does not expose that field; sibling access checks verify the team boundary.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: verify personal credential ownership and approval isolation, then run the delivery-stage gate.
+No new source file, package, dependency, or runtime abstraction was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-shared-channel-focused.log, /tmp/nakama-shared-channel-types.log, and /tmp/nakama-shared-channel-lint.log.

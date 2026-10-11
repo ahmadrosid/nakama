@@ -33,7 +33,10 @@ import {
   uploadOrganizationKnowledgeBaseDocument,
   writeParsedConfigIni,
 } from "@nakama/core";
-import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
+import {
+  LOCAL_CLIENT_USER_ID,
+  resolveLocalAuthToken,
+} from "@nakama/core/local-auth";
 import {
   createDatabase,
   createInMemoryDatabaseAdapter,
@@ -41,6 +44,7 @@ import {
   mergeWorkspaceSettings,
   type StoredProfileRecord,
 } from "@nakama/db";
+import { NakamaClient } from "../../../../packages/client/src/client";
 import { createMinimalHonoApp } from "../http/test-app-helpers";
 import { loginUserSession } from "../http/test-session-helpers";
 import { setupTestConfigDir } from "../test-config-dir";
@@ -2183,6 +2187,98 @@ describe("OrgService shared agent selection", () => {
         expect(await db.getSession(id)).toBeNull();
         expect(await db.listMessagesForSession(id)).toEqual([]);
       }
+    }
+  );
+  test.each(["cli", "telegram", "discord", "whatsapp", "slack"] as const)(
+    "local-token client denies revoked shared sessions for %s",
+    async (channel) => {
+      const {
+        orgService,
+        databaseAdapter: db,
+        authService,
+      } = createOrgService();
+      const publication = await seedSharedAgentSelection(db, orgService);
+      const profile = await orgService.createSharedAgentInstance(
+        "org_team_a",
+        publication.id,
+        "user_other"
+      );
+      let providerCalls = 0;
+      const provider = {
+        generateChat: () => {
+          providerCalls += 1;
+          return Promise.resolve({
+            assistantMessage: { content: "Done", role: "assistant" as const },
+            content: "Done",
+            toolCalls: [],
+          });
+        },
+        streamChat: (
+          _input: GenerateChatInput,
+          handlers: { onChunk: (chunk: string) => void }
+        ) => {
+          handlers.onChunk("Done");
+          return provider.generateChat();
+        },
+      };
+      const agent = new AgentService(null, null, db);
+      agent.setOrgService(orgService);
+      Object.assign(agent, {
+        _providerConfigured: true,
+        createHarnessForProfile: () => ({ name: "test", provider }),
+        resolveProfileTools: async () => [],
+      });
+      const { app } = createMinimalHonoApp({
+        agent,
+        authService,
+        databaseAdapter: db,
+        orgService,
+      });
+      const client = new NakamaClient({
+        authToken: await resolveLocalAuthToken(),
+        baseUrl: "http://localhost:4310",
+        fetch: (input, init) =>
+          Promise.resolve(app.fetch(new Request(input, init))),
+        orgId: "org_team_a",
+      });
+      const session = await client.createSession(channel, {
+        profileId: profile.id,
+      });
+      expect(await session.send("Saved team turn")).toBe("Done");
+      expect(await session.sendStream("Saved streamed turn", () => {})).toBe(
+        "Done"
+      );
+      const history = await session.getMessages();
+      expect(history).toHaveLength(4);
+      expect(providerCalls).toBe(2);
+      expect(await db.getSession(session.id)).toMatchObject({
+        channel,
+        profileId: profile.id,
+        userId: LOCAL_CLIENT_USER_ID,
+      });
+      await orgService.unpublishSharedResource(
+        "org_parent",
+        publication.id,
+        "user_creator"
+      );
+      await expect(
+        client.createSession(channel, { profileId: profile.id })
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(session.send("Revoked turn")).rejects.toMatchObject({
+        status: 404,
+      });
+      await expect(
+        session.sendStream("Revoked streamed turn", () => {})
+      ).rejects.toMatchObject({ status: 404 });
+      expect(providerCalls).toBe(2);
+      expect(sessionTurnRegistry.isActive(session.id)).toBe(false);
+      expect(await session.getMessages()).toEqual(history);
+      await expect(
+        client.forOrg("org_team_b").getSessionMessages(session.id)
+      ).rejects.toMatchObject({ status: 404 });
+      expect(await db.getProfileForOrg(profile.id, "org_team_a")).toEqual(
+        profile
+      );
     }
   );
   test("restored shared sessions rebuild from restored source settings and saved history", async () => {
