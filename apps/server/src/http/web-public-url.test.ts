@@ -5,6 +5,7 @@ import { setupTestConfigDir, withTestEnv } from "../test-config-dir";
 import { createMinimalHonoApp } from "./test-app-helpers";
 import { buildSetupAuthBody } from "./test-org-helpers";
 import {
+  type AppFetch,
   loginPlatformAdminSession,
   loginUserSession,
   seedOrgAdmin,
@@ -36,20 +37,20 @@ function putRequest(
   });
 }
 
-function readSavedBaseUrl(
-  app: { fetch: typeof fetch },
+async function readSavedBaseUrl(
+  app: AppFetch,
   session: TestBrowserSession,
   orgId?: string
 ): Promise<string | null> {
-  return app
-    .fetch(new Request(API_URL, { headers: session.headers({}, orgId) }))
-    .then(async (response) => {
-      expect(response.status).toBe(200);
+  const response = await app.fetch(
+    new Request(API_URL, { headers: session.headers({}, orgId) })
+  );
 
-      // SAFETY: The test checks this response against the endpoint contract asserted below.
-      return ((await response.json()) as { webPublicUrl: string | null })
-        .webPublicUrl;
-    });
+  expect(response.status).toBe(200);
+
+  // SAFETY: The test checks this response against the endpoint contract asserted below.
+  return ((await response.json()) as { webPublicUrl: string | null })
+    .webPublicUrl;
 }
 
 describe("web public url settings", () => {
