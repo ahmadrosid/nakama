@@ -37,7 +37,11 @@ import {
   useAssignToolMutation,
   useCloneProfileMutation,
   useCreateProfileMutation,
+  useCreateSkillMutation,
   useDeleteProfileMutation,
+  useDeleteSkillMutation,
+  useInstallSkillMutation,
+  usePatchSkillMutation,
   useRevokeArtifactShareMutation,
   useUnassignToolMutation,
   useUpdateProfileMutation,
@@ -132,6 +136,167 @@ afterAll(() => {
   revoke.mockRestore();
   publish.mockRestore();
 });
+
+for (const kind of ["create", "install", "patch", "delete"] as const) {
+  test.each([false, true])(
+    `${kind} skill refreshes shared catalogs only on success; failure=%s`,
+    async (fails) => {
+      const skill = {
+        body: "Updated skill",
+        createdAt: "2026-10-12T00:00:00Z",
+        createdBy: "human" as const,
+        description: "Review content",
+        disableModelInvocation: false,
+        enabled: true,
+        hasTool: false,
+        id: "skill",
+        name: "Content review",
+        orgId: "parent",
+        scriptIssues: [],
+        sourcePath: "/tmp/nakama-test-skills/content-review/SKILL.md",
+        updatedAt: "2026-10-12T00:00:00Z",
+      };
+
+      const create = spyOn(client, "createSkill").mockResolvedValue({ skill });
+
+      const install = spyOn(client, "installSkill").mockResolvedValue({
+        skill,
+      });
+
+      const patch = spyOn(client, "patchSkill").mockResolvedValue({ skill });
+      const remove = spyOn(client, "deleteSkill").mockResolvedValue(undefined);
+      const requests = [create, install, patch, remove];
+
+      if (fails) {
+        for (const request of requests) {
+          request.mockRejectedValue(new Error("Retry skill change"));
+        }
+      }
+
+      let createMutation!: ReturnType<typeof useCreateSkillMutation>;
+      let installMutation!: ReturnType<typeof useInstallSkillMutation>;
+      let patchMutation!: ReturnType<typeof usePatchSkillMutation>;
+      let deleteMutation!: ReturnType<typeof useDeleteSkillMutation>;
+
+      function Probe() {
+        createMutation = useCreateSkillMutation();
+        installMutation = useInstallSkillMutation();
+        patchMutation = usePatchSkillMutation();
+        deleteMutation = useDeleteSkillMutation();
+
+        return null;
+      }
+
+      const keys = [
+        queryKeys.organizationOverview("parent", "parent"),
+        queryKeys.organizationOverview("parent", "team"),
+        queryKeys.organizationPublicationCatalog("parent", "skill"),
+        queryKeys.skills.all,
+      ];
+
+      const reads = keys.map(() => mock(async () => 2));
+
+      const stops = keys.map((key, index) =>
+        new QueryObserver(queryClient, {
+          initialData: 1,
+          queryFn: reads[index],
+          queryKey: key,
+          staleTime: Number.POSITIVE_INFINITY,
+        }).subscribe(() => {})
+      );
+
+      const inactive = queryKeys.organizationOverview("parent", "other-team");
+      const memory = queryKeys.orgMemory("team");
+      queryClient.setQueryData(inactive, 1);
+      queryClient.setQueryData(memory, { content: "Private memory" });
+      queryClient.setQueryData(queryKeys.skills.detail(skill.id), {
+        ...skill,
+        body: "Old skill",
+      });
+
+      const createInput = {
+        description: skill.description,
+        name: skill.name,
+        profileId: "profile",
+      };
+
+      const installInput = {
+        profileId: "profile",
+        url: "https://example.com/skill.zip",
+      };
+
+      const patchInput = { body: skill.body };
+
+      try {
+        renderToString(
+          createElement(
+            QueryClientProvider,
+            { client: queryClient },
+            createElement(Probe)
+          )
+        );
+
+        const operation =
+          kind === "create"
+            ? createMutation.mutateAsync(createInput)
+            : kind === "install"
+              ? installMutation.mutateAsync(installInput)
+              : kind === "patch"
+                ? patchMutation.mutateAsync({
+                    input: patchInput,
+                    profileId: "profile",
+                    skillId: skill.id,
+                  })
+                : deleteMutation.mutateAsync(skill.id);
+
+        if (fails) {
+          await expect(operation).rejects.toThrow();
+        } else {
+          await operation;
+        }
+
+        expect(keys.map((key) => queryClient.getQueryData(key))).toEqual(
+          fails ? [1, 1, 1, 1] : [2, 2, 2, 2]
+        );
+
+        for (const read of reads) {
+          expect(read).toHaveBeenCalledTimes(fails ? 0 : 1);
+        }
+
+        expect(queryClient.getQueryState(inactive)?.isInvalidated).toBe(!fails);
+        expect(queryClient.getQueryState(memory)?.isInvalidated).toBe(false);
+        expect(queryClient.getQueryData<{ content: string }>(memory)).toEqual({
+          content: "Private memory",
+        });
+
+        if (kind === "create") {
+          expect(create).toHaveBeenCalledWith(createInput);
+        } else if (kind === "install") {
+          expect(install).toHaveBeenCalledWith(installInput);
+        } else if (kind === "patch") {
+          expect(patch).toHaveBeenCalledWith(skill.id, patchInput, {
+            profileId: "profile",
+          });
+          expect(
+            queryClient.getQueryData<{ body: string }>(
+              queryKeys.skills.detail(skill.id)
+            )?.body
+          ).toBe(fails ? "Old skill" : skill.body);
+        } else {
+          expect(remove).toHaveBeenCalledWith(skill.id);
+        }
+      } finally {
+        for (const stop of stops) {
+          stop();
+        }
+
+        for (const request of requests) {
+          request.mockRestore();
+        }
+      }
+    }
+  );
+}
 
 for (const kind of ["create", "clone", "update", "delete"] as const) {
   test.each([false, true])(

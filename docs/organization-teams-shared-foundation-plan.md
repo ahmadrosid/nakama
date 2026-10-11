@@ -2522,3 +2522,13 @@ Eight new cases exercise create, clone, update, and delete hooks with success an
 Step 5 and delivery stages 3 and 4 remain open. Next: the remaining resource source mutations, account cache boundaries, and data portability compatibility. No new file, package, dependency, or helper abstraction was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
 
 Evidence: /tmp/nakama-profile-catalog-{focused,types,format,oxlint,doctor,lint}.log.
+
+### Slice 3ae — Skill source catalog refresh
+
+The existing skill create, install, patch, and delete hooks now invalidate Organization overview queries and publication selectors after success. Active parent and team readers refresh before these mutations complete. Inactive summaries become stale for the next read. Existing skill and profile invalidation paths remain in place. Patching still stores the returned skill detail after the refresh. Failed mutations retain shared catalogs and cached detail. Private memory queries remain untouched.
+
+Eight new cases exercise all four hooks with success and failure responses. They check active and inactive summary refresh, publication and skill catalog refresh, exact source IDs and profile-scoped requests, retained private memory, and patch detail updates. All 184 focused component and mutation tests passed with 1355 assertions. Complete web types, scoped anti-slop, Ultracite, and git diff --check passed. One verification repair supplied the required sourcePath field in the skill fixture. No production repair was needed. React Doctor retained 91/100 with the same two assignment complexity warnings and no errors.
+
+Step 5 and delivery stages 3 and 4 remain open. Next: knowledge, tool, and provider source changes, account cache boundaries, and data portability compatibility. No new file, package, dependency, or helper abstraction was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
+
+Evidence: /tmp/nakama-skill-catalog-{focused,types,format,oxlint,doctor,lint}.log.

@@ -352,7 +352,13 @@ export function useCreateSkillMutation() {
   return useMutation({
     mutationFn: (input: Parameters<typeof client.createSkill>[0]) =>
       client.createSkill(input),
-    onSuccess: () => invalidateQueries(queryClient, queryKeys.skills.all),
+    onSuccess: () =>
+      invalidateQueries(
+        queryClient,
+        queryKeys.skills.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
+      ),
   });
 }
 
@@ -367,7 +373,9 @@ export function useInstallSkillMutation() {
         queryClient,
         queryKeys.skills.all,
         queryKeys.profiles.all,
-        queryKeys.profiles.detail(variables.profileId)
+        queryKeys.profiles.detail(variables.profileId),
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
       ),
   });
 }
@@ -388,6 +396,11 @@ export function usePatchSkillMutation() {
       client.patchSkill(skillId, input, profileId ? { profileId } : undefined),
     onSuccess: async (data, variables) => {
       await Promise.all([
+        invalidateQueries(
+          queryClient,
+          ["organizationOverview"],
+          ["organizationPublicationCatalog"]
+        ),
         invalidateQueries(queryClient, queryKeys.skills.all),
         invalidateQueries(
           queryClient,
@@ -420,7 +433,9 @@ export function useDeleteSkillMutation() {
       invalidateQueries(
         queryClient,
         queryKeys.skills.all,
-        queryKeys.profiles.all
+        queryKeys.profiles.all,
+        ["organizationOverview"],
+        ["organizationPublicationCatalog"]
       ),
   });
 }
