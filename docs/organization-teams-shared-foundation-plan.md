@@ -1627,3 +1627,15 @@ The touched tools route test file also includes its previously authorized test r
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: authorize parent tool detail reads and profile assignments, then recheck published tools across normal agent and playground execution.
 No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran.
 Evidence: /tmp/nakama-tool-catalog-final-focused.log, /tmp/nakama-tool-catalog-final-server-types.log, /tmp/nakama-tool-catalog-final-core-types.log, and /tmp/nakama-tool-catalog-lint.log.
+
+### Slice 2aj — tool detail and assignment verification stopped
+Uncommitted code scopes HTTP tool detail and source reads to the active tenant catalog. Published details keep sanitized configuration and load schemas from the source record. Parent source-file reads remain unavailable through team context.
+Uncommitted assignment code accepts current parent publications, rejects same-name tool assignments, and keeps shared template assignments read-only. Assigned-tool lists show sanitized published entries and hide revoked sources.
+The first focused run found a duplicate parent tool name in the fixture and local built-in timestamps changed by catalog initialization. Repair one gives the private fixture a unique name and preserves local assigned records without catalog initialization. It also adds HTTP detail and source-denial checks.
+The next focused run found a fixture that exported a schema instead of storing it in handlerConfig. Repair two places the expected schema in handlerConfig.
+The final focused run passed 213 tests, skipped two Windows tests, and failed one test across four files. The remaining assertion expects status 409 for shared template assignment changes. The existing requireMutableProfile guard correctly returns 403.
+The complete server type check passed before the second repair. Final type and lint checks did not run because the focused gate still fails after two repair attempts.
+Only this progress record is committed. The five touched source and test files remain uncommitted for the next iteration. Steps 2 and 3 and delivery stage 2 remain unchecked.
+Next: correct the remaining status assertion, verify the full slice, and commit it. Then connect parent tool assignments to normal agent and playground execution checks.
+No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-tool-detail-final-focused.log and /tmp/nakama-tool-detail-initial-types.log.
