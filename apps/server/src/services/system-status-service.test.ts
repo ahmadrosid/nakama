@@ -41,9 +41,6 @@ function createService(
   const usageTracker = extras?.llmUsageTracker;
 
   return new SystemStatusService(
-    // The service only reads these members; the rest of AgentService is not
-    // part of what a status response depends on.
-    // SAFETY: The test fixture matches the contract used by this test.
     {
       getLlmUsageDailyStats: async (orgId: string | null) =>
         (orgId ? await usageTracker?.getDailyStats(orgId) : null) ?? [],
@@ -56,16 +53,25 @@ function createService(
           totalTokens: 0,
           trackedSince: new Date().toISOString(),
         },
+      getLlmUsageStatsByActor: async () => {
+        throw new Error("Unexpected actor usage lookup");
+      },
       getLlmUsageStatsByModel: async (orgId: string | null) =>
         (orgId ? await usageTracker?.getStatsByModel(orgId) : null) ?? [],
-      getModels: async () => ({ models: [], provider: "openai" }),
+      getModels: async () => ({
+        currentProviderId: null,
+        displayName: "OpenAI",
+        models: [],
+        provider: "openai",
+        providers: [],
+      }),
       getUsageStatusFields: () => ({
         costEstimated: false,
         currentModel: "gpt-4o",
         displayName: "OpenAI",
       }),
       providerConfigured: true,
-    } as AgentService,
+    },
     // SAFETY: The test fixture matches the contract used by this test.
     { getActiveRunCount: () => 2 } as any,
     // SAFETY: The test fixture matches the contract used by this test.
@@ -83,6 +89,30 @@ function createService(
 }
 
 describe("SystemStatusService", () => {
+  test("organization status hides channel details and supplies an empty QR code", async () => {
+    await withConfigDir();
+    const service = createService(null);
+    const status = await service.getStatus("org_a");
+
+    for (const worker of [
+      status.telegramWorker,
+      status.discordWorker,
+      status.whatsappWorker,
+    ]) {
+      expect(worker).toMatchObject({
+        configured: false,
+        ok: true,
+        paired: false,
+        running: false,
+      });
+      expect(worker).not.toHaveProperty("process");
+    }
+
+    expect(status.discordWorker.connected).toBe(false);
+    expect(status.whatsappWorker.connected).toBe(false);
+    expect(status.whatsappWorker.qrCode).toBeNull();
+  });
+
   test("adds named usage per agent and per user only when asked", async () => {
     await withConfigDir();
     const db = createInMemoryDatabaseAdapter();
@@ -257,6 +287,11 @@ describe("SystemStatusService", () => {
     const orgA = await service.getStatus("org_a");
     const orgB = await service.getStatus("org_b");
 
+    const profileA = await service.getStatus({
+      orgId: "org_a",
+      profileId: "profile_a",
+    });
+
     expect(orgA.llmUsage).toMatchObject({
       inputTokens: 100,
       outputTokens: 50,
@@ -266,6 +301,12 @@ describe("SystemStatusService", () => {
     expect(orgA.llmUsage.models).toMatchObject([
       { inputTokens: 100, modelId: "gpt-4o", requestCount: 1 },
     ]);
+    expect(profileA.llmUsage).toMatchObject({
+      inputTokens: 100,
+      outputTokens: 50,
+      requestCount: 1,
+      totalTokens: 150,
+    });
     expect(orgB.llmUsage).toMatchObject({
       inputTokens: 900_000,
       outputTokens: 400_000,

@@ -28,7 +28,16 @@ import type { WorkerManagerService } from "./worker-manager-service";
 
 export class SystemStatusService {
   constructor(
-    private readonly agent: AgentService,
+    private readonly agent: Pick<
+      AgentService,
+      | "providerConfigured"
+      | "getModels"
+      | "getUsageStatusFields"
+      | "getLlmUsageStats"
+      | "getLlmUsageStatsByModel"
+      | "getLlmUsageDailyStats"
+      | "getLlmUsageStatsByActor"
+    >,
     private readonly automationRunner: AutomationRunner,
     private readonly workerManager: WorkerManagerService,
     private readonly mcpService: McpService | null = null,
@@ -123,17 +132,37 @@ export class SystemStatusService {
     };
   }
 
+  private resolveWorkerStatus(
+    name: "telegram",
+    pm2Status: WorkerProcessInfo | null,
+    orgId: ChannelConfigScope
+  ): Promise<SystemStatusResponse["telegramWorker"]>;
+  private resolveWorkerStatus(
+    name: "whatsapp",
+    pm2Status: WorkerProcessInfo | null,
+    orgId: ChannelConfigScope
+  ): Promise<SystemStatusResponse["whatsappWorker"]>;
+  private resolveWorkerStatus(
+    name: "discord",
+    pm2Status: WorkerProcessInfo | null,
+    orgId: ChannelConfigScope
+  ): Promise<SystemStatusResponse["discordWorker"]>;
   private async resolveWorkerStatus(
     name: "telegram" | "whatsapp" | "discord",
     pm2Status: WorkerProcessInfo | null,
     orgId: ChannelConfigScope
-  ) {
+  ): Promise<
+    | SystemStatusResponse["telegramWorker"]
+    | SystemStatusResponse["whatsappWorker"]
+    | SystemStatusResponse["discordWorker"]
+  > {
     if (!isChannelOwner(orgId)) {
       return {
         configured: false,
         connected: false,
         ok: true,
         paired: false,
+        qrCode: null,
         running: false,
       };
     }
