@@ -1,4 +1,5 @@
 import type {
+  CreateTeamRequest,
   OrganizationOverviewResponse,
   OrgSharedResourceKind,
 } from "@nakama/core/contract";
@@ -12,6 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@nakama/ui/dialog";
+import { Input } from "@nakama/ui/input";
 import {
   AiBrain01Icon,
   BookOpen01Icon,
@@ -19,7 +21,7 @@ import {
   TaskEdit01Icon,
   UserGroupIcon,
 } from "hugeicons-react";
-import { useRef, useState } from "react";
+import { type FormEvent, useId, useRef, useState } from "react";
 import { OrgArchiveCard } from "@/components/settings/OrgArchiveCard";
 import { OrgMembersCard } from "@/components/settings/OrgMembersCard";
 import { OrgMemoryCard } from "@/components/settings/OrgMemoryCard";
@@ -27,7 +29,10 @@ import { SkillsCuratorOrgCard } from "@/components/settings/SkillsCuratorOrgCard
 import { SkillsPostTurnReviewOrgCard } from "@/components/settings/SkillsPostTurnReviewOrgCard";
 import { SkillsWriteApprovalOrgCard } from "@/components/settings/SkillsWriteApprovalOrgCard";
 import { useAuth } from "@/context/use-auth";
-import { useOrganizationOverview } from "@/hooks/use-org-members";
+import {
+  useCreateTeam,
+  useOrganizationOverview,
+} from "@/hooks/use-org-members";
 import { formatError } from "@/lib/client";
 
 const RESOURCE_ROWS = [
@@ -47,6 +52,153 @@ const READINESS_LABELS = {
   requires_setup: "Requires setup",
   unavailable: "Unavailable",
 };
+
+function AddTeamDialog({
+  orgId,
+  creatorId,
+}: {
+  orgId: string;
+  creatorId: string;
+}) {
+  const { refreshSession } = useAuth();
+  const createTeam = useCreateTeam(orgId);
+  const formId = useId();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [adminUserId, setAdminUserId] = useState(creatorId);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [created, setCreated] = useState(false);
+  const running = useRef(false);
+  const request = useRef<CreateTeamRequest | null>(null);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (running.current) {
+      return;
+    }
+
+    const input = {
+      adminUserId: adminUserId.trim(),
+      name: name.trim(),
+      slug: slug.trim().toLowerCase(),
+    };
+
+    if (
+      !(
+        input.name &&
+        input.adminUserId &&
+        /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.slug)
+      )
+    ) {
+      setError("Enter a team name, valid slug, and existing admin user ID.");
+
+      return;
+    }
+
+    if (
+      !request.current ||
+      request.current.name !== input.name ||
+      request.current.slug !== input.slug ||
+      request.current.adminUserId !== input.adminUserId
+    ) {
+      request.current = { ...input, requestId: crypto.randomUUID() };
+    }
+
+    running.current = true;
+    setPending(true);
+    setError(null);
+
+    try {
+      if (!created) {
+        await createTeam.mutateAsync(request.current);
+        setCreated(true);
+      }
+
+      await refreshSession();
+      setOpen(false);
+      setName("");
+      setSlug("");
+      setAdminUserId(creatorId);
+      request.current = null;
+      setCreated(false);
+    } catch (cause) {
+      setError(formatError(cause));
+    } finally {
+      running.current = false;
+      setPending(false);
+    }
+  }
+
+  return (
+    <Dialog
+      onOpenChange={(nextOpen) => {
+        if (!running.current) {
+          setOpen(nextOpen);
+        }
+      }}
+      open={open}
+    >
+      <DialogTrigger render={<Button size="sm" variant="outline" />}>
+        Add team
+      </DialogTrigger>
+      <DialogContent showCloseButton={!pending}>
+        <DialogHeader>
+          <DialogTitle>Add team</DialogTitle>
+        </DialogHeader>
+        <form
+          className="space-y-4"
+          id={formId}
+          onSubmit={(event) => void submit(event)}
+        >
+          <div className="space-y-2">
+            <label htmlFor={`${formId}-name`}>Team name</label>
+            <Input
+              disabled={pending || created}
+              id={`${formId}-name`}
+              onChange={(event) => setName(event.target.value)}
+              required
+              value={name}
+            />
+          </div>
+          <div className="space-y-2">
+            <label htmlFor={`${formId}-slug`}>Slug</label>
+            <Input
+              disabled={pending || created}
+              id={`${formId}-slug`}
+              onChange={(event) => setSlug(event.target.value)}
+              pattern="[a-z0-9]+(-[a-z0-9]+)*"
+              required
+              value={slug}
+            />
+          </div>
+          <div className="space-y-2">
+            <label htmlFor={`${formId}-admin`}>First admin user ID</label>
+            <Input
+              disabled={pending || created}
+              id={`${formId}-admin`}
+              onChange={(event) => setAdminUserId(event.target.value)}
+              required
+              value={adminUserId}
+            />
+          </div>
+          {error && (
+            <p className="text-destructive" role="alert">
+              {error}
+            </p>
+          )}
+        </form>
+        <DialogFooter>
+          <Button disabled={pending} form={formId} type="submit">
+            {pending ? "Creating…" : "Create team"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function OrganizationTeamRow({
   team,
@@ -164,7 +316,7 @@ function OrganizationTeamRow({
 }
 
 export function OrganizationOverview() {
-  const { activeOrg } = useAuth();
+  const { activeOrg, user } = useAuth();
 
   const overview = useOrganizationOverview(
     activeOrg?.id ?? null,
@@ -247,8 +399,17 @@ export function OrganizationOverview() {
         </dl>
       </Card>
       <Card className="overflow-hidden">
-        <CardHeader className="border-b px-5 py-4">
+        <CardHeader className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
           <CardTitle className="text-base">Teams</CardTitle>
+          {overview.data.canManageOrganization &&
+            organization.id === activeOrg.id &&
+            user && (
+              <AddTeamDialog
+                creatorId={user.id}
+                key={`${activeOrg.id}:${user.id}`}
+                orgId={activeOrg.id}
+              />
+            )}
         </CardHeader>
         <ul className="divide-y">
           {teams.map((team) => (

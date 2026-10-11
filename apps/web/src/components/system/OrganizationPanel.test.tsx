@@ -71,7 +71,8 @@ async function settle() {
 
 function mount(
   queryClient: QueryClient,
-  switchOrg: AuthContextValue["switchOrg"] = async () => undefined
+  switchOrg: AuthContextValue["switchOrg"] = async () => undefined,
+  refreshSession: AuthContextValue["refreshSession"] = async () => undefined
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -84,7 +85,7 @@ function mount(
 
   return {
     container,
-    async render(org: OrganizationSummary) {
+    async render(org: NonNullable<AuthContextValue["activeOrg"]>) {
       const auth: AuthContextValue = {
         activeOrg: org,
         archiveOrg: async () => undefined,
@@ -99,11 +100,11 @@ function mount(
         platformOrgs: [],
         platformOrgsError: false,
         refreshPlatformOrgs: async () => undefined,
-        refreshSession: async () => undefined,
+        refreshSession,
         setup: async () => undefined,
         switchOrg,
         updateOrg: async () => undefined,
-        user: null,
+        user: { email: "creator@example.com", id: "creator" },
       };
 
       await act(async () => {
@@ -388,4 +389,287 @@ test("team changes discard open details from the previous organization", async (
   await render(organization("team-b"));
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   expect(container.textContent).not.toContain("Team team-a");
+});
+
+async function fillTeamForm(adminUserId = "creator") {
+  await act(async () => {
+    for (const [field, value] of [
+      ["name", "Support"],
+      ["slug", "support"],
+      ["admin", adminUserId],
+    ]) {
+      const input = document.querySelector<HTMLInputElement>(
+        `input[id$="-${field}"]`
+      );
+
+      expect(input).not.toBeNull();
+      Object.getOwnPropertyDescriptor(
+        Object.getPrototypeOf(input),
+        "value"
+      )?.set?.call(input, value);
+      input?.dispatchEvent(new window.Event("input", { bubbles: true }));
+    }
+  });
+}
+
+async function submitTeamForm() {
+  await act(async () => {
+    document
+      .querySelector("form")
+      ?.dispatchEvent(
+        new window.Event("submit", { bubbles: true, cancelable: true })
+      );
+    await settle();
+  });
+  await act(async () => {
+    await settle();
+  });
+}
+
+test.each(["creator", "another-user"])(
+  "parent admins create a team for existing admin %s without switching",
+  async (adminUserId) => {
+    const queries = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+      },
+    });
+
+    const data = overview("parent");
+    data.canManageOrganization = true;
+    data.teams = [];
+    queries.setQueryData(
+      queryKeys.organizationOverview("parent", "parent"),
+      data
+    );
+
+    const create = spyOn(client, "createTeam").mockResolvedValue({
+      organization: organization("new-team"),
+    });
+
+    const reload = spyOn(client, "getOrganizationOverview").mockResolvedValue(
+      data
+    );
+
+    cleanups.push(() => {
+      create.mockRestore();
+      reload.mockRestore();
+    });
+    const switchOrg = mock(async (_id: string) => undefined);
+    const refreshSession = mock(async () => undefined);
+    const { container, render } = mount(queries, switchOrg, refreshSession);
+    await render({ ...organization("parent"), parentOrgId: null });
+    await act(async () => {
+      container.querySelector("button")?.click();
+      await settle();
+    });
+    expect(
+      document.querySelector<HTMLInputElement>('input[id$="-admin"]')?.value
+    ).toBe("creator");
+    await fillTeamForm(adminUserId);
+    await submitTeamForm();
+    expect(create).toHaveBeenCalledTimes(1);
+    const [scope, request] = create.mock.calls[0];
+    expect(scope).toBe("parent");
+    expect(request).toMatchObject({
+      adminUserId,
+      name: "Support",
+      slug: "support",
+    });
+    expect(request.requestId.length).toBeGreaterThan(0);
+    expect(reload.mock.calls).toEqual([["parent"]]);
+    expect(refreshSession).toHaveBeenCalledTimes(1);
+    expect(switchOrg).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.querySelector("h2")?.textContent).toBe(
+      data.organization.name
+    );
+  }
+);
+
+test("failed team creation retains its request ID across dialog close and retry", async () => {
+  const queries = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  const data = overview("parent");
+  data.canManageOrganization = true;
+  data.teams = [];
+  queries.setQueryData(
+    queryKeys.organizationOverview("parent", "parent"),
+    data
+  );
+
+  const create = spyOn(client, "createTeam")
+    .mockRejectedValueOnce(new Error("Creation failed"))
+    .mockResolvedValue({ organization: organization("new-team") });
+
+  const reload = spyOn(client, "getOrganizationOverview").mockResolvedValue(
+    data
+  );
+
+  cleanups.push(() => {
+    create.mockRestore();
+    reload.mockRestore();
+  });
+  const { container, render } = mount(queries);
+  await render({ ...organization("parent"), parentOrgId: null });
+  await act(async () => {
+    container.querySelector("button")?.click();
+    await settle();
+  });
+  await fillTeamForm();
+  await submitTeamForm();
+  expect(
+    document.querySelector('[role="dialog"] [role="alert"]')
+  ).not.toBeNull();
+  await act(async () => {
+    document
+      .querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')
+      ?.click();
+    await settle();
+  });
+  await act(async () => {
+    container.querySelector("button")?.click();
+    await settle();
+  });
+  expect(
+    document.querySelector<HTMLInputElement>('input[id$="-name"]')?.value
+  ).toBe("Support");
+  await submitTeamForm();
+  expect(create).toHaveBeenCalledTimes(2);
+  expect(create.mock.calls[1]).toEqual(create.mock.calls[0]);
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+});
+
+test("failed session refresh retries without creating a second team", async () => {
+  const queries = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  const data = overview("parent");
+  data.canManageOrganization = true;
+  data.teams = [];
+  queries.setQueryData(
+    queryKeys.organizationOverview("parent", "parent"),
+    data
+  );
+
+  const create = spyOn(client, "createTeam").mockResolvedValue({
+    organization: organization("new-team"),
+  });
+
+  const reload = spyOn(client, "getOrganizationOverview").mockResolvedValue(
+    data
+  );
+
+  cleanups.push(() => {
+    create.mockRestore();
+    reload.mockRestore();
+  });
+
+  const refreshSession = mock(async () => undefined).mockRejectedValueOnce(
+    new Error("Refresh failed")
+  );
+
+  const { container, render } = mount(
+    queries,
+    async () => undefined,
+    refreshSession
+  );
+
+  await render({ ...organization("parent"), parentOrgId: null });
+  await act(async () => {
+    container.querySelector("button")?.click();
+    await settle();
+  });
+  await fillTeamForm();
+  await submitTeamForm();
+  expect(
+    document.querySelector('[role="dialog"] [role="alert"]')
+  ).not.toBeNull();
+  expect(
+    [...document.querySelectorAll<HTMLInputElement>("form input")].every(
+      (input) => input.disabled
+    )
+  ).toBe(true);
+  await submitTeamForm();
+  expect(create).toHaveBeenCalledTimes(1);
+  expect(refreshSession).toHaveBeenCalledTimes(2);
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+});
+
+test("team creation blocks repeated submissions and keeps pending input fixed", async () => {
+  const queries = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  const data = overview("parent");
+  data.canManageOrganization = true;
+  data.teams = [];
+  queries.setQueryData(
+    queryKeys.organizationOverview("parent", "parent"),
+    data
+  );
+
+  const pending = Promise.withResolvers<{
+    organization: OrganizationSummary;
+  }>();
+
+  const create = spyOn(client, "createTeam").mockReturnValue(pending.promise);
+
+  const reload = spyOn(client, "getOrganizationOverview").mockResolvedValue(
+    data
+  );
+
+  cleanups.push(() => {
+    create.mockRestore();
+    reload.mockRestore();
+  });
+  const { container, render } = mount(queries);
+  await render({ ...organization("parent"), parentOrgId: null });
+  await act(async () => {
+    container.querySelector("button")?.click();
+    await settle();
+  });
+  await fillTeamForm();
+  await submitTeamForm();
+  await submitTeamForm();
+  expect(create).toHaveBeenCalledTimes(1);
+  expect(
+    [...document.querySelectorAll<HTMLInputElement>("form input")].every(
+      (input) => input.disabled
+    )
+  ).toBe(true);
+  expect(document.querySelector('[data-slot="dialog-close"]')).toBeNull();
+  await act(async () => {
+    pending.resolve({ organization: organization("new-team") });
+    await settle();
+  });
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+});
+
+test("team membership cannot expose parent team creation controls", async () => {
+  const queries = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  queries.setQueryData(
+    queryKeys.organizationOverview("parent", "team-a"),
+    overview("team-a")
+  );
+  const { container, render } = mount(queries);
+  await render({ ...organization("team-a"), role: "admin" });
+  expect(container.querySelectorAll("button")).toHaveLength(1);
+  expect(container.querySelector("button")?.getAttribute("aria-label")).toBe(
+    "View Team team-a"
+  );
 });

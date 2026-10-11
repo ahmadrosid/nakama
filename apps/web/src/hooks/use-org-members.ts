@@ -1,5 +1,6 @@
 import type {
   AddOrgMemberRequest,
+  CreateTeamRequest,
   InviteOrgMemberRequest,
   UpdateOrgMemberRequest,
 } from "@nakama/core/contract";
@@ -38,6 +39,20 @@ export function useOrgMembers(orgId: string | null) {
   return useQuery({
     ...orgMembersQueryOptions(orgId ?? ""),
     enabled: Boolean(orgId),
+  });
+}
+
+export function useCreateTeam(orgId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (request: CreateTeamRequest) =>
+      client.createTeam(orgId, request),
+    onSuccess: () =>
+      invalidateQueries(
+        queryClient,
+        queryKeys.organizationOverview(orgId, orgId)
+      ),
   });
 }
 
