@@ -1784,3 +1784,12 @@ Checks: 103 OrgService tests passed. The complete server type check, lint across
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: verify shared resource revocation through HTTP, CLI, channels, and automation entry points, plus existing quotas and role checks, then run the delivery-stage gate.
 No new source file, package, dependency, or runtime abstraction was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-shared-restore-refresh-focused.log, /tmp/nakama-shared-restore-refresh-types.log, and /tmp/nakama-shared-restore-refresh-lint.log.
+
+### Slice 2ay — HTTP shared session revocation and viewer checks
+Added authenticated HTTP checks for both stored and ephemeral shared agent sessions. A team member creates a real session and runs one turn through the existing agent session implementation with a fake provider. After parent publication removal, HTTP denies both a new shared session and a new turn on the cached session. No additional provider call occurs, and no turn reservation remains active.
+Team viewers cannot create sessions or send turns. The owning member can still read saved history after revocation. A request under a sibling team cannot read that history. Shared local profile rows remain unchanged; ephemeral sessions create no stored session or message rows.
+No runtime change was needed. Tests exercise the existing browser authentication, organization middleware, session access, viewer guard, and shared execution checks. CLI, channel, and automation entry-point checks and quota checks remain separate work.
+Checks: 136 OrgService and HTTP session scope tests passed across two files. The complete server type check, lint across 1532 files, and git diff --check passed. One verification repair added the required channel to the session-creation request fixture.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: verify CLI, channel, and automation revocation plus team quota and credential ownership, then run the delivery-stage gate.
+No new source file, package, dependency, or runtime abstraction was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-shared-http-revocation-focused.log, /tmp/nakama-shared-http-revocation-types.log, and /tmp/nakama-shared-http-revocation-lint.log.

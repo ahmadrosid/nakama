@@ -41,6 +41,8 @@ import {
   mergeWorkspaceSettings,
   type StoredProfileRecord,
 } from "@nakama/db";
+import { createMinimalHonoApp } from "../http/test-app-helpers";
+import { loginUserSession } from "../http/test-session-helpers";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
 import { AuthService } from "./auth-service";
@@ -1842,6 +1844,151 @@ async function seedSharedAgentSelection(
 }
 
 describe("OrgService shared agent selection", () => {
+  test.each([false, true])(
+    "HTTP shared sessions deny revoked turns and viewer writes for cognito=%s",
+    async (cognito) => {
+      const {
+        orgService,
+        databaseAdapter: db,
+        authService,
+      } = createOrgService();
+      const publication = await seedSharedAgentSelection(db, orgService);
+      const profile = await orgService.createSharedAgentInstance(
+        "org_team_a",
+        publication.id,
+        "user_other"
+      );
+      const passwordHash = await authService.hashPassword("password123");
+      for (const userId of ["user_other", "user_viewer"]) {
+        await db.updateUserPassword(
+          userId,
+          passwordHash,
+          new Date().toISOString()
+        );
+      }
+      let providerCalls = 0;
+      const agent = new AgentService(null, null, db);
+      agent.setOrgService(orgService);
+      Object.assign(agent, {
+        _providerConfigured: true,
+        createHarnessForProfile: () => ({
+          provider: {
+            generateChat: () => {
+              providerCalls += 1;
+              return Promise.resolve({
+                assistantMessage: { content: "Done", role: "assistant" },
+                content: "Done",
+                toolCalls: [],
+              });
+            },
+            name: "test",
+          },
+        }),
+        resolveProfileTools: async () => [],
+      });
+      const { app } = createMinimalHonoApp({
+        agent,
+        authService,
+        databaseAdapter: db,
+        orgService,
+      });
+      const member = await loginUserSession(
+        app,
+        "user_other@example.com",
+        "password123",
+        "org_team_a"
+      );
+      const viewer = await loginUserSession(
+        app,
+        "user_viewer@example.com",
+        "password123",
+        "org_team_a"
+      );
+      const memberHeaders = member.headers({
+        "Content-Type": "application/json",
+        "X-CSRF-Token": member.csrfToken,
+      });
+      const viewerHeaders = viewer.headers({
+        "Content-Type": "application/json",
+        "X-CSRF-Token": viewer.csrfToken,
+      });
+      const create = await app.fetch(
+        new Request("http://localhost:4310/v1/sessions", {
+          body: JSON.stringify({
+            channel: "web",
+            cognito,
+            profileId: profile.id,
+          }),
+          headers: memberHeaders,
+          method: "POST",
+        })
+      );
+      expect(create.status).toBe(201);
+      const body: { sessionId: string } = await create.json();
+      const id = body.sessionId;
+      const session = (await agent.resolveSession(id, "org_team_a"))!;
+      await session.send("Saved team turn");
+      const history = [...session.getHistory()];
+      expect(providerCalls).toBe(1);
+      for (const path of ["/v1/sessions", `/v1/sessions/${id}/messages`]) {
+        const response = await app.fetch(
+          new Request(`http://localhost:4310${path}`, {
+            body: JSON.stringify({
+              channel: "web",
+              cognito,
+              message: "Viewer turn",
+              profileId: profile.id,
+            }),
+            headers: viewerHeaders,
+            method: "POST",
+          })
+        );
+        expect(response.status).toBe(403);
+      }
+      await orgService.unpublishSharedResource(
+        "org_parent",
+        publication.id,
+        "user_creator"
+      );
+      for (const path of ["/v1/sessions", `/v1/sessions/${id}/messages`]) {
+        const response = await app.fetch(
+          new Request(`http://localhost:4310${path}`, {
+            body: JSON.stringify({
+              channel: "web",
+              cognito,
+              message: "Revoked turn",
+              profileId: profile.id,
+            }),
+            headers: memberHeaders,
+            method: "POST",
+          })
+        );
+        expect(response.status).toBe(404);
+      }
+      expect(providerCalls).toBe(1);
+      expect(sessionTurnRegistry.isActive(id)).toBe(false);
+      const messages = await app.fetch(
+        new Request(`http://localhost:4310/v1/sessions/${id}/messages`, {
+          headers: member.headers(),
+        })
+      );
+      expect(messages.status).toBe(200);
+      expect(await messages.json()).toMatchObject({ messages: history });
+      const foreign = await app.fetch(
+        new Request(`http://localhost:4310/v1/sessions/${id}/messages`, {
+          headers: member.headers({}, "org_team_b"),
+        })
+      );
+      expect(foreign.status).toBe(404);
+      expect(await db.getProfileForOrg(profile.id, "org_team_a")).toEqual(
+        profile
+      );
+      if (cognito) {
+        expect(await db.getSession(id)).toBeNull();
+        expect(await db.listMessagesForSession(id)).toEqual([]);
+      }
+    }
+  );
   test("restored shared sessions rebuild from restored source settings and saved history", async () => {
     const rootDir = getUserConfigDir();
     const databasePath = join(rootDir, "sqlite", "restore.sqlite");
