@@ -1401,3 +1401,18 @@ No new source file, package, or dependency was added. Steps 2 and 3 remain unche
 Next: connect published skill assignments and prompt discovery, then guarded supporting assets and team execution with source write protection.
 No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-shared-skill-read-{focused,final-focused,core-types,server-types,client-types,lint}.log.
+
+2026-10-11: Step 2 slice 2u stops at the server type check after two repair attempts.
+Uncommitted changes permit published parent skill assignments by reference and return separate publishedSkills metadata in profile responses.
+Assignment checks reject private, sibling, revoked, and same-name sources before writes. Revoked assignments can still be removed.
+Team admins can assign and remove skills through existing routes. Members and viewers remain denied.
+Team maintenance and local discovery omit foreign source records before file reads, archive, consolidation, and name fallback.
+The first focused run failed because the archive guard used input.orgId instead of orgId, and an old test asserted error copy.
+The first repair corrected the guard and asserted status 404. New HTTP tests then failed because their write requests lacked CSRF tokens.
+The second repair supplied CSRF tokens. All 115 focused tests passed across four files, with two platform-specific skips.
+The complete core type check passed. The complete server type check failed at skills-service.test.ts:201 because the curator test options omit required trigger.
+No further repair ran this iteration. Next: supply the existing curator trigger value, rerun focused tests and affected package types, then full lint.
+Product changes and tests remain uncommitted. Only this failure record is committed. Steps 2 and 3 and delivery stage 2 remain unchecked.
+Shared prompt discovery, supporting assets, script tools, and runtime authorization remain incomplete.
+No full lint, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-parent-skill-assignment-{baseline,repair,final-focused,core-types,server-types}.log.
