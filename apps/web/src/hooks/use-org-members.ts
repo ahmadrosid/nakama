@@ -20,6 +20,20 @@ function orgMembersQueryOptions(orgId: string) {
   });
 }
 
+export function useOrganizationOverview(
+  orgId: string | null,
+  parentOrgId: string | null
+) {
+  return useQuery({
+    enabled: Boolean(orgId),
+    queryFn: () => client.getOrganizationOverview(orgId ?? ""),
+    queryKey: queryKeys.organizationOverview(
+      parentOrgId ?? orgId ?? "",
+      orgId ?? ""
+    ),
+  });
+}
+
 export function useOrgMembers(orgId: string | null) {
   return useQuery({
     ...orgMembersQueryOptions(orgId ?? ""),
