@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
+import type { AuthUserResponse, UserOrgSummary } from "@nakama/core/contract";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { AuthProvider } from "@/context/auth-context";
@@ -10,6 +11,148 @@ import { queryKeys } from "@/lib/query-keys";
 const ORG_A = { id: "org-a", name: "Org A", role: "admin", slug: "org-a" };
 
 const ORG_B = { id: "org-b", name: "Org B", role: "admin", slug: "org-b" };
+
+test.each(["logout", "revoked logout", "switch", "account"] as const)(
+  "%s clears shared and private queries and rejects late cache writes",
+  async (mode) => {
+    const user: AuthUserResponse = {
+      activeOrgId: ORG_A.id,
+      email: "admin@org-a.test",
+      id: "user-a",
+      isPlatformAdmin: false,
+      orgId: ORG_A.id,
+    };
+
+    const nextUser = {
+      ...user,
+      activeOrgId: mode === "account" ? ORG_A.id : ORG_B.id,
+      id: mode === "account" ? "user-b" : user.id,
+    };
+
+    const orgs: UserOrgSummary[] = [ORG_A, ORG_B].map((org) => ({
+      ...org,
+      createdAt: "2026-10-12T00:00:00Z",
+      role: "admin",
+      updatedAt: "2026-10-12T00:00:00Z",
+    }));
+
+    const getMe = spyOn(client, "getMe").mockResolvedValue(user);
+
+    const listUserOrgs = spyOn(client, "listUserOrgs").mockResolvedValue({
+      orgs,
+    });
+
+    const logout = spyOn(client, "logout").mockResolvedValue(undefined);
+    const switchOrg = spyOn(client, "setActiveOrg").mockResolvedValue(nextUser);
+
+    if (mode === "revoked logout") {
+      logout.mockRejectedValue(new Error("Session revoked"));
+    }
+
+    let auth!: ReturnType<typeof useAuth>;
+
+    function Probe() {
+      auth = useAuth();
+
+      return null;
+    }
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    const keys = [
+      queryKeys.organizationOverview("parent", ORG_A.id),
+      queryKeys.organizationPublicationCatalog("parent", "agent"),
+      queryKeys.orgMemory(ORG_A.id),
+      queryKeys.profiles.all,
+      queryKeys.notificationDestinations(ORG_A.id),
+    ];
+
+    const pending = Promise.withResolvers<number>();
+    let lateRead: Promise<unknown> | undefined;
+
+    try {
+      await act(async () =>
+        root.render(
+          <AuthProvider>
+            <Probe />
+          </AuthProvider>
+        )
+      );
+      expect(auth.user?.id).toBe(user.id);
+
+      for (const key of keys) {
+        queryClient.setQueryData(key, 1);
+      }
+
+      lateRead = queryClient
+        .fetchQuery({
+          queryFn: () => pending.promise,
+          queryKey: keys[0],
+          staleTime: 0,
+        })
+        .catch(() => undefined);
+      expect(queryClient.getQueryState(keys[0])?.fetchStatus).toBe("fetching");
+
+      await act(async () => {
+        if (mode === "switch") {
+          await auth.switchOrg(ORG_B.id);
+        } else if (mode === "account") {
+          getMe.mockResolvedValue(nextUser);
+          await auth.refreshSession();
+        } else {
+          await auth.logout();
+        }
+      });
+      expect(keys.map((key) => queryClient.getQueryData(key))).toEqual(
+        keys.map(() => undefined)
+      );
+      expect(auth.user?.id).toBe(
+        mode === "logout" || mode === "revoked logout" ? undefined : nextUser.id
+      );
+
+      if (mode === "switch" || mode === "account") {
+        expect(auth.activeOrg?.id).toBe(nextUser.activeOrgId);
+        queryClient.setQueryData(keys[0], 2);
+      }
+
+      pending.resolve(99);
+      await act(async () => {
+        await lateRead;
+        await pending.promise;
+      });
+      expect(queryClient.getQueryData<number>(keys[0])).toBe(
+        mode === "switch" || mode === "account" ? 2 : undefined
+      );
+
+      for (const key of keys.slice(1)) {
+        expect(queryClient.getQueryData(key)).toBeUndefined();
+      }
+
+      if (mode === "switch") {
+        expect(switchOrg).toHaveBeenCalledWith(ORG_B.id);
+      } else if (mode === "account") {
+        expect(getMe).toHaveBeenCalledTimes(2);
+      } else {
+        expect(logout).toHaveBeenCalledTimes(1);
+        expect(auth.isAuthenticated).toBe(false);
+      }
+    } finally {
+      pending.resolve(99);
+      await lateRead;
+      await act(async () => root.unmount());
+      container.remove();
+
+      for (const request of [getMe, listUserOrgs, logout, switchOrg]) {
+        request.mockRestore();
+      }
+
+      queryClient.clear();
+      client.setOrgId(null);
+    }
+  }
+);
 
 test("a tenant's cached data does not survive logout or an org switch", async () => {
   // SAFETY: The test controls this fixture or mock and asserts the resulting behavior.

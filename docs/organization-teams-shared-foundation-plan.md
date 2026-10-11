@@ -2564,3 +2564,13 @@ Twelve new cases cover all six hooks with success and failure responses. Query o
 Step 5 and delivery stages 3 and 4 remain open. Next: account cache boundaries, late responses during team switches, and import/export/archive/restore compatibility. No new file, package, dependency, or helper abstraction was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
 
 Evidence: /tmp/nakama-integration-catalog-{focused,types,format,oxlint,doctor,lint}.log.
+
+### Slice 3ai — Authentication cache boundary checks
+
+The existing AuthProvider clears the complete query cache after logout, team switching, and session refresh. Four new cases test successful logout, an already revoked logout, switching teams, and replacing the signed-in account through refreshSession. Each case seeds shared overview, publication, profile, private memory, and notification queries. It then starts a pending overview read before the identity boundary. The checks prove old queries disappear and that resolving the old read cannot restore removed data or replace a newer value under the same key.
+
+The cases also check the resulting authenticated user, active tenant, and exact switch request. Account replacement retains the same active tenant to check account identity independently of tenant switching. All 154 focused authentication and Organization component tests passed with 1142 assertions. Complete web types, scoped anti-slop, Ultracite, and git diff --check passed. React Doctor retained 91/100 with the same two assignment complexity warnings and no errors. One verification repair added the cache value's numeric type and removed an unused catch parameter. No production change was needed. Existing cache clearing already satisfies these query-response cases.
+
+These tests do not prove ordering of concurrent authentication requests. The source audit found that AuthProvider refreshSession accepts its result after waiting, while NakamaClient getMe and setActiveOrg update the client's implicit tenant on completion. That ordering still needs a focused race check before step 5 can close. Import/export/archive/restore compatibility and final delivery checks also remain open. No new file, package, dependency, browser check, full suite, build, paid call, push, or PR was added.
+
+Evidence: /tmp/nakama-auth-cache-{focused,types,format,oxlint,doctor,lint}.log.
