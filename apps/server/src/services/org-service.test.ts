@@ -33,6 +33,7 @@ import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import {
   createInMemoryDatabaseAdapter,
   type DatabaseAdapter,
+  type StoredProfileRecord,
 } from "@nakama/db";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
@@ -1828,6 +1829,195 @@ async function seedSharedAgentSelection(
 }
 
 describe("OrgService shared agent selection", () => {
+  test("shared profile resolution uses only permitted current source settings", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    const publication = await seedSharedAgentSelection(db, orgService);
+    const profile = await orgService.createSharedAgentInstance(
+      "org_team_a",
+      publication.id,
+      "user_other"
+    );
+    const previousConfig = await loadUserConfig();
+    try {
+      await saveUserConfig({
+        defaultProviderId: "shared-provider",
+        providers: [
+          {
+            apiKey: "",
+            baseUrl: "http://localhost:11434/v1",
+            createdAt: new Date().toISOString(),
+            customModels: [
+              { default: true, id: "shared-model", name: "Model" },
+            ],
+            id: "shared-provider",
+            label: "Provider",
+            type: "ollama",
+          },
+        ],
+        thinkingEffort: "medium",
+        thinkingEnabled: true,
+      });
+      const source = (await db.getProfile("profile_template"))!;
+      await db.upsertProfile({
+        ...source,
+        automationsEnabled: false,
+        model: "shared-provider::shared-model",
+        name: "Updated template",
+        skillsPostTurnReview: false,
+        skillsWriteApproval: false,
+        systemPrompt: "Updated instructions",
+        thinkingEffort: "high",
+        thinkingEnabled: true,
+      });
+      const resolved = (await orgService.resolveSharedAgentProfile(
+        "org_team_a",
+        profile.id
+      ))!;
+      expect(resolved).toMatchObject({
+        acpAgent: null,
+        acpSettings: null,
+        createdAt: profile.createdAt,
+        id: profile.id,
+        isDefault: false,
+        isSuper: false,
+        model: "shared-provider::shared-model",
+        name: "Updated template",
+        orgId: "org_team_a",
+        thinkingEffort: "high",
+        thinkingEnabled: true,
+        updatedAt: profile.updatedAt,
+      });
+      expect(resolved.systemPrompt).toBe(
+        (await db.getProfile(source.id))!.systemPrompt
+      );
+      expect(resolved.automationsEnabled).toBe(profile.automationsEnabled);
+      expect(resolved.skillsPostTurnReview).toBe(profile.skillsPostTurnReview);
+      expect(resolved.skillsWriteApproval).toBe(profile.skillsWriteApproval);
+      expect(await db.getProfileForOrg(profile.id, "org_team_a")).toEqual(
+        profile
+      );
+      expect(
+        await orgService.resolveSharedAgentProfile("org_team_b", profile.id)
+      ).toBeNull();
+      expect(
+        await orgService.resolveSharedAgentProfile("org_parent", source.id)
+      ).toBeNull();
+    } finally {
+      if (previousConfig) {
+        await saveUserConfig(previousConfig);
+      } else {
+        await rm(getUserConfigPath(), { force: true });
+      }
+    }
+  });
+
+  test.each([false, true])(
+    "shared configuration refresh preserves team history for cognito=%s",
+    async (cognito) => {
+      const { orgService, databaseAdapter: db } = createOrgService();
+      const publication = await seedSharedAgentSelection(db, orgService);
+      const profile = await orgService.createSharedAgentInstance(
+        "org_team_a",
+        publication.id,
+        "user_other"
+      );
+      const teamDir = getProfileSoulDir("org_team_a", profile.id);
+      await writeFile(join(teamDir, "MEMORY.md"), "Team memory");
+      await writeFile(join(teamDir, "USER.md"), "Team context");
+      const builds: StoredProfileRecord[] = [];
+      let failBuild = false;
+      const agent = new AgentService(null, null, db);
+      agent.setOrgService(orgService);
+      Object.assign(agent, {
+        _providerConfigured: true,
+        createHarnessForProfile: (settings: StoredProfileRecord) => {
+          builds.push(settings);
+          return {
+            provider: {
+              generateChat: () =>
+                Promise.resolve({
+                  assistantMessage: { content: "Done", role: "assistant" },
+                  content: "Done",
+                  toolCalls: [],
+                }),
+              name: "test",
+            },
+          };
+        },
+        resolveProfileTools: async () => {
+          if (failBuild) {
+            throw new Error("Build failed");
+          }
+          return [];
+        },
+      });
+      const id = await agent.createSession(
+        "org_team_a",
+        "web",
+        profile.id,
+        "user_other",
+        { cognito, orgRole: "member" }
+      );
+      const first = (await agent.resolveSession(id, "org_team_a"))!;
+      await first.send("First");
+      const history = [...first.getHistory()];
+      expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
+      const source = (await db.getProfile("profile_template"))!;
+      await db.upsertProfile({
+        ...source,
+        name: "Changed template",
+        systemPrompt: "Changed instructions",
+        thinkingEffort: "high",
+        thinkingEnabled: true,
+      });
+      expect(await agent.resolveSession(id, "org_team_a")).toBe(first);
+      sessionTurnRegistry.cancelTurn(id);
+      failBuild = true;
+      await expect(agent.beginSessionTurn(id, "org_team_a")).rejects.toThrow();
+      expect(sessionTurnRegistry.isActive(id)).toBe(false);
+      expect(first.getHistory()).toEqual(history);
+      expect(
+        (await agent.getSessionMessages(id, "org_team_a"))!.messages
+      ).toEqual(history);
+      failBuild = false;
+      expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
+      const second = (await agent.resolveSession(id, "org_team_a"))!;
+      expect(second).not.toBe(first);
+      expect(second.getHistory()).toEqual(history);
+      expect(builds.at(-1)).toMatchObject({
+        id: profile.id,
+        name: "Changed template",
+        orgId: "org_team_a",
+        thinkingEffort: "high",
+        thinkingEnabled: true,
+      });
+      expect(builds.at(-1)!.systemPrompt).toBe(
+        (await db.getProfile(source.id))!.systemPrompt
+      );
+      sessionTurnRegistry.cancelTurn(id);
+      await second.send("Second");
+      expect(await agent.resolveSession(id, "org_team_a")).toBe(second);
+      expect(
+        (await agent.getSessionMessages(id, "org_team_a"))!.messages.filter(
+          (message) => message.role === "user"
+        )
+      ).toHaveLength(2);
+      expect(await db.getProfileForOrg(profile.id, "org_team_a")).toEqual(
+        profile
+      );
+      expect(await readFile(join(teamDir, "MEMORY.md"), "utf8")).toBe(
+        "Team memory"
+      );
+      expect(await readFile(join(teamDir, "USER.md"), "utf8")).toBe(
+        "Team context"
+      );
+      if (cognito) {
+        expect(await db.getSession(id)).toBeNull();
+        expect(await db.listMessagesForSession(id)).toEqual([]);
+      }
+    }
+  );
+
   test.each([false, true])(
     "new turns reject unavailable shared agents and preserve history for cognito=%s",
     async (cognito) => {
@@ -1930,7 +2120,7 @@ describe("OrgService shared agent selection", () => {
         publication.id,
         "user_other"
       );
-      await orgService.assertSharedAgentAvailable("org_team_a", profile.id);
+      await orgService.resolveSharedAgentProfile("org_team_a", profile.id);
       const org = (await db.getOrganizationById(
         change === "parent-archive" ? "org_parent" : "org_team_a"
       ))!;
@@ -1948,7 +2138,7 @@ describe("OrgService shared agent selection", () => {
       );
       try {
         await expect(
-          orgService.assertSharedAgentAvailable("org_team_a", profile.id)
+          orgService.resolveSharedAgentProfile("org_team_a", profile.id)
         ).rejects.toMatchObject({ status: 404 });
       } finally {
         read.mockRestore();

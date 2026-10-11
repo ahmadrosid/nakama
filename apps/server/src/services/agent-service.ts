@@ -395,7 +395,7 @@ interface StoredSession {
   pluginRevision: string;
   profileId: string;
   session: AgentChatSession;
-  sharedSkillRevision?: string;
+  sharedCapabilityRevision?: string;
 }
 
 export type { SubAgentRunInput, SubAgentRunResult };
@@ -1758,9 +1758,7 @@ export class AgentService {
       throw new Error("Provider is not configured.");
     }
 
-    const profile = await this.requireProfile(orgId, profileId);
-
-    await this.assertSharedAgentAvailable(orgId, profileId);
+    const profile = await this.requireExecutionProfile(orgId, profileId);
     const tools = [
       ...(await this.resolveProfileTools(profile, {
         includeAutomationTools: false,
@@ -1946,8 +1944,7 @@ export class AgentService {
     orgId: string,
     profileId: string
   ): Promise<ToolDefinition[]> {
-    const profile = await this.requireProfile(orgId, profileId);
-    await this.assertSharedAgentAvailable(orgId, profileId);
+    const profile = await this.requireExecutionProfile(orgId, profileId);
 
     const tools = await this.resolveProfileTools(profile, {
       includeAutomationTools: false,
@@ -2010,8 +2007,7 @@ export class AgentService {
       throw new Error("Provider is not configured.");
     }
 
-    const profile = await this.requireProfile(orgId, profileId);
-    await this.assertSharedAgentAvailable(orgId, profileId);
+    const profile = await this.requireExecutionProfile(orgId, profileId);
 
     const { systemPrompt, soulActive } = await this.resolveProfileSystemPrompt(
       orgId,
@@ -2068,8 +2064,10 @@ export class AgentService {
     }
 
     const timeoutMs = clampSubAgentTimeout(input.timeoutMs);
-    const profile = await this.requireProfile(input.orgId, input.profileId);
-    await this.assertSharedAgentAvailable(input.orgId, input.profileId);
+    const profile = await this.requireExecutionProfile(
+      input.orgId,
+      input.profileId
+    );
 
     const tools = await this.resolveProfileTools(profile, {
       includeAutomationTools: false,
@@ -2226,9 +2224,15 @@ export class AgentService {
       profileId
     );
 
-    const profile = await this.requireProfile(orgId, resolvedProfileId);
+    const profile = await this.requireExecutionProfile(
+      orgId,
+      resolvedProfileId
+    );
     this.assertChatProfileAccess(profile, options ?? {});
-    await this.assertSharedAgentAvailable(orgId, resolvedProfileId);
+    const sharedCapabilityRevision = await this.capabilityRevisionForProfile(
+      orgId,
+      resolvedProfileId
+    );
 
     const sessionId = nanoid();
     const modelOverride = this.normalizeSessionModelOverride(options?.model);
@@ -2280,11 +2284,7 @@ export class AgentService {
         lastActiveAt: Date.now(),
         record,
         session,
-        sharedSkillRevision:
-          (await this.skillsService?.capabilityRevisionForProfile(
-            orgId,
-            resolvedProfileId
-          )) ?? "",
+        sharedCapabilityRevision,
       });
 
       return sessionId;
@@ -2295,11 +2295,7 @@ export class AgentService {
       pluginRevision: await this.pluginCapabilityRevision(orgId),
       profileId: resolvedProfileId,
       session,
-      sharedSkillRevision:
-        (await this.skillsService?.capabilityRevisionForProfile(
-          orgId,
-          resolvedProfileId
-        )) ?? "",
+      sharedCapabilityRevision,
     });
 
     return sessionId;
@@ -2407,6 +2403,10 @@ export class AgentService {
       entry.record.userId
     );
 
+    const sharedCapabilityRevision = await this.capabilityRevisionForProfile(
+      orgId,
+      entry.record.profileId
+    );
     const session = await this.buildChatSession(
       channel,
       orgId,
@@ -2420,14 +2420,9 @@ export class AgentService {
       { initialHistory: [...entry.session.getHistory()] }
     );
 
-    const sharedSkillRevision =
-      (await this.skillsService?.capabilityRevisionForProfile(
-        orgId,
-        entry.record.profileId
-      )) ?? "";
     entry.record.model = model;
     entry.session = session;
-    entry.sharedSkillRevision = sharedSkillRevision;
+    entry.sharedCapabilityRevision = sharedCapabilityRevision;
     await this.ephemeralSessions.set(entry);
 
     return true;
@@ -2790,15 +2785,14 @@ export class AgentService {
         return active;
       }
     }
-    await this.assertSharedAgentAvailable(orgId, record.profileId);
-    const sharedSkillRevision =
-      (await this.skillsService?.capabilityRevisionForProfile(
-        orgId,
-        record.profileId
-      )) ?? "";
+    const sharedCapabilityRevision = await this.capabilityRevisionForProfile(
+      orgId,
+      record.profileId
+    );
     if (ephemeral) {
       if (
-        (ephemeral.sharedSkillRevision ?? "") !== sharedSkillRevision &&
+        (ephemeral.sharedCapabilityRevision ?? "") !==
+          sharedCapabilityRevision &&
         !(await this.rebuildEphemeralSession(ephemeral, orgId, record.model))
       ) {
         throw new NakamaApiError("Session refresh failed. Try again.", 503);
@@ -2809,7 +2803,7 @@ export class AgentService {
     if (
       stored &&
       stored.pluginRevision === pluginRevision &&
-      (stored.sharedSkillRevision ?? "") === sharedSkillRevision
+      (stored.sharedCapabilityRevision ?? "") === sharedCapabilityRevision
     ) {
       return stored.session;
     }
@@ -2845,7 +2839,7 @@ export class AgentService {
       pluginRevision,
       profileId: record.profileId,
       session,
-      sharedSkillRevision,
+      sharedCapabilityRevision,
     });
 
     return session;
@@ -2945,7 +2939,7 @@ export class AgentService {
       return false;
     }
     try {
-      await this.assertSharedAgentAvailable(orgId, record.profileId);
+      await this.resolveSharedAgentProfile(orgId, record.profileId);
       if (
         this.sessions.has(sessionId) ||
         this.ephemeralSessions.has(sessionId)
@@ -4792,15 +4786,38 @@ export class AgentService {
     return profile ? record : null;
   }
 
-  private async assertSharedAgentAvailable(
+  private async resolveSharedAgentProfile(
     orgId: string,
     profileId: string
-  ): Promise<void> {
+  ): Promise<StoredProfileRecord | null> {
     if (this.orgService) {
-      await this.orgService.assertSharedAgentAvailable(orgId, profileId);
-    } else if (await this.db.getSharedAgentInstance(orgId, profileId)) {
+      return this.orgService.resolveSharedAgentProfile(orgId, profileId);
+    }
+    if (await this.db.getSharedAgentInstance(orgId, profileId)) {
       throw new NakamaApiError("Shared agent is unavailable.", 503);
     }
+    return null;
+  }
+
+  private async requireExecutionProfile(
+    orgId: string,
+    profileId: string
+  ): Promise<StoredProfileRecord> {
+    const profile = await this.requireProfile(orgId, profileId);
+    return (await this.resolveSharedAgentProfile(orgId, profileId)) ?? profile;
+  }
+
+  private async capabilityRevisionForProfile(
+    orgId: string,
+    profileId: string
+  ): Promise<string> {
+    const shared = await this.resolveSharedAgentProfile(orgId, profileId);
+    const skills =
+      (await this.skillsService?.capabilityRevisionForProfile(
+        orgId,
+        profileId
+      )) ?? "";
+    return shared ? JSON.stringify([shared, skills]) : skills;
   }
 
   private async requireProfile(
@@ -5021,8 +5038,7 @@ export class AgentService {
     cognito?: CognitoSessionOptions
   ): Promise<AgentChatSession> {
     await this.ensureVisionSettingsLoaded();
-    await this.assertSharedAgentAvailable(orgId, profileId);
-    const profile = await this.requireProfile(orgId, profileId);
+    const profile = await this.requireExecutionProfile(orgId, profileId);
     // skill_manage writes skills and expands /learn, both of which outlive the
     // chat, so a cognito session never gets it whatever the channel allows.
     const includeSkillManageTools = !cognito && SKILL_MANAGE_CHANNELS[channel];

@@ -391,16 +391,16 @@ export class OrgService {
     return profile;
   }
 
-  async assertSharedAgentAvailable(
+  async resolveSharedAgentProfile(
     teamOrgId: string,
     profileId: string
-  ): Promise<void> {
+  ): Promise<StoredProfileRecord | null> {
     const instance = await this.databaseAdapter.getSharedAgentInstance(
       teamOrgId,
       profileId
     );
     if (!instance) {
-      return;
+      return null;
     }
     const team = await this.requireActiveOrganization(teamOrgId);
     if (team.parentOrgId !== instance.sourceOrgId) {
@@ -419,6 +419,34 @@ export class OrgService {
       throw new NakamaApiError("Shared agent is unavailable.", 404);
     }
     await this.validateSharedResourceSource(parent.id, publication);
+    const [profile, source] = await Promise.all([
+      this.databaseAdapter.getProfileForOrg(profileId, teamOrgId),
+      this.databaseAdapter.getProfileForOrg(
+        instance.sourceProfileId,
+        parent.id
+      ),
+    ]);
+    if (
+      !(profile && source) ||
+      source.isDefault ||
+      source.isSuper ||
+      source.acpAgent ||
+      source.acpSettings
+    ) {
+      throw new NakamaApiError("Shared agent is unavailable.", 404);
+    }
+    return {
+      ...profile,
+      acpAgent: null,
+      acpSettings: null,
+      isDefault: false,
+      isSuper: false,
+      model: source.model,
+      name: source.name,
+      systemPrompt: source.systemPrompt,
+      thinkingEffort: source.thinkingEffort,
+      thinkingEnabled: source.thinkingEnabled,
+    };
   }
 
   private async validateSharedResourceSource(

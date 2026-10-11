@@ -1546,3 +1546,16 @@ Checks: 194 focused tests passed across seven files; the complete server type ch
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: synchronize permitted shared agent configuration, soul data, and assignments before new turns; rebuild cached sessions while preserving team history.
 No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-shared-agent-guard-final-focused.log and /tmp/nakama-shared-agent-guard-verified-{types,lint}.log.
+
+### Slice 2ad — live shared agent record configuration
+OrgService now resolves each shared instance to its current permitted source settings after the existing publication and source checks.
+Runtime records overlay source name, system prompt, model, and thinking settings. They preserve the team profile ID, tenant, timestamps, automation setting, and skill review settings. ACP configuration stays absent.
+Chat construction, automation, plugin execution and summaries, and delegated agent prompts now use these resolved team-context records. The resolver does not write either profile or copy workspace files.
+The existing shared skill session revision becomes a shared capability revision and includes the resolved agent configuration. Persisted and ephemeral cached sessions rebuild after source settings change.
+Revision reads now precede initial and ephemeral session construction. A source change during construction cannot give an older session a newer revision that would skip its next refresh.
+Active session reads keep the running session. Failed rebuilds retain the old session and history, and release the turn reservation. Retry uses current settings.
+Tests cover permitted model and thinking settings, local policy preservation, unchanged stored profile records, two session modes, active reads, failed rebuild recovery, two user turns, and unchanged team MEMORY.md and USER.md.
+Focused checks passed 139 tests across three service files and 130 tests across six runtime and route files. The first type check found a missing required apiKey field in the provider test setup; one repair added an empty test value. All 85 organization tests passed again, the complete server type check passed, lint passed 1532 files, and git diff --check passed.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: compose published agent soul configuration with team memory and user context, then synchronize permitted assignments and their execution checks.
+No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-shared-config-{focused,runtime,repair-focused,verified-types,lint}.log.
