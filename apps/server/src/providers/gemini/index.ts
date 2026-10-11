@@ -1,5 +1,6 @@
 import {
   ApiError,
+  type FunctionCall,
   type GenerateContentResponse,
   GoogleGenAI,
   type Part,
@@ -17,7 +18,6 @@ import {
   buildChatCompletionResult,
   extractGeminiTokenUsage,
   notifyToolInputDelta,
-  type ProviderJsonRecord,
   parseJsonRecord,
   readProviderString,
   readRecord,
@@ -179,7 +179,7 @@ interface PendingFunctionCall {
 
 function mergePendingFunctionCall(
   pending: Map<string, PendingFunctionCall>,
-  call: { id?: string; name?: string; args?: ProviderJsonRecord },
+  call: FunctionCall,
   handlers?: StreamChatHandlers
 ): void {
   // Gemini 2.5 sends no call id, so one is minted from the tool name. The old

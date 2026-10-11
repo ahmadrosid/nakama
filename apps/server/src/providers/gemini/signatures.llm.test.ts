@@ -37,9 +37,9 @@ test("Gemini resumes a signed tool turn after history serialization", async () =
         ])
       );
       const assistant = JSON.parse(JSON.stringify(first.assistantMessage));
-      expect((await toGeminiContents([assistant]))[0]?.parts).toEqual(
-        first.assistantMessage.providerContent
-      );
+      expect((await toGeminiContents([assistant]))[0]).toMatchObject({
+        parts: first.assistantMessage.providerContent,
+      });
       const call = first.toolCalls[0]!;
 
       const second = await provider.generateChat({
