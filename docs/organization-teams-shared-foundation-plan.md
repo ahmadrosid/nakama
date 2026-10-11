@@ -1820,3 +1820,12 @@ Checks: 114 OrgService tests passed, including five channel cases. The complete 
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: verify personal credential ownership and approval isolation, then run the delivery-stage gate.
 No new source file, package, dependency, or runtime abstraction was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-shared-channel-focused.log, /tmp/nakama-shared-channel-types.log, and /tmp/nakama-shared-channel-lint.log.
+
+### Slice 2bc — personal integration connection ownership
+Added a real ComposioService database test with one parent and two child teams. The same user has different connected accounts in each tenant. Assignment reads and session endpoint creation use only the selected tenant's account. Separate tenant cache entries keep those endpoints distinct. Repeated reads reuse the correct endpoint without another remote session request.
+A team member without a connection receives no connected account or endpoint, even when another user, the parent, and a sibling have connected accounts. Parent and sibling profile assignments do not supply a team endpoint. Removing the team's connection blocks its earlier cached endpoint without changing the parent or sibling connection.
+No runtime change was needed. Existing shared profile assignment tests still reject Composio assignments before and after revocation. Shared templates do not delegate parent OAuth accounts. The new ownership test covers supported team-local agents and connections; it does not add shared Composio template support.
+Checks: 128 ComposioService and OrgService tests passed across two files. The complete server type check, lint across 1532 files, and git diff --check passed. No verification repair was needed. The fake Composio client sends no external request.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: verify shared agent approval policy isolation, then audit all resource paths and run the delivery-stage gate.
+No new source file, package, dependency, or runtime abstraction was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-team-oauth-focused.log, /tmp/nakama-team-oauth-types.log, and /tmp/nakama-team-oauth-lint.log.
