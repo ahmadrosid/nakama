@@ -1956,13 +1956,14 @@ export class AgentService {
         await this.requireProfile(orgId, profileId);
         return this.profileService.listPublishedKnowledgeBaseDocuments(orgId);
       },
-      readPublishedSkillFile: async (publicationId, filePath) => {
+      readPublishedSkillFile: async (publicationId, filePath, maxBytes) => {
         await this.requireProfile(orgId, profileId);
         return this.requireSkillsService().readPublishedSkillFileForProfile(
           orgId,
           profileId,
           publicationId,
-          filePath
+          filePath,
+          maxBytes
         );
       },
     };

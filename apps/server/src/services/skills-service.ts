@@ -1341,24 +1341,87 @@ export class SkillsService {
     orgId: string,
     profileId: string,
     publicationId: string,
-    filePath: string
-  ): Promise<SkillFileResponse> {
+    filePath: string,
+    maxBytes: number
+  ): Promise<Uint8Array> {
     const profile = await this.db.getProfile(profileId);
     if (profile?.orgId !== orgId) {
       throw new NakamaApiError("Profile not found.", 404);
     }
-    const { skill } = await this.getPublishedSkill(orgId, publicationId);
+    const { summary, directory } = await this.resolvePublishedSkill(
+      orgId,
+      publicationId
+    );
     const assigned = await this.db.listSkillsForProfile(profileId);
-    if (!assigned.some((item) => item.id === skill.id)) {
+    if (!assigned.some((item) => item.id === summary.id)) {
       throw new NakamaApiError("Skill is unavailable.", 404);
     }
-    return this.readPublishedSkillFile(orgId, publicationId, filePath);
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
+      throw new NakamaApiError("Invalid file size limit.", 400);
+    }
+    try {
+      const bytes = await this.readBytesFromRoot(
+        directory,
+        filePath,
+        Math.min(maxBytes, 10 * 1024 * 1024)
+      );
+      if (!bytes) {
+        throw new NakamaApiError("Skill file exceeds the size limit.", 413);
+      }
+      return bytes;
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        throw error;
+      }
+      throw new NakamaApiError("Skill file is unavailable.", 404);
+    }
   }
 
   private async readFileFromRoot(
     root: string,
     filePath: string
   ): Promise<SkillFileResponse> {
+    const bytes = await this.readBytesFromRoot(root, filePath, 1024 * 1024);
+    if (!bytes) {
+      return {
+        content: null,
+        path: filePath,
+        unavailableReason: "Preview is limited to files up to 1 MB.",
+      };
+    }
+    const mediaType = inferArtifactMimeType(filePath);
+
+    if (mediaType.startsWith("image/")) {
+      return {
+        content: null,
+        image: { dataBase64: bytes.toString("base64"), mediaType },
+        path: filePath,
+      };
+    }
+
+    try {
+      if (bytes.includes(0)) {
+        throw new Error("Binary file");
+      }
+
+      return {
+        content: new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+        path: filePath,
+      };
+    } catch {
+      return {
+        content: null,
+        path: filePath,
+        unavailableReason: "Preview is unavailable for binary files.",
+      };
+    }
+  }
+
+  private async readBytesFromRoot(
+    root: string,
+    filePath: string,
+    maxBytes: number
+  ): Promise<Buffer | null> {
     if (
       !filePath ||
       filePath.includes("\0") ||
@@ -1390,54 +1453,18 @@ export class SkillsService {
         throw new NakamaApiError("Select a file.", 400);
       }
 
-      const maxBytes = 1024 * 1024;
-
       if (stat.size > maxBytes) {
-        return {
-          content: null,
-          path: filePath,
-          unavailableReason: "Preview is limited to files up to 1 MB.",
-        };
+        return null;
       }
 
       const buffer = Buffer.alloc(maxBytes + 1);
       const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
 
       if (bytesRead > maxBytes) {
-        return {
-          content: null,
-          path: filePath,
-          unavailableReason: "Preview is limited to files up to 1 MB.",
-        };
+        return null;
       }
 
-      const bytes = buffer.subarray(0, bytesRead);
-      const mediaType = inferArtifactMimeType(filePath);
-
-      if (mediaType.startsWith("image/")) {
-        return {
-          content: null,
-          image: { dataBase64: bytes.toString("base64"), mediaType },
-          path: filePath,
-        };
-      }
-
-      try {
-        if (bytes.includes(0)) {
-          throw new Error("Binary file");
-        }
-
-        return {
-          content: new TextDecoder("utf-8", { fatal: true }).decode(bytes),
-          path: filePath,
-        };
-      } catch {
-        return {
-          content: null,
-          path: filePath,
-          unavailableReason: "Preview is unavailable for binary files.",
-        };
-      }
+      return buffer.subarray(0, bytesRead);
     } finally {
       await handle.close();
     }

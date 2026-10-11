@@ -253,6 +253,75 @@ describe("SkillsService", () => {
     await expect(
       runReadFile({ path: skill.sourcePath + "/SKILL.md" }, context)
     ).rejects.toThrow();
+    const large = Buffer.alloc(1024 * 1024 + 1, 65);
+    await writeFile(join(skill.sourcePath, "large.txt"), large);
+    expect(
+      (
+        await runReadFile(
+          { path: "published-skill://published_skill/large.txt" },
+          context
+        )
+      ).bytesRead
+    ).toBe(large.length);
+    expect(
+      (
+        await service.readPublishedSkillFile(
+          "team_a",
+          publication.id,
+          "large.txt"
+        )
+      ).content
+    ).toBeNull();
+    await expect(
+      service.readPublishedSkillFileForProfile(
+        "team_a",
+        "profile_team_a",
+        publication.id,
+        "large.txt",
+        100
+      )
+    ).rejects.toMatchObject({ status: 413 });
+    await expect(
+      service.readPublishedSkillFileForProfile(
+        "team_a",
+        "profile_team_a",
+        publication.id,
+        "SKILL.md",
+        Number.POSITIVE_INFINITY
+      )
+    ).rejects.toMatchObject({ status: 400 });
+    for (const file of ["../SKILL.md", "/etc/passwd", "a\\b", "a\0b"]) {
+      await expect(
+        runReadFile(
+          {
+            path: `published-skill://published_skill/${encodeURIComponent(file)}`,
+          },
+          context
+        )
+      ).rejects.toMatchObject({ status: 400 });
+    }
+    await symlink(
+      join(skill.sourcePath, "..", "private-notes", "SKILL.md"),
+      join(skill.sourcePath, "outside.md")
+    );
+    await expect(
+      runReadFile(
+        { path: "published-skill://published_skill/outside.md" },
+        context
+      )
+    ).rejects.toMatchObject({ status: 403 });
+    const word = await readFile(
+      join(process.cwd(), "packages/core/src/__fixtures__/sample.docx")
+    );
+    await writeFile(join(skill.sourcePath, "report.docx"), word);
+    expect(
+      (
+        await runReadFile(
+          { path: "published-skill://published_skill/report.docx" },
+          context
+        )
+      ).content
+    ).toContain("Laporan Mingguan");
     const siblingContext = agent.buildPluginToolContext("team_b", {
       profileId: "profile_team_b",
       runId: "run",

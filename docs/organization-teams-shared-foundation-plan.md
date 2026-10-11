@@ -1468,3 +1468,14 @@ Next: load shared script tools with team execution context and live invocation g
 Shared code remains explicitly blocked in discovery. Shared agent configuration synchronization and other resource execution checks remain incomplete.
 No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-published-skill-prompts-{focused,repair-focused,final-focused,core-types,server-types,lint}.log.
+
+### Slice 2x — bounded shared skill asset bytes
+Assigned parent skill reads now return bounded bytes through the existing team tool context, after current publication and assignment checks.
+The shared read_file branch uses the existing image detection, Word conversion, and line limits. It keeps virtual paths and bypasses local memory hooks.
+The server caps asset reads at 10 MB and preserves path, realpath, file-type, and size checks. HTTP previews retain the 1 MB limit and existing response format.
+Tests cover encoded Word extensions, image detection by bytes, files above the preview limit, smaller requested limits, invalid limits, traversal, outside symlinks, unassignment, and revocation.
+The first type check found a missing ToolContext test import. One repair added it; the repeated focused tests and core type check passed.
+Checks: 168 focused tests passed across three files, with two Windows-specific skips; complete core and server type checks passed; lint passed 1532 files; git diff --check passed.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: load shared script tools with team execution context and current publication checks at invocation.
+No package, dependency, or source file was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-skill-bytes-{focused,repair-focused,core-types,server-types,lint}.log.

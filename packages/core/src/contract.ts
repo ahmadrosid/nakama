@@ -3145,8 +3145,9 @@ export interface ToolContext {
   /** Reads assigned parent skill files after live server publication checks. */
   readPublishedSkillFile?: (
     publicationId: string,
-    filePath: string
-  ) => Promise<SkillFileResponse>;
+    filePath: string,
+    maxBytes: number
+  ) => Promise<Uint8Array>;
   /**
    * Records bytes an optimiser removed from a tool result before insertion.
    * Passed in rather than imported because the database lives in the server and

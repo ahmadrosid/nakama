@@ -894,8 +894,10 @@ export async function runReadFile(
   const maxBytes = guardOptions.maxFileBytes ?? 10 * 1024 * 1024;
 
   let filePath: string;
-  let rawContent: string;
-  if (parsed.path.startsWith("published-skill://")) {
+  let contentPath: string;
+  let bytes: Buffer;
+  const shared = parsed.path.startsWith("published-skill://");
+  if (shared) {
     if (
       !(context.orgId && context.profileId && context.readPublishedSkillFile) ||
       parsed.cwd
@@ -918,46 +920,15 @@ export async function runReadFile(
         "SPECIAL_FILE"
       );
     }
-    const file = await context.readPublishedSkillFile(
-      publicationId,
-      relativePath
+    bytes = Buffer.from(
+      await context.readPublishedSkillFile(
+        publicationId,
+        relativePath,
+        maxBytes
+      )
     );
     filePath = parsed.path;
-    if (file.image) {
-      const bytes = Buffer.from(file.image.dataBase64, "base64");
-      const mediaType = detectImageMediaType(bytes);
-      if (!mediaType) {
-        throw new Error("Unsupported shared skill image.");
-      }
-      if (bytes.length > Math.min(maxBytes, MAX_IMAGE_BYTES)) {
-        throw new PathGuardError(
-          "Shared skill image exceeds the size limit",
-          "TOO_LARGE"
-        );
-      }
-      return {
-        bytesRead: bytes.length,
-        content: `Read image file [${mediaType}]`,
-        endLine: 0,
-        images: [{ data: file.image.dataBase64, mediaType }],
-        path: filePath,
-        startLine: 0,
-        totalLines: 0,
-        truncated: false,
-      };
-    }
-    if (file.content === null) {
-      throw new Error(
-        file.unavailableReason ?? "Shared skill file cannot be read."
-      );
-    }
-    if (Buffer.byteLength(file.content, "utf8") > maxBytes) {
-      throw new PathGuardError(
-        "Shared skill file exceeds the size limit",
-        "TOO_LARGE"
-      );
-    }
-    rawContent = file.content;
+    contentPath = relativePath;
   } else {
     const guarded = await guardFilePath(
       parsed.path,
@@ -996,35 +967,34 @@ export async function runReadFile(
       );
     }
 
-    const bytes = await readFile(filePath);
-    const mediaType = detectImageMediaType(bytes);
+    bytes = await readFile(filePath);
+    contentPath = filePath;
+  }
 
-    if (mediaType) {
-      if (bytes.length > MAX_IMAGE_BYTES) {
-        throw new PathGuardError(
-          `Image exceeds max ${MAX_IMAGE_BYTES} bytes (got ${bytes.length})`,
-          "TOO_LARGE"
-        );
-      }
-
-      return {
-        bytesRead: bytes.length,
-        content: `Read image file [${mediaType}]`,
-        endLine: 0,
-        images: [{ data: bytes.toString("base64"), mediaType }],
-        path: filePath,
-        startLine: 0,
-        totalLines: 0,
-        truncated: false,
-      };
+  if (bytes.length > maxBytes) {
+    throw new PathGuardError("File exceeds the size limit", "TOO_LARGE");
+  }
+  const mediaType = detectImageMediaType(bytes);
+  if (mediaType) {
+    if (bytes.length > MAX_IMAGE_BYTES) {
+      throw new PathGuardError("Image exceeds the size limit", "TOO_LARGE");
     }
-
-    const localContent = await readFileAsText(filePath, bytes);
-
-    rawContent = context.memoryFiles
+    return {
+      bytesRead: bytes.length,
+      content: `Read image file [${mediaType}]`,
+      endLine: 0,
+      images: [{ data: bytes.toString("base64"), mediaType }],
+      path: filePath,
+      startLine: 0,
+      totalLines: 0,
+      truncated: false,
+    };
+  }
+  const localContent = await readFileAsText(contentPath, bytes);
+  const rawContent =
+    !shared && context.memoryFiles
       ? await context.memoryFiles.read(filePath, localContent)
       : localContent;
-  }
 
   const lines = rawContent.length === 0 ? [] : rawContent.split("\n");
   const totalLines = lines.length;

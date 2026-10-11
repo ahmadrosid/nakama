@@ -12,6 +12,7 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { ToolContext } from "../contract";
 import { convertDocxToMarkdown } from "../docx-text";
 import { getGlobalSkillsDir } from "../skills/paths";
 import { getProfileSoulDir } from "../soul/resolve";
@@ -575,10 +576,7 @@ describe("file builtin tools", () => {
       ...PROFILE_CONTEXT,
       readPublishedSkillFile: (id: string, filePath: string) => {
         reads.push([id, filePath]);
-        return Promise.resolve({
-          content: "First\nSecond\nThird",
-          path: filePath,
-        });
+        return Promise.resolve(Buffer.from("First\nSecond\nThird"));
       },
     };
     const result = await runReadFile(
@@ -607,9 +605,9 @@ describe("file builtin tools", () => {
 
   test("published skill reads deny missing context and ambiguous references before host reads", async () => {
     let reads = 0;
-    const readPublishedSkillFile = (id: string, filePath: string) => {
+    const readPublishedSkillFile = () => {
       reads += 1;
-      return Promise.resolve({ content: id, path: filePath });
+      return Promise.resolve(Buffer.from("unused"));
     };
     for (const input of [
       { cwd: "/tmp", path: "published-skill://pub/SKILL.md" },
@@ -633,38 +631,51 @@ describe("file builtin tools", () => {
     expect(reads).toBe(0);
   });
 
-  test("published skill image and unavailable previews preserve file read behavior", async () => {
+  test("published skill bytes use image detection and propagate host errors", async () => {
     const image = Buffer.from("89504e470d0a1a0a", "hex");
     const result = await runReadFile(
-      { path: "published-skill://pub/image.png" },
+      { path: "published-skill://pub/image.bin" },
       {
         ...PROFILE_CONTEXT,
-        readPublishedSkillFile: (id: string, filePath: string) =>
-          Promise.resolve({
-            content: null,
-            image: {
-              dataBase64: image.toString("base64"),
-              mediaType: "image/png",
-            },
-            path: filePath,
-          }),
+        readPublishedSkillFile: () => Promise.resolve(image),
       }
     );
     expect(result.images).toEqual([
       { data: image.toString("base64"), mediaType: "image/png" },
     ]);
     expect(result.bytesRead).toBe(image.length);
-    expect(result.path).toBe("published-skill://pub/image.png");
+    expect(result.path).toBe("published-skill://pub/image.bin");
+    const failure = new Error("Unavailable");
     await expect(
       runReadFile(
-        { path: "published-skill://pub/binary.bin" },
+        { path: "published-skill://pub/file.bin" },
         {
           ...PROFILE_CONTEXT,
-          readPublishedSkillFile: (id: string, filePath: string) =>
-            Promise.resolve({ content: null, path: filePath }),
+          readPublishedSkillFile: () => Promise.reject(failure),
         }
       )
-    ).rejects.toThrow();
+    ).rejects.toBe(failure);
+  });
+
+  test("published skill Word files use decoded extensions and bypass local memory", async () => {
+    const bytes = await readFile(
+      path.join(import.meta.dir, "..", "__fixtures__", "sample.docx")
+    );
+    const result = await runReadFile(
+      { path: "published-skill://pub/report%2Edocx" },
+      {
+        ...PROFILE_CONTEXT,
+        memoryFiles: {
+          read: () => {
+            throw new Error("Local memory must not read parent assets");
+          },
+        } as unknown as ToolContext["memoryFiles"],
+        readPublishedSkillFile: () => Promise.resolve(bytes),
+      }
+    );
+    expect(result.content).toContain("Laporan Mingguan");
+    expect(result.content).toContain("**teks tebal**");
+    expect(result.path).toBe("published-skill://pub/report%2Edocx");
   });
 
   test("write_file refuses Word extensions instead of faking a document", async () => {
