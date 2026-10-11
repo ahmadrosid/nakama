@@ -9,6 +9,13 @@ import { NakamaAuthExpiredError, NakamaClient } from "./index";
 const organizationRequests = [
   {
     body: null,
+    call: (client: NakamaClient) => client.getTool("tool/a?", "team/a?"),
+    method: "GET",
+    path: "/v1/tools/tool%2Fa%3F",
+    response: { tool: { id: "tool/a?", name: "Shared tool" } },
+  },
+  {
+    body: null,
     call: (client: NakamaClient) =>
       client.listPublishedSkillFiles("team/a?", "publication/a?"),
     method: "GET",
@@ -1117,3 +1124,25 @@ test.each([403, 404])(
     ).rejects.toMatchObject({ status });
   }
 );
+
+test("tool detail scope overrides one request and preserves the client default", async () => {
+  const requests: Request[] = [];
+
+  const client = new NakamaClient({
+    baseUrl: "https://nakama.example.com",
+    fetch: async (input, init) => {
+      requests.push(new Request(input, init));
+
+      return Response.json({ tool: { id: "tool" } });
+    },
+    orgId: "default-org",
+  });
+
+  await client.getTool("tool", "team-org");
+  await client.getTool("tool");
+  expect(requests.map((request) => request.headers.get("X-Org-Id"))).toEqual([
+    "team-org",
+    "default-org",
+  ]);
+  expect(requests.map((request) => request.method)).toEqual(["GET", "GET"]);
+});

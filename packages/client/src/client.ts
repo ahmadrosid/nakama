@@ -1101,9 +1101,10 @@ export class NakamaClient {
     );
   }
 
-  async getTool(toolId: string): Promise<ToolResponse> {
+  async getTool(toolId: string, orgId?: string): Promise<ToolResponse> {
     return this.request<ToolResponse>(
-      `/v1/tools/${encodeURIComponent(toolId)}`
+      `/v1/tools/${encodeURIComponent(toolId)}`,
+      orgId ? { headers: { "X-Org-Id": orgId } } : undefined
     );
   }
 

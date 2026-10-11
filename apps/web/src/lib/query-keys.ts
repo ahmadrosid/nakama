@@ -136,6 +136,8 @@ export const queryKeys = {
   tools: {
     all: ["tools"] as const,
     detail: (toolId: string) => ["tools", toolId] as const,
+    published: (orgId: string, publicationId: string) =>
+      ["tools", "published", orgId, publicationId] as const,
     source: (toolId: string) => ["tools", toolId, "source"] as const,
   },
   transcriptionSettings: ["transcription", "settings"] as const,

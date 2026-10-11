@@ -2302,3 +2302,17 @@ Two verification repairs were used. The first removed unsupported test storage a
 Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: tool/model actions, root resource details, and shared-template field controls. This slice adds no package, dependency, file, or browser check. No full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
 
 Evidence: /tmp/nakama-agent-selection-{focused,types,oxlint,lint,doctor,rule}.log.
+
+### Slice 3m — Permitted tool details and setup
+
+Tool chips now open details for tenant admins and platform admins through the existing tool-read permissions. Ready tools and tools requiring setup are actionable. Members, viewers, and unavailable tools retain static chips. The dialog uses the active tenant ID and stable tool ID. Root tenants can read their own published tools through the same operation. The existing client getTool operation now accepts an optional explicit tenant without changing older callers or the client's default tenant.
+
+The dialog reuses ToolDetailSections and shows the source organization. It does not show source code, handler configuration, private paths, credentials, or source-edit controls. Its footer links to the existing tool playground and team-local configuration form. Loading and failed reads hide details and the footer. Retry and reopening recheck access. Query keys include the active tenant and publication ID. Team changes remove old dialogs and keep late results out of the new dialog. Publication mutations also invalidate the existing tool query family.
+
+All 61 component tests passed with 416 assertions. New tests cover explicit tenant and resource IDs, lazy reads, root reads, setup navigation, focus, escaped text, read-only details, and member/viewer restrictions. They also cover pending reads, retry, publication removal on reopening, unavailable tools, late responses after team changes, and cache invalidation after successful mutation. Client and existing server tool-route tests passed: 63 tests and 354 assertions. Client tests cover encoded IDs, denied access, authorization headers, and default tenant compatibility. Existing HTTP tests cover shared-tool access and team-local credentials.
+
+Complete web and client type checks, scoped anti-slop, Ultracite across 1533 files, and git diff --check passed. React Doctor remained at 91/100 with no issues. One verification repair corrected three test spacing errors. No new rule suppression was needed.
+
+Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: model detail actions, remaining root resource details, and shared-template field controls. No new package, dependency, file, or server route was added. No browser check, full suite, build, paid call, push, or PR ran. Actual setup through the browser remains unverified.
+
+Evidence: /tmp/nakama-shared-tools-{web-tests,api-tests,web-types,client-types,oxlint,lint,doctor}.log.

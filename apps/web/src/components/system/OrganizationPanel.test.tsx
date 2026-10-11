@@ -5,6 +5,7 @@ import type {
   ProfileResponse,
   ProfileSummary,
   SkillSummary,
+  ToolResponse,
 } from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
@@ -876,7 +877,9 @@ test("failed publication keeps the catalog and selected document for retry", asy
 });
 
 test("failed unpublication keeps the published resource and permits retry", async () => {
-  const { container, data } = await mountKnowledgeManager();
+  const { container, data, queries } = await mountKnowledgeManager();
+  const toolKey = queryKeys.tools.published("team-a", "team-a-tool");
+  queries.setQueryData(toolKey, publishedTool());
 
   const unpublish = spyOn(client, "unpublishOrgSharedResource")
     .mockRejectedValueOnce(new Error("Unpublish failed"))
@@ -903,6 +906,7 @@ test("failed unpublication keeps the published resource and permits retry", asyn
   expect(container.querySelector("dd")?.textContent).toContain(
     "parent knowledge"
   );
+  expect(queries.getQueryState(toolKey)?.isInvalidated).toBe(false);
   await act(async () => {
     submit?.click();
     await settle();
@@ -917,6 +921,7 @@ test("failed unpublication keeps the published resource and permits retry", asyn
   expect(container.querySelector("dd")?.textContent).not.toContain(
     "parent knowledge"
   );
+  expect(queries.getQueryState(toolKey)?.isInvalidated).toBe(true);
 });
 
 test("catalog refresh failure preserves current publications until retry succeeds", async () => {
@@ -2150,3 +2155,222 @@ test.each([
     expect(list).not.toHaveBeenCalled();
   }
 );
+
+function publishedTool(
+  orgId = "team-a",
+  description = "Shared description"
+): ToolResponse {
+  return {
+    tool: {
+      createdAt: "2026-10-12T00:00:00Z",
+      description,
+      handlerConfig: {
+        privatePath: "/private/parent/tool.js",
+        secret: "parent-key",
+      },
+      handlerType: "javascript",
+      id: "tool",
+      name: "Shared tool",
+      publicationId: `${orgId}-tool`,
+      scope: "parent",
+      sourceOrganization: { id: "parent", name: "Parent" },
+      updatedAt: "2026-10-12T00:00:00Z",
+    },
+  };
+}
+
+async function openSharedTool(container: HTMLElement) {
+  await act(async () => {
+    container
+      .querySelector<HTMLButtonElement>(
+        'button[aria-label^="View shared tool"]'
+      )
+      ?.click();
+    await settle();
+  });
+  await act(async () => {
+    await settle();
+  });
+}
+
+test.each([
+  { readiness: "ready", root: false },
+  { readiness: "requires_setup", root: false },
+  { readiness: "ready", root: true },
+] as const)(
+  "permitted tool details and setup keep active tenant scope %#",
+  async ({ root, readiness }) => {
+    const read = spyOn(client, "getTool").mockResolvedValue(
+      publishedTool("team-a", '<script>alert("x")</script>')
+    );
+
+    const credentials = spyOn(client, "getToolCredentialStatus");
+    const source = spyOn(client, "getToolSource");
+    cleanups.push(() => {
+      read.mockRestore();
+      credentials.mockRestore();
+      source.mockRestore();
+    });
+    const { container, queries, render } = await mountResourceReader("admin");
+    const orgId = root ? "parent" : "team-a";
+    const data = overview(orgId);
+    data.sharedResources[3].readiness = readiness;
+    await act(async () => {
+      queries.setQueryData(
+        queryKeys.organizationOverview("parent", orgId),
+        data
+      );
+      await settle();
+    });
+    await render({
+      ...organization(orgId),
+      parentOrgId: root ? null : "parent",
+      role: "admin",
+    });
+    expect(read).not.toHaveBeenCalled();
+
+    const trigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-label^="View shared tool"]'
+    );
+
+    trigger?.focus();
+    expect(document.activeElement).toBe(trigger);
+    await openSharedTool(container);
+    expect(read.mock.calls).toEqual([["tool", orgId]]);
+    expect(
+      queries.getQueryData<ToolResponse>(
+        queryKeys.tools.published(orgId, `${orgId}-tool`)
+      )
+    ).toEqual(publishedTool("team-a", '<script>alert("x")</script>'));
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog?.textContent).toContain("Parent");
+    expect(dialog?.textContent).toContain('<script>alert("x")</script>');
+    expect(dialog?.querySelector("script")).toBeNull();
+    expect(dialog?.textContent).not.toContain("parent-key");
+    expect(dialog?.textContent).not.toContain("/private/parent");
+    expect(dialog?.querySelectorAll("input,textarea,select")).toHaveLength(0);
+    expect(credentials).not.toHaveBeenCalled();
+    expect(source).not.toHaveBeenCalled();
+    await act(async () => {
+      document
+        .querySelector<HTMLButtonElement>('[data-slot="dialog-footer"] button')
+        ?.click();
+      await settle();
+    });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.querySelector("[data-chat-location]")?.textContent).toBe(
+      "/system/playground/tool"
+    );
+    expect(read).toHaveBeenCalledTimes(1);
+  }
+);
+
+test.each(["member", "viewer"] as const)(
+  "%s sees static tool chips without admin detail requests",
+  async (role) => {
+    const read = spyOn(client, "getTool");
+    cleanups.push(() => read.mockRestore());
+    const { container } = await mountResourceReader(role);
+    expect(
+      container.querySelector('button[aria-label^="View shared tool"]')
+    ).toBeNull();
+    expect(container.textContent).toContain("team-a tool");
+    expect(read).not.toHaveBeenCalled();
+  }
+);
+
+test("tool details retain loading and retry states and recheck on reopening", async () => {
+  const pending = Promise.withResolvers<ToolResponse>();
+
+  const read = spyOn(client, "getTool")
+    .mockImplementationOnce(() => pending.promise)
+    .mockResolvedValueOnce(publishedTool())
+    .mockRejectedValueOnce(new Error("Publication removed"));
+
+  cleanups.push(() => read.mockRestore());
+  const { container } = await mountResourceReader("admin");
+  await openSharedTool(container);
+  expect(
+    document.querySelector('[role="dialog"] [role="status"]')
+  ).not.toBeNull();
+  expect(document.querySelector('[data-slot="dialog-footer"]')).toBeNull();
+  await act(async () => {
+    pending.reject(new Error("Read failed"));
+    await settle();
+  });
+  expect(
+    document.querySelector('[role="dialog"] [role="alert"]')
+  ).not.toBeNull();
+  expect(document.querySelector('[role="dialog"] dl')).toBeNull();
+  await act(async () => {
+    document
+      .querySelector<HTMLButtonElement>('[role="dialog"] [role="alert"] button')
+      ?.click();
+    await settle();
+  });
+  await act(async () => {
+    await settle();
+  });
+  expect(document.querySelector('[role="dialog"] dl')).not.toBeNull();
+  await act(async () => {
+    document
+      .querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')
+      ?.click();
+    await settle();
+  });
+  await openSharedTool(container);
+  expect(read.mock.calls).toEqual(
+    Array.from({ length: 3 }, () => ["tool", "team-a"])
+  );
+  expect(
+    document.querySelector('[role="dialog"] [role="alert"]')
+  ).not.toBeNull();
+  expect(document.querySelector('[role="dialog"] dl')).toBeNull();
+  expect(document.querySelector('[data-slot="dialog-footer"]')).toBeNull();
+});
+
+test("late tool details cannot enter another team's dialog", async () => {
+  const pending = Promise.withResolvers<ToolResponse>();
+
+  const read = spyOn(client, "getTool")
+    .mockImplementationOnce(() => pending.promise)
+    .mockResolvedValueOnce(publishedTool("team-b", "Team B detail"));
+
+  cleanups.push(() => read.mockRestore());
+  const { container, render } = await mountResourceReader("admin");
+  await openSharedTool(container);
+  await render({ ...organization("team-b"), role: "admin" });
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  await openSharedTool(container);
+  await act(async () => {
+    pending.resolve(publishedTool("team-a", "Old team detail"));
+    await settle();
+  });
+  expect(read.mock.calls).toEqual([
+    ["tool", "team-a"],
+    ["tool", "team-b"],
+  ]);
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+    "Team B detail"
+  );
+  expect(document.body.textContent).not.toContain("Old team detail");
+});
+
+test("unavailable tools remain static for an admin", async () => {
+  const read = spyOn(client, "getTool");
+  cleanups.push(() => read.mockRestore());
+  const { container, queries } = await mountResourceReader("admin");
+  const data = overview("team-a");
+  data.sharedResources[3].readiness = "unavailable";
+  await act(async () => {
+    queries.setQueryData(
+      queryKeys.organizationOverview("parent", "team-a"),
+      data
+    );
+    await settle();
+  });
+  expect(
+    container.querySelector('button[aria-label^="View shared tool"]')
+  ).toBeNull();
+  expect(read).not.toHaveBeenCalled();
+});

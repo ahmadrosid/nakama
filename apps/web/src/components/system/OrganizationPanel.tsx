@@ -37,6 +37,7 @@ import { OrgMemoryCard } from "@/components/settings/OrgMemoryCard";
 import { SkillsCuratorOrgCard } from "@/components/settings/SkillsCuratorOrgCard";
 import { SkillsPostTurnReviewOrgCard } from "@/components/settings/SkillsPostTurnReviewOrgCard";
 import { SkillsWriteApprovalOrgCard } from "@/components/settings/SkillsWriteApprovalOrgCard";
+import { ToolDetailSections } from "@/components/tools/ToolDetailSections";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
 import { useAppNavigation } from "@/hooks/use-app-navigation";
@@ -47,6 +48,7 @@ import {
 } from "@/hooks/use-org-members";
 import { client, formatError } from "@/lib/client";
 import { encodeModelSelection } from "@/lib/models";
+import { canUseToolPlayground } from "@/lib/navigation";
 import { queryKeys } from "@/lib/query-keys";
 
 const RESOURCE_ROWS = [
@@ -66,6 +68,87 @@ const READINESS_LABELS = {
   requires_setup: "Requires setup",
   unavailable: "Unavailable",
 };
+
+function SharedToolDialog({
+  orgId,
+  resource,
+}: {
+  orgId: string;
+  resource: OrgSharedResourceSummary;
+}) {
+  const [open, setOpen] = useState(false);
+  const { navigateToToolPlayground } = useAppNavigation();
+
+  const detail = useQuery({
+    enabled: open,
+    gcTime: 0,
+    queryFn: () => client.getTool(resource.resourceId, orgId),
+    queryKey: queryKeys.tools.published(orgId, resource.id),
+    staleTime: 0,
+  });
+
+  return (
+    <Dialog onOpenChange={setOpen} open={open}>
+      <DialogTrigger
+        render={
+          <Button
+            aria-label={`View shared tool ${resource.label} from ${resource.sourceOrganization.name}`}
+            className="h-auto max-w-full whitespace-normal break-words text-left"
+            size="sm"
+            variant="secondary"
+          />
+        }
+      >
+        {resource.label}
+        {resource.readiness !== "ready" && (
+          <span className="ml-2 text-muted-foreground">
+            {READINESS_LABELS[resource.readiness]}
+          </span>
+        )}
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{resource.label}</DialogTitle>
+        </DialogHeader>
+        {detail.isFetching && <p role="status">Loading tool…</p>}
+        {detail.isError && (
+          <div className="space-y-2" role="alert">
+            <p>{formatError(detail.error)}</p>
+            <Button
+              disabled={detail.isFetching}
+              onClick={() => void detail.refetch()}
+              variant="outline"
+            >
+              Retry tool
+            </Button>
+          </div>
+        )}
+        {detail.data && !detail.isFetching && !detail.isError && (
+          <>
+            <div className="min-w-0 space-y-3 break-words">
+              <p className="text-muted-foreground text-sm">
+                Shared from {resource.sourceOrganization.name}
+              </p>
+              <ToolDetailSections tool={detail.data.tool} />
+            </div>
+            <DialogFooter>
+              <Button
+                onClick={() => {
+                  setOpen(false);
+                  navigateToToolPlayground(resource.resourceId);
+                }}
+              >
+                {resource.readiness === "requires_setup"
+                  ? "Set up tool"
+                  : "Open playground"}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function SharedAgentButton({
   orgId,
@@ -954,6 +1037,17 @@ export function OrganizationOverview() {
                         activeOrg.role === "member") ? (
                       <SharedAgentButton
                         key={`${activeOrg.id}:${user.id}:${resource.id}`}
+                        orgId={activeOrg.id}
+                        resource={resource}
+                      />
+                    ) : resource.resourceKind === "tool" &&
+                      resource.readiness !== "unavailable" &&
+                      canUseToolPlayground(
+                        user?.isPlatformAdmin === true,
+                        activeOrg.role
+                      ) ? (
+                      <SharedToolDialog
+                        key={`${activeOrg.id}:${user?.id}:${resource.id}`}
                         orgId={activeOrg.id}
                         resource={resource}
                       />
