@@ -2779,6 +2779,10 @@ export class AgentService {
       return null;
     }
 
+    if (forNewTurn && record.model) {
+      this.normalizeSessionModelOverride(record.model);
+    }
+
     const ephemeral = this.ephemeralSessions.get(sessionId);
     const stored = this.sessions.get(sessionId);
     if (sessionTurnRegistry.isActive(sessionId) && !forNewTurn) {

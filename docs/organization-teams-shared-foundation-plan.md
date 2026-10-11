@@ -1700,3 +1700,12 @@ The initial focused run found the test constructor arguments reversed. One repai
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: audit session override and auxiliary model calls, then complete effective profile and portability compatibility paths.
 No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-shared-model-focused.log, /tmp/nakama-shared-model-types.log, and /tmp/nakama-shared-model-lint.log.
+
+### Slice 2ap — session override and vision model use
+Session resolution now revalidates an explicit stored model override before each new turn. Cached persisted and ephemeral sessions cannot continue with a removed provider through the cached-session return path. History reads and current running calls retain their existing behavior.
+Vision model resolution now checks model availability on the explicitly selected provider before resolving capability and creating a provider. Missing providers, unavailable models, and ambiguous bare model IDs return an error; equal model names retain their selected provider identity. Existing global access remains valid after publication removal.
+Shared agent tests cover changing a session override, removing its runtime provider while the template model remains valid, preserving history and releasing the turn lock after denial, then continuing after configuration recovery. Vision tests cover provider identity, missing providers and models, invalid selections, and absence of keys in returned errors. Existing AgentService tests cover vision settings and separately charged vision usage.
+Checks: 165 focused tests across three files passed, along with the complete server type check, lint across 1532 files, and git diff --check. Two repairs corrected the vision helper import and a missing label in the provider test fixture.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: audit effective profile settings and template model consumers, then complete portability and invocation compatibility paths.
+No new source file, package, or dependency was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-model-paths-focused.log, /tmp/nakama-model-paths-types.log, and /tmp/nakama-model-paths-lint.log.

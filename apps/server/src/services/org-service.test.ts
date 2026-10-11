@@ -2745,6 +2745,28 @@ if __name__ == "__main__":
         expect(second).not.toBe(first);
         expect(second.getHistory()).toEqual(history);
         expect(selections).toEqual(["second::same-model", "first::same-model"]);
+        expect(
+          await agent.updateSessionModel(id, "org_team_a", "second::same-model")
+        ).toBe(true);
+        const overridden = (await agent.resolveSession(id, "org_team_a"))!;
+        expect(overridden.getHistory()).toEqual(history);
+        expect(selections.at(-1)).toBe("second::same-model");
+        const builds = selections.length;
+        Object.assign(agent, {
+          userConfig: { ...config, providers: [config.providers[0]!] },
+        });
+        await expect(
+          agent.beginSessionTurn(id, "org_team_a")
+        ).rejects.toMatchObject({ status: 400 });
+        expect(sessionTurnRegistry.isActive(id)).toBe(false);
+        expect(selections).toHaveLength(builds);
+        expect(
+          (await agent.getSessionMessages(id, "org_team_a"))!.messages
+        ).toEqual(history);
+        Object.assign(agent, { userConfig: config });
+        expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
+        sessionTurnRegistry.cancelTurn(id);
+        expect(await agent.resolveSession(id, "org_team_a")).toBe(overridden);
       } finally {
         if (previousConfig) {
           await saveUserConfig(previousConfig);
