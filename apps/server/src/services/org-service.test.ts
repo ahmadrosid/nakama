@@ -35,6 +35,7 @@ import {
 } from "@nakama/core";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import {
+  createDatabase,
   createInMemoryDatabaseAdapter,
   type DatabaseAdapter,
   mergeWorkspaceSettings,
@@ -50,6 +51,10 @@ import {
   saveToolApiKey,
   saveToolSetup,
 } from "./custom-tool-shared";
+import {
+  createNakamaDataExport,
+  restoreNakamaDataImport,
+} from "./data-portability";
 import { McpClientManager } from "./mcp-client-manager";
 import { McpService } from "./mcp-service";
 import { OrgService } from "./org-service";
@@ -1837,6 +1842,130 @@ async function seedSharedAgentSelection(
 }
 
 describe("OrgService shared agent selection", () => {
+  test("restored shared sessions rebuild from restored source settings and saved history", async () => {
+    const rootDir = getUserConfigDir();
+    const databasePath = join(rootDir, "sqlite", "restore.sqlite");
+    const database = await createDatabase(`file:${databasePath}`);
+    const db = database.adapter;
+    try {
+      const now = new Date().toISOString();
+      await saveUserConfig({
+        defaultProviderId: "restore_provider",
+        providers: [
+          {
+            apiKey: "test",
+            createdAt: now,
+            id: "restore_provider",
+            label: "Restore",
+            type: "openai",
+          },
+        ],
+      });
+      const orgService = new OrgService(db, new AuthService());
+      const publication = await seedSharedAgentSelection(db, orgService);
+      const profile = await orgService.createSharedAgentInstance(
+        "org_team_a",
+        publication.id,
+        "user_other"
+      );
+      const teamDir = getProfileSoulDir("org_team_a", profile.id);
+      const sourceDir = getProfileSoulDir("org_parent", "profile_template");
+      await mkdir(sourceDir, { recursive: true });
+      await writeFile(join(sourceDir, "STYLE.md"), "Restored source style");
+      await writeFile(join(teamDir, "MEMORY.md"), "Restored team memory");
+      const builds: StoredProfileRecord[] = [];
+      const turns: GenerateChatInput[] = [];
+      const agent = new AgentService(null, null, db);
+      agent.setOrgService(orgService);
+      Object.assign(agent, {
+        _providerConfigured: true,
+        createHarnessForProfile: (settings: StoredProfileRecord) => {
+          builds.push(settings);
+          return {
+            provider: {
+              generateChat: (input: GenerateChatInput) => {
+                turns.push(input);
+                return Promise.resolve({
+                  assistantMessage: { content: "Done", role: "assistant" },
+                  content: "Done",
+                  toolCalls: [],
+                });
+              },
+              name: "test",
+            },
+          };
+        },
+        resolveProfileTools: async () => [],
+      });
+      const id = await agent.createSession(
+        "org_team_a",
+        "web",
+        profile.id,
+        "user_other",
+        { orgRole: "member" }
+      );
+      const first = (await agent.resolveSession(id, "org_team_a"))!;
+      await first.send("Saved turn");
+      const savedHistory = [...first.getHistory()];
+      const backup = await createNakamaDataExport({ databasePath, rootDir });
+      const source = (await db.getProfile("profile_template"))!;
+      await db.upsertProfile({
+        ...source,
+        name: "Later source",
+        systemPrompt: "Later instructions",
+      });
+      await writeFile(join(sourceDir, "STYLE.md"), "Later source style");
+      await writeFile(join(teamDir, "MEMORY.md"), "Later team memory");
+      const later = (await agent.resolveSession(id, "org_team_a"))!;
+      await later.send("Later turn");
+      expect(later.getHistory()).toHaveLength(savedHistory.length + 2);
+      expect(builds.at(-1)?.name).toBe("Later source");
+      await restoreNakamaDataImport(backup.data, {
+        beforeReplace: () => database.release(),
+        confirm: true,
+        databasePath,
+        rootDir,
+      });
+      await database.reopen();
+      await agent.reloadAfterDataRestore();
+      const restored = (await agent.resolveSession(id, "org_team_a"))!;
+      expect(restored).not.toBe(later);
+      expect(restored.getHistory()).toEqual(savedHistory);
+      expect(builds.at(-1)).toMatchObject({
+        id: profile.id,
+        name: source.name,
+        orgId: "org_team_a",
+        systemPrompt: source.systemPrompt,
+      });
+      await restored.send("Continue after restore");
+      expect(turns.at(-1)?.system).toContain("Restored source style");
+      expect(turns.at(-1)?.system).toContain("Restored team memory");
+      expect(turns.at(-1)?.system).not.toContain("Later source style");
+      expect(turns.at(-1)?.system).not.toContain("Later team memory");
+      expect(
+        (await agent.getSessionMessages(id, "org_team_a"))?.messages
+      ).toEqual([...restored.getHistory()]);
+      await orgService.unpublishSharedResource(
+        "org_parent",
+        publication.id,
+        "user_creator"
+      );
+      await expect(
+        agent.beginSessionTurn(id, "org_team_a")
+      ).rejects.toMatchObject({ status: 404 });
+      expect(
+        (await agent.getSessionMessages(id, "org_team_a"))?.messages
+      ).toEqual([...restored.getHistory()]);
+      expect(await db.getProfileForOrg(profile.id, "org_team_a")).toEqual(
+        profile
+      );
+      expect(await readFile(join(teamDir, "MEMORY.md"), "utf8")).toBe(
+        "Restored team memory"
+      );
+    } finally {
+      database.release();
+    }
+  });
   test("published tool details and local assignments keep parent sources private", async () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     const agentPublication = await seedSharedAgentSelection(db, orgService);

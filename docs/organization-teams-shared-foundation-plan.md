@@ -1775,3 +1775,12 @@ Checks: 62 focused service, platform route, and setup import tests passed across
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: verify source revision refresh after restore, then invocation compatibility and the delivery-stage gate.
 No new source file, package, or dependency was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-restore-publications-focused.log, /tmp/nakama-restore-publications-types.log, and /tmp/nakama-restore-publications-lint.log.
+
+### Slice 2ax — restored shared session refresh proof
+Added a real SQLite backup and restore test for an active shared agent session. The test saves a turn, changes the parent configuration and style, changes team memory, and runs another cached turn. It then restores the backup, reopens the same database adapter, and calls the existing reloadAfterDataRestore hook.
+The next session rebuild uses the restored source settings, style, team memory, and exported history. The later cached turn does not enter restored history. The restored session can continue with its original ID. Removing publication after restore still blocks a new turn while history and team memory remain readable and unchanged.
+No runtime change was needed. The existing reload hook calls refreshProviderConfig, which clears persisted session caches, and clears ephemeral sessions separately. The production restore callback reopens the database before calling that hook. This test verifies stored conversation restore; ephemeral conversations are not exported.
+Checks: 103 OrgService tests passed. The complete server type check, lint across 1532 files, and git diff --check passed. One verification repair copied the read-only history array for typed equality assertions.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: verify shared resource revocation through HTTP, CLI, channels, and automation entry points, plus existing quotas and role checks, then run the delivery-stage gate.
+No new source file, package, dependency, or runtime abstraction was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-shared-restore-refresh-focused.log, /tmp/nakama-shared-restore-refresh-types.log, and /tmp/nakama-shared-restore-refresh-lint.log.
