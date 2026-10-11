@@ -7,6 +7,7 @@ import type {
   OrgInviteCreatedResponse,
   OrgLlmQuotaStatusResponse,
   OrgMemberResponse,
+  OrgSharedResourceResponse,
 } from "@nakama/core/contract";
 import { OrgUsageQuotaService } from "../../services/org-usage-quota-service";
 import type { ServerOptions } from "../context";
@@ -93,6 +94,146 @@ export function registerOrgMemberRoutes(
 
   const orgMemberParams = orgIdParam.extend({
     userId: z.string().openapi({ param: { in: "path", name: "userId" } }),
+  });
+
+  const resourceKindSchema = z.enum([
+    "knowledge",
+    "skill",
+    "agent",
+    "tool",
+    "model",
+  ]);
+  const publishSharedResourceSchema = z
+    .object({
+      resourceId: z.string().trim().min(1),
+      resourceKind: resourceKindSchema,
+    })
+    .strict()
+    .openapi("PublishOrgSharedResourceRequest");
+  const sharedResourceResponseSchema = z
+    .object({
+      publication: z.object({
+        createdAt: z.string(),
+        id: z.string(),
+        orgId: z.string(),
+        resourceId: z.string(),
+        resourceKind: resourceKindSchema,
+        updatedAt: z.string(),
+      }),
+    })
+    .openapi("OrgSharedResourceResponse");
+  const sharedResourceParams = orgIdParam.extend({
+    publicationId: z
+      .string()
+      .openapi({ param: { in: "path", name: "publicationId" } }),
+  });
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "publishOrgSharedResource",
+      path: "/v1/orgs/{orgId}/shared-resources",
+      request: {
+        body: {
+          content: {
+            "application/json": { schema: publishSharedResourceSchema },
+          },
+          required: true,
+        },
+        params: orgIdParam,
+      },
+      responses: {
+        201: {
+          content: {
+            "application/json": { schema: sharedResourceResponseSchema },
+          },
+          description: "Resource published or recovered",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Invalid request",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Access denied",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Source unavailable",
+        },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Invalid template",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Publication failed",
+        },
+      },
+      summary: "Publish a parent resource",
+      tags: ["Organizations"],
+    })
+  );
+  app.post("/v1/orgs/:orgId/shared-resources", async (c) => {
+    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+    if (auth.activeOrgId !== orgId) {
+      return errorResponse("Not found", 404);
+    }
+    if (!orgService) {
+      return errorResponse("Organization service not configured", 500);
+    }
+    const body = await readJson(c.req.raw, publishSharedResourceSchema);
+    const publication = await orgService.publishSharedResource(
+      orgId,
+      body,
+      auth.user.id
+    );
+    return json<OrgSharedResourceResponse>({ publication }, 201);
+  });
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "delete",
+      operationId: "unpublishOrgSharedResource",
+      path: "/v1/orgs/{orgId}/shared-resources/{publicationId}",
+      request: { params: sharedResourceParams },
+      responses: {
+        204: { description: "Publication removed or already absent" },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Access denied",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Organization unavailable",
+        },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Parent context required",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Removal failed",
+        },
+      },
+      summary: "Unpublish a parent resource",
+      tags: ["Organizations"],
+    })
+  );
+  app.delete("/v1/orgs/:orgId/shared-resources/:publicationId", async (c) => {
+    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+    if (auth.activeOrgId !== orgId) {
+      return errorResponse("Not found", 404);
+    }
+    if (!orgService) {
+      return errorResponse("Organization service not configured", 500);
+    }
+    await orgService.unpublishSharedResource(
+      orgId,
+      decodeURIComponent(c.req.param("publicationId")),
+      auth.user.id
+    );
+    return new Response(null, { status: 204 });
   });
 
   const createTeamSchema = z

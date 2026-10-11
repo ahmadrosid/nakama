@@ -635,6 +635,30 @@ export interface CreateTeamRequest
   requestId: string;
 }
 
+export type OrgSharedResourceKind =
+  | "knowledge"
+  | "skill"
+  | "agent"
+  | "tool"
+  | "model";
+
+export interface PublishOrgSharedResourceRequest {
+  resourceId: string;
+  resourceKind: OrgSharedResourceKind;
+}
+
+export interface OrgSharedResourcePublication
+  extends PublishOrgSharedResourceRequest {
+  createdAt: string;
+  id: string;
+  orgId: string;
+  updatedAt: string;
+}
+
+export interface OrgSharedResourceResponse {
+  publication: OrgSharedResourcePublication;
+}
+
 export interface UpdateOrganizationRequest {
   allowedInviteDomains?: string[];
   monthlyLlmTokenLimit?: number;

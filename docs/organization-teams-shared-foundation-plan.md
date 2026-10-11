@@ -354,6 +354,7 @@ Slice log (one row per commit):
 | 2026-10-11 | 1j | Configured model publication and stable provider identity | 258 focused service, provider-helper, and database tests passed | Agent dependency validation |
 | 2026-10-11 | 1k | Agent template and dependency publication checks; reuse guarded source validation | 250 focused service, database, and knowledge tests passed | Contracts and organization routes |
 | 2026-10-11 | 2a | Typed team request, parent summary field, and team creation HTTP route | 73 focused HTTP and service tests passed | Publication HTTP operations and overview |
+| 2026-10-11 | 2b | Typed publication mutations and parent-scoped HTTP routes | 75 focused HTTP and service tests passed | Authorized publication list and organization overview |
 
 2026-10-11: Slice 1b passed database tests, the database type check, and `bun x ultracite check`.
 The first test run found an incorrect SQL value count. The repaired query passed all database tests.
@@ -1106,3 +1107,16 @@ Step 2 and delivery stage 1 remain incomplete. Publication routes, overview, and
 No browser or external provider calls ran. Stale provider cassettes, full tests, and builds remain unresolved.
 Next: connect publication HTTP mutations to the existing OrgService with typed contracts and access checks.
 Evidence: `/tmp/nakama-team-route-tests-final.log`, `/tmp/nakama-team-route-{server,core}-types.log`, `/tmp/nakama-team-route-lint.log`.
+
+2026-10-11: Slice 2b adds publish and unpublish HTTP operations under /v1/orgs/:orgId/shared-resources.
+Core contracts define the five resource kinds, publication request, publication record, and mutation response. OrgService uses the request contract for source validation.
+Publish accepts only a resource kind and stable resource ID. Existing parent source checks validate all five kinds before writing.
+Mutations require active parent context, parent administration or platform authority, and existing CSRF validation. Team administration does not grant parent mutation access.
+Publish retries preserve the record. Unpublish returns 204 when the scoped record is already absent and preserves source files and configuration.
+Tests publish all five real source kinds, verify safe response fields, reject malformed and missing sources, and preserve skill content and tool configuration.
+Access tests cover two sibling teams, another root, parent members and viewers, CSRF denial, wrong tenant context, platform authority, and OpenAPI resource kinds.
+Checks: all 75 focused HTTP and service tests passed on the first run; complete server and core type checks passed; lint passed all 1532 files; `git diff --check` passed.
+Step 2 and delivery stage 1 remain incomplete. Publication list, overview, and shared-instance routes remain required.
+No browser or external provider calls ran. Other authorized cleanup remains uncommitted; stale provider cassettes, full tests, and builds remain unresolved.
+Next: derive the parent in team context and return authorized publication summaries and filtered team overview data.
+Evidence: `/tmp/nakama-publication-route-tests.log`, `/tmp/nakama-publication-route-{server,core}-types.log`, `/tmp/nakama-publication-route-lint.log`.

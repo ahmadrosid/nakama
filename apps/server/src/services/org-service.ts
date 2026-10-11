@@ -43,6 +43,7 @@ import type {
   OrgMemberResponse,
   OrgMemberSummary,
   OrgRole,
+  PublishOrgSharedResourceRequest,
   RequestPasswordResetResponse,
   ResetPasswordRequest,
   UpdateOrganizationRequest,
@@ -163,7 +164,7 @@ export class OrgService {
 
   async publishSharedResource(
     parentOrgId: string,
-    request: Pick<StoredOrgSharedResourceRecord, "resourceKind" | "resourceId">,
+    request: PublishOrgSharedResourceRequest,
     actorUserId: string
   ): Promise<StoredOrgSharedResourceRecord> {
     await this.requireParentAdmin(parentOrgId, actorUserId);
@@ -184,7 +185,7 @@ export class OrgService {
 
   private async validateSharedResourceSource(
     parentOrgId: string,
-    request: Pick<StoredOrgSharedResourceRecord, "resourceKind" | "resourceId">
+    request: PublishOrgSharedResourceRequest
   ): Promise<string> {
     let resourceId = request.resourceId;
     if (request.resourceKind === "agent") {

@@ -1,5 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import type { CreateOrganizationResponse } from "@nakama/core/contract";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import {
+  resolveProfileSkillDirectory,
+  saveUserConfig,
+  uploadOrganizationKnowledgeBaseDocument,
+} from "@nakama/core";
+import type {
+  CreateOrganizationResponse,
+  OrgSharedResourceResponse,
+  PublishOrgSharedResourceRequest,
+} from "@nakama/core/contract";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import { setupTestConfigDir } from "../test-config-dir";
 import { createMinimalHonoApp } from "./test-app-helpers";
@@ -9,6 +20,314 @@ import {
 } from "./test-session-helpers";
 
 setupTestConfigDir("nakama-org-members-test-");
+
+test("publication HTTP mutations validate all resource kinds and preserve source data", async () => {
+  const { app, authService, databaseAdapter: db } = createMinimalHonoApp();
+  const now = new Date().toISOString();
+  await db.upsertOrganization({
+    createdAt: now,
+    id: "org_parent",
+    name: "Parent",
+    slug: "parent",
+    updatedAt: now,
+  });
+  await db.createUser({
+    createdAt: now,
+    email: "publisher@example.com",
+    id: "user_publisher",
+    passwordHash: await authService.hashPassword("password123"),
+    updatedAt: now,
+  });
+  await db.upsertOrgMember({
+    createdAt: now,
+    orgId: "org_parent",
+    role: "admin",
+    userId: "user_publisher",
+  });
+  const session = await loginUserSession(
+    app,
+    "publisher@example.com",
+    "password123"
+  );
+  const headers = session.headers(
+    { "Content-Type": "application/json", "X-CSRF-Token": session.csrfToken },
+    "org_parent"
+  );
+  await db.upsertProfile({
+    createdAt: now,
+    id: "profile_source",
+    isDefault: false,
+    isSuper: false,
+    model: null,
+    name: "Source",
+    orgId: "org_parent",
+    systemPrompt: "Instructions",
+    updatedAt: now,
+  });
+  await db.upsertTool({
+    createdAt: now,
+    description: "Test",
+    handlerConfig: { token: "private-source-token" },
+    handlerType: "bash",
+    id: "tool_source",
+    name: "source-tool",
+    orgId: "org_parent",
+    updatedAt: now,
+  });
+  const skillPath = resolveProfileSkillDirectory(
+    "org_parent",
+    "profile_source",
+    "source-skill"
+  );
+  await mkdir(skillPath, { recursive: true });
+  const content =
+    "---\nname: source-skill\ndescription: Test\n---\nInstructions";
+  await writeFile(join(skillPath, "SKILL.md"), content);
+  await db.upsertSkill({
+    createdAt: now,
+    createdBy: "human",
+    description: "Test",
+    disableModelInvocation: false,
+    enabled: true,
+    hasTool: false,
+    id: "skill_source",
+    name: "source-skill",
+    orgId: "org_parent",
+    sourcePath: skillPath,
+    updatedAt: now,
+  });
+  const { document } = await uploadOrganizationKnowledgeBaseDocument(
+    "org_parent",
+    {
+      data: Buffer.from("Knowledge").toString("base64"),
+      filename: "source.txt",
+      mediaType: "text/plain",
+    }
+  );
+  await saveUserConfig({
+    defaultProviderId: "provider_source",
+    providers: [
+      {
+        apiKey: "private-provider-key",
+        createdAt: now,
+        customModels: [{ id: "source-model" }],
+        id: "provider_source",
+        label: "Source",
+        type: "ollama",
+      },
+    ],
+    thinkingEffort: "medium",
+    thinkingEnabled: true,
+  });
+  const requests: PublishOrgSharedResourceRequest[] = [
+    { resourceId: document.id, resourceKind: "knowledge" },
+    { resourceId: "skill_source", resourceKind: "skill" },
+    { resourceId: "profile_source", resourceKind: "agent" },
+    { resourceId: "tool_source", resourceKind: "tool" },
+    { resourceId: "provider_source::source-model", resourceKind: "model" },
+  ];
+  const post = (body: unknown) =>
+    app.fetch(
+      new Request("http://localhost:4310/v1/orgs/org_parent/shared-resources", {
+        body: JSON.stringify(body),
+        headers,
+        method: "POST",
+      })
+    );
+  expect(await db.listOrgSharedResources("org_parent")).toEqual([]);
+  for (const request of requests) {
+    const response = await post(request);
+    expect(response.status).toBe(201);
+    const result: OrgSharedResourceResponse = await response.json();
+    expect(result.publication).toMatchObject({
+      ...request,
+      orgId: "org_parent",
+    });
+    expect(Object.keys(result.publication).sort()).toEqual([
+      "createdAt",
+      "id",
+      "orgId",
+      "resourceId",
+      "resourceKind",
+      "updatedAt",
+    ]);
+    const retry = await post(request);
+    expect(retry.status).toBe(201);
+    expect(await retry.json()).toEqual(result);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const removed = await app.fetch(
+        new Request(
+          `http://localhost:4310/v1/orgs/org_parent/shared-resources/${result.publication.id}`,
+          { headers, method: "DELETE" }
+        )
+      );
+      expect(removed.status).toBe(204);
+      expect(await removed.text()).toBe("");
+    }
+  }
+  expect(await db.listOrgSharedResources("org_parent")).toEqual([]);
+  expect(await readFile(join(skillPath, "SKILL.md"), "utf8")).toBe(content);
+  expect((await db.getTool("tool_source"))?.handlerConfig).toEqual({
+    token: "private-source-token",
+  });
+  expect(await db.getProfile("profile_source")).toBeTruthy();
+  for (const body of [
+    { resourceId: "tool_source", resourceKind: "unknown" },
+    { resourceId: "", resourceKind: "tool" },
+    { resourceId: 12, resourceKind: "tool" },
+    {
+      parentOrgId: "org_other",
+      resourceId: "tool_source",
+      resourceKind: "tool",
+    },
+  ]) {
+    expect((await post(body)).status).toBe(400);
+  }
+  expect(
+    (await post({ resourceId: "missing", resourceKind: "tool" })).status
+  ).toBe(404);
+});
+
+test("publication HTTP mutations deny team admins, members, viewers, and wrong tenant context", async () => {
+  const { app, authService, databaseAdapter: db } = createMinimalHonoApp();
+  const now = new Date().toISOString();
+  for (const id of ["org_parent", "org_other", "org_team_a", "org_team_b"]) {
+    await db.upsertOrganization({
+      createdAt: now,
+      id,
+      name: id,
+      parentOrgId: id.startsWith("org_team") ? "org_parent" : null,
+      slug: id.replace(/_/g, "-"),
+      updatedAt: now,
+    });
+  }
+  await db.createUser({
+    createdAt: now,
+    email: "publisher@example.com",
+    id: "user_publisher",
+    passwordHash: await authService.hashPassword("password123"),
+    updatedAt: now,
+  });
+  for (const orgId of ["org_parent", "org_other", "org_team_a", "org_team_b"]) {
+    await db.upsertOrgMember({
+      createdAt: now,
+      orgId,
+      role: "admin",
+      userId: "user_publisher",
+    });
+  }
+  await db.upsertTool({
+    createdAt: now,
+    description: "Test",
+    handlerConfig: {},
+    handlerType: "bash",
+    id: "tool_source",
+    name: "Source",
+    orgId: "org_parent",
+    updatedAt: now,
+  });
+  const session = await loginUserSession(
+    app,
+    "publisher@example.com",
+    "password123"
+  );
+  const request = { resourceId: "tool_source", resourceKind: "tool" };
+  const send = (
+    method: "POST" | "DELETE",
+    pathOrg: string,
+    activeOrg: string,
+    publicationId = "missing",
+    csrf = true
+  ) =>
+    app.fetch(
+      new Request(
+        `http://localhost:4310/v1/orgs/${pathOrg}/shared-resources${method === "DELETE" ? `/${publicationId}` : ""}`,
+        {
+          ...(method === "POST" ? { body: JSON.stringify(request) } : {}),
+          headers: session.headers(
+            {
+              "Content-Type": "application/json",
+              ...(csrf ? { "X-CSRF-Token": session.csrfToken } : {}),
+            },
+            activeOrg
+          ),
+          method,
+        }
+      )
+    );
+  const created = await send("POST", "org_parent", "org_parent");
+  expect(created.status).toBe(201);
+  const { publication }: OrgSharedResourceResponse = await created.json();
+  for (const orgId of ["org_team_a", "org_team_b"]) {
+    for (const method of ["POST", "DELETE"] as const) {
+      expect(
+        (await send(method, "org_parent", orgId, publication.id)).status
+      ).toBe(404);
+      expect((await send(method, orgId, orgId, publication.id)).status).toBe(
+        409
+      );
+    }
+  }
+  expect(
+    (await send("DELETE", "org_other", "org_other", publication.id)).status
+  ).toBe(204);
+  expect((await send("POST", "org_other", "org_other")).status).toBe(404);
+  for (const role of ["member", "viewer"] as const) {
+    await db.upsertOrgMember({
+      createdAt: now,
+      orgId: "org_parent",
+      role,
+      userId: "user_publisher",
+    });
+    for (const method of ["POST", "DELETE"] as const) {
+      expect(
+        (await send(method, "org_parent", "org_parent", publication.id)).status
+      ).toBe(403);
+    }
+  }
+  await db.upsertOrgMember({
+    createdAt: now,
+    orgId: "org_parent",
+    role: "admin",
+    userId: "user_publisher",
+  });
+  for (const method of ["POST", "DELETE"] as const) {
+    expect(
+      (await send(method, "org_parent", "org_parent", publication.id, false))
+        .status
+    ).toBe(403);
+  }
+  expect(await db.listOrgSharedResources("org_parent")).toEqual([publication]);
+  const platform = await loginPlatformAdminSession(app, authService, db);
+  const platformPublish = await app.fetch(
+    new Request("http://localhost:4310/v1/orgs/org_parent/shared-resources", {
+      body: JSON.stringify(request),
+      headers: platform.headers(
+        {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": platform.csrfToken,
+        },
+        "org_parent"
+      ),
+      method: "POST",
+    })
+  );
+  expect(platformPublish.status).toBe(201);
+  expect(await platformPublish.json()).toEqual({ publication });
+  const specResponse = await app.fetch(
+    new Request("http://localhost:4310/openapi.json")
+  );
+  expect(specResponse.status).toBe(200);
+  const spec = await specResponse.json();
+  expect(
+    spec.components.schemas.PublishOrgSharedResourceRequest.properties
+      .resourceKind.enum
+  ).toEqual(["knowledge", "skill", "agent", "tool", "model"]);
+  expect(
+    spec.paths["/v1/orgs/{orgId}/shared-resources/{publicationId}"].delete
+      .responses["204"]
+  ).toBeTruthy();
+});
 
 test("team creation uses existing accounts, preserves selection, and recovers retries", async () => {
   const { app, authService, databaseAdapter: db } = createMinimalHonoApp();
