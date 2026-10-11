@@ -20,6 +20,7 @@ import {
   getUserConfigPath,
   listOrganizationKnowledgeBaseDocuments,
   NakamaApiError,
+  resolveProfileSkillDirectory,
   type ToolSetupPlan,
   uploadKnowledgeBaseDocument,
   uploadOrganizationKnowledgeBaseDocument,
@@ -1773,7 +1774,180 @@ async function seedTeamParent(db: DatabaseAdapter) {
   return { name: "Team", requestId: "team-request", slug: "team" };
 }
 
-describe("OrgService knowledge publications", () => {
+describe("OrgService shared resource publications", () => {
+  test("tools require parent ownership or global scope and keep source configuration", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    await seedTeamParent(db);
+    const now = new Date().toISOString();
+    for (const orgId of ["org_parent", "org_other", null]) {
+      const id = `tool_${orgId ?? "global"}`;
+      await db.upsertTool({
+        createdAt: now,
+        description: "Test tool",
+        handlerConfig: { command: "test" },
+        handlerType: "bash",
+        id,
+        name: id,
+        orgId,
+        updatedAt: now,
+      });
+    }
+    for (const resourceId of ["tool_org_parent", "tool_global"]) {
+      const request = { resourceId, resourceKind: "tool" as const };
+      const publication = await orgService.publishSharedResource(
+        "org_parent",
+        request,
+        "user_creator"
+      );
+      expect(
+        await orgService.publishSharedResource(
+          "org_parent",
+          request,
+          "user_creator"
+        )
+      ).toEqual(publication);
+      await orgService.unpublishSharedResource(
+        "org_parent",
+        publication.id,
+        "user_creator"
+      );
+      expect((await db.getTool(resourceId))?.handlerConfig).toEqual({
+        command: "test",
+      });
+    }
+    for (const resourceId of ["tool_org_other", "missing"]) {
+      await expect(
+        orgService.publishSharedResource(
+          "org_parent",
+          { resourceId, resourceKind: "tool" },
+          "user_creator"
+        )
+      ).rejects.toMatchObject({ status: 404 });
+    }
+    await expect(
+      orgService.publishSharedResource(
+        "org_parent",
+        { resourceId: "tool_org_parent", resourceKind: "tool" },
+        "user_viewer"
+      )
+    ).rejects.toMatchObject({ status: 403 });
+    expect(await db.listOrgSharedResources("org_parent")).toEqual([]);
+  });
+
+  test("skills require an enabled parent profile source with matching valid content", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    await seedTeamParent(db);
+    const now = new Date().toISOString();
+    const profileId = `profile_${crypto.randomUUID().replace(/-/g, "")}`;
+    await db.upsertProfile({
+      createdAt: now,
+      id: profileId,
+      isSuper: false,
+      model: null,
+      name: "Source",
+      orgId: "org_parent",
+      systemPrompt: "",
+      updatedAt: now,
+    });
+    const sourcePath = resolveProfileSkillDirectory(
+      "org_parent",
+      profileId,
+      "shared-skill"
+    );
+    const content =
+      "---\nname: shared-skill\ndescription: Test skill\n---\nUse this skill.\n";
+    await mkdir(sourcePath, { recursive: true });
+    await writeFile(join(sourcePath, "SKILL.md"), content);
+    const skill = {
+      createdAt: now,
+      createdBy: "human" as const,
+      description: "Test skill",
+      disableModelInvocation: false,
+      enabled: true,
+      hasTool: false,
+      id: "skill_parent",
+      name: "shared-skill",
+      orgId: "org_parent",
+      sourcePath,
+      updatedAt: now,
+    };
+    await db.upsertSkill(skill);
+    const request = { resourceId: skill.id, resourceKind: "skill" as const };
+    const publication = await orgService.publishSharedResource(
+      "org_parent",
+      request,
+      "user_creator"
+    );
+    expect(
+      await orgService.publishSharedResource(
+        "org_parent",
+        request,
+        "user_creator"
+      )
+    ).toEqual(publication);
+    await orgService.unpublishSharedResource(
+      "org_parent",
+      publication.id,
+      "user_creator"
+    );
+    expect(await readFile(join(sourcePath, "SKILL.md"), "utf8")).toBe(content);
+    for (const changes of [
+      { enabled: false },
+      { orgId: "org_other" },
+      { orgId: null },
+      { sourcePath: join(sourcePath, "..", ".archive", "shared-skill") },
+      {
+        sourcePath: resolveProfileSkillDirectory(
+          "org_parent",
+          "missing-profile",
+          skill.name
+        ),
+      },
+    ]) {
+      await db.upsertSkill({ ...skill, ...changes });
+      await expect(
+        orgService.publishSharedResource("org_parent", request, "user_creator")
+      ).rejects.toMatchObject({ status: 404 });
+    }
+    await db.upsertSkill(skill);
+    for (const invalid of [
+      "",
+      "invalid",
+      content.replace("name: shared-skill", "name: other-skill"),
+    ]) {
+      await writeFile(join(sourcePath, "SKILL.md"), invalid);
+      await expect(
+        orgService.publishSharedResource("org_parent", request, "user_creator")
+      ).rejects.toMatchObject({ status: 404 });
+    }
+    await rm(join(sourcePath, "SKILL.md"));
+    await expect(
+      orgService.publishSharedResource("org_parent", request, "user_creator")
+    ).rejects.toMatchObject({ status: 404 });
+    if (process.platform !== "win32") {
+      const foreignFile = join(getOrgConfigDir("org_other"), `${profileId}.md`);
+      await mkdir(getOrgConfigDir("org_other"), { recursive: true });
+      await writeFile(foreignFile, content);
+      await symlink(foreignFile, join(sourcePath, "SKILL.md"));
+      await expect(
+        orgService.publishSharedResource("org_parent", request, "user_creator")
+      ).rejects.toMatchObject({ status: 404 });
+      expect(await readFile(foreignFile, "utf8")).toBe(content);
+      await rm(sourcePath, { recursive: true });
+      const foreignDirectory = join(getOrgConfigDir("org_other"), profileId);
+      await mkdir(foreignDirectory, { recursive: true });
+      await writeFile(join(foreignDirectory, "SKILL.md"), content);
+      await symlink(foreignDirectory, sourcePath);
+      await expect(
+        orgService.publishSharedResource("org_parent", request, "user_creator")
+      ).rejects.toMatchObject({ status: 404 });
+      expect(await readFile(join(foreignDirectory, "SKILL.md"), "utf8")).toBe(
+        content
+      );
+    }
+    expect(await db.listOrgSharedResources("org_parent")).toEqual([]);
+  });
+
   const source = () => ({
     data: Buffer.from(crypto.randomUUID()).toString("base64"),
     filename: `${crypto.randomUUID()}.txt`,

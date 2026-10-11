@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { rm, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile, rm, stat } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import {
   createEmailOutboundAdapter,
   type EmailOutboundAdapter,
@@ -14,7 +14,10 @@ import {
   initSoulDirectory,
   listOrganizationKnowledgeBaseDocuments,
   NakamaApiError,
+  parseSkillMarkdown,
+  resolveProfileSkillDirectory,
   resolveWebPublicUrl,
+  SKILL_FILE_NAME,
 } from "@nakama/core";
 import { createChatLock } from "@nakama/core/channel-chat-lock";
 import {
@@ -151,37 +154,85 @@ export class OrgService {
 
   async publishSharedResource(
     parentOrgId: string,
-    request: { resourceKind: "knowledge"; resourceId: string },
+    request: {
+      resourceKind: "knowledge" | "skill" | "tool";
+      resourceId: string;
+    },
     actorUserId: string
   ): Promise<StoredOrgSharedResourceRecord> {
     await this.requireParentAdmin(parentOrgId, actorUserId);
-    if (request.resourceKind !== "knowledge") {
+    if (request.resourceKind === "tool") {
+      const tool = await this.databaseAdapter.getTool(request.resourceId);
+      if (!tool || (tool.orgId && tool.orgId !== parentOrgId)) {
+        throw new NakamaApiError("Tool is unavailable.", 404);
+      }
+    } else if (request.resourceKind === "skill") {
+      const skill = await this.databaseAdapter.getSkill(request.resourceId);
+      if (!(skill && skill.enabled) || skill.orgId !== parentOrgId) {
+        throw new NakamaApiError("Skill is unavailable.", 404);
+      }
+      try {
+        const profiles =
+          await this.databaseAdapter.listProfilesForOrg(parentOrgId);
+        const owner = profiles.find(
+          (profile) =>
+            resolve(skill.sourcePath) ===
+            resolveProfileSkillDirectory(parentOrgId, profile.id, skill.name)
+        );
+        if (!owner) {
+          throw new NakamaApiError("Skill is unavailable.", 404);
+        }
+        await guardFilePath(skill.sourcePath, null, undefined, {
+          allowedDirs: [getOrgConfigDir(parentOrgId)],
+        });
+        const { resolved } = await guardFilePath(
+          join(skill.sourcePath, SKILL_FILE_NAME),
+          null,
+          undefined,
+          { allowedDirs: [skill.sourcePath] }
+        );
+        const parsed = parseSkillMarkdown(
+          await readFile(resolved, "utf8"),
+          resolved
+        );
+        if (parsed.frontmatter.name !== skill.name) {
+          throw new NakamaApiError("Skill is unavailable.", 404);
+        }
+      } catch {
+        throw new NakamaApiError("Skill is unavailable.", 404);
+      }
+    } else if (request.resourceKind === "knowledge") {
+      const dir = getOrgKnowledgeBaseDir(parentOrgId);
+      try {
+        await guardFilePath(dir, null, undefined, {
+          allowedDirs: [getOrgConfigDir(parentOrgId)],
+        });
+        const documents =
+          await listOrganizationKnowledgeBaseDocuments(parentOrgId);
+        const document = documents.find(
+          (entry) => entry.id === request.resourceId
+        );
+        if (!document || document.status !== "ready") {
+          throw new NakamaApiError("Knowledge document is unavailable.", 404);
+        }
+        const { resolved } = await guardFilePath(
+          getKnowledgeBaseStoredDocumentPath(
+            dir,
+            document.id,
+            document.filename
+          ),
+          null,
+          undefined,
+          { allowedDirs: [dir] }
+        );
+        if (!(await stat(resolved)).isFile()) {
+          throw new NakamaApiError("Knowledge document is unavailable.", 404);
+        }
+      } catch {
+        throw new NakamaApiError("Knowledge document is unavailable.", 404);
+      }
+    } else {
       throw new NakamaApiError("Unsupported publication kind.", 400);
-    }
-    const dir = getOrgKnowledgeBaseDir(parentOrgId);
-    try {
-      await guardFilePath(dir, null, undefined, {
-        allowedDirs: [getOrgConfigDir(parentOrgId)],
-      });
-      const documents =
-        await listOrganizationKnowledgeBaseDocuments(parentOrgId);
-      const document = documents.find(
-        (entry) => entry.id === request.resourceId
-      );
-      if (!document || document.status !== "ready") {
-        throw new NakamaApiError("Knowledge document is unavailable.", 404);
-      }
-      const { resolved } = await guardFilePath(
-        getKnowledgeBaseStoredDocumentPath(dir, document.id, document.filename),
-        null,
-        undefined,
-        { allowedDirs: [dir] }
-      );
-      if (!(await stat(resolved)).isFile()) {
-        throw new NakamaApiError("Knowledge document is unavailable.", 404);
-      }
-    } catch {
-      throw new NakamaApiError("Knowledge document is unavailable.", 404);
     }
     const now = new Date().toISOString();
     return this.databaseAdapter.publishOrgSharedResource({

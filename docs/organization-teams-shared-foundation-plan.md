@@ -1052,3 +1052,14 @@ Step 1 and delivery stage 1 remain incomplete. Knowledge reads, HTTP publication
 No browser or external provider calls ran. Other authorized cleanup changes remain uncommitted; stale provider cassettes and full tests remain unresolved.
 Next: extend publication source validation for tools and profile-owned skills, using their existing stores.
 Evidence: `/tmp/nakama-knowledge-publication-tests-final.log`, `/tmp/nakama-knowledge-publication-types.log`, `/tmp/nakama-knowledge-publication-lint.log`.
+
+2026-10-11: Slice 1i adds tool and profile-owned skill publication checks to the existing OrgService.
+Tools must exist and belong to the parent or the global catalog. Publication does not change tool configuration or credential rules.
+Skills must be enabled, belong to the parent, and use the named skill directory of an existing parent profile.
+Path guards reject skill directories and files linked outside their allowed source roots. SKILL.md must parse and match the stored skill name.
+Tests cover stable retries, source preservation, viewer denial, foreign tools, disabled/global/foreign/archived skills, missing owners, invalid content, and file/directory symlink escapes.
+Checks: all 224 focused service and database tests passed across 29 files; complete server type check passed; lint passed all 1532 files; `git diff --check` passed.
+Step 1 and delivery stage 1 remain incomplete. Agent and model publication checks, contracts, and HTTP routes remain required.
+No browser or external provider calls ran. Other authorized cleanup changes remain uncommitted; stale provider cassettes, full tests, and builds remain unresolved.
+Next: validate agent publication dependencies and configured model selections in the existing OrgService.
+Evidence: `/tmp/nakama-skill-tool-tests-final.log`, `/tmp/nakama-skill-tool-types.log`, `/tmp/nakama-skill-tool-lint.log`.
