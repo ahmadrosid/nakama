@@ -669,6 +669,27 @@ export interface ListOrgSharedResourcesResponse {
   resources: OrgSharedResourceSummary[];
 }
 
+export interface OrganizationOverviewResponse {
+  activeOrgId: string;
+  canManageOrganization: boolean;
+  organization: { id: string; name: string };
+  sharedResources: OrgSharedResourceSummary[];
+  teams: Array<{
+    canSwitch: boolean;
+    id: string;
+    isCurrent: boolean;
+    localResourceCounts: {
+      agents: number;
+      knowledge: number;
+      skills: number;
+      tools: number;
+    };
+    memberCount: number;
+    name: string;
+    slug: string;
+  }>;
+}
+
 export interface UpdateOrganizationRequest {
   allowedInviteDomains?: string[];
   monthlyLlmTokenLimit?: number;

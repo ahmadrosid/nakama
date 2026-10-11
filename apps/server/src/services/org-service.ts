@@ -38,6 +38,7 @@ import type {
   ListOrgMembersResponse,
   ListOrgSharedResourcesResponse,
   ListUserOrgsResponse,
+  OrganizationOverviewResponse,
   OrganizationSummary,
   OrgInviteCreatedResponse,
   OrgInviteSummary,
@@ -233,6 +234,92 @@ export class OrgService {
       });
     }
     return { resources };
+  }
+
+  async getOrganizationOverview(
+    orgId: string,
+    actorUserId: string
+  ): Promise<OrganizationOverviewResponse> {
+    const { resources } = await this.listSharedResources(orgId, actorUserId);
+    const org = await this.requireActiveOrganization(orgId);
+    const parent = org.parentOrgId
+      ? await this.requireActiveOrganization(org.parentOrgId)
+      : org;
+    const [user, memberships, organizations] = await Promise.all([
+      this.databaseAdapter.getUserById(actorUserId),
+      this.databaseAdapter.listUserOrganizations(actorUserId),
+      this.databaseAdapter.listOrganizations(),
+    ]);
+    if (!user || user.disabledAt) {
+      throw new NakamaApiError("Not found", 404);
+    }
+    const membershipByOrg = new Map(
+      memberships.map((entry) => [entry.organization.id, entry.role])
+    );
+    if (!(user.isPlatformAdmin || membershipByOrg.has(orgId))) {
+      throw new NakamaApiError("Not found", 404);
+    }
+    const canReadAllTeams =
+      user.isPlatformAdmin || membershipByOrg.get(parent.id) === "admin";
+    const teams: OrganizationOverviewResponse["teams"] = [];
+    for (const team of organizations) {
+      if (
+        team.parentOrgId !== parent.id ||
+        team.archivedAt ||
+        team.setupPending ||
+        !(canReadAllTeams || membershipByOrg.has(team.id))
+      ) {
+        continue;
+      }
+      const counts = await this.databaseAdapter.getOrganizationResourceCounts(
+        team.id
+      );
+      if (!counts) {
+        continue;
+      }
+      const knowledgeDir = getOrgKnowledgeBaseDir(team.id);
+      let knowledgeCount: number;
+      try {
+        await guardFilePath(knowledgeDir, null, undefined, {
+          allowedDirs: [getOrgConfigDir(team.id)],
+        });
+        await guardFilePath(
+          getKnowledgeBaseManifestPath(knowledgeDir),
+          null,
+          undefined,
+          {
+            allowedDirs: [knowledgeDir],
+          }
+        );
+        knowledgeCount = (await listOrganizationKnowledgeBaseDocuments(team.id))
+          .length;
+      } catch {
+        throw new NakamaApiError("Team summary is unavailable.", 500);
+      }
+      teams.push({
+        canSwitch: Boolean(
+          user.isPlatformAdmin || membershipByOrg.has(team.id)
+        ),
+        id: team.id,
+        isCurrent: team.id === orgId,
+        localResourceCounts: {
+          agents: counts.agents,
+          knowledge: knowledgeCount,
+          skills: counts.skills,
+          tools: counts.tools,
+        },
+        memberCount: counts.members,
+        name: team.name,
+        slug: team.slug,
+      });
+    }
+    return {
+      activeOrgId: orgId,
+      canManageOrganization: Boolean(orgId === parent.id && canReadAllTeams),
+      organization: { id: parent.id, name: parent.name },
+      sharedResources: resources,
+      teams,
+    };
   }
 
   private async validateSharedResourceSource(

@@ -1035,6 +1035,12 @@ export interface DatabaseAdapter {
   ): Promise<StoredNotificationDestinationRecord | null>;
   getOrganizationById(id: string): Promise<StoredOrganizationRecord | null>;
   getOrganizationBySlug(slug: string): Promise<StoredOrganizationRecord | null>;
+  getOrganizationResourceCounts(orgId: string): Promise<{
+    agents: number;
+    members: number;
+    skills: number;
+    tools: number;
+  } | null>;
   getOrgInviteByTokenHash(
     tokenHash: string
   ): Promise<StoredOrgInviteRecord | null>;

@@ -2962,6 +2962,21 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     ORDER BY name ASC
   `);
 
+  const getOrganizationResourceCountsStmt = db.prepare<
+    { agents: number; members: number; skills: number; tools: number },
+    SQLQueryBindings[]
+  >(`
+    SELECT
+      (SELECT COUNT(*) FROM profiles p WHERE p.org_id = o.id
+        AND p.is_default = 0 AND p.is_super = 0
+        AND NOT EXISTS (SELECT 1 FROM shared_agent_instances s WHERE s.profile_id = p.id)) AS agents,
+      (SELECT COUNT(*) FROM org_members m JOIN users u ON u.id = m.user_id
+        WHERE m.org_id = o.id AND m.user_id != ?) AS members,
+      (SELECT COUNT(*) FROM skills s WHERE s.org_id = o.id) AS skills,
+      (SELECT COUNT(*) FROM tools t WHERE t.org_id = o.id) AS tools
+    FROM organizations o WHERE o.id = ?
+  `);
+
   const getOrganizationBySlugStmt = db.prepare<
     OrganizationRow,
     SQLQueryBindings[]
@@ -4683,6 +4698,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const row = getOrganizationBySlugStmt.get(slug);
 
       return row ? toOrganizationRecord(row) : null;
+    },
+
+    async getOrganizationResourceCounts(orgId) {
+      return getOrganizationResourceCountsStmt.get(LOCAL_CLIENT_USER_ID, orgId);
     },
 
     async getOrgInviteByTokenHash(tokenHash) {

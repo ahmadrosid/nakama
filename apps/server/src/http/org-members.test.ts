@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  getKnowledgeBaseManifestPath,
+  getOrgKnowledgeBaseDir,
   resolveProfileSkillDirectory,
   saveUserConfig,
   uploadOrganizationKnowledgeBaseDocument,
@@ -9,6 +11,7 @@ import {
 import type {
   CreateOrganizationResponse,
   ListOrgSharedResourcesResponse,
+  OrganizationOverviewResponse,
   OrgSharedResourceResponse,
   PublishOrgSharedResourceRequest,
 } from "@nakama/core/contract";
@@ -21,6 +24,352 @@ import {
 } from "./test-session-helpers";
 
 setupTestConfigDir("nakama-org-members-test-");
+
+test("organization overview filters teams, counts local additions, and preserves tenant boundaries", async () => {
+  const {
+    app,
+    authService,
+    databaseAdapter: db,
+    orgService,
+  } = createMinimalHonoApp();
+  const now = new Date().toISOString();
+  for (const id of ["org_parent", "org_other", "org_team_a", "org_team_b"]) {
+    await db.upsertOrganization({
+      allowedInviteDomains: ["private-domain.example"],
+      createdAt: now,
+      id,
+      monthlyLlmTokenLimit: 123_456,
+      name: id,
+      parentOrgId: id.startsWith("org_team") ? "org_parent" : null,
+      slug: id.replace(/_/g, "-"),
+      updatedAt: now,
+    });
+  }
+  for (const id of ["user_reader", "user_parent_admin", "user_other_member"]) {
+    await db.createUser({
+      createdAt: now,
+      email: `${id}@example.com`,
+      id,
+      passwordHash: await authService.hashPassword("password123"),
+      updatedAt: now,
+    });
+  }
+  for (const [orgId, userId, role] of [
+    ["org_team_a", "user_reader", "member"],
+    ["org_team_a", "user_other_member", "viewer"],
+    ["org_team_b", "user_other_member", "admin"],
+    ["org_parent", "user_parent_admin", "admin"],
+  ] as const) {
+    await db.upsertOrgMember({ createdAt: now, orgId, role, userId });
+  }
+  for (const [id, orgId, isDefault, isSuper] of [
+    ["profile_local", "org_team_a", false, false],
+    ["profile_default", "org_team_a", true, false],
+    ["profile_super", "org_team_a", false, true],
+    ["profile_template", "org_parent", false, false],
+    ["profile_foreign", "org_other", false, false],
+  ] as const) {
+    await db.upsertProfile({
+      createdAt: now,
+      id,
+      isDefault,
+      isSuper,
+      model: null,
+      name: id,
+      orgId,
+      systemPrompt: "Private instructions",
+      updatedAt: now,
+    });
+  }
+  const agentPublication = await orgService.publishSharedResource(
+    "org_parent",
+    { resourceId: "profile_template", resourceKind: "agent" },
+    "user_parent_admin"
+  );
+  await db.createSharedAgentInstance(
+    "org_team_a",
+    agentPublication.id,
+    "profile_shared",
+    now
+  );
+  for (const [id, orgId] of [
+    ["tool_local", "org_team_a"],
+    ["tool_parent", "org_parent"],
+    ["tool_global", null],
+    ["tool_foreign", "org_other"],
+  ] as const) {
+    await db.upsertTool({
+      createdAt: now,
+      description: "Private description",
+      handlerConfig: { token: "private-token" },
+      handlerType: "bash",
+      id,
+      name: id,
+      orgId,
+      updatedAt: now,
+    });
+  }
+  await orgService.publishSharedResource(
+    "org_parent",
+    { resourceId: "tool_parent", resourceKind: "tool" },
+    "user_parent_admin"
+  );
+  for (const [id, orgId, enabled] of [
+    ["skill_local", "org_team_a", true],
+    ["skill_disabled", "org_team_a", false],
+    ["skill_global", null, true],
+    ["skill_foreign", "org_other", true],
+  ] as const) {
+    await db.upsertSkill({
+      createdAt: now,
+      createdBy: "human",
+      description: "Private description",
+      disableModelInvocation: false,
+      enabled,
+      hasTool: false,
+      id,
+      name: id,
+      orgId,
+      sourcePath: `/private/${id}`,
+      updatedAt: now,
+    });
+  }
+  await uploadOrganizationKnowledgeBaseDocument("org_team_a", {
+    data: Buffer.from("Private team knowledge").toString("base64"),
+    filename: "private-team-file.txt",
+    mediaType: "text/plain",
+  });
+  const session = await loginUserSession(
+    app,
+    "user_reader@example.com",
+    "password123"
+  );
+  await db.beginOrgTeamCreation({
+    adminUserId: "user_reader",
+    creatorUserId: "user_parent_admin",
+    organization: {
+      createdAt: now,
+      id: "org_pending",
+      name: "Pending",
+      parentOrgId: "org_parent",
+      slug: "pending",
+      updatedAt: now,
+    },
+    requestHash: "hash",
+    requestId: "pending-request",
+  });
+  const get = (pathOrg: string, activeOrg = pathOrg, query = "") =>
+    app.fetch(
+      new Request(`http://localhost:4310/v1/orgs/${pathOrg}/overview${query}`, {
+        headers: session.headers({}, activeOrg),
+      })
+    );
+  const countOrgs: string[] = [];
+  const getCounts = db.getOrganizationResourceCounts;
+  db.getOrganizationResourceCounts = (id) => {
+    countOrgs.push(id);
+    return getCounts(id);
+  };
+  const response = await get("org_team_a");
+  expect(response.status).toBe(200);
+  const result: OrganizationOverviewResponse = await response.json();
+  expect(result).toMatchObject({
+    activeOrgId: "org_team_a",
+    canManageOrganization: false,
+    organization: { id: "org_parent", name: "org_parent" },
+  });
+  expect(result.teams).toEqual([
+    {
+      canSwitch: true,
+      id: "org_team_a",
+      isCurrent: true,
+      localResourceCounts: { agents: 1, knowledge: 1, skills: 2, tools: 1 },
+      memberCount: 2,
+      name: "org_team_a",
+      slug: "org-team-a",
+    },
+  ]);
+  expect(countOrgs).toEqual(["org_team_a"]);
+  db.getOrganizationResourceCounts = getCounts;
+  expect(
+    result.sharedResources.map((entry) => entry.resourceKind).sort()
+  ).toEqual(["agent", "tool"]);
+  const serialized = JSON.stringify(result);
+  for (const secret of [
+    "org_team_b",
+    "org_other",
+    "private-token",
+    "private-domain.example",
+    "private-team-file.txt",
+    "Private instructions",
+    "user_other_member@example.com",
+    "/private/skill_local",
+  ]) {
+    expect(serialized).not.toContain(secret);
+  }
+  expect(Object.keys(result.organization).sort()).toEqual(["id", "name"]);
+  const manifestPath = getKnowledgeBaseManifestPath(
+    getOrgKnowledgeBaseDir("org_team_a")
+  );
+  const manifest = await readFile(manifestPath, "utf8");
+  const foreignDir = getOrgKnowledgeBaseDir("org_other");
+  const foreignManifest = getKnowledgeBaseManifestPath(foreignDir);
+  await mkdir(foreignDir, { recursive: true });
+  await writeFile(foreignManifest, "{}");
+  await rm(manifestPath);
+  await symlink(foreignManifest, manifestPath);
+  try {
+    const failed = await get("org_team_a");
+    expect(failed.status).toBe(500);
+    expect(await failed.text()).not.toContain(foreignManifest);
+  } finally {
+    await rm(manifestPath);
+    await writeFile(manifestPath, manifest);
+  }
+  expect(await (await get("org_team_a")).json()).toEqual(result);
+  expect(
+    await (
+      await get("org_team_a", "org_team_a", "?parentOrgId=org_other")
+    ).json()
+  ).toEqual(result);
+  expect((await get("org_parent", "org_team_a")).status).toBe(404);
+  expect((await get("org_team_b", "org_team_a")).status).toBe(404);
+  expect((await get("org_other")).status).toBe(404);
+  await expect(
+    orgService.getOrganizationOverview("org_parent", "user_reader")
+  ).rejects.toMatchObject({ status: 404 });
+  expect(await db.getOrganizationResourceCounts("org_missing")).toBeNull();
+  for (const role of ["admin", "viewer"] as const) {
+    await db.upsertOrgMember({
+      createdAt: now,
+      orgId: "org_team_a",
+      role,
+      userId: "user_reader",
+    });
+    expect(await (await get("org_team_a")).json()).toEqual(result);
+  }
+  await db.upsertOrgMember({
+    createdAt: now,
+    orgId: "org_team_b",
+    role: "viewer",
+    userId: "user_reader",
+  });
+  const sibling: OrganizationOverviewResponse = await (
+    await get("org_team_a")
+  ).json();
+  expect(sibling.teams.map((team) => team.id)).toEqual([
+    "org_team_a",
+    "org_team_b",
+  ]);
+  expect(sibling.teams[1]).toMatchObject({
+    canSwitch: true,
+    isCurrent: false,
+    localResourceCounts: { agents: 0, knowledge: 0, skills: 0, tools: 0 },
+    memberCount: 2,
+  });
+  await db.upsertOrgMember({
+    createdAt: now,
+    orgId: "org_parent",
+    role: "viewer",
+    userId: "user_reader",
+  });
+  const rootReader: OrganizationOverviewResponse = await (
+    await get("org_parent")
+  ).json();
+  expect(rootReader.canManageOrganization).toBe(false);
+  expect(rootReader.teams.every((team) => !team.isCurrent)).toBe(true);
+  const parentAdmin = await orgService.getOrganizationOverview(
+    "org_parent",
+    "user_parent_admin"
+  );
+  expect(parentAdmin.canManageOrganization).toBe(true);
+  expect(parentAdmin.teams.map((team) => team.id)).toEqual([
+    "org_team_a",
+    "org_team_b",
+  ]);
+  expect(parentAdmin.teams.every((team) => !team.canSwitch)).toBe(true);
+  await expect(
+    orgService.getOrganizationOverview("org_team_a", "user_parent_admin")
+  ).rejects.toMatchObject({ status: 404 });
+  await db.upsertOrgMember({
+    createdAt: now,
+    orgId: "org_team_a",
+    role: "member",
+    userId: "user_parent_admin",
+  });
+  const adminTeam = await orgService.getOrganizationOverview(
+    "org_team_a",
+    "user_parent_admin"
+  );
+  expect(adminTeam.canManageOrganization).toBe(false);
+  expect(adminTeam.teams[0]).toMatchObject({
+    canSwitch: true,
+    isCurrent: true,
+    memberCount: 3,
+  });
+  expect(adminTeam.teams[1].canSwitch).toBe(false);
+  await db.deleteTool("tool_local");
+  await db.deleteSkill("skill_local");
+  await db.deleteProfile("profile_local");
+  const changed: OrganizationOverviewResponse = await (
+    await get("org_team_a")
+  ).json();
+  expect(changed.teams[0].localResourceCounts).toEqual({
+    agents: 0,
+    knowledge: 1,
+    skills: 1,
+    tools: 0,
+  });
+  await db.upsertOrgMember({
+    createdAt: now,
+    orgId: "org_other",
+    role: "admin",
+    userId: "user_reader",
+  });
+  const standalone: OrganizationOverviewResponse = await (
+    await get("org_other")
+  ).json();
+  expect(standalone).toEqual({
+    activeOrgId: "org_other",
+    canManageOrganization: true,
+    organization: { id: "org_other", name: "org_other" },
+    sharedResources: [],
+    teams: [],
+  });
+  const platform = await loginPlatformAdminSession(app, authService, db);
+  const platformResponse = await app.fetch(
+    new Request("http://localhost:4310/v1/orgs/org_parent/overview", {
+      headers: platform.headers({}, "org_parent"),
+    })
+  );
+  const platformResult: OrganizationOverviewResponse =
+    await platformResponse.json();
+  expect(platformResponse.status).toBe(200);
+  expect(platformResult.canManageOrganization).toBe(true);
+  expect(platformResult.teams.every((team) => team.canSwitch)).toBe(true);
+  const teamB = await db.getOrganizationById("org_team_b");
+  await db.upsertOrganization({ ...teamB!, archivedAt: now });
+  const archived = await orgService.getOrganizationOverview(
+    "org_parent",
+    "user_parent_admin"
+  );
+  expect(archived.teams.map((team) => team.id)).toEqual(["org_team_a"]);
+  await db.disableUser("user_reader", now);
+  await expect(
+    orgService.getOrganizationOverview("org_team_a", "user_reader")
+  ).rejects.toMatchObject({ status: 404 });
+  const openapi = await app.fetch(
+    new Request("http://localhost:4310/openapi.json")
+  );
+  const spec = await openapi.json();
+  expect(
+    spec.paths["/v1/orgs/{orgId}/overview"].get.responses["200"]
+  ).toBeTruthy();
+  expect(
+    spec.components.schemas.OrganizationOverviewResponse.properties.teams.items
+      .properties.memberCount.type
+  ).toBe("integer");
+});
 
 test("publication HTTP mutations validate all resource kinds and preserve source data", async () => {
   const { app, authService, databaseAdapter: db } = createMinimalHonoApp();

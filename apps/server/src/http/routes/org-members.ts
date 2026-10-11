@@ -4,6 +4,7 @@ import type {
   CreateOrganizationResponse,
   ListOrgMembersResponse,
   ListOrgSharedResourcesResponse,
+  OrganizationOverviewResponse,
   OrganizationResponse,
   OrgInviteCreatedResponse,
   OrgLlmQuotaStatusResponse,
@@ -139,6 +140,69 @@ export function registerOrgMemberRoutes(
       ),
     })
     .openapi("ListOrgSharedResourcesResponse");
+  const organizationOverviewSchema = z
+    .object({
+      activeOrgId: z.string(),
+      canManageOrganization: z.boolean(),
+      organization: z.object({ id: z.string(), name: z.string() }),
+      sharedResources: listSharedResourcesResponseSchema.shape.resources,
+      teams: z.array(
+        z.object({
+          canSwitch: z.boolean(),
+          id: z.string(),
+          isCurrent: z.boolean(),
+          localResourceCounts: z.object({
+            agents: z.number().int().nonnegative(),
+            knowledge: z.number().int().nonnegative(),
+            skills: z.number().int().nonnegative(),
+            tools: z.number().int().nonnegative(),
+          }),
+          memberCount: z.number().int().nonnegative(),
+          name: z.string(),
+          slug: z.string(),
+        })
+      ),
+    })
+    .openapi("OrganizationOverviewResponse");
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getOrganizationOverview",
+      path: "/v1/orgs/{orgId}/overview",
+      request: { params: orgIdParam },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: organizationOverviewSchema },
+          },
+          description: "Published resources and permitted team summaries",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Organization unavailable",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Overview failed",
+        },
+      },
+      summary: "Read organization overview from active tenant context",
+      tags: ["Organizations"],
+    })
+  );
+  app.get("/v1/orgs/:orgId/overview", async (c) => {
+    const auth = getRequestAuth(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+    if (auth.activeOrgId !== orgId) {
+      return errorResponse("Not found", 404);
+    }
+    if (!orgService) {
+      return errorResponse("Organization service not configured", 500);
+    }
+    return json<OrganizationOverviewResponse>(
+      await orgService.getOrganizationOverview(orgId, auth.user.id)
+    );
+  });
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",

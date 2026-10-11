@@ -1133,3 +1133,17 @@ Step 2 and delivery stage 1 remain incomplete. Filtered team overview and shared
 No browser or external provider calls ran. Other authorized cleanup remains uncommitted; stale provider cassettes, full tests, and builds remain unresolved.
 Next: return filtered team overview data and stored member and local-resource counts through active tenant context.
 Evidence: /tmp/nakama-publication-list-tests-final.log, /tmp/nakama-publication-list-{server,core}-types.log, /tmp/nakama-publication-list-lint.log.
+
+2026-10-11: Slice 2d adds GET /v1/orgs/:orgId/overview with typed contracts and matching OpenAPI fields.
+The overview derives the parent through the active tenant. It reuses publication summaries and returns only the parent ID/name, permitted team rows, and context-specific action flags.
+Sibling summaries require membership there, parent admin membership, or platform authority. A parent admin without team membership sees counts but cannot switch or enter the team.
+Pending, archived, and unrelated teams are excluded before count reads. Parent management actions require authorized root context; team administration alone does not expose siblings or parent actions.
+A scoped SQLite count operation reads numbers without loading private tool configuration, skill paths, profile instructions, or member details.
+Local additions count tenant-owned tools and stored skills, including disabled skill records. Agent counts exclude built-in agents and shared instances. Member counts match existing member lists and exclude the automatic CLI account.
+Knowledge counts use the team's stored document manifest with directory and file-link guards. A guarded read failure returns a safe error and permits retry. Model configuration remains install-wide and has no team-owned addition count.
+Tests cover real counts and deletion updates, all team reader roles, sibling membership, parent authority without child access, platform access, standalone roots, pending/archive filtering, current-team markers, safe fields, wrong context, disabled actors, and guarded file-link failure/retry.
+Checks: all 94 focused HTTP, service, and database tests passed; complete server, core, and database type checks passed; lint passed all 1532 files; git diff --check passed.
+Step 2 and delivery stage 1 remain incomplete. Shared-agent instance routes and final stage checks remain required.
+No browser or external provider calls ran. Other authorized cleanup remains uncommitted; stale provider cassettes, full tests, and builds remain unresolved.
+Next: create a shared-agent instance through authorized team context and return the existing team profile on retry.
+Evidence: /tmp/nakama-overview-tests-final.log, /tmp/nakama-overview-{server,core,db}-types.log, /tmp/nakama-overview-lint.log.
