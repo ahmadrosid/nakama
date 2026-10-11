@@ -103,9 +103,16 @@ describe("createChatgptProvider", () => {
           },
         ],
       });
-      expect(bodies[0]?.reasoning).toEqual(
-        enabled ? { effort: "high", summary: "auto" } : undefined
-      );
+
+      if (enabled) {
+        expect(bodies[0]?.reasoning).toEqual({
+          effort: "high",
+          summary: "auto",
+        });
+      } else {
+        expect(bodies[0]?.reasoning).toBeUndefined();
+      }
+
       expect(bodies[0]?.reasoning_effort).toBeUndefined();
     }
   );
