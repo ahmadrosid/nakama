@@ -158,6 +158,7 @@ function buildServerTools(
   const bash = db
     ? createCodingAgentAwareBashTool(db, userConfig, orgService)
     : bashTool;
+
   const map = new Map<string, ToolDefinition>([[bash.name, bash]]);
 
   if (overrides.subAgent) {

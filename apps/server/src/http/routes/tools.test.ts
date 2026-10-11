@@ -59,6 +59,7 @@ describe("tool playground routes", () => {
     async (handlerType) => {
       let service: ProfileService;
       let executor: AgentService;
+
       const {
         app,
         authService,
@@ -78,8 +79,10 @@ describe("tool playground routes", () => {
         unassignTool: (orgId, profileId, toolId, meta) =>
           service.unassignTool(orgId, profileId, toolId, meta),
       });
+
       service = new ProfileService(db);
       executor = new AgentService(null, null, db);
+
       const { orgId: parentOrgId, adminSession } = await createOrgAdminSession(
         app,
         authService,
@@ -87,6 +90,7 @@ describe("tool playground routes", () => {
         "shared-tools-team",
         "shared-tools-admin@acme.com"
       );
+
       const now = new Date().toISOString();
       const orgId = "tool_team";
       await db.upsertOrganization({
@@ -119,10 +123,12 @@ describe("tool playground routes", () => {
       });
       const workspace = getProfileSoulDir(orgId, profileId);
       await mkdir(workspace, { recursive: true });
+
       const modulePath = join(
         getCustomToolsDir(),
         handlerType === "python" ? "published-http.py" : "published-http.js"
       );
+
       await writeFile(
         modulePath,
         handlerType === "python"
@@ -139,6 +145,7 @@ describe("tool playground routes", () => {
         createdAt: now,
         updatedAt: now,
       });
+
       const publication = await db.publishOrgSharedResource({
         id: "tool_publication",
         orgId: parentOrgId,
@@ -147,14 +154,19 @@ describe("tool playground routes", () => {
         createdAt: now,
         updatedAt: now,
       });
+
       await saveToolApiKey(parentOrgId, "published_parent_tool", "parent-key");
+
       const url =
         "http://localhost:4310/v1/tools/published_parent_tool/credentials";
+
       const status = () =>
         app.fetch(
           new Request(url, { headers: adminSession.headers({}, orgId) })
         );
+
       const before = await status();
+
       const headers = adminSession.headers(
         {
           "Content-Type": "application/json",
@@ -162,6 +174,7 @@ describe("tool playground routes", () => {
         },
         orgId
       );
+
       const run = () =>
         app.fetch(
           new Request(
@@ -173,6 +186,7 @@ describe("tool playground routes", () => {
             }
           )
         );
+
       const missing = await run();
       expect(missing.status).toBe(200);
       expect(await missing.json()).toMatchObject({
@@ -181,6 +195,7 @@ describe("tool playground routes", () => {
       await expect(
         readFile(join(workspace, "playground.marker"))
       ).rejects.toThrow();
+
       const assigned = await app.fetch(
         new Request(`http://localhost:4310/v1/profiles/${profileId}/tools`, {
           method: "POST",
@@ -188,20 +203,25 @@ describe("tool playground routes", () => {
           body: JSON.stringify({ toolId: "published_parent_tool" }),
         })
       );
+
       expect(assigned.status).toBe(200);
+
       const listed = await app.fetch(
         new Request(`http://localhost:4310/v1/profiles/${profileId}/tools`, {
           headers,
         })
       );
+
       expect(listed.status).toBe(200);
       expect(await listed.json()).toMatchObject({
         tools: [{ id: "published_parent_tool", scope: "parent" }],
       });
       const detailUrl = "http://localhost:4310/v1/tools/published_parent_tool";
+
       const detail = await app.fetch(
         new Request(detailUrl, { headers: adminSession.headers({}, orgId) })
       );
+
       expect(detail.status).toBe(200);
       const payload = await detail.json();
       expect(payload).toMatchObject({
@@ -223,6 +243,7 @@ describe("tool playground routes", () => {
       ).toBe(404);
       expect(before.status).toBe(200);
       expect(await before.json()).toEqual({ configured: false });
+
       const saved = await app.fetch(
         new Request(url, {
           method: "PUT",
@@ -236,6 +257,7 @@ describe("tool playground routes", () => {
           body: JSON.stringify({ apiKey: "team-key" }),
         })
       );
+
       expect(saved.status).toBe(200);
       expect(await loadToolApiKey(orgId, "published_parent_tool")).toBe(
         "team-key"
@@ -262,37 +284,45 @@ describe("tool playground routes", () => {
       await writeFile(join(workspace, "playground.marker"), "unchanged");
       const readPublications = db.listOrgSharedResources.bind(db);
       let reads = 0;
+
       const revoke = spyOn(db, "listOrgSharedResources").mockImplementation(
         async (id) => {
           if (++reads === 3) {
             await db.deleteOrgSharedResource(parentOrgId, publication.id);
           }
+
           return readPublications(id);
         }
       );
+
       try {
         expect((await run()).status).toBe(404);
         expect(reads).toBe(3);
       } finally {
         revoke.mockRestore();
       }
+
       expect((await run()).status).toBe(404);
       expect(await readFile(join(workspace, "playground.marker"), "utf8")).toBe(
         "unchanged"
       );
+
       const suggestion = await app.fetch(
         new Request(
           "http://localhost:4310/v1/tools/published_parent_tool/params/suggest",
           { method: "POST", headers, body: JSON.stringify({ prompt: "Probe" }) }
         )
       );
+
       expect(suggestion.status).toBe(404);
+
       const removed = await app.fetch(
         new Request(
           `http://localhost:4310/v1/profiles/${profileId}/tools/published_parent_tool`,
           { method: "DELETE", headers }
         )
       );
+
       expect(removed.status).toBe(200);
       expect(await db.listToolsForProfile(profileId)).toEqual([]);
       expect(
@@ -303,6 +333,7 @@ describe("tool playground routes", () => {
         ).status
       ).toBe(404);
       expect((await status()).status).toBe(404);
+
       const denied = await app.fetch(
         new Request(url, {
           method: "PUT",
@@ -316,6 +347,7 @@ describe("tool playground routes", () => {
           body: JSON.stringify({ apiKey: "replacement" }),
         })
       );
+
       expect(denied.status).toBe(404);
       expect(await loadToolApiKey(orgId, "published_parent_tool")).toBe(
         "team-key"

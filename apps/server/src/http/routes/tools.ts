@@ -134,6 +134,7 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
         .optional(),
     })
     .passthrough();
+
   const listToolsSchema = z
     .object({ tools: z.array(toolDetailSchema) })
     .passthrough()
