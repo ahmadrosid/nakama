@@ -2734,13 +2734,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       created_at AS createdAt, completed_at AS completedAt
     FROM org_team_creation_requests WHERE parent_org_id = ? AND request_id = ?
   `);
+
   const insertOrgTeamCreationStmt = db.prepare(`
     INSERT INTO org_team_creation_requests (parent_org_id, request_id, request_hash, creator_user_id, admin_user_id, team_org_id, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
+
   const completeOrgTeamCreationStmt = db.prepare(
     "UPDATE org_team_creation_requests SET completed_at = ? WHERE parent_org_id = ? AND request_id = ? AND team_org_id = ? AND completed_at IS NULL"
   );
+
   const deleteOrgTeamCreationStmt = db.prepare(
     "DELETE FROM org_team_creation_requests WHERE parent_org_id = ? AND request_id = ? AND team_org_id = ? AND completed_at IS NULL"
   );
@@ -2754,6 +2757,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       publication_id AS publicationId, created_at AS createdAt
     FROM shared_agent_instances WHERE team_org_id = ? AND profile_id = ?
   `);
+
   const getSharedAgentInstanceForSourceStmt = db.prepare<
     StoredSharedAgentInstanceRecord,
     SQLQueryBindings[]
@@ -2763,10 +2767,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       publication_id AS publicationId, created_at AS createdAt
     FROM shared_agent_instances WHERE team_org_id = ? AND source_profile_id = ?
   `);
+
   const insertSharedAgentInstanceStmt = db.prepare(`
     INSERT INTO shared_agent_instances (profile_id, team_org_id, source_org_id, source_profile_id, publication_id, created_at)
     VALUES (?, ?, ?, ?, ?, ?)
   `);
+
   const updateSharedAgentInstancePublicationStmt = db.prepare(
     "UPDATE shared_agent_instances SET publication_id = ? WHERE profile_id = ? AND team_org_id = ?"
   );
@@ -2779,6 +2785,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       resource_id AS resourceId, created_at AS createdAt, updated_at AS updatedAt
     FROM org_shared_resources WHERE org_id = ? ORDER BY resource_kind, id
   `);
+
   const getOrgSharedResourceStmt = db.prepare<
     StoredOrgSharedResourceRecord,
     SQLQueryBindings[]
@@ -2787,6 +2794,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       resource_id AS resourceId, created_at AS createdAt, updated_at AS updatedAt
     FROM org_shared_resources WHERE org_id = ? AND id = ?
   `);
+
   const getOrgSharedResourceBySourceStmt = db.prepare<
     StoredOrgSharedResourceRecord,
     SQLQueryBindings[]
@@ -2795,11 +2803,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       resource_id AS resourceId, created_at AS createdAt, updated_at AS updatedAt
     FROM org_shared_resources WHERE org_id = ? AND resource_kind = ? AND resource_id = ?
   `);
+
   const publishOrgSharedResourceStmt = db.prepare(`
     INSERT INTO org_shared_resources (id, org_id, resource_kind, resource_id, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(org_id, resource_kind, resource_id) DO NOTHING
   `);
+
   const deleteOrgSharedResourceStmt = db.prepare(
     "DELETE FROM org_shared_resources WHERE org_id = ? AND id = ?"
   );
@@ -2835,10 +2845,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           pendingRequest.parentOrgId,
           pendingRequest.requestId
         );
+
         if (!request || request.teamOrgId !== orgId || request.completedAt) {
           return false;
         }
       }
+
       if (
         !organizationExistsStmt.get(orgId) ||
         organizationChildrenStmt.get(orgId)
@@ -2868,6 +2880,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       }
 
       const deleted = deleteOrganizationStmt.run(orgId).changes > 0;
+
       if (deleted && pendingRequest) {
         deleteOrgTeamCreationStmt.run(
           pendingRequest.parentOrgId,
@@ -2875,6 +2888,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           orgId
         );
       }
+
       return deleted;
     }
   );
@@ -3407,6 +3421,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const runUpsertOrganizationStmt = db.transaction(
     (record: StoredOrganizationRecord) => {
       const existing = getOrganizationByIdStmt.get(record.id);
+
       if (
         existing &&
         record.parentOrgId !== undefined &&
@@ -3414,13 +3429,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       ) {
         throw new Error("Organization parent cannot change");
       }
+
       const parentOrgId = record.parentOrgId ?? existing?.parent_org_id ?? null;
+
       if (parentOrgId && !(existing && record.archivedAt)) {
         const parent = getOrganizationByIdStmt.get(parentOrgId);
+
         if (!parent || parent.parent_org_id || parent.archived_at) {
           throw new Error("Team requires an active root organization");
         }
       }
+
       if (
         record.archivedAt &&
         db
@@ -3431,6 +3450,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       ) {
         throw new Error("Organization has active teams");
       }
+
       upsertOrganizationStmt.run(
         record.id,
         parentOrgId,
@@ -3457,11 +3477,14 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const publishOrgSharedResourceTransaction = db.transaction(
     (record: StoredOrgSharedResourceRecord) => {
       const parent = getOrganizationByIdStmt.get(record.orgId);
+
       if (!parent || parent.parent_org_id || parent.archived_at) {
         throw new Error("Publication requires an active root organization");
       }
+
       if (record.resourceKind === "agent") {
         const profile = getProfileStmt.get(record.resourceId);
+
         if (
           !profile ||
           profile.org_id !== record.orgId ||
@@ -3471,18 +3494,23 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           throw new Error("Agent source cannot be published");
         }
       }
+
       if (record.resourceKind === "skill") {
         const skill = getSkillStmt.get(record.resourceId);
+
         if (!skill || skill.org_id !== record.orgId || !skill.enabled) {
           throw new Error("Skill source cannot be published");
         }
       }
+
       if (record.resourceKind === "tool") {
         const tool = getToolStmt.get(record.resourceId);
+
         if (!tool || (tool.org_id && tool.org_id !== record.orgId)) {
           throw new Error("Tool source cannot be published");
         }
       }
+
       // Filesystem knowledge and configured models are validated by OrgService.
       publishOrgSharedResourceStmt.run(
         record.id,
@@ -3492,14 +3520,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.createdAt,
         record.updatedAt
       );
+
       const published = getOrgSharedResourceBySourceStmt.get(
         record.orgId,
         record.resourceKind,
         record.resourceId
       );
+
       if (!published) {
         throw new Error("Publication was not saved");
       }
+
       return published;
     }
   );
@@ -3512,9 +3543,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       createdAt: string
     ) => {
       const team = getOrganizationByIdStmt.get(teamOrgId);
+
       const parent = team?.parent_org_id
         ? getOrganizationByIdStmt.get(team.parent_org_id)
         : null;
+
       if (
         !team ||
         team.archived_at ||
@@ -3526,14 +3559,17 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       ) {
         throw new Error("Shared agent requires an active team and parent");
       }
+
       const publication = getOrgSharedResourceStmt.get(
         parent.id,
         publicationId
       );
+
       const source =
         publication?.resourceKind === "agent"
           ? getProfileStmt.get(publication.resourceId)
           : null;
+
       if (
         !(publication && source) ||
         source.org_id !== parent.id ||
@@ -3544,12 +3580,15 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       ) {
         throw new Error("Shared agent source is unavailable");
       }
+
       const existing = getSharedAgentInstanceForSourceStmt.get(
         teamOrgId,
         source.id
       );
+
       if (existing) {
         const profile = getProfileStmt.get(existing.profileId);
+
         if (
           !profile ||
           profile.org_id !== teamOrgId ||
@@ -3557,16 +3596,20 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         ) {
           throw new Error("Shared agent instance has invalid ownership");
         }
+
         updateSharedAgentInstancePublicationStmt.run(
           publicationId,
           profile.id,
           teamOrgId
         );
+
         return toProfileRecord(profile);
       }
+
       if (getProfileStmt.get(profileId)) {
         throw new Error("Shared agent profile ID already exists");
       }
+
       const profile: StoredProfileRecord = {
         ...toProfileRecord(source),
         automationsEnabled: true,
@@ -3580,6 +3623,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         skillsWriteApproval: null,
         updatedAt: createdAt,
       };
+
       runUpsertProfileStmt(profile);
       insertSharedAgentInstanceStmt.run(
         profileId,
@@ -3589,6 +3633,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         publicationId,
         createdAt
       );
+
       return profile;
     }
   );
@@ -3609,6 +3654,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const parent = getOrganizationByIdStmt.get(parentOrgId);
       const creator = getUserByIdStmt.get(input.creatorUserId);
       const member = getOrgMemberStmt.get(parentOrgId, input.creatorUserId);
+
       if (
         !parent ||
         parent.parent_org_id ||
@@ -3619,7 +3665,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       ) {
         throw new Error("Team creation requires an active parent admin");
       }
+
       const existing = getOrgTeamCreationStmt.get(parentOrgId, input.requestId);
+
       if (existing) {
         if (
           existing.creatorUserId !== input.creatorUserId ||
@@ -3629,9 +3677,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
             "Team creation request conflicts with its previous use"
           );
         }
+
         return existing;
       }
+
       const admin = getUserByIdStmt.get(input.adminUserId);
+
       if (
         !admin ||
         admin.disabled_at ||
@@ -3642,6 +3693,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           "Team creation requires a new active team and an active admin"
         );
       }
+
       runUpsertOrganizationStmt(input.organization);
       runUpsertOrgMemberStmt({
         createdAt: input.organization.createdAt,
@@ -3659,9 +3711,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         input.organization.createdAt
       );
       const request = getOrgTeamCreationStmt.get(parentOrgId, input.requestId);
+
       if (!request) {
         throw new Error("Team creation request was not saved");
       }
+
       return request;
     }
   );
@@ -3674,16 +3728,20 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       completedAt: string
     ) => {
       const request = getOrgTeamCreationStmt.get(parentOrgId, requestId);
+
       if (!request || request.teamOrgId !== teamOrgId) {
         return false;
       }
+
       if (request.completedAt) {
         return true;
       }
+
       const team = getOrganizationByIdStmt.get(teamOrgId);
       const parent = getOrganizationByIdStmt.get(parentOrgId);
       const admin = getUserByIdStmt.get(request.adminUserId);
       const member = getOrgMemberStmt.get(teamOrgId, request.adminUserId);
+
       if (
         !team ||
         team.parent_org_id !== parentOrgId ||
@@ -3700,6 +3758,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       ) {
         return false;
       }
+
       return (
         completeOrgTeamCreationStmt.run(
           completedAt,
@@ -4963,6 +5022,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           record.profileId,
           record.teamOrgId
         );
+
         if (
           !profile ||
           profile.is_default ||
@@ -4971,6 +5031,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         ) {
           throw new Error("Invalid imported shared agent profile");
         }
+
         insertSharedAgentInstanceStmt.run(
           record.profileId,
           record.teamOrgId,
@@ -6352,9 +6413,9 @@ type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-type JsonRecord = Record<string, unknown>;
+type JsonRecord = Record<string, JsonValue>;
 
-function isJsonRecord(value: unknown): value is JsonRecord {
+function isJsonRecord<Value>(value: Value): value is Value & JsonRecord {
   return value instanceof Object && !Array.isArray(value);
 }
 
@@ -6460,7 +6521,9 @@ function parseAgentQuestionnaire(
       return null;
     }
 
-    const validQuestions = questions.filter(isAgentQuestion);
+    const validQuestions = questions.filter((question) =>
+      isAgentQuestion(question)
+    );
 
     if (validQuestions.length !== questions.length) {
       return null;

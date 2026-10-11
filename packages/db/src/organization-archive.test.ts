@@ -36,6 +36,7 @@ describe("organization archive persistence", () => {
     const db = createSqliteMemoryAdapter();
     const now = "2026-10-11T00:00:00.000Z";
     await seedTwoActiveOrgs(db, now);
+
     const team = {
       createdAt: now,
       id: "team",
@@ -44,6 +45,7 @@ describe("organization archive persistence", () => {
       slug: "team",
       updatedAt: now,
     };
+
     await db.upsertOrganization(team);
     await db.upsertOrgMember({
       createdAt: now,
@@ -72,6 +74,7 @@ describe("organization archive persistence", () => {
     await expect(
       db.upsertOrganization({ ...team, parentOrgId: null })
     ).rejects.toThrow();
+
     for (const parentOrgId of ["missing", "team"]) {
       await expect(
         db.upsertOrganization({
@@ -90,6 +93,7 @@ describe("organization archive persistence", () => {
     await seedTwoActiveOrgs(db, now);
     const parent = await db.getOrganizationById("org_a");
     expect(parent).not.toBeNull();
+
     const team = {
       createdAt: now,
       id: "team",
@@ -98,6 +102,7 @@ describe("organization archive persistence", () => {
       slug: "team",
       updatedAt: now,
     };
+
     await db.upsertOrganization(team);
     await db.upsertTool({
       createdAt: now,
@@ -283,6 +288,7 @@ describe("organization publications", () => {
       slug: "team",
       updatedAt: now,
     });
+
     const source: StoredOrgSharedResourceRecord = {
       createdAt: now,
       id: "publication",
@@ -291,6 +297,7 @@ describe("organization publications", () => {
       resourceKind: "knowledge",
       updatedAt: now,
     };
+
     expect(await db.publishOrgSharedResource(source)).toEqual(source);
     expect(
       await db.publishOrgSharedResource({
@@ -304,11 +311,13 @@ describe("organization publications", () => {
     expect(await db.getOrgSharedResource("org_b", source.id)).toBeNull();
     expect(await db.deleteOrgSharedResource("org_b", source.id)).toBe(false);
     expect(await db.getOrgSharedResource("org_a", source.id)).toEqual(source);
+
     for (const orgId of ["missing", "team"]) {
       await expect(
         db.publishOrgSharedResource({ ...source, id: "invalid", orgId })
       ).rejects.toThrow();
     }
+
     expect(await db.tryMarkOrganizationArchived("org_b", now)).toBe(true);
     await expect(
       db.publishOrgSharedResource({ ...source, id: "archived", orgId: "org_b" })
@@ -324,6 +333,7 @@ describe("organization publications", () => {
     const db = createSqliteMemoryAdapter();
     const now = "2026-10-11T00:00:00.000Z";
     await seedTwoActiveOrgs(db, now);
+
     const profile = {
       createdAt: now,
       id: "agent",
@@ -335,10 +345,12 @@ describe("organization publications", () => {
       systemPrompt: "",
       updatedAt: now,
     };
+
     await db.upsertProfile(profile);
     await db.upsertProfile({ ...profile, id: "default", isDefault: true });
     await db.upsertProfile({ ...profile, id: "super", isSuper: true });
     await db.upsertProfile({ ...profile, id: "foreign", orgId: "org_b" });
+
     const skill: StoredSkillRecord = {
       createdAt: now,
       createdBy: "human",
@@ -352,6 +364,7 @@ describe("organization publications", () => {
       sourcePath: "/source",
       updatedAt: now,
     };
+
     await db.upsertSkill(skill);
     await db.upsertSkill({
       ...skill,
@@ -367,6 +380,7 @@ describe("organization publications", () => {
       name: "Disabled",
       sourcePath: "/disabled",
     });
+
     const tool = {
       createdAt: now,
       description: "",
@@ -377,6 +391,7 @@ describe("organization publications", () => {
       orgId: "org_a",
       updatedAt: now,
     };
+
     await db.upsertTool(tool);
     await db.upsertTool({
       ...tool,
@@ -390,6 +405,7 @@ describe("organization publications", () => {
       name: "global_tool",
       orgId: null,
     });
+
     const source: StoredOrgSharedResourceRecord = {
       createdAt: now,
       id: "publication",
@@ -398,11 +414,13 @@ describe("organization publications", () => {
       resourceKind: "agent",
       updatedAt: now,
     };
+
     for (const resourceId of ["missing", "foreign", "default", "super"]) {
       await expect(
         db.publishOrgSharedResource({ ...source, resourceId })
       ).rejects.toThrow();
     }
+
     for (const resourceId of ["missing", "foreign-skill", "disabled"]) {
       await expect(
         db.publishOrgSharedResource({
@@ -412,6 +430,7 @@ describe("organization publications", () => {
         })
       ).rejects.toThrow();
     }
+
     for (const resourceId of ["missing", "foreign-tool"]) {
       await expect(
         db.publishOrgSharedResource({
@@ -421,6 +440,7 @@ describe("organization publications", () => {
         })
       ).rejects.toThrow();
     }
+
     for (const resourceKind of ["agent", "skill", "tool"] as const) {
       await db.publishOrgSharedResource({
         ...source,
@@ -429,6 +449,7 @@ describe("organization publications", () => {
         resourceKind,
       });
     }
+
     await db.publishOrgSharedResource({
       ...source,
       id: "global",
@@ -450,6 +471,7 @@ describe("organization publications", () => {
 async function seedSharedAgent(db: DatabaseAdapter) {
   const now = "2026-10-11T00:00:00.000Z";
   await seedTwoActiveOrgs(db, now);
+
   for (const id of ["team_a", "team_b"]) {
     await db.upsertOrganization({
       createdAt: now,
@@ -460,6 +482,7 @@ async function seedSharedAgent(db: DatabaseAdapter) {
       updatedAt: now,
     });
   }
+
   const source = {
     createdAt: now,
     id: "source",
@@ -471,7 +494,9 @@ async function seedSharedAgent(db: DatabaseAdapter) {
     systemPrompt: "Source instructions",
     updatedAt: now,
   };
+
   await db.upsertProfile(source);
+
   const publication = await db.publishOrgSharedResource({
     createdAt: now,
     id: "agent-publication",
@@ -480,6 +505,7 @@ async function seedSharedAgent(db: DatabaseAdapter) {
     resourceKind: "agent",
     updatedAt: now,
   });
+
   return { now, publication, source };
 }
 
@@ -487,18 +513,22 @@ describe("shared agent instance persistence", () => {
   test("unsupported ACP configuration cannot enter a team through selection or retry", async () => {
     const db = createSqliteMemoryAdapter();
     const { now, publication, source } = await seedSharedAgent(db);
+
     const instance = await db.createSharedAgentInstance(
       "team_a",
       publication.id,
       "instance",
       now
     );
+
     const link = await db.getSharedAgentInstance("team_a", instance.id);
+
     for (const changes of [
       { acpAgent: { args: ["--token", "parent-secret"], command: "agent" } },
       { acpSettings: { token: "parent-secret" } },
     ]) {
       await db.upsertProfile({ ...source, ...changes });
+
       for (const teamOrgId of ["team_a", "team_b"]) {
         await expect(
           db.createSharedAgentInstance(
@@ -509,6 +539,7 @@ describe("shared agent instance persistence", () => {
           )
         ).rejects.toThrow();
       }
+
       expect(await db.getProfile("new-instance")).toBeNull();
       expect(await db.getProfile(instance.id)).toEqual(instance);
       expect(await db.getSharedAgentInstance("team_a", instance.id)).toEqual(
@@ -549,10 +580,12 @@ describe("shared agent instance persistence", () => {
       skillsPostTurnReview: false,
       skillsWriteApproval: false,
     });
+
     const [first, second] = await Promise.all([
       db.createSharedAgentInstance("team_a", publication.id, "instance_a", now),
       db.createSharedAgentInstance("team_a", publication.id, "retry_a", now),
     ]);
+
     expect(first).toEqual({
       ...source,
       acpAgent: null,
@@ -581,19 +614,23 @@ describe("shared agent instance persistence", () => {
       teamOrgId: "team_a",
     });
     expect(await db.getSharedAgentInstance("team_b", first.id)).toBeNull();
+
     const sibling = await db.createSharedAgentInstance(
       "team_b",
       publication.id,
       "instance_b",
       now
     );
+
     expect(sibling.orgId).toBe("team_b");
     expect(sibling.id).not.toBe(first.id);
+
     for (const teamOrgId of ["org_a", "org_b", "missing"]) {
       await expect(
         db.createSharedAgentInstance(teamOrgId, publication.id, "invalid", now)
       ).rejects.toThrow();
     }
+
     await expect(
       db.createSharedAgentInstance("team_a", "missing", "invalid", now)
     ).rejects.toThrow();
@@ -605,12 +642,14 @@ describe("shared agent instance persistence", () => {
   test("revocation keeps source links and sessions; explicit selection can reconnect the same instance", async () => {
     const db = createSqliteMemoryAdapter();
     const { now, publication, source } = await seedSharedAgent(db);
+
     const instance = await db.createSharedAgentInstance(
       "team_a",
       publication.id,
       "instance",
       now
     );
+
     await db.upsertSession({
       agentQuestionnaire: null,
       agentTodos: [],
@@ -629,10 +668,12 @@ describe("shared agent instance persistence", () => {
     expect(
       (await db.getSharedAgentInstance("team_a", instance.id))?.publicationId
     ).toBe(publication.id);
+
     const republished = await db.publishOrgSharedResource({
       ...publication,
       id: "republished",
     });
+
     expect(
       (
         await db.createSharedAgentInstance(
@@ -668,6 +709,7 @@ describe("shared agent instance persistence", () => {
     const path = join(directory, "test.sqlite");
     const database = await createSqliteDatabase(`file:${path}`);
     const raw = new Database(path);
+
     try {
       const { now, publication } = await seedSharedAgent(database.adapter);
       raw.exec(
@@ -710,6 +752,7 @@ async function seedTeamCreation(
 ): Promise<BeginOrgTeamCreationInput> {
   const now = "2026-10-11T00:00:00.000Z";
   await seedTwoActiveOrgs(db, now);
+
   for (const id of ["creator", "admin", "viewer"]) {
     await db.createUser({
       createdAt: now,
@@ -719,6 +762,7 @@ async function seedTeamCreation(
       updatedAt: now,
     });
   }
+
   await db.upsertOrgMember({
     createdAt: now,
     orgId: "org_a",
@@ -731,6 +775,7 @@ async function seedTeamCreation(
     role: "viewer",
     userId: "viewer",
   });
+
   return {
     adminUserId: "admin",
     creatorUserId: "creator",
@@ -751,6 +796,7 @@ describe("atomic team creation records", () => {
   test("retries retain one team and keep incomplete setup outside memberships", async () => {
     const db = createSqliteMemoryAdapter();
     const input = await seedTeamCreation(db);
+
     const [first, retry] = await Promise.all([
       db.beginOrgTeamCreation(input),
       db.beginOrgTeamCreation({
@@ -758,6 +804,7 @@ describe("atomic team creation records", () => {
         organization: { ...input.organization, id: "retry", slug: "retry" },
       }),
     ]);
+
     expect(first).toEqual(retry);
     expect(first.completedAt).toBeNull();
     expect(first.teamOrgId).toBe("team");
@@ -774,6 +821,7 @@ describe("atomic team creation records", () => {
     expect(
       await db.completeOrgTeamCreation("org_a", "request", "team", "done")
     ).toBe(false);
+
     for (const [id, isDefault, isSuper] of [
       ["default", true, false],
       ["super", false, true],
@@ -790,6 +838,7 @@ describe("atomic team creation records", () => {
         updatedAt: "now",
       });
     }
+
     expect(
       await db.completeOrgTeamCreation("org_a", "request", "wrong-team", "done")
     ).toBe(false);
@@ -826,10 +875,12 @@ describe("atomic team creation records", () => {
     await db.disableUser("admin", "now");
     await expect(db.beginOrgTeamCreation(input)).rejects.toThrow();
     await db.enableUser("admin");
+
     const [request, archived] = await Promise.all([
       db.beginOrgTeamCreation(input),
       db.tryMarkOrganizationArchived("org_a", "now"),
     ]);
+
     expect(request.teamOrgId).toBe("team");
     expect(archived).toBe(false);
     await db.upsertProfile({
@@ -873,6 +924,7 @@ describe("atomic team creation records", () => {
       const path = join(directory, "test.sqlite");
       const database = await createSqliteDatabase(`file:${path}`);
       const raw = new Database(path);
+
       try {
         const input = await seedTeamCreation(database.adapter);
         raw.exec(
