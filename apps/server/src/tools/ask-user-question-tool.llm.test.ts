@@ -73,6 +73,7 @@ test("ask_user_question schema is callable by a real OpenAI model", async () => 
   const mode = process.env.LLM_VCR_MODE?.trim().toLowerCase();
   const replay = mode === "replay" || (mode !== "record" && existing !== null);
   const instance = replay ? null : await resolveOpenAiInstance();
+
   const model = replay
     ? z.object({ model: z.string() }).parse(existing?.request?.body).model
     : "gpt-4o-mini";
