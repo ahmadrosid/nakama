@@ -1572,3 +1572,16 @@ Checks: 269 focused tests passed across eight service and route files; the compl
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: synchronize permitted shared agent assignments and their execution checks, then finish the remaining shared tool and model paths.
 No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-shared-soul-complete-{focused,types,lint}.log.
+
+### Slice 2af — live shared agent skill assignments
+SkillsService now derives shared instance skill assignments from the current source profile. It checks the active team and parent, their recorded relationship, the exact agent publication, and source profile restrictions before reading assignments.
+Parent-owned skills require current skill publications; foreign or disabled source assignments fail closed. Global skill assignments retain their existing access rules.
+Prompt discovery, executable loading and rechecks, published asset reads, and usage recording use this effective assignment read. Local profiles keep their stored assignments. Shared instances receive no copied assignment rows or parent workspace files.
+The shared skill revision includes effective instance assignment records, including global skills. Cached persisted and ephemeral sessions refresh after parent or global assignment additions and removals.
+Tests add and remove a published parent JavaScript skill, run reviewed code in the team workspace, read its assigned assets, reject an unpublished private source skill, reject retained tools after source removal, and reject agent publication removal. They also add and remove a global executable skill and preserve history through five user turns.
+Persisted usage belongs to the team instance. Ephemeral sessions retain their existing no-usage-persistence behavior. Raw team assignment rows remain empty.
+The first focused run found a missing team workspace in the database-only test fixture. The first repair added the workspace. The next run found an incorrect persistent-usage assertion for ephemeral sessions; the second repair checked each mode's expected behavior.
+Checks: 242 focused tests passed across six service and session route files; the complete server type check passed; lint passed 1532 files; git diff --check passed.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: implement permitted shared agent tool and integration assignments, then finish shared tool catalogs and model use checks.
+No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-shared-agent-skills-complete-focused.log and /tmp/nakama-shared-agent-skills-{types,lint}.log.

@@ -1357,7 +1357,7 @@ export class SkillsService {
       orgId,
       publicationId
     );
-    const assigned = await this.db.listSkillsForProfile(profileId);
+    const assigned = await this.getAssignedSkills(orgId, profileId);
     if (!assigned.some((item) => item.id === summary.id)) {
       throw new NakamaApiError("Skill is unavailable.", 404);
     }
@@ -1600,13 +1600,18 @@ export class SkillsService {
     orgId: string,
     profileId: string
   ): Promise<string> {
-    const shared = (await this.getPromptSkills(orgId, profileId)).filter(
+    const assigned = await this.getPromptSkills(orgId, profileId);
+    const instance = await this.db.getSharedAgentInstance(orgId, profileId);
+    const shared = assigned.filter(
       (item) => item.discovered.sourceOrganization && item.discovered.hasTool
     );
-    if (shared.length === 0) {
+    if (shared.length === 0 && !instance) {
       return "";
     }
     const hash = createHash("sha256");
+    if (instance) {
+      hash.update(JSON.stringify(assigned.map((item) => item.record)));
+    }
     for (const item of shared.sort((a, b) =>
       a.record.id.localeCompare(b.record.id)
     )) {
@@ -1738,7 +1743,7 @@ export class SkillsService {
       throw new NakamaApiError("Profile not found.", 404);
     }
     const source = await this.resolvePublishedSkill(orgId, publicationId);
-    const assigned = await this.db.listSkillsForProfile(profileId);
+    const assigned = await this.getAssignedSkills(orgId, profileId);
     const record = assigned.find((item) => item.id === source.summary.id);
     if (!record) {
       throw new NakamaApiError("Skill is unavailable.", 404);
@@ -2066,7 +2071,10 @@ export class SkillsService {
     patchedAt?: string;
   }): Promise<void> {
     try {
-      const assigned = await this.db.listSkillsForProfile(input.profileId);
+      const assigned = await this.getAssignedSkills(
+        input.orgId,
+        input.profileId
+      );
 
       if (!assigned.some((skill) => skill.id === input.skillId)) {
         return;
@@ -2179,6 +2187,62 @@ export class SkillsService {
     }
   }
 
+  private async getAssignedSkills(
+    orgId: string,
+    profileId: string
+  ): Promise<StoredSkillRecord[]> {
+    const instance = await this.db.getSharedAgentInstance(orgId, profileId);
+    if (!instance) {
+      return this.db.listSkillsForProfile(profileId);
+    }
+    const [team, parent, publication, source] = await Promise.all([
+      this.db.getOrganizationById(orgId),
+      this.db.getOrganizationById(instance.sourceOrgId),
+      this.db.getOrgSharedResource(
+        instance.sourceOrgId,
+        instance.publicationId
+      ),
+      this.db.getProfileForOrg(instance.sourceProfileId, instance.sourceOrgId),
+    ]);
+    if (
+      !team ||
+      team.archivedAt ||
+      team.setupPending ||
+      team.parentOrgId !== instance.sourceOrgId ||
+      !parent ||
+      parent.archivedAt ||
+      parent.setupPending ||
+      parent.parentOrgId ||
+      publication?.resourceKind !== "agent" ||
+      publication.resourceId !== instance.sourceProfileId ||
+      !source ||
+      source.isDefault ||
+      source.isSuper ||
+      source.acpAgent ||
+      source.acpSettings
+    ) {
+      throw new NakamaApiError("Shared agent is unavailable.", 404);
+    }
+    const assigned = await this.db.listSkillsForProfile(source.id);
+    const publications = await this.db.listOrgSharedResources(parent.id);
+    if (
+      assigned.some(
+        (skill) =>
+          !skill.enabled ||
+          (skill.orgId &&
+            (skill.orgId !== parent.id ||
+              !publications.some(
+                (entry) =>
+                  entry.resourceKind === "skill" &&
+                  entry.resourceId === skill.id
+              )))
+      )
+    ) {
+      throw new NakamaApiError("Shared agent skills are unavailable.", 409);
+    }
+    return assigned;
+  }
+
   private async getPromptSkills(
     orgId: string,
     profileId: string
@@ -2194,7 +2258,7 @@ export class SkillsService {
     const publications = team?.parentOrgId
       ? await this.db.listOrgSharedResources(team.parentOrgId)
       : [];
-    for (const record of await this.db.listSkillsForProfile(profileId)) {
+    for (const record of await this.getAssignedSkills(orgId, profileId)) {
       if (!record.orgId || record.orgId === orgId) {
         continue;
       }
@@ -2250,7 +2314,7 @@ export class SkillsService {
   ): Promise<
     Array<{ discovered: DiscoveredSkill; record: StoredSkillRecord }>
   > {
-    const assigned = await this.db.listSkillsForProfile(profileId);
+    const assigned = await this.getAssignedSkills(orgId, profileId);
     const discovered = await discoverSkills({ orgId, profileId });
 
     const bySourcePath = new Map(

@@ -13,6 +13,7 @@ import { join } from "node:path";
 import {
   ensureBundledSkillFiles,
   type GenerateChatInput,
+  getProfileSoulDir,
   runReadFile,
   uploadOrganizationKnowledgeBaseDocument,
 } from "@nakama/core";
@@ -23,6 +24,8 @@ import type { AgentQuestionnaireState } from "./agent-questionnaire-state";
 import { AgentService } from "./agent-service";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
 import type { AgentTodoState } from "./agent-todo-state";
+import { AuthService } from "./auth-service";
+import { OrgService } from "./org-service";
 import { ProfileService } from "./profile-service";
 import { sessionTurnRegistry } from "./session-turn-registry";
 import { SkillCuratorService } from "./skill-curator-service";
@@ -119,6 +122,212 @@ describe("SkillsService", () => {
     });
     return { db, local, privateSkill, publication, service, sibling, skill };
   }
+
+  test.each([false, true])(
+    "shared agent skill assignments remain live in team execution for cognito=%s",
+    async (cognito) => {
+      const { db, service, skill, privateSkill } = await setupPublishedSkill();
+      await db.unassignSkillFromProfile("profile_parent", skill.id);
+      await db.unassignSkillFromProfile("profile_parent", privateSkill.id);
+      const now = new Date().toISOString();
+      const publication = await db.publishOrgSharedResource({
+        createdAt: now,
+        id: "published_agent",
+        orgId: "parent",
+        resourceId: "profile_parent",
+        resourceKind: "agent",
+        updatedAt: now,
+      });
+      const instance = await db.createSharedAgentInstance(
+        "team_a",
+        publication.id,
+        "shared_instance",
+        now
+      );
+      await mkdir(getProfileSoulDir("team_a", instance.id), {
+        recursive: true,
+      });
+      await db.createUser({
+        createdAt: now,
+        email: "shared-agent@example.com",
+        id: "shared-user",
+        passwordHash: "unused",
+        updatedAt: now,
+      });
+      await db.upsertOrgMember({
+        createdAt: now,
+        orgId: "team_a",
+        role: "member",
+        userId: "shared-user",
+      });
+      await writeFile(
+        join(skill.sourcePath, "tool.js"),
+        `import {writeFile} from "node:fs/promises";
+export const name = "shared-notes";
+export const parameters = {type: "object", properties: {}};
+export async function run(input, context) {
+  await writeFile("shared.marker", "team");
+  return {orgId: context.orgId, profileId: context.profileId, workspace: context.workspaceRoot};
+}`
+      );
+      await db.upsertOrganization({
+        ...(await db.getOrganizationById("parent"))!,
+        skillsWriteApproval: true,
+      });
+      const proposals = new SkillProposalService(db, service);
+      const staged = await proposals.stageProposal({
+        action: "approve_code",
+        orgId: "parent",
+        profileId: "profile_parent",
+        relativePath: "tool.js",
+        skillName: "shared-notes",
+      });
+      await proposals.approveProposal("parent", staged.proposalId!, "admin");
+      const turns: GenerateChatInput[] = [];
+      const agent = new AgentService(null, null, db);
+      agent.setSkillsService(service);
+      agent.setOrgService(new OrgService(db, new AuthService()));
+      Object.assign(agent, {
+        _providerConfigured: true,
+        createHarnessForProfile: () => ({
+          provider: {
+            generateChat(input: GenerateChatInput) {
+              turns.push(input);
+              return Promise.resolve({
+                assistantMessage: { content: "Done", role: "assistant" },
+                content: "Done",
+                toolCalls: [],
+              });
+            },
+            name: "test",
+          },
+        }),
+        resolveProfileTools: (profile: { orgId: string; id: string }) =>
+          service.loadToolsForProfile(profile.orgId, profile.id),
+      });
+      const id = await agent.createSession(
+        "team_a",
+        "web",
+        instance.id,
+        "shared-user",
+        { cognito, orgRole: "member" }
+      );
+      const first = (await agent.resolveSession(id, "team_a"))!;
+      await first.send("First");
+      expect(turns[0]!.tools ?? []).toEqual([]);
+      await db.assignSkillToProfile("profile_parent", skill.id);
+      const second = (await agent.resolveSession(id, "team_a"))!;
+      expect(second).not.toBe(first);
+      expect(second.getHistory()).toEqual(first.getHistory());
+      await second.send("Second");
+      expect(turns[1]!.tools?.map((tool) => tool.name)).toContain(
+        "shared-notes"
+      );
+      const tool = (
+        await service.loadToolsForProfile("team_a", instance.id)
+      )[0]!;
+      const context = agent.buildPluginToolContext("team_a", {
+        profileId: instance.id,
+        runId: "run",
+        workflowId: "workflow",
+      });
+      await mkdir(context.workspaceRoot!, { recursive: true });
+      expect(
+        await tool.run({}, { ...context, workspaceRoot: skill.sourcePath })
+      ).toEqual({
+        orgId: "team_a",
+        profileId: instance.id,
+        workspace: context.workspaceRoot,
+      });
+      expect(
+        await readFile(join(context.workspaceRoot!, "shared.marker"), "utf8")
+      ).toBe("team");
+      await expect(
+        readFile(join(skill.sourcePath, "shared.marker"))
+      ).rejects.toThrow();
+      expect(
+        await service.readPublishedSkillFileForProfile(
+          "team_a",
+          instance.id,
+          "published_skill",
+          "SKILL.md",
+          10_000
+        )
+      ).toBeInstanceOf(Uint8Array);
+      expect(await db.listSkillsForProfile(instance.id)).toEqual([]);
+      const usage = await db.listSkillUsageForProfile(instance.id);
+      if (cognito) {
+        expect(usage).toEqual([]);
+      } else {
+        expect(usage).toContainEqual(
+          expect.objectContaining({ skillId: skill.id })
+        );
+      }
+      await db.assignSkillToProfile("profile_parent", privateSkill.id);
+      await expect(
+        service.loadToolsForProfile("team_a", instance.id)
+      ).rejects.toMatchObject({ status: 409 });
+      await expect(tool.run({}, context)).rejects.toMatchObject({
+        status: 409,
+      });
+      await db.unassignSkillFromProfile("profile_parent", privateSkill.id);
+      await db.unassignSkillFromProfile("profile_parent", skill.id);
+      await expect(tool.run({}, context)).rejects.toMatchObject({
+        status: 404,
+      });
+      await expect(
+        service.readPublishedSkillFileForProfile(
+          "team_a",
+          instance.id,
+          "published_skill",
+          "SKILL.md",
+          10_000
+        )
+      ).rejects.toMatchObject({ status: 404 });
+      const third = (await agent.resolveSession(id, "team_a"))!;
+      expect(third).not.toBe(second);
+      expect(third.getHistory()).toEqual(second.getHistory());
+      await third.send("Third");
+      expect(turns[2]!.tools ?? []).toEqual([]);
+      expect(
+        (await agent.getSessionMessages(id, "team_a"))!.messages.filter(
+          (message) => message.role === "user"
+        )
+      ).toHaveLength(3);
+      const globalDirectory = join(configDir, "agent", "skills", "weather");
+      await writeFile(
+        join(globalDirectory, "tool.ts"),
+        'export const name = "weather"; export const description = "Weather"; export const parameters = {type: "object", properties: {}}; export async function run() { return "global"; }'
+      );
+      await db.upsertSkill({
+        ...skill,
+        id: "global_skill",
+        name: "weather",
+        orgId: null,
+        sourcePath: globalDirectory,
+      });
+      await db.assignSkillToProfile("profile_parent", "global_skill");
+      const fourth = (await agent.resolveSession(id, "team_a"))!;
+      expect(fourth).not.toBe(third);
+      expect(fourth.getHistory()).toEqual(third.getHistory());
+      await fourth.send("Fourth");
+      expect(turns[3]!.tools?.map((tool) => tool.name)).toContain("weather");
+      await db.unassignSkillFromProfile("profile_parent", "global_skill");
+      const fifth = (await agent.resolveSession(id, "team_a"))!;
+      expect(fifth).not.toBe(fourth);
+      expect(fifth.getHistory()).toEqual(fourth.getHistory());
+      await fifth.send("Fifth");
+      expect(turns[4]!.tools ?? []).toEqual([]);
+      await db.deleteOrgSharedResource("parent", publication.id);
+      await expect(
+        service.loadToolsForProfile("team_a", instance.id)
+      ).rejects.toMatchObject({ status: 404 });
+      expect(await db.listSkillsForProfile(instance.id)).toEqual([]);
+      if (cognito) {
+        expect(await db.getSession(id)).toBeNull();
+      }
+    }
+  );
 
   test.each(["tool.js", "tool.ts"])(
     "shared JavaScript %s runs current reviewed code in the team",
