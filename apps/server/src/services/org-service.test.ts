@@ -62,6 +62,7 @@ import {
 import { McpClientManager } from "./mcp-client-manager";
 import { McpService } from "./mcp-service";
 import { OrgService } from "./org-service";
+import { OrgUsageQuotaService } from "./org-usage-quota-service";
 import { ProfileService } from "./profile-service";
 import { modelExistsOnInstance } from "./provider-instance-helpers";
 import { sessionTurnRegistry } from "./session-turn-registry";
@@ -1846,6 +1847,96 @@ async function seedSharedAgentSelection(
 }
 
 describe("OrgService shared agent selection", () => {
+  test.each(["stored", "ephemeral", "automation"] as const)(
+    "shared %s turns use only the executing team's quota and usage",
+    async (mode) => {
+      const { orgService, databaseAdapter: db } = createOrgService();
+      const publication = await seedSharedAgentSelection(db, orgService);
+      const profile = await orgService.createSharedAgentInstance(
+        "org_team_a",
+        publication.id,
+        "user_other"
+      );
+      const parent = (await db.getOrganizationById("org_parent"))!;
+      const team = (await db.getOrganizationById("org_team_a"))!;
+      await db.upsertOrganization({ ...parent, monthlyLlmTurnLimit: 1 });
+      await db.upsertOrganization({ ...team, monthlyLlmTurnLimit: 1 });
+      await db.incrementLlmTurnUsage("org_parent", {
+        estimated: false,
+        inputTokens: 1,
+        optimized: false,
+        outputTokens: 1,
+      });
+      const parentUsage = await db.listLlmTurnUsage("org_parent");
+      const quotas = new OrgUsageQuotaService(db);
+      expect((await quotas.getStatus("org_parent")).status).toBe("blocked");
+      let providerCalls = 0;
+      const provider = {
+        generateChat: async () => {
+          providerCalls += 1;
+          return {
+            assistantMessage: { content: "Done", role: "assistant" as const },
+            content: "Done",
+            toolCalls: [],
+            usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5 },
+          };
+        },
+        name: "test",
+        streamChat: async (
+          _input: GenerateChatInput,
+          handlers: { onChunk: (chunk: string) => void }
+        ) => {
+          handlers.onChunk("Done");
+          return provider.generateChat();
+        },
+      };
+      const agent = new AgentService(null, null, db);
+      agent.setOrgService(orgService);
+      Object.assign(agent, {
+        _providerConfigured: true,
+        createHarnessForProfile: () => ({ provider }),
+        resolveProfileTools: async () => [],
+      });
+      const sessionId =
+        mode === "automation"
+          ? null
+          : await agent.createSession(
+              "org_team_a",
+              "web",
+              profile.id,
+              "user_other",
+              { cognito: mode === "ephemeral", orgRole: "member" }
+            );
+      const session = sessionId
+        ? (await agent.resolveSession(sessionId, "org_team_a"))!
+        : null;
+      const run = () =>
+        session
+          ? session.send("Team task")
+          : agent.runAutomationPrompt("org_team_a", profile.id, "Team task");
+      await run();
+      expect(providerCalls).toBe(1);
+      expect(await quotas.getStatus("org_team_a")).toMatchObject({
+        status: "blocked",
+        turns: 1,
+      });
+      expect((await quotas.getStatus("org_team_a")).tokens).toBeGreaterThan(0);
+      expect(await db.listLlmTurnUsage("org_parent")).toEqual(parentUsage);
+      expect(await db.listLlmTurnUsage("org_team_b")).toEqual([]);
+      await expect(run()).rejects.toMatchObject({ status: 429 });
+      expect(providerCalls).toBe(1);
+      expect((await quotas.getStatus("org_team_a")).turns).toBe(1);
+      await db.upsertOrganization({ ...team, monthlyLlmTurnLimit: 0 });
+      await run();
+      expect(providerCalls).toBe(2);
+      expect((await quotas.getStatus("org_team_a")).turns).toBe(2);
+      expect(await db.listLlmTurnUsage("org_parent")).toEqual(parentUsage);
+      expect(await db.listLlmTurnUsage("org_team_b")).toEqual([]);
+      expect(await db.getProfileForOrg(profile.id, "org_team_a")).toEqual(
+        profile
+      );
+    }
+  );
   test("shared automation runs use team state and record revocation failures without provider calls", async () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     const publication = await seedSharedAgentSelection(db, orgService);

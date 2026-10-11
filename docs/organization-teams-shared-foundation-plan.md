@@ -1802,3 +1802,12 @@ Checks: 137 OrgService and automation service tests passed across two files. The
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: verify CLI and channel revocation plus team quota and credential ownership, then run the delivery-stage gate.
 No new source file, package, dependency, or runtime abstraction was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-shared-automation-revocation-focused.log, /tmp/nakama-shared-automation-revocation-types.log, and /tmp/nakama-shared-automation-revocation-lint.log.
+
+### Slice 2ba — shared turn quota and usage isolation
+Added shared agent quota tests for stored chat, ephemeral chat, and automation execution. The parent starts with an exhausted quota. Each team execution still succeeds under its own quota and records its provider tokens and one turn only under the team ID. Parent usage remains unchanged, and sibling usage stays empty.
+The team's next turn fails with status 429 before another provider call. Removing the team limit permits another turn and records a second team turn. Shared local profile rows remain unchanged. The tests use the real session and automation execution paths with a fake provider and explicit token usage.
+No runtime change was needed. Existing team-scoped quota and usage callbacks remain effective when profile configuration comes from a parent template.
+Checks: 121 OrgService and quota service tests passed across two files. The complete server type check, lint across 1532 files, and git diff --check passed. One verification repair supplied token usage in the fake provider result.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: verify CLI and channel revocation and personal credential ownership, then run the delivery-stage gate.
+No new source file, package, dependency, or runtime abstraction was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-shared-team-quota-focused.log, /tmp/nakama-shared-team-quota-types.log, and /tmp/nakama-shared-team-quota-lint.log.
