@@ -555,6 +555,15 @@ export interface PublishOrgPluginReleaseInput {
   selectedVersion: string;
 }
 
+export interface StoredSharedAgentInstanceRecord {
+  createdAt: string;
+  profileId: string;
+  publicationId: string;
+  sourceOrgId: string;
+  sourceProfileId: string;
+  teamOrgId: string;
+}
+
 export interface StoredOrgSharedResourceRecord {
   createdAt: string;
   id: string;
@@ -881,6 +890,12 @@ export interface DatabaseAdapter {
 
   /** Append-only insert. Adapters must not expose update/delete for this table. */
   createProfileChangeEvent(record: StoredProfileChangeEvent): Promise<void>;
+  createSharedAgentInstance(
+    teamOrgId: string,
+    publicationId: string,
+    profileId: string,
+    createdAt: string
+  ): Promise<StoredProfileRecord>;
 
   createSkillProposal(record: StoredSkillProposal): Promise<void>;
 
@@ -1050,6 +1065,10 @@ export interface DatabaseAdapter {
     sessionId: string
   ): Promise<AgentQuestionnaire | null>;
   getSessionTodos(sessionId: string): Promise<AgentTodo[]>;
+  getSharedAgentInstance(
+    teamOrgId: string,
+    profileId: string
+  ): Promise<StoredSharedAgentInstanceRecord | null>;
   getSkill(id: string): Promise<StoredSkillRecord | null>;
   /**
    * Resolve a skill by name within `orgId`, falling back to a global (bundled)

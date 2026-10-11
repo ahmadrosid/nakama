@@ -51,6 +51,7 @@ import type {
   StoredSessionMessageRecord,
   StoredSessionRecord,
   StoredSessionSummaryRecord,
+  StoredSharedAgentInstanceRecord,
   StoredSkillProposal,
   StoredSkillRecord,
   StoredSkillSuggestion,
@@ -2720,6 +2721,32 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     }
   );
 
+  const getSharedAgentInstanceStmt = db.prepare<
+    StoredSharedAgentInstanceRecord,
+    SQLQueryBindings[]
+  >(`
+    SELECT profile_id AS profileId, team_org_id AS teamOrgId,
+      source_org_id AS sourceOrgId, source_profile_id AS sourceProfileId,
+      publication_id AS publicationId, created_at AS createdAt
+    FROM shared_agent_instances WHERE team_org_id = ? AND profile_id = ?
+  `);
+  const getSharedAgentInstanceForSourceStmt = db.prepare<
+    StoredSharedAgentInstanceRecord,
+    SQLQueryBindings[]
+  >(`
+    SELECT profile_id AS profileId, team_org_id AS teamOrgId,
+      source_org_id AS sourceOrgId, source_profile_id AS sourceProfileId,
+      publication_id AS publicationId, created_at AS createdAt
+    FROM shared_agent_instances WHERE team_org_id = ? AND source_profile_id = ?
+  `);
+  const insertSharedAgentInstanceStmt = db.prepare(`
+    INSERT INTO shared_agent_instances (profile_id, team_org_id, source_org_id, source_profile_id, publication_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  const updateSharedAgentInstancePublicationStmt = db.prepare(
+    "UPDATE shared_agent_instances SET publication_id = ? WHERE profile_id = ? AND team_org_id = ?"
+  );
+
   const listOrgSharedResourcesStmt = db.prepare<
     StoredOrgSharedResourceRecord,
     SQLQueryBindings[]
@@ -3391,6 +3418,87 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     }
   );
 
+  const createSharedAgentInstanceTransaction = db.transaction(
+    (
+      teamOrgId: string,
+      publicationId: string,
+      profileId: string,
+      createdAt: string
+    ) => {
+      const team = getOrganizationByIdStmt.get(teamOrgId);
+      const parent = team?.parent_org_id
+        ? getOrganizationByIdStmt.get(team.parent_org_id)
+        : null;
+      if (
+        !team ||
+        team.archived_at ||
+        !parent ||
+        parent.archived_at ||
+        parent.parent_org_id
+      ) {
+        throw new Error("Shared agent requires an active team and parent");
+      }
+      const publication = getOrgSharedResourceStmt.get(
+        parent.id,
+        publicationId
+      );
+      const source =
+        publication?.resourceKind === "agent"
+          ? getProfileStmt.get(publication.resourceId)
+          : null;
+      if (
+        !(publication && source) ||
+        source.org_id !== parent.id ||
+        source.is_super ||
+        source.is_default
+      ) {
+        throw new Error("Shared agent source is unavailable");
+      }
+      const existing = getSharedAgentInstanceForSourceStmt.get(
+        teamOrgId,
+        source.id
+      );
+      if (existing) {
+        const profile = getProfileStmt.get(existing.profileId);
+        if (
+          !profile ||
+          profile.org_id !== teamOrgId ||
+          existing.sourceOrgId !== parent.id
+        ) {
+          throw new Error("Shared agent instance has invalid ownership");
+        }
+        updateSharedAgentInstancePublicationStmt.run(
+          publicationId,
+          profile.id,
+          teamOrgId
+        );
+        return toProfileRecord(profile);
+      }
+      if (getProfileStmt.get(profileId)) {
+        throw new Error("Shared agent profile ID already exists");
+      }
+      const profile: StoredProfileRecord = {
+        ...toProfileRecord(source),
+        createdAt,
+        id: profileId,
+        isDefault: false,
+        isSuper: false,
+        orgId: teamOrgId,
+        updatedAt: createdAt,
+      };
+      runUpsertProfileStmt(profile);
+      insertSharedAgentInstanceStmt.run(
+        profileId,
+        teamOrgId,
+        parent.id,
+        source.id,
+        publicationId,
+        createdAt
+      );
+      return profile;
+    }
+  );
+
   const runUpsertOrgMemberStmt = (record: StoredOrgMemberRecord) => {
     upsertOrgMemberStmt.run(
       record.orgId,
@@ -4023,6 +4131,20 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       );
     },
 
+    async createSharedAgentInstance(
+      teamOrgId,
+      publicationId,
+      profileId,
+      createdAt
+    ) {
+      return createSharedAgentInstanceTransaction.immediate(
+        teamOrgId,
+        publicationId,
+        profileId,
+        createdAt
+      );
+    },
+
     async createSkillProposal(record) {
       createSkillProposalStmt.run(
         record.id,
@@ -4513,6 +4635,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const row = getSessionTodosStmt.get(sessionId);
 
       return row ? parseAgentTodos(row.agent_todos) : [];
+    },
+
+    async getSharedAgentInstance(teamOrgId, profileId) {
+      return getSharedAgentInstanceStmt.get(teamOrgId, profileId) ?? null;
     },
 
     async getSkill(id) {

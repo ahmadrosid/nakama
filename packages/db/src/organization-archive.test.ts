@@ -1,4 +1,8 @@
+import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   createSqliteDatabase,
   createSqliteMemoryAdapter,
@@ -439,5 +443,223 @@ describe("organization publications", () => {
     expect((await db.getTool("global-tool"))?.orgId).toBeNull();
     await db.deleteTool("global-tool");
     expect(await db.listOrgSharedResources("org_a")).toEqual([]);
+  });
+});
+
+async function seedSharedAgent(db: DatabaseAdapter) {
+  const now = "2026-10-11T00:00:00.000Z";
+  await seedTwoActiveOrgs(db, now);
+  for (const id of ["team_a", "team_b"]) {
+    await db.upsertOrganization({
+      createdAt: now,
+      id,
+      name: id,
+      parentOrgId: "org_a",
+      slug: id,
+      updatedAt: now,
+    });
+  }
+  const source = {
+    createdAt: now,
+    id: "source",
+    isDefault: false,
+    isSuper: false,
+    model: "provider::model",
+    name: "Source",
+    orgId: "org_a",
+    systemPrompt: "Source instructions",
+    updatedAt: now,
+  };
+  await db.upsertProfile(source);
+  const publication = await db.publishOrgSharedResource({
+    createdAt: now,
+    id: "agent-publication",
+    orgId: "org_a",
+    resourceId: "source",
+    resourceKind: "agent",
+    updatedAt: now,
+  });
+  return { now, publication, source };
+}
+
+describe("shared agent instance persistence", () => {
+  test("concurrent selections create one team profile without source history or assignments", async () => {
+    const db = createSqliteMemoryAdapter();
+    const { now, publication, source } = await seedSharedAgent(db);
+    await db.upsertSession({
+      agentQuestionnaire: null,
+      agentTodos: [],
+      channel: "web",
+      createdAt: now,
+      id: "source-session",
+      model: null,
+      profileId: source.id,
+      title: null,
+      userId: null,
+    });
+    await db.upsertTool({
+      createdAt: now,
+      description: "",
+      handlerConfig: {},
+      handlerType: "javascript",
+      id: "private-tool",
+      name: "private_tool",
+      orgId: "org_a",
+      updatedAt: now,
+    });
+    await db.assignToolToProfile(source.id, "private-tool");
+    const [first, second] = await Promise.all([
+      db.createSharedAgentInstance("team_a", publication.id, "instance_a", now),
+      db.createSharedAgentInstance("team_a", publication.id, "retry_a", now),
+    ]);
+    expect(first).toEqual({
+      ...source,
+      acpAgent: null,
+      acpSettings: null,
+      automationsEnabled: true,
+      id: "instance_a",
+      orgId: "team_a",
+      skillsCuratorConsolidateEnabled: null,
+      skillsPostTurnReview: null,
+      skillsWriteApproval: null,
+      thinkingEffort: null,
+      thinkingEnabled: null,
+    });
+    expect(second).toEqual(first);
+    expect(await db.getProfile("retry_a")).toBeNull();
+    expect(
+      (await db.listSessions()).filter((row) => row.profileId === first.id)
+    ).toEqual([]);
+    expect(await db.listToolsForProfile(first.id)).toEqual([]);
+    expect(await db.getSharedAgentInstance("team_a", first.id)).toEqual({
+      createdAt: now,
+      profileId: first.id,
+      publicationId: publication.id,
+      sourceOrgId: "org_a",
+      sourceProfileId: source.id,
+      teamOrgId: "team_a",
+    });
+    expect(await db.getSharedAgentInstance("team_b", first.id)).toBeNull();
+    const sibling = await db.createSharedAgentInstance(
+      "team_b",
+      publication.id,
+      "instance_b",
+      now
+    );
+    expect(sibling.orgId).toBe("team_b");
+    expect(sibling.id).not.toBe(first.id);
+    for (const teamOrgId of ["org_a", "org_b", "missing"]) {
+      await expect(
+        db.createSharedAgentInstance(teamOrgId, publication.id, "invalid", now)
+      ).rejects.toThrow();
+    }
+    await expect(
+      db.createSharedAgentInstance("team_a", "missing", "invalid", now)
+    ).rejects.toThrow();
+    expect(await db.getProfile(source.id)).toEqual(
+      expect.objectContaining(source)
+    );
+  });
+
+  test("revocation keeps source links and sessions; explicit selection can reconnect the same instance", async () => {
+    const db = createSqliteMemoryAdapter();
+    const { now, publication, source } = await seedSharedAgent(db);
+    const instance = await db.createSharedAgentInstance(
+      "team_a",
+      publication.id,
+      "instance",
+      now
+    );
+    await db.upsertSession({
+      agentQuestionnaire: null,
+      agentTodos: [],
+      channel: "web",
+      createdAt: now,
+      id: "team-session",
+      model: null,
+      profileId: instance.id,
+      title: null,
+      userId: null,
+    });
+    await db.deleteOrgSharedResource("org_a", publication.id);
+    await expect(
+      db.createSharedAgentInstance("team_a", publication.id, "retry", now)
+    ).rejects.toThrow();
+    expect(
+      (await db.getSharedAgentInstance("team_a", instance.id))?.publicationId
+    ).toBe(publication.id);
+    const republished = await db.publishOrgSharedResource({
+      ...publication,
+      id: "republished",
+    });
+    expect(
+      (
+        await db.createSharedAgentInstance(
+          "team_a",
+          republished.id,
+          "retry",
+          now
+        )
+      ).id
+    ).toBe(instance.id);
+    expect(
+      (await db.getSharedAgentInstance("team_a", instance.id))?.publicationId
+    ).toBe(republished.id);
+    expect((await db.getSession("team-session"))?.profileId).toBe(instance.id);
+    expect(await db.tryMarkOrganizationArchived("team_a", now)).toBe(true);
+    await expect(
+      db.createSharedAgentInstance("team_a", republished.id, "retry", now)
+    ).rejects.toThrow();
+    await db.deleteProfile(source.id);
+    await expect(
+      db.createSharedAgentInstance("team_b", republished.id, "retry", now)
+    ).rejects.toThrow();
+    expect(await db.getProfile(instance.id)).not.toBeNull();
+    expect(
+      await db.getSharedAgentInstance("team_a", instance.id)
+    ).not.toBeNull();
+    await db.deleteProfile(instance.id);
+    expect(await db.getSharedAgentInstance("team_a", instance.id)).toBeNull();
+  });
+
+  test("failed source-link insertion rolls back the new profile", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "nakama-shared-agent-"));
+    const path = join(directory, "test.sqlite");
+    const database = await createSqliteDatabase(`file:${path}`);
+    const raw = new Database(path);
+    try {
+      const { now, publication } = await seedSharedAgent(database.adapter);
+      raw.exec(
+        `CREATE TRIGGER reject_shared_instance BEFORE INSERT ON shared_agent_instances BEGIN SELECT RAISE(ABORT, 'injected failure'); END;`
+      );
+      await expect(
+        database.adapter.createSharedAgentInstance(
+          "team_a",
+          publication.id,
+          "instance",
+          now
+        )
+      ).rejects.toThrow();
+      expect(await database.adapter.getProfile("instance")).toBeNull();
+      expect(
+        await database.adapter.getSharedAgentInstance("team_a", "instance")
+      ).toBeNull();
+      raw.exec("DROP TRIGGER reject_shared_instance;");
+      expect(
+        (
+          await database.adapter.createSharedAgentInstance(
+            "team_a",
+            publication.id,
+            "instance",
+            now
+          )
+        ).id
+      ).toBe("instance");
+      expect(raw.query("PRAGMA foreign_key_check").all()).toEqual([]);
+    } finally {
+      raw.close();
+      database.close();
+      rmSync(directory, { force: true, recursive: true });
+    }
   });
 });

@@ -120,6 +120,12 @@ AFTER DELETE ON tools
 BEGIN
   DELETE FROM org_shared_resources WHERE resource_kind = 'tool' AND resource_id = OLD.id;
 END;
+
+CREATE TRIGGER IF NOT EXISTS profiles_remove_shared_agent_instance
+AFTER DELETE ON profiles
+BEGIN
+  DELETE FROM shared_agent_instances WHERE profile_id = OLD.id;
+END;
   `);
 }
 

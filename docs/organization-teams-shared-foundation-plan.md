@@ -326,7 +326,7 @@ Status values: `todo`, `doing`, `done`, `blocked`.
 
 | ID | Delivery stage | Step | Test items | Status | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 1. Schema, contracts, access | Tenant relationship and publication records | 1, 2, 3, 17, 18 | doing | ae7404d0 (1a), 47c456c3 (1b), 69fdbb59 (1c) | Slices 1a–1d complete; agent links and creation work remain |
+| 1 | 1. Schema, contracts, access | Tenant relationship and publication records | 1, 2, 3, 17, 18 | doing | ae7404d0 (1a), 47c456c3 (1b), 69fdbb59 (1c), ff81645b (1d) | Slices 1a–1e complete; team creation work remains |
 | 2 | 1. Schema, contracts, access | Contracts and organization routes | 15, 16 | todo | | |
 | 3a | 2. Resource paths | Knowledge | 4, 5, 6, 21 | todo | | |
 | 3b | 2. Resource paths | Skills | 4, 5, 20 | todo | | |
@@ -346,6 +346,7 @@ Slice log (one row per commit):
 | 2026-10-11 | 1b | Persist parent relationships; reject reparenting, nested teams, inactive parents, unsafe archive and deletion | Lookups, memberships, ordinary updates, lifecycle guards; 147 database tests passed | Publication records and migration |
 | 2026-10-11 | 1c | Publication and shared agent source-link tables; repeatable migration | Five resource kinds, uniqueness, references, revocation survival, cleanup; 149 database tests passed | Publication adapter operations |
 | 2026-10-11 | 1d | Scoped publication reads and writes; idempotent publish; SQL ownership checks and source-deletion triggers | Active root, wrong scope, retry, default/Super Bot rejection, SQL ownership and deletion; 151 database tests passed | Agent source-link operations and atomic team creation |
+| 2026-10-11 | 1e | Atomic shared agent profile/source-link creation; scoped reads and explicit reconnection | Concurrent selection, sibling isolation, revocation, retained sessions, source deletion, injected rollback; 154 database tests passed | Atomic team creation and request idempotency |
 
 2026-10-11: Slice 1b passed database tests, the database type check, and `bun x ultracite check`.
 The first test run found an incorrect SQL value count. The repaired query passed all database tests.
@@ -370,3 +371,12 @@ Knowledge-file validation, configured-model validation, profile skill paths, and
 The type check found an invalid skill creator fixture. A typed `human` fixture fixed it.
 Checks: 151 database tests passed; 10 focused tests passed after the fixture repair; database type check and `bun x ultracite check` passed.
 Stage 1 remains incomplete. Next: agent source-link operations and atomic team creation.
+
+2026-10-11: Slice 1e adds atomic shared agent record creation using the existing profile writer.
+An immediate transaction checks the active team, parent, publication, and source before creating a local profile and source link.
+Repeated selections return the same local profile. Explicit selection after republication reconnects its link without replacing sessions.
+SQL creation copies profile configuration only. Service code must still validate and assign permitted resources, create local workspace files, and enforce template edit restrictions.
+A deletion trigger cleans local instance links even when test adapters disable foreign keys.
+Two test repairs corrected session API use and empty-session summary assumptions. No failed check remains.
+Checks: all 154 database tests passed; database type check and `bun x ultracite check` passed.
+Stage 1 remains incomplete. Next: atomic team creation and request idempotency.
