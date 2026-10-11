@@ -19,7 +19,7 @@ function mockProvider(
       throw new Error("unused");
     },
     generateText,
-    name: "mock",
+    name: "openai",
     streamChat: async () => {
       throw new Error("unused");
     },
