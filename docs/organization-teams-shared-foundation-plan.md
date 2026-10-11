@@ -290,14 +290,14 @@ Implementation sequence:
 
 - [x] 1. Add the tenant relationship and publication records.
 - [ ] 2. Extend contracts and organization routes.
-- [ ] 3. Connect publication checks to real resource use.
+- [x] 3. Connect publication checks to real resource use.
 - [ ] 4. Build the Organization screen.
 - [ ] 5. Update client state and compatibility.
 
 Delivery order:
 
 - [x] 1. Deliver schema, contracts, access rules, and migration tests.
-- [ ] 2. Deliver all five resource paths and execution checks.
+- [x] 2. Deliver all five resource paths and execution checks.
 - [ ] 3. Deliver the Organization page, client state, and component tests.
 - [ ] 4. Document the UI path and roles in existing user docs.
 
@@ -2194,3 +2194,8 @@ Evidence: /tmp/nakama-remaining-delivery-check.log, /tmp/nakama-server-core-spac
 ### Slice 2dh — Web spacing and full lint checks completed
 Corrected the final two spacing errors in the chat composer and skill picker with blank lines only. Existing tests cover composer actions, selection, and skill suggestions. Checks passed: 39 tests across two files with 70 assertions; complete web type check; Ultracite across 1532 files; full bun run check including anti-slop; and git diff --check. React Doctor changed-scope scans stayed at 91/100 before and after, with no reported issues. No new tests were added for blank-line edits. This slice contains two web files and this entry. All earlier compatibility cleanup is committed and the full lint gate is green. Steps 2 and 3 and delivery stage 2 remain unchecked. Next: run full delivery tests and knip, then audit backend requirements before the Organization UI slices. No browser check, paid call, full-suite rerun, build, push, or PR ran. The Organization screen remains incomplete.
 Evidence: /tmp/nakama-web-spacing-focused.log, /tmp/nakama-web-spacing-types.log, /tmp/nakama-web-spacing-lint-check.log, /tmp/nakama-web-spacing-full-check.log, /tmp/nakama-web-spacing-doctor-before.log, and /tmp/nakama-web-spacing-doctor-after.log.
+
+### Slice 2di — Backend delivery stage verified
+The worktree was clean before verification. The canonical full test script passed both phases: 4364 non-web tests with 22 skips across 419 files, then 654 web tests across 93 files. The phases made 16203 and 1784 assertions respectively. All 255 focused shared-resource, organization HTTP, proposal, integration, knowledge, tool catalog, and database tests passed across eight files with 2469 assertions. Complete core, server, agent, database, and client type checks passed. Full bun run check, Ultracite across 1532 files, knip, and git diff --check passed. No repair was needed.
+The backend audit and tests cover all five resource paths, explicit publication, tenant-private execution, source removal, credential readiness, shared instance uniqueness, preserved team work, archive boundaries, and compatibility. Delivery stage 2 and implementation step 3 are complete. Implementation step 2 remains open because its publication controls and shared-agent selection flow require the Organization UI. Next: implement the Organization overview and client query state, followed by team creation and publication controls. This slice changes only this progress record. No browser check, paid call, build, push, or PR ran. Release builds, live external delivery and OAuth, and the Organization screen remain unverified.
+Evidence: /tmp/nakama-stage2-current-full-tests.log, /tmp/nakama-stage2-current-focused.log, /tmp/nakama-stage2-current-{core,server,agent,db,client}-types.log, /tmp/nakama-stage2-current-check.log, /tmp/nakama-stage2-current-lint.log, and /tmp/nakama-stage2-current-knip.log.
