@@ -54,6 +54,8 @@ export const queryKeys = {
   openRouterModels: ["openRouterModels"] as const,
   organizationOverview: (parentOrgId: string, activeOrgId: string) =>
     ["organizationOverview", parentOrgId, activeOrgId] as const,
+  organizationPublicationCatalog: (orgId: string, kind: string) =>
+    ["organizationPublicationCatalog", orgId, kind] as const,
   orgMembers: (orgId: string) => ["orgMembers", orgId] as const,
   orgMemory: (orgId: string) => ["orgMemory", orgId] as const,
   orgMemoryHistory: (orgId: string) => ["orgMemoryHistory", orgId] as const,

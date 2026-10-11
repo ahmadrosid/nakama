@@ -78,7 +78,9 @@ export function useOrgPublicationMutation(orgId: string) {
       invalidateQueries(
         queryClient,
         ["organizationOverview", orgId],
+        ["organizationPublicationCatalog", orgId],
         ["knowledgeBase"],
+        queryKeys.skills.all,
         queryKeys.profiles.all
       ),
   });

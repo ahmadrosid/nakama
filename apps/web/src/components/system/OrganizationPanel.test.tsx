@@ -2,6 +2,8 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import type {
   OrganizationOverviewResponse,
   OrganizationSummary,
+  ProfileSummary,
+  SkillSummary,
 } from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
@@ -748,7 +750,7 @@ async function openKnowledgeManager(container: HTMLElement) {
   });
 }
 
-async function selectKnowledgeDocument() {
+async function selectPublicationResource(expectedLabels = ["Brand guide"]) {
   await act(async () => {
     document.querySelector<HTMLButtonElement>('[role="combobox"]')?.click();
     await settle();
@@ -758,7 +760,7 @@ async function selectKnowledgeDocument() {
     ...document.querySelectorAll<HTMLElement>('[role="option"]'),
   ];
 
-  expect(options.map((option) => option.textContent)).toEqual(["Brand guide"]);
+  expect(options.map((option) => option.textContent)).toEqual(expectedLabels);
   await act(async () => {
     options[0]?.click();
     await settle();
@@ -787,7 +789,7 @@ test("knowledge publication uses ready local document IDs and refreshes the cata
   expect(catalog).not.toHaveBeenCalled();
   await openKnowledgeManager(container);
   expect(catalog.mock.calls).toEqual([["parent"]]);
-  await selectKnowledgeDocument();
+  await selectPublicationResource();
   await act(async () => {
     [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
       .find((button) => button.textContent === "Publish document")
@@ -823,7 +825,7 @@ test("failed publication keeps the catalog and selected document for retry", asy
 
   cleanups.push(() => publish.mockRestore());
   await openKnowledgeManager(container);
-  await selectKnowledgeDocument();
+  await selectPublicationResource();
 
   const submit = [
     ...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
@@ -943,4 +945,233 @@ test("catalog refresh failure preserves current publications until retry succeed
     "parent knowledge"
   );
   expect(unpublish).toHaveBeenCalledTimes(1);
+});
+
+function skill(
+  id: string,
+  name: string,
+  orgId: string | null = "parent",
+  enabled = true
+): SkillSummary {
+  return {
+    createdAt: "2026-10-12T00:00:00Z",
+    createdBy: "human",
+    description: "",
+    disableModelInvocation: false,
+    enabled,
+    hasTool: false,
+    id,
+    name,
+    orgId,
+    sourcePath: `/private/parent/profile/skills/${id}`,
+    updatedAt: "2026-10-12T00:00:00Z",
+  };
+}
+
+function template(id: string, name: string): ProfileSummary {
+  return {
+    createdAt: "2026-10-12T00:00:00Z",
+    hasAvatar: false,
+    id,
+    isSuper: false,
+    mcpServerCount: 0,
+    model: null,
+    name,
+    soulActive: true,
+    toolCount: 0,
+    updatedAt: "2026-10-12T00:00:00Z",
+  };
+}
+
+test.each([
+  { id: "skill-a", kind: "skill", label: "skills", name: "Brand voice" },
+  { id: "agent-a", kind: "agent", label: "agents", name: "Writer" },
+] as const)(
+  "parent publication selector uses stable owned IDs in case %#",
+  async ({ kind, label, id, name }) => {
+    const { container, catalog, data } = await mountKnowledgeManager();
+
+    const skills = spyOn(client, "listSkills").mockResolvedValue({
+      skills: [
+        skill("skill-a", "Brand voice"),
+        skill("skill-b", "Brand voice"),
+        skill("skill", "Already published"),
+        skill("global", "Global skill", null),
+        skill("foreign", "Foreign skill", "other"),
+        skill("disabled", "Disabled skill", "parent", false),
+      ],
+    });
+
+    const profiles = spyOn(client, "listProfiles").mockResolvedValue({
+      profiles: [
+        template("agent-a", "Writer"),
+        template("agent-b", "Writer"),
+        template("agent", "Already published"),
+        { ...template("default", "Default Bot"), isDefault: true },
+        { ...template("super", "Super Bot"), isSuper: true },
+        {
+          ...template("instance", "Shared instance"),
+          sharedAgent: {
+            available: true,
+            publicationId: "remote",
+            sourceOrgId: "other",
+            sourceProfileId: "source",
+          },
+        },
+      ],
+    });
+
+    const publication = {
+      ...data.sharedResources[0],
+      id: `pub-${id}`,
+      label: name,
+      resourceId: id,
+      resourceKind: kind,
+    };
+
+    const publish = spyOn(
+      client,
+      "publishOrgSharedResource"
+    ).mockImplementation(async () => {
+      data.sharedResources.push(publication);
+
+      return { publication };
+    });
+
+    const unpublish = spyOn(
+      client,
+      "unpublishOrgSharedResource"
+    ).mockImplementation(async (_orgId: string, publicationId: string) => {
+      data.sharedResources = data.sharedResources.filter(
+        (resource) => resource.id !== publicationId
+      );
+    });
+
+    cleanups.push(() => {
+      skills.mockRestore();
+      profiles.mockRestore();
+      publish.mockRestore();
+      unpublish.mockRestore();
+    });
+    expect(skills).not.toHaveBeenCalled();
+    expect(profiles).not.toHaveBeenCalled();
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          `button[aria-label="Manage shared ${label}"]`
+        )
+        ?.click();
+      await settle();
+    });
+    await act(async () => {
+      await settle();
+    });
+    expect(catalog).not.toHaveBeenCalled();
+    expect(kind === "skill" ? skills.mock.calls : profiles.mock.calls).toEqual([
+      ["parent"],
+    ]);
+    expect(kind === "skill" ? profiles : skills).not.toHaveBeenCalled();
+    await selectPublicationResource([`${name} (${id})`, `${name} (${kind}-b)`]);
+    expect(
+      document.querySelector('[role="dialog"]')?.textContent
+    ).not.toContain("/private/");
+    await act(async () => {
+      [
+        ...document.querySelectorAll<HTMLButtonElement>(
+          '[role="dialog"] button'
+        ),
+      ]
+        .find((button) => button.textContent === `Publish ${kind}`)
+        ?.click();
+      await settle();
+    });
+    await act(async () => {
+      await settle();
+    });
+    expect(publish.mock.calls).toEqual([
+      ["parent", { resourceId: id, resourceKind: kind }],
+    ]);
+    expect(
+      document.querySelector(`button[aria-label="Unpublish ${name}"]`)
+    ).not.toBeNull();
+    await act(async () => {
+      document
+        .querySelector<HTMLButtonElement>(
+          `button[aria-label="Unpublish ${name}"]`
+        )
+        ?.click();
+      await settle();
+    });
+    await act(async () => {
+      await settle();
+    });
+    expect(unpublish.mock.calls).toEqual([["parent", `pub-${id}`]]);
+    expect(
+      document.querySelector(`button[aria-label="Unpublish ${name}"]`)
+    ).toBeNull();
+  }
+);
+
+test("skill catalog failure permits a scoped retry before publication", async () => {
+  const { container } = await mountKnowledgeManager();
+
+  const skills = spyOn(client, "listSkills")
+    .mockRejectedValueOnce(new Error("Catalog unavailable"))
+    .mockResolvedValue({ skills: [skill("skill-a", "Brand voice")] });
+
+  cleanups.push(() => skills.mockRestore());
+  await act(async () => {
+    container
+      .querySelector<HTMLButtonElement>(
+        'button[aria-label="Manage shared skills"]'
+      )
+      ?.click();
+    await settle();
+  });
+  await act(async () => {
+    await settle();
+  });
+  expect(
+    document.querySelector('[role="dialog"] [role="alert"]')
+  ).not.toBeNull();
+  expect(document.querySelector('[role="combobox"]')).toBeNull();
+  await act(async () => {
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
+      .find((button) => button.textContent === "Retry skills")
+      ?.click();
+    await settle();
+  });
+  expect(skills.mock.calls).toEqual([["parent"], ["parent"]]);
+  expect(document.querySelector('[role="dialog"] [role="alert"]')).toBeNull();
+  await selectPublicationResource(["Brand voice"]);
+});
+
+test("team admins cannot load private skill or agent publication catalogs", async () => {
+  const queries = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  queries.setQueryData(
+    queryKeys.organizationOverview("parent", "team-a"),
+    overview("team-a")
+  );
+  const skills = spyOn(client, "listSkills").mockResolvedValue({ skills: [] });
+
+  const profiles = spyOn(client, "listProfiles").mockResolvedValue({
+    profiles: [],
+  });
+
+  cleanups.push(() => {
+    skills.mockRestore();
+    profiles.mockRestore();
+  });
+  const { container, render } = mount(queries);
+  await render({ ...organization("team-a"), role: "admin" });
+  expect(
+    container.querySelectorAll('button[aria-label^="Manage shared"]')
+  ).toHaveLength(0);
+  expect(skills).not.toHaveBeenCalled();
+  expect(profiles).not.toHaveBeenCalled();
 });

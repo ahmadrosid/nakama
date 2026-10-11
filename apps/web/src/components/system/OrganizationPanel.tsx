@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@nakama/ui/select";
+import { useQuery } from "@tanstack/react-query";
 import {
   AiBrain01Icon,
   BookOpen01Icon,
@@ -42,8 +43,8 @@ import {
   useOrganizationOverview,
   useOrgPublicationMutation,
 } from "@/hooks/use-org-members";
-import { useOrganizationKnowledgeBaseQuery } from "@/hooks/use-resource-mutations";
-import { formatError } from "@/lib/client";
+import { client, formatError } from "@/lib/client";
+import { queryKeys } from "@/lib/query-keys";
 
 const RESOURCE_ROWS = [
   { icon: BookOpen01Icon, kind: "knowledge", label: "Knowledge" },
@@ -63,29 +64,80 @@ const READINESS_LABELS = {
   unavailable: "Unavailable",
 };
 
-function KnowledgePublicationDialog({
+function ResourcePublicationDialog({
   orgId,
   resources,
+  kind,
+  label,
 }: {
   orgId: string;
   resources: OrgSharedResourceSummary[];
+  kind: "knowledge" | "skill" | "agent";
+  label: string;
 }) {
   const [open, setOpen] = useState(false);
   const [resourceId, setResourceId] = useState<string | null>(null);
-  const documents = useOrganizationKnowledgeBaseQuery(open ? orgId : null);
+
+  const catalog = useQuery({
+    enabled: open,
+    queryFn: async () => {
+      if (kind === "knowledge") {
+        const { documents } = await client.listOrganizationKnowledgeBase(orgId);
+
+        return documents
+          .filter((document) => document.status === "ready")
+          .map((document) => ({ id: document.id, label: document.filename }));
+      }
+
+      if (kind === "skill") {
+        const { skills } = await client.listSkills(orgId);
+
+        return skills
+          .filter((skill) => skill.enabled && skill.orgId === orgId)
+          .map((skill) => ({ id: skill.id, label: skill.name }));
+      }
+
+      const { profiles } = await client.listProfiles(orgId);
+
+      return profiles
+        .filter(
+          (profile) =>
+            !(profile.isSuper || profile.isDefault || profile.sharedAgent)
+        )
+        .map((profile) => ({ id: profile.id, label: profile.name }));
+    },
+    queryKey: queryKeys.organizationPublicationCatalog(orgId, kind),
+  });
+
   const mutation = useOrgPublicationMutation(orgId);
 
+  const resourceLabel =
+    kind === "knowledge" ? "document" : kind === "skill" ? "skill" : "agent";
+
   const publications = resources.filter(
-    (resource) => resource.resourceKind === "knowledge"
+    (resource) => resource.resourceKind === kind
   );
 
-  const available = (documents.data?.documents ?? []).filter(
-    (document) =>
-      document.status === "ready" &&
-      !publications.some(
-        (publication) => publication.resourceId === document.id
-      )
-  );
+  const labelCounts = new Map<string, number>();
+
+  for (const resource of catalog.data ?? []) {
+    labelCounts.set(resource.label, (labelCounts.get(resource.label) ?? 0) + 1);
+  }
+
+  const available = (catalog.data ?? [])
+    .filter(
+      (resource) =>
+        !publications.some(
+          (publication) => publication.resourceId === resource.id
+        )
+    )
+    .map((resource) => ({
+      ...resource,
+      label:
+        (labelCounts.get(resource.label) ?? 0) > 1
+          ? `${resource.label} (${resource.id})`
+          : resource.label,
+    }));
 
   return (
     <Dialog
@@ -100,7 +152,7 @@ function KnowledgePublicationDialog({
       <DialogTrigger
         render={
           <Button
-            aria-label="Manage shared knowledge"
+            aria-label={`Manage shared ${label.toLowerCase()}`}
             size="sm"
             variant="outline"
           />
@@ -110,70 +162,70 @@ function KnowledgePublicationDialog({
       </DialogTrigger>
       <DialogContent showCloseButton={!mutation.isPending}>
         <DialogHeader>
-          <DialogTitle>Shared knowledge</DialogTitle>
+          <DialogTitle>Shared {label.toLowerCase()}</DialogTitle>
         </DialogHeader>
-        {documents.isError && (
+        {catalog.isError && (
           <div className="space-y-2" role="alert">
-            <p>{formatError(documents.error)}</p>
+            <p>{formatError(catalog.error)}</p>
             <Button
-              disabled={documents.isFetching}
-              onClick={() => void documents.refetch()}
+              disabled={catalog.isFetching}
+              onClick={() => void catalog.refetch()}
               variant="outline"
             >
-              Retry documents
+              Retry {resourceLabel}s
             </Button>
           </div>
         )}
-        {documents.isPending && <p role="status">Loading documents…</p>}
-        {documents.data && (
+        {catalog.isPending && <p role="status">Loading {resourceLabel}s…</p>}
+        {catalog.data && (
           <div className="flex flex-col gap-3">
             <Select
-              disabled={mutation.isPending || documents.isError}
-              items={available.map((document) => ({
-                label: document.filename,
-                value: document.id,
+              disabled={mutation.isPending || catalog.isError}
+              items={available.map((resource) => ({
+                label: resource.label,
+                value: resource.id,
               }))}
               onValueChange={setResourceId}
               value={resourceId}
             >
               <SelectTrigger
-                aria-label="Document to publish"
+                aria-label={`${resourceLabel} to publish`}
                 className="w-full"
               >
-                <SelectValue placeholder="Select document" />
+                <SelectValue placeholder={`Select ${resourceLabel}`} />
               </SelectTrigger>
               <SelectContent>
-                {available.map((document) => (
-                  <SelectItem key={document.id} value={document.id}>
-                    {document.filename}
+                {available.map((resource) => (
+                  <SelectItem key={resource.id} value={resource.id}>
+                    {resource.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             {available.length === 0 && (
               <p className="text-muted-foreground text-sm">
-                No unpublished ready documents
+                No unpublished {resourceLabel}s
               </p>
             )}
             <Button
               disabled={
                 mutation.isPending ||
-                documents.isError ||
-                !available.some((document) => document.id === resourceId)
+                catalog.isError ||
+                !available.some((resource) => resource.id === resourceId)
               }
               onClick={() => {
                 if (resourceId) {
                   mutation.mutate(
                     {
                       action: "publish",
-                      resource: { resourceId, resourceKind: "knowledge" },
+                      resource: { resourceId, resourceKind: kind },
                     },
                     { onSuccess: () => setResourceId(null) }
                   );
                 }
               }}
             >
-              Publish document
+              Publish {resourceLabel}
             </Button>
           </div>
         )}
@@ -540,11 +592,15 @@ export function OrganizationOverview() {
               <dt className="flex shrink-0 flex-wrap items-center gap-2 font-medium sm:w-32">
                 <Icon aria-hidden className="size-4 text-muted-foreground" />
                 {label}
-                {kind === "knowledge" &&
+                {(kind === "knowledge" ||
+                  kind === "skill" ||
+                  kind === "agent") &&
                   overview.data.canManageOrganization &&
                   organization.id === activeOrg.id && (
-                    <KnowledgePublicationDialog
+                    <ResourcePublicationDialog
                       key={activeOrg.id}
+                      kind={kind}
+                      label={label}
                       orgId={activeOrg.id}
                       resources={sharedResources}
                     />
