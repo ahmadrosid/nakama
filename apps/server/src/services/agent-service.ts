@@ -4335,6 +4335,18 @@ export class AgentService {
     );
   }
 
+  async readPublishedKnowledgeBaseDocument(
+    orgId: string,
+    publicationId: string,
+    options: { render?: "text" } = {}
+  ): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
+    return this.profileService.readPublishedKnowledgeBaseDocument(
+      orgId,
+      publicationId,
+      options
+    );
+  }
+
   async getProfileSoulStatus(
     orgId: string,
     profileId: string,

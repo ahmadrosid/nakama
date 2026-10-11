@@ -1,9 +1,12 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import {
   attachSharedKnowledgeBaseDocument,
   getKnowledgeBaseDir,
   getKnowledgeBaseExtractedPath,
+  getKnowledgeBaseManifestPath,
+  getKnowledgeBaseStoredDocumentPath,
+  getOrgKnowledgeBaseDir,
 } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { zipSync } from "fflate";
@@ -13,6 +16,7 @@ import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
   createOrgAdminSession,
+  loginUserSession,
   setupFreshInstallSession,
 } from "../test-session-helpers";
 
@@ -323,7 +327,7 @@ describe("profile knowledge base ZIP import", () => {
 
     // SAFETY: This test controls the fixture shape at this boundary.
     const spec = (await response.json()) as {
-      paths: Record<string, { get?: object; post?: object; put?: object }>;
+      paths: Record<string, Record<string, object>>;
     };
 
     expect(
@@ -415,6 +419,16 @@ function createApp() {
   return {
     ...createMinimalHonoApp({
       agent: {
+        readPublishedKnowledgeBaseDocument: (
+          orgId: string,
+          publicationId: string,
+          options: { render?: "text" }
+        ) =>
+          profileService.readPublishedKnowledgeBaseDocument(
+            orgId,
+            publicationId,
+            options
+          ),
         deleteKnowledgeBaseDocument: (
           orgId: string,
           profileId: string,
@@ -483,8 +497,249 @@ function createApp() {
       databaseAdapter,
     }),
     databaseAdapter,
+    profileService,
   };
 }
+
+async function setupPublishedKnowledge() {
+  const { app, authService, databaseAdapter: db, profileService } = createApp();
+  const now = new Date().toISOString();
+  for (const id of ["org_parent", "org_other", "org_team_a", "org_team_b"]) {
+    await db.upsertOrganization({
+      createdAt: now,
+      updatedAt: now,
+      id,
+      name: id,
+      slug: id.replaceAll("_", "-"),
+      parentOrgId: id.startsWith("org_team") ? "org_parent" : null,
+    });
+  }
+  await db.createUser({
+    id: "user_reader",
+    email: "shared-reader@example.com",
+    createdAt: now,
+    updatedAt: now,
+    passwordHash: await authService.hashPassword("password123"),
+  });
+  for (const orgId of ["org_team_a", "org_team_b", "org_other"]) {
+    await db.upsertOrgMember({
+      orgId,
+      userId: "user_reader",
+      role: "viewer",
+      createdAt: now,
+    });
+  }
+  const { document } =
+    await profileService.uploadOrganizationKnowledgeBaseDocument(
+      "org_parent",
+      textDocument("Published parent bytes")
+    );
+  const privateDocument =
+    await profileService.uploadOrganizationKnowledgeBaseDocument("org_parent", {
+      ...textDocument("Private parent bytes"),
+      filename: "private.txt",
+    });
+  const publication = await db.publishOrgSharedResource({
+    id: "publication_knowledge",
+    orgId: "org_parent",
+    resourceId: document.id,
+    resourceKind: "knowledge",
+    createdAt: now,
+    updatedAt: now,
+  });
+  await db.publishOrgSharedResource({
+    id: "publication_other",
+    orgId: "org_other",
+    resourceId: document.id,
+    resourceKind: "knowledge",
+    createdAt: now,
+    updatedAt: now,
+  });
+  const session = await loginUserSession(
+    app,
+    "shared-reader@example.com",
+    "password123"
+  );
+  const read = (
+    pathOrg = "org_team_a",
+    id = publication.id,
+    query = "",
+    activeOrg = pathOrg
+  ) =>
+    app.fetch(
+      new Request(
+        `${BASE}/v1/orgs/${pathOrg}/shared-resources/${id}/content${query}`,
+        { headers: session.headers({}, activeOrg) }
+      )
+    );
+  return {
+    app,
+    db,
+    profileService,
+    publication,
+    document,
+    privateDocument: privateDocument.document,
+    session,
+    read,
+  };
+}
+
+describe("published parent knowledge reads", () => {
+  test("viewers in sibling teams can download and preview published parent bytes without parent membership", async () => {
+    const { db, read } = await setupPublishedKnowledge();
+    expect(await db.getOrgMember("org_parent", "user_reader")).toBeNull();
+    for (const team of ["org_team_a", "org_team_b"]) {
+      const downloaded = await read(team);
+      expect(downloaded.status).toBe(200);
+      expect(downloaded.headers.get("Content-Type")).toBe("text/plain");
+      expect(downloaded.headers.get("Content-Disposition")).toBe(
+        'attachment; filename="handbook.txt"'
+      );
+      expect(await downloaded.text()).toBe("Published parent bytes");
+      const preview = await read(
+        team,
+        undefined,
+        "?inline=1&render=text&parentOrgId=org_other"
+      );
+      expect(preview.status).toBe(200);
+      expect(preview.headers.get("Content-Disposition")).toBe(
+        'inline; filename="handbook.txt"'
+      );
+      expect(await preview.text()).toBe("Published parent bytes");
+    }
+  });
+
+  test("publication IDs do not grant private, foreign, or parent tenant access", async () => {
+    const { app, db, document, privateDocument, publication, read, session } =
+      await setupPublishedKnowledge();
+    const now = new Date().toISOString();
+    await db.publishOrgSharedResource({
+      id: "publication_model",
+      orgId: "org_parent",
+      resourceId: document.id,
+      resourceKind: "model",
+      createdAt: now,
+      updatedAt: now,
+    });
+    for (const id of [
+      document.id,
+      privateDocument.id,
+      "publication_other",
+      "publication_model",
+      "missing",
+    ]) {
+      expect((await read("org_team_a", id)).status).toBe(404);
+    }
+    expect((await read("org_other")).status).toBe(404);
+    expect(
+      (await read("org_parent", publication.id, "", "org_team_a")).status
+    ).toBe(404);
+    expect((await read("org_parent")).status).toBe(404);
+    const parentRead = await app.fetch(
+      new Request(
+        `${BASE}/v1/orgs/org_parent/knowledge-base/${document.id}/content`,
+        { headers: session.headers({}, "org_parent") }
+      )
+    );
+    expect(parentRead.status).toBe(404);
+    const anonymous = await app.fetch(
+      new Request(
+        `${BASE}/v1/orgs/org_team_a/shared-resources/${publication.id}/content`
+      )
+    );
+    expect(anonymous.status).toBe(401);
+  });
+
+  test("new reads fail after revocation, source removal, or archive", async () => {
+    const { db, document, publication, profileService, read } =
+      await setupPublishedKnowledge();
+    expect((await read()).status).toBe(200);
+    await db.deleteOrgSharedResource("org_parent", publication.id);
+    expect((await read()).status).toBe(404);
+    await db.publishOrgSharedResource(publication);
+    const team = await db.getOrganizationById("org_team_a");
+    const sibling = await db.getOrganizationById("org_team_b");
+    await db.upsertOrganization({
+      ...team!,
+      archivedAt: new Date().toISOString(),
+    });
+    expect((await read()).status).toBe(404);
+    await db.upsertOrganization({
+      ...sibling!,
+      archivedAt: new Date().toISOString(),
+    });
+    const parent = await db.getOrganizationById("org_parent");
+    await db.upsertOrganization({
+      ...parent!,
+      archivedAt: new Date().toISOString(),
+    });
+    expect((await read()).status).toBe(404);
+    await expect(
+      profileService.readPublishedKnowledgeBaseDocument(
+        "org_parent",
+        publication.id
+      )
+    ).rejects.toMatchObject({ status: 404 });
+    await db.upsertOrganization({ ...parent!, archivedAt: null });
+    await db.upsertOrganization({ ...team!, archivedAt: null });
+    await db.upsertOrganization({ ...sibling!, archivedAt: null });
+    await profileService.deleteOrganizationKnowledgeBaseDocument(
+      "org_parent",
+      document.id
+    );
+    expect((await read()).status).toBe(404);
+  });
+
+  test("failed documents and missing originals cannot use cached extracted text", async () => {
+    const { document, read } = await setupPublishedKnowledge();
+    const dir = getOrgKnowledgeBaseDir("org_parent");
+    const manifestPath = getKnowledgeBaseManifestPath(dir);
+    const original = await readFile(manifestPath, "utf8");
+    const manifest = JSON.parse(original);
+    manifest.documents.find(
+      (entry: { id: string }) => entry.id === document.id
+    ).status = "failed";
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    expect((await read()).status).toBe(404);
+    await writeFile(manifestPath, original);
+    await rm(
+      getKnowledgeBaseStoredDocumentPath(dir, document.id, document.filename)
+    );
+    expect((await read()).status).toBe(404);
+    expect((await read("org_team_a", undefined, "?render=text")).status).toBe(
+      404
+    );
+  });
+
+  test.each(["stored", "extracted", "manifest", "directory"])(
+    "rejects a %s symlink outside the source directory",
+    async (kind) => {
+      const { document, read } = await setupPublishedKnowledge();
+      const dir = getOrgKnowledgeBaseDir("org_parent");
+      const privateDir = getOrgKnowledgeBaseDir("org_other");
+      const secretPath = `${privateDir}/secret.txt`;
+      await mkdir(privateDir, { recursive: true });
+      await writeFile(secretPath, "Sibling secret");
+      const path =
+        kind === "stored"
+          ? getKnowledgeBaseStoredDocumentPath(
+              dir,
+              document.id,
+              document.filename
+            )
+          : kind === "extracted"
+            ? getKnowledgeBaseExtractedPath(dir, document.id)
+            : kind === "manifest"
+              ? getKnowledgeBaseManifestPath(dir)
+              : dir;
+      await rm(path, { recursive: kind === "directory", force: true });
+      await symlink(kind === "directory" ? privateDir : secretPath, path);
+      const response = await read("org_team_a", undefined, "?render=text");
+      expect(response.status).toBe(404);
+      expect(await response.text()).not.toContain("Sibling secret");
+    }
+  );
+});
 
 async function setupSession(email: string) {
   const { app, authService, databaseAdapter } = createApp();
@@ -718,13 +973,14 @@ describe("organization knowledge base routes", () => {
 
     // SAFETY: This test controls the fixture shape at this boundary.
     const spec = (await response.json()) as {
-      paths: Record<string, { get?: object; post?: object; put?: object }>;
+      paths: Record<string, Record<string, object>>;
     };
 
     const expected: Array<[string, string[]]> = [
       ["/v1/orgs/{orgId}/knowledge-base", ["get", "post"]],
       ["/v1/orgs/{orgId}/knowledge-base/{documentId}", ["delete"]],
       ["/v1/orgs/{orgId}/knowledge-base/{documentId}/content", ["get"]],
+      ["/v1/orgs/{orgId}/shared-resources/{publicationId}/content", ["get"]],
       [
         "/v1/profiles/{profileId}/knowledge-base/shared/{documentId}",
         ["put", "delete"],

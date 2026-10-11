@@ -1288,3 +1288,20 @@ Steps 2 and 5 remain unchecked. The screen, query state, resource execution, por
 Next: add authorized shared resource reads through the active team, then complete execution checks before the Organization screen.
 This slice does not finish a delivery stage. No full-suite rerun, browser check, build, push, or PR ran.
 Evidence: /tmp/nakama-client-foundation-{focused,types,lint}.log.
+
+2026-10-11: Step 2 slice 2o adds knowledge content reads through the active organization's publication IDs.
+GET /v1/orgs/:orgId/shared-resources/:publicationId/content returns original downloads or extracted-text previews through the existing profile service.
+The server derives the source organization from the active tenant. A parent or parentOrgId query cannot grant access to a different source.
+Each request checks active source and team records, a current knowledge publication, ready document metadata, and the original file.
+Directory, manifest, original, and extracted-file guards reject symlinks outside the source directory. Errors expose no private paths or document bytes.
+Team viewers can read published parent documents without parent membership. Existing parent knowledge write and private read permissions remain unchanged.
+Tests cover both sibling teams, foreign publications, private document IDs, wrong resource kinds, context mismatch, anonymous access, revocation, archive, and source removal.
+They also cover failed metadata, missing originals despite cached extracted text, four symlink boundaries, preview headers, downloads, and OpenAPI registration.
+The first focused run found fixture errors: the foreign directory was missing, and the fixture attempted parent archive before child archive.
+The corrected fixtures create the foreign directory and archive children first. Existing archive guards remain effective.
+This slice includes the previously authorized request-schema and byte-response type repairs in the same profiles route module and its test fixture.
+Checks: all 167 focused tests passed across six files; complete server type check passed; lint passed all 1532 files; git diff --check passed.
+Steps 2 and 3 remain unchecked. Knowledge catalogs, profile assignments, indexed and regex search, and the other execution paths remain incomplete.
+Next: supply published parent document references to team knowledge catalogs and searches, with live publication checks.
+No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran.
+Evidence: /tmp/nakama-published-knowledge-{focused,types,lint}.log.

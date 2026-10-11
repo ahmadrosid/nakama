@@ -1,5 +1,5 @@
 import { existsSync, lstatSync, mkdirSync, renameSync } from "node:fs";
-import { cp, rm } from "node:fs/promises";
+import { cp, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type {
   AcpAgentConfig,
@@ -38,8 +38,14 @@ import {
   deleteProfileAvatar,
   ensureKnowledgeBaseDirs,
   getKnowledgeBaseDir,
+  getKnowledgeBaseExtractedPath,
+  getKnowledgeBaseManifestPath,
+  getKnowledgeBaseStoredDocumentPath,
+  getOrgConfigDir,
+  getOrgKnowledgeBaseDir,
   getProfileSharedDocumentIds,
   getProfileSoulDir,
+  guardFilePath,
   hasProfileAvatar,
   initSoulDirectory,
   KnowledgeBaseDocumentInUseError,
@@ -1349,6 +1355,70 @@ export class ProfileService {
           : "Knowledge base document not found.";
 
       throw new NakamaApiError(message, 404);
+    }
+  }
+
+  async readPublishedKnowledgeBaseDocument(
+    orgId: string,
+    publicationId: string,
+    options: { render?: "text" } = {}
+  ): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
+    const organization = await this.db.getOrganizationById(orgId);
+    if (!organization || organization.archivedAt) {
+      throw new NakamaApiError("Not found", 404);
+    }
+    const sourceOrgId = organization.parentOrgId ?? orgId;
+    const source = await this.db.getOrganizationById(sourceOrgId);
+    const publication = await this.db.getOrgSharedResource(
+      sourceOrgId,
+      publicationId
+    );
+    if (
+      !source ||
+      source.archivedAt ||
+      publication?.resourceKind !== "knowledge"
+    ) {
+      throw new NakamaApiError("Not found", 404);
+    }
+    const dir = getOrgKnowledgeBaseDir(sourceOrgId);
+    try {
+      await guardFilePath(dir, null, undefined, {
+        allowedDirs: [getOrgConfigDir(sourceOrgId)],
+      });
+      await guardFilePath(getKnowledgeBaseManifestPath(dir), null, undefined, {
+        allowedDirs: [dir],
+      });
+      const document = (
+        await listOrganizationKnowledgeBaseDocuments(sourceOrgId)
+      ).find(
+        (entry) =>
+          entry.id === publication.resourceId && entry.status === "ready"
+      );
+      if (!document) {
+        throw new NakamaApiError("Not found", 404);
+      }
+      const stored = await guardFilePath(
+        getKnowledgeBaseStoredDocumentPath(dir, document.id, document.filename),
+        null,
+        undefined,
+        { allowedDirs: [dir] }
+      );
+      if (!(await stat(stored.resolved)).isFile()) {
+        throw new NakamaApiError("Not found", 404);
+      }
+      await guardFilePath(
+        getKnowledgeBaseExtractedPath(dir, document.id),
+        null,
+        undefined,
+        { allowedDirs: [dir] }
+      );
+      return await readOrganizationKnowledgeBaseDocumentContent(
+        sourceOrgId,
+        document.id,
+        options
+      );
+    } catch {
+      throw new NakamaApiError("Not found", 404);
     }
   }
 
