@@ -773,6 +773,7 @@ export class ComposioService {
     input: UpdateProfileComposioToolkitsRequest
   ): Promise<ListProfileComposioToolkitsResponse> {
     this.assertProfileOrg(profile, orgId);
+
     if (await this.databaseAdapter.getSharedAgentInstance(orgId, profile.id)) {
       throw new NakamaApiError("Shared agent configuration is read-only.", 403);
     }

@@ -59,7 +59,8 @@ function normalizeActionSlugList(
 }
 
 export function normalizeEnableComposioToolkitRequest(
-  value: JsonValue
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Request inputs are untrusted and validated by the schema below.
+  value: unknown
 ): EnableComposioToolkitRequest {
   const parsed = z
     .object({ toolkitSlug: z.json().optional() })
@@ -75,7 +76,8 @@ export function normalizeEnableComposioToolkitRequest(
 }
 
 export function normalizeUpdateProfileComposioToolkitsRequest(
-  value: JsonValue
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Request inputs are untrusted and validated by the schema below.
+  value: unknown
 ): UpdateProfileComposioToolkitsRequest {
   const parsed = z.object({ assignments: z.array(z.json()) }).safeParse(value);
 
