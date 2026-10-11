@@ -159,12 +159,14 @@ export function resolvePythonBin(
 }
 
 export async function loadPythonTool(
-  record: StoredToolRecord
+  record: StoredToolRecord,
+  sharedContext?: ToolContext
 ): Promise<ToolDefinition | null> {
   return loadCustomSubprocessTool({
     record,
     resolveModulePath: resolveCustomToolModulePath,
-    run: runPythonTool,
+    run: (modulePath, input, context, env) =>
+      runPythonTool(modulePath, input, context, env, Boolean(sharedContext)),
     validateModule: validatePythonToolModule,
   });
 }
@@ -204,20 +206,26 @@ async function runPythonTool<T>(
   modulePath: string,
   input: T,
   context: ToolContext,
-  env?: Record<string, string>
+  env?: Record<string, string>,
+  shared = false
 ): Promise<CustomToolJsonValue> {
   // No try/catch here on purpose: a failed spawn must reject so the retry
   // policy in withToolRetries can retry explicitly opt-in transient failures
   // (RetryableToolError / exit 75). executeToolCall converts the throw into
   // `{ error: message }`.
+  const cwd = shared ? context.workspaceRoot : path.dirname(modulePath);
+  if (!cwd) {
+    throw new Error("Shared tool workspace is unavailable.");
+  }
   const result = await spawnJsonTool({
     args: [modulePath],
     bin: resolvePythonBin(),
     context,
-    cwd: path.dirname(modulePath),
+    cwd,
     env,
     input: customToolJsonValueSchema.parse(input),
     label: "Python tool",
+    transport: shared ? { includeConfigDir: false } : undefined,
     workspaceRoot: readOptionalString(context?.workspaceRoot),
   });
 

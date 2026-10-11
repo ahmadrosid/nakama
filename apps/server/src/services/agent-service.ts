@@ -191,6 +191,7 @@ import {
   rehydrateAttachmentRefsInContent,
   removeTelegramAccessRequest,
   replaceImagePartsWithDescriptions,
+  requireToolNotViewer,
   resolveDiscordApplicationId,
   resolveOllamaHostMode,
   saveComposioConfig,
@@ -4878,14 +4879,81 @@ export class AgentService {
       userId?: string | null;
     } = {}
   ): Promise<ToolDefinition[]> {
-    const storedTools = await this.db.listToolsForProfile(profile.id);
-
-    const tools = await resolveProfileStoredTools(storedTools, this.db, [], {
+    const shared = profile.orgId
+      ? await this.resolveSharedAgentProfile(profile.orgId, profile.id)
+      : null;
+    const storedTools =
+      shared?.assignedTools ?? (await this.db.listToolsForProfile(profile.id));
+    const resolveOptions = {
       actorRole: options.actorRole ?? undefined,
       pluginService: this.pluginService,
       serverTools: this.serverTools,
+      sharedContext: shared
+        ? buildToolExecutionContext({
+            orgId: profile.orgId!,
+            profileId: profile.id,
+          })
+        : undefined,
       userConfig: this.userConfig,
-    });
+    };
+    const tools = await resolveProfileStoredTools(
+      shared
+        ? storedTools.map((record) => ({
+            ...record,
+            orgId: record.orgId ? profile.orgId : null,
+          }))
+        : storedTools,
+      this.db,
+      [],
+      resolveOptions
+    );
+    if (shared) {
+      for (let index = 0; index < tools.length; index++) {
+        const tool = tools[index]!;
+        const record = storedTools.find((item) => item.name === tool.name)!;
+        tools[index] = {
+          ...tool,
+          // The source can replace its handler after the caller selects a batch.
+          parallelSafe: false,
+          run: async (input, context) => {
+            requireToolNotViewer(context);
+            if (
+              !context.orgId ||
+              context.orgId !== profile.orgId ||
+              context.profileId !== profile.id
+            ) {
+              throw new NakamaApiError("Tool is unavailable.", 404);
+            }
+            const current = await this.resolveSharedAgentProfile(
+              context.orgId,
+              profile.id
+            );
+            const assigned = current?.assignedTools.find(
+              (item) => item.id === record.id && item.name === tool.name
+            );
+            if (!assigned) {
+              throw new NakamaApiError("Tool is unavailable.", 404);
+            }
+            const [definition] = await resolveProfileStoredTools(
+              [{ ...assigned, orgId: assigned.orgId ? context.orgId : null }],
+              this.db,
+              [],
+              resolveOptions
+            );
+            if (!definition) {
+              throw new NakamaApiError("Tool is unavailable.", 404);
+            }
+            return definition.run(
+              input,
+              buildToolExecutionContext({
+                ...context,
+                workspaceRoot: undefined,
+              })
+            );
+          },
+        };
+      }
+    }
 
     const includeAutomationTools = options.includeAutomationTools ?? true;
     const includeTodoTools = options.includeTodoTools ?? true;
@@ -5022,6 +5090,12 @@ export class AgentService {
       resolved = resolved.filter((tool) => tool.name !== SUB_AGENT_TOOL_NAME);
     }
 
+    if (
+      shared &&
+      new Set(resolved.map((tool) => tool.name)).size !== resolved.length
+    ) {
+      throw new NakamaApiError("Conflicting tool names are assigned.", 409);
+    }
     return resolved;
   }
 

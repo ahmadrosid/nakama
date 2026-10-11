@@ -4,6 +4,7 @@ import {
   mkdir,
   readdir,
   readFile,
+  realpath,
   rm,
   symlink,
   writeFile,
@@ -13,6 +14,7 @@ import {
   attachSharedKnowledgeBaseDocument,
   type EmailOutboundAdapter,
   type GenerateChatInput,
+  getCustomToolsDir,
   getKnowledgeBaseManifestPath,
   getKnowledgeBaseStoredDocumentPath,
   getOrgConfigDir,
@@ -1830,6 +1832,216 @@ async function seedSharedAgentSelection(
 }
 
 describe("OrgService shared agent selection", () => {
+  test.each([
+    { cognito: false, handlerType: "javascript" },
+    { cognito: true, handlerType: "javascript" },
+    { cognito: false, handlerType: "python" },
+    { cognito: true, handlerType: "python" },
+  ])(
+    "shared stored tools use current definitions and team credentials for %j",
+    async ({ cognito, handlerType }) => {
+      const { orgService, databaseAdapter: db } = createOrgService();
+      const publication = await seedSharedAgentSelection(db, orgService);
+      const profile = await orgService.createSharedAgentInstance(
+        "org_team_a",
+        publication.id,
+        "user_other"
+      );
+      const now = new Date().toISOString();
+      await mkdir(getCustomToolsDir(), { recursive: true });
+      const filename = handlerType === "javascript" ? "shared.js" : "shared.py";
+      const modulePath = join(getCustomToolsDir(), filename);
+      const source =
+        handlerType === "javascript"
+          ? `import {writeFile} from "node:fs/promises";
+export async function run(input, context) {
+  await writeFile("tool.marker", "team");
+  return {keyIsTeam: process.env.NAKAMA_TOOL_API_KEY === "team-key", config: process.env.NAKAMA_CONFIG_DIR ?? null, cwd: process.cwd(), workspace: context.workspaceRoot, version: "first"};
+}`
+          : `import json
+import os
+import sys
+
+def run(input, context):
+    with open("tool.marker", "w") as handle:
+        handle.write("team")
+    return {"keyIsTeam": os.environ.get("NAKAMA_TOOL_API_KEY") == "team-key", "config": os.environ.get("NAKAMA_CONFIG_DIR"), "cwd": os.getcwd(), "workspace": os.environ.get("NAKAMA_WORKSPACE_ROOT"), "version": "first"}
+
+if __name__ == "__main__":
+    print(json.dumps(run(json.loads(sys.stdin.read() or "{}"), {})))
+`;
+      await writeFile(modulePath, source);
+      const record = {
+        createdAt: now,
+        description: "Shared probe",
+        handlerConfig: {
+          modulePath: filename,
+          parameters: { properties: {}, type: "object" },
+          requiresApiKey: true,
+        },
+        handlerType,
+        id: "tool_parent",
+        name: "shared_probe",
+        orgId: "org_parent",
+        updatedAt: now,
+      };
+      await db.upsertTool(record);
+      await db.upsertTool({
+        createdAt: now,
+        description: "Read",
+        handlerConfig: {},
+        handlerType: "builtin",
+        id: "global_read",
+        name: "read_file",
+        orgId: null,
+        updatedAt: now,
+      });
+      await orgService.publishSharedResource(
+        "org_parent",
+        { resourceId: record.id, resourceKind: "tool" },
+        "user_creator"
+      );
+      await saveToolApiKey("org_parent", record.id, "parent-key");
+      const turns: GenerateChatInput[] = [];
+      const agent = new AgentService(null, null, db);
+      agent.setOrgService(orgService);
+      Object.assign(agent, {
+        _providerConfigured: true,
+        createHarnessForProfile: () => ({
+          provider: {
+            generateChat(input: GenerateChatInput) {
+              turns.push(input);
+              return Promise.resolve({
+                assistantMessage: { content: "Done", role: "assistant" },
+                content: "Done",
+                toolCalls: [],
+              });
+            },
+            name: "test",
+          },
+        }),
+      });
+      const id = await agent.createSession(
+        "org_team_a",
+        "web",
+        profile.id,
+        "user_other",
+        { cognito, orgRole: "member" }
+      );
+      const first = (await agent.resolveSession(id, "org_team_a"))!;
+      await first.send("First");
+      await db.assignToolToProfile("profile_template", record.id);
+      await db.assignToolToProfile("profile_template", "global_read");
+      const second = (await agent.resolveSession(id, "org_team_a"))!;
+      expect(second).not.toBe(first);
+      expect(second.getHistory()).toEqual(first.getHistory());
+      await second.send("Second");
+      expect(turns[1]!.tools?.map((tool) => tool.name)).toContain(
+        "shared_probe"
+      );
+      const tools = await agent.resolvePluginExecutionTools(
+        "org_team_a",
+        profile.id
+      );
+      const tool = tools.find((item) => item.name === "shared_probe")!;
+      const read = tools.find((item) => item.name === "read_file")!;
+      const context = agent.buildPluginToolContext("org_team_a", {
+        profileId: profile.id,
+        runId: "run",
+        workflowId: "workflow",
+      });
+      const teamDir = getProfileSoulDir("org_team_a", profile.id);
+      const parentDir = getProfileSoulDir("org_parent", "profile_template");
+      await mkdir(parentDir, { recursive: true });
+      await writeFile(join(teamDir, "note.txt"), "Team note");
+      await writeFile(join(parentDir, "note.txt"), "Private parent note");
+      expect(await tool.run({}, context)).toMatchObject({
+        orgId: "org_team_a",
+        toolId: record.id,
+        type: "tool_credentials_required",
+      });
+      await expect(readFile(join(teamDir, "tool.marker"))).rejects.toThrow();
+      await saveToolApiKey("org_team_a", record.id, "team-key");
+      expect(
+        await tool.run({}, { ...context, workspaceRoot: parentDir })
+      ).toMatchObject({
+        config: null,
+        cwd: await realpath(teamDir),
+        keyIsTeam: true,
+        version: "first",
+        workspace: teamDir,
+      });
+      expect(await readFile(join(teamDir, "tool.marker"), "utf8")).toBe("team");
+      await expect(readFile(join(parentDir, "tool.marker"))).rejects.toThrow();
+      expect(
+        await read.run(
+          { path: "note.txt" },
+          { ...context, workspaceRoot: parentDir }
+        )
+      ).toHaveProperty("content", "Team note");
+      for (const denied of [
+        { ...context, orgRole: "viewer" as const },
+        { ...context, orgId: "org_team_b" },
+        { ...context, profileId: "profile_template" },
+      ]) {
+        await expect(tool.run({}, denied)).rejects.toMatchObject({
+          status: denied.orgRole === "viewer" ? 403 : 404,
+        });
+      }
+      await writeFile(modulePath, source.replace('"first"', '"updated"'));
+      await db.upsertTool({ ...record, name: "ask_user_question" });
+      await expect(
+        agent.resolvePluginExecutionTools("org_team_a", profile.id)
+      ).rejects.toMatchObject({ status: 409 });
+      await db.upsertTool({
+        ...record,
+        handlerConfig: {
+          ...record.handlerConfig,
+          parameters: {
+            properties: { updated: { type: "string" } },
+            type: "object",
+          },
+        },
+      });
+      const third = (await agent.resolveSession(id, "org_team_a"))!;
+      expect(third).not.toBe(second);
+      expect(third.getHistory()).toEqual(second.getHistory());
+      const current = (
+        await agent.resolvePluginExecutionTools("org_team_a", profile.id)
+      ).find((item) => item.name === "shared_probe")!;
+      expect(current.parameters).toMatchObject({
+        properties: { updated: { type: "string" } },
+      });
+      expect(await tool.run({}, context)).toMatchObject({
+        keyIsTeam: true,
+        version: "updated",
+      });
+      await third.send("Third");
+      await db.unassignToolFromProfile("profile_template", record.id);
+      await expect(tool.run({}, context)).rejects.toMatchObject({
+        status: 404,
+      });
+      expect(await db.listToolsForProfile(profile.id)).toEqual([]);
+      expect(await loadToolApiKey("org_parent", record.id)).toBe("parent-key");
+      await orgService.unpublishSharedResource(
+        "org_parent",
+        publication.id,
+        "user_creator"
+      );
+      await expect(
+        read.run({ path: "note.txt" }, context)
+      ).rejects.toMatchObject({ status: 404 });
+      expect(
+        (await agent.getSessionMessages(id, "org_team_a"))!.messages.filter(
+          (message) => message.role === "user"
+        )
+      ).toHaveLength(3);
+      if (cognito) {
+        expect(await db.getSession(id)).toBeNull();
+      }
+    }
+  );
+
   test("shared profile resolution uses only permitted current source settings", async () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     const publication = await seedSharedAgentSelection(db, orgService);

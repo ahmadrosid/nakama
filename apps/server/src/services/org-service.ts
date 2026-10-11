@@ -64,6 +64,7 @@ import type {
   StoredOrgSharedResourceRecord,
   StoredPasswordResetTokenRecord,
   StoredProfileRecord,
+  StoredToolRecord,
   StoredUserRecord,
 } from "@nakama/db";
 import {
@@ -399,6 +400,7 @@ export class OrgService {
     profileId: string
   ): Promise<
     | (StoredProfileRecord & {
+        assignedTools: StoredToolRecord[];
         publishedSoul: Pick<SoulStackFiles, "soul" | "style" | "instructions">;
       })
     | null
@@ -447,6 +449,7 @@ export class OrgService {
       ...profile,
       acpAgent: null,
       acpSettings: null,
+      assignedTools: await this.databaseAdapter.listToolsForProfile(source.id),
       isDefault: false,
       isSuper: false,
       model: source.model,

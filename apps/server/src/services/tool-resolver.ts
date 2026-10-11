@@ -15,7 +15,7 @@ import { createCustomWebSearchTool } from "@nakama/core/tools/custom-web-search"
 import { emailTool } from "@nakama/core/tools/email";
 import { loadWebSearchConfig } from "@nakama/core/web-search-config";
 import type { DatabaseAdapter, StoredToolRecord } from "@nakama/db";
-import { bashTool, runBash } from "../tools/bash";
+import { type BashInput, bashTool, runBash } from "../tools/bash";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
 import { getCustomToolHandler } from "./custom-tool-handlers";
 import type { PluginService } from "./plugin-service";
@@ -32,6 +32,7 @@ export type ResolveStoredToolsOptions = {
   actorRole?: PluginActorRole;
   pluginService?: PluginService | null;
   serverTools?: ServerToolOverrides;
+  sharedContext?: ToolContext;
   userConfig?: UserConfig | null;
 };
 
@@ -99,7 +100,8 @@ export async function resolveToolsFromStorage(
       builtinMap,
       serverTools,
       options.pluginService,
-      options.actorRole
+      options.actorRole,
+      options.sharedContext
     );
 
     if (tool) {
@@ -115,7 +117,8 @@ async function resolveStoredTool(
   builtinMap: Map<string, ToolDefinition>,
   serverTools: Map<string, ToolDefinition>,
   pluginService?: PluginService | null,
-  actorRole?: PluginActorRole
+  actorRole?: PluginActorRole,
+  sharedContext?: ToolContext
 ): Promise<ToolDefinition | null> {
   if (record.handlerType === "builtin") {
     return builtinMap.get(record.name) ?? null;
@@ -137,7 +140,7 @@ async function resolveStoredTool(
   const customHandler = getCustomToolHandler(record.handlerType);
 
   if (customHandler) {
-    return customHandler.load(record);
+    return customHandler.load(record, sharedContext);
   }
 
   return null;
@@ -169,7 +172,7 @@ function buildServerTools(
 function createCodingAgentAwareBashTool(
   db: DatabaseAdapter,
   userConfig?: UserConfig | null
-): ToolDefinition {
+): ToolDefinition<BashInput> {
   return {
     ...bashTool,
     run: async (input, context: ToolContext) => {

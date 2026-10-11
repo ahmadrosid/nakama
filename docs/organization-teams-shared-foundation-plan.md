@@ -1585,3 +1585,17 @@ Checks: 242 focused tests passed across six service and session route files; the
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: implement permitted shared agent tool and integration assignments, then finish shared tool catalogs and model use checks.
 No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-shared-agent-skills-complete-focused.log and /tmp/nakama-shared-agent-skills-{types,lint}.log.
+
+### Slice 2ag — live shared agent stored tool assignments
+Shared agent runtime records now include current source tool assignments. Cached persisted and ephemeral sessions refresh after assignment and definition changes.
+AgentService resolves these assignments in team context without copying database rows. Retained tools check the current source publication, assignment, name, and definition before execution.
+Execution requires the same team and profile, rejects viewers, and rebuilds the team workspace context. Shared stored tools run sequentially because their handlers can change after batch selection.
+JavaScript and Python tools use team credentials and the team working directory. Their child processes omit the configuration directory environment variable. Local tool execution retains its existing behavior.
+Shared tool resolution rejects duplicate executable names, including conflicts with generated session helpers.
+Tests cover both session modes and both script languages, missing team credentials, private parent credentials, workspace isolation, built-in file reads, changed code and schemas, removed assignments, agent revocation, and helper-name conflicts.
+The first focused run found canonical filesystem path differences in the test fixture. Repair one uses realpath. The first type check found optional organization and workspace values. Repair two adds explicit guards.
+Checks: 306 focused tests passed across ten files, with four Windows tests skipped. The conflict test passed among 92 organization tests. Final runtime checks passed 98 tests across two files. The complete server type check, lint across 1532 files, and git diff --check passed.
+The touched tool-resolver file also includes its previously authorized BashInput type correction. Other authorized type cleanup remains uncommitted.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: implement permitted shared agent integration assignments and shared tool catalog and credential setup access.
+No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran.
+Evidence: /tmp/nakama-shared-tools-final-focused.log, /tmp/nakama-shared-tools-verified-org.log, /tmp/nakama-shared-tools-verified-runtime.log, /tmp/nakama-shared-tools-verified-types-final.log, and /tmp/nakama-shared-tools-lint.log.

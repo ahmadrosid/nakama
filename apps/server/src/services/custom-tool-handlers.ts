@@ -20,7 +20,10 @@ export interface CustomToolHandler {
   extension: string;
   /** Language tag returned by tool-source for this handler type. */
   language: ToolSourceResponse["language"];
-  load(record: StoredToolRecord): Promise<ToolDefinition | null>;
+  load(
+    record: StoredToolRecord,
+    sharedContext?: ToolContext
+  ): Promise<ToolDefinition | null>;
   resolveModulePath(modulePath: string): string;
   validateModule(modulePath: string): Promise<void>;
 }
@@ -180,8 +183,8 @@ export function getCustomToolHandler(
     ...handler,
     // Both loader types resolve through this seam, so wrapping load here
     // applies the retry policy to JavaScript and Python in one place.
-    load: async (record) => {
-      const definition = await handler.load(record);
+    load: async (record, sharedContext) => {
+      const definition = await handler.load(record, sharedContext);
 
       if (!definition) {
         return null;
