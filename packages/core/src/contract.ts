@@ -2428,6 +2428,9 @@ export interface ToolDetail extends ToolSummary {
   handlerConfig: unknown;
   /** Resolved JSON Schema for javascript tools (module export or handlerConfig). */
   parameters?: JsonSchema;
+  publicationId?: string;
+  scope?: "parent";
+  sourceOrganization?: { id: string; name: string };
   updatedAt: string;
 }
 

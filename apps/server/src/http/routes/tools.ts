@@ -125,8 +125,17 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
     toolId: z.string().openapi({ param: { in: "path", name: "toolId" } }),
   });
 
+  const toolDetailSchema = z
+    .object({
+      publicationId: z.string().optional(),
+      scope: z.literal("parent").optional(),
+      sourceOrganization: z
+        .object({ id: z.string(), name: z.string() })
+        .optional(),
+    })
+    .passthrough();
   const listToolsSchema = z
-    .object({})
+    .object({ tools: z.array(toolDetailSchema) })
     .passthrough()
     .openapi("ListToolsResponse");
 

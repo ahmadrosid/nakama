@@ -4,8 +4,10 @@ import type { AgentService } from "../../services/agent-service";
 import {
   loadToolApiKey,
   loadToolSetup,
+  saveToolApiKey,
   saveToolSetup,
 } from "../../services/custom-tool-shared";
+import { ProfileService } from "../../services/profile-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import {
@@ -46,6 +48,106 @@ function createApp(agentOverrides: Partial<AgentService> = {}) {
 }
 
 describe("tool playground routes", () => {
+  test("published parent tool credentials belong to the active team and require publication", async () => {
+    let service: ProfileService;
+    const {
+      app,
+      authService,
+      databaseAdapter: db,
+    } = createApp({ listTools: (orgId) => service.listTools(orgId) });
+    service = new ProfileService(db);
+    const { orgId: parentOrgId, adminSession } = await createOrgAdminSession(
+      app,
+      authService,
+      db,
+      "shared-tools-team",
+      "shared-tools-admin@acme.com"
+    );
+    const now = new Date().toISOString();
+    const orgId = "tool_team";
+    await db.upsertOrganization({
+      id: orgId,
+      name: "Team",
+      slug: "tool-team",
+      parentOrgId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const user = (await db.getUserByEmail("shared-tools-admin@acme.com"))!;
+    await db.upsertOrgMember({
+      orgId,
+      userId: user.id,
+      role: "admin",
+      createdAt: now,
+    });
+    await db.upsertTool({
+      id: "published_parent_tool",
+      orgId: parentOrgId,
+      name: "Published",
+      description: "Probe",
+      handlerType: "javascript",
+      handlerConfig: { modulePath: "/private/tool.js", requiresApiKey: true },
+      createdAt: now,
+      updatedAt: now,
+    });
+    const publication = await db.publishOrgSharedResource({
+      id: "tool_publication",
+      orgId: parentOrgId,
+      resourceKind: "tool",
+      resourceId: "published_parent_tool",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await saveToolApiKey(parentOrgId, "published_parent_tool", "parent-key");
+    const url =
+      "http://localhost:4310/v1/tools/published_parent_tool/credentials";
+    const status = () =>
+      app.fetch(new Request(url, { headers: adminSession.headers({}, orgId) }));
+    const before = await status();
+    expect(before.status).toBe(200);
+    expect(await before.json()).toEqual({ configured: false });
+    const saved = await app.fetch(
+      new Request(url, {
+        method: "PUT",
+        headers: adminSession.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": adminSession.csrfToken,
+          },
+          orgId
+        ),
+        body: JSON.stringify({ apiKey: "team-key" }),
+      })
+    );
+    expect(saved.status).toBe(200);
+    expect(await loadToolApiKey(orgId, "published_parent_tool")).toBe(
+      "team-key"
+    );
+    expect(await loadToolApiKey(parentOrgId, "published_parent_tool")).toBe(
+      "parent-key"
+    );
+    const after = await status();
+    expect(await after.json()).toEqual({ configured: true });
+    await db.deleteOrgSharedResource(parentOrgId, publication.id);
+    expect((await status()).status).toBe(404);
+    const denied = await app.fetch(
+      new Request(url, {
+        method: "PUT",
+        headers: adminSession.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": adminSession.csrfToken,
+          },
+          orgId
+        ),
+        body: JSON.stringify({ apiKey: "replacement" }),
+      })
+    );
+    expect(denied.status).toBe(404);
+    expect(await loadToolApiKey(orgId, "published_parent_tool")).toBe(
+      "team-key"
+    );
+  });
   test("setup approval validates org and target, keeps keys private, and is idempotent", async () => {
     let visibleOrg = "";
 
@@ -55,7 +157,24 @@ describe("tool playground routes", () => {
           throw new NakamaApiError("Profile not found.", 404);
         }
 
-        return { profile: { id: profileId } };
+        return {
+          profile: {
+            createdAt: "2026-10-11T00:00:00.000Z",
+            hasAvatar: false,
+            id: profileId,
+            isSuper: false,
+            mcpServerCount: 0,
+            mcpServers: [],
+            model: null,
+            name: "Target",
+            skills: [],
+            soulActive: false,
+            systemPrompt: "",
+            toolCount: 0,
+            tools: [],
+            updatedAt: "2026-10-11T00:00:00.000Z",
+          },
+        };
       },
     });
 
@@ -133,27 +252,36 @@ describe("tool playground routes", () => {
           orgId === visibleOrg
             ? [
                 {
+                  createdAt: "2026-10-11T00:00:00.000Z",
+                  description: "Key tool",
+                  handlerConfig: {},
+                  handlerType: "javascript",
                   id: "tool_key",
                   name: "key_tool",
-                  handlerType: "javascript",
-                  handlerConfig: {},
+                  updatedAt: "2026-10-11T00:00:00.000Z",
                 },
                 {
-                  id: "tool_env",
-                  name: "env_tool",
-                  handlerType: "python",
+                  createdAt: "2026-10-11T00:00:00.000Z",
+                  description: "Environment tool",
                   handlerConfig: {
                     env: [
                       { name: "SERVICE_URL" },
                       { name: "SERVICE_KEY", secret: true },
                     ],
                   },
+                  handlerType: "python",
+                  id: "tool_env",
+                  name: "env_tool",
+                  updatedAt: "2026-10-11T00:00:00.000Z",
                 },
                 {
+                  createdAt: "2026-10-11T00:00:00.000Z",
+                  description: "Built-in tool",
+                  handlerConfig: {},
+                  handlerType: "builtin",
                   id: "tool_builtin",
                   name: "builtin_tool",
-                  handlerType: "builtin",
-                  handlerConfig: {},
+                  updatedAt: "2026-10-11T00:00:00.000Z",
                 },
               ]
             : [],

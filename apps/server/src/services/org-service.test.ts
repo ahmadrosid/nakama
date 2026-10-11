@@ -1834,6 +1834,155 @@ async function seedSharedAgentSelection(
 }
 
 describe("OrgService shared agent selection", () => {
+  test("team tool catalogs show current published sources without parent paths or secrets", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    await seedSharedAgentSelection(db, orgService);
+    const service = new ProfileService(db);
+    const now = new Date().toISOString();
+    const record = {
+      createdAt: now,
+      description: "Published",
+      handlerConfig: {
+        env: [{ name: "TOKEN", secret: true, value: "parent-secret" }],
+        modulePath: "/private/parent/tool.js",
+        requiresApiKey: true,
+        token: "parent-secret",
+      },
+      handlerType: "javascript",
+      id: "published_tool",
+      name: "Same name",
+      orgId: "org_parent",
+      updatedAt: now,
+    };
+    await db.upsertTool(record);
+    await db.upsertTool({ ...record, id: "private_tool", name: "Private" });
+    await db.upsertTool({
+      ...record,
+      id: "foreign_tool",
+      name: "Foreign",
+      orgId: "org_team_b",
+    });
+    await db.upsertTool({
+      ...record,
+      description: "Local",
+      handlerConfig: {},
+      id: "local_tool",
+      orgId: "org_team_a",
+    });
+    await db.upsertTool({
+      ...record,
+      description: "Global",
+      handlerConfig: {},
+      id: "global_tool",
+      orgId: null,
+    });
+    const publication = await orgService.publishSharedResource(
+      "org_parent",
+      { resourceId: record.id, resourceKind: "tool" },
+      "user_creator"
+    );
+    const globalPublication = await orgService.publishSharedResource(
+      "org_parent",
+      { resourceId: "global_tool", resourceKind: "tool" },
+      "user_creator"
+    );
+    const catalog = await service.listTools("org_team_a");
+    const shared = catalog.tools.find((tool) => tool.id === record.id)!;
+    expect(shared).toMatchObject({
+      handlerConfig: {
+        env: [{ name: "TOKEN", secret: true }],
+        requiresApiKey: true,
+      },
+      name: "Same name",
+      publicationId: publication.id,
+      scope: "parent",
+      sourceOrganization: { id: "org_parent", name: "org_parent" },
+    });
+    expect(JSON.stringify(shared)).not.toContain("/private/parent");
+    expect(JSON.stringify(shared)).not.toContain("parent-secret");
+    expect(
+      catalog.tools.filter((tool) => tool.name === "Same name")
+    ).toHaveLength(3);
+    expect(
+      catalog.tools.some(
+        (tool) => tool.id === "private_tool" || tool.id === "foreign_tool"
+      )
+    ).toBe(false);
+    expect(
+      catalog.tools.filter((tool) => tool.id === "global_tool")
+    ).toHaveLength(1);
+    await db.upsertTool({ ...record, name: "Renamed" });
+    expect(
+      (await service.listTools("org_team_a")).tools.find(
+        (tool) => tool.id === record.id
+      )?.name
+    ).toBe("Renamed");
+    await orgService.unpublishSharedResource(
+      "org_parent",
+      publication.id,
+      "user_creator"
+    );
+    expect(
+      (await service.listTools("org_team_a")).tools.some(
+        (tool) => tool.id === record.id
+      )
+    ).toBe(false);
+    await orgService.unpublishSharedResource(
+      "org_parent",
+      globalPublication.id,
+      "user_creator"
+    );
+    expect(
+      (await service.listTools("org_team_a")).tools.some(
+        (tool) => tool.id === "global_tool"
+      )
+    ).toBe(true);
+    await orgService.publishSharedResource(
+      "org_parent",
+      { resourceId: record.id, resourceKind: "tool" },
+      "user_creator"
+    );
+    const parent = (await db.getOrganizationById("org_parent"))!;
+    const readOrg = db.getOrganizationById.bind(db);
+    let parentView = { ...parent, archivedAt: now };
+    const lookup = spyOn(db, "getOrganizationById").mockImplementation((id) =>
+      id === parent.id ? Promise.resolve(parentView) : readOrg(id)
+    );
+    try {
+      expect(
+        (await service.listTools("org_team_a")).tools.some(
+          (tool) => tool.id === record.id
+        )
+      ).toBe(false);
+      parentView = { ...parent, archivedAt: "", parentOrgId: "org_team_b" };
+      expect(
+        (await service.listTools("org_team_a")).tools.some(
+          (tool) => tool.id === record.id
+        )
+      ).toBe(false);
+    } finally {
+      lookup.mockRestore();
+    }
+    const team = (await db.getOrganizationById("org_team_a"))!;
+    await db.upsertOrganization({ ...team, archivedAt: now });
+    expect(
+      (await service.listTools("org_team_a")).tools.some(
+        (tool) => tool.id === record.id
+      )
+    ).toBe(false);
+    await db.upsertOrganization(team);
+    await db.deleteTool(record.id);
+    expect(
+      (await service.listTools("org_team_a")).tools.some(
+        (tool) => tool.id === record.id
+      )
+    ).toBe(false);
+    expect(
+      (await service.listTools("org_team_b")).tools.some(
+        (tool) => tool.id === "local_tool"
+      )
+    ).toBe(false);
+  });
   test.each([false, true])(
     "shared MCP assignments refresh and check execution for cognito=%s",
     async (cognito) => {

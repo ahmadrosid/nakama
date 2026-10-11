@@ -97,7 +97,10 @@ import {
   getCustomToolHandler,
   isCustomToolType,
 } from "./custom-tool-handlers";
-import { parseToolEnvDeclarations } from "./custom-tool-shared";
+import {
+  parseToolEnvDeclarations,
+  readToolEnvDeclarations,
+} from "./custom-tool-shared";
 import { toMcpServerSummaries } from "./mcp-service";
 import { MemoryBackendService } from "./memory-backend-service";
 import {
@@ -748,11 +751,44 @@ export class ProfileService {
   async listTools(orgId: string): Promise<ListToolsResponse> {
     await ensureBuiltinToolDefinitions(this.db);
 
-    const tools = (await this.db.listTools()).filter(
-      (tool) => !tool.orgId || tool.orgId === orgId
-    );
-
-    return { tools: tools.map(toToolDetail) };
+    const records = await this.db.listTools();
+    const tools = records.filter((tool) => !tool.orgId || tool.orgId === orgId);
+    const details = tools.map(toToolDetail);
+    const team = await this.db.getOrganizationById(orgId);
+    const parent =
+      team?.parentOrgId && !team.archivedAt
+        ? await this.db.getOrganizationById(team.parentOrgId)
+        : null;
+    if (parent && !parent.archivedAt && !parent.parentOrgId) {
+      const publications = await this.db.listOrgSharedResources(parent.id);
+      for (const publication of publications) {
+        if (publication.resourceKind !== "tool") {
+          continue;
+        }
+        const record = records.find(
+          (tool) =>
+            tool.id === publication.resourceId && tool.orgId === parent.id
+        );
+        if (!record) {
+          continue;
+        }
+        const config = z
+          .object({ requiresApiKey: z.boolean().optional() })
+          .safeParse(record.handlerConfig);
+        details.push({
+          ...toToolDetail(record),
+          handlerConfig: {
+            env: readToolEnvDeclarations(record.handlerConfig),
+            requiresApiKey:
+              config.success && config.data.requiresApiKey === true,
+          },
+          publicationId: publication.id,
+          scope: "parent",
+          sourceOrganization: { id: parent.id, name: parent.name },
+        });
+      }
+    }
+    return { tools: details };
   }
 
   async getTool(toolId: string): Promise<ToolResponse> {

@@ -1612,3 +1612,18 @@ Checks: 204 focused tests passed across six service and session route files. The
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: implement shared tool catalog, assignment, and team credential setup access, then finish model and compatibility checks.
 No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-shared-mcp-final-focused.log, /tmp/nakama-shared-mcp-final-types.log, and /tmp/nakama-shared-mcp-lint.log.
+
+### Slice 2ai — published parent tool catalog and team credential access
+ProfileService now adds current published parent tools to the active team's existing tool catalog. It checks the active team, active root parent, current publication, and current source ownership.
+Local and global tools retain their existing catalog behavior. Global publications do not duplicate global entries or remove their access after publication removal.
+Shared catalog entries retain stable source tool IDs and include publication and source organization labels. Equal local, global, and shared names remain separate entries.
+Shared handler configuration contains only API-key requirements and parsed environment declarations. Parent module paths, private configuration fields, and credential values do not appear in shared entries.
+ToolDetail and the existing list OpenAPI schema describe the optional shared source fields. No new endpoint is needed for catalog reads.
+The existing credential routes use this catalog authorization. Tests confirm that a team admin sees its own credential status, saves only a team key, preserves the parent key, and cannot read or replace credentials after publication removal.
+Catalog tests cover current renames, unpublished and foreign sources, source deletion, archived team and parent reads, invalid parent depth, equal names, and global compatibility.
+The first run found an incorrect expected parent name. Repair one corrects the fixture expectation and adds the credential route test. The next run found database guards rejecting invalid archive and reparenting setup. Repair two creates a valid child and uses controlled parent reads for invalid source-state checks.
+Checks: 158 focused tests passed across three service and HTTP route files, with two Windows tests skipped. Complete server and core type checks, lint across 1532 files, and git diff --check passed.
+The touched tools route test file also includes its previously authorized test response type cleanup. Other authorized type cleanup remains uncommitted.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: authorize parent tool detail reads and profile assignments, then recheck published tools across normal agent and playground execution.
+No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran.
+Evidence: /tmp/nakama-tool-catalog-final-focused.log, /tmp/nakama-tool-catalog-final-server-types.log, /tmp/nakama-tool-catalog-final-core-types.log, and /tmp/nakama-tool-catalog-lint.log.
