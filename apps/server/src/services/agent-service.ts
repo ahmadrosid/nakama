@@ -394,6 +394,7 @@ interface StoredSession {
   pluginRevision: string;
   profileId: string;
   session: AgentChatSession;
+  sharedSkillRevision?: string;
 }
 
 export type { SubAgentRunInput, SubAgentRunResult };
@@ -2268,6 +2269,11 @@ export class AgentService {
         lastActiveAt: Date.now(),
         record,
         session,
+        sharedSkillRevision:
+          (await this.skillsService?.capabilityRevisionForProfile(
+            orgId,
+            resolvedProfileId
+          )) ?? "",
       });
 
       return sessionId;
@@ -2278,6 +2284,11 @@ export class AgentService {
       pluginRevision: await this.pluginCapabilityRevision(orgId),
       profileId: resolvedProfileId,
       session,
+      sharedSkillRevision:
+        (await this.skillsService?.capabilityRevisionForProfile(
+          orgId,
+          resolvedProfileId
+        )) ?? "",
     });
 
     return sessionId;
@@ -2398,8 +2409,14 @@ export class AgentService {
       { initialHistory: [...entry.session.getHistory()] }
     );
 
+    const sharedSkillRevision =
+      (await this.skillsService?.capabilityRevisionForProfile(
+        orgId,
+        entry.record.profileId
+      )) ?? "";
     entry.record.model = model;
     entry.session = session;
+    entry.sharedSkillRevision = sharedSkillRevision;
     await this.ephemeralSessions.set(entry);
 
     return true;
@@ -2743,7 +2760,8 @@ export class AgentService {
 
   async resolveSession(
     sessionId: string,
-    orgId: string
+    orgId: string,
+    forNewTurn = false
   ): Promise<AgentChatSession | null> {
     const record = await this.getSessionRecordForOrg(sessionId, orgId);
 
@@ -2751,23 +2769,35 @@ export class AgentService {
       return null;
     }
 
-    // Never rebuilt: the history only exists inside this object, so dropping
-    // it to pick up a config change would silently empty the conversation.
     const ephemeral = this.ephemeralSessions.get(sessionId);
-
+    const stored = this.sessions.get(sessionId);
+    if (sessionTurnRegistry.isActive(sessionId) && !forNewTurn) {
+      const active = ephemeral?.session ?? stored?.session;
+      if (active) {
+        return active;
+      }
+    }
+    const sharedSkillRevision =
+      (await this.skillsService?.capabilityRevisionForProfile(
+        orgId,
+        record.profileId
+      )) ?? "";
     if (ephemeral) {
+      if (
+        (ephemeral.sharedSkillRevision ?? "") !== sharedSkillRevision &&
+        !(await this.rebuildEphemeralSession(ephemeral, orgId, record.model))
+      ) {
+        throw new NakamaApiError("Session refresh failed. Try again.", 503);
+      }
       return ephemeral.session;
     }
-
-    const stored = this.sessions.get(sessionId);
     const pluginRevision = await this.pluginCapabilityRevision(orgId);
-
-    if (stored && stored.pluginRevision === pluginRevision) {
+    if (
+      stored &&
+      stored.pluginRevision === pluginRevision &&
+      (stored.sharedSkillRevision ?? "") === sharedSkillRevision
+    ) {
       return stored.session;
-    }
-
-    if (stored) {
-      this.sessions.delete(sessionId);
     }
 
     const channel = parseAgentChannel(record.channel);
@@ -2801,6 +2831,7 @@ export class AgentService {
       pluginRevision,
       profileId: record.profileId,
       session,
+      sharedSkillRevision,
     });
 
     return session;
@@ -2895,14 +2926,22 @@ export class AgentService {
       return null;
     }
 
-    const cached = this.sessions.get(sessionId);
-    const pluginRevision = await this.pluginCapabilityRevision(orgId);
-
-    if (cached && cached.pluginRevision !== pluginRevision) {
-      this.sessions.delete(sessionId);
+    const turn = sessionTurnRegistry.beginTurn(sessionId);
+    if (!turn.started) {
+      return false;
     }
-
-    return sessionTurnRegistry.beginTurn(sessionId).started;
+    try {
+      if (
+        this.sessions.has(sessionId) ||
+        this.ephemeralSessions.has(sessionId)
+      ) {
+        await this.resolveSession(sessionId, orgId, true);
+      }
+      return true;
+    } catch (error) {
+      sessionTurnRegistry.cancelTurn(sessionId);
+      throw error;
+    }
   }
 
   async clearSession(sessionId: string, orgId: string): Promise<boolean> {

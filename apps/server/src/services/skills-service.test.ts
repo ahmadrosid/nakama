@@ -19,9 +19,12 @@ import {
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createMinimalHonoApp } from "../http/test-app-helpers";
 import { loginUserSession } from "../http/test-session-helpers";
+import type { AgentQuestionnaireState } from "./agent-questionnaire-state";
 import { AgentService } from "./agent-service";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
+import type { AgentTodoState } from "./agent-todo-state";
 import { ProfileService } from "./profile-service";
+import { sessionTurnRegistry } from "./session-turn-registry";
 import { SkillCuratorService } from "./skill-curator-service";
 import { SkillProposalService } from "./skill-proposal-service";
 import { SkillsService } from "./skills-service";
@@ -580,6 +583,170 @@ if __name__ == "__main__":
       status: 404,
     });
   });
+
+  test.each([false, true])(
+    "cached shared tools refresh with history for cognito=%s",
+    async (cognito) => {
+      const { db, service, skill, publication } = await setupPublishedSkill();
+      const now = new Date().toISOString();
+      await db.createUser({
+        createdAt: now,
+        email: "shared@example.com",
+        id: "shared-user",
+        passwordHash: "unused",
+        updatedAt: now,
+      });
+      await db.upsertOrgMember({
+        createdAt: now,
+        orgId: "team_a",
+        role: "member",
+        userId: "shared-user",
+      });
+      await db.setUserContext(
+        "team_a",
+        "shared-user",
+        "User context to preserve",
+        now
+      );
+      await writeFile(
+        join(skill.sourcePath, "tool.js"),
+        'export const name = "shared-notes"; export const parameters = {type: "object", properties: {old: {type: "string"}}}; export async function run() { return "done"; }'
+      );
+      await db.upsertOrganization({
+        ...(await db.getOrganizationById("parent"))!,
+        skillsWriteApproval: true,
+      });
+      const proposals = new SkillProposalService(db, service);
+      const approve = async () => {
+        const staged = await proposals.stageProposal({
+          action: "approve_code",
+          orgId: "parent",
+          profileId: "profile_parent",
+          relativePath: "tool.js",
+          skillName: "shared-notes",
+        });
+        await proposals.approveProposal("parent", staged.proposalId!, "admin");
+      };
+      await approve();
+      const turns: GenerateChatInput[] = [];
+      let failBuild = false;
+      const agent = new AgentService(null, null, db);
+      agent.setSkillsService(service);
+      Object.assign(agent, {
+        _providerConfigured: true,
+        createHarnessForProfile: () => ({
+          provider: {
+            generateChat(input: GenerateChatInput) {
+              turns.push(input);
+              return Promise.resolve({
+                assistantMessage: { content: "Done", role: "assistant" },
+                content: "Done",
+                toolCalls: [],
+              });
+            },
+            name: "test",
+          },
+        }),
+        resolveProfileTools: async (profile: { orgId: string; id: string }) => {
+          if (failBuild) {
+            throw new Error("Build failed");
+          }
+          return service.loadToolsForProfile(profile.orgId, profile.id);
+        },
+      });
+      const id = await agent.createSession(
+        "team_a",
+        "web",
+        "profile_team_a",
+        "shared-user",
+        { cognito, orgRole: "member" }
+      );
+      const first = (await agent.resolveSession(id, "team_a"))!;
+      await first.send("First");
+      expect(turns[0]!.tools?.map((tool) => tool.name) ?? []).not.toContain(
+        "shared-notes"
+      );
+      const state = agent as unknown as {
+        agentTodoState: AgentTodoState;
+        agentQuestionnaireState: AgentQuestionnaireState;
+      };
+      const todos = await state.agentTodoState.write(id, {
+        merge: false,
+        todos: [{ content: "Keep task", id: "todo", status: "pending" }],
+      });
+      const questionnaire = await state.agentQuestionnaireState.write(id, {
+        id: "questionnaire",
+        questions: [
+          {
+            allowCustomAnswer: false,
+            choices: [{ id: "choice", label: "One" }],
+            id: "question",
+            prompt: "Choose",
+          },
+        ],
+        title: "Choice",
+      });
+      await db.assignSkillToProfile("profile_team_a", skill.id);
+      failBuild = true;
+      await expect(agent.resolveSession(id, "team_a")).rejects.toThrow();
+      expect(
+        first.getHistory().filter((message) => message.role === "user")
+      ).toHaveLength(1);
+      expect(await agent.getSessionTodos(id, "team_a")).toEqual(todos);
+      expect(await agent.getSessionQuestionnaire(id, "team_a")).toEqual(
+        questionnaire
+      );
+      failBuild = false;
+      expect(await agent.beginSessionTurn(id, "team_a")).toBe(true);
+      const second = (await agent.resolveSession(id, "team_a"))!;
+      expect(second).not.toBe(first);
+      expect(second.getHistory()).toEqual(first.getHistory());
+      expect(await agent.getSessionQuestionnaire(id, "team_a")).toEqual(
+        questionnaire
+      );
+      sessionTurnRegistry.cancelTurn(id);
+      await second.send("Second");
+      expect(turns[1]!.tools?.map((tool) => tool.name)).toContain(
+        "shared-notes"
+      );
+      expect(turns[1]!.system).toContain("User context to preserve");
+      await writeFile(
+        join(skill.sourcePath, "tool.js"),
+        'export const name = "shared-notes"; export const parameters = {type: "object", properties: {current: {type: "number"}}}; export async function run() { return "done"; }'
+      );
+      await approve();
+      const updated = (await agent.resolveSession(id, "team_a"))!;
+      expect(updated).not.toBe(second);
+      await updated.send("Third");
+      expect(
+        turns[2]!.tools?.find((tool) => tool.name === "shared-notes")
+          ?.parameters
+      ).toMatchObject({ properties: { current: { type: "number" } } });
+      await db.deleteOrgSharedResource("parent", publication.id);
+      const revoked = (await agent.resolveSession(id, "team_a"))!;
+      expect(revoked).not.toBe(updated);
+      await revoked.send("Fourth");
+      expect(turns[3]!.tools?.map((tool) => tool.name) ?? []).not.toContain(
+        "shared-notes"
+      );
+      expect(
+        revoked.getHistory().filter((message) => message.role === "user")
+      ).toHaveLength(4);
+      expect((await agent.getSessionMessages(id, "team_a"))?.profileId).toBe(
+        "profile_team_a"
+      );
+      if (cognito) {
+        expect(await db.getSession(id)).toBeNull();
+        expect(await db.listMessagesForSession(id)).toEqual([]);
+      } else {
+        expect(
+          (await db.listMessagesForSession(id)).filter(
+            (message) => (message.payload as { role: string }).role === "user"
+          )
+        ).toHaveLength(4);
+      }
+    }
+  );
 
   test.each([false, true])(
     "cached skill catalogs recheck publications for cognito=%s",

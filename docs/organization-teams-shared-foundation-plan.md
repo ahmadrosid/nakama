@@ -1521,3 +1521,15 @@ The two repair attempts are used. This iteration commits only this progress reco
 Next: add the required timestamp to that test call, rerun the checks, and finish the shared skill session refresh slice. Steps 2 and 3 and delivery stage 2 remain unchecked.
 No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-skill-refresh-{focused,repair-focused,final-focused,types,lint}.log.
+
+### Slice 2ab — shared skill session refresh verified
+The missing setUserContext test timestamp from slice 2aa is fixed. This slice commits the previously uncommitted shared skill revision and session refresh code.
+Shared executable skill revisions include current publication metadata, source review settings, approved proposals, SKILL.md, and code file contents.
+Cached persisted sessions rebuild from their saved history. Ephemeral sessions reuse the existing rebuild path and pass their in-memory history into the replacement.
+The old session remains available until the replacement succeeds. Failed rebuilds preserve history and pending state. Turn reservation releases on refresh failure.
+Active session reads retain the running session. New turns refresh shared tool additions, changed schemas, and removals before using cached capabilities.
+Tests verify four user turns after assignment, schema changes, and revocation; they preserve user context, pending todos and questionnaires during rebuild, and ephemeral non-persistence.
+Checks: 146 focused service tests passed across five files; 54 session route and turn registry tests passed across four files; the complete server type check passed; lint passed 1532 files; git diff --check passed.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: synchronize shared agent configuration and published soul data before new turns, with capability refresh and history preservation.
+No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-skill-refresh-complete-{focused,routes,types,lint}.log.

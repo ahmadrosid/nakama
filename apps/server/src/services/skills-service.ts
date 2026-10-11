@@ -1596,6 +1596,72 @@ export class SkillsService {
     return toSkillSummaries(records, usage);
   }
 
+  async capabilityRevisionForProfile(
+    orgId: string,
+    profileId: string
+  ): Promise<string> {
+    const shared = (await this.getPromptSkills(orgId, profileId)).filter(
+      (item) => item.discovered.sourceOrganization && item.discovered.hasTool
+    );
+    if (shared.length === 0) {
+      return "";
+    }
+    const hash = createHash("sha256");
+    for (const item of shared.sort((a, b) =>
+      a.record.id.localeCompare(b.record.id)
+    )) {
+      const publication = await this.getPublishedSkillSummaryForResource(
+        orgId,
+        item.record.id
+      );
+      const source = await this.resolvePublishedSkill(
+        orgId,
+        publication.publicationId
+      );
+      hash.update(JSON.stringify(publication));
+      hash.update(
+        JSON.stringify(
+          await this.db.getOrganizationById(
+            source.summary.sourceOrganization.id
+          )
+        )
+      );
+      hash.update(
+        JSON.stringify(await this.db.getProfile(source.sourceProfileId))
+      );
+      hash.update(
+        JSON.stringify(
+          await this.db.listSkillProposals(
+            source.summary.sourceOrganization.id,
+            { profileId: source.sourceProfileId, status: "approved" }
+          )
+        )
+      );
+      const listing = await this.listFilesInRoot(source.directory);
+      if (listing.truncated) {
+        throw new NakamaApiError("Shared skill code is unavailable.", 503);
+      }
+      for (const file of listing.files.filter(
+        (entry) =>
+          entry.type === "file" &&
+          (entry.path === SKILL_FILE_NAME ||
+            /\.(?:py|js|ts|mjs|cjs|jsx|tsx)$/i.test(entry.path))
+      )) {
+        const bytes = await this.readBytesFromRoot(
+          source.directory,
+          file.path,
+          10 * 1024 * 1024
+        );
+        if (!bytes) {
+          throw new NakamaApiError("Shared skill code is unavailable.", 503);
+        }
+        hash.update(file.path);
+        hash.update(bytes);
+      }
+    }
+    return hash.digest("hex");
+  }
+
   async loadToolsForProfile(
     orgId: string,
     profileId: string
