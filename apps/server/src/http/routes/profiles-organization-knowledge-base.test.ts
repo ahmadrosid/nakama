@@ -7,9 +7,12 @@ import {
   getKnowledgeBaseManifestPath,
   getKnowledgeBaseStoredDocumentPath,
   getOrgKnowledgeBaseDir,
+  getProfileSoulDir,
 } from "@nakama/core";
+import { runKnowledgeBaseSearch } from "@nakama/core/tools/knowledge-base-search";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { zipSync } from "fflate";
+import { AgentService } from "../../services/agent-service";
 import { MemoryBackendService } from "../../services/memory-backend-service";
 import { ProfileService } from "../../services/profile-service";
 import { setupTestConfigDir } from "../../test-config-dir";
@@ -585,6 +588,37 @@ async function setupPublishedKnowledge() {
 }
 
 describe("published parent knowledge reads", () => {
+  test("server tool contexts recheck parent publications during real search", async () => {
+    const { db, profileService, publication } = await setupPublishedKnowledge();
+    const created = await profileService.createProfile("org_team_a", {
+      name: "Reader",
+    });
+    const agent = new AgentService(null, null, db);
+    const context = agent.buildPluginToolContext("org_team_a", {
+      profileId: created.profile.id,
+      runId: "run",
+      workflowId: "workflow",
+    });
+    expect(context.workspaceRoot).toBe(
+      getProfileSoulDir("org_team_a", created.profile.id)
+    );
+    const initial = await runKnowledgeBaseSearch(
+      { query: "Published parent", regex: true },
+      context
+    );
+    expect(
+      initial.matches.filter((match) => match.scope === "parent")
+    ).toHaveLength(1);
+    await db.deleteOrgSharedResource("org_parent", publication.id);
+    expect(
+      (
+        await runKnowledgeBaseSearch(
+          { query: "Published parent", regex: true },
+          context
+        )
+      ).matches.filter((match) => match.scope === "parent")
+    ).toEqual([]);
+  });
   test("team profile catalogs separate live parent publications from local attachments", async () => {
     const { db, profileService, document, publication, privateDocument } =
       await setupPublishedKnowledge();

@@ -3101,6 +3101,9 @@ export interface ToolContext {
   forbidProfileSkillMarkdownWrites?: boolean;
   /** Platform admin flag for Super Bot bind checks (same as HTTP ProfileAccess). */
   isPlatformAdmin?: boolean;
+  listPublishedKnowledgeDocuments?: () => Promise<
+    PublishedKnowledgeBaseDocument[]
+  >;
   /** Loads a provider-neutral document/image reference scoped to this execution. */
   loadAttachment?: LoadAttachmentBytes;
   /** Host-owned memory storage; file guards run before these callbacks. */

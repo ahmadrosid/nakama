@@ -1774,7 +1774,7 @@ export class AgentService {
     const toolContext = buildToolExecutionContext({
       assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
       automationId,
-      ...this.memoryBackend.toolContext(orgId, profileId),
+      ...this.knowledgeToolContext(orgId, profileId),
       automationRunId,
       orgId,
       orgRole: "member",
@@ -1948,6 +1948,16 @@ export class AgentService {
     return partitionTools(tools).localTools;
   }
 
+  private knowledgeToolContext(orgId: string, profileId: string): ToolContext {
+    return {
+      ...this.memoryBackend.toolContext(orgId, profileId),
+      listPublishedKnowledgeDocuments: async () => {
+        await this.requireProfile(orgId, profileId);
+        return this.profileService.listPublishedKnowledgeBaseDocuments(orgId);
+      },
+    };
+  }
+
   buildPluginToolContext(
     orgId: string,
     context: {
@@ -1957,7 +1967,7 @@ export class AgentService {
     }
   ): ToolContext {
     return buildToolExecutionContext({
-      ...this.memoryBackend.toolContext(orgId, context.profileId),
+      ...this.knowledgeToolContext(orgId, context.profileId),
       assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
       orgId,
       orgRole: "member",
@@ -2084,7 +2094,7 @@ export class AgentService {
       systemPrompt: childSystemPrompt,
       toolContext: buildToolExecutionContext({
         agentDepth: input.agentDepth,
-        ...this.memoryBackend.toolContext(input.orgId, input.profileId),
+        ...this.knowledgeToolContext(input.orgId, input.profileId),
         assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(input.orgId),
         clientOrigin: input.clientOrigin,
         orgId: input.orgId,
@@ -2971,7 +2981,7 @@ export class AgentService {
       tools,
       buildToolExecutionContext({
         channel: "web",
-        ...this.memoryBackend.toolContext(orgId, profile.id),
+        ...this.knowledgeToolContext(orgId, profile.id),
         orgId,
         profileId: profile.id,
       })
@@ -3990,7 +4000,7 @@ export class AgentService {
     }
 
     const toolContext = buildToolExecutionContext({
-      ...this.memoryBackend.toolContext(context.orgId, profileId),
+      ...this.knowledgeToolContext(context.orgId, profileId),
       orgId: context.orgId,
       profileId,
       userId: context.userId,
@@ -5035,7 +5045,7 @@ export class AgentService {
     const toolContext = buildToolExecutionContext({
       assertCanStartLlmTurn: this.llmTurnQuotaCheckerFor(orgId),
       channel,
-      ...this.memoryBackend.toolContext(orgId, profileId),
+      ...this.knowledgeToolContext(orgId, profileId),
       codingWorkspaceRoot,
       forbidMemoryWrites: cognito ? true : undefined,
       forbidProfileSkillMarkdownWrites: hasSkillManage,

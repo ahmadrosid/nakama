@@ -1320,3 +1320,20 @@ Steps 2 and 3 remain unchecked. This catalog slice does not finish a delivery st
 Next: pass these authorized references into regex and indexed search, then include them in prompt catalogs after actual search use passes access tests.
 No new source file, dependency, or package was added. No full-suite rerun, browser check, build, push, or PR ran.
 Evidence: /tmp/nakama-published-catalog-{focused,core-types,server-types,lint}.log.
+
+2026-10-11: Step 2 slice 2q connects published parent knowledge to team search.
+The server supplies live publication references through the existing tool context in chat, automation, plugins, subagents, ACP drafts, and playground calls.
+Each callback rechecks the team profile and current publications. Cached sessions retain the callback, not a fixed publication list.
+Regex and indexed search use only the published document IDs. Parent matches include publication IDs and source organization labels.
+Parent file guards reject extracted files outside the source directory. The indexed search rebuilds its parent collection before each query.
+Profile memory, workspace roots, and attached team documents keep their existing scope. Core search does not read a parent manifest itself.
+Tests cover both search backends with and without profile memory, filename filters, private documents, revocation, and extracted-file symlinks.
+An integration test searches through a server tool context, removes the publication, and confirms that the same context cannot search it again.
+The first focused run found a missing test import. The repaired run passed all 103 tests across three files.
+This slice includes the previously authorized search input and QMD type repairs in the same search module.
+Checks: 103 focused tests passed; the final search check passed all 22 tests; complete core and server type checks passed.
+Lint passed all 1532 files. git diff --check passed. No new file, package, or dependency was added.
+Steps 2 and 3 remain unchecked. This slice does not finish a delivery stage.
+Next: include authorized parent knowledge in prompt catalogs, then connect the remaining resource execution paths.
+No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-parent-search-{focused,final-focused,core-types,server-types,lint}.log.
