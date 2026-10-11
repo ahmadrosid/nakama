@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   resolveProfileSkillDirectory,
@@ -8,6 +8,7 @@ import {
 } from "@nakama/core";
 import type {
   CreateOrganizationResponse,
+  ListOrgSharedResourcesResponse,
   OrgSharedResourceResponse,
   PublishOrgSharedResourceRequest,
 } from "@nakama/core/contract";
@@ -154,6 +155,49 @@ test("publication HTTP mutations validate all resource kinds and preserve source
     const retry = await post(request);
     expect(retry.status).toBe(201);
     expect(await retry.json()).toEqual(result);
+    const listed = await app.fetch(
+      new Request("http://localhost:4310/v1/orgs/org_parent/shared-resources", {
+        headers: session.headers({}, "org_parent"),
+      })
+    );
+    expect(listed.status).toBe(200);
+    const summaries: ListOrgSharedResourcesResponse = await listed.json();
+    expect(summaries.resources).toEqual([
+      {
+        ...result.publication,
+        label: {
+          agent: "Source",
+          knowledge: "source.txt",
+          model: "source-model",
+          skill: "source-skill",
+          tool: "source-tool",
+        }[request.resourceKind],
+        readiness: "ready",
+        sourceOrganization: { id: "org_parent", name: "Parent" },
+      },
+    ]);
+    const serialized = JSON.stringify(summaries);
+    expect(serialized).not.toContain("private-source-token");
+    expect(serialized).not.toContain("private-provider-key");
+    expect(serialized).not.toContain(skillPath);
+    if (request.resourceKind === "skill") {
+      await rm(join(skillPath, "SKILL.md"));
+      const unavailable = await app.fetch(
+        new Request(
+          "http://localhost:4310/v1/orgs/org_parent/shared-resources",
+          {
+            headers: session.headers({}, "org_parent"),
+          }
+        )
+      );
+      const missing: ListOrgSharedResourcesResponse = await unavailable.json();
+      expect(missing.resources[0]).toMatchObject({
+        id: result.publication.id,
+        label: request.resourceId,
+        readiness: "unavailable",
+      });
+      await writeFile(join(skillPath, "SKILL.md"), content);
+    }
     for (let attempt = 0; attempt < 2; attempt++) {
       const removed = await app.fetch(
         new Request(
@@ -186,6 +230,185 @@ test("publication HTTP mutations validate all resource kinds and preserve source
   expect(
     (await post({ resourceId: "missing", resourceKind: "tool" })).status
   ).toBe(404);
+});
+
+test("publication lists derive the active team's parent and enforce read access", async () => {
+  const {
+    app,
+    authService,
+    databaseAdapter: db,
+    orgService,
+  } = createMinimalHonoApp();
+  const now = new Date().toISOString();
+  for (const id of ["org_parent", "org_other", "org_team_a", "org_team_b"]) {
+    await db.upsertOrganization({
+      createdAt: now,
+      id,
+      name: id,
+      parentOrgId: id.startsWith("org_team") ? "org_parent" : null,
+      slug: id.replace(/_/g, "-"),
+      updatedAt: now,
+    });
+  }
+  await db.createUser({
+    createdAt: now,
+    email: "reader@example.com",
+    id: "user_reader",
+    passwordHash: await authService.hashPassword("password123"),
+    updatedAt: now,
+  });
+  for (const orgId of ["org_team_a", "org_team_b", "org_other"]) {
+    await db.upsertOrgMember({
+      createdAt: now,
+      orgId,
+      role: "viewer",
+      userId: "user_reader",
+    });
+  }
+  for (const [id, orgId] of [
+    ["tool_published", "org_parent"],
+    ["tool_private", "org_parent"],
+    ["tool_other", "org_other"],
+  ]) {
+    await db.upsertTool({
+      createdAt: now,
+      description: "Private description",
+      handlerConfig: { token: "private-token" },
+      handlerType: "bash",
+      id,
+      name: id,
+      orgId,
+      updatedAt: now,
+    });
+  }
+  for (const [id, orgId, resourceId] of [
+    ["publication_parent", "org_parent", "tool_published"],
+    ["publication_other", "org_other", "tool_other"],
+  ]) {
+    await db.publishOrgSharedResource({
+      createdAt: now,
+      id,
+      orgId,
+      resourceId,
+      resourceKind: "tool",
+      updatedAt: now,
+    });
+  }
+  const session = await loginUserSession(
+    app,
+    "reader@example.com",
+    "password123"
+  );
+  const get = (pathOrg: string, activeOrg = pathOrg, query = "") =>
+    app.fetch(
+      new Request(
+        `http://localhost:4310/v1/orgs/${pathOrg}/shared-resources${query}`,
+        { headers: session.headers({}, activeOrg) }
+      )
+    );
+  const first = await get("org_team_a");
+  expect(first.status).toBe(200);
+  const result: ListOrgSharedResourcesResponse = await first.json();
+  expect(result.resources).toEqual([
+    {
+      createdAt: now,
+      id: "publication_parent",
+      label: "tool_published",
+      orgId: "org_parent",
+      readiness: "ready",
+      resourceId: "tool_published",
+      resourceKind: "tool",
+      sourceOrganization: { id: "org_parent", name: "org_parent" },
+      updatedAt: now,
+    },
+  ]);
+  expect(await (await get("org_team_b")).json()).toEqual(result);
+  expect(
+    await (
+      await get("org_team_a", "org_team_a", "?parentOrgId=org_other")
+    ).json()
+  ).toEqual(result);
+  expect((await get("org_parent", "org_team_a")).status).toBe(404);
+  expect((await get("org_team_b", "org_team_a")).status).toBe(404);
+  expect((await get("org_parent")).status).toBe(404);
+  expect(
+    (
+      await orgService.listSharedResources("org_other", "user_reader")
+    ).resources.map((entry) => entry.id)
+  ).toEqual(["publication_other"]);
+  await expect(
+    orgService.listSharedResources("org_parent", "user_reader")
+  ).rejects.toMatchObject({ status: 404 });
+  await expect(
+    orgService.listSharedResources("org_team_a", "user_missing")
+  ).rejects.toMatchObject({ status: 404 });
+  for (const role of ["member", "viewer"] as const) {
+    await db.upsertOrgMember({
+      createdAt: now,
+      orgId: "org_parent",
+      role,
+      userId: "user_reader",
+    });
+    expect(await (await get("org_parent")).json()).toEqual(result);
+  }
+  await db.deleteOrgMember("org_team_b", "user_reader");
+  expect((await get("org_team_b")).status).toBe(404);
+  await expect(
+    orgService.listSharedResources("org_team_b", "user_reader")
+  ).rejects.toMatchObject({ status: 404 });
+  const platform = await loginPlatformAdminSession(app, authService, db);
+  const platformList = await app.fetch(
+    new Request("http://localhost:4310/v1/orgs/org_team_b/shared-resources", {
+      headers: platform.headers({}, "org_team_b"),
+    })
+  );
+  expect(platformList.status).toBe(200);
+  expect(await platformList.json()).toEqual(result);
+  await db.upsertTool({
+    ...(await db.getTool("tool_published"))!,
+    name: "Changed source name",
+    orgId: "org_other",
+  });
+  const invalid: ListOrgSharedResourcesResponse = await (
+    await get("org_team_a")
+  ).json();
+  expect(invalid.resources[0]).toMatchObject({
+    label: "tool_published",
+    readiness: "unavailable",
+  });
+  expect(JSON.stringify(invalid)).not.toContain("Changed source name");
+  await db.deleteOrgSharedResource("org_parent", "publication_parent");
+  expect(await (await get("org_team_a")).json()).toEqual({ resources: [] });
+  const getOrganizationById = db.getOrganizationById;
+  db.getOrganizationById = async (id) => {
+    const record = await getOrganizationById(id);
+    return record && id === "org_parent"
+      ? { ...record, archivedAt: now }
+      : record;
+  };
+  try {
+    expect((await get("org_team_a")).status).toBe(404);
+    await expect(
+      orgService.listSharedResources("org_team_a", "user_reader")
+    ).rejects.toMatchObject({ status: 404 });
+  } finally {
+    db.getOrganizationById = getOrganizationById;
+  }
+  await db.disableUser("user_reader", now);
+  await expect(
+    orgService.listSharedResources("org_team_a", "user_reader")
+  ).rejects.toMatchObject({ status: 404 });
+  const openapi = await app.fetch(
+    new Request("http://localhost:4310/openapi.json")
+  );
+  const spec = await openapi.json();
+  expect(
+    spec.paths["/v1/orgs/{orgId}/shared-resources"].get.responses["200"]
+  ).toBeTruthy();
+  expect(
+    spec.components.schemas.ListOrgSharedResourcesResponse.properties.resources
+      .items.properties.readiness.enum
+  ).toEqual(["ready", "unavailable"]);
 });
 
 test("publication HTTP mutations deny team admins, members, viewers, and wrong tenant context", async () => {

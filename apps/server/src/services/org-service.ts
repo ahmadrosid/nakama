@@ -36,6 +36,7 @@ import type {
   CreateOrganizationResponse,
   CreateTeamRequest,
   ListOrgMembersResponse,
+  ListOrgSharedResourcesResponse,
   ListUserOrgsResponse,
   OrganizationSummary,
   OrgInviteCreatedResponse,
@@ -168,7 +169,7 @@ export class OrgService {
     actorUserId: string
   ): Promise<StoredOrgSharedResourceRecord> {
     await this.requireParentAdmin(parentOrgId, actorUserId);
-    const resourceId = await this.validateSharedResourceSource(
+    const { resourceId } = await this.validateSharedResourceSource(
       parentOrgId,
       request
     );
@@ -183,11 +184,63 @@ export class OrgService {
     });
   }
 
+  async listSharedResources(
+    orgId: string,
+    actorUserId: string
+  ): Promise<ListOrgSharedResourcesResponse> {
+    const org = await this.requireActiveOrganization(orgId);
+    const [user, membership] = await Promise.all([
+      this.databaseAdapter.getUserById(actorUserId),
+      this.databaseAdapter.getOrgMember(orgId, actorUserId),
+    ]);
+    if (!user || user.disabledAt || !(user.isPlatformAdmin || membership)) {
+      throw new NakamaApiError("Not found", 404);
+    }
+    const parent = org.parentOrgId
+      ? await this.requireActiveOrganization(org.parentOrgId)
+      : org;
+    if (parent.parentOrgId) {
+      throw new NakamaApiError("Not found", 404);
+    }
+    const publications = await this.databaseAdapter.listOrgSharedResources(
+      parent.id
+    );
+    const resources: ListOrgSharedResourcesResponse["resources"] = [];
+    for (const publication of publications) {
+      let label = publication.resourceId;
+      let readiness: "ready" | "unavailable" = "ready";
+      try {
+        ({ label } = await this.validateSharedResourceSource(
+          parent.id,
+          publication
+        ));
+      } catch (error) {
+        if (
+          !(
+            error instanceof NakamaApiError &&
+            [400, 404, 409].includes(error.status)
+          )
+        ) {
+          throw error;
+        }
+        readiness = "unavailable";
+      }
+      resources.push({
+        ...publication,
+        label,
+        readiness,
+        sourceOrganization: { id: parent.id, name: parent.name },
+      });
+    }
+    return { resources };
+  }
+
   private async validateSharedResourceSource(
     parentOrgId: string,
     request: PublishOrgSharedResourceRequest
-  ): Promise<string> {
+  ): Promise<{ resourceId: string; label: string }> {
     let resourceId = request.resourceId;
+    let label = resourceId;
     if (request.resourceKind === "agent") {
       const profile = await this.databaseAdapter.getProfileForOrg(
         resourceId,
@@ -196,6 +249,7 @@ export class OrgService {
       if (!profile || profile.isDefault || profile.isSuper) {
         throw new NakamaApiError("Agent is unavailable.", 404);
       }
+      label = profile.name;
       const [tools, skills, servers, toolkits, publications] =
         await Promise.all([
           this.databaseAdapter.listToolsForProfile(profile.id),
@@ -325,16 +379,19 @@ export class OrgService {
         throw new NakamaApiError("Select a configured model.", 400);
       }
       resourceId = `${selected.instance.id}::${selected.modelId}`;
+      label = selected.modelId;
     } else if (request.resourceKind === "tool") {
       const tool = await this.databaseAdapter.getTool(request.resourceId);
       if (!tool || (tool.orgId && tool.orgId !== parentOrgId)) {
         throw new NakamaApiError("Tool is unavailable.", 404);
       }
+      label = tool.name;
     } else if (request.resourceKind === "skill") {
       const skill = await this.databaseAdapter.getSkill(request.resourceId);
       if (!(skill && skill.enabled) || skill.orgId !== parentOrgId) {
         throw new NakamaApiError("Skill is unavailable.", 404);
       }
+      label = skill.name;
       try {
         const profiles =
           await this.databaseAdapter.listProfilesForOrg(parentOrgId);
@@ -379,6 +436,7 @@ export class OrgService {
         if (!document || document.status !== "ready") {
           throw new NakamaApiError("Knowledge document is unavailable.", 404);
         }
+        label = document.filename;
         const { resolved } = await guardFilePath(
           getKnowledgeBaseStoredDocumentPath(
             dir,
@@ -398,7 +456,7 @@ export class OrgService {
     } else {
       throw new NakamaApiError("Unsupported publication kind.", 400);
     }
-    return resourceId;
+    return { label, resourceId };
   }
 
   async unpublishSharedResource(

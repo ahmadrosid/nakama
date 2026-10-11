@@ -1120,3 +1120,16 @@ Step 2 and delivery stage 1 remain incomplete. Publication list, overview, and s
 No browser or external provider calls ran. Other authorized cleanup remains uncommitted; stale provider cassettes, full tests, and builds remain unresolved.
 Next: derive the parent in team context and return authorized publication summaries and filtered team overview data.
 Evidence: `/tmp/nakama-publication-route-tests.log`, `/tmp/nakama-publication-route-{server,core}-types.log`, `/tmp/nakama-publication-route-lint.log`.
+
+2026-10-11: Slice 2c adds GET /v1/orgs/:orgId/shared-resources with typed summary and OpenAPI contracts.
+OrgService checks the active tenant and actor, then derives the parent from the stored team relationship. Team readers need no parent membership.
+Root members and viewers may read explicit publications. Platform authority remains supported; missing membership, disabled accounts, wrong tenant context, and inactive parents deny access.
+The existing source validator now returns the resource label with its validated ID. Summaries include safe publication fields, source organization, and current source readiness.
+Missing or invalid sources return unavailable without exposing source error text, private paths, configuration, or foreign resource labels. Unpublish removes entries on the next read.
+Tests cover all five labels, safe response fields, missing skill files, sibling team reads, ignored parent overrides, root reader roles, platform reads, membership removal, disabled users, changed ownership, and OpenAPI readiness fields.
+Two test repairs corrected the archived-parent boundary fixture and platform login argument order. The database correctly prevents parent archive while teams remain active.
+Checks: all 76 focused HTTP and service tests passed; complete server and core type checks passed; lint passed all 1532 files; git diff --check passed.
+Step 2 and delivery stage 1 remain incomplete. Filtered team overview and shared-agent instance routes remain required. Readiness describes source validation; execution checks remain in step 3.
+No browser or external provider calls ran. Other authorized cleanup remains uncommitted; stale provider cassettes, full tests, and builds remain unresolved.
+Next: return filtered team overview data and stored member and local-resource counts through active tenant context.
+Evidence: /tmp/nakama-publication-list-tests-final.log, /tmp/nakama-publication-list-{server,core}-types.log, /tmp/nakama-publication-list-lint.log.

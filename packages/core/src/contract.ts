@@ -659,6 +659,16 @@ export interface OrgSharedResourceResponse {
   publication: OrgSharedResourcePublication;
 }
 
+export interface OrgSharedResourceSummary extends OrgSharedResourcePublication {
+  label: string;
+  readiness: "ready" | "unavailable";
+  sourceOrganization: { id: string; name: string };
+}
+
+export interface ListOrgSharedResourcesResponse {
+  resources: OrgSharedResourceSummary[];
+}
+
 export interface UpdateOrganizationRequest {
   allowedInviteDomains?: string[];
   monthlyLlmTokenLimit?: number;

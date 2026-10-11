@@ -3,6 +3,7 @@ import type {
   AddOrgMemberResponse,
   CreateOrganizationResponse,
   ListOrgMembersResponse,
+  ListOrgSharedResourcesResponse,
   OrganizationResponse,
   OrgInviteCreatedResponse,
   OrgLlmQuotaStatusResponse,
@@ -15,7 +16,7 @@ import {
   requireOrgAdminFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
 } from "../org-guards";
-import { errorResponse, json, readJson } from "../shared";
+import { errorResponse, getRequestAuth, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
 export function registerOrgMemberRoutes(
@@ -126,6 +127,56 @@ export function registerOrgMemberRoutes(
     publicationId: z
       .string()
       .openapi({ param: { in: "path", name: "publicationId" } }),
+  });
+  const listSharedResourcesResponseSchema = z
+    .object({
+      resources: z.array(
+        sharedResourceResponseSchema.shape.publication.extend({
+          label: z.string(),
+          readiness: z.enum(["ready", "unavailable"]),
+          sourceOrganization: z.object({ id: z.string(), name: z.string() }),
+        })
+      ),
+    })
+    .openapi("ListOrgSharedResourcesResponse");
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "listOrgSharedResources",
+      path: "/v1/orgs/{orgId}/shared-resources",
+      request: { params: orgIdParam },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: listSharedResourcesResponseSchema },
+          },
+          description: "Published parent resource summaries",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Organization unavailable",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Listing failed",
+        },
+      },
+      summary: "List parent publications from active organization context",
+      tags: ["Organizations"],
+    })
+  );
+  app.get("/v1/orgs/:orgId/shared-resources", async (c) => {
+    const auth = getRequestAuth(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+    if (auth.activeOrgId !== orgId) {
+      return errorResponse("Not found", 404);
+    }
+    if (!orgService) {
+      return errorResponse("Organization service not configured", 500);
+    }
+    return json<ListOrgSharedResourcesResponse>(
+      await orgService.listSharedResources(orgId, auth.user.id)
+    );
   });
   app.openAPIRegistry.registerPath(
     createRoute({
