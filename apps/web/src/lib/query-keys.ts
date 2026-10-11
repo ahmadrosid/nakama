@@ -112,6 +112,8 @@ export const queryKeys = {
   skills: {
     all: ["skills"] as const,
     detail: (skillId: string) => ["skills", skillId] as const,
+    published: (orgId: string, publicationId: string) =>
+      ["skills", "published", orgId, publicationId] as const,
   },
   slack: {
     settings: ["slack", "settings"] as const,

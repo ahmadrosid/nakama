@@ -2242,3 +2242,15 @@ All 25 component tests passed with 170 assertions. New tests cover lazy tool and
 Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: authorized resource actions and shared-agent selection into a team chat. No browser check, paid call, full test run, build, push, or PR ran. Those final checks remain required before stage completion.
 
 Evidence: /tmp/nakama-tools-models-{focused,types,oxlint,lint,doctor}.log.
+
+### Slice 3h — Read-only shared skill details
+
+Ready shared skill chips now open a read-only dialog in team context. The existing `getPublishedSkill` operation receives the active team ID and publication ID, with explicit `X-Org-Id`. The UI does not request the parent skill endpoint. The dialog shows source, description, and escaped skill content. It uses the existing button and dialog components. Root chips and unavailable skills remain static in this slice.
+
+The query key includes the active tenant and publication ID under the existing skills cache family. Reads start only after selection. Each reopening checks the publication again. Pending and failed reads hide previous content. Retry uses the same authorized scope. A team change removes the old dialog; late responses cannot replace the new team's data. No edit or assignment control was added.
+
+All 31 component tests passed with 210 assertions. Tests cover admin, member, and viewer reads, keyboard focus, escaped content, read-only controls, loading, failure, retry, publication removal on reopening, unavailable chips, and late responses after a team change. Existing team-detail tests now select their own row buttons. One verification repair supplied `HTMLButtonElement` types for those selectors. The complete web type check, scoped anti-slop, Ultracite across 1533 files, and git diff --check passed. React Doctor stayed at 91/100 with no issues.
+
+Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: knowledge detail/download actions, then remaining resource actions and shared-agent selection. Root resource details remain open. No browser check, full suite, build, paid call, push, or PR ran.
+
+Evidence: /tmp/nakama-shared-skill-{focused,types,oxlint,lint,doctor}.log.

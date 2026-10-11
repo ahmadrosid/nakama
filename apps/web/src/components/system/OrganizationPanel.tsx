@@ -65,6 +65,72 @@ const READINESS_LABELS = {
   unavailable: "Unavailable",
 };
 
+function SharedSkillDialog({
+  orgId,
+  resource,
+}: {
+  orgId: string;
+  resource: OrgSharedResourceSummary;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const detail = useQuery({
+    enabled: open,
+    gcTime: 0,
+    queryFn: () => client.getPublishedSkill(orgId, resource.id),
+    queryKey: queryKeys.skills.published(orgId, resource.id),
+    staleTime: 0,
+  });
+
+  return (
+    <Dialog onOpenChange={setOpen} open={open}>
+      <DialogTrigger
+        render={
+          <Button
+            aria-label={`View shared skill ${resource.label} from ${resource.sourceOrganization.name}`}
+            className="h-auto max-w-full whitespace-normal break-words text-left"
+            size="sm"
+            variant="secondary"
+          />
+        }
+      >
+        {resource.label}
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{resource.label}</DialogTitle>
+        </DialogHeader>
+        {detail.isFetching && <p role="status">Loading skill…</p>}
+        {detail.isError && (
+          <div className="space-y-2" role="alert">
+            <p>{formatError(detail.error)}</p>
+            <Button
+              disabled={detail.isFetching}
+              onClick={() => void detail.refetch()}
+              variant="outline"
+            >
+              Retry skill
+            </Button>
+          </div>
+        )}
+        {detail.data && !detail.isFetching && !detail.isError && (
+          <div className="min-w-0 space-y-3">
+            <p className="text-muted-foreground text-sm">
+              Shared from {detail.data.skill.sourceOrganization.name}
+            </p>
+            {detail.data.skill.description && (
+              <p className="break-words">{detail.data.skill.description}</p>
+            )}
+            <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted p-3 text-sm">
+              {detail.data.skill.body}
+            </pre>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ResourcePublicationDialog({
   orgId,
   resources,
@@ -631,20 +697,30 @@ export function OrganizationOverview() {
               <dd className="flex min-w-0 flex-wrap gap-2">
                 {sharedResources
                   .filter((resource) => resource.resourceKind === kind)
-                  .map((resource) => (
-                    <span
-                      className="max-w-full break-words rounded-lg bg-muted px-2.5 py-1 text-sm"
-                      key={resource.id}
-                      title={`Shared from ${resource.sourceOrganization.name}`}
-                    >
-                      {resource.label}
-                      {resource.readiness !== "ready" && (
-                        <span className="ml-2 text-muted-foreground">
-                          {READINESS_LABELS[resource.readiness]}
-                        </span>
-                      )}
-                    </span>
-                  ))}
+                  .map((resource) =>
+                    resource.resourceKind === "skill" &&
+                    resource.readiness === "ready" &&
+                    activeOrg.parentOrgId ? (
+                      <SharedSkillDialog
+                        key={`${activeOrg.id}:${resource.id}`}
+                        orgId={activeOrg.id}
+                        resource={resource}
+                      />
+                    ) : (
+                      <span
+                        className="max-w-full break-words rounded-lg bg-muted px-2.5 py-1 text-sm"
+                        key={resource.id}
+                        title={`Shared from ${resource.sourceOrganization.name}`}
+                      >
+                        {resource.label}
+                        {resource.readiness !== "ready" && (
+                          <span className="ml-2 text-muted-foreground">
+                            {READINESS_LABELS[resource.readiness]}
+                          </span>
+                        )}
+                      </span>
+                    )
+                  )}
                 {!sharedResources.some(
                   (resource) => resource.resourceKind === kind
                 ) && (

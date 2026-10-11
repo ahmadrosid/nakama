@@ -157,7 +157,7 @@ test("renders all published resource kinds and stored team counts", async () => 
   expect(
     [...container.querySelectorAll("li dd")].map((node) => node.textContent)
   ).toEqual(["3", "5", "4", "2"]);
-  expect(container.querySelectorAll("dd button")).toHaveLength(0);
+  expect(container.querySelectorAll("dd button")).toHaveLength(1);
 });
 
 test("a standalone organization with no publications or teams remains readable", async () => {
@@ -259,7 +259,7 @@ test("team details open without switching and permitted switching waits for succ
   const switchOrg = mock((_id: string) => pending.promise);
   const { container, render } = mount(queries, switchOrg);
   await render(organization("team-a"));
-  const trigger = container.querySelector("button");
+  const trigger = container.querySelector<HTMLButtonElement>("li button");
   trigger?.focus();
   expect(document.activeElement).toBe(trigger);
   await act(async () => {
@@ -310,7 +310,7 @@ test.each([true, false])(
     const { container, render } = mount(queries, switchOrg);
     await render(organization("team-a"));
     await act(async () => {
-      container.querySelector("button")?.click();
+      container.querySelector<HTMLButtonElement>("li button")?.click();
       await settle();
     });
     const dialog = document.querySelector('[role="dialog"]');
@@ -341,7 +341,7 @@ test("failed switching retains team details and permits retry", async () => {
   const { container, render } = mount(queries, switchOrg);
   await render(organization("team-a"));
   await act(async () => {
-    container.querySelector("button")?.click();
+    container.querySelector<HTMLButtonElement>("li button")?.click();
     await settle();
   });
   await act(async () => {
@@ -384,7 +384,7 @@ test("team changes discard open details from the previous organization", async (
   const { container, render } = mount(queries);
   await render(organization("team-a"));
   await act(async () => {
-    container.querySelector("button")?.click();
+    container.querySelector<HTMLButtonElement>("li button")?.click();
     await settle();
   });
   expect(document.querySelector('[role="dialog"]')).not.toBeNull();
@@ -680,10 +680,14 @@ test("team membership cannot expose parent team creation controls", async () => 
   );
   const { container, render } = mount(queries);
   await render({ ...organization("team-a"), role: "admin" });
-  expect(container.querySelectorAll("button")).toHaveLength(1);
-  expect(container.querySelector("button")?.getAttribute("aria-label")).toBe(
-    "View Team team-a"
-  );
+  expect(
+    container.querySelectorAll('button[aria-label="Add team"]')
+  ).toHaveLength(0);
+  expect(
+    container
+      .querySelector<HTMLButtonElement>("li button")
+      ?.getAttribute("aria-label")
+  ).toBe("View Team team-a");
 });
 
 async function mountKnowledgeManager() {
@@ -1369,3 +1373,191 @@ test.each([
     ).toBeNull();
   }
 );
+
+function publishedSkill(
+  publicationId = "team-a-skill",
+  body = "Shared instructions"
+) {
+  return {
+    skill: {
+      body,
+      createdAt: "2026-10-12T00:00:00Z",
+      createdBy: "human" as const,
+      description: "Source description",
+      disableModelInvocation: false,
+      enabled: true,
+      hasTool: false,
+      id: "source-skill",
+      name: "Brand voice",
+      publicationId,
+      scope: "parent" as const,
+      sourceOrganization: { id: "parent", name: "Parent" },
+      updatedAt: "2026-10-12T00:00:00Z",
+    },
+  };
+}
+
+async function mountSkillReader(
+  role: "admin" | "member" | "viewer" = "member"
+) {
+  const queries = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+    },
+  });
+
+  for (const id of ["team-a", "team-b"]) {
+    queries.setQueryData(
+      queryKeys.organizationOverview("parent", id),
+      overview(id)
+    );
+  }
+
+  const result = mount(queries);
+  await result.render({ ...organization("team-a"), role });
+
+  return { ...result, queries };
+}
+
+async function openSharedSkill(container: HTMLElement) {
+  await act(async () => {
+    container
+      .querySelector<HTMLButtonElement>(
+        'button[aria-label^="View shared skill"]'
+      )
+      ?.click();
+    await settle();
+  });
+  await act(async () => {
+    await settle();
+  });
+}
+
+test.each(["admin", "member", "viewer"] as const)(
+  "shared skill details use active tenant and remain read-only for %s",
+  async (role) => {
+    const read = spyOn(client, "getPublishedSkill").mockResolvedValue(
+      publishedSkill("team-a-skill", '<script>alert("x")</script>')
+    );
+
+    const privateRead = spyOn(client, "getSkill");
+    cleanups.push(() => {
+      read.mockRestore();
+      privateRead.mockRestore();
+    });
+    const { container } = await mountSkillReader(role);
+    expect(read).not.toHaveBeenCalled();
+
+    const trigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-label^="View shared skill"]'
+    );
+
+    trigger?.focus();
+    expect(document.activeElement).toBe(trigger);
+    await openSharedSkill(container);
+    expect(read.mock.calls).toEqual([["team-a", "team-a-skill"]]);
+    expect(privateRead).not.toHaveBeenCalled();
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog?.querySelector("pre")?.textContent).toBe(
+      '<script>alert("x")</script>'
+    );
+    expect(dialog?.querySelector("script")).toBeNull();
+    expect(dialog?.textContent).toContain("Parent");
+    expect(dialog?.querySelectorAll("input,textarea,select")).toHaveLength(0);
+    expect(dialog?.querySelectorAll("button")).toHaveLength(1);
+  }
+);
+
+test("shared skill details retry and recheck publication on reopening", async () => {
+  const pending = Promise.withResolvers<ReturnType<typeof publishedSkill>>();
+
+  const read = spyOn(client, "getPublishedSkill")
+    .mockImplementationOnce(() => pending.promise)
+    .mockResolvedValueOnce(publishedSkill())
+    .mockRejectedValueOnce(new Error("Publication removed"));
+
+  cleanups.push(() => read.mockRestore());
+  const { container } = await mountSkillReader();
+  await openSharedSkill(container);
+  expect(
+    document.querySelector('[role="dialog"] [role="status"]')
+  ).not.toBeNull();
+  await act(async () => {
+    pending.reject(new Error("Read failed"));
+    await settle();
+  });
+  expect(
+    document.querySelector('[role="dialog"] [role="alert"]')
+  ).not.toBeNull();
+  expect(document.querySelector('[role="dialog"] pre')).toBeNull();
+  await act(async () => {
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
+      .find((button) => button.textContent === "Retry skill")
+      ?.click();
+    await settle();
+  });
+  await act(async () => {
+    await settle();
+  });
+  expect(document.querySelector('[role="dialog"] pre')?.textContent).toBe(
+    "Shared instructions"
+  );
+  await act(async () => {
+    document
+      .querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')
+      ?.click();
+    await settle();
+  });
+  await openSharedSkill(container);
+  expect(read.mock.calls).toEqual(
+    Array.from({ length: 3 }, () => ["team-a", "team-a-skill"])
+  );
+  expect(
+    document.querySelector('[role="dialog"] [role="alert"]')
+  ).not.toBeNull();
+  expect(document.querySelector('[role="dialog"] pre')).toBeNull();
+});
+
+test("late shared skill response cannot replace another team's details", async () => {
+  const pending = Promise.withResolvers<ReturnType<typeof publishedSkill>>();
+
+  const read = spyOn(client, "getPublishedSkill")
+    .mockImplementationOnce(() => pending.promise)
+    .mockResolvedValueOnce(publishedSkill("team-b-skill", "Team B content"));
+
+  cleanups.push(() => read.mockRestore());
+  const { container, render } = await mountSkillReader();
+  await openSharedSkill(container);
+  await render({ ...organization("team-b"), role: "member" });
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  await openSharedSkill(container);
+  await act(async () => {
+    pending.resolve(publishedSkill("team-a-skill", "Old team content"));
+    await settle();
+  });
+  expect(read.mock.calls).toEqual([
+    ["team-a", "team-a-skill"],
+    ["team-b", "team-b-skill"],
+  ]);
+  expect(document.querySelector('[role="dialog"] pre')?.textContent).toBe(
+    "Team B content"
+  );
+  expect(document.body.textContent).not.toContain("Old team content");
+});
+
+test("unavailable shared skills remain non-actionable", async () => {
+  const { container, queries } = await mountSkillReader();
+  const data = overview("team-a");
+  data.sharedResources[1].readiness = "unavailable";
+  await act(async () => {
+    queries.setQueryData(
+      queryKeys.organizationOverview("parent", "team-a"),
+      data
+    );
+    await settle();
+  });
+  expect(
+    container.querySelector('button[aria-label^="View shared skill"]')
+  ).toBeNull();
+  expect(container.textContent).toContain(data.sharedResources[1].label);
+});
