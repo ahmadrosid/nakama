@@ -196,6 +196,70 @@ describe("knowledge_base_search tool", () => {
     expect(soulOnly.matchCount).toBe(0);
   });
 
+  test("matches stems and prefixes, and honors exclusions", async () => {
+    await setupKnowledgeBase({
+      additionalProfileDocuments: [
+        {
+          body: "deployed services nightly\nrollback plan\n",
+          filename: "ops.txt",
+          id: "kb_ops",
+        },
+      ],
+      profile: {
+        body: "deploying checklist\nrollback skipped\n",
+        filename: "checklist.txt",
+        id: "kb_checklist",
+      },
+    });
+
+    const context = { orgId: ORG_ID, profileId: PROFILE_ID };
+
+    const stemmed = await runKnowledgeBaseSearch({ query: "deploy" }, context);
+
+    expect(stemmed.matchCount).toBe(2);
+
+    const excluded = await runKnowledgeBaseSearch(
+      { query: "rollback -skipped" },
+      context
+    );
+
+    expect(excluded.matchCount).toBe(1);
+    expect(excluded.matches[0]?.text).toContain("rollback plan");
+  });
+
+  test("reindexes a document after its content changes", async () => {
+    await setupKnowledgeBase({
+      profile: {
+        body: "first version zebra\n",
+        filename: "notes.txt",
+        id: "kb_changing",
+      },
+    });
+
+    const context = { orgId: ORG_ID, profileId: PROFILE_ID };
+
+    expect(
+      (await runKnowledgeBaseSearch({ query: "zebra" }, context)).matchCount
+    ).toBe(1);
+
+    await writeFile(
+      getKnowledgeBaseExtractedPath(
+        getKnowledgeBaseDir(ORG_ID, PROFILE_ID),
+        "kb_changing"
+      ),
+      extractedContent("notes.txt", "second version giraffe and more text\n"),
+      "utf8"
+    );
+
+    expect(
+      (await runKnowledgeBaseSearch({ query: "zebra" }, context)).matchCount
+    ).toBe(0);
+
+    expect(
+      (await runKnowledgeBaseSearch({ query: "giraffe" }, context)).matchCount
+    ).toBe(1);
+  });
+
   test("includes only shared organization documents attached to the profile", async () => {
     await setupTwoScopes();
 

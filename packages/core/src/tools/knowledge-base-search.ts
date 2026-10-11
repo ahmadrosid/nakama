@@ -45,7 +45,9 @@ type KnowledgeBaseScope = "organization" | "profile";
 
 type ScopedMatch = RipgrepMatch & { scope: KnowledgeBaseScope };
 
-const qmdSearchLock = createChatLock();
+const searchIndexLock = createChatLock();
+
+const SEARCH_INDEX_FILE = ".kb-search.sqlite";
 
 export interface KnowledgeBaseSearchOutput {
   matchCount: number;
@@ -133,7 +135,7 @@ export async function runKnowledgeBaseSearch(
     const organizationResult = parsed.regex
       ? await runSearchTarget(organizationTarget, parsed, organizationRoot)
       : (
-          await runQmdSearchTargets(
+          await runLexicalSearchTargets(
             getKnowledgeBaseDir(orgId, profileId),
             [organizationTarget],
             parsed,
@@ -165,7 +167,7 @@ export async function runKnowledgeBaseSearch(
         runSearchTarget(profileTarget, parsed, workspaceRoot),
         runSearchTarget(organizationTarget, parsed, organizationRoot),
       ])
-    : await runQmdSearchTargets(
+    : await runLexicalSearchTargets(
         getKnowledgeBaseDir(orgId, profileId),
         [profileTarget, organizationTarget],
         parsed,
@@ -379,7 +381,7 @@ async function runSearchTarget(
   };
 }
 
-async function runQmdSearchTargets(
+async function runLexicalSearchTargets(
   profileRoot: string,
   targets: SearchTarget[],
   parsed: KnowledgeBaseSearchInput,
@@ -389,94 +391,245 @@ async function runQmdSearchTargets(
     return targets.map(() => ({ matches: [], truncated: false }));
   }
 
-  // Collection masks change with filename filters, so index and query share a lock.
-  return qmdSearchLock.withLock(profileRoot, async () => {
+  // Filename filters change which files a target covers, so index and query share a lock.
+  return searchIndexLock.withLock(profileRoot, async () => {
     await ensureDir(profileRoot);
     const canonicalProfileRoot = await realpath(profileRoot);
-    // Keep QMD's native packages out of the server and worker bundles.
-    const qmdPackage = "@tobilu/qmd";
 
-    // SAFETY: The constant package specifier is the declared @tobilu/qmd module.
-    const { createStore, extractSnippet } = (await import(
-      qmdPackage
-    )) as typeof import("@tobilu/qmd");
-
-    const store = await createStore({
-      dbPath: join(canonicalProfileRoot, ".qmd.sqlite"),
+    const db = new Database(join(canonicalProfileRoot, SEARCH_INDEX_FILE), {
+      create: true,
     });
 
     try {
-      const collectionNames: string[] = [];
+      db.run(
+        "CREATE TABLE IF NOT EXISTS docs (id INTEGER PRIMARY KEY, collection TEXT NOT NULL, path TEXT NOT NULL, mtime_ms REAL NOT NULL, size INTEGER NOT NULL, UNIQUE (collection, path))"
+      );
 
-      for (const target of targets) {
-        if (target.kind === "missing") {
-          await store.removeCollection(target.scope);
-          continue;
-        }
+      db.run(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(body, tokenize='porter unicode61')"
+      );
 
-        const path =
-          target.kind === "file" ? dirname(target.root) : target.root;
-
-        const pattern =
-          target.kind === "file" ? basename(target.root) : target.glob!;
-
-        await store.addCollection(target.scope, { path, pattern });
-        collectionNames.push(target.scope);
-      }
-
-      if (collectionNames.length === 0) {
-        return targets.map(() => ({ matches: [], truncated: false }));
-      }
-
-      await store.update({ collections: collectionNames });
+      const ftsQuery = buildFtsQuery(parsed.query);
 
       return await Promise.all(
         targets.map(async (target) => {
           if (target.kind === "missing") {
+            removeCollection(db, target.scope);
+
             return { matches: [], truncated: false };
           }
 
-          const results = await store.searchLex(parsed.query, {
-            collection: target.scope,
-            limit: parsed.maxResults + 1,
-          });
+          const root =
+            target.kind === "file" ? dirname(target.root) : target.root;
 
-          return {
-            matches: results.slice(0, parsed.maxResults).map((result) => {
-              const snippet = extractSnippet(
-                result.body ?? "",
-                parsed.query,
-                16_000
-              );
+          const pattern =
+            target.kind === "file" ? basename(target.root) : target.glob;
 
-              const filename = basename(result.filepath);
+          const paths = await syncCollection(db, target.scope, root, pattern);
+
+          if (!ftsQuery || paths.length === 0) {
+            return { matches: [], truncated: false };
+          }
+
+          const rows = db
+            .query<{ path: string }, [string, string, string, number]>(
+              `SELECT d.path AS path
+               FROM docs_fts
+               JOIN docs d ON d.id = docs_fts.rowid
+               WHERE docs_fts MATCH ?
+                 AND d.collection = ?
+                 AND d.path IN (SELECT value FROM json_each(?))
+               ORDER BY bm25(docs_fts)
+               LIMIT ?`
+            )
+            .all(
+              ftsQuery,
+              target.scope,
+              JSON.stringify(paths),
+              parsed.maxResults + 1
+            );
+
+          const matches = await Promise.all(
+            rows.slice(0, parsed.maxResults).map(async (row) => {
+              const body = await Bun.file(join(root, row.path)).text();
+              const snippet = extractSnippet(body, parsed.query, 16_000);
 
               return {
                 file:
                   target.scope === "profile"
                     ? relative(
                         workspaceRoot,
-                        join(canonicalProfileRoot, filename)
+                        join(canonicalProfileRoot, row.path)
                       )
-                    : filename,
+                    : row.path,
                 line: snippet.line,
                 scope: target.scope,
-                text: snippet.snippet,
+                text: snippet.text,
               };
-            }),
-            truncated: results.length > parsed.maxResults,
-          };
+            })
+          );
+
+          return { matches, truncated: rows.length > parsed.maxResults };
         })
       );
     } finally {
-      try {
-        // Finalize prepared statements so Windows releases the index files.
-        if (store.internal.db instanceof Database) {
-          store.internal.db.close(true);
-        }
-      } finally {
-        await store.close();
-      }
+      // Finalize prepared statements so Windows releases the index file.
+      db.close(true);
     }
   });
+}
+
+function removeCollection(db: Database, collection: string): void {
+  db.run(
+    "DELETE FROM docs_fts WHERE rowid IN (SELECT id FROM docs WHERE collection = ?)",
+    [collection]
+  );
+  db.run("DELETE FROM docs WHERE collection = ?", [collection]);
+}
+
+/**
+ * Brings the index up to date for the files `pattern` matches under `root` and
+ * returns their relative paths. Rows for files that no longer exist are
+ * dropped; rows for files outside this pattern stay, so alternating filename
+ * filters do not rebuild the index.
+ */
+async function syncCollection(
+  db: Database,
+  collection: string,
+  root: string,
+  pattern: string
+): Promise<string[]> {
+  const paths: string[] = [];
+
+  for await (const path of new Bun.Glob(pattern).scan({ cwd: root })) {
+    paths.push(path);
+  }
+
+  const known = new Map(
+    db
+      .query<
+        { id: number; mtime_ms: number; path: string; size: number },
+        [string]
+      >("SELECT id, path, mtime_ms, size FROM docs WHERE collection = ?")
+      .all(collection)
+      .map((row) => [row.path, row])
+  );
+
+  const remove = (id: number) => {
+    db.run("DELETE FROM docs_fts WHERE rowid = ?", [id]);
+    db.run("DELETE FROM docs WHERE id = ?", [id]);
+  };
+
+  const scanned = new Set(paths);
+
+  for (const [path, row] of known) {
+    if (!(scanned.has(path) || (await Bun.file(join(root, path)).exists()))) {
+      remove(row.id);
+    }
+  }
+
+  for (const path of paths) {
+    const file = Bun.file(join(root, path));
+    const previous = known.get(path);
+
+    if (
+      previous &&
+      previous.mtime_ms === file.lastModified &&
+      previous.size === file.size
+    ) {
+      continue;
+    }
+
+    const body = await file.text();
+
+    if (previous) {
+      remove(previous.id);
+    }
+
+    const { lastInsertRowid } = db.run(
+      "INSERT INTO docs (collection, path, mtime_ms, size) VALUES (?, ?, ?, ?)",
+      [collection, path, file.lastModified, file.size]
+    );
+
+    db.run("INSERT INTO docs_fts (rowid, body) VALUES (?, ?)", [
+      lastInsertRowid,
+      body,
+    ]);
+  }
+
+  return paths;
+}
+
+/**
+ * Turns free text into an FTS5 query: every term must match, plain words match
+ * as prefixes, quoted phrases and hyphenated or dotted tokens (`gpt-4`,
+ * `3.14.0`) match as phrases, and a leading `-` excludes a term. Returns null
+ * when nothing searchable is left.
+ */
+function buildFtsQuery(query: string): string | null {
+  const positive: string[] = [];
+  const negative: string[] = [];
+
+  for (const match of query.matchAll(/(-?)(?:"([^"]*)"|(\S+))/gu)) {
+    const negated = match[1] === "-" || (match[3]?.startsWith("-") ?? false);
+    const text = match[2] ?? match[3]?.replace(/^-/u, "") ?? "";
+    const parts = text.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
+    if (parts.length === 0) {
+      continue;
+    }
+
+    const isPhrase = match[2] !== undefined || parts.length > 1;
+    const term = isPhrase ? `"${parts.join(" ")}"` : `"${parts[0]}"*`;
+    (negated ? negative : positive).push(term);
+  }
+
+  if (positive.length === 0) {
+    return null;
+  }
+
+  return [positive.join(" AND "), ...negative].join(" NOT ");
+}
+
+interface SnippetResult {
+  line: number;
+  text: string;
+}
+
+/** Finds the line that matches the most query terms and returns it with context. */
+function extractSnippet(
+  body: string,
+  query: string,
+  maxLength: number
+): SnippetResult {
+  const lines = body.split("\n");
+
+  const terms = query
+    .toLowerCase()
+    .split(/\s+/u)
+    .map((term) => term.replace(/^-|"/gu, ""))
+    .filter(Boolean);
+
+  let bestLine = 0;
+  let bestScore = -1;
+
+  for (const [index, line] of lines.entries()) {
+    const lower = line.toLowerCase();
+    const score = terms.filter((term) => lower.includes(term)).length;
+
+    if (score > bestScore) {
+      bestLine = index;
+      bestScore = score;
+    }
+  }
+
+  const start = Math.max(0, bestLine - 1);
+  const snippetLines = lines.slice(start, bestLine + 3);
+  const text = snippetLines.join("\n");
+  const header = `@@ -${start + 1},${snippetLines.length} @@ (${start} before, ${Math.max(0, lines.length - start - snippetLines.length)} after)`;
+
+  return {
+    line: bestLine + 1,
+    text: `${header}\n${text.length > maxLength ? `${text.slice(0, maxLength - 3)}...` : text}`,
+  };
 }
