@@ -63,16 +63,35 @@ export function automationRunMessages(
   return messages;
 }
 
-export function formatTrigger(trigger: AutomationTrigger): string {
+const DAILY_CRON = /^(\d{1,2}) (\d{1,2}) \* \* \*$/;
+
+export function describeTrigger(trigger: AutomationTrigger): {
+  label: string;
+  note?: string;
+} {
   if (trigger.type === "manual") {
-    return "Manual trigger";
+    return { label: "Manual only", note: "Starts when you press Run now" };
   }
 
   if (trigger.type === "runAt") {
-    return `One-time · ${trigger.at}${trigger.timezone ? ` (${trigger.timezone})` : ""}`;
+    return { label: `Once, ${trigger.at}`, note: trigger.timezone };
   }
 
-  return `Schedule · ${trigger.cron}${trigger.timezone ? ` (${trigger.timezone})` : ""}`;
+  const daily = DAILY_CRON.exec(trigger.cron.trim());
+
+  if (daily) {
+    const time = new Date(2000, 0, 1, Number(daily[2]), Number(daily[1]));
+
+    return {
+      label: `Every day, ${time.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`,
+      note: trigger.timezone,
+    };
+  }
+
+  return {
+    label: "Custom schedule",
+    note: [trigger.cron, trigger.timezone].filter(Boolean).join(" · "),
+  };
 }
 
 export function summarizeAutomationListMeta(

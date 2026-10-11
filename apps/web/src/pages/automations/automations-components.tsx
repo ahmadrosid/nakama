@@ -29,9 +29,7 @@ import {
   CheckmarkCircle01Icon,
   Copy01Icon,
   Delete02Icon,
-  Edit03Icon,
   Loading03Icon,
-  PlayIcon,
   Search01Icon,
 } from "hugeicons-react";
 import { type ReactNode, useMemo, useState } from "react";
@@ -50,64 +48,6 @@ import {
   runPreviewText,
   summarizeAutomationListMeta,
 } from "@/pages/automations/automations-page.shared";
-
-export function AutomationDetailActions({
-  automation,
-  busy,
-  runningId,
-  onRun,
-  onEdit,
-  onDelete,
-  className,
-}: {
-  automation: StoredAutomation;
-  busy: boolean;
-  runningId: string | null;
-  onRun: (automationId: string) => void | Promise<void>;
-  onEdit: (automation: StoredAutomation) => void;
-  onDelete: (automation: StoredAutomation) => void;
-  className?: string;
-}) {
-  return (
-    <div className={cn("flex shrink-0 items-center gap-1", className)}>
-      <Button
-        aria-label="Run now"
-        disabled={busy || runningId !== null}
-        onClick={() => void onRun(automation.id)}
-        size="icon-sm"
-        type="button"
-        variant="ghost"
-      >
-        {runningId === automation.id ? (
-          <Spinner className="size-3.5" />
-        ) : (
-          <PlayIcon aria-hidden className="ml-px size-3.5" />
-        )}
-      </Button>
-      <Button
-        aria-label="Edit"
-        disabled={busy}
-        onClick={() => onEdit(automation)}
-        size="icon-sm"
-        type="button"
-        variant="ghost"
-      >
-        <Edit03Icon aria-hidden className="size-3.5" />
-      </Button>
-      <Button
-        aria-label="Delete"
-        className="text-destructive hover:text-destructive"
-        disabled={busy}
-        onClick={() => onDelete(automation)}
-        size="icon-sm"
-        type="button"
-        variant="ghost"
-      >
-        <Delete02Icon aria-hidden className="size-3.5" />
-      </Button>
-    </div>
-  );
-}
 
 export function AutomationListItem({
   automation,
@@ -905,34 +845,6 @@ function DeliverySettingsFields({
   );
 }
 
-export function AutomationStateBadge({
-  enabled,
-  className,
-}: {
-  enabled: boolean;
-  className?: string;
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium text-2xs",
-        enabled
-          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-          : "bg-muted text-muted-foreground",
-        className
-      )}
-    >
-      <span
-        className={cn(
-          "size-1.5 rounded-full",
-          enabled ? "bg-emerald-500" : "bg-muted-foreground/70"
-        )}
-      />
-      {enabled ? "Enabled" : "Disabled"}
-    </span>
-  );
-}
-
 function AutomationStateDot({ enabled }: { enabled: boolean }) {
   return (
     <span
@@ -942,28 +854,6 @@ function AutomationStateDot({ enabled }: { enabled: boolean }) {
         enabled ? "bg-emerald-500" : "bg-muted-foreground/50"
       )}
     />
-  );
-}
-
-export function SoftPill({
-  label,
-  tone = "default",
-}: {
-  label: string;
-  tone?: "default" | "success" | "danger";
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2 py-1 font-medium text-2xs",
-        tone === "default" && "bg-muted text-muted-foreground",
-        tone === "success" &&
-          "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-        tone === "danger" && "bg-destructive/10 text-destructive"
-      )}
-    >
-      {label}
-    </span>
   );
 }
 

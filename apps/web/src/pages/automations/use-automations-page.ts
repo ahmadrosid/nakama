@@ -17,13 +17,8 @@ import {
   useRunAutomationMutation,
   useUpdateAutomationMutation,
 } from "@/hooks/use-automations";
-import {
-  formatFutureRelativeTime,
-  formatSessionRelativeTime,
-} from "@/lib/chat-history";
 import { formatError } from "@/lib/client";
 import { findSuperBotProfile } from "@/lib/profiles";
-import { formatTrigger } from "@/pages/automations/automations-page.shared";
 
 const EMPTY_AUTOMATIONS: StoredAutomation[] = [];
 
@@ -215,6 +210,34 @@ export function useAutomationsPage() {
     }
   }
 
+  async function handleToggleEnabled(
+    automation: StoredAutomation,
+    enabled: boolean
+  ) {
+    if (busy) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await updateMutation.mutateAsync({
+        automationId: automation.id,
+        input: {
+          delivery: automation.delivery ?? null,
+          description: automation.description,
+          enabled,
+          name: automation.name,
+          profileId: automation.profileId,
+          prompt: automation.prompt,
+          trigger: automation.trigger,
+        },
+      });
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }
+
   async function handleDeleteConfirm() {
     if (!deleteTarget || busy) {
       return;
@@ -299,21 +322,9 @@ export function useAutomationsPage() {
     navigateToNewChat(superBotProfile.id);
   }
 
-  const runScheduleHint = selected?.nextRunAt
-    ? `Next run ${formatFutureRelativeTime(selected.nextRunAt)}`
-    : selected?.lastRunAt
-      ? `Last run ${formatSessionRelativeTime(selected.lastRunAt)}`
-      : "Not run yet";
-
-  const selectedSubtitle = selected
-    ? [
-        profiles.find((p) => p.id === selected.profileId)?.name ??
-          selected.profileId,
-        formatTrigger(selected.trigger),
-        runScheduleHint,
-      ]
-        .filter(Boolean)
-        .join(" · ")
+  const selectedProfileName = selected
+    ? (profiles.find((p) => p.id === selected.profileId)?.name ??
+      selected.profileId)
     : "";
 
   return {
@@ -330,6 +341,7 @@ export function useAutomationsPage() {
     handleDeleteRunConfirm,
     handleRun,
     handleSaveEdit,
+    handleToggleEnabled,
     initialLoading,
     isSearching,
     loading,
@@ -344,8 +356,8 @@ export function useAutomationsPage() {
     searchQuery,
     selected,
     selectedId,
+    selectedProfileName,
     selectedRunSummary,
-    selectedSubtitle,
     setDeleteRunTarget,
     setDeleteTarget,
     setEditDraft,

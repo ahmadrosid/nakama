@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import type { AutomationRunRecord } from "@nakama/core/contract";
-import { automationRunMessages } from "./automations-page.shared";
+import {
+  automationRunMessages,
+  describeTrigger,
+} from "./automations-page.shared";
 
 test("run conversations retain tools and text and only animate a running run", () => {
   const run: AutomationRunRecord = {
@@ -56,4 +59,18 @@ test("run conversations retain tools and text and only animate a running run", (
   run.status = "running";
   run.output = null;
   expect(automationRunMessages(run)[0]?.streaming).toBe(true);
+});
+
+test("daily cron reads as plain words and other triggers stay readable", () => {
+  expect(
+    describeTrigger({
+      cron: "0 7 * * *",
+      timezone: "Asia/Jakarta",
+      type: "schedule",
+    })
+  ).toEqual({ label: "Every day, 7:00 AM", note: "Asia/Jakarta" });
+  expect(describeTrigger({ cron: "*/5 * * * *", type: "schedule" }).label).toBe(
+    "Custom schedule"
+  );
+  expect(describeTrigger({ type: "manual" }).label).toBe("Manual only");
 });
