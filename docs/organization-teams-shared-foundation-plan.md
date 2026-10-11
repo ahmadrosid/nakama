@@ -1186,3 +1186,14 @@ Step 2 and delivery stage 1 remain incomplete. Import paths and the shared-agent
 No browser or external provider calls ran. Stale provider cassettes, full tests, and builds remain unresolved.
 Next: check import paths for shared-profile configuration writes before exposing shared-agent selection through HTTP.
 Evidence: /tmp/nakama-shared-direct-config-tests.log, /tmp/nakama-shared-direct-config-server-types.log, /tmp/nakama-shared-direct-config-lint.log.
+
+2026-10-11: Step 2 slice 2h verifies profile-pack import isolation before shared-agent HTTP selection.
+The existing importer allocates a free profile ID globally. Manifest sourceProfileId is provenance, not a write target. It constructs the destination organization and profile fields explicitly.
+A new regression imports a local pack with forged source and organization IDs into a team containing a shared instance. A matching name cannot overwrite the shared instance, source profile, team soul files, audit history, source link, or parent relationship.
+The test repeats after publication removal and verifies that neither forged parent metadata nor publications enter the destination. Imported local profiles retain their own team scope and remain separate from the shared instance.
+No new import abstraction was needed. This slice includes the previously authorized avatar lookup typing and custom-tool handler validation repairs in the same module. Existing route tests and malformed-manifest tests cover those repairs.
+Checks: all 21 focused service and HTTP tests passed; complete server type check passed; lint passed all 1532 files; git diff --check passed.
+Step 2 and delivery stage 1 remain incomplete. Shared-agent selection still has no HTTP entry. Shared-reference export, inactive-reference import, full data restore, and publication restoration remain in step 5; this test does not claim those paths are complete.
+No browser or external provider calls ran. Stale provider cassettes, full tests, and builds remain unresolved.
+Next: expose the authorized shared-agent selection service through HTTP and return a team-owned ProfileResponse.
+Evidence: /tmp/nakama-shared-import-guards-tests.log, /tmp/nakama-shared-import-guards-server-types.log, /tmp/nakama-shared-import-guards-lint.log.

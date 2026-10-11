@@ -131,7 +131,7 @@ const IN_PROCESS_SKILL_SOURCE_EXTENSIONS = new Set([
 const IN_PROCESS_SKILL_SOURCE_REASON =
   "Executable JavaScript/TypeScript skill sources run inside the Nakama server process and are never installed from a profile pack.";
 
-const AVATAR_EXTENSION_MEDIA_TYPES = {
+const AVATAR_EXTENSION_MEDIA_TYPES: Record<string, string> = {
   gif: "image/gif",
   jpeg: "image/jpeg",
   jpg: "image/jpeg",
@@ -1123,12 +1123,14 @@ function isProfilePackSkippedItem<T>(value: T): boolean {
 
 function isProfilePackCustomTool<T>(value: T): boolean {
   const tool = readStringKeyedRecord(value);
+  const handlerType = tool?.get("handlerType");
 
   return Boolean(
     tool &&
       isString(tool.get("description")) &&
       isProfilePackJsonValue(tool.get("handlerConfig")) &&
-      isCustomToolType(tool.get("handlerType")) &&
+      isString(handlerType) &&
+      isCustomToolType(handlerType) &&
       isString(tool.get("name"))
   );
 }

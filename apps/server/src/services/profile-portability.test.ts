@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { getCustomToolsDir } from "@nakama/core";
+import { getCustomToolsDir, slugifyProfileName } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { unzipSync, zipSync } from "fflate";
 
@@ -61,6 +61,102 @@ describe("profile portability", () => {
     path.join(root, "orgs", orgId, "profiles", profileId);
 
   const now = () => new Date().toISOString();
+
+  test("pack provenance and name collisions cannot overwrite a shared instance or its source", async () => {
+    const { db, service } = await setup();
+    const timestamp = now();
+    for (const id of [ORG, DEST, VICTIM]) {
+      await db.upsertOrganization({
+        createdAt: timestamp,
+        id,
+        name: id,
+        parentOrgId: id === DEST ? ORG : null,
+        slug: id,
+        updatedAt: timestamp,
+      });
+    }
+    const { profile: source } = await service.createProfile(ORG, {
+      name: "Published template",
+      systemPrompt: "Source instructions",
+    });
+    const publication = await db.publishOrgSharedResource({
+      createdAt: timestamp,
+      id: "publication",
+      orgId: ORG,
+      resourceId: source.id,
+      resourceKind: "agent",
+      updatedAt: timestamp,
+    });
+    const name = "Shared instance";
+    const instance = await db.createSharedAgentInstance(
+      DEST,
+      publication.id,
+      slugifyProfileName(name),
+      timestamp
+    );
+    const link = await db.getSharedAgentInstance(DEST, instance.id);
+    const storedSource = await db.getProfile(source.id);
+    const teamDir = soul(DEST, instance.id);
+    await mkdir(teamDir, { recursive: true });
+    const files = [
+      "SOUL.md",
+      "STYLE.md",
+      "INSTRUCTIONS.md",
+      "MEMORY.md",
+      "USER.md",
+    ];
+    for (const file of files) {
+      await writeFile(path.join(teamDir, file), `Team ${file}`);
+    }
+    const { profile: local } = await service.createProfile(VICTIM, {
+      name: "Local pack",
+      soulFiles: { "SOUL.md": "Imported identity" },
+      systemPrompt: "Imported instructions",
+    });
+    const exported = await createProfilePackExport(db, VICTIM, local.id);
+    for (const revoked of [false, true]) {
+      if (revoked) {
+        await db.deleteOrgSharedResource(ORG, publication.id);
+      }
+      const crafted = repack(exported.data, {
+        "nakama-profile-export.json": JSON.stringify({
+          ...exported.manifest,
+          meta: {
+            ...exported.manifest.meta,
+            id: instance.id,
+            name,
+            orgId: ORG,
+          },
+          orgId: ORG,
+          parentOrgId: VICTIM,
+          sourceProfileId: revoked ? source.id : instance.id,
+        }),
+      });
+      const imported = await importProfilePack(db, DEST, crafted, {
+        confirm: true,
+      });
+      expect(imported.profileId).not.toBe(instance.id);
+      expect(imported.profileId).not.toBe(source.id);
+      expect(await db.getProfile(imported.profileId)).toMatchObject({
+        orgId: DEST,
+        systemPrompt: "Imported instructions",
+      });
+      expect(
+        await db.getSharedAgentInstance(DEST, imported.profileId)
+      ).toBeNull();
+      expect(await db.getProfile(instance.id)).toEqual(instance);
+      expect(await db.getProfile(source.id)).toEqual(storedSource);
+      expect(await db.getSharedAgentInstance(DEST, instance.id)).toEqual(link);
+      expect(await db.listProfileChangeEvents(DEST, instance.id)).toEqual([]);
+      expect((await db.getOrganizationById(DEST))?.parentOrgId).toBe(ORG);
+      expect(await db.listOrgSharedResources(DEST)).toEqual([]);
+      for (const file of files) {
+        expect(await readFile(path.join(teamDir, file), "utf8")).toBe(
+          `Team ${file}`
+        );
+      }
+    }
+  });
 
   async function writeSkill(
     db: ReturnType<typeof createInMemoryDatabaseAdapter>,
@@ -664,6 +760,29 @@ describe("profile portability", () => {
 
     const before = (await db.listProfilesForOrg(DEST)).length;
     await previewProfilePackImport(db, DEST, exported.data);
+    expect(await db.listProfilesForOrg(DEST)).toHaveLength(before);
+
+    for (const handlerType of [null, 123, [], {}]) {
+      const invalid = repack(exported.data, {
+        "nakama-profile-export.json": JSON.stringify({
+          ...exported.manifest,
+          meta: {
+            ...exported.manifest.meta,
+            customTools: [
+              {
+                description: "Invalid tool",
+                handlerConfig: {},
+                handlerType,
+                name: "invalid_tool",
+              },
+            ],
+          },
+        }),
+      });
+      await expect(
+        previewProfilePackImport(db, DEST, invalid)
+      ).rejects.toThrow();
+    }
     expect(await db.listProfilesForOrg(DEST)).toHaveLength(before);
 
     await expect(
