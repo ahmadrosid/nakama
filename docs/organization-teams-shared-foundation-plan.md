@@ -1212,3 +1212,16 @@ Automatic approval review previously rejected provider recording because sending
 Step 2 remains unchecked until its delivery gate passes. Full-suite repair stopped after the two runs; shared-reference portability and runtime configuration refresh remain incomplete.
 Next: repair the root browser test setup, then resolve the provider fixtures after the required permission is supplied. Recheck delivery stage 1 before marking it complete.
 Evidence: /tmp/nakama-shared-selection-http-tests.log, /tmp/nakama-shared-selection-http-{server,db,web}-types.log, /tmp/nakama-shared-selection-http-lint.log, /tmp/nakama-stage-one-knip.log, /tmp/nakama-stage-one-full-tests.log, /tmp/nakama-stage-one-full-tests-unsandboxed.log.
+
+2026-10-11: Step 2 gate repair separates server and web tests in the root `bun run test` script.
+The non-web run discovers all tests except apps/web; the web run uses its existing DOM preload in a separate process. The script stops on a failed non-web run. Both complete suites ran separately for this gate check.
+Global DOM setup caused provider SDK safety failures. Bun file isolation removed those failures but broke interception during the complete provider replay run, causing requests with a test key to return authentication errors. Both approaches were removed; the final process split retains SDK browser safety and restores offline replay.
+The web type check now includes its existing preload. A provider regression checks that browser objects cannot enable server credentials or cause a request. The existing cassette viewer is an explicit knip entry.
+Channel fixtures now scope NAKAMA_CONFIG_DIR to their temporary home and restore it after each test. Shared fixtures, Telegram outbound tests, and notification webhook tests retain their existing setup and cleanup. The platform organization response test checks the new parentOrgId field.
+This slice includes previously authorized fetch fixture typing and channel fixture field corrections in the same files. Other cleanup remains uncommitted.
+Checks: all 126 focused tests passed; all 654 web tests passed; complete core, server, and web type checks passed; lint passed all 1532 files; knip passed; git diff --check passed.
+The final complete non-web run outside the sandbox used a temporary configuration directory and LLM_VCR_MODE=replay: 4183 passed, 22 skipped, 2 failed. Combined with the web suite: 4837 passed, 22 skipped, 2 failed across 512 files. Both remaining failures are the existing ask_user_question and todo_write OpenAI recordings returning empty Responses output.
+Earlier repair runs failed with global DOM setup (112 failures) and file isolation (40 failures). No further full-suite repair runs will run in this iteration. Step 2 and delivery stage 1 remain unchecked.
+Automatic approval review previously rejected provider recording because sending the test payload and tool schema to OpenAI lacked explicit human approval. No recording ran. Browser automation, builds, push, and PR remain unchecked.
+Next: obtain the required recording permission, replace the two stale provider recordings with real Responses calls, replay offline, and recheck the stage 1 gate. Runtime composition, UI, portability, and docs remain incomplete.
+Evidence: /tmp/nakama-root-test-setup-final-{focused,node,web,core-types,server-types,web-types,lint,knip}.log.

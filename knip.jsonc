@@ -32,7 +32,11 @@
       ]
     },
     "apps/server": {
-      "entry": ["src/index.ts", "scripts/*.ts"],
+      "entry": [
+        "src/index.ts",
+        "scripts/*.ts",
+        "src/testing/cassettes/serve.ts"
+      ],
       // Bundled ACP agents. The server resolves them by name at run time (acp-agent-presets.ts).
       "ignoreDependencies": [
         "@agentclientprotocol/claude-agent-acp",

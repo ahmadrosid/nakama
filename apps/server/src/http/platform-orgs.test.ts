@@ -54,6 +54,7 @@ describe("platform org routes", () => {
         id: expect.stringMatching(/^org_/),
         monthlyLlmTurnLimit: 0,
         name: "Acme Corp",
+        parentOrgId: null,
         skillsCuratorArchiveAfterDays: 90,
         skillsCuratorConsolidateEnabled: false,
         skillsCuratorEnabled: false,
