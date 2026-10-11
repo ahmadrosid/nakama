@@ -288,7 +288,7 @@ These are stated choices, not verified requirements from the screenshot.
 
 Implementation sequence:
 
-- [ ] 1. Add the tenant relationship and publication records.
+- [x] 1. Add the tenant relationship and publication records.
 - [ ] 2. Extend contracts and organization routes.
 - [ ] 3. Connect publication checks to real resource use.
 - [ ] 4. Build the Organization screen.
@@ -326,7 +326,7 @@ Status values: `todo`, `doing`, `done`, `blocked`.
 
 | ID | Delivery stage | Step | Test items | Status | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 1. Schema, contracts, access | Tenant relationship and publication records | 1, 2, 3, 17, 18 | doing | ae7404d0 (1a), 47c456c3 (1b), 69fdbb59 (1c), ff81645b (1d), bc7bb682 (1e), 38f29075 (1f), 1b1d7ab6 (1g), 8ba2b8b5 (1h), e45bdeea (1i) | Slices 1a–1j complete; agent publication validation remains |
+| 1 | 1. Schema, contracts, access | Tenant relationship and publication records | 1, 2, 3, 17, 18 | done | ae7404d0 (1a), 47c456c3 (1b), 69fdbb59 (1c), ff81645b (1d), bc7bb682 (1e), 38f29075 (1f), 1b1d7ab6 (1g), 8ba2b8b5 (1h), e45bdeea (1i), fa966d71 (1j) | Slices 1a–1k complete; contracts and routes remain in step 2 |
 | 2 | 1. Schema, contracts, access | Contracts and organization routes | 15, 16 | todo | | |
 | 3a | 2. Resource paths | Knowledge | 4, 5, 6, 21 | todo | | |
 | 3b | 2. Resource paths | Skills | 4, 5, 20 | todo | | |
@@ -352,6 +352,7 @@ Slice log (one row per commit):
 | 2026-10-11 | 1h | Parent knowledge publication and scoped removal | 79 focused service and database tests passed | Tool and skill source validation |
 | 2026-10-11 | 1i | Tool ownership and profile skill source validation | 224 focused service and database tests passed | Model source validation |
 | 2026-10-11 | 1j | Configured model publication and stable provider identity | 258 focused service, provider-helper, and database tests passed | Agent dependency validation |
+| 2026-10-11 | 1k | Agent template and dependency publication checks; reuse guarded source validation | 250 focused service, database, and knowledge tests passed | Contracts and organization routes |
 
 2026-10-11: Slice 1b passed database tests, the database type check, and `bun x ultracite check`.
 The first test run found an incorrect SQL value count. The repaired query passed all database tests.
@@ -1078,3 +1079,16 @@ Step 1 and delivery stage 1 remain incomplete. Agent dependency checks, contract
 Live model catalog and execution checks remain for step 3. No browser or external provider calls ran; stale provider cassettes, full tests, and builds remain unresolved.
 Next: validate shared agent templates and their permitted assignments in the existing OrgService.
 Evidence: `/tmp/nakama-model-publication-tests-final.log`, `/tmp/nakama-model-publication-types.log`, `/tmp/nakama-model-publication-lint.log`.
+
+2026-10-11: Slice 1k completes step 1 with agent publication source and dependency checks.
+Templates exclude foreign, Default Bot, and Super Bot profiles. Tenant tools, skills, and attached knowledge require valid current publications.
+Global tools, skills, configured models, and global MCP servers retain existing access. Conflicting tool and skill names, disabled skills, private profile knowledge, and unsupported parent integrations block publication.
+The existing knowledge reference reader now exports its read-only operation. Guarded reference reads preserve source layout and avoid legacy migration during publication checks.
+Publication and template checks reuse one source validator. Missing source files and invalid model selections fail without replacing the template record or source configuration.
+Tests cover explicit publication ordering, retry identity, dependency revocation, source memory preservation, protected profiles, conflicting tools, global MCP compatibility, and model rejection.
+Two repair passes corrected an import and fixture assumptions. SQLite returns complete profile defaults and currently stores MCP definitions globally; a boundary fixture checks a tenant-scoped server record.
+Checks: all 250 focused tests passed across 31 files; complete server and core type checks passed; lint passed all 1532 files; `git diff --check` passed.
+Step 1 is complete. Delivery stage 1 remains incomplete until contracts and routes pass their checks. Runtime refresh and actual executable-name checks remain in step 3.
+No browser or external provider calls ran. Other authorized cleanup changes remain uncommitted; stale provider cassettes, full tests, and builds remain unresolved.
+Next: add typed overview, team-creation, and publication contracts with the existing OpenAPI schemas.
+Evidence: `/tmp/nakama-agent-publication-tests-final.log`, `/tmp/nakama-agent-publication-{server,core}-types.log`, `/tmp/nakama-agent-publication-lint.log`.

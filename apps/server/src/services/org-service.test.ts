@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  attachSharedKnowledgeBaseDocument,
   type EmailOutboundAdapter,
   getKnowledgeBaseManifestPath,
   getKnowledgeBaseStoredDocumentPath,
@@ -1778,6 +1779,255 @@ async function seedTeamParent(db: DatabaseAdapter) {
 }
 
 describe("OrgService shared resource publications", () => {
+  test("agent publication requires published assignments and preserves private source files", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    await seedTeamParent(db);
+    const now = new Date().toISOString();
+    const profile = {
+      createdAt: now,
+      id: "profile_template",
+      isDefault: false,
+      isSuper: false,
+      model: null,
+      name: "Template",
+      orgId: "org_parent",
+      systemPrompt: "Instructions",
+      updatedAt: now,
+    };
+    await db.upsertProfile(profile);
+    const soulDir = getProfileSoulDir("org_parent", profile.id);
+    await mkdir(soulDir, { recursive: true });
+    await writeFile(join(soulDir, "MEMORY.md"), "Private source memory");
+    const tool = {
+      createdAt: now,
+      description: "Test",
+      handlerConfig: {},
+      handlerType: "bash",
+      id: "tool_template",
+      name: "template-tool",
+      orgId: "org_parent",
+      updatedAt: now,
+    };
+    await db.upsertTool(tool);
+    await db.assignToolToProfile(profile.id, tool.id);
+    const request = { resourceId: profile.id, resourceKind: "agent" as const };
+    await expect(
+      orgService.publishSharedResource("org_parent", request, "user_creator")
+    ).rejects.toMatchObject({ status: 409 });
+    await orgService.publishSharedResource(
+      "org_parent",
+      { resourceId: tool.id, resourceKind: "tool" },
+      "user_creator"
+    );
+    const skillPath = resolveProfileSkillDirectory(
+      "org_parent",
+      profile.id,
+      "template-skill"
+    );
+    await mkdir(skillPath, { recursive: true });
+    await writeFile(
+      join(skillPath, "SKILL.md"),
+      "---\nname: template-skill\ndescription: Test\n---\nInstructions"
+    );
+    const skill = {
+      createdAt: now,
+      createdBy: "human" as const,
+      description: "Test",
+      disableModelInvocation: false,
+      enabled: true,
+      hasTool: false,
+      id: "skill_template",
+      name: "template-skill",
+      orgId: "org_parent",
+      sourcePath: skillPath,
+      updatedAt: now,
+    };
+    await db.upsertSkill(skill);
+    await db.assignSkillToProfile(profile.id, skill.id);
+    await expect(
+      orgService.publishSharedResource("org_parent", request, "user_creator")
+    ).rejects.toMatchObject({ status: 409 });
+    await orgService.publishSharedResource(
+      "org_parent",
+      { resourceId: skill.id, resourceKind: "skill" },
+      "user_creator"
+    );
+    const { document } = await uploadOrganizationKnowledgeBaseDocument(
+      "org_parent",
+      {
+        data: Buffer.from("Shared knowledge").toString("base64"),
+        filename: "template.txt",
+        mediaType: "text/plain",
+      }
+    );
+    await attachSharedKnowledgeBaseDocument(
+      "org_parent",
+      profile.id,
+      document.id
+    );
+    await expect(
+      orgService.publishSharedResource("org_parent", request, "user_creator")
+    ).rejects.toMatchObject({ status: 409 });
+    const knowledgePublication = await orgService.publishSharedResource(
+      "org_parent",
+      { resourceId: document.id, resourceKind: "knowledge" },
+      "user_creator"
+    );
+    const publication = await orgService.publishSharedResource(
+      "org_parent",
+      request,
+      "user_creator"
+    );
+    expect(
+      await orgService.publishSharedResource(
+        "org_parent",
+        request,
+        "user_creator"
+      )
+    ).toEqual(publication);
+    expect(await db.listProfilesForOrg("org_parent")).toHaveLength(1);
+    expect(await db.getProfile(profile.id)).toMatchObject(profile);
+    expect(await readFile(join(soulDir, "MEMORY.md"), "utf8")).toBe(
+      "Private source memory"
+    );
+    await orgService.unpublishSharedResource(
+      "org_parent",
+      knowledgePublication.id,
+      "user_creator"
+    );
+    await expect(
+      orgService.publishSharedResource("org_parent", request, "user_creator")
+    ).rejects.toMatchObject({ status: 409 });
+    await orgService.publishSharedResource(
+      "org_parent",
+      { resourceId: document.id, resourceKind: "knowledge" },
+      "user_creator"
+    );
+    await db.upsertSkill({ ...skill, enabled: false });
+    await expect(
+      orgService.publishSharedResource("org_parent", request, "user_creator")
+    ).rejects.toMatchObject({ status: 409 });
+    await db.upsertSkill(skill);
+    await rm(join(skillPath, "SKILL.md"));
+    await expect(
+      orgService.publishSharedResource("org_parent", request, "user_creator")
+    ).rejects.toMatchObject({ status: 404 });
+    await db.unassignSkillFromProfile(profile.id, skill.id);
+    await uploadKnowledgeBaseDocument("org_parent", profile.id, {
+      data: Buffer.from("Private knowledge").toString("base64"),
+      filename: "private.txt",
+      mediaType: "text/plain",
+    });
+    await expect(
+      orgService.publishSharedResource("org_parent", request, "user_creator")
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  test("agent publication rejects protected profiles, conflicting names, and parent connections", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    await seedTeamParent(db);
+    const now = new Date().toISOString();
+    const profile = {
+      createdAt: now,
+      id: "profile_template",
+      isDefault: false,
+      isSuper: false,
+      model: null,
+      name: "Template",
+      orgId: "org_parent",
+      systemPrompt: "",
+      updatedAt: now,
+    };
+    const request = { resourceId: profile.id, resourceKind: "agent" as const };
+    for (const changes of [
+      { orgId: "org_other" },
+      { isDefault: true },
+      { isSuper: true },
+    ]) {
+      await db.upsertProfile({ ...profile, ...changes });
+      await expect(
+        orgService.publishSharedResource("org_parent", request, "user_creator")
+      ).rejects.toMatchObject({ status: 404 });
+    }
+    await db.upsertProfile(profile);
+    const globalTool = {
+      createdAt: now,
+      description: "Test",
+      handlerConfig: {},
+      handlerType: "bash",
+      id: "tool_global",
+      name: "same-name",
+      orgId: null,
+      updatedAt: now,
+    };
+    await db.upsertTool(globalTool);
+    await db.assignToolToProfile(profile.id, globalTool.id);
+    await orgService.publishSharedResource(
+      "org_parent",
+      request,
+      "user_creator"
+    );
+    const parentTool = {
+      ...globalTool,
+      id: "tool_parent",
+      orgId: "org_parent",
+    };
+    await db.upsertTool(parentTool);
+    await orgService.publishSharedResource(
+      "org_parent",
+      { resourceId: parentTool.id, resourceKind: "tool" },
+      "user_creator"
+    );
+    await db.assignToolToProfile(profile.id, parentTool.id);
+    await expect(
+      orgService.publishSharedResource("org_parent", request, "user_creator")
+    ).rejects.toMatchObject({ status: 409 });
+    await db.unassignToolFromProfile(profile.id, parentTool.id);
+    await db.upsertMcpServer({
+      cachedTools: [],
+      config: { command: "test", env: { TOKEN: "private" } },
+      createdAt: now,
+      enabled: true,
+      id: "mcp_parent",
+      lastError: null,
+      name: "Parent connection",
+      orgId: "org_parent",
+      status: "disconnected",
+      transport: "stdio",
+      updatedAt: now,
+    });
+    await db.assignMcpServerToProfile(profile.id, "mcp_parent");
+    const server = await db.getMcpServer("mcp_parent");
+    expect(server).toBeTruthy();
+    await orgService.publishSharedResource(
+      "org_parent",
+      request,
+      "user_creator"
+    );
+    const scopedServer = spyOn(
+      db,
+      "listMcpServersForProfile"
+    ).mockResolvedValueOnce([{ ...server!, orgId: "org_parent" }]);
+    try {
+      await expect(
+        orgService.publishSharedResource("org_parent", request, "user_creator")
+      ).rejects.toMatchObject({ status: 409 });
+    } finally {
+      scopedServer.mockRestore();
+    }
+    await db.unassignMcpServerFromProfile(profile.id, "mcp_parent");
+    await db.upsertProfile({
+      ...profile,
+      model: "missing-provider::missing-model",
+    });
+    await expect(
+      orgService.publishSharedResource("org_parent", request, "user_creator")
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      orgService.publishSharedResource("org_parent", request, "user_viewer")
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
   test("model publications retain provider identity and require current configured selections", async () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     await seedTeamParent(db);

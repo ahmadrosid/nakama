@@ -5,6 +5,8 @@ import {
   createEmailOutboundAdapter,
   type EmailOutboundAdapter,
   generateTemporaryPassword,
+  getKnowledgeBaseDir,
+  getKnowledgeBaseManifestPath,
   getKnowledgeBaseStoredDocumentPath,
   getOrgConfigDir,
   getOrgKnowledgeBaseDir,
@@ -16,6 +18,7 @@ import {
   loadUserConfig,
   NakamaApiError,
   parseSkillMarkdown,
+  readProfileManifestForReference,
   resolveProfileSkillDirectory,
   resolveWebPublicUrl,
   SKILL_FILE_NAME,
@@ -159,15 +162,151 @@ export class OrgService {
 
   async publishSharedResource(
     parentOrgId: string,
-    request: {
-      resourceKind: "knowledge" | "skill" | "tool" | "model";
-      resourceId: string;
-    },
+    request: Pick<StoredOrgSharedResourceRecord, "resourceKind" | "resourceId">,
     actorUserId: string
   ): Promise<StoredOrgSharedResourceRecord> {
     await this.requireParentAdmin(parentOrgId, actorUserId);
+    const resourceId = await this.validateSharedResourceSource(
+      parentOrgId,
+      request
+    );
+    const now = new Date().toISOString();
+    return this.databaseAdapter.publishOrgSharedResource({
+      createdAt: now,
+      id: `publication_${crypto.randomUUID().replace(/-/g, "")}`,
+      orgId: parentOrgId,
+      resourceId,
+      resourceKind: request.resourceKind,
+      updatedAt: now,
+    });
+  }
+
+  private async validateSharedResourceSource(
+    parentOrgId: string,
+    request: Pick<StoredOrgSharedResourceRecord, "resourceKind" | "resourceId">
+  ): Promise<string> {
     let resourceId = request.resourceId;
-    if (request.resourceKind === "model") {
+    if (request.resourceKind === "agent") {
+      const profile = await this.databaseAdapter.getProfileForOrg(
+        resourceId,
+        parentOrgId
+      );
+      if (!profile || profile.isDefault || profile.isSuper) {
+        throw new NakamaApiError("Agent is unavailable.", 404);
+      }
+      const [tools, skills, servers, toolkits, publications] =
+        await Promise.all([
+          this.databaseAdapter.listToolsForProfile(profile.id),
+          this.databaseAdapter.listSkillsForProfile(profile.id),
+          this.databaseAdapter.listMcpServersForProfile(profile.id),
+          this.databaseAdapter.listProfileComposioToolkits(profile.id),
+          this.databaseAdapter.listOrgSharedResources(parentOrgId),
+        ]);
+      if (
+        servers.some((server) => server.orgId || !server.enabled) ||
+        toolkits.length > 0
+      ) {
+        throw new NakamaApiError(
+          "Agent requires a team-local integration.",
+          409
+        );
+      }
+      const published = new Set(
+        publications.map((entry) => `${entry.resourceKind}:${entry.resourceId}`)
+      );
+      const toolNames = new Set<string>();
+      for (const tool of tools) {
+        if (
+          toolNames.has(tool.name) ||
+          (tool.orgId && !published.has(`tool:${tool.id}`))
+        ) {
+          throw new NakamaApiError(
+            "Agent tool assignments are unavailable or conflicting.",
+            409
+          );
+        }
+        await this.validateSharedResourceSource(parentOrgId, {
+          resourceId: tool.id,
+          resourceKind: "tool",
+        });
+        toolNames.add(tool.name);
+      }
+      const skillNames = new Set<string>();
+      for (const skill of skills) {
+        if (
+          !skill.enabled ||
+          skillNames.has(skill.name) ||
+          (skill.hasTool && toolNames.has(skill.name)) ||
+          (skill.orgId && !published.has(`skill:${skill.id}`))
+        ) {
+          throw new NakamaApiError(
+            "Agent skill assignments are unavailable or conflicting.",
+            409
+          );
+        }
+        if (skill.orgId) {
+          await this.validateSharedResourceSource(parentOrgId, {
+            resourceId: skill.id,
+            resourceKind: "skill",
+          });
+        }
+        skillNames.add(skill.name);
+        if (skill.hasTool) {
+          toolNames.add(skill.name);
+        }
+      }
+      try {
+        const soulDir = getProfileSoulDir(parentOrgId, profile.id);
+        await guardFilePath(soulDir, null, undefined, {
+          allowedDirs: [getOrgConfigDir(parentOrgId)],
+        });
+        for (const dir of [
+          getKnowledgeBaseDir(parentOrgId, profile.id),
+          join(soulDir, "data", "knowledge-base"),
+        ]) {
+          await guardFilePath(dir, null, undefined, { allowedDirs: [soulDir] });
+          await guardFilePath(
+            getKnowledgeBaseManifestPath(dir),
+            null,
+            undefined,
+            { allowedDirs: [dir] }
+          );
+        }
+        const manifest = await readProfileManifestForReference(
+          parentOrgId,
+          profile.id
+        );
+        if (manifest.documents.length > 0) {
+          throw new NakamaApiError(
+            "Agent requires private profile knowledge.",
+            409
+          );
+        }
+        for (const documentId of manifest.sharedDocumentIds ?? []) {
+          if (!published.has(`knowledge:${documentId}`)) {
+            throw new NakamaApiError(
+              "Agent knowledge assignment is unpublished.",
+              409
+            );
+          }
+          await this.validateSharedResourceSource(parentOrgId, {
+            resourceId: documentId,
+            resourceKind: "knowledge",
+          });
+        }
+      } catch (error) {
+        if (error instanceof NakamaApiError) {
+          throw error;
+        }
+        throw new NakamaApiError("Agent knowledge is unavailable.", 404);
+      }
+      if (profile.model) {
+        await this.validateSharedResourceSource(parentOrgId, {
+          resourceId: profile.model,
+          resourceKind: "model",
+        });
+      }
+    } else if (request.resourceKind === "model") {
       const selected = resolveConfiguredModelInstance(
         await loadUserConfig(),
         resourceId,
@@ -257,15 +396,7 @@ export class OrgService {
     } else {
       throw new NakamaApiError("Unsupported publication kind.", 400);
     }
-    const now = new Date().toISOString();
-    return this.databaseAdapter.publishOrgSharedResource({
-      createdAt: now,
-      id: `publication_${crypto.randomUUID().replace(/-/g, "")}`,
-      orgId: parentOrgId,
-      resourceId,
-      resourceKind: request.resourceKind,
-      updatedAt: now,
-    });
+    return resourceId;
   }
 
   async unpublishSharedResource(

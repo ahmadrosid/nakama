@@ -276,7 +276,7 @@ async function readManifestFrom(dir: string): Promise<KnowledgeBaseManifest> {
  * folders, so a failed rename mid-loop would abort the delete on a half
  * migrated tree.
  */
-async function readProfileManifestForReference(
+export async function readProfileManifestForReference(
   orgId: string,
   profileId: string
 ): Promise<KnowledgeBaseManifest> {
