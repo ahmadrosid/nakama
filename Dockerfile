@@ -40,7 +40,9 @@ FROM oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52
 WORKDIR /runtime-deps
 
 COPY .docker/runtime-deps/package.json .docker/runtime-deps/bun.lock ./
-RUN bun install --frozen-lockfile --production --ignore-scripts
+RUN bun install --frozen-lockfile --production --ignore-scripts \
+  # The runtime is Debian (glibc); the SDK never picks its musl binary here.
+  && rm -rf node_modules/@anthropic-ai/claude-agent-sdk-linux-x64-musl
 
 # --- Production runtime (server + workspace packages + built static assets) ---
 FROM oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61 AS runtime
