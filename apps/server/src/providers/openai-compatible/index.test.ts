@@ -33,12 +33,14 @@ describe("OpenAI-compatible provider", () => {
   test("browser clients cannot expose server provider credentials through the SDK", () => {
     const fetch = mock(async () => Response.json({}));
     globalThis.fetch = asTestFetch(fetch);
+
     const originals = new Map(
       ["window", "navigator"].map((key) => [
         key,
         Object.getOwnPropertyDescriptor(globalThis, key),
       ])
     );
+
     try {
       Object.defineProperty(globalThis, "window", {
         configurable: true,

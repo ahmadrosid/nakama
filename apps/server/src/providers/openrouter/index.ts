@@ -21,6 +21,7 @@ import type {
   ChatMessages,
   ChatRequest,
   ChatRequestReasoning,
+  ChatResult,
   ChatStreamChunk,
   ChatToolCall,
 } from "@openrouter/sdk/models";
@@ -283,19 +284,18 @@ function parseMessageReasoning(
   return trimmed || undefined;
 }
 
-function parseChatResult(result: {
-  usage?: ProviderJsonRecord;
-  choices?: Array<{
-    message?: {
-      content?: string | null;
-      reasoning?: string | null;
-      toolCalls?: ChatToolCall[];
-    };
-  }>;
-}): ChatCompletionResult {
+function readChatText(
+  content: ChatResult["choices"][number]["message"]["content"]
+): string {
+  return Array.isArray(content)
+    ? content.map((part) => (part.type === "text" ? part.text : "")).join("")
+    : (content ?? "");
+}
+
+function parseChatResult(result: ChatResult): ChatCompletionResult {
   const message = result.choices?.[0]?.message;
   const toolCalls = parseSdkToolCalls(message?.toolCalls);
-  const content = message?.content ?? "";
+  const content = readChatText(message?.content);
   const thinking = parseMessageReasoning(message?.reasoning);
 
   if (!content.trim() && toolCalls.length === 0 && !thinking) {
@@ -474,6 +474,10 @@ export function createOpenRouterProvider(
           { fetchOptions: { signal: input.signal } }
         );
 
+        if (!("choices" in result)) {
+          throw new Error(`${PROVIDER_LABEL} returned an unexpected stream.`);
+        }
+
         return parseChatResult(result);
       });
     },
@@ -504,7 +508,13 @@ export function createOpenRouterProvider(
 
         const result = await client.chat.send({ chatRequest });
 
-        const content = result.choices?.[0]?.message?.content?.trim();
+        if (!("choices" in result)) {
+          throw new Error(`${PROVIDER_LABEL} returned an unexpected stream.`);
+        }
+
+        const content = readChatText(
+          result.choices[0]?.message?.content
+        ).trim();
 
         const usage = extractOpenAITokenUsage(readRecord(result).usage);
 
@@ -549,6 +559,12 @@ export function createOpenRouterProvider(
               fetchOptions: { signal: input.signal },
               retries: { strategy: "none" },
             });
+
+            if ("choices" in stream) {
+              throw new Error(
+                `${PROVIDER_LABEL} returned an unexpected response.`
+              );
+            }
 
             return await readOpenRouterStream(stream, handlers, input.signal);
           } catch (error) {
