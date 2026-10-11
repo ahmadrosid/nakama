@@ -22,6 +22,7 @@ describe("notification webhook routes", () => {
     } else {
       process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
     }
+
     homedirSpy?.mockRestore();
     homedirSpy = null;
 
@@ -137,6 +138,9 @@ describe("notification webhook routes", () => {
         expect((await notify("evt_bad_payload", { body: " " })).status).toBe(
           400
         );
+        expect(
+          (await notify("evt_1", { body: "Received", level: "fatal" })).status
+        ).toBe(400);
         expect(calls).toEqual([]);
         expect((await notify("evt_1")).status).toBe(204);
         expect((await notify("evt_1")).status).toBe(409);
