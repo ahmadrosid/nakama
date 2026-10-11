@@ -299,22 +299,29 @@ export class ProfileService {
     const view = await this.resolveProfileView(
       await this.requireProfile(orgId, profileId)
     );
+
     const profile = view.profile;
+
     const tools =
       view.shared?.assignedTools ??
       (await this.db.listToolsForProfile(profileId));
+
     const mcpServers =
       view.shared?.assignedMcpServers ??
       (await this.db.listMcpServersForProfile(profileId));
+
     const skills = await this.db.listSkillsForProfile(
       view.shared ? view.instance!.sourceProfileId : profileId
     );
+
     const skillUsage = await this.db.listSkillUsageForProfile(profileId);
     const publishedSkills: PublishedSkillSummary[] = [];
+
     for (const skill of skills) {
       if (!skill.orgId || skill.orgId === orgId) {
         continue;
       }
+
       try {
         publishedSkills.push(
           await this.skillsService.getPublishedSkillSummaryForResource(
@@ -721,6 +728,7 @@ export class ProfileService {
       const orgProfiles = await this.db.listProfilesForOrg(orgId);
 
       let successor: StoredProfileRecord | undefined;
+
       for (const entry of orgProfiles) {
         if (
           entry.id === profileId ||
@@ -729,6 +737,7 @@ export class ProfileService {
         ) {
           continue;
         }
+
         successor = entry;
         break;
       }
@@ -768,6 +777,7 @@ export class ProfileService {
     const records = await this.db.listTools();
     const tools = records.filter((tool) => !tool.orgId || tool.orgId === orgId);
     const details = tools.map(toToolDetail);
+
     return {
       tools: [...details, ...(await this.listPublishedTools(orgId, records))],
     };
@@ -779,10 +789,12 @@ export class ProfileService {
   ): Promise<ToolDetail[]> {
     const details: ToolDetail[] = [];
     const team = await this.db.getOrganizationById(orgId);
+
     const parent =
       team?.parentOrgId && !team.archivedAt && !team.setupPending
         ? await this.db.getOrganizationById(team.parentOrgId)
         : null;
+
     if (
       parent &&
       !parent.archivedAt &&
@@ -790,20 +802,25 @@ export class ProfileService {
       !parent.parentOrgId
     ) {
       const publications = await this.db.listOrgSharedResources(parent.id);
+
       for (const publication of publications) {
         if (publication.resourceKind !== "tool") {
           continue;
         }
+
         const record = records.find(
           (tool) =>
             tool.id === publication.resourceId && tool.orgId === parent.id
         );
+
         if (!record) {
           continue;
         }
+
         const config = z
           .object({ requiresApiKey: z.boolean().optional() })
           .safeParse(record.handlerConfig);
+
         details.push({
           ...toToolDetail(record),
           handlerConfig: {
@@ -817,6 +834,7 @@ export class ProfileService {
         });
       }
     }
+
     return details;
   }
 
@@ -824,10 +842,13 @@ export class ProfileService {
     const detail = orgId
       ? (await this.listTools(orgId)).tools.find((tool) => tool.id === toolId)
       : undefined;
+
     if (orgId && !detail) {
       throw new NakamaApiError("Tool not found.", 404);
     }
+
     const tool = await this.requireTool(toolId);
+
     return {
       tool: await enrichToolParameters(detail ?? toToolDetail(tool), tool),
     };
@@ -841,10 +862,12 @@ export class ProfileService {
       const detail = (await this.listTools(orgId)).tools.find(
         (tool) => tool.id === toolId
       );
+
       if (!detail || detail.scope === "parent") {
         throw new NakamaApiError("Tool source is unavailable.", 404);
       }
     }
+
     const tool = await this.requireTool(toolId);
 
     return readToolSource(tool);
@@ -857,20 +880,25 @@ export class ProfileService {
     const view = await this.resolveProfileView(
       await this.requireProfile(orgId, profileId)
     );
+
     const tools = view.instance
       ? (view.shared?.assignedTools ?? [])
       : await this.db.listToolsForProfile(profileId);
+
     const sharedCatalog = tools.some(
       (tool) => tool.orgId && tool.orgId !== orgId
     )
       ? await this.listPublishedTools(orgId, tools)
       : [];
+
     return {
       tools: tools.flatMap((tool) => {
         if (!tool.orgId || tool.orgId === orgId) {
           return [toToolDetail(tool)];
         }
+
         const shared = sharedCatalog.find((entry) => entry.id === tool.id);
+
         return shared ? [shared] : [];
       }),
     };
@@ -969,6 +997,7 @@ export class ProfileService {
     }
 
     const assigned = await this.db.listToolsForProfile(profileId);
+
     if (
       assigned.some((item) => item.id !== tool.id && item.name === tool.name)
     ) {
@@ -1072,13 +1101,16 @@ export class ProfileService {
     if (!skill) {
       throw new Error("Skill not found.");
     }
+
     if (skill.orgId != null && skill.orgId !== orgId) {
       await this.skillsService.getPublishedSkillSummaryForResource(
         orgId,
         skill.id
       );
     }
+
     const assigned = await this.db.listSkillsForProfile(profileId);
+
     if (
       assigned.some(
         (existing) => existing.id !== skill.id && existing.name === skill.name
@@ -1510,16 +1542,20 @@ export class ProfileService {
     orgId: string
   ): Promise<PublishedKnowledgeBaseDocument[]> {
     const organization = await this.db.getOrganizationById(orgId);
+
     if (!organization || organization.archivedAt || !organization.parentOrgId) {
       return [];
     }
+
     const documents: PublishedKnowledgeBaseDocument[] = [];
+
     for (const publication of await this.db.listOrgSharedResources(
       organization.parentOrgId
     )) {
       if (publication.resourceKind !== "knowledge") {
         continue;
       }
+
       try {
         documents.push(
           await this.resolvePublishedKnowledgeBaseDocument(
@@ -1533,6 +1569,7 @@ export class ProfileService {
         }
       }
     }
+
     return documents;
   }
 
@@ -1545,6 +1582,7 @@ export class ProfileService {
       orgId,
       publicationId
     );
+
     try {
       return await readOrganizationKnowledgeBaseDocumentContent(
         document.sourceOrganization.id,
@@ -1561,15 +1599,19 @@ export class ProfileService {
     publicationId: string
   ): Promise<PublishedKnowledgeBaseDocument> {
     const organization = await this.db.getOrganizationById(orgId);
+
     if (!organization || organization.archivedAt) {
       throw new NakamaApiError("Not found", 404);
     }
+
     const sourceOrgId = organization.parentOrgId ?? orgId;
     const source = await this.db.getOrganizationById(sourceOrgId);
+
     const publication = await this.db.getOrgSharedResource(
       sourceOrgId,
       publicationId
     );
+
     if (
       !source ||
       source.archivedAt ||
@@ -1577,7 +1619,9 @@ export class ProfileService {
     ) {
       throw new NakamaApiError("Not found", 404);
     }
+
     const dir = getOrgKnowledgeBaseDir(sourceOrgId);
+
     try {
       await guardFilePath(dir, null, undefined, {
         allowedDirs: [getOrgConfigDir(sourceOrgId)],
@@ -1585,30 +1629,36 @@ export class ProfileService {
       await guardFilePath(getKnowledgeBaseManifestPath(dir), null, undefined, {
         allowedDirs: [dir],
       });
+
       const document = (
         await listOrganizationKnowledgeBaseDocuments(sourceOrgId)
       ).find(
         (entry) =>
           entry.id === publication.resourceId && entry.status === "ready"
       );
+
       if (!document) {
         throw new NakamaApiError("Not found", 404);
       }
+
       const stored = await guardFilePath(
         getKnowledgeBaseStoredDocumentPath(dir, document.id, document.filename),
         null,
         undefined,
         { allowedDirs: [dir] }
       );
+
       if (!(await stat(stored.resolved)).isFile()) {
         throw new NakamaApiError("Not found", 404);
       }
+
       await guardFilePath(
         getKnowledgeBaseExtractedPath(dir, document.id),
         null,
         undefined,
         { allowedDirs: [dir] }
       );
+
       return {
         filename: document.filename,
         id: document.id,
@@ -1705,9 +1755,11 @@ export class ProfileService {
     profileId: string
   ): Promise<StoredProfileRecord> {
     const profile = await this.requireProfile(orgId, profileId);
+
     if (await this.db.getSharedAgentInstance(orgId, profileId)) {
       throw new NakamaApiError("Shared agent configuration is read-only.", 403);
     }
+
     return profile;
   }
 
@@ -1748,11 +1800,13 @@ export class ProfileService {
     const instance = profile.orgId
       ? await this.db.getSharedAgentInstance(profile.orgId, profile.id)
       : null;
+
     let shared: Awaited<
       ReturnType<
         import("./org-service").OrgService["resolveSharedAgentProfile"]
       >
     > = null;
+
     if (instance && this.orgService && profile.orgId) {
       try {
         shared = await this.orgService.resolveSharedAgentProfile(
@@ -1770,6 +1824,7 @@ export class ProfileService {
         }
       }
     }
+
     return { instance, profile: shared ?? profile, shared };
   }
 
@@ -1788,22 +1843,14 @@ export class ProfileService {
     const tools =
       view.shared?.assignedTools ??
       (await this.db.listToolsForProfile(profile.id));
+
     const mcpServers =
       view.shared?.assignedMcpServers ??
       (await this.db.listMcpServersForProfile(profile.id));
+
     const soulStack = await resolveSoulStackForProfile(orgId, profile.id);
 
-    return {
-      ...(view.instance
-        ? {
-            sharedAgent: {
-              available: Boolean(view.shared),
-              publicationId: view.instance.publicationId,
-              sourceOrgId: view.instance.sourceOrgId,
-              sourceProfileId: view.instance.sourceProfileId,
-            },
-          }
-        : {}),
+    const summary: ProfileSummary = {
       acpAgent: profile.acpAgent ?? null,
       automationsEnabled: profile.automationsEnabled !== false,
       createdAt: profile.createdAt,
@@ -1826,6 +1873,17 @@ export class ProfileService {
       toolCount: tools.length,
       updatedAt: profile.updatedAt,
     };
+
+    if (view.instance) {
+      summary.sharedAgent = {
+        available: Boolean(view.shared),
+        publicationId: view.instance.publicationId,
+        sourceOrgId: view.instance.sourceOrgId,
+        sourceProfileId: view.instance.sourceProfileId,
+      };
+    }
+
+    return summary;
   }
 }
 
