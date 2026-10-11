@@ -292,13 +292,13 @@ Implementation sequence:
 - [x] 2. Extend contracts and organization routes.
 - [x] 3. Connect publication checks to real resource use.
 - [x] 4. Build the Organization screen.
-- [ ] 5. Update client state and compatibility.
+- [x] 5. Update client state and compatibility.
 
 Delivery order:
 
 - [x] 1. Deliver schema, contracts, access rules, and migration tests.
 - [x] 2. Deliver all five resource paths and execution checks.
-- [ ] 3. Deliver the Organization page, client state, and component tests.
+- [x] 3. Deliver the Organization page, client state, and component tests.
 - [ ] 4. Document the UI path and roles in existing user docs.
 
 2026-10-11: First iteration stopped at the required feature-issue gate. GitHub searches found no matching feature issue.
@@ -2644,3 +2644,15 @@ Seven new filesystem cases cover workspace files, profile roots with parent arti
 Existing tests also cover inactive shared pack references, destination publication verification, tenant-local history exports, and restore without reviving revoked publications. Step 5 and delivery stages 3 and 4 remain open. Next, finish the import, clone, archive, restore, and revision-invalidation review, then run the delivery-stage checks. User documentation and final builds remain required. No new file, package, dependency, browser check, full repository suite, build, paid call, push, or PR was added.
 
 Evidence: /tmp/nakama-team-{export-before,pack-before,export-extra-before,export-linked,export-focused,export-types,export-format,export-oxlint,export-lint}.log.
+
+### Slice 3aq — Client compatibility checks and delivery stage 3 completion
+
+The compatibility review checked profile import, clone, organization archive, backup restore, and session refresh after restore. Existing access checks keep imported shared references inactive until the destination has the matching parent and publication. Shared instances cannot be cloned or changed through ordinary profile operations. Parent archive rejects active children. Restore retains tenant history and memory, but does not revive revoked, deleted, or replaced publications. The server reopens the database and clears cached agent sessions after restore. Existing tests confirm that new turns use restored settings and saved team history.
+
+Two existing tests now check additional behavior. Backup restore retains parent links in both an existing installation and a fresh installation. A profile pack with forged organization, parent, and publication fields cannot change destination ownership or publish resources. Unsupported pack fields remain inert; this test does not require archive rejection.
+
+All 251 focused tests passed with two Windows-only skips and 1,848 assertions. Complete server, client, core, database, and web type checks passed. Ultracite, the full anti-slop check, knip, and git diff --check passed. The canonical bun run test passed: 4,404 server and package tests, 22 skips, and 16,438 assertions; 942 web tests and 4,248 assertions. Both suites reported zero failures. The canonical script runs web tests with their required DOM setup. No verification repair was needed. Only existing tests and this progress record changed.
+
+Implementation step 5 and delivery stage 3 are complete. Delivery stage 4 remains open. Next: document System → Organization, parent publications, team additions, roles, and team-local connections in existing user docs. Final builds and release checks remain required. No browser check, new file, package, dependency, paid call, push, or PR ran in this slice.
+
+Evidence: /tmp/nakama-compatibility-{focused,server-types,client-types,core-types,db-types,web-types,lint}.log; /tmp/nakama-stage3-{full-test,knip-confirm,check-confirm}.log.

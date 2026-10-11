@@ -125,6 +125,16 @@ describe("Nakama data portability", () => {
       try {
         expect(
           restored
+            .query(
+              "SELECT id, parent_org_id FROM organizations WHERE id IN ('parent','team') ORDER BY id"
+            )
+            .all()
+        ).toEqual([
+          { id: "parent", parent_org_id: null },
+          { id: "team", parent_org_id: "parent" },
+        ]);
+        expect(
+          restored
             .query("SELECT id FROM org_shared_resources ORDER BY id")
             .all()
         ).toEqual([{ id: "active_publication" }]);
@@ -172,6 +182,16 @@ describe("Nakama data portability", () => {
       const fresh = new Database(freshDatabasePath);
 
       try {
+        expect(
+          fresh
+            .query(
+              "SELECT id, parent_org_id FROM organizations WHERE id IN ('parent','team') ORDER BY id"
+            )
+            .all()
+        ).toEqual([
+          { id: "parent", parent_org_id: null },
+          { id: "team", parent_org_id: "parent" },
+        ]);
         expect(
           fresh.query("SELECT id FROM org_shared_resources").all()
         ).toEqual([]);

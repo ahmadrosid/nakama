@@ -186,6 +186,16 @@ describe("profile portability", () => {
           bundledSkillNames: ["missing_skill"],
           composioToolkitSlugs: ["missing_toolkit"],
           mcpServerNames: ["missing_server"],
+          orgId: ORG,
+          parentOrgId: ORG,
+          sharedResources: [
+            {
+              id: publication.id,
+              orgId: ORG,
+              resourceId: source.id,
+              resourceKind: "agent",
+            },
+          ],
           toolNames: ["pack_destination_tool"],
         },
       }),
