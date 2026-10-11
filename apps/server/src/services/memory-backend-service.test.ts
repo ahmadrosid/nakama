@@ -49,12 +49,14 @@ async function setup() {
       id: string;
       metadata: object;
       status: string;
+      taskType: "superrag" | "memory";
     }
   >();
 
   let unavailable = false;
   let pending = false;
   let loseWriteResponse = false;
+  let malformedResponse: "GET" | "POST" | undefined;
   let writes = 0;
   let searchQuery: ((query: string) => boolean) | undefined;
   const queries: string[] = [];
@@ -82,7 +84,7 @@ async function setup() {
         throw new Error("Connection lost after save");
       }
 
-      return Response.json({ id });
+      return Response.json(malformedResponse === "POST" ? null : { id });
     }
 
     if (path === "/v3/search") {
@@ -124,7 +126,7 @@ async function setup() {
       documents.delete(id);
     }
 
-    return Response.json(document);
+    return Response.json(malformedResponse === "GET" ? null : document);
   };
 
   async function enable(
@@ -159,6 +161,9 @@ async function setup() {
     },
     queries,
     service: new MemoryBackendService(db, { configDir, transport }),
+    setMalformedResponse: (method: "GET" | "POST" | undefined) => {
+      malformedResponse = method;
+    },
     setPending: (value: boolean) => {
       pending = value;
     },
@@ -179,6 +184,24 @@ test("built-in memory remains local without an enabled plugin", async () => {
   );
   expect(h.writes()).toBe(0);
 });
+
+test.each(["GET", "POST"] as const)(
+  "malformed %s document responses reject recall and retain retry state",
+  async (method) => {
+    const h = await setup();
+    await h.enable("org");
+    h.setMalformedResponse(method);
+    await expect(
+      h.service.readMemory("org", "agent", "MEMORY.md", "Remember tea")
+    ).rejects.toThrow();
+    expect(h.writes()).toBe(1);
+    h.setMalformedResponse(undefined);
+    expect(
+      await h.service.readMemory("org", "agent", "MEMORY.md", "Remember tea")
+    ).toBe("Remember tea");
+    expect(h.writes()).toBe(1);
+  }
+);
 
 test("file tools and prompt loading share memory; failed writes preserve the local copy", async () => {
   const h = await setup();
