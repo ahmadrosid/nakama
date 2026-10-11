@@ -346,7 +346,7 @@ export class ProfileService {
     sourceId: string,
     request: CloneProfileRequest = {}
   ): Promise<ProfileResponse> {
-    const source = await this.requireProfile(orgId, sourceId);
+    const source = await this.requireMutableProfile(orgId, sourceId);
 
     if (source.isSuper) {
       throw new NakamaApiError("Super Bot cannot be cloned.", 400);
@@ -465,6 +465,18 @@ export class ProfileService {
     const profile = await this.requireProfile(orgId, profileId);
     const now = new Date().toISOString();
 
+    if (
+      (await this.db.getSharedAgentInstance(orgId, profileId)) &&
+      (Object.entries(request).some(
+        ([key, value]) => key !== "soulFiles" && value !== undefined
+      ) ||
+        Object.entries(request.soulFiles ?? {}).some(
+          ([name, content]) => name !== "MEMORY.md" && content !== undefined
+        ))
+    ) {
+      throw new NakamaApiError("Shared agent configuration is read-only.", 403);
+    }
+
     validateGeneratedSoulFiles(request.soulFiles);
     validateAcpAgent(request.acpAgent);
 
@@ -563,7 +575,7 @@ export class ProfileService {
     profileId: string,
     request: MoveProfileRequest
   ): Promise<ProfileResponse> {
-    await this.requireProfile(orgId, profileId);
+    await this.requireMutableProfile(orgId, profileId);
 
     for (const platform of [
       "telegram",
@@ -659,9 +671,18 @@ export class ProfileService {
     if (profile.isDefault) {
       const orgProfiles = await this.db.listProfilesForOrg(orgId);
 
-      const successor = orgProfiles.find(
-        (entry) => entry.id !== profileId && !entry.isSuper
-      );
+      let successor: StoredProfileRecord | undefined;
+      for (const entry of orgProfiles) {
+        if (
+          entry.id === profileId ||
+          entry.isSuper ||
+          (await this.db.getSharedAgentInstance(orgId, entry.id))
+        ) {
+          continue;
+        }
+        successor = entry;
+        break;
+      }
 
       if (orgProfiles.length < 3 || !successor) {
         throw new Error(
@@ -721,7 +742,7 @@ export class ProfileService {
     await this.requireProfile(orgId, profileId);
     const tools = await this.db.listToolsForProfile(profileId);
 
-    return { tools: tools.map(toToolSummary) };
+    return { tools: tools.map(toToolDetail) };
   }
 
   async deleteTool(toolId: string): Promise<void> {
@@ -806,7 +827,7 @@ export class ProfileService {
     request: AssignToolRequest,
     meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    await this.requireProfile(orgId, profileId);
+    await this.requireMutableProfile(orgId, profileId);
 
     const tool = await this.db.getTool(request.toolId);
 
@@ -833,7 +854,7 @@ export class ProfileService {
     toolId: string,
     meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    await this.requireProfile(orgId, profileId);
+    await this.requireMutableProfile(orgId, profileId);
 
     await withAssignmentChange(
       this.db,
@@ -859,7 +880,7 @@ export class ProfileService {
     request: AssignMcpServerRequest,
     meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    await this.requireProfile(orgId, profileId);
+    await this.requireMutableProfile(orgId, profileId);
 
     const server = await this.db.getMcpServer(request.serverId);
 
@@ -882,7 +903,7 @@ export class ProfileService {
     serverId: string,
     meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    await this.requireProfile(orgId, profileId);
+    await this.requireMutableProfile(orgId, profileId);
 
     await withAssignmentChange(
       this.db,
@@ -908,7 +929,7 @@ export class ProfileService {
     request: AssignSkillRequest,
     meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    await this.requireProfile(orgId, profileId);
+    await this.requireMutableProfile(orgId, profileId);
 
     const skill = await this.db.getSkill(request.skillId);
 
@@ -931,7 +952,7 @@ export class ProfileService {
     skillId: string,
     meta?: ProfileChangeMeta
   ): Promise<ProfileResponse> {
-    await this.requireProfile(orgId, profileId);
+    await this.requireMutableProfile(orgId, profileId);
 
     await withAssignmentChange(
       this.db,
@@ -974,7 +995,7 @@ export class ProfileService {
     profileId: string,
     attachment: ImageAttachment
   ): Promise<ProfileResponse> {
-    const profile = await this.requireProfile(orgId, profileId);
+    const profile = await this.requireMutableProfile(orgId, profileId);
 
     await saveProfileAvatar(orgId, profileId, attachment);
 
@@ -1003,7 +1024,7 @@ export class ProfileService {
   }
 
   async deleteProfileAvatar(orgId: string, profileId: string): Promise<void> {
-    const profile = await this.requireProfile(orgId, profileId);
+    const profile = await this.requireMutableProfile(orgId, profileId);
     const removed = await deleteProfileAvatar(orgId, profileId);
 
     if (!removed) {
@@ -1136,7 +1157,7 @@ export class ProfileService {
           "error"
         );
 
-        const entry = {
+        const entry: ImportKnowledgeBaseZipEntry = {
           documentId: document.id,
           filename,
           outcome: "created",
@@ -1388,6 +1409,17 @@ export class ProfileService {
     return (await this.db.listProfiles()).some(
       (profile) => profile.id.toLowerCase() === lowered
     );
+  }
+
+  private async requireMutableProfile(
+    orgId: string,
+    profileId: string
+  ): Promise<StoredProfileRecord> {
+    const profile = await this.requireProfile(orgId, profileId);
+    if (await this.db.getSharedAgentInstance(orgId, profileId)) {
+      throw new NakamaApiError("Shared agent configuration is read-only.", 403);
+    }
+    return profile;
   }
 
   private async requireProfile(

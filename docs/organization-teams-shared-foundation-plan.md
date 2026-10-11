@@ -1160,3 +1160,16 @@ Step 2 and delivery stage 1 remain incomplete. The selection service has no HTTP
 No browser or external provider calls ran. Other authorized cleanup remains uncommitted; stale provider cassettes, full tests, and builds remain unresolved.
 Next: add shared-profile write guards before exposing selection and its normal team ProfileResponse through HTTP.
 Evidence: /tmp/nakama-shared-selection-tests-final.log, /tmp/nakama-shared-selection-{server,db}-types.log, /tmp/nakama-shared-selection-lint.log.
+
+2026-10-11: Slice 2f adds shared-profile write guards to the existing ProfileService before HTTP selection exposure.
+Template configuration changes reject before profile, soul file, or audit writes. Memory-only updates remain permitted in the team workspace and preserve source memory and template fields.
+A shared instance cannot change tool, skill, or MCP assignments, clone into a local profile, transfer to another tenant, or change its avatar through these service operations.
+The scoped profile lookup runs before the shared-link guard, so foreign profile IDs remain unavailable. Removing the publication does not convert its instance into an editable local agent.
+Deleting a default profile now selects only a local successor. Shared instances cannot silently become the team's built-in default profile.
+Tests cover each template field, mixed memory/configuration requests, assignment preservation, clone/transfer denial, avatar denial, audit preservation, revoked publications, foreign IDs, private memory updates, local profile edits, and default succession.
+This slice includes the previously authorized ListToolsResponse shape repair and profile-transfer fixture type repairs in the same files. Existing tests cover those repairs; other cleanup remains uncommitted.
+Checks: 123 focused profile and organization service tests passed; two existing Windows-only case checks skipped on this host; complete server type check passed; lint passed all 1532 files; git diff --check passed.
+Step 2 and delivery stage 1 remain incomplete. Direct soul writes, integration configuration, import paths, and the selection HTTP route still require checks and guards. Shared skill maintenance and runtime refresh remain in step 3.
+No browser or external provider calls ran. Stale provider cassettes, full tests, and builds remain unresolved.
+Next: guard direct soul and integration configuration writes on shared profiles, while retaining team-owned memory and user context.
+Evidence: /tmp/nakama-shared-profile-guards-tests.log, /tmp/nakama-shared-profile-guards-server-types.log, /tmp/nakama-shared-profile-guards-lint.log.
