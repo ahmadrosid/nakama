@@ -1162,6 +1162,10 @@ export interface DatabaseAdapter {
    * attachments, or a branch loses the files it copied references to.
    */
   handOverSharedAttachments(sessionId: string, orgId: string): Promise<void>;
+
+  importSharedAgentReference(
+    record: StoredSharedAgentInstanceRecord
+  ): Promise<void>;
   incrementLlmTurnUsage(orgId: string, delta: LlmTurnUsageDelta): Promise<void>;
   incrementLlmUsageDailyStats(
     orgId: string,

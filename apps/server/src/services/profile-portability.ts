@@ -228,6 +228,14 @@ export async function createProfilePackExport(
   const soulDir = getProfileSoulDir(orgId, profileId);
   const { files, skipped } = await inventoryProfileSoulDir(soulDir);
   const meta = await buildProfilePackMeta(db, profileId, profile);
+  const shared = await db.getSharedAgentInstance(orgId, profileId);
+  if (shared) {
+    meta.sharedAgent = {
+      publicationId: shared.publicationId,
+      sourceOrgId: shared.sourceOrgId,
+      sourceProfileId: shared.sourceProfileId,
+    };
+  }
   const createdAt = (options.now ?? new Date()).toISOString();
 
   const entries: Record<string, Uint8Array> = {};
@@ -294,51 +302,53 @@ export async function previewProfilePackImport(
   const manifest = readProfilePackManifest(entries);
 
   const skippedAssignments: ProfilePackSkippedItem[] = [];
-  await previewToolAssignments(
-    db,
-    orgId,
-    manifest,
-    entries,
-    options.restoreCustomTools === true,
-    skippedAssignments
-  );
-  await eachNamedOrSkip(
-    manifest.meta.mcpServerNames,
-    (name) =>
-      findMcpServerForOrg(db, orgId, name, {
-        isPlatformAdmin: options.isPlatformAdmin,
-      }),
-    skippedAssignments,
-    (name) => ({
-      path: `MCP server:${name}`,
-      reason: `MCP server "${name}" is not available to this organization and will be skipped.`,
-    })
-  );
-  await eachNamedOrSkip(
-    manifest.meta.composioToolkitSlugs,
-    (slug) => db.getComposioToolkitBySlug(orgId, slug),
-    skippedAssignments,
-    (slug) => ({
-      path: `Composio toolkit:${slug}`,
-      reason: `Composio toolkit "${slug}" was not found in the destination and will be skipped.`,
-    })
-  );
-  await eachNamedOrSkip(
-    manifest.meta.bundledSkillNames,
-    (name) => db.getSkillByName(name, orgId),
-    skippedAssignments,
-    (name) => ({
-      path: `bundled skill:${name}`,
-      reason: `Bundled skill "${name}" was not found in the destination and will be skipped.`,
-    })
-  );
+  if (!manifest.meta.sharedAgent) {
+    await previewToolAssignments(
+      db,
+      orgId,
+      manifest,
+      entries,
+      options.restoreCustomTools === true,
+      skippedAssignments
+    );
+    await eachNamedOrSkip(
+      manifest.meta.mcpServerNames,
+      (name) =>
+        findMcpServerForOrg(db, orgId, name, {
+          isPlatformAdmin: options.isPlatformAdmin,
+        }),
+      skippedAssignments,
+      (name) => ({
+        path: `MCP server:${name}`,
+        reason: `MCP server "${name}" is not available to this organization and will be skipped.`,
+      })
+    );
+    await eachNamedOrSkip(
+      manifest.meta.composioToolkitSlugs,
+      (slug) => db.getComposioToolkitBySlug(orgId, slug),
+      skippedAssignments,
+      (slug) => ({
+        path: `Composio toolkit:${slug}`,
+        reason: `Composio toolkit "${slug}" was not found in the destination and will be skipped.`,
+      })
+    );
+    await eachNamedOrSkip(
+      manifest.meta.bundledSkillNames,
+      (name) => db.getSkillByName(name, orgId),
+      skippedAssignments,
+      (name) => ({
+        path: `bundled skill:${name}`,
+        reason: `Bundled skill "${name}" was not found in the destination and will be skipped.`,
+      })
+    );
 
-  for (const skill of readSkillNamesFromZip(entries)) {
-    if (await db.getSkillByName(skill.name, orgId)) {
-      skippedAssignments.push({
-        path: `skills/${skill.folder}`,
-        reason: `Skill "${skill.name}" already exists at a different location and will be skipped.`,
-      });
+    for (const skill of readSkillNamesFromZip(entries)) {
+      if (await db.getSkillByName(skill.name, orgId)) {
+        skippedAssignments.push({
+          path: `skills/${skill.folder}`,
+          reason: `Skill "${skill.name}" already exists at a different location and will be skipped.`,
+        });
+      }
     }
   }
 
@@ -401,6 +411,14 @@ export async function importProfilePack(
 
   try {
     const skippedAssignments: ProfilePackSkippedItem[] = [];
+    if (manifest.meta.sharedAgent) {
+      await db.importSharedAgentReference({
+        ...manifest.meta.sharedAgent,
+        createdAt: now,
+        profileId,
+        teamOrgId: orgId,
+      });
+    }
     const soulDir = getProfileSoulDir(orgId, profileId);
     await initSoulDirectory(soulDir);
     await writePackedWorkspaceFiles(
@@ -409,56 +427,58 @@ export async function importProfilePack(
       entries,
       skippedAssignments
     );
-    createdSkillIds = await recreatePackedSkills(
-      db,
-      orgId,
-      profileId,
-      skippedAssignments
-    );
-    await restoreToolAssignments(
-      db,
-      profileId,
-      orgId,
-      manifest,
-      entries,
-      options.restoreCustomTools === true,
-      skippedAssignments,
-      createdCustomTools
-    );
-    await eachNamedOrSkip(
-      manifest.meta.mcpServerNames,
-      (serverName) =>
-        findMcpServerForOrg(db, orgId, serverName, {
-          isPlatformAdmin: options.isPlatformAdmin,
+    if (!manifest.meta.sharedAgent) {
+      createdSkillIds = await recreatePackedSkills(
+        db,
+        orgId,
+        profileId,
+        skippedAssignments
+      );
+      await restoreToolAssignments(
+        db,
+        profileId,
+        orgId,
+        manifest,
+        entries,
+        options.restoreCustomTools === true,
+        skippedAssignments,
+        createdCustomTools
+      );
+      await eachNamedOrSkip(
+        manifest.meta.mcpServerNames,
+        (serverName) =>
+          findMcpServerForOrg(db, orgId, serverName, {
+            isPlatformAdmin: options.isPlatformAdmin,
+          }),
+        skippedAssignments,
+        (name) => ({
+          path: `MCP server:${name}`,
+          reason: `MCP server "${name}" is not available to this organization and was skipped.`,
         }),
-      skippedAssignments,
-      (name) => ({
-        path: `MCP server:${name}`,
-        reason: `MCP server "${name}" is not available to this organization and was skipped.`,
-      }),
-      async (server) => {
-        await db.assignMcpServerToProfile(profileId, server.id);
-      }
-    );
-    await eachNamedOrSkip(
-      manifest.meta.bundledSkillNames,
-      (skillName) => db.getSkillByName(skillName, orgId),
-      skippedAssignments,
-      (name) => ({
-        path: `bundled skill:${name}`,
-        reason: `Bundled skill "${name}" was not found in the destination and was skipped.`,
-      }),
-      async (skill) => {
-        await db.assignSkillToProfile(profileId, skill.id);
-      }
-    );
-    await assignComposioToolkitsBySlug(
-      db,
-      orgId,
-      profileId,
-      manifest.meta.composioToolkitSlugs,
-      skippedAssignments
-    );
+        async (server) => {
+          await db.assignMcpServerToProfile(profileId, server.id);
+        }
+      );
+      await eachNamedOrSkip(
+        manifest.meta.bundledSkillNames,
+        (skillName) => db.getSkillByName(skillName, orgId),
+        skippedAssignments,
+        (name) => ({
+          path: `bundled skill:${name}`,
+          reason: `Bundled skill "${name}" was not found in the destination and was skipped.`,
+        }),
+        async (skill) => {
+          await db.assignSkillToProfile(profileId, skill.id);
+        }
+      );
+      await assignComposioToolkitsBySlug(
+        db,
+        orgId,
+        profileId,
+        manifest.meta.composioToolkitSlugs,
+        skippedAssignments
+      );
+    }
 
     await recordProfileChangeEvent(db, {
       actorUserId: options.actorUserId,
@@ -1093,10 +1113,20 @@ function isProfilePackManifest<T>(value: T): value is T & ProfilePackManifest {
   const meta = readStringKeyedRecord(manifest?.get("meta"));
   const skipped = manifest?.get("skipped");
   const customTools = meta?.get("customTools");
+  const sharedAgent = meta?.get("sharedAgent");
+  const sharedReference = readStringKeyedRecord(sharedAgent);
 
   return Boolean(
     manifest &&
       meta &&
+      (sharedAgent === undefined ||
+        (sharedReference &&
+          ["publicationId", "sourceOrgId", "sourceProfileId"].every((key) => {
+            const id = sharedReference.get(key);
+            return (
+              typeof id === "string" && id.trim().length > 0 && id.length <= 256
+            );
+          }))) &&
       manifest.get("apiVersion") === NAKAMA_API_VERSION &&
       isString(manifest.get("createdAt")) &&
       manifest.get("kind") === PROFILE_PACK_KIND &&

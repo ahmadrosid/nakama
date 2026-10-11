@@ -4953,6 +4953,31 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       handOverSharedAttachmentsStmt.run(sessionId, orgId);
     },
 
+    async importSharedAgentReference(record) {
+      db.transaction(() => {
+        const profile = getProfileForOrgStmt.get(
+          record.profileId,
+          record.teamOrgId
+        );
+        if (
+          !profile ||
+          profile.is_default ||
+          profile.is_super ||
+          getSharedAgentInstanceStmt.get(record.teamOrgId, record.profileId)
+        ) {
+          throw new Error("Invalid imported shared agent profile");
+        }
+        insertSharedAgentInstanceStmt.run(
+          record.profileId,
+          record.teamOrgId,
+          record.sourceOrgId,
+          record.sourceProfileId,
+          record.publicationId,
+          record.createdAt
+        );
+      }).immediate();
+    },
+
     async incrementLlmTurnUsage(orgId, delta) {
       const updatedAt = new Date().toISOString();
       incrementLlmTurnUsageStmt.run(

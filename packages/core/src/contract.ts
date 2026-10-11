@@ -449,6 +449,11 @@ export interface ProfilePackMeta {
   model: string | null;
   name: string;
   profileSkillNames: string[];
+  sharedAgent?: {
+    publicationId: string;
+    sourceOrgId: string;
+    sourceProfileId: string;
+  };
   skillsCuratorConsolidateEnabled: boolean | null;
   skillsPostTurnReview: boolean | null;
   skillsWriteApproval: boolean | null;

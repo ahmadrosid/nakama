@@ -12,11 +12,12 @@ import path from "node:path";
 import { getCustomToolsDir, slugifyProfileName } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { unzipSync, zipSync } from "fflate";
-
+import { AuthService } from "./auth-service";
 import {
   createNakamaDataExport,
   previewNakamaDataImport,
 } from "./data-portability";
+import { OrgService } from "./org-service";
 import {
   createProfilePackExport,
   importProfilePack,
@@ -62,6 +63,177 @@ describe("profile portability", () => {
     path.join(root, "orgs", orgId, "profiles", profileId);
 
   const now = () => new Date().toISOString();
+
+  test("shared packs retain references and require a valid destination publication", async () => {
+    const { db, service } = await setup();
+    const orgService = new OrgService(db, new AuthService());
+    service.setOrgService(orgService);
+    const timestamp = now();
+    const verifiedTeam = "org_verified";
+    for (const id of [ORG, DEST, VICTIM, verifiedTeam]) {
+      await db.upsertOrganization({
+        createdAt: timestamp,
+        id,
+        name: id,
+        parentOrgId: [DEST, verifiedTeam].includes(id) ? ORG : null,
+        slug: id,
+        updatedAt: timestamp,
+      });
+    }
+    const { profile: source } = await service.createProfile(ORG, {
+      name: "Shared source",
+      systemPrompt: "Published instructions",
+    });
+    const publication = await db.publishOrgSharedResource({
+      createdAt: timestamp,
+      id: "shared_pack_publication",
+      orgId: ORG,
+      resourceId: source.id,
+      resourceKind: "agent",
+      updatedAt: timestamp,
+    });
+    const instance = await db.createSharedAgentInstance(
+      DEST,
+      publication.id,
+      "shared_pack_instance",
+      timestamp
+    );
+    await mkdir(soul(DEST, instance.id), { recursive: true });
+    await writeFile(
+      path.join(soul(DEST, instance.id), "MEMORY.md"),
+      "Team memory"
+    );
+    const exported = await createProfilePackExport(db, DEST, instance.id);
+    const reference = {
+      publicationId: publication.id,
+      sourceOrgId: ORG,
+      sourceProfileId: source.id,
+    };
+    expect(exported.manifest.meta.sharedAgent).toEqual(reference);
+    await db.upsertTool({
+      createdAt: timestamp,
+      description: "Destination tool",
+      handlerConfig: {},
+      handlerType: "javascript",
+      id: "pack_destination_tool",
+      name: "pack_destination_tool",
+      orgId: VICTIM,
+      updatedAt: timestamp,
+    });
+    const crafted = repack(exported.data, {
+      "nakama-profile-export.json": JSON.stringify({
+        ...exported.manifest,
+        meta: {
+          ...exported.manifest.meta,
+          bundledSkillNames: ["missing_skill"],
+          composioToolkitSlugs: ["missing_toolkit"],
+          mcpServerNames: ["missing_server"],
+          toolNames: ["pack_destination_tool"],
+        },
+      }),
+    });
+    expect(
+      (await previewProfilePackImport(db, VICTIM, crafted)).skippedAssignments
+    ).toEqual([]);
+    const imported = await importProfilePack(db, VICTIM, crafted, {
+      confirm: true,
+    });
+    expect(imported.profileId).not.toBe(instance.id);
+    expect(
+      await db.getSharedAgentInstance(VICTIM, imported.profileId)
+    ).toMatchObject({
+      ...reference,
+      profileId: imported.profileId,
+      teamOrgId: VICTIM,
+    });
+    expect(
+      (await service.getProfile(VICTIM, imported.profileId)).profile.sharedAgent
+        ?.available
+    ).toBe(false);
+    await expect(
+      orgService.resolveSharedAgentProfile(VICTIM, imported.profileId)
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.updateProfile(VICTIM, imported.profileId, { name: "Local edit" })
+    ).rejects.toMatchObject({ status: 403 });
+    expect((await db.getOrganizationById(VICTIM))?.parentOrgId).toBeNull();
+    expect(await db.listOrgSharedResources(VICTIM)).toEqual([]);
+    expect(await db.listToolsForProfile(imported.profileId)).toEqual([]);
+    expect(
+      await readFile(
+        path.join(soul(VICTIM, imported.profileId), "MEMORY.md"),
+        "utf8"
+      )
+    ).toBe("Team memory");
+    const reexported = await createProfilePackExport(
+      db,
+      VICTIM,
+      imported.profileId
+    );
+    expect(reexported.manifest.meta.sharedAgent).toEqual(reference);
+
+    const verified = await importProfilePack(db, verifiedTeam, exported.data, {
+      confirm: true,
+    });
+    expect(
+      (await service.getProfile(verifiedTeam, verified.profileId)).profile
+        .sharedAgent?.available
+    ).toBe(true);
+    const profilesBefore = await db.listProfiles();
+    const linkBefore = await db.getSharedAgentInstance(
+      verifiedTeam,
+      verified.profileId
+    );
+    await expect(
+      importProfilePack(db, verifiedTeam, exported.data, { confirm: true })
+    ).rejects.toThrow();
+    expect(await db.listProfiles()).toEqual(profilesBefore);
+    expect(
+      await db.getSharedAgentInstance(verifiedTeam, verified.profileId)
+    ).toEqual(linkBefore);
+    await db.deleteOrgSharedResource(ORG, publication.id);
+    expect(
+      (await service.getProfile(verifiedTeam, verified.profileId)).profile
+        .sharedAgent?.available
+    ).toBe(false);
+    await expect(
+      orgService.resolveSharedAgentProfile(verifiedTeam, verified.profileId)
+    ).rejects.toMatchObject({ status: 404 });
+    expect(
+      await readFile(
+        path.join(soul(verifiedTeam, verified.profileId), "MEMORY.md"),
+        "utf8"
+      )
+    ).toBe("Team memory");
+  });
+
+  test("invalid shared pack references are rejected before creating profiles", async () => {
+    const { db, service } = await setup();
+    const { profile } = await service.createProfile(ORG, {
+      name: "Pack source",
+    });
+    const exported = await createProfilePackExport(db, ORG, profile.id);
+    const profilesBefore = await db.listProfiles();
+    for (const sharedAgent of [
+      null,
+      {},
+      { publicationId: "", sourceOrgId: ORG, sourceProfileId: profile.id },
+    ]) {
+      const crafted = repack(exported.data, {
+        "nakama-profile-export.json": JSON.stringify({
+          ...exported.manifest,
+          meta: { ...exported.manifest.meta, sharedAgent },
+        }),
+      });
+      await expect(
+        previewProfilePackImport(db, DEST, crafted)
+      ).rejects.toThrow();
+      await expect(
+        importProfilePack(db, DEST, crafted, { confirm: true })
+      ).rejects.toThrow();
+    }
+    expect(await db.listProfiles()).toEqual(profilesBefore);
+  });
 
   test("pack provenance and name collisions cannot overwrite a shared instance or its source", async () => {
     const { db, service } = await setup();
