@@ -10,7 +10,7 @@ import {
 } from "./skill-post-turn-review-service";
 
 function toolCall(id: string, name = "read_file") {
-  return { arguments: "{}", id, name };
+  return { arguments: {}, id, name };
 }
 
 function assistantWithTools(count: number, names?: string[]): ChatMessage {

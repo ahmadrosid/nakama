@@ -45,9 +45,9 @@ describe("SessionTurnRegistry", () => {
     const live: StreamEvent[] = [];
     registry.subscribe("session_1", (event) => live.push(event));
 
-    const todos: AgentTodo[] = [
+    const todos = [
       { content: "Read files", id: "todo_1", status: "in_progress" },
-    ];
+    ] satisfies AgentTodo[];
 
     const events: StreamEvent[] = [
       { todos: [], type: "todos_updated" },
