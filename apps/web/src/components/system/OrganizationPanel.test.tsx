@@ -2689,3 +2689,145 @@ test("unavailable model chips remain static", async () => {
   expect(publications).not.toHaveBeenCalled();
   expect(models).not.toHaveBeenCalled();
 });
+
+test.each([
+  { agents: 1, platform: false, role: "admin", skills: 0 },
+  { agents: 0, platform: false, role: "member", skills: 0 },
+  { agents: 0, platform: false, role: "viewer", skills: 0 },
+  { agents: 1, platform: true, role: "viewer", skills: 1 },
+] as const)(
+  "root source links use existing permissions and stable IDs %#",
+  async ({ role, platform, agents, skills }) => {
+    const create = spyOn(client, "createSharedAgentInstance");
+    cleanups.push(() => create.mockRestore());
+
+    const { container, queries, render } = await mountResourceReader(
+      role,
+      platform
+    );
+
+    const data = overview("parent");
+    data.sharedResources[1].label = "Same name";
+    data.sharedResources[1].resourceId = "source/skill?";
+    data.sharedResources[2].label = "Same name";
+    data.sharedResources[2].resourceId = "source/agent?";
+    queries.setQueryData(
+      queryKeys.organizationOverview("parent", "parent"),
+      data
+    );
+    await render({ ...organization("parent"), parentOrgId: null, role });
+
+    const agent = container.querySelector<HTMLAnchorElement>(
+      'a[aria-label^="View published agent"]'
+    );
+
+    const skill = container.querySelector<HTMLAnchorElement>(
+      'a[aria-label^="View published skill"]'
+    );
+
+    expect(
+      container.querySelectorAll('a[aria-label^="View published agent"]')
+    ).toHaveLength(agents);
+    expect(
+      container.querySelectorAll('a[aria-label^="View published skill"]')
+    ).toHaveLength(skills);
+    expect(create).not.toHaveBeenCalled();
+    expect(
+      container.querySelector('button[aria-label^="Open shared agent"]')
+    ).toBeNull();
+
+    if (agents) {
+      expect(agent?.getAttribute("href")).toBe(
+        "/profiles?profile=source%2Fagent%3F"
+      );
+      agent?.focus();
+      expect(document.activeElement).toBe(agent);
+      await act(async () => {
+        agent?.click();
+        await settle();
+      });
+      expect(container.querySelector("[data-chat-location]")?.textContent).toBe(
+        "/profiles?profile=source%2Fagent%3F"
+      );
+      expect(create).not.toHaveBeenCalled();
+    }
+
+    if (skills) {
+      expect(skill?.getAttribute("href")).toBe(
+        "/profiles/skills/source%2Fskill%3F"
+      );
+      skill?.focus();
+      expect(document.activeElement).toBe(skill);
+      await act(async () => {
+        skill?.click();
+        await settle();
+      });
+      expect(container.querySelector("[data-chat-location]")?.textContent).toBe(
+        "/profiles/skills/source%2Fskill%3F"
+      );
+    }
+  }
+);
+
+test.each([
+  { readiness: "unavailable" },
+  { readiness: "requires_setup" },
+] as const)(
+  "unavailable root sources have no detail link %#",
+  async ({ readiness }) => {
+    const { container, queries, render } = await mountResourceReader(
+      "admin",
+      true
+    );
+
+    const data = overview("parent");
+    data.sharedResources[1].readiness = readiness;
+    data.sharedResources[2].readiness = readiness;
+    queries.setQueryData(
+      queryKeys.organizationOverview("parent", "parent"),
+      data
+    );
+    await render({
+      ...organization("parent"),
+      parentOrgId: null,
+      role: "admin",
+    });
+    expect(
+      container.querySelectorAll('a[aria-label^="View published"]')
+    ).toHaveLength(0);
+    expect(container.textContent).toContain(data.sharedResources[1].label);
+    expect(container.textContent).toContain(data.sharedResources[2].label);
+  }
+);
+
+test("root source links cannot use foreign publication owners", async () => {
+  const { container, queries, render } = await mountResourceReader(
+    "admin",
+    true
+  );
+
+  const data = overview("parent");
+  data.sharedResources[1].orgId = "foreign";
+  data.sharedResources[2].orgId = "foreign";
+  queries.setQueryData(
+    queryKeys.organizationOverview("parent", "parent"),
+    data
+  );
+  await render({ ...organization("parent"), parentOrgId: null, role: "admin" });
+  expect(
+    container.querySelectorAll('a[aria-label^="View published"]')
+  ).toHaveLength(0);
+});
+
+test("team users never receive direct links to parent sources", async () => {
+  const { container } = await mountResourceReader("admin", true);
+  expect(
+    container.querySelectorAll('a[aria-label^="View published"]')
+  ).toHaveLength(0);
+  expect(
+    container.querySelector('button[aria-label^="Open shared agent"]')
+  ).not.toBeNull();
+  expect(
+    container.querySelector('button[aria-label^="View shared skill"]')
+  ).not.toBeNull();
+});

@@ -31,6 +31,7 @@ import {
   UserGroupIcon,
 } from "hugeicons-react";
 import { type FormEvent, useId, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { OrgArchiveCard } from "@/components/settings/OrgArchiveCard";
 import { OrgMembersCard } from "@/components/settings/OrgMembersCard";
 import { OrgMemoryCard } from "@/components/settings/OrgMemoryCard";
@@ -48,7 +49,12 @@ import {
 } from "@/hooks/use-org-members";
 import { client, formatError } from "@/lib/client";
 import { decodeModelSelection, encodeModelSelection } from "@/lib/models";
-import { canAccessSystemPage, canUseToolPlayground } from "@/lib/navigation";
+import {
+  canAccessSystemPage,
+  canUseToolPlayground,
+  profilePath,
+  skillDetailPath,
+} from "@/lib/navigation";
 import { queryKeys } from "@/lib/query-keys";
 
 const RESOURCE_ROWS = [
@@ -1202,6 +1208,35 @@ export function OrganizationOverview() {
                         orgId={activeOrg.id}
                         resource={resource}
                       />
+                    ) : !activeOrg.parentOrgId &&
+                      resource.orgId === activeOrg.id &&
+                      resource.readiness === "ready" &&
+                      user &&
+                      ((resource.resourceKind === "agent" &&
+                        canAccessSystemPage(
+                          user.isPlatformAdmin === true,
+                          activeOrg.role
+                        )) ||
+                        (resource.resourceKind === "skill" &&
+                          user.isPlatformAdmin)) ? (
+                      <Button
+                        aria-label={`View published ${resource.resourceKind} ${resource.label} from ${resource.sourceOrganization.name}`}
+                        className="h-auto max-w-full whitespace-normal break-words text-left"
+                        key={`${activeOrg.id}:${resource.id}`}
+                        render={
+                          <Link
+                            to={
+                              resource.resourceKind === "agent"
+                                ? profilePath(resource.resourceId)
+                                : skillDetailPath(resource.resourceId)
+                            }
+                          />
+                        }
+                        size="sm"
+                        variant="secondary"
+                      >
+                        {resource.label}
+                      </Button>
                     ) : (
                       <span
                         className="max-w-full break-words rounded-lg bg-muted px-2.5 py-1 text-sm"

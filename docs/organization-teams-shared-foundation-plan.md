@@ -2330,3 +2330,15 @@ All 75 component tests passed with 501 assertions. New coverage includes lazy re
 Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: remaining root resource details, then shared-template field controls and compatibility labels. No new package, dependency, file, or server route was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks and browser settings navigation remain unverified.
 
 Evidence: /tmp/nakama-shared-models-{focused,types,oxlint,lint,doctor}.log.
+
+### Slice 3o — Root agent and skill source links
+
+Ready root agent chips now link to their existing profile page for tenant admins and platform admins. Root skill chips link to the existing skill page for platform admins, matching its current HTTP read permission. Links use source resource IDs, encoded by existing navigation helpers. They require the publication owner to match the active root tenant. Duplicate labels do not change the destination. Unavailable sources and sources requiring setup remain static. Team chips retain their team-context readers and instance selection; they receive no direct parent-source link.
+
+All 83 component tests passed with 538 assertions. New tests cover admin/member/viewer and platform permissions, encoded IDs, duplicate labels, native link focus, both destinations, and absence of shared-instance creation in root context. They also cover unavailable sources, foreign publication owners, and denial of direct parent links in team context. Complete web types, scoped anti-slop, Ultracite across 1533 files, and git diff --check passed. React Doctor remained at 91/100 with no issues. No verification repair was needed.
+
+The route audit found an unfinished access requirement. Existing GET organization knowledge catalog/content and GET skill catalog/detail routes still require platform administration. Parent publication controls already render for parent admins, so ordinary parent admins cannot complete their knowledge and skill selectors. The plan explicitly grants parent admins their parent catalog. The next slice must add scoped read access and access tests before treating step 2 as complete. Root document actions remain open.
+
+Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: resolve parent-admin catalog read permissions, then root document actions and shared-template field controls. No package, dependency, file, server route, or new read permission was added in this slice. No browser check, full suite, build, paid call, push, or PR ran. Browser destination rendering and final delivery checks remain unverified.
+
+Evidence: /tmp/nakama-root-source-links-{focused,types,oxlint,lint,doctor}.log.
