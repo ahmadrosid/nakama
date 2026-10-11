@@ -1,121 +1,213 @@
 {
-  "version": 1,
   "name": "todo-write-tool-call",
-  "recordedAt": "2026-07-23T16:25:54.126Z",
+  "recordedAt": "2026-10-11T12:57:58.905Z",
   "request": {
-    "method": "POST",
-    "url": "https://api.openai.com/v1/chat/completions",
     "body": {
-      "model": "gpt-4o-mini",
-      "messages": [
+      "input": [
         {
-          "role": "system",
-          "content": "You are a helpful assistant. For complex multi-step requests, you must call the todo_write tool to create an internal task plan before doing the work. Use merge=false for the initial plan. Keep exactly one task in_progress. Do not answer in plain text."
-        },
-        {
-          "role": "user",
-          "content": "Plan how you would research, draft, and review a short blog post about TypeScript enums. Use the todo_write tool with at least 3 tasks."
+          "content": "Plan how you would research, draft, and review a short blog post about TypeScript enums. Use the todo_write tool with at least 3 tasks.",
+          "role": "user"
         }
       ],
+      "instructions": "You are a helpful assistant. For complex multi-step requests, you must call the todo_write tool to create an internal task plan before doing the work. Use merge=false for the initial plan. Keep exactly one task in_progress. Do not answer in plain text.",
+      "model": "gpt-5.6-luna",
+      "store": false,
+      "tools": [
+        {
+          "description": "Create or update the internal task plan for complex multi-step work. Use when a request has 3+ distinct steps. Initialize at the start, keep one task in_progress, and mark tasks completed as you finish them.",
+          "name": "todo_write",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "merge": {
+                "description": "If true, update todos by id. If false, replace the entire task plan.",
+                "type": "boolean"
+              },
+              "todos": {
+                "description": "Todo items to create or update.",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "content": {
+                      "description": "Todo description. Required when creating a new todo.",
+                      "type": "string"
+                    },
+                    "id": {
+                      "description": "Stable todo identifier.",
+                      "type": "string"
+                    },
+                    "status": {
+                      "description": "Current todo status.",
+                      "enum": [
+                        "pending",
+                        "in_progress",
+                        "completed",
+                        "cancelled"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "status"],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": ["merge", "todos"],
+            "type": "object"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    "method": "POST",
+    "url": "https://api.openai.com/v1/responses"
+  },
+  "response": {
+    "body": {
+      "id": "resp_086f148a528ce58c016acb87d4703087d0941676aa67117e95",
+      "object": "response",
+      "created_at": 1791723476,
+      "status": "completed",
+      "access_programs": null,
+      "background": false,
+      "billing": {
+        "payer": "developer"
+      },
+      "completed_at": 1791723478,
+      "error": null,
+      "frequency_penalty": 0,
+      "incomplete_details": null,
+      "instructions": "You are a helpful assistant. For complex multi-step requests, you must call the todo_write tool to create an internal task plan before doing the work. Use merge=false for the initial plan. Keep exactly one task in_progress. Do not answer in plain text.",
+      "max_output_tokens": null,
+      "max_tool_calls": null,
+      "model": "gpt-5.6-luna",
+      "moderation": null,
+      "output": [
+        {
+          "id": "rs_086f148a528ce58c016acb87d5335c87d081f1f613a24ab570",
+          "type": "reasoning",
+          "content": [],
+          "encrypted_content": "gAAAAABqy4fWaOBHpiQV2WrISECvbXFR8HjdLYttD-i5yd1vGTLthXbBq1xV5jRlK5OpdWGgTykYe8lD9Y5ZnQ6POXFP9XN8oJ4q7QUm5UtOqOgfJqKrzKveLOmFgFww2BL9PbNY2VH-04RcETvmnyi5B5uDA1-t3K3IhiJeYIOuzTIC6gzOMiozrjUHIRr-6AIMbIlzs0C7tycVICEIkn41gcKf73NksAj3k1AQt4BrSK7ry-6V1tnqBEvHRobD7LTQIFMXFMsjbOIrBPqjtqpdthE9ssG2WrYp5Q3o4SISsbtSW7e47VPuzyogmkixmvzZiN33ycwJzrC1OyIb6da4jqkaUSPw-ZLIxBAwWpX7TUcZ3dyt7jqt97ZV9ibUJbhc5wdtYKVbSclMeAyyFssoYmJrVJ6nIfjfnphfWBo3mCkmVBEhYFDFlcZ-3maoco7ieijLhGhVwnmkPBsdEiV0n_IzChIpc-1zLLuKLaOUibTrHOsr4NMlyouDXuJIDfKyWrJW5xUOKUBbA5q0-dtyiL6swL7Err3a6MRXolzpqLr1bqodCIuF1l8vOasPeHFq6A8dd6QQV1zkVlTVxoGM_O4S9yIflm4-qXi51JgOhas7-lx4xoLr7-TGAr6pT82LV7Isnu1jB0iIAD_iBhl1M9EnrE9LeMTLhzJc4SGKEmbs5VRuoxQVuEIjHtVbnT8Ifxj2-dbn5LPVaUGbyLJgRImJxDPxPbgK3BzRKLjVWnqZKoouvfn5ZA-QvPlykqgW0-XNmzPE4MYIyZHoK32c6ujlz_gTwNXYNygZkJ48j1DqZ3tX6eNt7OVo-Y6O_P4M6GRkznvmUHGnrRiuCCX12T24KSPwkHiWEJrCOKL2F5BDLHivskai6JVaY0ic_1U1lZSsxmP4qrlKQQcUCMhDB9m_ryLW6rwZd0ihDZa6s6rKlve40bojQkLox8uOsSJ8zg023iAwtVDBN_oPuiEPGphnb1PjSBP74bBMPEVNFNzjhU7QdTqcjBnjR_Xbp03up-HFJrscIcvc02YWUwZkzbkUa6FToAEoD5mXPtLHDgmQEVbhKjBqiJpuIwDTBtHQLLIeUXGQYIwqo4CMaI4qRMDUPXJ41szDSXcRVAT13PCuu4ay4rYlJk64Hw8as9bUcbJeX32Uq5-Wxa5GKmRYBaAtdzhqRPLVuSwzQGPNXwGpRr8RS1DJ-IAiGwI6H1Nw5fe7PdPiqOdP2Q0uk1SmtzrAWbqyFu3OaoRb8xLu0UCFFq1cIIi--wrAn14MvQOcsUmS_48jZZgRWpjAuAUvF-Qi-nUEaDPmakCQ9W4PSVYhE4ze6fwoK4IQ-Gs1WLs3egnGhAU5jFm8TSbcU8n06gEUOoBZLFojBfsNk3ulZ3S_FBx7okIUsk_2_DY8q45maNASnpu4wJZXe3iF5cCZnfTFtCk37Jl_urlqPFY224gQhC4oG2gOFmSvRSSrmrPxDSKKk2bmzpabcnhBMR-8Pv1TklLcBPnqIHH0gz2PW-Y8jQXVTaCPaFqnYLc07tj3i6ukLWiW2io98iZ5us3FHmU66gQDE99VH9Y9GTaFa-rpvkvmtmNREMeDlwEurw4wi-yLxRFw11hbxbJmob45OUDz8sJR6OOu9jx-ZoGQ6zgQNhlv7Hr8GSgx1_AWPhDzYm1A57xa3sTyzPWL2EG_d4hOMsMayu0_JTihTdrFf4K_Bzee9apjyeFzChr04I0dsN3gUkxq",
+          "summary": []
+        },
+        {
+          "id": "fc_086f148a528ce58c016acb87d589d487d09f243f2443e9f83d",
+          "type": "function_call",
+          "status": "completed",
+          "arguments": "{\"merge\":false,\"todos\":[{\"content\":\"Research TypeScript enum syntax, variants, current guidance, and common pitfalls using authoritative sources\",\"id\":\"research\",\"status\":\"in_progress\"},{\"content\":\"Draft a concise blog post outline and first version covering practical examples and trade-offs\",\"id\":\"draft\",\"status\":\"pending\"},{\"content\":\"Review the draft for technical accuracy, clarity, audience fit, and concise presentation\",\"id\":\"review\",\"status\":\"pending\"},{\"content\":\"Finalize the post with edits, examples, and source links\",\"id\":\"finalize\",\"status\":\"pending\"}]}",
+          "call_id": "call_4T1JAck9ftvGPy0Fw7LGudrG",
+          "name": "todo_write"
+        }
+      ],
+      "parallel_tool_calls": true,
+      "presence_penalty": 0,
+      "previous_response_id": null,
+      "prompt_cache_key": null,
+      "prompt_cache_retention": "24h",
+      "reasoning": {
+        "context": "all_turns",
+        "effort": "medium",
+        "mode": "standard",
+        "summary": null
+      },
+      "safety_identifier": null,
+      "service_tier": "default",
+      "store": false,
+      "temperature": 1,
+      "text": {
+        "format": {
+          "type": "text"
+        },
+        "verbosity": "medium"
+      },
+      "tool_choice": "auto",
+      "tool_usage": {
+        "image_gen": {
+          "input_tokens": 0,
+          "input_tokens_details": {
+            "image_tokens": 0,
+            "text_tokens": 0
+          },
+          "output_tokens": 0,
+          "output_tokens_details": {
+            "image_tokens": 0,
+            "text_tokens": 0
+          },
+          "total_tokens": 0
+        },
+        "web_search": {
+          "num_requests": 0
+        }
+      },
       "tools": [
         {
           "type": "function",
-          "function": {
-            "name": "todo_write",
-            "description": "Create or update the internal task plan for complex multi-step work. Use when a request has 3+ distinct steps. Initialize at the start, keep one task in_progress, and mark tasks completed as you finish them.",
-            "parameters": {
-              "type": "object",
-              "properties": {
-                "merge": {
-                  "type": "boolean",
-                  "description": "If true, update todos by id. If false, replace the entire task plan."
-                },
-                "todos": {
-                  "type": "array",
-                  "description": "Todo items to create or update.",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "description": "Stable todo identifier."
-                      },
-                      "content": {
-                        "type": "string",
-                        "description": "Todo description. Required when creating a new todo."
-                      },
-                      "status": {
-                        "type": "string",
-                        "enum": [
-                          "pending",
-                          "in_progress",
-                          "completed",
-                          "cancelled"
-                        ],
-                        "description": "Current todo status."
-                      }
-                    },
-                    "required": ["id", "status"],
-                    "additionalProperties": false
-                  }
-                }
+          "description": "Create or update the internal task plan for complex multi-step work. Use when a request has 3+ distinct steps. Initialize at the start, keep one task in_progress, and mark tasks completed as you finish them.",
+          "name": "todo_write",
+          "output_schema": null,
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "merge": {
+                "description": "If true, update todos by id. If false, replace the entire task plan.",
+                "type": "boolean"
               },
-              "required": ["merge", "todos"],
-              "additionalProperties": false
-            }
-          }
-        }
-      ],
-      "tool_choice": "auto"
-    }
-  },
-  "response": {
-    "status": 200,
-    "body": {
-      "id": "chatcmpl-E4qX2Hp0uzOyGDBAoBkN4ybyMXn0O",
-      "object": "chat.completion",
-      "created": 1784823952,
-      "model": "gpt-4o-mini-2024-07-18",
-      "choices": [
-        {
-          "index": 0,
-          "message": {
-            "role": "assistant",
-            "content": null,
-            "tool_calls": [
-              {
-                "id": "call_HZLAKIz8XxQLKTiui7tx1U7P",
-                "type": "function",
-                "function": {
-                  "name": "todo_write",
-                  "arguments": "{\"merge\":false,\"todos\":[{\"id\":\"task_1\",\"content\":\"Research TypeScript enums by finding definitions, examples, and best practices.\",\"status\":\"in_progress\"},{\"id\":\"task_2\",\"content\":\"Draft the blog post based on the research findings.\",\"status\":\"pending\"},{\"id\":\"task_3\",\"content\":\"Review the draft for clarity, accuracy, and completeness before publishing.\",\"status\":\"pending\"}]}"
-                }
+              "todos": {
+                "description": "Todo items to create or update.",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "content": {
+                      "description": "Todo description. Required when creating a new todo.",
+                      "type": "string"
+                    },
+                    "id": {
+                      "description": "Stable todo identifier.",
+                      "type": "string"
+                    },
+                    "status": {
+                      "description": "Current todo status.",
+                      "enum": [
+                        "pending",
+                        "in_progress",
+                        "completed",
+                        "cancelled"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": ["content", "id", "status"],
+                  "type": "object"
+                },
+                "type": "array"
               }
-            ],
-            "refusal": null,
-            "annotations": []
+            },
+            "required": ["merge", "todos"],
+            "type": "object"
           },
-          "logprobs": null,
-          "finish_reason": "tool_calls"
+          "strict": true
         }
       ],
+      "top_logprobs": 0,
+      "top_p": 0.98,
+      "truncation": "disabled",
       "usage": {
-        "prompt_tokens": 241,
-        "completion_tokens": 92,
-        "total_tokens": 333,
-        "prompt_tokens_details": {
-          "cached_tokens": 0,
-          "audio_tokens": 0
+        "input_tokens": 244,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
         },
-        "completion_tokens_details": {
-          "reasoning_tokens": 0,
-          "audio_tokens": 0,
-          "accepted_prediction_tokens": 0,
-          "rejected_prediction_tokens": 0
-        }
+        "output_tokens": 155,
+        "output_tokens_details": {
+          "reasoning_tokens": 27
+        },
+        "total_tokens": 399
       },
-      "service_tier": "default",
-      "system_fingerprint": "fp_67faaa3b02"
-    }
-  }
+      "user": null,
+      "metadata": {}
+    },
+    "status": 200
+  },
+  "version": 1
 }

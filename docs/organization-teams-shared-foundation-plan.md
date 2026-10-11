@@ -296,7 +296,7 @@ Implementation sequence:
 
 Delivery order:
 
-- [ ] 1. Deliver schema, contracts, access rules, and migration tests.
+- [x] 1. Deliver schema, contracts, access rules, and migration tests.
 - [ ] 2. Deliver all five resource paths and execution checks.
 - [ ] 3. Deliver the Organization page, client state, and component tests.
 - [ ] 4. Document the UI path and roles in existing user docs.
@@ -1258,3 +1258,18 @@ The same ask_user_question and todo_write recordings still return empty Response
 Step 2 and all delivery stages remain unchecked. Further stage delivery waits for that required input. The publication lock covers one server process; runtime use, UI, portability, docs, builds, push, and PR remain incomplete.
 Next: obtain explicit permission for the two real OpenAI test calls, or receive genuine recordings from the user. Replay both recordings offline and repeat the complete stage 1 gate before proceeding with resource execution work.
 Evidence: /tmp/nakama-model-update-unpublish-{focused,server-types,lint,knip,full,full-web}.log.
+
+2026-10-11: Step 2 slice 2m replaces the two stale OpenAI tool recordings after explicit human approval.
+Both approved calls returned HTTP 200 through /v1/responses. Tests validated ask_user_question and todo_write arguments and their local state changes.
+The saved requests use gpt-5.6-luna. The first isolated replay used gpt-4o-mini and selected the wrong API path.
+Replay now reads the recorded model and skips credential loading. Both tests pass with an empty temporary configuration directory.
+Record mode requires real credentials before it sends a request. No further provider calls ran after the two approved recordings.
+This slice includes the previously authorized JSON typing and tool-state assertion repairs in the same test modules and cassette helper.
+Formatting changed only JSON layout. Recordings contain request bodies and response bodies, with no authentication headers.
+Checks: all 3 focused tests passed; complete server type check passed; lint passed all 1532 files; knip and git diff --check passed.
+The full root test script passed with LLM_VCR_MODE=replay and a temporary configuration directory: 4198 non-web tests and 654 web tests passed.
+Combined: 4852 passed, 22 skipped, 0 failed across 512 files. The required delivery stage 1 gate is complete.
+Implementation step 2 remains unchecked because its root setup and publication controls also require the planned Organization screen.
+Next: connect published resources to execution, then complete the screen and client controls. Stages 2 through 4 remain incomplete.
+No browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-approved-tool-{recordings,replay}.log and /tmp/nakama-approved-recordings-{types,lint,knip,full}.log.
