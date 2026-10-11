@@ -11,18 +11,20 @@ const API_PREFIXES = [
   "/artifact-frame",
 ] as const;
 
-const CONTENT_TYPES = {
-  ".css": "text/css; charset=utf-8",
-  ".html": "text/html; charset=utf-8",
-  ".ico": "image/x-icon",
-  ".js": "text/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".png": "image/png",
-  ".svg": "image/svg+xml",
-  ".webmanifest": "application/manifest+json; charset=utf-8",
-  ".woff": "font/woff",
-  ".woff2": "font/woff2",
-} satisfies Record<string, string>;
+const CONTENT_TYPES = new Map(
+  Object.entries({
+    ".css": "text/css; charset=utf-8",
+    ".html": "text/html; charset=utf-8",
+    ".ico": "image/x-icon",
+    ".js": "text/javascript; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".webmanifest": "application/manifest+json; charset=utf-8",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+  })
+);
 
 /** Vite writes content-hashed filenames here, so they can never go stale. */
 const IMMUTABLE_PREFIX = "/assets/";
@@ -136,7 +138,7 @@ function fileResponse(
 ): Response {
   const file = Bun.file(filePath);
   const extension = filePath.slice(filePath.lastIndexOf(".")).toLowerCase();
-  const contentType = CONTENT_TYPES[extension] ?? file.type;
+  const contentType = CONTENT_TYPES.get(extension) ?? file.type;
 
   const headers = {
     "Cache-Control": cacheControlFor(pathname, extension),
