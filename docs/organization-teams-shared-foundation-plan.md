@@ -1040,3 +1040,15 @@ Step 1 and delivery stage 1 remain incomplete. Publication source validation, co
 Other authorized type cleanup changes remain uncommitted. Stale provider cassettes, full tests, and builds remain unresolved.
 Next: implement parent publication source validation and its access tests within the existing OrgService.
 Evidence: `/tmp/nakama-team-service-ready-tests.log`, `/tmp/nakama-team-service-ready-{server,db}-types.log`, `/tmp/nakama-team-service-ready-lint.log`.
+
+2026-10-11: Slice 1h adds knowledge publication and scoped removal to the existing OrgService.
+Team creation and publication mutations reuse the same active-root and parent-admin check. Disabled users, team admins, parent members, and viewers cannot manage parent publications.
+Knowledge publication requires a ready organization-owned document and an existing regular file. Path guards reject sources linked outside the parent's knowledge store.
+Publication retries keep one stable record. Removal preserves source bytes; repeated removal is safe; another root cannot remove the record.
+Five new regressions cover publication state, access roles, platform authority, archived parents, foreign/profile documents, missing files, failed extraction, and symlink escape.
+Checks: all 79 focused service and database tests passed; complete server type check passed; lint passed all 1532 files; `git diff --check` passed.
+The first test run exposed Bun's null access() return value. The revised assertion verifies unchanged source bytes; the second run passed.
+Step 1 and delivery stage 1 remain incomplete. Knowledge reads, HTTP publication routes, and skill, agent, tool, and model source validation are still required.
+No browser or external provider calls ran. Other authorized cleanup changes remain uncommitted; stale provider cassettes and full tests remain unresolved.
+Next: extend publication source validation for tools and profile-owned skills, using their existing stores.
+Evidence: `/tmp/nakama-knowledge-publication-tests-final.log`, `/tmp/nakama-knowledge-publication-types.log`, `/tmp/nakama-knowledge-publication-lint.log`.

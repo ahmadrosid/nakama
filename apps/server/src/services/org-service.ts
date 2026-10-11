@@ -1,14 +1,18 @@
 import { createHash } from "node:crypto";
-import { rm } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   createEmailOutboundAdapter,
   type EmailOutboundAdapter,
   generateTemporaryPassword,
+  getKnowledgeBaseStoredDocumentPath,
   getOrgConfigDir,
+  getOrgKnowledgeBaseDir,
   getProfileSoulDir,
   getUserConfigDir,
+  guardFilePath,
   initSoulDirectory,
+  listOrganizationKnowledgeBaseDocuments,
   NakamaApiError,
   resolveWebPublicUrl,
 } from "@nakama/core";
@@ -41,6 +45,7 @@ import type {
   DatabaseAdapter,
   StoredOrganizationRecord,
   StoredOrgInviteRecord,
+  StoredOrgSharedResourceRecord,
   StoredPasswordResetTokenRecord,
   StoredUserRecord,
 } from "@nakama/db";
@@ -122,6 +127,83 @@ export class OrgService {
     }
 
     return org;
+  }
+
+  private async requireParentAdmin(
+    orgId: string,
+    userId: string
+  ): Promise<StoredOrganizationRecord> {
+    const parent = await this.requireActiveOrganization(orgId);
+    if (parent.parentOrgId) {
+      throw new NakamaApiError("Requires a root organization.", 409);
+    }
+    const user = await this.databaseAdapter.getUserById(userId);
+    const membership = await this.databaseAdapter.getOrgMember(orgId, userId);
+    if (
+      !user ||
+      user.disabledAt ||
+      (!user.isPlatformAdmin && membership?.role !== "admin")
+    ) {
+      throw new NakamaApiError("Forbidden", 403);
+    }
+    return parent;
+  }
+
+  async publishSharedResource(
+    parentOrgId: string,
+    request: { resourceKind: "knowledge"; resourceId: string },
+    actorUserId: string
+  ): Promise<StoredOrgSharedResourceRecord> {
+    await this.requireParentAdmin(parentOrgId, actorUserId);
+    if (request.resourceKind !== "knowledge") {
+      throw new NakamaApiError("Unsupported publication kind.", 400);
+    }
+    const dir = getOrgKnowledgeBaseDir(parentOrgId);
+    try {
+      await guardFilePath(dir, null, undefined, {
+        allowedDirs: [getOrgConfigDir(parentOrgId)],
+      });
+      const documents =
+        await listOrganizationKnowledgeBaseDocuments(parentOrgId);
+      const document = documents.find(
+        (entry) => entry.id === request.resourceId
+      );
+      if (!document || document.status !== "ready") {
+        throw new NakamaApiError("Knowledge document is unavailable.", 404);
+      }
+      const { resolved } = await guardFilePath(
+        getKnowledgeBaseStoredDocumentPath(dir, document.id, document.filename),
+        null,
+        undefined,
+        { allowedDirs: [dir] }
+      );
+      if (!(await stat(resolved)).isFile()) {
+        throw new NakamaApiError("Knowledge document is unavailable.", 404);
+      }
+    } catch {
+      throw new NakamaApiError("Knowledge document is unavailable.", 404);
+    }
+    const now = new Date().toISOString();
+    return this.databaseAdapter.publishOrgSharedResource({
+      createdAt: now,
+      id: `publication_${crypto.randomUUID().replace(/-/g, "")}`,
+      orgId: parentOrgId,
+      resourceId: request.resourceId,
+      resourceKind: request.resourceKind,
+      updatedAt: now,
+    });
+  }
+
+  async unpublishSharedResource(
+    parentOrgId: string,
+    publicationId: string,
+    actorUserId: string
+  ): Promise<boolean> {
+    await this.requireParentAdmin(parentOrgId, actorUserId);
+    return this.databaseAdapter.deleteOrgSharedResource(
+      parentOrgId,
+      publicationId
+    );
   }
 
   async archiveOrganization(
@@ -433,22 +515,7 @@ export class OrgService {
     return await teamCreationLock.withLock(
       JSON.stringify([parentOrgId, request.requestId]),
       async () => {
-        const parent = await this.requireActiveOrganization(parentOrgId);
-        if (parent.parentOrgId) {
-          throw new NakamaApiError("Teams require a root organization.", 409);
-        }
-        const creator = await this.databaseAdapter.getUserById(creatorUserId);
-        const membership = await this.databaseAdapter.getOrgMember(
-          parentOrgId,
-          creatorUserId
-        );
-        if (
-          !creator ||
-          creator.disabledAt ||
-          (!creator.isPlatformAdmin && membership?.role !== "admin")
-        ) {
-          throw new NakamaApiError("Forbidden", 403);
-        }
+        await this.requireParentAdmin(parentOrgId, creatorUserId);
         const previous = await this.databaseAdapter.getOrgTeamCreation(
           parentOrgId,
           request.requestId

@@ -1,14 +1,28 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import {
   type EmailOutboundAdapter,
+  getKnowledgeBaseManifestPath,
+  getKnowledgeBaseStoredDocumentPath,
   getOrgConfigDir,
+  getOrgKnowledgeBaseDir,
   getProfileSoulDir,
   getUserConfigDir,
   getUserConfigPath,
+  listOrganizationKnowledgeBaseDocuments,
   NakamaApiError,
   type ToolSetupPlan,
+  uploadKnowledgeBaseDocument,
+  uploadOrganizationKnowledgeBaseDocument,
   writeParsedConfigIni,
 } from "@nakama/core";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
@@ -1758,6 +1772,265 @@ async function seedTeamParent(db: DatabaseAdapter) {
   });
   return { name: "Team", requestId: "team-request", slug: "team" };
 }
+
+describe("OrgService knowledge publications", () => {
+  const source = () => ({
+    data: Buffer.from(crypto.randomUUID()).toString("base64"),
+    filename: `${crypto.randomUUID()}.txt`,
+    mediaType: "text/plain",
+  });
+
+  test("publication is explicit, stable on retry, and removal preserves the source", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    await seedTeamParent(db);
+    const attachment = source();
+    const { document } = await uploadOrganizationKnowledgeBaseDocument(
+      "org_parent",
+      attachment
+    );
+    const request = {
+      resourceId: document.id,
+      resourceKind: "knowledge" as const,
+    };
+    expect(await db.listOrgSharedResources("org_parent")).toEqual([]);
+    const publication = await orgService.publishSharedResource(
+      "org_parent",
+      request,
+      "user_creator"
+    );
+    const retried = await orgService.publishSharedResource(
+      "org_parent",
+      request,
+      "user_creator"
+    );
+    expect(retried.id).toBe(publication.id);
+    expect(await db.listOrgSharedResources("org_parent")).toHaveLength(1);
+    expect(publication).toMatchObject({ orgId: "org_parent", ...request });
+    expect(
+      await orgService.unpublishSharedResource(
+        "org_parent",
+        publication.id,
+        "user_creator"
+      )
+    ).toBe(true);
+    expect(
+      await orgService.unpublishSharedResource(
+        "org_parent",
+        publication.id,
+        "user_creator"
+      )
+    ).toBe(false);
+    await expect(
+      readFile(
+        getKnowledgeBaseStoredDocumentPath(
+          getOrgKnowledgeBaseDir("org_parent"),
+          document.id,
+          document.filename
+        )
+      )
+    ).resolves.toEqual(Buffer.from(attachment.data, "base64"));
+    const republished = await orgService.publishSharedResource(
+      "org_parent",
+      request,
+      "user_creator"
+    );
+    expect(republished.id).not.toBe(publication.id);
+  });
+
+  test("parent members, viewers, unrelated users, and team admins cannot publish or remove parent documents", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    await seedTeamParent(db);
+    const now = new Date().toISOString();
+    await db.upsertOrgMember({
+      createdAt: now,
+      orgId: "org_parent",
+      role: "member",
+      userId: "user_other",
+    });
+    await db.upsertOrganization({
+      createdAt: now,
+      id: "org_team",
+      name: "Team",
+      parentOrgId: "org_parent",
+      slug: "publication-team",
+      updatedAt: now,
+    });
+    await db.upsertOrgMember({
+      createdAt: now,
+      orgId: "org_team",
+      role: "admin",
+      userId: "user_other",
+    });
+    const { document } = await uploadOrganizationKnowledgeBaseDocument(
+      "org_parent",
+      source()
+    );
+    const request = {
+      resourceId: document.id,
+      resourceKind: "knowledge" as const,
+    };
+    const publication = await orgService.publishSharedResource(
+      "org_parent",
+      request,
+      "user_creator"
+    );
+    for (const actor of ["user_viewer", "user_other", "user_missing"]) {
+      await expect(
+        orgService.publishSharedResource("org_parent", request, actor)
+      ).rejects.toMatchObject({ status: 403 });
+      await expect(
+        orgService.unpublishSharedResource("org_parent", publication.id, actor)
+      ).rejects.toMatchObject({ status: 403 });
+    }
+    await expect(
+      orgService.publishSharedResource("org_team", request, "user_other")
+    ).rejects.toMatchObject({ status: 409 });
+    expect(await db.listOrgSharedResources("org_parent")).toEqual([
+      publication,
+    ]);
+    expect(await db.listOrgSharedResources("org_team")).toEqual([]);
+  });
+
+  test("platform admins may publish, but disabled admins and archived parents cannot", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    await seedTeamParent(db);
+    const now = new Date().toISOString();
+    await db.createUser({
+      createdAt: now,
+      email: "publication-platform@example.com",
+      id: "user_platform",
+      isPlatformAdmin: true,
+      passwordHash: "test",
+      updatedAt: now,
+    });
+    const { document } = await uploadOrganizationKnowledgeBaseDocument(
+      "org_parent",
+      source()
+    );
+    const request = {
+      resourceId: document.id,
+      resourceKind: "knowledge" as const,
+    };
+    const publication = await orgService.publishSharedResource(
+      "org_parent",
+      request,
+      "user_platform"
+    );
+    expect(
+      await orgService.unpublishSharedResource(
+        "org_other",
+        publication.id,
+        "user_platform"
+      )
+    ).toBe(false);
+    await db.disableUser("user_platform", now);
+    await expect(
+      orgService.publishSharedResource("org_parent", request, "user_platform")
+    ).rejects.toMatchObject({ status: 403 });
+    await orgService.archiveOrganization("org_parent");
+    await expect(
+      orgService.publishSharedResource("org_parent", request, "user_creator")
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      orgService.unpublishSharedResource(
+        "org_parent",
+        publication.id,
+        "user_creator"
+      )
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  test("foreign, profile-owned, missing, and failed documents leave publications unchanged", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    await seedTeamParent(db);
+    const foreign = await uploadOrganizationKnowledgeBaseDocument(
+      "org_other",
+      source()
+    );
+    const profile = await uploadKnowledgeBaseDocument(
+      "org_parent",
+      "profile_private",
+      source()
+    );
+    const missing = await uploadOrganizationKnowledgeBaseDocument(
+      "org_parent",
+      source()
+    );
+    await rm(
+      getKnowledgeBaseStoredDocumentPath(
+        getOrgKnowledgeBaseDir("org_parent"),
+        missing.document.id,
+        missing.document.filename
+      )
+    );
+    const failed = await uploadOrganizationKnowledgeBaseDocument(
+      "org_parent",
+      source()
+    );
+    const manifestPath = getKnowledgeBaseManifestPath(
+      getOrgKnowledgeBaseDir("org_parent")
+    );
+    const documents =
+      await listOrganizationKnowledgeBaseDocuments("org_parent");
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        documents: documents.map((document) =>
+          document.id === failed.document.id
+            ? { ...document, status: "failed" }
+            : document
+        ),
+      })
+    );
+    for (const resourceId of [
+      foreign.document.id,
+      profile.document.id,
+      missing.document.id,
+      failed.document.id,
+      "missing",
+    ]) {
+      await expect(
+        orgService.publishSharedResource(
+          "org_parent",
+          { resourceId, resourceKind: "knowledge" },
+          "user_creator"
+        )
+      ).rejects.toMatchObject({ status: 404 });
+    }
+    expect(await db.listOrgSharedResources("org_parent")).toEqual([]);
+  });
+
+  test.skipIf(process.platform === "win32")(
+    "documents linked outside the parent knowledge store cannot be published",
+    async () => {
+      const { orgService, databaseAdapter: db } = createOrgService();
+      await seedTeamParent(db);
+      const { document } = await uploadOrganizationKnowledgeBaseDocument(
+        "org_parent",
+        source()
+      );
+      const stored = getKnowledgeBaseStoredDocumentPath(
+        getOrgKnowledgeBaseDir("org_parent"),
+        document.id,
+        document.filename
+      );
+      const privatePath = join(getOrgConfigDir("org_other"), "private.txt");
+      await mkdir(getOrgConfigDir("org_other"), { recursive: true });
+      await writeFile(privatePath, "private");
+      await rm(stored);
+      await symlink(privatePath, stored);
+      await expect(
+        orgService.publishSharedResource(
+          "org_parent",
+          { resourceId: document.id, resourceKind: "knowledge" },
+          "user_creator"
+        )
+      ).rejects.toMatchObject({ status: 404 });
+      expect(await db.listOrgSharedResources("org_parent")).toEqual([]);
+      expect(await readFile(privatePath, "utf8")).toBe("private");
+    }
+  );
+});
 
 describe("OrgService team setup", () => {
   test("concurrent and later retries return one fully seeded team", async () => {
