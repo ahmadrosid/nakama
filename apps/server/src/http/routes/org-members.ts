@@ -1,14 +1,19 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type {
   AddOrgMemberResponse,
+  CreateOrganizationResponse,
   ListOrgMembersResponse,
+  OrganizationResponse,
   OrgInviteCreatedResponse,
   OrgLlmQuotaStatusResponse,
   OrgMemberResponse,
 } from "@nakama/core/contract";
 import { OrgUsageQuotaService } from "../../services/org-usage-quota-service";
 import type { ServerOptions } from "../context";
-import { requireOrgAdminFromContext } from "../org-guards";
+import {
+  requireOrgAdminFromContext,
+  requireOrgAdminOrPlatformAdminFromContext,
+} from "../org-guards";
 import { errorResponse, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
@@ -88,6 +93,98 @@ export function registerOrgMemberRoutes(
 
   const orgMemberParams = orgIdParam.extend({
     userId: z.string().openapi({ param: { in: "path", name: "userId" } }),
+  });
+
+  const createTeamSchema = z
+    .object({
+      adminUserId: z.string().trim().min(1).optional(),
+      name: z.string().trim().min(1),
+      requestId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
+      slug: z.string().trim().min(1),
+    })
+    .strict()
+    .openapi("CreateTeamRequest");
+  const createTeamResponseSchema = z
+    .object({
+      adminMember: z
+        .object({
+          member: z
+            .object({
+              userId: z.string(),
+              role: z.enum(["admin", "member", "viewer"]),
+            })
+            .passthrough(),
+          temporaryPassword: z.string().nullable(),
+        })
+        .optional(),
+      organization: z
+        .object({
+          createdAt: z.string(),
+          id: z.string(),
+          name: z.string(),
+          parentOrgId: z.string().nullable().optional(),
+          slug: z.string(),
+          updatedAt: z.string(),
+        })
+        .passthrough(),
+    })
+    .openapi("CreateTeamResponse");
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "createTeam",
+      path: "/v1/orgs/{orgId}/teams",
+      request: {
+        body: {
+          content: { "application/json": { schema: createTeamSchema } },
+          required: true,
+        },
+        params: orgIdParam,
+      },
+      responses: {
+        201: {
+          content: { "application/json": { schema: createTeamResponseSchema } },
+          description: "Team created or recovered",
+        },
+        400: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Invalid request",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Access denied",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Organization unavailable",
+        },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Request conflict",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Setup failed",
+        },
+      },
+      summary: "Create a team with an existing first admin",
+      tags: ["Organizations"],
+    })
+  );
+  app.post("/v1/orgs/:orgId/teams", async (c) => {
+    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+    if (auth.activeOrgId !== orgId) {
+      return errorResponse("Not found", 404);
+    }
+    if (!orgService) {
+      return errorResponse("Organization service not configured", 500);
+    }
+    const body = await readJson(c.req.raw, createTeamSchema);
+    return json<CreateOrganizationResponse>(
+      await orgService.createTeam(orgId, body, auth.user.id),
+      201
+    );
   });
 
   app.openAPIRegistry.registerPath(
@@ -395,6 +492,9 @@ export function registerOrgMemberRoutes(
       return errorResponse("Not found", 404);
     }
 
+    if (!options.databaseAdapter) {
+      return errorResponse("Database not configured", 500);
+    }
     const quota = await new OrgUsageQuotaService(
       options.databaseAdapter
     ).getStatus(orgId);

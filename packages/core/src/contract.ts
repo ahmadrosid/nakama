@@ -607,6 +607,7 @@ export interface OrganizationSummary {
   monthlyLlmTurnLimit?: number;
   monthlyLlmWarningPercent?: number;
   name: string;
+  parentOrgId?: string | null;
   skillsCuratorArchiveAfterDays?: number;
   skillsCuratorConsolidateEnabled?: boolean;
   skillsCuratorEnabled?: boolean;
@@ -626,6 +627,12 @@ export interface CreateOrganizationRequest {
   };
   name: string;
   slug: string;
+}
+
+export interface CreateTeamRequest
+  extends Pick<CreateOrganizationRequest, "name" | "slug"> {
+  adminUserId?: string;
+  requestId: string;
 }
 
 export interface UpdateOrganizationRequest {
@@ -2817,15 +2824,20 @@ export interface GenerateTextInput {
   system: string;
 }
 
-export interface JsonSchema {
+export type JsonSchema = {
+  $schema?: string;
   additionalProperties?: boolean | JsonSchema;
   description?: string;
   enum?: Array<string | number | boolean>;
+  exclusiveMaximum?: number | boolean;
+  exclusiveMinimum?: number | boolean;
   items?: JsonSchema;
+  maximum?: number;
+  minimum?: number;
   properties?: Record<string, JsonSchema>;
   required?: string[];
-  type?: string;
-}
+  type?: string | string[];
+};
 
 export interface LlmToolDefinition {
   description: string;

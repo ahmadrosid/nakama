@@ -34,6 +34,7 @@ import type {
   AuthUserResponse,
   CreateOrganizationRequest,
   CreateOrganizationResponse,
+  CreateTeamRequest,
   ListOrgMembersResponse,
   ListUserOrgsResponse,
   OrganizationSummary,
@@ -697,12 +698,7 @@ export class OrgService {
 
   async createTeam(
     parentOrgId: string,
-    request: {
-      name: string;
-      slug: string;
-      requestId: string;
-      adminUserId?: string;
-    },
+    request: CreateTeamRequest,
     creatorUserId: string
   ): Promise<CreateOrganizationResponse> {
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(request.requestId)) {
@@ -1959,6 +1955,7 @@ function toOrganizationSummary(
     id: record.id,
     monthlyLlmTurnLimit: record.monthlyLlmTurnLimit ?? 0,
     name: record.name,
+    parentOrgId: record.parentOrgId ?? null,
     skillsCuratorArchiveAfterDays: record.skillsCuratorArchiveAfterDays ?? 90,
     skillsCuratorConsolidateEnabled:
       record.skillsCuratorConsolidateEnabled ?? false,

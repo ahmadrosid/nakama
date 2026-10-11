@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import type { CreateOrganizationResponse } from "@nakama/core/contract";
+import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
 import { setupTestConfigDir } from "../test-config-dir";
 import { createMinimalHonoApp } from "./test-app-helpers";
 import {
@@ -7,6 +9,223 @@ import {
 } from "./test-session-helpers";
 
 setupTestConfigDir("nakama-org-members-test-");
+
+test("team creation uses existing accounts, preserves selection, and recovers retries", async () => {
+  const { app, authService, databaseAdapter: db } = createMinimalHonoApp();
+  const now = new Date().toISOString();
+  await db.upsertOrganization({
+    createdAt: now,
+    id: "org_parent",
+    name: "Parent",
+    slug: "parent",
+    updatedAt: now,
+  });
+  for (const id of ["user_creator", "user_selected"]) {
+    await db.createUser({
+      createdAt: now,
+      email: `${id}@example.com`,
+      id,
+      passwordHash: await authService.hashPassword("password123"),
+      updatedAt: now,
+    });
+  }
+  await db.upsertOrgMember({
+    createdAt: now,
+    orgId: "org_parent",
+    role: "admin",
+    userId: "user_creator",
+  });
+  const session = await loginUserSession(
+    app,
+    "user_creator@example.com",
+    "password123"
+  );
+  const request = { name: "Team", requestId: "team-request", slug: "team" };
+  const post = (body: unknown) =>
+    app.fetch(
+      new Request("http://localhost:4310/v1/orgs/org_parent/teams", {
+        body: JSON.stringify(body),
+        headers: session.headers(
+          {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": session.csrfToken,
+          },
+          "org_parent"
+        ),
+        method: "POST",
+      })
+    );
+  const response = await post(request);
+  expect(response.status).toBe(201);
+  const created: CreateOrganizationResponse = await response.json();
+  expect(created.organization.parentOrgId).toBe("org_parent");
+  expect(created.adminMember).toMatchObject({
+    member: { role: "admin", userId: "user_creator" },
+    temporaryPassword: null,
+  });
+  const retry = await post(request);
+  expect(retry.status).toBe(201);
+  expect(await retry.json()).toEqual(created);
+  expect(await db.listProfilesForOrg(created.organization.id)).toHaveLength(2);
+  expect(
+    (await db.listOrganizations()).filter(
+      (org) => org.parentOrgId === "org_parent"
+    )
+  ).toHaveLength(1);
+  const conflict = await post({ ...request, name: "Changed" });
+  expect(conflict.status).toBe(409);
+  const selected = await post({
+    ...request,
+    adminUserId: "user_selected",
+    requestId: "selected-request",
+    slug: "selected-team",
+  });
+  expect(selected.status).toBe(201);
+  const other: CreateOrganizationResponse = await selected.json();
+  expect(other.adminMember?.member.userId).toBe("user_selected");
+  expect(
+    await db.getOrgMember(other.organization.id, "user_creator")
+  ).toBeNull();
+  expect(
+    (await db.listOrgMembers(other.organization.id))
+      .filter((entry) => entry.userId !== LOCAL_CLIENT_USER_ID)
+      .map((entry) => entry.userId)
+  ).toEqual(["user_selected"]);
+  expect(await db.getUserById("user_selected")).toBeTruthy();
+  const me = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/me", {
+      headers: session.headers(),
+    })
+  );
+  expect(me.status).toBe(200);
+  expect(await me.json()).toMatchObject({ activeOrgId: "org_parent" });
+});
+
+test("team creation rejects invalid bodies, roles, contexts, and nested teams", async () => {
+  const { app, authService, databaseAdapter: db } = createMinimalHonoApp();
+  const now = new Date().toISOString();
+  for (const id of ["org_parent", "org_other"]) {
+    await db.upsertOrganization({
+      createdAt: now,
+      id,
+      name: id,
+      slug: id.replace(/_/g, "-"),
+      updatedAt: now,
+    });
+  }
+  await db.createUser({
+    createdAt: now,
+    email: "creator@example.com",
+    id: "user_creator",
+    passwordHash: await authService.hashPassword("password123"),
+    updatedAt: now,
+  });
+  await db.upsertOrgMember({
+    createdAt: now,
+    orgId: "org_parent",
+    role: "admin",
+    userId: "user_creator",
+  });
+  const session = await loginUserSession(
+    app,
+    "creator@example.com",
+    "password123"
+  );
+  const request = { name: "Team", requestId: "team-request", slug: "team" };
+  const post = (
+    body: unknown,
+    pathOrg = "org_parent",
+    activeOrg = "org_parent",
+    csrf = true
+  ) =>
+    app.fetch(
+      new Request(`http://localhost:4310/v1/orgs/${pathOrg}/teams`, {
+        body: JSON.stringify(body),
+        headers: session.headers(
+          {
+            "Content-Type": "application/json",
+            ...(csrf ? { "X-CSRF-Token": session.csrfToken } : {}),
+          },
+          activeOrg
+        ),
+        method: "POST",
+      })
+    );
+  for (const changes of [
+    { requestId: 12 },
+    { requestId: "" },
+    { name: null },
+    { name: " " },
+    { slug: "invalid slug" },
+    { adminUserId: false },
+    { adminUserId: "missing-user" },
+    { parentOrgId: "org_other" },
+    { admin: { email: "new@example.com" } },
+  ]) {
+    expect((await post({ ...request, ...changes })).status).toBe(400);
+  }
+  expect(
+    (await db.listOrganizations()).filter(
+      (org) => org.parentOrgId === "org_parent"
+    )
+  ).toEqual([]);
+  expect((await post(request, "org_other")).status).toBe(404);
+  expect((await post(request, "org_other", "org_other")).status).toBe(404);
+  expect((await post(request, "org_parent", "org_parent", false)).status).toBe(
+    403
+  );
+  for (const role of ["member", "viewer"] as const) {
+    await db.upsertOrgMember({
+      createdAt: now,
+      orgId: "org_parent",
+      role,
+      userId: "user_creator",
+    });
+    expect((await post(request)).status).toBe(403);
+  }
+  await db.upsertOrgMember({
+    createdAt: now,
+    orgId: "org_parent",
+    role: "admin",
+    userId: "user_creator",
+  });
+  const child = await post(request);
+  expect(child.status).toBe(201);
+  const created: CreateOrganizationResponse = await child.json();
+  expect(
+    (
+      await post(
+        { ...request, requestId: "nested", slug: "nested" },
+        created.organization.id,
+        created.organization.id
+      )
+    ).status
+  ).toBe(409);
+  expect(
+    (await db.listOrganizations()).filter(
+      (org) => org.parentOrgId === created.organization.id
+    )
+  ).toEqual([]);
+  const specResponse = await app.fetch(
+    new Request("http://localhost:4310/openapi.json")
+  );
+  expect(specResponse.status).toBe(200);
+  const spec = await specResponse.json();
+  expect(
+    spec.paths["/v1/orgs/{orgId}/teams"].post.requestBody.content[
+      "application/json"
+    ].schema.$ref
+  ).toBe("#/components/schemas/CreateTeamRequest");
+  expect(spec.components.schemas.CreateTeamRequest.required).toEqual([
+    "name",
+    "requestId",
+    "slug",
+  ]);
+  expect(
+    spec.components.schemas.CreateTeamResponse.properties.organization
+      .properties.parentOrgId
+  ).toBeTruthy();
+});
 
 describe("org member management (AE2)", () => {
   test("viewer can read org data but not list or manage members", async () => {

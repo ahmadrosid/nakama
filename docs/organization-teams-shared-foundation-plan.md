@@ -353,6 +353,7 @@ Slice log (one row per commit):
 | 2026-10-11 | 1i | Tool ownership and profile skill source validation | 224 focused service and database tests passed | Model source validation |
 | 2026-10-11 | 1j | Configured model publication and stable provider identity | 258 focused service, provider-helper, and database tests passed | Agent dependency validation |
 | 2026-10-11 | 1k | Agent template and dependency publication checks; reuse guarded source validation | 250 focused service, database, and knowledge tests passed | Contracts and organization routes |
+| 2026-10-11 | 2a | Typed team request, parent summary field, and team creation HTTP route | 73 focused HTTP and service tests passed | Publication HTTP operations and overview |
 
 2026-10-11: Slice 1b passed database tests, the database type check, and `bun x ultracite check`.
 The first test run found an incorrect SQL value count. The repaired query passed all database tests.
@@ -1092,3 +1093,16 @@ Step 1 is complete. Delivery stage 1 remains incomplete until contracts and rout
 No browser or external provider calls ran. Other authorized cleanup changes remain uncommitted; stale provider cassettes, full tests, and builds remain unresolved.
 Next: add typed overview, team-creation, and publication contracts with the existing OpenAPI schemas.
 Evidence: `/tmp/nakama-agent-publication-tests-final.log`, `/tmp/nakama-agent-publication-{server,core}-types.log`, `/tmp/nakama-agent-publication-lint.log`.
+
+2026-10-11: Slice 2a connects team creation to POST /v1/orgs/:orgId/teams in the existing organization route module.
+CreateTeamRequest uses an existing account ID, a durable request ID, name, and slug. OrganizationSummary exposes nullable parentOrgId without removing existing fields.
+The HTTP schema rejects invalid fields and additional account or parent data. Existing CSRF, active-tenant, parent-admin, and platform-admin checks remain effective.
+The response preserves the existing organization shape. Retries return the same completed team; another request body with the same ID returns a conflict.
+Tests cover first-admin selection, no creator membership when another admin is selected, existing account preservation, unchanged active selection, role denial, wrong tenant context, invalid requests, nested teams, and OpenAPI fields.
+Two test repair passes replaced a nonexistent child-list method and accounted for existing local-client membership and middleware's 404 denial.
+Checks: all 73 focused HTTP and service tests passed; complete server and core type checks passed; lint passed all 1532 files; `git diff --check` passed.
+This slice includes earlier checked JsonSchema type repairs and the quota route dependency guard in the same files. Other authorized cleanup remains uncommitted.
+Step 2 and delivery stage 1 remain incomplete. Publication routes, overview, and shared-instance routes remain required.
+No browser or external provider calls ran. Stale provider cassettes, full tests, and builds remain unresolved.
+Next: connect publication HTTP mutations to the existing OrgService with typed contracts and access checks.
+Evidence: `/tmp/nakama-team-route-tests-final.log`, `/tmp/nakama-team-route-{server,core}-types.log`, `/tmp/nakama-team-route-lint.log`.
