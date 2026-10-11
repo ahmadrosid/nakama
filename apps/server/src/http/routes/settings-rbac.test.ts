@@ -13,7 +13,11 @@ import { AgentService } from "../../services/agent-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import type { ServerOptions } from "../context";
 import { createMinimalHonoApp } from "../test-app-helpers";
-import { loginUserSession, seedOrgAdmin } from "../test-session-helpers";
+import {
+  type AppFetch,
+  loginUserSession,
+  seedOrgAdmin,
+} from "../test-session-helpers";
 
 setupTestConfigDir("nakama-settings-rbac-test-");
 
@@ -281,7 +285,6 @@ function createApp(systemStatus?: SystemStatusStub) {
   const databaseAdapter = createInMemoryDatabaseAdapter();
 
   const { app, authService } = createMinimalHonoApp({
-    // SAFETY: This test controls the fixture shape at this boundary.
     agent: {
       configureProvider: record("configureProvider"),
       createProvider: record("createProvider"),
@@ -306,13 +309,12 @@ function createApp(systemStatus?: SystemStatusStub) {
       testDiscordSettings: record("testDiscordSettings"),
       testTelegramSettings: record("testTelegramSettings"),
       updateProvider: record("updateProvider"),
-    } as ServerOptions["agent"],
+    },
     databaseAdapter,
-    // SAFETY: This test controls the fixture shape at this boundary.
     workerManager: {
       startWorker: record("startWorker"),
       stopWorker: record("stopWorker"),
-    } as ServerOptions["workerManager"],
+    },
     systemStatus,
   });
 
@@ -360,7 +362,7 @@ async function login(
 }
 
 async function callRoute(
-  app: { fetch: typeof fetch },
+  app: AppFetch,
   session: {
     headers: (extra?: Record<string, string>) => Record<string, string>;
     csrfToken: string;

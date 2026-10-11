@@ -110,18 +110,59 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
     .passthrough()
     .openapi("TestMcpServerResponse");
 
+  const transportSchema = z
+    .string()
+    .trim()
+    .toLowerCase()
+    .pipe(z.enum(["http", "stdio", "command"]))
+    .transform((transport) =>
+      transport === "command" ? ("stdio" as const) : transport
+    );
+
+  const configSchema = z.union([
+    z
+      .object({
+        url: z.string(),
+        headers: z.record(z.string(), z.string()).optional(),
+      })
+      .passthrough(),
+    z
+      .object({
+        command: z.string(),
+        args: z.array(z.string()).optional(),
+        env: z.record(z.string(), z.string()).optional(),
+      })
+      .passthrough(),
+  ]);
+
   const createServerSchema = z
-    .object({})
+    .object({
+      config: configSchema,
+      connect: z.boolean().optional(),
+      enabled: z.boolean().optional(),
+      name: z.string(),
+      serverId: z.string().optional(),
+      transport: transportSchema,
+    })
     .passthrough()
     .openapi("CreateMcpServerRequest");
 
+  const testServerRequestSchema = createServerSchema
+    .omit({ name: true })
+    .openapi("TestMcpServerRequest");
+
   const updateServerSchema = z
-    .object({})
+    .object({
+      config: configSchema.optional(),
+      enabled: z.boolean().optional(),
+      name: z.string().optional(),
+      transport: transportSchema.optional(),
+    })
     .passthrough()
     .openapi("UpdateMcpServerRequest");
 
   const assignServerSchema = z
-    .object({})
+    .object({ serverId: z.string() })
     .passthrough()
     .openapi("AssignMcpServerRequest");
 
@@ -174,7 +215,7 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
       path: "/v1/mcp/servers/test",
       request: {
         body: {
-          content: { "application/json": { schema: createServerSchema } },
+          content: { "application/json": { schema: testServerRequestSchema } },
           required: true,
         },
       },
@@ -373,7 +414,7 @@ export function registerMcpRoutes(app: HonoApp, options: ServerOptions): void {
 
   app.post("/v1/mcp/servers/test", async (c) => {
     requirePlatformAdminFromContext(c);
-    const body = await readJson(c.req.raw, createServerSchema);
+    const body = await readJson(c.req.raw, testServerRequestSchema);
 
     return json<TestMcpServerResponse>(
       await mcpService.testServer(body.transport, body.config, body.serverId)

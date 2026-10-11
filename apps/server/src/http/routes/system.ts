@@ -99,7 +99,10 @@ export function registerSystemRoutes(
     .openapi("HealthResponse");
 
   const systemStatusSchema = z
-    .object({ ok: z.boolean() })
+    .object({
+      checkedAt: z.string(),
+      server: z.object({ ok: z.boolean() }).passthrough(),
+    })
     .passthrough()
     .openapi("SystemStatusResponse");
 

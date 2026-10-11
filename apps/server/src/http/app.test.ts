@@ -240,6 +240,19 @@ describe("createHonoApp", () => {
         "PATCH",
         { config: { args: [7], command: "bun" } },
       ],
+      [
+        "/v1/mcp/servers/test",
+        "POST",
+        {
+          config: { headers: { TOKEN: 7 }, url: "https://mcp.example.com" },
+          transport: "http",
+        },
+      ],
+      [
+        "/v1/mcp/servers/test",
+        "POST",
+        { config: { command: "bun", env: { TOKEN: 7 } }, transport: "stdio" },
+      ],
       ["/v1/profiles/default/mcp-servers", "POST", { serverId: 7 }],
     ] as const) {
       const response = await app.fetch(
