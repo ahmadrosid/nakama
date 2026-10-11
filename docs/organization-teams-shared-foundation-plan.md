@@ -2316,3 +2316,17 @@ Complete web and client type checks, scoped anti-slop, Ultracite across 1533 fil
 Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: model detail actions, remaining root resource details, and shared-template field controls. No new package, dependency, file, or server route was added. No browser check, full suite, build, paid call, push, or PR ran. Actual setup through the browser remains unverified.
 
 Evidence: /tmp/nakama-shared-tools-{web-tests,api-tests,web-types,client-types,oxlint,lint,doctor}.log.
+
+### Slice 3n — Model details and permitted settings links
+
+Ready model chips now open read-only details for authenticated tenant admins, members, viewers, and platform admins. Opening the dialog rechecks the publication through the active tenant. It then resolves the configured global catalog using both provider ID and model ID. The dialog uses the fresh publication reference, rather than the cached overview reference. Missing publications, unavailable sources, malformed references, missing providers, and wrong provider instances block details and actions.
+
+Details show the source organization, model name, provider label, stable IDs, and the model's reported context limit. They omit provider URLs and credential fields. Tenant admins can open existing agent settings. Only platform admins receive the provider-management link. The existing provider and profile pages retain their own permissions and write operations. No model assignment, provider creation, key update, or new model restriction is introduced by this dialog.
+
+Queries run only when the dialog opens. Their keys contain the active tenant and publication ID under the existing model cache family. Loading or failed reads hide previous details and actions. Retry and reopening recheck publication. Team changes remove old dialogs; late model responses cannot enter the new team's dialog. Successful publication changes now invalidate model queries. Failed changes retain cached data.
+
+All 75 component tests passed with 501 assertions. New coverage includes lazy reads, active tenant scope, equal model names under different providers, fresh source labels, admin/member/viewer controls, and platform provider management. Tests also cover root reads, missing or invalid configuration, loading, retry, removal on reopening, late responses after team changes, unavailable chips, and mutation cache invalidation. Complete web types, scoped anti-slop, Ultracite across 1533 files, and git diff --check passed. React Doctor remained at 91/100 with no issues. No verification repair was needed.
+
+Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: remaining root resource details, then shared-template field controls and compatibility labels. No new package, dependency, file, or server route was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks and browser settings navigation remain unverified.
+
+Evidence: /tmp/nakama-shared-models-{focused,types,oxlint,lint,doctor}.log.

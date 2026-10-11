@@ -82,6 +82,7 @@ export function useOrgPublicationMutation(orgId: string) {
         ["knowledgeBase"],
         queryKeys.skills.all,
         queryKeys.tools.all,
+        queryKeys.models,
         queryKeys.profiles.all
       ),
   });

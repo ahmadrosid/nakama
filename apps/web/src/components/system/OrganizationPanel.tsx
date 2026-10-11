@@ -47,8 +47,8 @@ import {
   useOrgPublicationMutation,
 } from "@/hooks/use-org-members";
 import { client, formatError } from "@/lib/client";
-import { encodeModelSelection } from "@/lib/models";
-import { canUseToolPlayground } from "@/lib/navigation";
+import { decodeModelSelection, encodeModelSelection } from "@/lib/models";
+import { canAccessSystemPage, canUseToolPlayground } from "@/lib/navigation";
 import { queryKeys } from "@/lib/query-keys";
 
 const RESOURCE_ROWS = [
@@ -68,6 +68,148 @@ const READINESS_LABELS = {
   requires_setup: "Requires setup",
   unavailable: "Unavailable",
 };
+
+function SharedModelDialog({
+  orgId,
+  resource,
+}: {
+  orgId: string;
+  resource: OrgSharedResourceSummary;
+}) {
+  const [open, setOpen] = useState(false);
+  const { user, activeOrg } = useAuth();
+  const { navigateToPage } = useAppNavigation();
+
+  const detail = useQuery({
+    enabled: open,
+    gcTime: 0,
+    queryFn: async () => {
+      const { resources } = await client.listOrgSharedResources(orgId);
+
+      const publication = resources.find(
+        (entry) => entry.id === resource.id && entry.resourceKind === "model"
+      );
+
+      if (!publication || publication.readiness !== "ready") {
+        throw new Error("This shared model is unavailable.");
+      }
+
+      const selection = decodeModelSelection(publication.resourceId);
+
+      if (!selection) {
+        throw new Error("This shared model is unavailable.");
+      }
+
+      const { models, providers } = await client.getModels();
+
+      const model = models.find(
+        (entry) =>
+          entry.id === selection.modelId &&
+          entry.providerId === selection.providerId
+      );
+
+      const provider = providers.find(
+        (entry) => entry.id === selection.providerId
+      );
+
+      if (!(model && provider)) {
+        throw new Error("This shared model is unavailable.");
+      }
+
+      return { model, provider, publication };
+    },
+    queryKey: [...queryKeys.models, "published", orgId, resource.id],
+    staleTime: 0,
+  });
+
+  const canManageProfiles = canAccessSystemPage(
+    user?.isPlatformAdmin === true,
+    activeOrg?.role
+  );
+
+  return (
+    <Dialog onOpenChange={setOpen} open={open}>
+      <DialogTrigger
+        render={
+          <Button
+            aria-label={`View shared model ${resource.label} from ${resource.sourceOrganization.name}`}
+            className="h-auto max-w-full whitespace-normal break-words text-left"
+            size="sm"
+            variant="secondary"
+          />
+        }
+      >
+        {resource.label}
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{resource.label}</DialogTitle>
+        </DialogHeader>
+        {detail.isFetching && <p role="status">Loading model…</p>}
+        {detail.isError && (
+          <div className="space-y-2" role="alert">
+            <p>{formatError(detail.error)}</p>
+            <Button
+              disabled={detail.isFetching}
+              onClick={() => void detail.refetch()}
+              variant="outline"
+            >
+              Retry model
+            </Button>
+          </div>
+        )}
+        {detail.data && !detail.isFetching && !detail.isError && (
+          <>
+            <p className="break-words text-muted-foreground text-sm">
+              Shared from {detail.data.publication.sourceOrganization.name}
+            </p>
+            <dl className="grid min-w-0 gap-3 break-words text-sm sm:grid-cols-[6rem_minmax(0,1fr)]">
+              <dt>Model</dt>
+              <dd>{detail.data.model.name}</dd>
+              <dt>Provider</dt>
+              <dd>{detail.data.provider.label}</dd>
+              <dt>Provider ID</dt>
+              <dd className="font-mono">{detail.data.provider.id}</dd>
+              <dt>Model ID</dt>
+              <dd className="font-mono">{detail.data.model.id}</dd>
+              {detail.data.model.contextWindow !== undefined && (
+                <>
+                  <dt>Context limit</dt>
+                  <dd className="tabular-nums">
+                    {detail.data.model.contextWindow.toLocaleString()} tokens
+                  </dd>
+                </>
+              )}
+            </dl>
+            {canManageProfiles && (
+              <DialogFooter>
+                <Button
+                  onClick={() => {
+                    setOpen(false);
+                    navigateToPage("profiles");
+                  }}
+                >
+                  Agent settings
+                </Button>
+                {user?.isPlatformAdmin && (
+                  <Button
+                    onClick={() => {
+                      setOpen(false);
+                      navigateToPage("providers");
+                    }}
+                    variant="outline"
+                  >
+                    Manage providers
+                  </Button>
+                )}
+              </DialogFooter>
+            )}
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function SharedToolDialog({
   orgId,
@@ -1048,6 +1190,15 @@ export function OrganizationOverview() {
                       ) ? (
                       <SharedToolDialog
                         key={`${activeOrg.id}:${user?.id}:${resource.id}`}
+                        orgId={activeOrg.id}
+                        resource={resource}
+                      />
+                    ) : resource.resourceKind === "model" &&
+                      resource.readiness === "ready" &&
+                      user &&
+                      (activeOrg.role !== undefined || user.isPlatformAdmin) ? (
+                      <SharedModelDialog
+                        key={`${activeOrg.id}:${user.id}:${resource.id}`}
                         orgId={activeOrg.id}
                         resource={resource}
                       />

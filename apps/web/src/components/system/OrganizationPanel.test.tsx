@@ -1,5 +1,6 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import type {
+  ModelsResponse,
   OrganizationOverviewResponse,
   OrganizationSummary,
   ProfileResponse,
@@ -89,7 +90,11 @@ function ChatLocation() {
 function mount(
   queryClient: QueryClient,
   switchOrg: AuthContextValue["switchOrg"] = async () => undefined,
-  refreshSession: AuthContextValue["refreshSession"] = async () => undefined
+  refreshSession: AuthContextValue["refreshSession"] = async () => undefined,
+  user: AuthContextValue["user"] = {
+    email: "creator@example.com",
+    id: "creator",
+  }
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -121,7 +126,7 @@ function mount(
         setup: async () => undefined,
         switchOrg,
         updateOrg: async () => undefined,
-        user: { email: "creator@example.com", id: "creator" },
+        user,
       };
 
       await act(async () => {
@@ -879,7 +884,9 @@ test("failed publication keeps the catalog and selected document for retry", asy
 test("failed unpublication keeps the published resource and permits retry", async () => {
   const { container, data, queries } = await mountKnowledgeManager();
   const toolKey = queryKeys.tools.published("team-a", "team-a-tool");
+  const modelKey = [...queryKeys.models, "published", "team-a", "team-a-model"];
   queries.setQueryData(toolKey, publishedTool());
+  queries.setQueryData(modelKey, { reference: "provider-a::model-a" });
 
   const unpublish = spyOn(client, "unpublishOrgSharedResource")
     .mockRejectedValueOnce(new Error("Unpublish failed"))
@@ -907,6 +914,7 @@ test("failed unpublication keeps the published resource and permits retry", asyn
     "parent knowledge"
   );
   expect(queries.getQueryState(toolKey)?.isInvalidated).toBe(false);
+  expect(queries.getQueryState(modelKey)?.isInvalidated).toBe(false);
   await act(async () => {
     submit?.click();
     await settle();
@@ -922,6 +930,7 @@ test("failed unpublication keeps the published resource and permits retry", asyn
     "parent knowledge"
   );
   expect(queries.getQueryState(toolKey)?.isInvalidated).toBe(true);
+  expect(queries.getQueryState(modelKey)?.isInvalidated).toBe(true);
 });
 
 test("catalog refresh failure preserves current publications until retry succeeds", async () => {
@@ -1420,7 +1429,8 @@ function publishedSkill(
 }
 
 async function mountResourceReader(
-  role: "admin" | "member" | "viewer" = "member"
+  role: "admin" | "member" | "viewer" = "member",
+  isPlatformAdmin = false
 ) {
   const queries = new QueryClient({
     defaultOptions: {
@@ -1435,7 +1445,12 @@ async function mountResourceReader(
     );
   }
 
-  const result = mount(queries);
+  const result = mount(queries, undefined, undefined, {
+    email: "creator@example.com",
+    id: "creator",
+    isPlatformAdmin,
+  });
+
   await result.render({ ...organization("team-a"), role });
 
   return { ...result, queries };
@@ -2373,4 +2388,304 @@ test("unavailable tools remain static for an admin", async () => {
     container.querySelector('button[aria-label^="View shared tool"]')
   ).toBeNull();
   expect(read).not.toHaveBeenCalled();
+});
+
+function configuredSharedModels(): ModelsResponse {
+  return {
+    currentProviderId: "provider-a",
+    displayName: null,
+    models: ["provider-a", "provider-b"].map((providerId) => ({
+      contextWindow: providerId === "provider-a" ? 1000 : 2000,
+      id: "same-model",
+      name: "Same model",
+      provider: "openai" as const,
+      providerId,
+    })),
+    provider: "openai",
+    providers: ["provider-a", "provider-b"].map((id) => ({
+      baseUrl: "https://private-provider.example.com",
+      createdAt: "2026-10-12T00:00:00Z",
+      hasApiKey: true,
+      id,
+      label: id === "provider-a" ? "First provider" : "Second provider",
+      modelCount: 1,
+      type: "openai" as const,
+    })),
+  };
+}
+
+function observeSharedModel() {
+  const publications = spyOn(
+    client,
+    "listOrgSharedResources"
+  ).mockImplementation(async (orgId) => ({
+    resources: [
+      {
+        ...overview(orgId).sharedResources[4],
+        resourceId: "provider-b::same-model",
+        sourceOrganization: { id: "parent", name: "Current parent" },
+      },
+    ],
+  }));
+
+  const models = spyOn(client, "getModels").mockResolvedValue(
+    configuredSharedModels()
+  );
+
+  cleanups.push(() => {
+    publications.mockRestore();
+    models.mockRestore();
+  });
+
+  return { models, publications };
+}
+
+async function openSharedModel(container: HTMLElement) {
+  await act(async () => {
+    container
+      .querySelector<HTMLButtonElement>(
+        'button[aria-label^="View shared model"]'
+      )
+      ?.click();
+    await settle();
+  });
+  await act(async () => {
+    await settle();
+  });
+}
+
+test.each(["admin", "member", "viewer"] as const)(
+  "model details recheck publication and distinguish provider instances for %s",
+  async (role) => {
+    const { models, publications } = observeSharedModel();
+    const { container } = await mountResourceReader(role);
+    expect(models).not.toHaveBeenCalled();
+    expect(publications).not.toHaveBeenCalled();
+
+    const trigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-label^="View shared model"]'
+    );
+
+    trigger?.focus();
+    expect(document.activeElement).toBe(trigger);
+    await openSharedModel(container);
+    expect(publications.mock.calls).toEqual([["team-a"]]);
+    expect(models).toHaveBeenCalledTimes(1);
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog?.textContent).toContain("Current parent");
+    expect(
+      [...dialog!.querySelectorAll("dd")].map((node) => node.textContent)
+    ).toEqual([
+      "Same model",
+      "Second provider",
+      "provider-b",
+      "same-model",
+      "2,000 tokens",
+    ]);
+    expect(dialog?.textContent).not.toContain("First provider");
+    expect(dialog?.textContent).not.toContain("private-provider");
+    expect(dialog?.querySelectorAll("input,textarea,select")).toHaveLength(0);
+
+    const actions = document.querySelectorAll(
+      '[data-slot="dialog-footer"] button'
+    );
+
+    expect(actions).toHaveLength(role === "admin" ? 1 : 0);
+
+    if (role === "admin") {
+      await act(async () => {
+        document
+          .querySelector<HTMLButtonElement>(
+            '[data-slot="dialog-footer"] button'
+          )
+          ?.click();
+        await settle();
+      });
+      expect(container.querySelector("[data-chat-location]")?.textContent).toBe(
+        "/profiles"
+      );
+    }
+  }
+);
+
+test("platform admins retain provider management", async () => {
+  observeSharedModel();
+  const { container } = await mountResourceReader("viewer", true);
+  await openSharedModel(container);
+
+  const actions = [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      '[data-slot="dialog-footer"] button'
+    ),
+  ];
+
+  expect(actions).toHaveLength(2);
+  await act(async () => {
+    actions[1]?.click();
+    await settle();
+  });
+  expect(container.querySelector("[data-chat-location]")?.textContent).toBe(
+    "/customize/providers"
+  );
+});
+
+test("root model details use root context without provider writes", async () => {
+  const { models, publications } = observeSharedModel();
+  const { container, queries, render } = await mountResourceReader("admin");
+  queries.setQueryData(
+    queryKeys.organizationOverview("parent", "parent"),
+    overview("parent")
+  );
+  await render({ ...organization("parent"), parentOrgId: null, role: "admin" });
+  await openSharedModel(container);
+  expect(publications.mock.calls).toEqual([["parent"]]);
+  expect(models).toHaveBeenCalledTimes(1);
+  expect(
+    document.querySelectorAll('[data-slot="dialog-footer"] button')
+  ).toHaveLength(1);
+});
+
+test.each([
+  { failure: "removed" },
+  { failure: "unavailable" },
+  { failure: "wrong-kind" },
+  { failure: "invalid-reference" },
+  { failure: "missing-provider" },
+  { failure: "wrong-instance" },
+])(
+  "invalid model publication or configuration hides details and actions %#",
+  async ({ failure }) => {
+    const { models, publications } = observeSharedModel();
+
+    const publication = {
+      ...overview("team-a").sharedResources[4],
+      resourceId: "provider-b::same-model",
+    };
+
+    if (failure === "removed") {
+      publications.mockResolvedValueOnce({ resources: [] });
+    } else if (failure === "unavailable") {
+      publications.mockResolvedValueOnce({
+        resources: [{ ...publication, readiness: "unavailable" }],
+      });
+    } else if (failure === "wrong-kind") {
+      publications.mockResolvedValueOnce({
+        resources: [{ ...publication, resourceKind: "tool" }],
+      });
+    } else if (failure === "invalid-reference") {
+      publications.mockResolvedValueOnce({
+        resources: [{ ...publication, resourceId: "same-model" }],
+      });
+    } else if (failure === "missing-provider") {
+      models.mockResolvedValueOnce({
+        ...configuredSharedModels(),
+        providers: configuredSharedModels().providers.slice(0, 1),
+      });
+    } else {
+      models.mockResolvedValueOnce({
+        ...configuredSharedModels(),
+        models: configuredSharedModels().models.slice(0, 1),
+      });
+    }
+
+    const { container } = await mountResourceReader("admin");
+    await openSharedModel(container);
+    expect(
+      document.querySelector('[role="dialog"] [role="alert"]')
+    ).not.toBeNull();
+    expect(document.querySelector('[role="dialog"] dl')).toBeNull();
+    expect(document.querySelector('[data-slot="dialog-footer"]')).toBeNull();
+    expect(container.querySelector("[data-chat-location]")?.textContent).toBe(
+      "/system/organization"
+    );
+    expect(models).toHaveBeenCalledTimes(
+      ["missing-provider", "wrong-instance"].includes(failure) ? 1 : 0
+    );
+  }
+);
+
+test("model details retry and recheck access on reopening", async () => {
+  const { publications } = observeSharedModel();
+
+  const pending =
+    Promise.withResolvers<
+      Awaited<ReturnType<typeof client.listOrgSharedResources>>
+    >();
+
+  publications.mockImplementationOnce(() => pending.promise);
+  const { container } = await mountResourceReader("admin");
+  await openSharedModel(container);
+  expect(
+    document.querySelector('[role="dialog"] [role="status"]')
+  ).not.toBeNull();
+  expect(document.querySelector('[data-slot="dialog-footer"]')).toBeNull();
+  await act(async () => {
+    pending.reject(new Error("Read failed"));
+    await settle();
+  });
+  expect(
+    document.querySelector('[role="dialog"] [role="alert"]')
+  ).not.toBeNull();
+  await act(async () => {
+    document
+      .querySelector<HTMLButtonElement>('[role="dialog"] [role="alert"] button')
+      ?.click();
+    await settle();
+  });
+  await act(async () => {
+    await settle();
+  });
+  expect(document.querySelector('[role="dialog"] dl')).not.toBeNull();
+  await act(async () => {
+    document
+      .querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')
+      ?.click();
+    await settle();
+  });
+  publications.mockResolvedValueOnce({ resources: [] });
+  await openSharedModel(container);
+  expect(publications).toHaveBeenCalledTimes(3);
+  expect(document.querySelector('[role="dialog"] dl')).toBeNull();
+  expect(document.querySelector('[data-slot="dialog-footer"]')).toBeNull();
+});
+
+test("late model configuration cannot enter another team's dialog", async () => {
+  const { models, publications } = observeSharedModel();
+  const pending = Promise.withResolvers<ModelsResponse>();
+  models.mockImplementationOnce(() => pending.promise);
+  const { container, render } = await mountResourceReader("admin");
+  await openSharedModel(container);
+  await render({ ...organization("team-b"), role: "admin" });
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  await openSharedModel(container);
+  const oldModels = configuredSharedModels();
+  oldModels.models[1].name = "Old team model";
+  await act(async () => {
+    pending.resolve(oldModels);
+    await settle();
+  });
+  expect(publications.mock.calls).toEqual([["team-a"], ["team-b"]]);
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+    "Same model"
+  );
+  expect(document.body.textContent).not.toContain("Old team model");
+});
+
+test("unavailable model chips remain static", async () => {
+  const { models, publications } = observeSharedModel();
+  const { container, queries } = await mountResourceReader("admin");
+  const data = overview("team-a");
+  data.sharedResources[4].readiness = "unavailable";
+  await act(async () => {
+    queries.setQueryData(
+      queryKeys.organizationOverview("parent", "team-a"),
+      data
+    );
+    await settle();
+  });
+  expect(
+    container.querySelector('button[aria-label^="View shared model"]')
+  ).toBeNull();
+  expect(publications).not.toHaveBeenCalled();
+  expect(models).not.toHaveBeenCalled();
 });
