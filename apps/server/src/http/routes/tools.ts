@@ -617,12 +617,17 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
 
   app.post("/v1/tools/:toolId/params/suggest", async (c) => {
     requireOrgAdminOrPlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
     const toolId = decodeURIComponent(c.req.param("toolId"));
     const body = await readJson(c.req.raw, suggestToolParamsSchema);
 
     try {
       return json<SuggestToolParamsResponse>(
-        await agent.suggestToolPlaygroundParams(toolId, body.prompt ?? "")
+        await agent.suggestToolPlaygroundParams(
+          toolId,
+          body.prompt ?? "",
+          orgId
+        )
       );
     } catch (error) {
       const status = error instanceof NakamaApiError ? error.status : 400;
@@ -632,7 +637,7 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.get("/v1/profiles/:profileId/tools", async (c) => {
-    requirePlatformAdminFromContext(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
 
     return json<ListToolsResponse>(
@@ -644,7 +649,7 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.post("/v1/profiles/:profileId/tools", async (c) => {
-    const auth = requirePlatformAdminFromContext(c);
+    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson(c.req.raw, assignToolSchema);
 
@@ -659,7 +664,7 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
   });
 
   app.delete("/v1/profiles/:profileId/tools/:toolId", async (c) => {
-    const auth = requirePlatformAdminFromContext(c);
+    const auth = requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
 
     return json<ProfileResponse>(

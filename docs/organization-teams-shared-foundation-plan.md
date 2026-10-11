@@ -1666,3 +1666,17 @@ Checks: 270 focused tests passed across eight service and HTTP route files, with
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: connect direct playground and parameter suggestion calls to published tool authorization and team execution context, then complete model and compatibility checks.
 No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-local-published-tools-final-focused.log, /tmp/nakama-local-published-tools-types.log, and /tmp/nakama-local-published-tools-lint.log.
+
+### Slice 2am — published tool playground execution
+Playground execution now reads tool details through the active tenant catalog. It checks the selected team profile through the existing execution-profile guard before building tool context.
+Published parent records receive team ownership and shared loader context. Existing local and global records retain their loader behavior. Credential lookup stays in the team, and shared subprocess working directories stay in the team profile.
+The existing publication check runs before loading and immediately before execution. A removed publication blocks the call even when it was valid during the earlier detail read.
+Parameter suggestions now require the active organization and use its authorized tool details and resolved schema. Removing the duplicate loader call keeps unavailable IDs from reaching provider resolution.
+Profile tool list, assignment, and removal routes now permit team admins through the existing organization-or-platform-admin guard. Profile scope, publication, duplicate-name, and shared-template write checks remain in ProfileService.
+HTTP tests exercise real AgentService playground calls for JavaScript and Python. They verify missing team credentials, parent key preservation, team keys and working directories, absence of configuration-directory environment values, admin assignments and lists, removal after revocation, denied detail and suggestion reads, and unchanged files after execution denial.
+A test removes publication during the final pre-execution check. The call returns 404 and preserves the existing workspace marker. No OpenAI request or paid provider call is made by these tests.
+The first focused run found a Python fixture without its required run function. One repair supplies that function and adds the final-check revocation case.
+Checks: 258 focused tests passed across six service and HTTP route files, with six Windows tests skipped. The complete server type check, lint across 1532 files, and git diff --check passed.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: audit tool setup approval authorization, then complete model use checks and remaining compatibility paths.
+No new source file, package, or dependency was added. No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-published-playground-final-focused.log, /tmp/nakama-published-playground-types.log, and /tmp/nakama-published-playground-lint.log.

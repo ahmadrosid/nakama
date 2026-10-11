@@ -4037,7 +4037,7 @@ export class AgentService {
     context: { orgId: string; userId: string }
   ): Promise<RunToolResponse> {
     const parsedParameters = agentJsonRecordSchema.parse(parameters);
-    const { tool } = await this.profileService.getTool(toolId);
+    const { tool } = await this.profileService.getTool(toolId, context.orgId);
     const handler = getCustomToolHandler(tool.handlerType);
 
     if (!handler) {
@@ -4057,18 +4057,23 @@ export class AgentService {
       toolId
     );
 
-    const loaded = await handler.load(record);
-
-    if (!loaded) {
-      throw new Error(`Failed to load tool "${tool.name}".`);
-    }
-
+    await this.requireExecutionProfile(context.orgId, profileId);
     const toolContext = buildToolExecutionContext({
       ...this.knowledgeToolContext(context.orgId, profileId),
       orgId: context.orgId,
       profileId,
       userId: context.userId,
     });
+    const inherited = Boolean(record.orgId && record.orgId !== context.orgId);
+    await this.publishedToolRevisionForRecords(context.orgId, [record]);
+    const loaded = await handler.load(
+      { ...record, orgId: inherited ? context.orgId : record.orgId },
+      inherited ? toolContext : undefined
+    );
+    if (!loaded) {
+      throw new Error(`Failed to load tool "${tool.name}".`);
+    }
+    await this.publishedToolRevisionForRecords(context.orgId, [record]);
 
     const raw = await executeToolCall(
       [loaded],
@@ -4087,9 +4092,10 @@ export class AgentService {
 
   async suggestToolPlaygroundParams(
     toolId: string,
-    prompt: string
+    prompt: string,
+    orgId: string
   ): Promise<SuggestToolParamsResponse> {
-    const { tool } = await this.profileService.getTool(toolId);
+    const { tool } = await this.profileService.getTool(toolId, orgId);
     const handler = getCustomToolHandler(tool.handlerType);
 
     if (!handler) {
@@ -4097,14 +4103,6 @@ export class AgentService {
         `Only custom ${customToolTypesLabel()} tools support parameter suggestions.`
       );
     }
-
-    const record = await this.db.getTool(toolId);
-
-    if (!record) {
-      throw new NakamaApiError("Tool not found.", 404);
-    }
-
-    const loaded = await handler.load(record);
 
     const provider = createProviderFromActiveConfig(
       this.userConfig,
@@ -4114,7 +4112,7 @@ export class AgentService {
     const parameters = await suggestToolParamsFromPrompt(
       {
         description: tool.description,
-        parameters: loaded?.parameters,
+        parameters: tool.parameters,
         prompt,
         toolName: tool.name,
       },
