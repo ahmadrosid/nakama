@@ -8,8 +8,7 @@ import { streamMessage, streamTurnSubscribe } from "../shared";
 function createCancellableSession() {
   let signal: AbortSignal | undefined;
 
-  // SAFETY: This test controls the fixture shape at this boundary.
-  const session = {
+  const session: Parameters<typeof streamMessage>[1] = {
     getContextUsage: () => null,
     getTurnUsage: () => null,
     sendStream: (
@@ -28,14 +27,13 @@ function createCancellableSession() {
           once: true,
         });
       }),
-  } as AgentChatSession;
+  };
 
   return { sawSignal: () => signal, session };
 }
 
 /** Emits once and then stalls: a healthy turn sitting in a long tool run. */
-function createChattyThenStalledSession(): AgentChatSession {
-  // SAFETY: This test controls the fixture shape at this boundary.
+function createChattyThenStalledSession(): Parameters<typeof streamMessage>[1] {
   return {
     getContextUsage: () => null,
     getTurnUsage: () => null,
@@ -52,7 +50,7 @@ function createChattyThenStalledSession(): AgentChatSession {
           { once: true }
         );
       }),
-  } as AgentChatSession;
+  };
 }
 
 async function waitForTurnToEnd(sessionId: string): Promise<void> {
@@ -286,48 +284,19 @@ describe("streamMessage timeout", () => {
 
   test("a completed turn clears its deadline instead of leaving a timer behind", async () => {
     const sessionId = `session_deadline_test_${Date.now()}`;
-    const realSetTimeout = globalThis.setTimeout;
     const realClearTimeout = globalThis.clearTimeout;
-    const pending = new Set<ReturnType<typeof setTimeout>>();
     // Distinctive enough that only the stream deadline matches.
     const deadlineMs = 300_000;
 
-    // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.setTimeout = ((
-      handler: TimerHandler,
-      delay?: number,
-      ...rest: unknown[]
-    ) => {
-      const handle = realSetTimeout(
-        // SAFETY: This test controls the fixture shape at this boundary.
-        handler as () => void,
-        delay,
-        // SAFETY: This test controls the fixture shape at this boundary.
-        ...(rest as [])
-      );
-
-      if (delay === deadlineMs) {
-        pending.add(handle);
-      }
-
-      return handle;
-    }) as typeof globalThis.setTimeout;
-    // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.clearTimeout = ((handle?: ReturnType<typeof setTimeout>) => {
-      if (handle !== undefined) {
-        pending.delete(handle);
-      }
-
-      realClearTimeout(handle);
-    }) as typeof globalThis.clearTimeout;
+    const timeoutSpy = spyOn(globalThis, "setTimeout");
+    const clearSpy = spyOn(globalThis, "clearTimeout");
 
     try {
-      // SAFETY: This test controls the fixture shape at this boundary.
-      const session = {
+      const session: Parameters<typeof streamMessage>[1] = {
         getContextUsage: () => null,
         getTurnUsage: () => null,
         sendStream: () => Promise.resolve("done"),
-      } as AgentChatSession;
+      };
 
       expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
 
@@ -343,14 +312,27 @@ describe("streamMessage timeout", () => {
       await new Response(response.body).text();
       await waitForTurnToEnd(sessionId);
 
-      expect(pending.size).toBe(0);
-    } finally {
-      globalThis.setTimeout = realSetTimeout;
-      globalThis.clearTimeout = realClearTimeout;
+      const deadlineIndex = timeoutSpy.mock.calls.findIndex(
+        ([, delay]) => delay === deadlineMs
+      );
 
-      for (const handle of pending) {
-        realClearTimeout(handle);
+      expect(deadlineIndex).toBeGreaterThanOrEqual(0);
+      const deadlineResult = timeoutSpy.mock.results[deadlineIndex];
+      expect(deadlineResult?.type).toBe("return");
+      expect(clearSpy).toHaveBeenCalledWith(deadlineResult?.value);
+    } finally {
+      const deadlineIndex = timeoutSpy.mock.calls.findIndex(
+        ([, delay]) => delay === deadlineMs
+      );
+
+      const deadlineResult = timeoutSpy.mock.results[deadlineIndex];
+
+      if (deadlineResult?.type === "return") {
+        realClearTimeout(deadlineResult.value);
       }
+
+      timeoutSpy.mockRestore();
+      clearSpy.mockRestore();
     }
   });
 });

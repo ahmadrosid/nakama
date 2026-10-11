@@ -63,7 +63,7 @@ async function createScenario() {
 async function createSessionOverHttp(
   app: Awaited<ReturnType<typeof createScenario>>["app"],
   session: Awaited<ReturnType<typeof createScenario>>["session"],
-  body: CreateSessionRequest
+  body: Partial<CreateSessionRequest>
 ): Promise<string> {
   const response = await app.fetch(
     new Request("http://localhost:4310/v1/sessions", {
