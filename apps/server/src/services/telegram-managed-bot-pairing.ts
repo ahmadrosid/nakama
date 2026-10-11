@@ -316,7 +316,7 @@ export class TelegramManagedBotPairingService {
     >("getUpdates", requestBody);
 
     for (const update of updates) {
-      if (Number.isFinite(update.update_id)) {
+      if (update.update_id !== undefined && Number.isFinite(update.update_id)) {
         this.offset = Math.max(this.offset, update.update_id + 1);
       }
 
