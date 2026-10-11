@@ -140,9 +140,11 @@ class FakeAgent implements acp.Agent {
   }
 }
 
-// SAFETY: Node's Readable.toWeb yields ReadableStream<any>, and the ACP
-// stream only reads Uint8Array chunks from stdin.
-const stdin = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
+// SAFETY: Node's byte stream implements the SDK's DOM stream contract; only reader overload declarations differ.
+const stdin = Readable.toWeb(process.stdin) as ReturnType<
+  typeof Readable.toWeb
+> &
+  ReadableStream<Uint8Array>;
 
 const stream = acp.ndJsonStream(Writable.toWeb(process.stdout), stdin);
 
