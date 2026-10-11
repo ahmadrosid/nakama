@@ -12,6 +12,164 @@ const ORG_A = { id: "org-a", name: "Org A", role: "admin", slug: "org-a" };
 
 const ORG_B = { id: "org-b", name: "Org B", role: "admin", slug: "org-b" };
 
+for (const action of ["login", "setup"] as const) {
+  test.each(["logout", "switch", "login", "current"] as const)(
+    `${action} cannot replace a newer authentication action: %s`,
+    async (mode) => {
+      const user: AuthUserResponse = {
+        activeOrgId: ORG_A.id,
+        email: "admin@example.com",
+        id: "user-a",
+        isPlatformAdmin: false,
+      };
+
+      const newest = { ...user, activeOrgId: ORG_B.id, id: "user-b" };
+
+      const orgs: UserOrgSummary[] = [ORG_A, ORG_B].map((org) => ({
+        ...org,
+        createdAt: "2026-10-12T00:00:00Z",
+        role: org.id === ORG_B.id ? "viewer" : "admin",
+        updatedAt: "2026-10-12T00:00:00Z",
+      }));
+
+      const pending = Promise.withResolvers<AuthUserResponse>();
+      const getMe = spyOn(client, "getMe").mockResolvedValue(user);
+
+      const listUserOrgs = spyOn(client, "listUserOrgs").mockResolvedValue({
+        orgs,
+      });
+
+      const logout = spyOn(client, "logout").mockResolvedValue(undefined);
+      const switchOrg = spyOn(client, "setActiveOrg").mockResolvedValue(newest);
+      const login = spyOn(client, "login").mockResolvedValue(newest);
+
+      const setup = spyOn(client, "setupUser").mockImplementation(
+        () => pending.promise
+      );
+
+      if (action === "login") {
+        login.mockImplementationOnce(() => pending.promise);
+      }
+
+      let auth!: ReturnType<typeof useAuth>;
+
+      function Probe() {
+        auth = useAuth();
+
+        return null;
+      }
+
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      let previous: Promise<void | AuthUserResponse> | undefined;
+      const cacheKey = queryKeys.organizationOverview("parent", ORG_B.id);
+
+      const setupRequest = {
+        admin: {
+          email: "admin@example.com",
+          name: "Admin",
+          password: "password",
+        },
+        organization: { name: "Org A", slug: "org-a" },
+        webPublicUrl: "https://nakama.example.com",
+      };
+
+      try {
+        await act(async () =>
+          root.render(
+            <AuthProvider>
+              <Probe />
+            </AuthProvider>
+          )
+        );
+        await act(async () => {
+          previous =
+            action === "login"
+              ? auth.login(user.email, "password", { mfaCode: "123456" })
+              : auth.setup(setupRequest);
+        });
+
+        if (action === "login") {
+          expect(login).toHaveBeenCalledWith(user.email, "password", {
+            mfaCode: "123456",
+          });
+        } else {
+          expect(setup).toHaveBeenCalledWith(setupRequest);
+        }
+
+        if (mode === "logout") {
+          await act(async () => {
+            await auth.logout();
+          });
+        } else if (mode === "switch") {
+          await act(async () => {
+            await auth.switchOrg(ORG_B.id);
+          });
+        } else {
+          getMe.mockResolvedValue(newest);
+
+          if (mode === "login") {
+            await act(async () => {
+              await auth.login(newest.email, "new-password");
+            });
+            getMe.mockResolvedValue(user);
+          }
+        }
+
+        queryClient.setQueryData(cacheKey, 2);
+        pending.resolve(user);
+        await act(async () => {
+          await previous;
+        });
+
+        if (action === "login") {
+          expect(await previous).toEqual(user);
+        }
+
+        expect(auth.user?.id).toBe(mode === "logout" ? undefined : newest.id);
+        expect(auth.activeOrg?.id).toBe(
+          mode === "logout" ? undefined : ORG_B.id
+        );
+        expect(auth.activeOrg?.role).toBe(
+          mode === "logout" ? undefined : "viewer"
+        );
+        expect(auth.isLoading).toBe(false);
+        expect(getMe).toHaveBeenCalledTimes(
+          mode === "current" || mode === "login" ? 2 : 1
+        );
+        expect(queryClient.getQueryData<number>(cacheKey)).toBe(
+          mode === "current" ? undefined : 2
+        );
+
+        if (mode === "logout") {
+          expect(auth.orgs).toEqual([]);
+          expect(auth.platformOrgs).toEqual([]);
+        }
+      } finally {
+        pending.resolve(user);
+        await previous;
+        await act(async () => root.unmount());
+        container.remove();
+
+        for (const request of [
+          getMe,
+          listUserOrgs,
+          logout,
+          switchOrg,
+          login,
+          setup,
+        ]) {
+          request.mockRestore();
+        }
+
+        queryClient.clear();
+        client.setOrgId(null);
+      }
+    }
+  );
+}
+
 test.each([
   "initial logout",
   "initial refresh",

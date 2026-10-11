@@ -106,28 +106,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const revision = authRevision.current;
     const requestRevision = sessionRequestRevision.current + 1;
-    refreshSession()
-      .catch(() => {
-        if (
-          revision !== authRevision.current ||
-          requestRevision !== sessionRequestRevision.current
-        ) {
-          return;
-        }
+    refreshSession().catch(() => {
+      if (
+        revision !== authRevision.current ||
+        requestRevision !== sessionRequestRevision.current
+      ) {
+        return;
+      }
 
-        setUser(null);
-        setOrgs([]);
-        setPlatformOrgs([]);
-        setPlatformOrgsError(false);
-      })
-      .finally(() => {
-        if (
-          revision === authRevision.current &&
-          requestRevision === sessionRequestRevision.current
-        ) {
-          setIsLoading(false);
-        }
-      });
+      setUser(null);
+      setOrgs([]);
+      setPlatformOrgs([]);
+      setPlatformOrgsError(false);
+      setIsLoading(false);
+    });
 
     return () => {
       authRevision.current += 1;
@@ -150,6 +142,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const setup = useCallback(
     async (request: SetupAuthRequest) => {
+      const revision = ++authRevision.current;
+
       const webPublicUrl =
         request.webPublicUrl ??
         (typeof window !== "undefined" && window.location?.origin
@@ -161,6 +155,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // oxlint-disable-next-line anti-slop/no-conditional-empty-object-spread -- This optional field must stay absent when no value exists to preserve the wire payload contract.
         ...(webPublicUrl ? { webPublicUrl } : {}),
       });
+
+      if (revision !== authRevision.current) {
+        return;
+      }
+
+      authRevision.current += 1;
       await refreshSession();
     },
     [refreshSession]
@@ -177,8 +177,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         passkeyChallenge?: string;
       }
     ) => {
+      const revision = ++authRevision.current;
       const response = await client.login(email, password, mfa);
-      await refreshSession();
+
+      if (revision === authRevision.current) {
+        authRevision.current += 1;
+        await refreshSession();
+      }
 
       return response;
     },

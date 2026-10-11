@@ -2604,3 +2604,13 @@ Twelve HTTP-mock cases cover all four operations after switching, resetting scop
 Step 5 and delivery stages 3 and 4 remain open. The next slice must check AuthProvider login and setup continuations after logout or switching. Organization mutations and platform-list refreshes also need review. These client guards preserve scope changes; they do not cancel server mutations or order concurrent account requests before any scope change. Import/export/archive/restore compatibility and final delivery checks remain required. No new file, package, dependency, browser check, full repository suite, build, paid call, push, or PR was added.
 
 Evidence: /tmp/nakama-auth-writer-{before,focused,types,format,oxlint,lint}.log.
+
+### Slice 3am — Login and setup respect newer authentication actions
+
+AuthProvider login and setup now advance the existing authentication revision before their requests. Their responses start a session refresh only when no newer authentication action has started. An accepted response advances the revision again to invalidate session reads started during its wait. Login keeps its returned response fields, including when its UI update is skipped. Setup keeps its existing request payload and public-origin handling. Initial loading now ends in the existing successful refresh or guarded failure handler; the duplicate final loading check was removed.
+
+Eight new component cases cover both login and setup after logout, a team switch, another login, or no newer action. They check request inputs, login response data, user and team identity, tenant membership role, loading state, session-read counts, and query data. Six cases failed before the change. All 171 focused authentication and Organization panel tests passed with 1,270 assertions. Complete web types, scoped anti-slop, Ultracite, and git diff --check passed. React Doctor returned 91/100 with the same two existing complexity warnings. One verification repair removed the duplicate loading check after React Doctor reported a new function-size warning.
+
+Step 5 and delivery stages 3 and 4 remain open. Next, audit organization mutations and platform-list refreshes for late authentication state updates. Import/export/archive/restore compatibility and final delivery checks remain required. Client response guards and UI revision checks do not cancel server mutations or control browser-cookie response ordering. No new file, package, dependency, browser check, full repository suite, build, paid call, push, or PR was added.
+
+Evidence: /tmp/nakama-auth-entry-{before,focused,types,format,oxlint,lint,doctor}.log.
