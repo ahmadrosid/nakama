@@ -934,6 +934,39 @@ describe("published parent knowledge reads", () => {
     expect(anonymous.status).toBe(401);
   });
 
+  test("parent admins read published documents in parent context with live publication checks", async () => {
+    const { db, document, privateDocument, publication, read } =
+      await setupPublishedKnowledge();
+
+    await db.upsertOrgMember({
+      createdAt: new Date().toISOString(),
+      orgId: "org_parent",
+      role: "admin",
+      userId: "user_reader",
+    });
+
+    for (const query of ["", "?render=text"]) {
+      const response = await read("org_parent", publication.id, query);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Content-Type")).toBe("text/plain");
+      expect(await response.text()).toBe("Published parent bytes");
+
+      for (const id of [document.id, privateDocument.id, "publication_other"]) {
+        expect((await read("org_parent", id, query)).status).toBe(404);
+      }
+
+      expect(
+        (await read("org_parent", publication.id, query, "org_team_a")).status
+      ).toBe(404);
+    }
+
+    await db.deleteOrgSharedResource("org_parent", publication.id);
+    expect((await read("org_parent")).status).toBe(404);
+    expect(
+      (await read("org_parent", publication.id, "?render=text")).status
+    ).toBe(404);
+  });
+
   test("new reads fail after revocation, source removal, or archive", async () => {
     const { db, document, publication, profileService, read } =
       await setupPublishedKnowledge();

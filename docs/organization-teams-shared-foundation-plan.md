@@ -2354,3 +2354,15 @@ Complete server types, scoped anti-slop, Ultracite, and git diff --check passed.
 Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: scoped parent-admin detail reads and root document actions, then shared-template field controls. No package, dependency, file, or endpoint was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
 
 Evidence: /tmp/nakama-admin-catalog-{focused,types,oxlint,lint}.log.
+
+### Slice 3q — Root document preview and download
+
+Ready knowledge chips now open the existing read-only document dialog in root context for tenant admins and platform admins. Root chips require the publication owner to match the active tenant. Members, viewers, unavailable documents, and foreign publication owners retain static root chips. Team readers keep their existing permissions. Root actions reuse the publication-based client reader; no new direct source read permission or client operation is needed.
+
+The server audit confirmed that the existing publication resolver supports root context. It checks publication, source activity, manifest and file boundaries before returning bytes. A new authenticated parent-admin HTTP test proves preview and original downloads succeed, while direct document IDs, unpublished IDs, foreign publications, mismatched tenant context, and removed publications fail. Existing sibling, anonymous, archive, deletion, and symlink tests remain passing.
+
+All 91 component tests passed with 579 assertions. Eight new cases cover root role gates, stable publication IDs, keyboard focus, lazy preview, original downloads, URL cleanup, revocation on reopening, failed downloads after revocation, unavailable sources, foreign owners, and late root responses after team selection. Existing root source links now declare nativeButton=false when rendering links, removing the Base UI warning found during these tests. API and client tests passed: 81 tests and 430 assertions. Complete web and server types, scoped anti-slop, Ultracite, and git diff --check passed. React Doctor remained at 91/100 with no issues. One verification repair corrected the existing link setting; no suppression was added.
+
+Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: parent-admin skill details, then shared-template field controls and compatibility labels. No package, dependency, file, endpoint, or new read permission was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
+
+Evidence: /tmp/nakama-root-knowledge-{web-tests,api-tests,web-types,server-types,oxlint,lint,doctor}.log.

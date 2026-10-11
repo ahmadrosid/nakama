@@ -1170,7 +1170,13 @@ export function OrganizationOverview() {
                       />
                     ) : resource.resourceKind === "knowledge" &&
                       resource.readiness === "ready" &&
-                      activeOrg.parentOrgId ? (
+                      (activeOrg.parentOrgId ||
+                        (resource.orgId === activeOrg.id &&
+                          user &&
+                          canAccessSystemPage(
+                            user.isPlatformAdmin === true,
+                            activeOrg.role
+                          ))) ? (
                       <SharedKnowledgeDialog
                         key={`${activeOrg.id}:${resource.id}`}
                         orgId={activeOrg.id}
@@ -1223,6 +1229,7 @@ export function OrganizationOverview() {
                         aria-label={`View published ${resource.resourceKind} ${resource.label} from ${resource.sourceOrganization.name}`}
                         className="h-auto max-w-full whitespace-normal break-words text-left"
                         key={`${activeOrg.id}:${resource.id}`}
+                        nativeButton={false}
                         render={
                           <Link
                             to={

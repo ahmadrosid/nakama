@@ -1710,6 +1710,153 @@ test.each(["admin", "member", "viewer"] as const)(
   }
 );
 
+test.each([
+  { actionable: true, platform: false, role: "admin" },
+  { actionable: false, platform: false, role: "member" },
+  { actionable: false, platform: false, role: "viewer" },
+  { actionable: true, platform: true, role: "viewer" },
+] as const)(
+  "root knowledge actions use parent context and existing permissions %#",
+  async ({ actionable, platform, role }) => {
+    const read = spyOn(client, "readPublishedKnowledgeBaseDocument")
+      .mockResolvedValueOnce(publishedDocument("Root preview"))
+      .mockResolvedValueOnce(publishedDocument("Root original"))
+      .mockRejectedValue(new Error("Publication removed"));
+
+    cleanups.push(() => read.mockRestore());
+    const { downloads, revokeUrl } = observeDocumentDownloads();
+
+    const { container, queries, render } = await mountResourceReader(
+      role,
+      platform
+    );
+
+    const data = overview("parent");
+    data.sharedResources[0].id = "root/publication?";
+    data.sharedResources[0].resourceId = "root/document?";
+    queries.setQueryData(
+      queryKeys.organizationOverview("parent", "parent"),
+      data
+    );
+    await render({ ...organization("parent"), parentOrgId: null, role });
+
+    const trigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-label^="View shared knowledge"]'
+    );
+
+    expect(Boolean(trigger)).toBe(actionable);
+    expect(read).not.toHaveBeenCalled();
+
+    if (!actionable) {
+      return;
+    }
+
+    trigger?.focus();
+    expect(document.activeElement).toBe(trigger);
+    await openSharedKnowledge(container);
+    expect(read.mock.calls).toEqual([
+      ["parent", "root/publication?", { render: "text" }],
+    ]);
+    expect(document.querySelector('[role="dialog"] pre')?.textContent).toBe(
+      "Root preview"
+    );
+    await downloadSharedKnowledge();
+    expect(read.mock.calls[1]).toEqual(["parent", "root/publication?"]);
+    expect(downloads).toEqual([
+      { filename: "parent knowledge", url: "blob:published-document" },
+    ]);
+    expect(revokeUrl.mock.calls).toEqual([["blob:published-document"]]);
+
+    await act(async () => {
+      document
+        .querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')
+        ?.click();
+      await settle();
+    });
+    await openSharedKnowledge(container);
+    expect(read.mock.calls[2]).toEqual([
+      "parent",
+      "root/publication?",
+      { render: "text" },
+    ]);
+    expect(document.querySelector('[role="dialog"] pre')).toBeNull();
+    expect(document.querySelector('[role="alert"]')).not.toBeNull();
+    await downloadSharedKnowledge();
+    expect(read.mock.calls[3]).toEqual(["parent", "root/publication?"]);
+    expect(downloads).toHaveLength(1);
+  }
+);
+
+test.each([
+  { owner: "parent", readiness: "unavailable" },
+  { owner: "parent", readiness: "requires_setup" },
+  { owner: "other", readiness: "ready" },
+] as const)(
+  "unavailable or foreign root knowledge remains static %#",
+  async ({ owner, readiness }) => {
+    const read = spyOn(client, "readPublishedKnowledgeBaseDocument");
+    cleanups.push(() => read.mockRestore());
+    const { container, queries, render } = await mountResourceReader("admin");
+    const data = overview("parent");
+    data.sharedResources[0].orgId = owner;
+    data.sharedResources[0].readiness = readiness;
+    queries.setQueryData(
+      queryKeys.organizationOverview("parent", "parent"),
+      data
+    );
+    await render({
+      ...organization("parent"),
+      parentOrgId: null,
+      role: "admin",
+    });
+    expect(
+      container.querySelector('button[aria-label^="View shared knowledge"]')
+    ).toBeNull();
+    expect(read).not.toHaveBeenCalled();
+  }
+);
+
+test("late root knowledge preview cannot appear after selecting a team", async () => {
+  const pending =
+    Promise.withResolvers<
+      Awaited<ReturnType<typeof client.readPublishedKnowledgeBaseDocument>>
+    >();
+
+  const read = spyOn(client, "readPublishedKnowledgeBaseDocument")
+    .mockImplementationOnce(() => pending.promise)
+    .mockResolvedValue(publishedDocument("Team preview"));
+
+  cleanups.push(() => read.mockRestore());
+  const { container, queries, render } = await mountResourceReader("admin");
+  queries.setQueryData(
+    queryKeys.organizationOverview("parent", "parent"),
+    overview("parent")
+  );
+  await render({ ...organization("parent"), parentOrgId: null, role: "admin" });
+  await openSharedKnowledge(container);
+  expect(read.mock.calls[0]).toEqual([
+    "parent",
+    "parent-knowledge",
+    { render: "text" },
+  ]);
+  await render({ ...organization("team-a"), role: "admin" });
+  await act(async () => {
+    pending.resolve(publishedDocument("Private root preview"));
+    await settle();
+  });
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.body.textContent).not.toContain("Private root preview");
+  await openSharedKnowledge(container);
+  expect(read.mock.calls[1]).toEqual([
+    "team-a",
+    "team-a-knowledge",
+    { render: "text" },
+  ]);
+  expect(document.querySelector('[role="dialog"] pre')?.textContent).toBe(
+    "Team preview"
+  );
+});
+
 test("shared knowledge preview retries and hides cached bytes after publication removal", async () => {
   const pending = Promise.withResolvers<ReturnType<typeof publishedDocument>>();
 
