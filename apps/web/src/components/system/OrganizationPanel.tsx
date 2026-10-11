@@ -44,6 +44,7 @@ import {
   useOrgPublicationMutation,
 } from "@/hooks/use-org-members";
 import { client, formatError } from "@/lib/client";
+import { encodeModelSelection } from "@/lib/models";
 import { queryKeys } from "@/lib/query-keys";
 
 const RESOURCE_ROWS = [
@@ -72,7 +73,7 @@ function ResourcePublicationDialog({
 }: {
   orgId: string;
   resources: OrgSharedResourceSummary[];
-  kind: "knowledge" | "skill" | "agent";
+  kind: OrgSharedResourceKind;
   label: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -97,6 +98,31 @@ function ResourcePublicationDialog({
           .map((skill) => ({ id: skill.id, label: skill.name }));
       }
 
+      if (kind === "tool") {
+        const { tools } = await client.listTools(orgId);
+
+        return tools.map((tool) => ({ id: tool.id, label: tool.name }));
+      }
+
+      if (kind === "model") {
+        const { models, providers } = await client.getModels();
+
+        return models.flatMap((model) => {
+          const provider = providers.find(
+            (entry) => entry.id === model.providerId
+          );
+
+          return provider
+            ? [
+                {
+                  id: encodeModelSelection(provider.id, model.id),
+                  label: model.name,
+                },
+              ]
+            : [];
+        });
+      }
+
       const { profiles } = await client.listProfiles(orgId);
 
       return profiles
@@ -111,8 +137,7 @@ function ResourcePublicationDialog({
 
   const mutation = useOrgPublicationMutation(orgId);
 
-  const resourceLabel =
-    kind === "knowledge" ? "document" : kind === "skill" ? "skill" : "agent";
+  const resourceLabel = kind === "knowledge" ? "document" : kind;
 
   const publications = resources.filter(
     (resource) => resource.resourceKind === kind
@@ -592,10 +617,7 @@ export function OrganizationOverview() {
               <dt className="flex shrink-0 flex-wrap items-center gap-2 font-medium sm:w-32">
                 <Icon aria-hidden className="size-4 text-muted-foreground" />
                 {label}
-                {(kind === "knowledge" ||
-                  kind === "skill" ||
-                  kind === "agent") &&
-                  overview.data.canManageOrganization &&
+                {overview.data.canManageOrganization &&
                   organization.id === activeOrg.id && (
                     <ResourcePublicationDialog
                       key={activeOrg.id}

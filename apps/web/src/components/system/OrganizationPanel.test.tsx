@@ -1175,3 +1175,197 @@ test("team admins cannot load private skill or agent publication catalogs", asyn
   expect(skills).not.toHaveBeenCalled();
   expect(profiles).not.toHaveBeenCalled();
 });
+
+test.each([
+  { id: "tool-a", kind: "tool", label: "tools", name: "Search" },
+  {
+    id: "provider-a::model-a",
+    kind: "model",
+    label: "models",
+    name: "Model A",
+  },
+] as const)(
+  "tool and model publication uses catalog IDs in case %#",
+  async ({ id, kind, label, name }) => {
+    const { container, catalog, data, queries } = await mountKnowledgeManager();
+    const publishedId = kind === "tool" ? "tool" : "provider-a::published";
+    const secondId = kind === "tool" ? "tool-b" : "provider-b::model-a";
+    data.sharedResources = data.sharedResources.map((resource) =>
+      resource.resourceKind === kind
+        ? { ...resource, resourceId: publishedId }
+        : resource
+    );
+    queries.setQueryData(
+      queryKeys.organizationOverview("parent", "parent"),
+      structuredClone(data)
+    );
+
+    const tools = spyOn(client, "listTools").mockResolvedValue({
+      tools: [
+        {
+          createdAt: "2026-10-12",
+          description: "",
+          handlerConfig: {},
+          handlerType: "builtin",
+          id: "tool-a",
+          name: "Search",
+          updatedAt: "2026-10-12",
+        },
+        {
+          createdAt: "2026-10-12",
+          description: "",
+          handlerConfig: {},
+          handlerType: "builtin",
+          id: "tool-b",
+          name: "Search",
+          updatedAt: "2026-10-12",
+        },
+        {
+          createdAt: "2026-10-12",
+          description: "",
+          handlerConfig: {},
+          handlerType: "builtin",
+          id: "tool",
+          name: "Published",
+          updatedAt: "2026-10-12",
+        },
+      ],
+    });
+
+    const models = spyOn(client, "getModels").mockResolvedValue({
+      currentProviderId: "provider-a",
+      displayName: null,
+      models: [
+        {
+          id: "model-a",
+          name: "Model A",
+          provider: "openai",
+          providerId: "provider-a",
+        },
+        {
+          id: "model-a",
+          name: "Model A",
+          provider: "openai",
+          providerId: "provider-b",
+        },
+        {
+          id: "published",
+          name: "Published",
+          provider: "openai",
+          providerId: "provider-a",
+        },
+        {
+          id: "missing",
+          name: "Missing provider",
+          provider: "openai",
+          providerId: "removed",
+        },
+        { id: "unconfigured", name: "Static catalog", provider: "openai" },
+      ],
+      provider: "openai",
+      providers: ["provider-a", "provider-b"].map((providerId) => ({
+        createdAt: "2026-10-12",
+        hasApiKey: true,
+        id: providerId,
+        label: providerId,
+        modelCount: 2,
+        type: "openai" as const,
+      })),
+    });
+
+    const publication = {
+      ...data.sharedResources[0],
+      id: `pub-${kind}`,
+      label: name,
+      resourceId: id,
+      resourceKind: kind,
+    };
+
+    const publish = spyOn(client, "publishOrgSharedResource")
+      .mockRejectedValueOnce(new Error("Publication failed"))
+      .mockImplementation(async () => {
+        data.sharedResources.push(publication);
+
+        return { publication };
+      });
+
+    const unpublish = spyOn(
+      client,
+      "unpublishOrgSharedResource"
+    ).mockImplementation(async (_orgId: string, publicationId: string) => {
+      data.sharedResources = data.sharedResources.filter(
+        (resource) => resource.id !== publicationId
+      );
+    });
+
+    cleanups.push(() => {
+      tools.mockRestore();
+      models.mockRestore();
+      publish.mockRestore();
+      unpublish.mockRestore();
+    });
+    expect(tools).not.toHaveBeenCalled();
+    expect(models).not.toHaveBeenCalled();
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          `button[aria-label="Manage shared ${label}"]`
+        )
+        ?.click();
+      await settle();
+    });
+    await act(async () => {
+      await settle();
+    });
+    expect(catalog).not.toHaveBeenCalled();
+    expect(kind === "tool" ? models : tools).not.toHaveBeenCalled();
+    expect(kind === "tool" ? tools.mock.calls : models.mock.calls).toEqual(
+      kind === "tool" ? [["parent"]] : [[]]
+    );
+    await selectPublicationResource([
+      `${name} (${id})`,
+      `${name} (${secondId})`,
+    ]);
+
+    const submit = [
+      ...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
+    ].find((button) => button.textContent === `Publish ${kind}`);
+
+    await act(async () => {
+      submit?.click();
+      await settle();
+    });
+    expect(
+      document.querySelector('[role="dialog"] [role="alert"]')
+    ).not.toBeNull();
+    expect(document.querySelector('[role="combobox"]')?.textContent).toContain(
+      name
+    );
+    await act(async () => {
+      submit?.click();
+      await settle();
+    });
+    await act(async () => {
+      await settle();
+    });
+    expect(publish.mock.calls).toEqual([
+      ["parent", { resourceId: id, resourceKind: kind }],
+      ["parent", { resourceId: id, resourceKind: kind }],
+    ]);
+    await act(async () => {
+      document
+        .querySelector<HTMLButtonElement>(
+          `button[aria-label="Unpublish ${name}"]`
+        )
+        ?.click();
+      await settle();
+    });
+    await act(async () => {
+      await settle();
+    });
+    expect(unpublish.mock.calls).toEqual([["parent", `pub-${kind}`]]);
+    expect(
+      document.querySelector(`button[aria-label="Unpublish ${name}"]`)
+    ).toBeNull();
+  }
+);
