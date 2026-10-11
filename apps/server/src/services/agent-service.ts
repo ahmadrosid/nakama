@@ -3520,32 +3520,37 @@ export class AgentService {
     providerId: string,
     request: UpdateProviderRequest
   ): Promise<UpdateProviderResponse> {
-    if (!this.userConfig) {
-      throw new Error("Provider is not configured.");
-    }
+    return providerPublicationLock.withLock("providers", async () => {
+      if (!this.userConfig) {
+        throw new Error("Provider is not configured.");
+      }
 
-    const current = findProviderInstance(this.userConfig, providerId);
+      const current = findProviderInstance(this.userConfig, providerId);
 
-    if (!current) {
-      throw new Error("Provider not found.");
-    }
+      if (!current) {
+        throw new Error("Provider not found.");
+      }
 
-    const updated = applyProviderInstanceUpdate(current, request);
+      const updated = applyProviderInstanceUpdate(current, request);
+      await this.unpublishProviderModels(providerId, current);
 
-    const providers = this.userConfig.providers.map((instance) =>
-      instance.id === providerId ? updated : instance
-    );
+      const providers = this.userConfig.providers.map((instance) =>
+        instance.id === providerId ? updated : instance
+      );
 
-    this.userConfig = { ...this.userConfig, providers };
-    await saveUserConfig(this.userConfig);
-    this.refreshProviderConfig();
+      const config = { ...this.userConfig, providers };
+      await saveUserConfig(config);
+      this.userConfig = config;
+      this.refreshProviderConfig();
+      await this.unpublishProviderModels(providerId, updated);
 
-    return {
-      provider: toProviderInstanceSummary(
-        updated,
-        countModelsForInstance(updated)
-      ),
-    };
+      return {
+        provider: toProviderInstanceSummary(
+          updated,
+          countModelsForInstance(updated)
+        ),
+      };
+    });
   }
 
   async deleteProvider(providerId: string): Promise<DeleteProviderResponse> {
@@ -3584,12 +3589,23 @@ export class AgentService {
     });
   }
 
-  private async unpublishProviderModels(providerId: string): Promise<void> {
+  private async unpublishProviderModels(
+    providerId: string,
+    instance?: ProviderInstance
+  ): Promise<void> {
+    const prefix = `${providerId}::`;
     for (const org of await this.db.listOrganizations()) {
       for (const publication of await this.db.listOrgSharedResources(org.id)) {
         if (
           publication.resourceKind === "model" &&
-          publication.resourceId.startsWith(`${providerId}::`)
+          publication.resourceId.startsWith(prefix) &&
+          !(
+            instance &&
+            modelExistsOnInstance(
+              instance,
+              publication.resourceId.slice(prefix.length)
+            )
+          )
         ) {
           await this.db.deleteOrgSharedResource(org.id, publication.id);
         }
