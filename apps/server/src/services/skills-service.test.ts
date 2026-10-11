@@ -20,7 +20,10 @@ import {
 } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createMinimalHonoApp } from "../http/test-app-helpers";
-import { loginUserSession } from "../http/test-session-helpers";
+import {
+  loginPlatformAdminSession,
+  loginUserSession,
+} from "../http/test-session-helpers";
 import { AgentService } from "./agent-service";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
 import { AuthService } from "./auth-service";
@@ -1720,6 +1723,194 @@ if __name__ == "__main__":
       ).toBe("string");
     }
   );
+
+  test("root admins read published skill details and assets without source write access", async () => {
+    const { db, service, skill, privateSkill, local, sibling, publication } =
+      await setupPublishedSkill();
+
+    await mkdir(join(skill.sourcePath, "references"));
+    await writeFile(
+      join(skill.sourcePath, "references", "guide.md"),
+      "Root reference"
+    );
+
+    const { app, authService } = createMinimalHonoApp({
+      agent: {
+        getPublishedSkill: service.getPublishedSkill.bind(service),
+        listPublishedSkillFiles: service.listPublishedSkillFiles.bind(service),
+        readPublishedSkillFile: service.readPublishedSkillFile.bind(service),
+      },
+      databaseAdapter: db,
+    });
+
+    const now = new Date().toISOString();
+    await db.createUser({
+      createdAt: now,
+      email: "root-skill-reader@example.com",
+      id: "root-reader",
+      passwordHash: await authService.hashPassword("password123"),
+      updatedAt: now,
+    });
+
+    for (const orgId of ["parent", "team_a"]) {
+      await db.upsertOrgMember({
+        createdAt: now,
+        orgId,
+        role: "admin",
+        userId: "root-reader",
+      });
+    }
+
+    const session = await loginUserSession(
+      app,
+      "root-skill-reader@example.com",
+      "password123"
+    );
+
+    const read = (id = publication.id, suffix = "", activeOrg = "parent") =>
+      app.fetch(
+        new Request(
+          `http://localhost:4310/v1/orgs/parent/shared-resources/${id}/skill${suffix}`,
+          { headers: session.headers({}, activeOrg) }
+        )
+      );
+
+    const detail = await read();
+    expect(detail.status).toBe(200);
+    const body = await detail.json();
+    expect(body.skill).toMatchObject({
+      id: skill.id,
+      publicationId: publication.id,
+      sourceOrganization: { id: "parent", name: "parent" },
+    });
+    expect(body.skill.body).toContain("Published instructions");
+    expect(body.skill).not.toHaveProperty("sourcePath");
+    expect(body.skill).not.toHaveProperty("usage");
+    expect(JSON.stringify(body)).not.toContain(skill.sourcePath);
+    const files = await read(publication.id, "/files");
+    expect(files.status).toBe(200);
+    expect((await files.json()).files).toContainEqual({
+      path: "references/guide.md",
+      type: "file",
+    });
+    const file = await read(publication.id, "/file?path=references%2Fguide.md");
+    expect(file.status).toBe(200);
+    expect(await file.json()).toEqual({
+      content: "Root reference",
+      path: "references/guide.md",
+    });
+
+    const suffixes = ["", "/files", "/file?path=SKILL.md"];
+
+    const foreign = await service.createSkill("other", {
+      description: "Foreign root source",
+      name: "foreign-root-notes",
+      profileId: "profile_other",
+    });
+
+    for (const [id, orgId, resourceKind, resourceId] of [
+      ["foreign-publication", "other", "skill", foreign.skill.id],
+      ["root-wrong-kind", "parent", "agent", "profile_parent"],
+    ] as const) {
+      await db.publishOrgSharedResource({
+        createdAt: now,
+        id,
+        orgId,
+        resourceId,
+        resourceKind,
+        updatedAt: now,
+      });
+    }
+
+    for (const suffix of suffixes) {
+      for (const id of [
+        skill.id,
+        privateSkill.id,
+        local.id,
+        sibling.id,
+        "missing-publication",
+        "foreign-publication",
+        "root-wrong-kind",
+      ]) {
+        expect((await read(id, suffix)).status).toBe(404);
+      }
+
+      expect((await read(publication.id, suffix, "team_a")).status).toBe(404);
+    }
+
+    for (const method of ["PATCH", "DELETE"]) {
+      const response = await app.fetch(
+        new Request(`http://localhost:4310/v1/skills/${skill.id}`, {
+          body: method === "PATCH" ? "{}" : undefined,
+          headers: session.headers(
+            {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": session.csrfToken,
+            },
+            "parent"
+          ),
+          method,
+        })
+      );
+
+      expect(response.status).toBe(403);
+    }
+
+    for (const role of ["member", "viewer"] as const) {
+      await db.upsertOrgMember({
+        createdAt: now,
+        orgId: "parent",
+        role,
+        userId: "root-reader",
+      });
+
+      for (const suffix of suffixes) {
+        expect((await read(publication.id, suffix)).status).toBe(404);
+      }
+    }
+
+    await db.upsertOrgMember({
+      createdAt: now,
+      orgId: "parent",
+      role: "admin",
+      userId: "root-reader",
+    });
+
+    const source = (await db.getSkill(skill.id))!;
+    await db.upsertSkill({ ...source, enabled: false });
+
+    for (const suffix of suffixes) {
+      expect((await read(publication.id, suffix)).status).toBe(404);
+    }
+
+    await db.upsertSkill(source);
+
+    const platform = await loginPlatformAdminSession(
+      app,
+      authService,
+      db,
+      "root-platform@example.com"
+    );
+
+    for (const suffix of suffixes) {
+      const response = await app.fetch(
+        new Request(
+          `http://localhost:4310/v1/orgs/parent/shared-resources/${publication.id}/skill${suffix}`,
+          {
+            headers: platform.headers({}, "parent"),
+          }
+        )
+      );
+
+      expect(response.status).toBe(200);
+    }
+
+    await db.deleteOrgSharedResource("parent", publication.id);
+
+    for (const suffix of suffixes) {
+      expect((await read(publication.id, suffix)).status).toBe(404);
+    }
+  });
 
   test("discovers global skills and syncs them to the database", async () => {
     const db = createInMemoryDatabaseAdapter();

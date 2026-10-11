@@ -2366,3 +2366,17 @@ All 91 component tests passed with 579 assertions. Eight new cases cover root ro
 Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: parent-admin skill details, then shared-template field controls and compatibility labels. No package, dependency, file, endpoint, or new read permission was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
 
 Evidence: /tmp/nakama-root-knowledge-{web-tests,api-tests,web-types,server-types,oxlint,lint,doctor}.log.
+
+### Slice 3r — Parent-admin published skill details
+
+The existing published skill resolver now accepts the active root as its source when no parent exists. Root detail and asset routes require tenant admin or platform authority. Members and viewers keep their previous 404 denial in root context. Team readers retain their existing published access. All reads still require a current skill publication, enabled source, correct owner, guarded source directory, and valid SKILL.md. Direct source reads and all source write permissions remain unchanged. OpenAPI now describes the detail reader in active organization context.
+
+Ready root skill chips now open the existing read-only skill dialog for ordinary tenant admins. The publication owner must match the active root. Platform admins retain their existing skill-management link. Root members, viewers, unavailable sources, and foreign owners receive no new action. Dialog queries use the active root and publication ID. Reopening rechecks access and hides cached instructions after revocation.
+
+All 98 component tests passed with 604 assertions. Seven new cases cover root role gates, retained platform links, stable IDs, lazy reads, focus, read-only content, reopening after removal, unavailable sources, and foreign owners. API, service, installation, and client tests passed: 113 tests and 847 assertions. The new parent-admin HTTP test covers details and supporting assets, private and foreign IDs, wrong resource kinds, mismatched tenant context, role denial, platform authority, source disablement, revocation, and denied source writes. Existing sibling isolation, source path guards, execution, assignment, and global compatibility tests remain passing.
+
+Complete web and server types, scoped anti-slop, Ultracite, and git diff --check passed. React Doctor remained at 91/100 with no issues. Two verification repairs were used. The first retained existing 404 denial behavior and corrected foreign ownership in the fixture. The second moved the foreign publication fixture from a child tenant to a separate root, as required by database validation. No rule suppression was added.
+
+Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: audit the remaining contract and route requirements for step 2, then shared-template field controls and compatibility labels. No package, dependency, file, or endpoint was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
+
+Evidence: /tmp/nakama-root-skills-{web-tests,api-tests,web-types,server-types,oxlint,lint,doctor}.log.

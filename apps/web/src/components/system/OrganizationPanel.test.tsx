@@ -1582,6 +1582,106 @@ test("late shared skill response cannot replace another team's details", async (
   expect(document.body.textContent).not.toContain("Old team content");
 });
 
+test.each([
+  { dialog: true, link: false, platform: false, role: "admin" },
+  { dialog: false, link: false, platform: false, role: "member" },
+  { dialog: false, link: false, platform: false, role: "viewer" },
+  { dialog: false, link: true, platform: true, role: "viewer" },
+] as const)(
+  "root skill actions keep role gates and published scope %#",
+  async ({ dialog, link, platform, role }) => {
+    const read = spyOn(client, "getPublishedSkill")
+      .mockResolvedValueOnce(
+        publishedSkill("root/publication?", "Root instructions")
+      )
+      .mockRejectedValueOnce(new Error("Publication removed"));
+
+    cleanups.push(() => read.mockRestore());
+
+    const { container, queries, render } = await mountResourceReader(
+      role,
+      platform
+    );
+
+    const data = overview("parent");
+    data.sharedResources[1].id = "root/publication?";
+    data.sharedResources[1].resourceId = "root/source?";
+    queries.setQueryData(
+      queryKeys.organizationOverview("parent", "parent"),
+      data
+    );
+    await render({ ...organization("parent"), parentOrgId: null, role });
+
+    const trigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-label^="View shared skill"]'
+    );
+
+    expect(Boolean(trigger)).toBe(dialog);
+    expect(
+      Boolean(container.querySelector('a[aria-label^="View published skill"]'))
+    ).toBe(link);
+    expect(read).not.toHaveBeenCalled();
+
+    if (!dialog) {
+      return;
+    }
+
+    trigger?.focus();
+    expect(document.activeElement).toBe(trigger);
+    await openSharedSkill(container);
+    expect(read.mock.calls[0]).toEqual(["parent", "root/publication?"]);
+    expect(document.querySelector('[role="dialog"] pre')?.textContent).toBe(
+      "Root instructions"
+    );
+    expect(
+      document.querySelector(
+        '[role="dialog"] input, [role="dialog"] textarea, [role="dialog"] select'
+      )
+    ).toBeNull();
+    await act(async () => {
+      document
+        .querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')
+        ?.click();
+      await settle();
+    });
+    await openSharedSkill(container);
+    expect(read.mock.calls[1]).toEqual(["parent", "root/publication?"]);
+    expect(document.querySelector('[role="dialog"] pre')).toBeNull();
+    expect(
+      document.querySelector('[role="dialog"] [role="alert"]')
+    ).not.toBeNull();
+  }
+);
+
+test.each([
+  { owner: "parent", readiness: "unavailable" },
+  { owner: "parent", readiness: "requires_setup" },
+  { owner: "other", readiness: "ready" },
+] as const)(
+  "unavailable or foreign root skill cannot open a reader %#",
+  async ({ owner, readiness }) => {
+    const read = spyOn(client, "getPublishedSkill");
+    cleanups.push(() => read.mockRestore());
+    const { container, queries, render } = await mountResourceReader("admin");
+    const data = overview("parent");
+    data.sharedResources[1].orgId = owner;
+    data.sharedResources[1].readiness = readiness;
+    queries.setQueryData(
+      queryKeys.organizationOverview("parent", "parent"),
+      data
+    );
+    await render({
+      ...organization("parent"),
+      parentOrgId: null,
+      role: "admin",
+    });
+    expect(
+      container.querySelector('button[aria-label^="View shared skill"]')
+    ).toBeNull();
+    expect(read).not.toHaveBeenCalled();
+  }
+);
+
 test("unavailable shared skills remain non-actionable", async () => {
   const { container, queries } = await mountResourceReader();
   const data = overview("team-a");

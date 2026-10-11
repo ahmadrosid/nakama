@@ -321,7 +321,7 @@ export class SkillsService {
 
     const parent = team?.parentOrgId
       ? await this.db.getOrganizationById(team.parentOrgId)
-      : null;
+      : team;
 
     if (
       !team ||

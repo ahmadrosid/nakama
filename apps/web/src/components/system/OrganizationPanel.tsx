@@ -1162,7 +1162,11 @@ export function OrganizationOverview() {
                   .map((resource) =>
                     resource.resourceKind === "skill" &&
                     resource.readiness === "ready" &&
-                    activeOrg.parentOrgId ? (
+                    (activeOrg.parentOrgId ||
+                      (resource.orgId === activeOrg.id &&
+                        user &&
+                        !user.isPlatformAdmin &&
+                        activeOrg.role === "admin")) ? (
                       <SharedSkillDialog
                         key={`${activeOrg.id}:${resource.id}`}
                         orgId={activeOrg.id}

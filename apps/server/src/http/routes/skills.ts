@@ -84,7 +84,7 @@ export function registerSkillRoutes(
           description: "Error",
         },
       },
-      summary: "Read a published parent skill through the active team",
+      summary: "Read a published skill through the active organization",
       tags: ["Skills"],
     })
   );
@@ -95,6 +95,17 @@ export function registerSkillRoutes(
       const orgId = decodeURIComponent(c.req.param("orgId"));
 
       if (auth.activeOrgId !== orgId) {
+        throw new NakamaApiError("Not found", 404);
+      }
+
+      const organization =
+        await options.databaseAdapter?.getOrganizationById(orgId);
+
+      if (
+        !organization?.parentOrgId &&
+        auth.orgRole !== "admin" &&
+        !auth.isPlatformAdmin
+      ) {
         throw new NakamaApiError("Not found", 404);
       }
 
@@ -173,6 +184,17 @@ export function registerSkillRoutes(
         const orgId = decodeURIComponent(c.req.param("orgId"));
 
         if (auth.activeOrgId !== orgId) {
+          throw new NakamaApiError("Not found", 404);
+        }
+
+        const organization =
+          await options.databaseAdapter?.getOrganizationById(orgId);
+
+        if (
+          !organization?.parentOrgId &&
+          auth.orgRole !== "admin" &&
+          !auth.isPlatformAdmin
+        ) {
           throw new NakamaApiError("Not found", 404);
         }
 
