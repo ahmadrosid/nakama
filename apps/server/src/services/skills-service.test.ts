@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  type ChatMessage,
   ensureBundledSkillFiles,
   type GenerateChatInput,
   getProfileSoulDir,
@@ -20,10 +21,8 @@ import {
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { createMinimalHonoApp } from "../http/test-app-helpers";
 import { loginUserSession } from "../http/test-session-helpers";
-import type { AgentQuestionnaireState } from "./agent-questionnaire-state";
 import { AgentService } from "./agent-service";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
-import type { AgentTodoState } from "./agent-todo-state";
 import { AuthService } from "./auth-service";
 import { OrgService } from "./org-service";
 import { ProfileService } from "./profile-service";
@@ -64,6 +63,7 @@ describe("SkillsService", () => {
   async function setupPublishedSkill() {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();
+
     for (const id of ["parent", "team_a", "team_b", "other"]) {
       await db.upsertOrganization({
         archivedAt: null,
@@ -81,7 +81,9 @@ describe("SkillsService", () => {
         orgId: id,
       });
     }
+
     const service = new SkillsService(db);
+
     const skill = (
       await service.createSkill("parent", {
         body: "Published instructions",
@@ -90,6 +92,7 @@ describe("SkillsService", () => {
         profileId: "profile_parent",
       })
     ).skill;
+
     const privateSkill = (
       await service.createSkill("parent", {
         body: "Private instructions",
@@ -98,6 +101,7 @@ describe("SkillsService", () => {
         profileId: "profile_parent",
       })
     ).skill;
+
     const local = (
       await service.createSkill("team_a", {
         description: "Local notes",
@@ -105,6 +109,7 @@ describe("SkillsService", () => {
         profileId: "profile_team_a",
       })
     ).skill;
+
     const sibling = (
       await service.createSkill("team_b", {
         description: "Private sibling",
@@ -112,6 +117,7 @@ describe("SkillsService", () => {
         profileId: "profile_team_b",
       })
     ).skill;
+
     const publication = await db.publishOrgSharedResource({
       createdAt: now,
       id: "published_skill",
@@ -120,6 +126,7 @@ describe("SkillsService", () => {
       resourceKind: "skill",
       updatedAt: now,
     });
+
     return { db, local, privateSkill, publication, service, sibling, skill };
   }
 
@@ -130,6 +137,7 @@ describe("SkillsService", () => {
       await db.unassignSkillFromProfile("profile_parent", skill.id);
       await db.unassignSkillFromProfile("profile_parent", privateSkill.id);
       const now = new Date().toISOString();
+
       const publication = await db.publishOrgSharedResource({
         createdAt: now,
         id: "published_agent",
@@ -138,12 +146,14 @@ describe("SkillsService", () => {
         resourceKind: "agent",
         updatedAt: now,
       });
+
       const instance = await db.createSharedAgentInstance(
         "team_a",
         publication.id,
         "shared_instance",
         now
       );
+
       await mkdir(getProfileSoulDir("team_a", instance.id), {
         recursive: true,
       });
@@ -175,6 +185,7 @@ export async function run(input, context) {
         skillsWriteApproval: true,
       });
       const proposals = new SkillProposalService(db, service);
+
       const staged = await proposals.stageProposal({
         action: "approve_code",
         orgId: "parent",
@@ -182,6 +193,7 @@ export async function run(input, context) {
         relativePath: "tool.js",
         skillName: "shared-notes",
       });
+
       await proposals.approveProposal("parent", staged.proposalId!, "admin");
       const turns: GenerateChatInput[] = [];
       const agent = new AgentService(null, null, db);
@@ -193,6 +205,7 @@ export async function run(input, context) {
           provider: {
             generateChat(input: GenerateChatInput) {
               turns.push(input);
+
               return Promise.resolve({
                 assistantMessage: { content: "Done", role: "assistant" },
                 content: "Done",
@@ -205,6 +218,7 @@ export async function run(input, context) {
         resolveProfileTools: (profile: { orgId: string; id: string }) =>
           service.loadToolsForProfile(profile.orgId, profile.id),
       });
+
       const id = await agent.createSession(
         "team_a",
         "web",
@@ -212,6 +226,7 @@ export async function run(input, context) {
         "shared-user",
         { cognito, orgRole: "member" }
       );
+
       const first = (await agent.resolveSession(id, "team_a"))!;
       await first.send("First");
       expect(turns[0]!.tools ?? []).toEqual([]);
@@ -223,14 +238,17 @@ export async function run(input, context) {
       expect(turns[1]!.tools?.map((tool) => tool.name)).toContain(
         "shared-notes"
       );
+
       const tool = (
         await service.loadToolsForProfile("team_a", instance.id)
       )[0]!;
+
       const context = agent.buildPluginToolContext("team_a", {
         profileId: instance.id,
         runId: "run",
         workflowId: "workflow",
       });
+
       await mkdir(context.workspaceRoot!, { recursive: true });
       expect(
         await tool.run({}, { ...context, workspaceRoot: skill.sourcePath })
@@ -256,6 +274,7 @@ export async function run(input, context) {
       ).toBeInstanceOf(Uint8Array);
       expect(await db.listSkillsForProfile(instance.id)).toEqual([]);
       const usage = await db.listSkillUsageForProfile(instance.id);
+
       if (cognito) {
         expect(usage).toEqual([]);
       } else {
@@ -263,6 +282,7 @@ export async function run(input, context) {
           expect.objectContaining({ skillId: skill.id })
         );
       }
+
       await db.assignSkillToProfile("profile_parent", privateSkill.id);
       await expect(
         service.loadToolsForProfile("team_a", instance.id)
@@ -330,6 +350,7 @@ export async function run(input, context) {
         service.loadToolsForProfile("team_a", instance.id)
       ).rejects.toMatchObject({ status: 404 });
       expect(await db.listSkillsForProfile(instance.id)).toEqual([]);
+
       if (cognito) {
         expect(await db.getSession(id)).toBeNull();
       }
@@ -341,6 +362,7 @@ export async function run(input, context) {
     async (file) => {
       const { db, skill, publication, service } = await setupPublishedSkill();
       const modulePath = join(skill.sourcePath, file);
+
       const source = `import { writeFile } from "node:fs/promises";
 process.env.NAKAMA_SHARED_JS_CHILD = "child";
 export const name = "shared-notes";
@@ -351,21 +373,26 @@ export async function run(input, context) {
   return { cwd: process.cwd(), workspace: context.workspaceRoot, orgId: context.orgId, profileId: context.profileId, config: process.env.NAKAMA_CONFIG_DIR ?? null, value: "original", message: input.message };
 }
 `;
+
       const originalChild = process.env.NAKAMA_SHARED_JS_CHILD;
       await writeFile(modulePath, source);
       await db.assignSkillToProfile("profile_team_a", skill.id);
       const agent = new AgentService(null, null, db);
       agent.setSkillsService(service);
+
       const context = agent.buildPluginToolContext("team_a", {
         profileId: "profile_team_a",
         runId: "run",
         workflowId: "workflow",
       });
+
       const root = context.workspaceRoot!;
       await mkdir(root, { recursive: true });
+
       const blocked = (
         await service.loadToolsForProfile("team_a", "profile_team_a")
       )[0]!;
+
       expect(await blocked.run({}, context)).toHaveProperty("error");
       expect(process.env.NAKAMA_SHARED_JS_CHILD).toBe(originalChild);
       await expect(readFile(join(root, "executed.marker"))).rejects.toThrow();
@@ -374,6 +401,7 @@ export async function run(input, context) {
         skillsWriteApproval: true,
       });
       const proposals = new SkillProposalService(db, service);
+
       const approve = async () => {
         const staged = await proposals.stageProposal({
           action: "approve_code",
@@ -382,12 +410,16 @@ export async function run(input, context) {
           relativePath: file,
           skillName: "shared-notes",
         });
+
         await proposals.approveProposal("parent", staged.proposalId!, "admin");
       };
+
       await approve();
+
       const tool = (
         await service.loadToolsForProfile("team_a", "profile_team_a")
       )[0]!;
+
       expect(tool.parameters).toEqual({
         properties: { message: { type: "string" } },
         type: "object",
@@ -425,6 +457,7 @@ export async function run(input, context) {
       await expect(
         tool.run({}, { ...context, orgId: "team_b" })
       ).rejects.toMatchObject({ status: 404 });
+
       for (const broken of [
         source + "\n(",
         source.replace(
@@ -434,6 +467,7 @@ export async function run(input, context) {
       ]) {
         await writeFile(modulePath, broken);
         await approve();
+
         try {
           await tool.run({}, context);
           throw new Error("Expected failure");
@@ -443,6 +477,7 @@ export async function run(input, context) {
           expect(String(error)).not.toContain("tool.");
         }
       }
+
       await db.deleteOrgSharedResource("parent", publication.id);
       await expect(tool.run({}, context)).rejects.toMatchObject({
         status: 404,
@@ -459,6 +494,7 @@ export async function run(input, context) {
       const { db, skill, publication, service } = await setupPublishedSkill();
       const modulePath = join(skill.sourcePath, file);
       await mkdir(join(skill.sourcePath, "scripts"), { recursive: true });
+
       const source = `"""Report execution context."""
 import json
 import os
@@ -472,28 +508,36 @@ def run(payload, context):
 if __name__ == "__main__":
     print(json.dumps(run(json.loads(sys.stdin.read() or "{}"), {})))
 `;
+
       await writeFile(modulePath, source);
+
       if (file.startsWith("scripts/")) {
         await writeFile(
           join(skill.sourcePath, "SKILL.md"),
           "---\nname: shared-notes\ndescription: Shared Python\nscripts: scripts/probe.py\n---\n\nPublished instructions\n"
         );
       }
+
       await db.assignSkillToProfile("profile_team_a", skill.id);
       const agent = new AgentService(null, null, db);
       agent.setSkillsService(service);
+
       const context = agent.buildPluginToolContext("team_a", {
         profileId: "profile_team_a",
         runId: "run",
         workflowId: "workflow",
       });
+
       const teamRoot = context.workspaceRoot!;
       await mkdir(teamRoot, { recursive: true });
+
       const expectedName =
         file === "tool.py" ? "shared-notes" : "shared_notes_probe";
+
       const blocked = (
         await service.loadToolsForProfile("team_a", "profile_team_a")
       ).find((tool) => tool.name === expectedName)!;
+
       expect(blocked).toBeDefined();
       expect(await blocked.run({}, context)).toHaveProperty("error");
       await expect(
@@ -502,6 +546,7 @@ if __name__ == "__main__":
       const parent = (await db.getOrganizationById("parent"))!;
       await db.upsertOrganization({ ...parent, skillsWriteApproval: true });
       const proposals = new SkillProposalService(db, service);
+
       const approve = async () => {
         const staged = await proposals.stageProposal({
           action: "approve_code",
@@ -510,16 +555,21 @@ if __name__ == "__main__":
           relativePath: file,
           skillName: "shared-notes",
         });
+
         await proposals.approveProposal("parent", staged.proposalId!, "admin");
       };
+
       await approve();
+
       const tool = (
         await service.loadToolsForProfile("team_a", "profile_team_a")
       ).find((entry) => entry.name === expectedName)!;
+
       const result = await tool.run(
         {},
         { ...context, workspaceRoot: skill.sourcePath }
       );
+
       expect(result).toMatchObject({
         config: null,
         cwd: await realpath(teamRoot),
@@ -535,6 +585,7 @@ if __name__ == "__main__":
       expect(
         await service.composeCatalogForProfile("team_a", "profile_team_a")
       ).not.toContain(skill.sourcePath);
+
       for (const denied of [
         { ...context, orgRole: "viewer" as const },
         { ...context, orgRole: undefined },
@@ -545,6 +596,7 @@ if __name__ == "__main__":
           status: denied.orgRole === "viewer" || !denied.orgRole ? 403 : 404,
         });
       }
+
       await writeFile(modulePath, source.replace('"original"', '"updated"'));
       expect(await tool.run({}, context)).toHaveProperty("error");
       await approve();
@@ -577,9 +629,11 @@ if __name__ == "__main__":
   test("published assignments keep source references and remove revoked summaries", async () => {
     const { db, skill, publication, service } = await setupPublishedSkill();
     const profiles = new ProfileService(db);
+
     const assigned = await profiles.assignSkill("team_a", "profile_team_a", {
       skillId: skill.id,
     });
+
     expect(assigned.profile.skills).toEqual([]);
     expect(assigned.profile.publishedSkills).toMatchObject([
       { id: skill.id, publicationId: publication.id, scope: "parent" },
@@ -623,8 +677,10 @@ if __name__ == "__main__":
     async (order) => {
       const { db, local, skill } = await setupPublishedSkill();
       const profiles = new ProfileService(db);
+
       const [first, second] =
         order === "parent-first" ? [skill, local] : [local, skill];
+
       await profiles.assignSkill("team_a", "profile_team_a", {
         skillId: first.id,
       });
@@ -640,20 +696,26 @@ if __name__ == "__main__":
   test("prompt discovery matches parent instructions without exposing source paths", async () => {
     const { db, service, skill, local, privateSkill, sibling } =
       await setupPublishedSkill();
+
     await db.assignSkillToProfile("profile_team_a", skill.id);
+
     const catalog = await service.composeCatalogForProfile(
       "team_a",
       "profile_team_a"
     );
+
     expect(catalog).toContain("published-skill://published_skill/SKILL.md");
+
     for (const source of [skill, local, privateSkill, sibling]) {
       expect(catalog).not.toContain(source.sourcePath);
     }
+
     const explicit = await service.formatMatchedSkillsForPrompt(
       "team_a",
       "profile_team_a",
       "/skill shared-notes"
     );
+
     expect(explicit).toContain("Published instructions");
     expect(explicit).not.toContain(skill.sourcePath);
     expect(explicit).toContain('"parent"');
@@ -679,11 +741,13 @@ if __name__ == "__main__":
     );
     const agent = new AgentService(null, null, db);
     agent.setSkillsService(service);
+
     const context = agent.buildPluginToolContext("team_a", {
       profileId: "profile_team_a",
       runId: "run",
       workflowId: "workflow",
     });
+
     const instruction = { path: "published-skill://published_skill/SKILL.md" };
     await expect(runReadFile(instruction, context)).rejects.toMatchObject({
       status: 404,
@@ -692,6 +756,7 @@ if __name__ == "__main__":
     expect((await runReadFile(instruction, context)).content).toContain(
       "Published instructions"
     );
+
     const reference = await runReadFile(
       {
         limit: 1,
@@ -700,6 +765,7 @@ if __name__ == "__main__":
       },
       context
     );
+
     expect(reference).toMatchObject({
       content: "Second",
       endLine: 2,
@@ -749,6 +815,7 @@ if __name__ == "__main__":
         Number.POSITIVE_INFINITY
       )
     ).rejects.toMatchObject({ status: 400 });
+
     for (const file of ["../SKILL.md", "/etc/passwd", "a\\b", "a\0b"]) {
       await expect(
         runReadFile(
@@ -759,6 +826,7 @@ if __name__ == "__main__":
         )
       ).rejects.toMatchObject({ status: 400 });
     }
+
     await symlink(
       join(skill.sourcePath, "..", "private-notes", "SKILL.md"),
       join(skill.sourcePath, "outside.md")
@@ -769,9 +837,11 @@ if __name__ == "__main__":
         context
       )
     ).rejects.toMatchObject({ status: 403 });
+
     const word = await readFile(
       join(process.cwd(), "packages/core/src/__fixtures__/sample.docx")
     );
+
     await writeFile(join(skill.sourcePath, "report.docx"), word);
     expect(
       (
@@ -781,11 +851,13 @@ if __name__ == "__main__":
         )
       ).content
     ).toContain("Laporan Mingguan");
+
     const siblingContext = agent.buildPluginToolContext("team_b", {
       profileId: "profile_team_b",
       runId: "run",
       workflowId: "workflow",
     });
+
     await expect(
       runReadFile(instruction, siblingContext)
     ).rejects.toMatchObject({ status: 404 });
@@ -833,6 +905,7 @@ if __name__ == "__main__":
         skillsWriteApproval: true,
       });
       const proposals = new SkillProposalService(db, service);
+
       const approve = async () => {
         const staged = await proposals.stageProposal({
           action: "approve_code",
@@ -841,8 +914,10 @@ if __name__ == "__main__":
           relativePath: "tool.js",
           skillName: "shared-notes",
         });
+
         await proposals.approveProposal("parent", staged.proposalId!, "admin");
       };
+
       await approve();
       const turns: GenerateChatInput[] = [];
       let failBuild = false;
@@ -854,6 +929,7 @@ if __name__ == "__main__":
           provider: {
             generateChat(input: GenerateChatInput) {
               turns.push(input);
+
               return Promise.resolve({
                 assistantMessage: { content: "Done", role: "assistant" },
                 content: "Done",
@@ -867,9 +943,11 @@ if __name__ == "__main__":
           if (failBuild) {
             throw new Error("Build failed");
           }
+
           return service.loadToolsForProfile(profile.orgId, profile.id);
         },
       });
+
       const id = await agent.createSession(
         "team_a",
         "web",
@@ -877,20 +955,19 @@ if __name__ == "__main__":
         "shared-user",
         { cognito, orgRole: "member" }
       );
+
       const first = (await agent.resolveSession(id, "team_a"))!;
       await first.send("First");
       expect(turns[0]!.tools?.map((tool) => tool.name) ?? []).not.toContain(
         "shared-notes"
       );
-      const state = agent as unknown as {
-        agentTodoState: AgentTodoState;
-        agentQuestionnaireState: AgentQuestionnaireState;
-      };
-      const todos = await state.agentTodoState.write(id, {
+
+      const todos = await agent["agentTodoState"].write(id, {
         merge: false,
         todos: [{ content: "Keep task", id: "todo", status: "pending" }],
       });
-      const questionnaire = await state.agentQuestionnaireState.write(id, {
+
+      const questionnaire = await agent["agentQuestionnaireState"].write(id, {
         id: "questionnaire",
         questions: [
           {
@@ -902,6 +979,7 @@ if __name__ == "__main__":
         ],
         title: "Choice",
       });
+
       await db.assignSkillToProfile("profile_team_a", skill.id);
       failBuild = true;
       await expect(agent.resolveSession(id, "team_a")).rejects.toThrow();
@@ -951,13 +1029,15 @@ if __name__ == "__main__":
       expect((await agent.getSessionMessages(id, "team_a"))?.profileId).toBe(
         "profile_team_a"
       );
+
       if (cognito) {
         expect(await db.getSession(id)).toBeNull();
         expect(await db.listMessagesForSession(id)).toEqual([]);
       } else {
         expect(
           (await db.listMessagesForSession(id)).filter(
-            (message) => (message.payload as { role: string }).role === "user"
+            // SAFETY: Real session writes store ChatMessage payloads on this tested path.
+            (message) => (message.payload as ChatMessage).role === "user"
           )
         ).toHaveLength(4);
       }
@@ -978,6 +1058,7 @@ if __name__ == "__main__":
           provider: {
             generateChat(input: GenerateChatInput) {
               prompts.push(input.system ?? "");
+
               return Promise.resolve({
                 assistantMessage: { content: "Done", role: "assistant" },
                 content: "Done",
@@ -989,6 +1070,7 @@ if __name__ == "__main__":
         }),
         resolveProfileTools: async () => [],
       });
+
       const id = await agent.createSession(
         "team_a",
         "web",
@@ -996,6 +1078,7 @@ if __name__ == "__main__":
         null,
         { cognito, orgRole: "member" }
       );
+
       const session = await agent.resolveSession(id, "team_a");
       expect(session).not.toBeNull();
       await session!.send("First question");
@@ -1030,13 +1113,16 @@ if __name__ == "__main__":
   test("private, sibling, and revoked sources cannot create team assignments", async () => {
     const { db, privateSkill, sibling, skill, publication } =
       await setupPublishedSkill();
+
     const profiles = new ProfileService(db);
     await db.deleteOrgSharedResource("parent", publication.id);
+
     for (const source of [privateSkill, sibling, skill]) {
       await expect(
         profiles.assignSkill("team_a", "profile_team_a", { skillId: source.id })
       ).rejects.toMatchObject({ status: 404 });
     }
+
     expect(await db.listSkillsForProfile("profile_team_a")).toEqual([]);
   });
 
@@ -1053,10 +1139,12 @@ if __name__ == "__main__":
       skillsCuratorConsolidateEnabled: true,
     });
     const original = await readFile(join(skill.sourcePath, "SKILL.md"), "utf8");
+
     const result = await new SkillCuratorService(db, service).run("team_a", {
       now: new Date("2026-10-11T00:00:00.000Z"),
       trigger: "manual",
     });
+
     expect(result.scanned).toBe(0);
     expect(await readFile(join(skill.sourcePath, "SKILL.md"), "utf8")).toBe(
       original
@@ -1075,6 +1163,7 @@ if __name__ == "__main__":
     async (role) => {
       const { db, skill, privateSkill } = await setupPublishedSkill();
       const profiles = new ProfileService(db);
+
       const { app, authService } = createMinimalHonoApp({
         agent: {
           assignSkill: profiles.assignSkill.bind(profiles),
@@ -1082,6 +1171,7 @@ if __name__ == "__main__":
         },
         databaseAdapter: db,
       });
+
       const now = new Date().toISOString();
       await db.createUser({
         createdAt: now,
@@ -1096,11 +1186,13 @@ if __name__ == "__main__":
         role,
         userId: "team-admin",
       });
+
       const session = await loginUserSession(
         app,
         "skill-admin@example.com",
         "password123"
       );
+
       const assign = (skillId: string, profileId = "profile_team_a") =>
         app.fetch(
           new Request(`http://localhost:4310/v1/profiles/${profileId}/skills`, {
@@ -1115,8 +1207,10 @@ if __name__ == "__main__":
             method: "POST",
           })
         );
+
       const response = await assign(skill.id);
       expect(response.status).toBe(role === "admin" ? 200 : 403);
+
       if (role === "admin") {
         expect((await response.json()).profile.publishedSkills[0].id).toBe(
           skill.id
@@ -1124,6 +1218,7 @@ if __name__ == "__main__":
         expect((await assign(privateSkill.id)).status).toBe(404);
         expect((await assign(skill.id, "profile_team_b")).status).toBe(404);
       }
+
       const removed = await app.fetch(
         new Request(
           `http://localhost:4310/v1/profiles/profile_team_a/skills/${skill.id}`,
@@ -1136,6 +1231,7 @@ if __name__ == "__main__":
           }
         )
       );
+
       expect(removed.status).toBe(role === "admin" ? 200 : 403);
       expect(await db.listSkillsForProfile("profile_team_a")).toEqual([]);
     }
@@ -1144,6 +1240,7 @@ if __name__ == "__main__":
   test("team catalogs separate parent publications and preserve local and global skills", async () => {
     const { service, skill, privateSkill, local, sibling } =
       await setupPublishedSkill();
+
     const a = await service.listSkills("team_a");
     const b = await service.listSkills("team_b");
     expect(a.publishedSkills).toEqual(b.publishedSkills);
@@ -1173,6 +1270,7 @@ if __name__ == "__main__":
   test("published file previews stay within the source skill and preserve preview limits", async () => {
     const { service, skill, publication, privateSkill } =
       await setupPublishedSkill();
+
     await mkdir(join(skill.sourcePath, "references"));
     await writeFile(
       join(skill.sourcePath, "references", "guide.md"),
@@ -1193,10 +1291,12 @@ if __name__ == "__main__":
       join(skill.sourcePath, "secret.md")
     );
     await symlink(privateSkill.sourcePath, join(skill.sourcePath, "private"));
+
     const listing = await service.listPublishedSkillFiles(
       "team_a",
       publication.id
     );
+
     expect(listing.files).toContainEqual({
       path: "references/guide.md",
       type: "file",
@@ -1223,15 +1323,18 @@ if __name__ == "__main__":
         )
       ).image
     ).toEqual({ dataBase64: image.toString("base64"), mediaType: "image/png" });
+
     for (const file of ["binary.bin", "large.txt"]) {
       const result = await service.readPublishedSkillFile(
         "team_a",
         publication.id,
         file
       );
+
       expect(result.content).toBeNull();
       expect(result.unavailableReason).toBeDefined();
     }
+
     for (const file of [
       "../private-notes/SKILL.md",
       "/tmp/secret.md",
@@ -1243,11 +1346,13 @@ if __name__ == "__main__":
         service.readPublishedSkillFile("team_a", publication.id, file)
       ).rejects.toMatchObject({ status: 400 });
     }
+
     for (const file of ["secret.md", "private/SKILL.md"]) {
       await expect(
         service.readPublishedSkillFile("team_a", publication.id, file)
       ).rejects.toMatchObject({ status: 403 });
     }
+
     await expect(
       service.readPublishedSkillFile("team_a", publication.id, "missing.md")
     ).rejects.toMatchObject({ status: 404 });
@@ -1273,6 +1378,7 @@ if __name__ == "__main__":
       expect((await service.listSkills("team_a")).publishedSkills).toHaveLength(
         1
       );
+
       if (change === "revoke") {
         await db.deleteOrgSharedResource("parent", publication.id);
       } else if (change === "disabled") {
@@ -1282,6 +1388,7 @@ if __name__ == "__main__":
         });
       } else if (change === "missing" || change === "file-symlink") {
         await rm(join(skill.sourcePath, "SKILL.md"));
+
         if (change === "file-symlink") {
           const secret = join(configDir, "secret.md");
           await writeFile(secret, "Private bytes");
@@ -1289,6 +1396,7 @@ if __name__ == "__main__":
         }
       } else {
         const id = change === "team-archive" ? "team_a" : "parent";
+
         if (change === "parent-archive") {
           for (const childId of ["team_a", "team_b"]) {
             await db.upsertOrganization({
@@ -1297,11 +1405,13 @@ if __name__ == "__main__":
             });
           }
         }
+
         await db.upsertOrganization({
           ...(await db.getOrganizationById(id))!,
           archivedAt: new Date().toISOString(),
         });
       }
+
       expect((await service.listSkills("team_a")).publishedSkills).toEqual([]);
       await expect(
         service.getPublishedSkill("team_a", publication.id)
@@ -1324,16 +1434,20 @@ if __name__ == "__main__":
     expect(
       (await service.listSkills("team_a")).publishedSkills?.[0]?.description
     ).toBe("Updated source");
+
     const read = spyOn(db, "listOrgSharedResources").mockRejectedValueOnce(
       new Error("database unavailable")
     );
+
     try {
       await expect(service.listSkills("team_a")).rejects.toThrow();
     } finally {
       read.mockRestore();
     }
+
     const failure = new Error("database unavailable");
     const publicationRead = spyOn(db, "getOrgSharedResource");
+
     try {
       publicationRead.mockRejectedValueOnce(failure);
       await expect(
@@ -1366,11 +1480,13 @@ if __name__ == "__main__":
     async (role) => {
       const { db, service, skill, privateSkill, publication } =
         await setupPublishedSkill();
+
       await mkdir(join(skill.sourcePath, "references"));
       await writeFile(
         join(skill.sourcePath, "references", "guide.md"),
         "Shared reference"
       );
+
       const { app, authService } = createMinimalHonoApp({
         agent: {
           getPublishedSkill: (orgId: string, publicationId: string) =>
@@ -1382,6 +1498,7 @@ if __name__ == "__main__":
         },
         databaseAdapter: db,
       });
+
       const now = new Date().toISOString();
       await db.createUser({
         createdAt: now,
@@ -1390,6 +1507,7 @@ if __name__ == "__main__":
         passwordHash: await authService.hashPassword("password123"),
         updatedAt: now,
       });
+
       for (const orgId of ["team_a", "team_b", "other"]) {
         await db.upsertOrgMember({
           createdAt: now,
@@ -1398,11 +1516,13 @@ if __name__ == "__main__":
           userId: "reader",
         });
       }
+
       const session = await loginUserSession(
         app,
         "skill-reader@example.com",
         "password123"
       );
+
       const read = (
         orgId = "team_a",
         id = publication.id,
@@ -1415,6 +1535,7 @@ if __name__ == "__main__":
             { headers: session.headers({}, activeOrg) }
           )
         );
+
       for (const orgId of ["team_a", "team_b"]) {
         const response = await read(orgId);
         expect(response.status).toBe(200);
@@ -1436,24 +1557,29 @@ if __name__ == "__main__":
           type: "file",
         });
         expect(JSON.stringify(listed)).not.toContain(skill.sourcePath);
+
         const file = await read(
           orgId,
           publication.id,
           orgId,
           "/file?path=references%2Fguide.md"
         );
+
         expect(file.status).toBe(200);
         expect(await file.json()).toEqual({
           content: "Shared reference",
           path: "references/guide.md",
         });
       }
+
       expect(await db.getOrgMember("parent", "reader")).toBeNull();
+
       const foreignSkill = await service.createSkill("other", {
         description: "Foreign source",
         name: "foreign-notes",
         profileId: "profile_other",
       });
+
       const knowledge = await uploadOrganizationKnowledgeBaseDocument(
         "parent",
         {
@@ -1462,6 +1588,7 @@ if __name__ == "__main__":
           mediaType: "text/plain",
         }
       );
+
       for (const [id, orgId, resourceKind, resourceId] of [
         ["wrong-kind", "parent", "knowledge", knowledge.document.id],
         ["foreign-publication", "other", "skill", foreignSkill.skill.id],
@@ -1475,6 +1602,7 @@ if __name__ == "__main__":
           updatedAt: now,
         });
       }
+
       for (const id of [
         skill.id,
         privateSkill.id,
@@ -1483,10 +1611,12 @@ if __name__ == "__main__":
         "foreign-publication",
       ]) {
         expect((await read("team_a", id)).status).toBe(404);
+
         for (const suffix of ["/files", "/file?path=SKILL.md"]) {
           expect((await read("team_a", id, "team_a", suffix)).status).toBe(404);
         }
       }
+
       for (const suffix of ["/files", "/file?path=SKILL.md"]) {
         expect(
           (await read("other", publication.id, "other", suffix)).status
@@ -1507,16 +1637,19 @@ if __name__ == "__main__":
           ).status
         ).toBe(401);
       }
+
       expect((await read("other")).status).toBe(404);
       expect((await read("team_b", publication.id, "team_a")).status).toBe(404);
       const deniedParent = await read("parent");
       expect(deniedParent.status).toBe(404);
       expect(await deniedParent.text()).not.toContain("Published instructions");
+
       const anonymous = await app.fetch(
         new Request(
           `http://localhost:4310/v1/orgs/team_a/shared-resources/${publication.id}/skill`
         )
       );
+
       expect(anonymous.status).toBe(401);
       await writeFile(
         join(skill.sourcePath, "SKILL.md"),
@@ -1556,9 +1689,11 @@ if __name__ == "__main__":
           )
         ).status
       ).toBe(404);
+
       const spec = await (
         await app.fetch(new Request("http://localhost:4310/openapi.json"))
       ).json();
+
       expect(
         spec.paths["/v1/orgs/{orgId}/shared-resources/{publicationId}/skill"]
           .get
