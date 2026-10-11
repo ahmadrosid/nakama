@@ -43,7 +43,13 @@ export function pluginTarball(
 
 const packages = new Map<
   string,
-  { source: PluginPackageRequest; archive: Buffer; integrity: string }
+  {
+    source: PluginPackageRequest;
+    archive: Buffer;
+    integrity: string;
+    tarball?: string;
+    token?: string;
+  }
 >();
 
 const registry = setupServer(
@@ -51,7 +57,12 @@ const registry = setupServer(
     const path = decodeURIComponent(new URL(request.url).pathname.slice(1));
     const fixture = packages.get(path.replace(/\/fixture\.tgz$/, ""));
 
-    if (!fixture) {
+    // npm answers 404, not 401, for a restricted package the caller cannot read.
+    if (
+      !fixture ||
+      (fixture.token &&
+        request.headers.get("authorization") !== `Bearer ${fixture.token}`)
+    ) {
       return new HttpResponse(null, { status: 404 });
     }
 
@@ -68,7 +79,9 @@ const registry = setupServer(
         [version]: {
           dist: {
             integrity: fixture.integrity,
-            tarball: `https://registry.npmjs.org/${name}/fixture.tgz`,
+            tarball:
+              fixture.tarball ??
+              `https://registry.npmjs.org/${name}/fixture.tgz`,
           },
           name,
           version,
@@ -88,6 +101,8 @@ export function pluginPackage(
     archive?: Buffer;
     packageJson?: Record<string, JsonValue>;
     integrity?: string;
+    tarball?: string;
+    token?: string;
   } = {}
 ): PluginPackageRequest {
   // Other MSW servers can dispose the shared interceptors between test files.
@@ -105,6 +120,7 @@ export function pluginPackage(
 
   hash.update(JSON.stringify(options.packageJson ?? {}));
   hash.update(options.integrity ?? "");
+  hash.update(options.tarball ?? "").update(options.token ?? "");
   const packageName = `@nakama-test/fixture-${hash.digest("hex").slice(0, 24)}`;
   let version = "1.0.0";
 
@@ -138,7 +154,13 @@ export function pluginPackage(
     options.integrity ??
     `sha512-${createHash("sha512").update(archive).digest("base64")}`;
 
-  packages.set(packageName, { archive, integrity, source });
+  packages.set(packageName, {
+    archive,
+    integrity,
+    source,
+    tarball: options.tarball,
+    token: options.token,
+  });
 
   return source;
 }
