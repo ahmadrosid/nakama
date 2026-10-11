@@ -16,6 +16,22 @@ import {
 const owner = { orgId: "org_a", profileId: "agent_a" };
 
 describe("normalizeAutomationDelivery", () => {
+  test.each(
+    [
+      false,
+      7,
+      "telegram",
+      [],
+      {},
+      { channel: "telegram", chatId: "1" },
+      { channel: "discord", channelId: 7 },
+      { channel: "email", to: 7 },
+      { channel: "telegram", notifyOn: "unknown" },
+    ].map((input) => ({ input }))
+  )("rejects malformed delivery input: %j", ({ input }) => {
+    expect(() => normalizeAutomationDelivery(input)).toThrow();
+  });
+
   test("returns undefined for missing delivery", () => {
     expect(normalizeAutomationDelivery(undefined)).toBeUndefined();
     expect(normalizeAutomationDelivery(null)).toBeUndefined();
@@ -35,13 +51,10 @@ describe("normalizeAutomationDelivery", () => {
 
   test("parses discord delivery with channelId", () => {
     expect(
-      normalizeAutomationDelivery(
-        {
-          channel: "discord",
-          channelId: "123456789012345678",
-        },
-        owner
-      )
+      normalizeAutomationDelivery({
+        channel: "discord",
+        channelId: "123456789012345678",
+      })
     ).toEqual({
       channel: "discord",
       channelId: "123456789012345678",
@@ -98,13 +111,10 @@ describe("normalizeAutomationDelivery", () => {
 
   test("rejects telegram payload with channelId", () => {
     expect(() =>
-      normalizeAutomationDelivery(
-        {
-          channel: "telegram",
-          channelId: "123456789012345678",
-        },
-        owner
-      )
+      normalizeAutomationDelivery({
+        channel: "telegram",
+        channelId: "123456789012345678",
+      })
     ).toThrow(
       "delivery.channelId is only valid when delivery.channel is discord."
     );
