@@ -131,13 +131,13 @@ const IN_PROCESS_SKILL_SOURCE_EXTENSIONS = new Set([
 const IN_PROCESS_SKILL_SOURCE_REASON =
   "Executable JavaScript/TypeScript skill sources run inside the Nakama server process and are never installed from a profile pack.";
 
-const AVATAR_EXTENSION_MEDIA_TYPES: Record<string, string> = {
-  gif: "image/gif",
-  jpeg: "image/jpeg",
-  jpg: "image/jpeg",
-  png: "image/png",
-  webp: "image/webp",
-} satisfies Record<string, string>;
+const AVATAR_EXTENSION_MEDIA_TYPES = new Map([
+  ["gif", "image/gif"],
+  ["jpeg", "image/jpeg"],
+  ["jpg", "image/jpeg"],
+  ["png", "image/png"],
+  ["webp", "image/webp"],
+]);
 
 const NOT_ALLOWLISTED_REASON =
   "Not part of the profile pack allowlist (secrets and generated data are excluded).";
@@ -229,6 +229,7 @@ export async function createProfilePackExport(
   const { files, skipped } = await inventoryProfileSoulDir(soulDir);
   const meta = await buildProfilePackMeta(db, profileId, profile);
   const shared = await db.getSharedAgentInstance(orgId, profileId);
+
   if (shared) {
     meta.sharedAgent = {
       publicationId: shared.publicationId,
@@ -236,6 +237,7 @@ export async function createProfilePackExport(
       sourceProfileId: shared.sourceProfileId,
     };
   }
+
   const createdAt = (options.now ?? new Date()).toISOString();
 
   const entries: Record<string, Uint8Array> = {};
@@ -302,6 +304,7 @@ export async function previewProfilePackImport(
   const manifest = readProfilePackManifest(entries);
 
   const skippedAssignments: ProfilePackSkippedItem[] = [];
+
   if (!manifest.meta.sharedAgent) {
     await previewToolAssignments(
       db,
@@ -411,6 +414,7 @@ export async function importProfilePack(
 
   try {
     const skippedAssignments: ProfilePackSkippedItem[] = [];
+
     if (manifest.meta.sharedAgent) {
       await db.importSharedAgentReference({
         ...manifest.meta.sharedAgent,
@@ -419,6 +423,7 @@ export async function importProfilePack(
         teamOrgId: orgId,
       });
     }
+
     const soulDir = getProfileSoulDir(orgId, profileId);
     await initSoulDirectory(soulDir);
     await writePackedWorkspaceFiles(
@@ -427,6 +432,7 @@ export async function importProfilePack(
       entries,
       skippedAssignments
     );
+
     if (!manifest.meta.sharedAgent) {
       createdSkillIds = await recreatePackedSkills(
         db,
@@ -1123,9 +1129,8 @@ function isProfilePackManifest<T>(value: T): value is T & ProfilePackManifest {
         (sharedReference &&
           ["publicationId", "sourceOrgId", "sourceProfileId"].every((key) => {
             const id = sharedReference.get(key);
-            return (
-              typeof id === "string" && id.trim().length > 0 && id.length <= 256
-            );
+
+            return isString(id) && id.trim().length > 0 && id.length <= 256;
           }))) &&
       manifest.get("apiVersion") === NAKAMA_API_VERSION &&
       isString(manifest.get("createdAt")) &&
@@ -1270,7 +1275,7 @@ async function writePackedAvatar(
     .slice(entry.name.lastIndexOf(".") + 1)
     .toLowerCase();
 
-  const mediaType = AVATAR_EXTENSION_MEDIA_TYPES[extension];
+  const mediaType = AVATAR_EXTENSION_MEDIA_TYPES.get(extension);
 
   if (!mediaType) {
     return;

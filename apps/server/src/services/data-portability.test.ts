@@ -57,6 +57,7 @@ describe("Nakama data portability", () => {
     const databasePath = join(rootDir, "sqlite", "nakama.sqlite");
     const database = await createDatabase(`file:${databasePath}`);
     const raw = new Database(databasePath);
+
     try {
       raw.exec(
         "INSERT INTO organizations (id,name,slug,created_at,updated_at) VALUES ('parent','Parent','parent','now','now')"
@@ -64,6 +65,7 @@ describe("Nakama data portability", () => {
       raw.exec(
         "INSERT INTO organizations (id,name,slug,parent_org_id,created_at,updated_at) VALUES ('team','Team','team','parent','now','now')"
       );
+
       for (const id of ["active", "revoked", "deleted", "replaced"]) {
         raw
           .query(
@@ -79,12 +81,14 @@ describe("Nakama data portability", () => {
           updatedAt: "now",
         });
       }
+
       const instance = await database.adapter.createSharedAgentInstance(
         "team",
         "revoked_publication",
         "shared_instance",
         "now"
       );
+
       raw.exec(
         "INSERT INTO profiles (id,name,org_id,created_at,updated_at) VALUES ('unpublished','Unpublished','parent','now','now')"
       );
@@ -117,6 +121,7 @@ describe("Nakama data portability", () => {
         rootDir,
       });
       const restored = new Database(databasePath);
+
       try {
         expect(
           restored
@@ -156,6 +161,7 @@ describe("Nakama data portability", () => {
       } finally {
         restored.close();
       }
+
       const freshRoot = join(rootDir, "fresh");
       const freshDatabasePath = join(freshRoot, "sqlite", "nakama.sqlite");
       await restoreNakamaDataImport(backup.data, {
@@ -164,6 +170,7 @@ describe("Nakama data portability", () => {
         rootDir: freshRoot,
       });
       const fresh = new Database(freshDatabasePath);
+
       try {
         expect(
           fresh.query("SELECT id FROM org_shared_resources").all()
@@ -188,6 +195,7 @@ describe("Nakama data portability", () => {
     const raw = new Database(databasePath);
     const oldConfigDir = process.env.NAKAMA_CONFIG_DIR;
     process.env.NAKAMA_CONFIG_DIR = rootDir;
+
     try {
       raw.exec(
         "INSERT INTO organizations (id,name,slug,created_at,updated_at) VALUES ('parent','Parent','parent','now','now')"
@@ -198,6 +206,7 @@ describe("Nakama data portability", () => {
       raw.exec(
         "INSERT INTO profiles (id,name,org_id,created_at,updated_at) VALUES ('source','Source','parent','now','now'),('sibling_profile','Sibling profile','sibling','now','now')"
       );
+
       const publication = await database.adapter.publishOrgSharedResource({
         createdAt: "now",
         id: "publication",
@@ -206,12 +215,14 @@ describe("Nakama data portability", () => {
         resourceKind: "agent",
         updatedAt: "now",
       });
+
       const instance = await database.adapter.createSharedAgentInstance(
         "team",
         publication.id,
         "shared_instance",
         "now"
       );
+
       for (const [orgId, profileId, marker] of [
         ["parent", "source", "parent_private"],
         ["team", instance.id, "team_private"],
@@ -235,13 +246,17 @@ describe("Nakama data portability", () => {
             JSON.stringify({ content: marker, role: "user" })
           );
       }
+
       const expectedMessages =
         await database.adapter.listMessagesForSession("team_session");
+
       const sourceBefore = await database.adapter.getProfile("source");
+
       const linkBefore = await database.adapter.getSharedAgentInstance(
         "team",
         instance.id
       );
+
       for (const revoked of [false, true]) {
         if (revoked) {
           await database.adapter.deleteOrgSharedResource(
@@ -249,14 +264,18 @@ describe("Nakama data portability", () => {
             publication.id
           );
         }
+
         const exported = await createNakamaOrgDataExport(
           database.adapter,
           "team"
         );
+
         const entries = fflate.unzipSync(exported.data);
+
         const manifestText = Buffer.from(
           entries[NAKAMA_ORG_EXPORT_MANIFEST]!
         ).toString("utf8");
+
         const manifest: unknown = JSON.parse(manifestText);
         expect(manifest).toMatchObject({
           organization: { id: "team", parentOrgId: "parent" },
@@ -314,6 +333,7 @@ describe("Nakama data portability", () => {
     } finally {
       database.release();
       raw.close();
+
       if (oldConfigDir === undefined) {
         delete process.env.NAKAMA_CONFIG_DIR;
       } else {

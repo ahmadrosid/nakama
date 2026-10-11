@@ -705,10 +705,12 @@ export async function createNakamaOrgDataExport(
       getKnowledgeBaseDir(orgId, profile.id),
       `profiles/${profile.id}/knowledge-base`
     );
+
     const shared = await databaseAdapter.getSharedAgentInstance(
       orgId,
       profile.id
     );
+
     profiles.push({
       ...profile,
       artifacts: exportedArtifacts,
@@ -1004,8 +1006,10 @@ export async function restoreNakamaDataImport(
 
     // Read after requests drain, so a publication revoked during staging stays revoked.
     const permittedPublications = new Set<string>();
+
     if (liveDatabasePath && (await pathExists(liveDatabasePath))) {
       const live = new Database(liveDatabasePath, { readonly: true });
+
       try {
         if (
           live
@@ -1027,6 +1031,7 @@ export async function restoreNakamaDataImport(
               "SELECT id, org_id, resource_kind, resource_id FROM org_shared_resources"
             )
             .all();
+
           for (const publication of publications) {
             permittedPublications.add(
               JSON.stringify([
@@ -1042,11 +1047,14 @@ export async function restoreNakamaDataImport(
         live.close();
       }
     }
+
     for (const candidate of stagedDatabases) {
       if (!(candidate && (await pathExists(candidate)))) {
         continue;
       }
+
       const staged = new Database(candidate);
+
       try {
         if (
           staged
@@ -1070,9 +1078,11 @@ export async function restoreNakamaDataImport(
                   "SELECT id, org_id, resource_kind, resource_id FROM org_shared_resources"
                 )
                 .all();
+
               const remove = staged.query(
                 "DELETE FROM org_shared_resources WHERE id = ?"
               );
+
               for (const publication of publications) {
                 if (
                   !permittedPublications.has(

@@ -70,6 +70,7 @@ describe("profile portability", () => {
     service.setOrgService(orgService);
     const timestamp = now();
     const verifiedTeam = "org_verified";
+
     for (const id of [ORG, DEST, VICTIM, verifiedTeam]) {
       await db.upsertOrganization({
         createdAt: timestamp,
@@ -80,10 +81,12 @@ describe("profile portability", () => {
         updatedAt: timestamp,
       });
     }
+
     const { profile: source } = await service.createProfile(ORG, {
       name: "Shared source",
       systemPrompt: "Published instructions",
     });
+
     const publication = await db.publishOrgSharedResource({
       createdAt: timestamp,
       id: "shared_pack_publication",
@@ -92,23 +95,27 @@ describe("profile portability", () => {
       resourceKind: "agent",
       updatedAt: timestamp,
     });
+
     const instance = await db.createSharedAgentInstance(
       DEST,
       publication.id,
       "shared_pack_instance",
       timestamp
     );
+
     await mkdir(soul(DEST, instance.id), { recursive: true });
     await writeFile(
       path.join(soul(DEST, instance.id), "MEMORY.md"),
       "Team memory"
     );
     const exported = await createProfilePackExport(db, DEST, instance.id);
+
     const reference = {
       publicationId: publication.id,
       sourceOrgId: ORG,
       sourceProfileId: source.id,
     };
+
     expect(exported.manifest.meta.sharedAgent).toEqual(reference);
     await db.upsertTool({
       createdAt: timestamp,
@@ -120,6 +127,7 @@ describe("profile portability", () => {
       orgId: VICTIM,
       updatedAt: timestamp,
     });
+
     const crafted = repack(exported.data, {
       "nakama-profile-export.json": JSON.stringify({
         ...exported.manifest,
@@ -132,12 +140,15 @@ describe("profile portability", () => {
         },
       }),
     });
+
     expect(
       (await previewProfilePackImport(db, VICTIM, crafted)).skippedAssignments
     ).toEqual([]);
+
     const imported = await importProfilePack(db, VICTIM, crafted, {
       confirm: true,
     });
+
     expect(imported.profileId).not.toBe(instance.id);
     expect(
       await db.getSharedAgentInstance(VICTIM, imported.profileId)
@@ -165,25 +176,30 @@ describe("profile portability", () => {
         "utf8"
       )
     ).toBe("Team memory");
+
     const reexported = await createProfilePackExport(
       db,
       VICTIM,
       imported.profileId
     );
+
     expect(reexported.manifest.meta.sharedAgent).toEqual(reference);
 
     const verified = await importProfilePack(db, verifiedTeam, exported.data, {
       confirm: true,
     });
+
     expect(
       (await service.getProfile(verifiedTeam, verified.profileId)).profile
         .sharedAgent?.available
     ).toBe(true);
     const profilesBefore = await db.listProfiles();
+
     const linkBefore = await db.getSharedAgentInstance(
       verifiedTeam,
       verified.profileId
     );
+
     await expect(
       importProfilePack(db, verifiedTeam, exported.data, { confirm: true })
     ).rejects.toThrow();
@@ -209,15 +225,25 @@ describe("profile portability", () => {
 
   test("invalid shared pack references are rejected before creating profiles", async () => {
     const { db, service } = await setup();
+
     const { profile } = await service.createProfile(ORG, {
       name: "Pack source",
     });
+
     const exported = await createProfilePackExport(db, ORG, profile.id);
     const profilesBefore = await db.listProfiles();
+
     for (const sharedAgent of [
       null,
       {},
       { publicationId: "", sourceOrgId: ORG, sourceProfileId: profile.id },
+      { publicationId: 123, sourceOrgId: ORG, sourceProfileId: profile.id },
+      { publicationId: "pub", sourceOrgId: false, sourceProfileId: profile.id },
+      {
+        publicationId: "pub",
+        sourceOrgId: ORG,
+        sourceProfileId: "x".repeat(257),
+      },
     ]) {
       const crafted = repack(exported.data, {
         "nakama-profile-export.json": JSON.stringify({
@@ -225,6 +251,7 @@ describe("profile portability", () => {
           meta: { ...exported.manifest.meta, sharedAgent },
         }),
       });
+
       await expect(
         previewProfilePackImport(db, DEST, crafted)
       ).rejects.toThrow();
@@ -232,12 +259,14 @@ describe("profile portability", () => {
         importProfilePack(db, DEST, crafted, { confirm: true })
       ).rejects.toThrow();
     }
+
     expect(await db.listProfiles()).toEqual(profilesBefore);
   });
 
   test("pack provenance and name collisions cannot overwrite a shared instance or its source", async () => {
     const { db, service } = await setup();
     const timestamp = now();
+
     for (const id of [ORG, DEST, VICTIM]) {
       await db.upsertOrganization({
         createdAt: timestamp,
@@ -248,10 +277,12 @@ describe("profile portability", () => {
         updatedAt: timestamp,
       });
     }
+
     const { profile: source } = await service.createProfile(ORG, {
       name: "Published template",
       systemPrompt: "Source instructions",
     });
+
     const publication = await db.publishOrgSharedResource({
       createdAt: timestamp,
       id: "publication",
@@ -260,17 +291,21 @@ describe("profile portability", () => {
       resourceKind: "agent",
       updatedAt: timestamp,
     });
+
     const name = "Shared instance";
+
     const instance = await db.createSharedAgentInstance(
       DEST,
       publication.id,
       slugifyProfileName(name),
       timestamp
     );
+
     const link = await db.getSharedAgentInstance(DEST, instance.id);
     const storedSource = await db.getProfile(source.id);
     const teamDir = soul(DEST, instance.id);
     await mkdir(teamDir, { recursive: true });
+
     const files = [
       "SOUL.md",
       "STYLE.md",
@@ -278,19 +313,24 @@ describe("profile portability", () => {
       "MEMORY.md",
       "USER.md",
     ];
+
     for (const file of files) {
       await writeFile(path.join(teamDir, file), `Team ${file}`);
     }
+
     const { profile: local } = await service.createProfile(VICTIM, {
       name: "Local pack",
       soulFiles: { "SOUL.md": "Imported identity" },
       systemPrompt: "Imported instructions",
     });
+
     const exported = await createProfilePackExport(db, VICTIM, local.id);
+
     for (const revoked of [false, true]) {
       if (revoked) {
         await db.deleteOrgSharedResource(ORG, publication.id);
       }
+
       const crafted = repack(exported.data, {
         "nakama-profile-export.json": JSON.stringify({
           ...exported.manifest,
@@ -305,9 +345,11 @@ describe("profile portability", () => {
           sourceProfileId: revoked ? source.id : instance.id,
         }),
       });
+
       const imported = await importProfilePack(db, DEST, crafted, {
         confirm: true,
       });
+
       expect(imported.profileId).not.toBe(instance.id);
       expect(imported.profileId).not.toBe(source.id);
       expect(await db.getProfile(imported.profileId)).toMatchObject({
@@ -323,6 +365,7 @@ describe("profile portability", () => {
       expect(await db.listProfileChangeEvents(DEST, instance.id)).toEqual([]);
       expect((await db.getOrganizationById(DEST))?.parentOrgId).toBe(ORG);
       expect(await db.listOrgSharedResources(DEST)).toEqual([]);
+
       for (const file of files) {
         expect(await readFile(path.join(teamDir, file), "utf8")).toBe(
           `Team ${file}`
@@ -753,6 +796,7 @@ describe("profile portability", () => {
     async (published) => {
       const { db, service } = await setup();
       const timestamp = now();
+
       for (const id of [VICTIM, ORG]) {
         await db.upsertOrganization({
           createdAt: timestamp,
@@ -763,12 +807,15 @@ describe("profile portability", () => {
           updatedAt: timestamp,
         });
       }
+
       const { profile } = await service.createProfile(ORG, {
         name: "Team agent",
       });
+
       const { profile: source } = await service.createProfile(VICTIM, {
         name: "Parent source",
       });
+
       const skill = (
         await new SkillsService(db).createSkill(VICTIM, {
           body: "parent-private-instructions",
@@ -777,6 +824,7 @@ describe("profile portability", () => {
           profileId: source.id,
         })
       ).skill;
+
       await db.assignSkillToProfile(profile.id, skill.id);
       await mkdir(getCustomToolsDir(), { recursive: true });
       await writeFile(
@@ -794,6 +842,7 @@ describe("profile portability", () => {
         updatedAt: timestamp,
       });
       await db.assignToolToProfile(profile.id, "parent_tool");
+
       if (published) {
         await db.publishOrgSharedResource({
           createdAt: timestamp,
@@ -804,9 +853,11 @@ describe("profile portability", () => {
           updatedAt: timestamp,
         });
       }
+
       const exported = await createProfilePackExport(db, ORG, profile.id, {
         includeCustomTools: true,
       });
+
       expect(exported.manifest.meta.toolNames).not.toContain("parent_tool");
       expect(exported.manifest.meta.profileSkillNames).not.toContain(
         "parent-only"
@@ -833,10 +884,12 @@ describe("profile portability", () => {
         await readFile(path.join(getCustomToolsDir(), "parent.js"), "utf8")
       ).toContain("parent-private-source");
       expect(await db.listToolsForProfile(profile.id)).toHaveLength(1);
+
       const imported = await importProfilePack(db, ORG, exported.data, {
         confirm: true,
         name: "Imported team agent",
       });
+
       expect(await db.listToolsForProfile(imported.profileId)).toEqual([]);
       expect(await db.listSkillsForProfile(imported.profileId)).toEqual([]);
     }
@@ -1046,10 +1099,12 @@ describe("profile portability", () => {
           },
         }),
       });
+
       await expect(
         previewProfilePackImport(db, DEST, invalid)
       ).rejects.toThrow();
     }
+
     expect(await db.listProfilesForOrg(DEST)).toHaveLength(before);
 
     await expect(
