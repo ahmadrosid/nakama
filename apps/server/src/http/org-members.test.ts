@@ -19,6 +19,7 @@ import {
 } from "@nakama/core";
 import type {
   CreateOrganizationResponse,
+  CreateTeamRequest,
   ListOrgSharedResourcesResponse,
   OrganizationOverviewResponse,
   OrgSharedResourceResponse,
@@ -40,6 +41,7 @@ setupTestConfigDir("nakama-org-members-test-");
 test("shared agent selection returns stable team profiles and enforces invocation access", async () => {
   const db = createInMemoryDatabaseAdapter();
   const profileService = new ProfileService(db);
+
   const { app, authService, orgService } = createMinimalHonoApp({
     agent: {
       getProfile: (orgId: string, profileId: string) =>
@@ -47,7 +49,9 @@ test("shared agent selection returns stable team profiles and enforces invocatio
     },
     databaseAdapter: db,
   });
+
   const now = new Date().toISOString();
+
   for (const id of ["org_parent", "org_team_a", "org_team_b", "org_other"]) {
     await db.upsertOrganization({
       createdAt: now,
@@ -58,6 +62,7 @@ test("shared agent selection returns stable team profiles and enforces invocatio
       updatedAt: now,
     });
   }
+
   for (const id of ["user_reader", "user_parent_admin"]) {
     await db.createUser({
       createdAt: now,
@@ -67,6 +72,7 @@ test("shared agent selection returns stable team profiles and enforces invocatio
       updatedAt: now,
     });
   }
+
   for (const orgId of ["org_team_a", "org_team_b", "org_other"]) {
     await db.upsertOrgMember({
       createdAt: now,
@@ -75,12 +81,14 @@ test("shared agent selection returns stable team profiles and enforces invocatio
       userId: "user_reader",
     });
   }
+
   await db.upsertOrgMember({
     createdAt: now,
     orgId: "org_parent",
     role: "admin",
     userId: "user_parent_admin",
   });
+
   const source = {
     createdAt: now,
     id: "profile_template",
@@ -92,23 +100,28 @@ test("shared agent selection returns stable team profiles and enforces invocatio
     systemPrompt: "Published instructions",
     updatedAt: now,
   };
+
   await db.upsertProfile(source);
   const sourceDir = getProfileSoulDir(source.orgId, source.id);
   await mkdir(sourceDir, { recursive: true });
+
   for (const file of ["MEMORY.md", "USER.md", "private.txt"]) {
     await writeFile(join(sourceDir, file), `Private ${file}`);
   }
+
   const publication = await orgService.publishSharedResource(
     "org_parent",
     { resourceId: source.id, resourceKind: "agent" },
     "user_parent_admin"
   );
+
   const session = await loginUserSession(
     app,
     "user_reader@example.com",
     "password123",
     "org_team_a"
   );
+
   const post = (
     pathOrg = "org_team_a",
     publicationId = publication.id,
@@ -133,17 +146,22 @@ test("shared agent selection returns stable team profiles and enforces invocatio
         }
       )
     );
+
   const responses = await Promise.all([post(), post(), post()]);
   const results: ProfileResponse[] = [];
+
   for (const response of responses) {
     expect(response.status).toBe(200);
     results.push(await response.json());
   }
+
   const profileId = results[0]?.profile.id;
   expect(profileId).toBeTruthy();
+
   if (!profileId) {
     throw new Error("Missing team profile");
   }
+
   expect(new Set(results.map((result) => result.profile.id)).size).toBe(1);
   expect(profileId).not.toBe(source.id);
   expect(await db.getProfileForOrg(profileId, "org_team_a")).toBeTruthy();
@@ -197,6 +215,7 @@ test("shared agent selection returns stable team profiles and enforces invocatio
     orgId: "org_parent",
     updatedAt: now,
   });
+
   const wrongKind = await db.publishOrgSharedResource({
     createdAt: now,
     id: "wrong-kind",
@@ -205,6 +224,7 @@ test("shared agent selection returns stable team profiles and enforces invocatio
     resourceKind: "tool",
     updatedAt: now,
   });
+
   expect((await post("org_team_a", wrongKind.id)).status).toBe(404);
   expect((await post("org_other", publication.id, "org_other")).status).toBe(
     409
@@ -222,19 +242,23 @@ test("shared agent selection returns stable team profiles and enforces invocatio
     role: "member",
     userId: "user_reader",
   });
+
   const csrf = await app.fetch(
     new Request(
       `http://localhost:4310/v1/orgs/org_team_a/shared-agents/${publication.id}/instance`,
       { headers: session.headers({}, "org_team_a"), method: "POST" }
     )
   );
+
   expect(csrf.status).toBe(403);
+
   const parentSession = await loginUserSession(
     app,
     "user_parent_admin@example.com",
     "password123",
     "org_parent"
   );
+
   for (const [orgId, expected] of [
     ["org_team_a", 404],
     ["org_parent", 409],
@@ -251,8 +275,10 @@ test("shared agent selection returns stable team profiles and enforces invocatio
         }
       )
     );
+
     expect(response.status).toBe(expected);
   }
+
   await db.upsertProfile({
     ...source,
     acpAgent: { args: ["--token", "parent-secret"], command: "agent" },
@@ -272,16 +298,19 @@ test("shared agent selection returns stable team profiles and enforces invocatio
   expect(await readFile(join(teamDir, "MEMORY.md"), "utf8")).toBe(
     "Team memory"
   );
+
   for (const file of ["MEMORY.md", "USER.md", "private.txt"]) {
     expect(await readFile(join(sourceDir, file), "utf8")).toBe(
       `Private ${file}`
     );
   }
+
   const republished = await orgService.publishSharedResource(
     "org_parent",
     { resourceId: source.id, resourceKind: "agent" },
     "user_parent_admin"
   );
+
   const recovered = await post("org_team_a", republished.id);
   expect(recovered.status).toBe(200);
   const recoveredResult: ProfileResponse = await recovered.json();
@@ -289,9 +318,11 @@ test("shared agent selection returns stable team profiles and enforces invocatio
   expect(await db.listProfilesForOrg("org_team_a")).toHaveLength(1);
   await db.deleteOrgMember("org_team_a", "user_reader");
   expect((await post("org_team_a", republished.id)).status).toBe(404);
+
   const specResponse = await app.fetch(
     new Request("http://localhost:4310/openapi.json")
   );
+
   const spec = await specResponse.json();
   expect(
     spec.paths["/v1/orgs/{orgId}/shared-agents/{publicationId}/instance"].post
@@ -306,7 +337,9 @@ test("organization overview filters teams, counts local additions, and preserves
     databaseAdapter: db,
     orgService,
   } = createMinimalHonoApp();
+
   const now = new Date().toISOString();
+
   for (const id of ["org_parent", "org_other", "org_team_a", "org_team_b"]) {
     await db.upsertOrganization({
       allowedInviteDomains: ["private-domain.example"],
@@ -319,6 +352,7 @@ test("organization overview filters teams, counts local additions, and preserves
       updatedAt: now,
     });
   }
+
   for (const id of ["user_reader", "user_parent_admin", "user_other_member"]) {
     await db.createUser({
       createdAt: now,
@@ -328,6 +362,7 @@ test("organization overview filters teams, counts local additions, and preserves
       updatedAt: now,
     });
   }
+
   for (const [orgId, userId, role] of [
     ["org_team_a", "user_reader", "member"],
     ["org_team_a", "user_other_member", "viewer"],
@@ -336,6 +371,7 @@ test("organization overview filters teams, counts local additions, and preserves
   ] as const) {
     await db.upsertOrgMember({ createdAt: now, orgId, role, userId });
   }
+
   for (const [id, orgId, isDefault, isSuper] of [
     ["profile_local", "org_team_a", false, false],
     ["profile_default", "org_team_a", true, false],
@@ -355,17 +391,20 @@ test("organization overview filters teams, counts local additions, and preserves
       updatedAt: now,
     });
   }
+
   const agentPublication = await orgService.publishSharedResource(
     "org_parent",
     { resourceId: "profile_template", resourceKind: "agent" },
     "user_parent_admin"
   );
+
   await db.createSharedAgentInstance(
     "org_team_a",
     agentPublication.id,
     "profile_shared",
     now
   );
+
   for (const [id, orgId] of [
     ["tool_local", "org_team_a"],
     ["tool_parent", "org_parent"],
@@ -383,11 +422,13 @@ test("organization overview filters teams, counts local additions, and preserves
       updatedAt: now,
     });
   }
+
   await orgService.publishSharedResource(
     "org_parent",
     { resourceId: "tool_parent", resourceKind: "tool" },
     "user_parent_admin"
   );
+
   for (const [id, orgId, enabled] of [
     ["skill_local", "org_team_a", true],
     ["skill_disabled", "org_team_a", false],
@@ -408,16 +449,19 @@ test("organization overview filters teams, counts local additions, and preserves
       updatedAt: now,
     });
   }
+
   await uploadOrganizationKnowledgeBaseDocument("org_team_a", {
     data: Buffer.from("Private team knowledge").toString("base64"),
     filename: "private-team-file.txt",
     mediaType: "text/plain",
   });
+
   const session = await loginUserSession(
     app,
     "user_reader@example.com",
     "password123"
   );
+
   await db.beginOrgTeamCreation({
     adminUserId: "user_reader",
     creatorUserId: "user_parent_admin",
@@ -432,18 +476,22 @@ test("organization overview filters teams, counts local additions, and preserves
     requestHash: "hash",
     requestId: "pending-request",
   });
+
   const get = (pathOrg: string, activeOrg = pathOrg, query = "") =>
     app.fetch(
       new Request(`http://localhost:4310/v1/orgs/${pathOrg}/overview${query}`, {
         headers: session.headers({}, activeOrg),
       })
     );
+
   const countOrgs: string[] = [];
   const getCounts = db.getOrganizationResourceCounts;
   db.getOrganizationResourceCounts = (id) => {
     countOrgs.push(id);
+
     return getCounts(id);
   };
+
   const response = await get("org_team_a");
   expect(response.status).toBe(200);
   const result: OrganizationOverviewResponse = await response.json();
@@ -469,6 +517,7 @@ test("organization overview filters teams, counts local additions, and preserves
     result.sharedResources.map((entry) => entry.resourceKind).sort()
   ).toEqual(["agent", "tool"]);
   const serialized = JSON.stringify(result);
+
   for (const secret of [
     "org_team_b",
     "org_other",
@@ -481,10 +530,13 @@ test("organization overview filters teams, counts local additions, and preserves
   ]) {
     expect(serialized).not.toContain(secret);
   }
+
   expect(Object.keys(result.organization).sort()).toEqual(["id", "name"]);
+
   const manifestPath = getKnowledgeBaseManifestPath(
     getOrgKnowledgeBaseDir("org_team_a")
   );
+
   const manifest = await readFile(manifestPath, "utf8");
   const foreignDir = getOrgKnowledgeBaseDir("org_other");
   const foreignManifest = getKnowledgeBaseManifestPath(foreignDir);
@@ -492,6 +544,7 @@ test("organization overview filters teams, counts local additions, and preserves
   await writeFile(foreignManifest, "{}");
   await rm(manifestPath);
   await symlink(foreignManifest, manifestPath);
+
   try {
     const failed = await get("org_team_a");
     expect(failed.status).toBe(500);
@@ -500,6 +553,7 @@ test("organization overview filters teams, counts local additions, and preserves
     await rm(manifestPath);
     await writeFile(manifestPath, manifest);
   }
+
   expect(await (await get("org_team_a")).json()).toEqual(result);
   expect(
     await (
@@ -513,6 +567,7 @@ test("organization overview filters teams, counts local additions, and preserves
     orgService.getOrganizationOverview("org_parent", "user_reader")
   ).rejects.toMatchObject({ status: 404 });
   expect(await db.getOrganizationResourceCounts("org_missing")).toBeNull();
+
   for (const role of ["admin", "viewer"] as const) {
     await db.upsertOrgMember({
       createdAt: now,
@@ -522,15 +577,18 @@ test("organization overview filters teams, counts local additions, and preserves
     });
     expect(await (await get("org_team_a")).json()).toEqual(result);
   }
+
   await db.upsertOrgMember({
     createdAt: now,
     orgId: "org_team_b",
     role: "viewer",
     userId: "user_reader",
   });
+
   const sibling: OrganizationOverviewResponse = await (
     await get("org_team_a")
   ).json();
+
   expect(sibling.teams.map((team) => team.id)).toEqual([
     "org_team_a",
     "org_team_b",
@@ -547,15 +605,19 @@ test("organization overview filters teams, counts local additions, and preserves
     role: "viewer",
     userId: "user_reader",
   });
+
   const rootReader: OrganizationOverviewResponse = await (
     await get("org_parent")
   ).json();
+
   expect(rootReader.canManageOrganization).toBe(false);
   expect(rootReader.teams.every((team) => !team.isCurrent)).toBe(true);
+
   const parentAdmin = await orgService.getOrganizationOverview(
     "org_parent",
     "user_parent_admin"
   );
+
   expect(parentAdmin.canManageOrganization).toBe(true);
   expect(parentAdmin.teams.map((team) => team.id)).toEqual([
     "org_team_a",
@@ -571,10 +633,12 @@ test("organization overview filters teams, counts local additions, and preserves
     role: "member",
     userId: "user_parent_admin",
   });
+
   const adminTeam = await orgService.getOrganizationOverview(
     "org_team_a",
     "user_parent_admin"
   );
+
   expect(adminTeam.canManageOrganization).toBe(false);
   expect(adminTeam.teams[0]).toMatchObject({
     canSwitch: true,
@@ -585,9 +649,11 @@ test("organization overview filters teams, counts local additions, and preserves
   await db.deleteTool("tool_local");
   await db.deleteSkill("skill_local");
   await db.deleteProfile("profile_local");
+
   const changed: OrganizationOverviewResponse = await (
     await get("org_team_a")
   ).json();
+
   expect(changed.teams[0].localResourceCounts).toEqual({
     agents: 0,
     knowledge: 1,
@@ -600,9 +666,11 @@ test("organization overview filters teams, counts local additions, and preserves
     role: "admin",
     userId: "user_reader",
   });
+
   const standalone: OrganizationOverviewResponse = await (
     await get("org_other")
   ).json();
+
   expect(standalone).toEqual({
     activeOrgId: "org_other",
     canManageOrganization: true,
@@ -611,30 +679,37 @@ test("organization overview filters teams, counts local additions, and preserves
     teams: [],
   });
   const platform = await loginPlatformAdminSession(app, authService, db);
+
   const platformResponse = await app.fetch(
     new Request("http://localhost:4310/v1/orgs/org_parent/overview", {
       headers: platform.headers({}, "org_parent"),
     })
   );
+
   const platformResult: OrganizationOverviewResponse =
     await platformResponse.json();
+
   expect(platformResponse.status).toBe(200);
   expect(platformResult.canManageOrganization).toBe(true);
   expect(platformResult.teams.every((team) => team.canSwitch)).toBe(true);
   const teamB = await db.getOrganizationById("org_team_b");
   await db.upsertOrganization({ ...teamB!, archivedAt: now });
+
   const archived = await orgService.getOrganizationOverview(
     "org_parent",
     "user_parent_admin"
   );
+
   expect(archived.teams.map((team) => team.id)).toEqual(["org_team_a"]);
   await db.disableUser("user_reader", now);
   await expect(
     orgService.getOrganizationOverview("org_team_a", "user_reader")
   ).rejects.toMatchObject({ status: 404 });
+
   const openapi = await app.fetch(
     new Request("http://localhost:4310/openapi.json")
   );
+
   const spec = await openapi.json();
   expect(
     spec.paths["/v1/orgs/{orgId}/overview"].get.responses["200"]
@@ -668,15 +743,18 @@ test("publication HTTP mutations validate all resource kinds and preserve source
     role: "admin",
     userId: "user_publisher",
   });
+
   const session = await loginUserSession(
     app,
     "publisher@example.com",
     "password123"
   );
+
   const headers = session.headers(
     { "Content-Type": "application/json", "X-CSRF-Token": session.csrfToken },
     "org_parent"
   );
+
   await db.upsertProfile({
     createdAt: now,
     id: "profile_source",
@@ -698,14 +776,18 @@ test("publication HTTP mutations validate all resource kinds and preserve source
     orgId: "org_parent",
     updatedAt: now,
   });
+
   const skillPath = resolveProfileSkillDirectory(
     "org_parent",
     "profile_source",
     "source-skill"
   );
+
   await mkdir(skillPath, { recursive: true });
+
   const content =
     "---\nname: source-skill\ndescription: Test\n---\nInstructions";
+
   await writeFile(join(skillPath, "SKILL.md"), content);
   await db.upsertSkill({
     createdAt: now,
@@ -720,6 +802,7 @@ test("publication HTTP mutations validate all resource kinds and preserve source
     sourcePath: skillPath,
     updatedAt: now,
   });
+
   const { document } = await uploadOrganizationKnowledgeBaseDocument(
     "org_parent",
     {
@@ -728,6 +811,7 @@ test("publication HTTP mutations validate all resource kinds and preserve source
       mediaType: "text/plain",
     }
   );
+
   await saveUserConfig({
     defaultProviderId: "provider_source",
     providers: [
@@ -743,6 +827,7 @@ test("publication HTTP mutations validate all resource kinds and preserve source
     thinkingEffort: "medium",
     thinkingEnabled: true,
   });
+
   const requests: PublishOrgSharedResourceRequest[] = [
     { resourceId: document.id, resourceKind: "knowledge" },
     { resourceId: "skill_source", resourceKind: "skill" },
@@ -750,17 +835,20 @@ test("publication HTTP mutations validate all resource kinds and preserve source
     { resourceId: "tool_source", resourceKind: "tool" },
     { resourceId: "provider_source::source-model", resourceKind: "model" },
   ];
-  const post = (body: unknown) =>
+
+  const post = (body: string) =>
     app.fetch(
       new Request("http://localhost:4310/v1/orgs/org_parent/shared-resources", {
-        body: JSON.stringify(body),
+        body,
         headers,
         method: "POST",
       })
     );
+
   expect(await db.listOrgSharedResources("org_parent")).toEqual([]);
+
   for (const request of requests) {
-    const response = await post(request);
+    const response = await post(JSON.stringify(request));
     expect(response.status).toBe(201);
     const result: OrgSharedResourceResponse = await response.json();
     expect(result.publication).toMatchObject({
@@ -775,14 +863,16 @@ test("publication HTTP mutations validate all resource kinds and preserve source
       "resourceKind",
       "updatedAt",
     ]);
-    const retry = await post(request);
+    const retry = await post(JSON.stringify(request));
     expect(retry.status).toBe(201);
     expect(await retry.json()).toEqual(result);
+
     const listed = await app.fetch(
       new Request("http://localhost:4310/v1/orgs/org_parent/shared-resources", {
         headers: session.headers({}, "org_parent"),
       })
     );
+
     expect(listed.status).toBe(200);
     const summaries: ListOrgSharedResourcesResponse = await listed.json();
     expect(summaries.resources).toEqual([
@@ -803,8 +893,10 @@ test("publication HTTP mutations validate all resource kinds and preserve source
     expect(serialized).not.toContain("private-source-token");
     expect(serialized).not.toContain("private-provider-key");
     expect(serialized).not.toContain(skillPath);
+
     if (request.resourceKind === "skill") {
       await rm(join(skillPath, "SKILL.md"));
+
       const unavailable = await app.fetch(
         new Request(
           "http://localhost:4310/v1/orgs/org_parent/shared-resources",
@@ -813,6 +905,7 @@ test("publication HTTP mutations validate all resource kinds and preserve source
           }
         )
       );
+
       const missing: ListOrgSharedResourcesResponse = await unavailable.json();
       expect(missing.resources[0]).toMatchObject({
         id: result.publication.id,
@@ -821,6 +914,7 @@ test("publication HTTP mutations validate all resource kinds and preserve source
       });
       await writeFile(join(skillPath, "SKILL.md"), content);
     }
+
     for (let attempt = 0; attempt < 2; attempt++) {
       const removed = await app.fetch(
         new Request(
@@ -828,16 +922,19 @@ test("publication HTTP mutations validate all resource kinds and preserve source
           { headers, method: "DELETE" }
         )
       );
+
       expect(removed.status).toBe(204);
       expect(await removed.text()).toBe("");
     }
   }
+
   expect(await db.listOrgSharedResources("org_parent")).toEqual([]);
   expect(await readFile(join(skillPath, "SKILL.md"), "utf8")).toBe(content);
   expect((await db.getTool("tool_source"))?.handlerConfig).toEqual({
     token: "private-source-token",
   });
   expect(await db.getProfile("profile_source")).toBeTruthy();
+
   for (const body of [
     { resourceId: "tool_source", resourceKind: "unknown" },
     { resourceId: "", resourceKind: "tool" },
@@ -848,10 +945,15 @@ test("publication HTTP mutations validate all resource kinds and preserve source
       resourceKind: "tool",
     },
   ]) {
-    expect((await post(body)).status).toBe(400);
+    expect((await post(JSON.stringify(body))).status).toBe(400);
   }
+
   expect(
-    (await post({ resourceId: "missing", resourceKind: "tool" })).status
+    (
+      await post(
+        JSON.stringify({ resourceId: "missing", resourceKind: "tool" })
+      )
+    ).status
   ).toBe(404);
 });
 
@@ -862,7 +964,9 @@ test("publication lists derive the active team's parent and enforce read access"
     databaseAdapter: db,
     orgService,
   } = createMinimalHonoApp();
+
   const now = new Date().toISOString();
+
   for (const id of ["org_parent", "org_other", "org_team_a", "org_team_b"]) {
     await db.upsertOrganization({
       createdAt: now,
@@ -873,6 +977,7 @@ test("publication lists derive the active team's parent and enforce read access"
       updatedAt: now,
     });
   }
+
   await db.createUser({
     createdAt: now,
     email: "reader@example.com",
@@ -880,6 +985,7 @@ test("publication lists derive the active team's parent and enforce read access"
     passwordHash: await authService.hashPassword("password123"),
     updatedAt: now,
   });
+
   for (const orgId of ["org_team_a", "org_team_b", "org_other"]) {
     await db.upsertOrgMember({
       createdAt: now,
@@ -888,6 +994,7 @@ test("publication lists derive the active team's parent and enforce read access"
       userId: "user_reader",
     });
   }
+
   for (const [id, orgId] of [
     ["tool_published", "org_parent"],
     ["tool_private", "org_parent"],
@@ -904,6 +1011,7 @@ test("publication lists derive the active team's parent and enforce read access"
       updatedAt: now,
     });
   }
+
   for (const [id, orgId, resourceId] of [
     ["publication_parent", "org_parent", "tool_published"],
     ["publication_other", "org_other", "tool_other"],
@@ -917,11 +1025,13 @@ test("publication lists derive the active team's parent and enforce read access"
       updatedAt: now,
     });
   }
+
   const session = await loginUserSession(
     app,
     "reader@example.com",
     "password123"
   );
+
   const get = (pathOrg: string, activeOrg = pathOrg, query = "") =>
     app.fetch(
       new Request(
@@ -929,6 +1039,7 @@ test("publication lists derive the active team's parent and enforce read access"
         { headers: session.headers({}, activeOrg) }
       )
     );
+
   const first = await get("org_team_a");
   expect(first.status).toBe(200);
   const result: ListOrgSharedResourcesResponse = await first.json();
@@ -965,6 +1076,7 @@ test("publication lists derive the active team's parent and enforce read access"
   await expect(
     orgService.listSharedResources("org_team_a", "user_missing")
   ).rejects.toMatchObject({ status: 404 });
+
   for (const role of ["member", "viewer"] as const) {
     await db.upsertOrgMember({
       createdAt: now,
@@ -974,17 +1086,20 @@ test("publication lists derive the active team's parent and enforce read access"
     });
     expect(await (await get("org_parent")).json()).toEqual(result);
   }
+
   await db.deleteOrgMember("org_team_b", "user_reader");
   expect((await get("org_team_b")).status).toBe(404);
   await expect(
     orgService.listSharedResources("org_team_b", "user_reader")
   ).rejects.toMatchObject({ status: 404 });
   const platform = await loginPlatformAdminSession(app, authService, db);
+
   const platformList = await app.fetch(
     new Request("http://localhost:4310/v1/orgs/org_team_b/shared-resources", {
       headers: platform.headers({}, "org_team_b"),
     })
   );
+
   expect(platformList.status).toBe(200);
   expect(await platformList.json()).toEqual(result);
   await db.upsertTool({
@@ -992,9 +1107,11 @@ test("publication lists derive the active team's parent and enforce read access"
     name: "Changed source name",
     orgId: "org_other",
   });
+
   const invalid: ListOrgSharedResourcesResponse = await (
     await get("org_team_a")
   ).json();
+
   expect(invalid.resources[0]).toMatchObject({
     label: "tool_published",
     readiness: "unavailable",
@@ -1005,10 +1122,12 @@ test("publication lists derive the active team's parent and enforce read access"
   const getOrganizationById = db.getOrganizationById;
   db.getOrganizationById = async (id) => {
     const record = await getOrganizationById(id);
+
     return record && id === "org_parent"
       ? { ...record, archivedAt: now }
       : record;
   };
+
   try {
     expect((await get("org_team_a")).status).toBe(404);
     await expect(
@@ -1017,13 +1136,16 @@ test("publication lists derive the active team's parent and enforce read access"
   } finally {
     db.getOrganizationById = getOrganizationById;
   }
+
   await db.disableUser("user_reader", now);
   await expect(
     orgService.listSharedResources("org_team_a", "user_reader")
   ).rejects.toMatchObject({ status: 404 });
+
   const openapi = await app.fetch(
     new Request("http://localhost:4310/openapi.json")
   );
+
   const spec = await openapi.json();
   expect(
     spec.paths["/v1/orgs/{orgId}/shared-resources"].get.responses["200"]
@@ -1037,6 +1159,7 @@ test("publication lists derive the active team's parent and enforce read access"
 test("publication HTTP mutations deny team admins, members, viewers, and wrong tenant context", async () => {
   const { app, authService, databaseAdapter: db } = createMinimalHonoApp();
   const now = new Date().toISOString();
+
   for (const id of ["org_parent", "org_other", "org_team_a", "org_team_b"]) {
     await db.upsertOrganization({
       createdAt: now,
@@ -1047,6 +1170,7 @@ test("publication HTTP mutations deny team admins, members, viewers, and wrong t
       updatedAt: now,
     });
   }
+
   await db.createUser({
     createdAt: now,
     email: "publisher@example.com",
@@ -1054,6 +1178,7 @@ test("publication HTTP mutations deny team admins, members, viewers, and wrong t
     passwordHash: await authService.hashPassword("password123"),
     updatedAt: now,
   });
+
   for (const orgId of ["org_parent", "org_other", "org_team_a", "org_team_b"]) {
     await db.upsertOrgMember({
       createdAt: now,
@@ -1062,6 +1187,7 @@ test("publication HTTP mutations deny team admins, members, viewers, and wrong t
       userId: "user_publisher",
     });
   }
+
   await db.upsertTool({
     createdAt: now,
     description: "Test",
@@ -1072,38 +1198,49 @@ test("publication HTTP mutations deny team admins, members, viewers, and wrong t
     orgId: "org_parent",
     updatedAt: now,
   });
+
   const session = await loginUserSession(
     app,
     "publisher@example.com",
     "password123"
   );
+
   const request = { resourceId: "tool_source", resourceKind: "tool" };
+
   const send = (
     method: "POST" | "DELETE",
     pathOrg: string,
     activeOrg: string,
     publicationId = "missing",
     csrf = true
-  ) =>
-    app.fetch(
+  ) => {
+    const headers = session.headers(
+      { "Content-Type": "application/json" },
+      activeOrg
+    );
+
+    if (csrf) {
+      headers["X-CSRF-Token"] = session.csrfToken;
+    }
+
+    const init: RequestInit = { headers, method };
+
+    if (method === "POST") {
+      init.body = JSON.stringify(request);
+    }
+
+    return app.fetch(
       new Request(
         `http://localhost:4310/v1/orgs/${pathOrg}/shared-resources${method === "DELETE" ? `/${publicationId}` : ""}`,
-        {
-          ...(method === "POST" ? { body: JSON.stringify(request) } : {}),
-          headers: session.headers(
-            {
-              "Content-Type": "application/json",
-              ...(csrf ? { "X-CSRF-Token": session.csrfToken } : {}),
-            },
-            activeOrg
-          ),
-          method,
-        }
+        init
       )
     );
+  };
+
   const created = await send("POST", "org_parent", "org_parent");
   expect(created.status).toBe(201);
   const { publication }: OrgSharedResourceResponse = await created.json();
+
   for (const orgId of ["org_team_a", "org_team_b"]) {
     for (const method of ["POST", "DELETE"] as const) {
       expect(
@@ -1114,10 +1251,12 @@ test("publication HTTP mutations deny team admins, members, viewers, and wrong t
       );
     }
   }
+
   expect(
     (await send("DELETE", "org_other", "org_other", publication.id)).status
   ).toBe(204);
   expect((await send("POST", "org_other", "org_other")).status).toBe(404);
+
   for (const role of ["member", "viewer"] as const) {
     await db.upsertOrgMember({
       createdAt: now,
@@ -1125,26 +1264,31 @@ test("publication HTTP mutations deny team admins, members, viewers, and wrong t
       role,
       userId: "user_publisher",
     });
+
     for (const method of ["POST", "DELETE"] as const) {
       expect(
         (await send(method, "org_parent", "org_parent", publication.id)).status
       ).toBe(403);
     }
   }
+
   await db.upsertOrgMember({
     createdAt: now,
     orgId: "org_parent",
     role: "admin",
     userId: "user_publisher",
   });
+
   for (const method of ["POST", "DELETE"] as const) {
     expect(
       (await send(method, "org_parent", "org_parent", publication.id, false))
         .status
     ).toBe(403);
   }
+
   expect(await db.listOrgSharedResources("org_parent")).toEqual([publication]);
   const platform = await loginPlatformAdminSession(app, authService, db);
+
   const platformPublish = await app.fetch(
     new Request("http://localhost:4310/v1/orgs/org_parent/shared-resources", {
       body: JSON.stringify(request),
@@ -1158,11 +1302,14 @@ test("publication HTTP mutations deny team admins, members, viewers, and wrong t
       method: "POST",
     })
   );
+
   expect(platformPublish.status).toBe(201);
   expect(await platformPublish.json()).toEqual({ publication });
+
   const specResponse = await app.fetch(
     new Request("http://localhost:4310/openapi.json")
   );
+
   expect(specResponse.status).toBe(200);
   const spec = await specResponse.json();
   expect(
@@ -1185,6 +1332,7 @@ test("team creation uses existing accounts, preserves selection, and recovers re
     slug: "parent",
     updatedAt: now,
   });
+
   for (const id of ["user_creator", "user_selected"]) {
     await db.createUser({
       createdAt: now,
@@ -1194,19 +1342,23 @@ test("team creation uses existing accounts, preserves selection, and recovers re
       updatedAt: now,
     });
   }
+
   await db.upsertOrgMember({
     createdAt: now,
     orgId: "org_parent",
     role: "admin",
     userId: "user_creator",
   });
+
   const session = await loginUserSession(
     app,
     "user_creator@example.com",
     "password123"
   );
+
   const request = { name: "Team", requestId: "team-request", slug: "team" };
-  const post = (body: unknown) =>
+
+  const post = (body: CreateTeamRequest) =>
     app.fetch(
       new Request("http://localhost:4310/v1/orgs/org_parent/teams", {
         body: JSON.stringify(body),
@@ -1220,6 +1372,7 @@ test("team creation uses existing accounts, preserves selection, and recovers re
         method: "POST",
       })
     );
+
   const response = await post(request);
   expect(response.status).toBe(201);
   const created: CreateOrganizationResponse = await response.json();
@@ -1239,12 +1392,14 @@ test("team creation uses existing accounts, preserves selection, and recovers re
   ).toHaveLength(1);
   const conflict = await post({ ...request, name: "Changed" });
   expect(conflict.status).toBe(409);
+
   const selected = await post({
     ...request,
     adminUserId: "user_selected",
     requestId: "selected-request",
     slug: "selected-team",
   });
+
   expect(selected.status).toBe(201);
   const other: CreateOrganizationResponse = await selected.json();
   expect(other.adminMember?.member.userId).toBe("user_selected");
@@ -1257,11 +1412,13 @@ test("team creation uses existing accounts, preserves selection, and recovers re
       .map((entry) => entry.userId)
   ).toEqual(["user_selected"]);
   expect(await db.getUserById("user_selected")).toBeTruthy();
+
   const me = await app.fetch(
     new Request("http://localhost:4310/v1/auth/me", {
       headers: session.headers(),
     })
   );
+
   expect(me.status).toBe(200);
   expect(await me.json()).toMatchObject({ activeOrgId: "org_parent" });
 });
@@ -1269,6 +1426,7 @@ test("team creation uses existing accounts, preserves selection, and recovers re
 test("team creation rejects invalid bodies, roles, contexts, and nested teams", async () => {
   const { app, authService, databaseAdapter: db } = createMinimalHonoApp();
   const now = new Date().toISOString();
+
   for (const id of ["org_parent", "org_other"]) {
     await db.upsertOrganization({
       createdAt: now,
@@ -1278,6 +1436,7 @@ test("team creation rejects invalid bodies, roles, contexts, and nested teams", 
       updatedAt: now,
     });
   }
+
   await db.createUser({
     createdAt: now,
     email: "creator@example.com",
@@ -1291,31 +1450,39 @@ test("team creation rejects invalid bodies, roles, contexts, and nested teams", 
     role: "admin",
     userId: "user_creator",
   });
+
   const session = await loginUserSession(
     app,
     "creator@example.com",
     "password123"
   );
+
   const request = { name: "Team", requestId: "team-request", slug: "team" };
+
   const post = (
-    body: unknown,
+    body: string,
     pathOrg = "org_parent",
     activeOrg = "org_parent",
     csrf = true
-  ) =>
-    app.fetch(
+  ) => {
+    const headers = session.headers(
+      { "Content-Type": "application/json" },
+      activeOrg
+    );
+
+    if (csrf) {
+      headers["X-CSRF-Token"] = session.csrfToken;
+    }
+
+    return app.fetch(
       new Request(`http://localhost:4310/v1/orgs/${pathOrg}/teams`, {
-        body: JSON.stringify(body),
-        headers: session.headers(
-          {
-            "Content-Type": "application/json",
-            ...(csrf ? { "X-CSRF-Token": session.csrfToken } : {}),
-          },
-          activeOrg
-        ),
+        body,
+        headers,
         method: "POST",
       })
     );
+  };
+
   for (const changes of [
     { requestId: 12 },
     { requestId: "" },
@@ -1327,18 +1494,25 @@ test("team creation rejects invalid bodies, roles, contexts, and nested teams", 
     { parentOrgId: "org_other" },
     { admin: { email: "new@example.com" } },
   ]) {
-    expect((await post({ ...request, ...changes })).status).toBe(400);
+    expect(
+      (await post(JSON.stringify({ ...request, ...changes }))).status
+    ).toBe(400);
   }
+
   expect(
     (await db.listOrganizations()).filter(
       (org) => org.parentOrgId === "org_parent"
     )
   ).toEqual([]);
-  expect((await post(request, "org_other")).status).toBe(404);
-  expect((await post(request, "org_other", "org_other")).status).toBe(404);
-  expect((await post(request, "org_parent", "org_parent", false)).status).toBe(
-    403
-  );
+  expect((await post(JSON.stringify(request), "org_other")).status).toBe(404);
+  expect(
+    (await post(JSON.stringify(request), "org_other", "org_other")).status
+  ).toBe(404);
+  expect(
+    (await post(JSON.stringify(request), "org_parent", "org_parent", false))
+      .status
+  ).toBe(403);
+
   for (const role of ["member", "viewer"] as const) {
     await db.upsertOrgMember({
       createdAt: now,
@@ -1346,21 +1520,22 @@ test("team creation rejects invalid bodies, roles, contexts, and nested teams", 
       role,
       userId: "user_creator",
     });
-    expect((await post(request)).status).toBe(403);
+    expect((await post(JSON.stringify(request))).status).toBe(403);
   }
+
   await db.upsertOrgMember({
     createdAt: now,
     orgId: "org_parent",
     role: "admin",
     userId: "user_creator",
   });
-  const child = await post(request);
+  const child = await post(JSON.stringify(request));
   expect(child.status).toBe(201);
   const created: CreateOrganizationResponse = await child.json();
   expect(
     (
       await post(
-        { ...request, requestId: "nested", slug: "nested" },
+        JSON.stringify({ ...request, requestId: "nested", slug: "nested" }),
         created.organization.id,
         created.organization.id
       )
@@ -1371,9 +1546,11 @@ test("team creation rejects invalid bodies, roles, contexts, and nested teams", 
       (org) => org.parentOrgId === created.organization.id
     )
   ).toEqual([]);
+
   const specResponse = await app.fetch(
     new Request("http://localhost:4310/openapi.json")
   );
+
   expect(specResponse.status).toBe(200);
   const spec = await specResponse.json();
   expect(
@@ -1716,11 +1893,13 @@ describe("org member management (AE2)", () => {
 
 test("pending team setup blocks tenant requests even for platform admins", async () => {
   const { app, authService, databaseAdapter } = createMinimalHonoApp();
+
   const session = await loginPlatformAdminSession(
     app,
     authService,
     databaseAdapter
   );
+
   const user = (await databaseAdapter.listPlatformAdminUsers())[0];
   expect(user).toBeTruthy();
   const now = new Date().toISOString();
@@ -1745,16 +1924,20 @@ test("pending team setup blocks tenant requests even for platform admins", async
     requestHash: "hash",
     requestId: "pending-request",
   });
+
   const pending = await app.fetch(
     new Request("http://localhost:4310/v1/profiles", {
       headers: session.headers({}, "org_pending"),
     })
   );
+
   expect(pending.status).toBe(404);
+
   const parent = await app.fetch(
     new Request("http://localhost:4310/v1/profiles", {
       headers: session.headers({}, "org_parent"),
     })
   );
+
   expect(parent.status).toBe(200);
 });

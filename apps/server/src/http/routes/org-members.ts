@@ -107,6 +107,7 @@ export function registerOrgMemberRoutes(
     "tool",
     "model",
   ]);
+
   const publishSharedResourceSchema = z
     .object({
       resourceId: z.string().trim().min(1),
@@ -114,6 +115,7 @@ export function registerOrgMemberRoutes(
     })
     .strict()
     .openapi("PublishOrgSharedResourceRequest");
+
   const sharedResourceResponseSchema = z
     .object({
       publication: z.object({
@@ -126,11 +128,13 @@ export function registerOrgMemberRoutes(
       }),
     })
     .openapi("OrgSharedResourceResponse");
+
   const sharedResourceParams = orgIdParam.extend({
     publicationId: z
       .string()
       .openapi({ param: { in: "path", name: "publicationId" } }),
   });
+
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
@@ -172,23 +176,29 @@ export function registerOrgMemberRoutes(
     async (c) => {
       const auth = getRequestAuth(c);
       const orgId = decodeURIComponent(c.req.param("orgId"));
+
       if (auth.activeOrgId !== orgId) {
         return errorResponse("Not found", 404);
       }
+
       requireNotViewer(auth);
+
       if (!orgService) {
         return errorResponse("Organization service not configured", 500);
       }
+
       const profile = await orgService.createSharedAgentInstance(
         orgId,
         decodeURIComponent(c.req.param("publicationId")),
         auth.user.id
       );
+
       return json<ProfileResponse>(
         await options.agent.getProfile(orgId, profile.id)
       );
     }
   );
+
   const listSharedResourcesResponseSchema = z
     .object({
       resources: z.array(
@@ -200,6 +210,7 @@ export function registerOrgMemberRoutes(
       ),
     })
     .openapi("ListOrgSharedResourcesResponse");
+
   const organizationOverviewSchema = z
     .object({
       activeOrgId: z.string(),
@@ -224,6 +235,7 @@ export function registerOrgMemberRoutes(
       ),
     })
     .openapi("OrganizationOverviewResponse");
+
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "get",
@@ -253,12 +265,15 @@ export function registerOrgMemberRoutes(
   app.get("/v1/orgs/:orgId/overview", async (c) => {
     const auth = getRequestAuth(c);
     const orgId = decodeURIComponent(c.req.param("orgId"));
+
     if (auth.activeOrgId !== orgId) {
       return errorResponse("Not found", 404);
     }
+
     if (!orgService) {
       return errorResponse("Organization service not configured", 500);
     }
+
     return json<OrganizationOverviewResponse>(
       await orgService.getOrganizationOverview(orgId, auth.user.id)
     );
@@ -292,12 +307,15 @@ export function registerOrgMemberRoutes(
   app.get("/v1/orgs/:orgId/shared-resources", async (c) => {
     const auth = getRequestAuth(c);
     const orgId = decodeURIComponent(c.req.param("orgId"));
+
     if (auth.activeOrgId !== orgId) {
       return errorResponse("Not found", 404);
     }
+
     if (!orgService) {
       return errorResponse("Organization service not configured", 500);
     }
+
     return json<ListOrgSharedResourcesResponse>(
       await orgService.listSharedResources(orgId, auth.user.id)
     );
@@ -351,18 +369,23 @@ export function registerOrgMemberRoutes(
   app.post("/v1/orgs/:orgId/shared-resources", async (c) => {
     const auth = requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = decodeURIComponent(c.req.param("orgId"));
+
     if (auth.activeOrgId !== orgId) {
       return errorResponse("Not found", 404);
     }
+
     if (!orgService) {
       return errorResponse("Organization service not configured", 500);
     }
+
     const body = await readJson(c.req.raw, publishSharedResourceSchema);
+
     const publication = await orgService.publishSharedResource(
       orgId,
       body,
       auth.user.id
     );
+
     return json<OrgSharedResourceResponse>({ publication }, 201);
   });
   app.openAPIRegistry.registerPath(
@@ -397,17 +420,21 @@ export function registerOrgMemberRoutes(
   app.delete("/v1/orgs/:orgId/shared-resources/:publicationId", async (c) => {
     const auth = requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = decodeURIComponent(c.req.param("orgId"));
+
     if (auth.activeOrgId !== orgId) {
       return errorResponse("Not found", 404);
     }
+
     if (!orgService) {
       return errorResponse("Organization service not configured", 500);
     }
+
     await orgService.unpublishSharedResource(
       orgId,
       decodeURIComponent(c.req.param("publicationId")),
       auth.user.id
     );
+
     return new Response(null, { status: 204 });
   });
 
@@ -420,6 +447,7 @@ export function registerOrgMemberRoutes(
     })
     .strict()
     .openapi("CreateTeamRequest");
+
   const createTeamResponseSchema = z
     .object({
       adminMember: z
@@ -445,6 +473,7 @@ export function registerOrgMemberRoutes(
         .passthrough(),
     })
     .openapi("CreateTeamResponse");
+
   app.openAPIRegistry.registerPath(
     createRoute({
       method: "post",
@@ -490,13 +519,17 @@ export function registerOrgMemberRoutes(
   app.post("/v1/orgs/:orgId/teams", async (c) => {
     const auth = requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = decodeURIComponent(c.req.param("orgId"));
+
     if (auth.activeOrgId !== orgId) {
       return errorResponse("Not found", 404);
     }
+
     if (!orgService) {
       return errorResponse("Organization service not configured", 500);
     }
+
     const body = await readJson(c.req.raw, createTeamSchema);
+
     return json<CreateOrganizationResponse>(
       await orgService.createTeam(orgId, body, auth.user.id),
       201
@@ -811,6 +844,7 @@ export function registerOrgMemberRoutes(
     if (!options.databaseAdapter) {
       return errorResponse("Database not configured", 500);
     }
+
     const quota = await new OrgUsageQuotaService(
       options.databaseAdapter
     ).getStatus(orgId);
