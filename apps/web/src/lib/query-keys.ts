@@ -42,6 +42,8 @@ export const queryKeys = {
     organization: (orgId: string) =>
       ["knowledgeBase", "organization", orgId] as const,
     profile: (profileId: string) => ["knowledgeBase", profileId] as const,
+    published: (orgId: string, publicationId: string) =>
+      ["knowledgeBase", "published", orgId, publicationId] as const,
   },
   mcp: {
     all: ["mcp", "servers"] as const,

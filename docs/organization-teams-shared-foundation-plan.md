@@ -2276,3 +2276,15 @@ React Doctor improved from 88/100 to 90/100 but remains below the 91/100 baselin
 Only this progress entry is committed. The component, its tests, and query keys remain unstaged for the next iteration. Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: resolve the remaining object URL diagnostic, then verify and commit knowledge actions. No browser check, full suite, build, paid call, push, or PR ran.
 
 Evidence: /tmp/nakama-knowledge-actions-{focused,types,oxlint,lint,doctor,rule}.log.
+
+### Slice 3k — Knowledge preview and download controls
+
+Committed the knowledge actions left unstaged by slice 3j. Ready knowledge chips now open a read-only dialog in team context. Preview reads extracted text with the active team ID and publication ID. Download requests original bytes separately and checks publication access again. Both use the typed client operation and explicit tenant scope. Source labels, loading, errors, retry, escaped preview, and unavailable chips use existing UI components. Root chips remain static pending their own authorized resource actions.
+
+The preview query includes the active tenant and publication ID under the existing knowledge cache family. Reopening checks the publication again and hides previous content during pending or failed reads. Team changes remove old dialogs. A disconnected trigger prevents late responses from creating downloads. Download submission prevents repeated clicks. The handler releases its object URL in the outer finally boundary and removes its temporary anchor on failure or success. No rule suppression or new helper abstraction was added.
+
+All 40 component tests passed with 282 assertions. Coverage includes admin, member, and viewer reads, exact original bytes and content type, read-only controls, escaped text, pending states, retry, publication removal on reopening, unavailable resources, repeated submissions, and late preview/download responses after team changes. A new failed-activation test confirms byte release, anchor removal, loading reset, and retry. One verification repair exposed the existing click mock from the test observer. The complete web type check, scoped anti-slop, Ultracite across 1533 files, and git diff --check passed. React Doctor returned to the 91/100 baseline with no issues; the warning recorded in 3j is resolved.
+
+Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: shared-agent selection into a team chat, then tool/model actions and root resource details. No browser check, full suite, build, paid call, push, or PR ran.
+
+Evidence: /tmp/nakama-knowledge-actions-final-{focused,types,oxlint,lint,doctor}.log.

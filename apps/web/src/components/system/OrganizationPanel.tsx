@@ -65,6 +65,144 @@ const READINESS_LABELS = {
   unavailable: "Unavailable",
 };
 
+function SharedKnowledgeDialog({
+  orgId,
+  resource,
+}: {
+  orgId: string;
+  resource: OrgSharedResourceSummary;
+}) {
+  const [open, setOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const running = useRef(false);
+  const trigger = useRef<HTMLButtonElement | null>(null);
+
+  const detail = useQuery({
+    enabled: open,
+    gcTime: 0,
+    queryFn: async () => {
+      const document = await client.readPublishedKnowledgeBaseDocument(
+        orgId,
+        resource.id,
+        { render: "text" }
+      );
+
+      return new TextDecoder().decode(document.data);
+    },
+    queryKey: queryKeys.knowledgeBase.published(orgId, resource.id),
+    staleTime: 0,
+  });
+
+  async function download() {
+    if (running.current) {
+      return;
+    }
+
+    running.current = true;
+    setDownloading(true);
+    setDownloadError(null);
+    let downloadUrl: string | null = null;
+
+    try {
+      const content = await client.readPublishedKnowledgeBaseDocument(
+        orgId,
+        resource.id
+      );
+
+      if (trigger.current?.isConnected) {
+        const anchor = document.createElement("a");
+
+        downloadUrl = URL.createObjectURL(
+          new Blob([content.data], { type: content.contentType })
+        );
+
+        try {
+          anchor.href = downloadUrl;
+          anchor.download = resource.label;
+          document.body.append(anchor);
+          anchor.click();
+        } finally {
+          anchor.remove();
+        }
+      }
+    } catch (error) {
+      if (trigger.current?.isConnected) {
+        setDownloadError(formatError(error));
+      }
+    } finally {
+      running.current = false;
+      setDownloading(false);
+
+      if (downloadUrl) {
+        URL.revokeObjectURL(downloadUrl);
+      }
+    }
+  }
+
+  return (
+    <Dialog
+      onOpenChange={(nextOpen) => {
+        if (!running.current) {
+          setDownloadError(null);
+          setOpen(nextOpen);
+        }
+      }}
+      open={open}
+    >
+      <DialogTrigger
+        render={
+          <Button
+            aria-label={`View shared knowledge ${resource.label} from ${resource.sourceOrganization.name}`}
+            className="h-auto max-w-full whitespace-normal break-words text-left"
+            ref={trigger}
+            size="sm"
+            variant="secondary"
+          />
+        }
+      >
+        {resource.label}
+      </DialogTrigger>
+      <DialogContent showCloseButton={!downloading}>
+        <DialogHeader>
+          <DialogTitle>{resource.label}</DialogTitle>
+        </DialogHeader>
+        <p className="text-muted-foreground text-sm">
+          Shared from {resource.sourceOrganization.name}
+        </p>
+        {detail.isFetching && <p role="status">Loading document…</p>}
+        {detail.isError && (
+          <div className="space-y-2" role="alert">
+            <p>{formatError(detail.error)}</p>
+            <Button
+              disabled={detail.isFetching}
+              onClick={() => void detail.refetch()}
+              variant="outline"
+            >
+              Retry preview
+            </Button>
+          </div>
+        )}
+        {detail.data !== undefined && !detail.isFetching && !detail.isError && (
+          <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted p-3 text-sm">
+            {detail.data}
+          </pre>
+        )}
+        {downloadError && <p role="alert">{downloadError}</p>}
+        <DialogFooter>
+          <Button disabled={downloading} onClick={() => void download()}>
+            {downloading
+              ? "Downloading…"
+              : downloadError
+                ? "Retry download"
+                : "Download document"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function SharedSkillDialog({
   orgId,
   resource,
@@ -702,6 +840,14 @@ export function OrganizationOverview() {
                     resource.readiness === "ready" &&
                     activeOrg.parentOrgId ? (
                       <SharedSkillDialog
+                        key={`${activeOrg.id}:${resource.id}`}
+                        orgId={activeOrg.id}
+                        resource={resource}
+                      />
+                    ) : resource.resourceKind === "knowledge" &&
+                      resource.readiness === "ready" &&
+                      activeOrg.parentOrgId ? (
+                      <SharedKnowledgeDialog
                         key={`${activeOrg.id}:${resource.id}`}
                         orgId={activeOrg.id}
                         resource={resource}

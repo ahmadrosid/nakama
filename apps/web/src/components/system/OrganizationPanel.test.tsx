@@ -157,7 +157,7 @@ test("renders all published resource kinds and stored team counts", async () => 
   expect(
     [...container.querySelectorAll("li dd")].map((node) => node.textContent)
   ).toEqual(["3", "5", "4", "2"]);
-  expect(container.querySelectorAll("dd button")).toHaveLength(1);
+  expect(container.querySelectorAll("dd button")).toHaveLength(2);
 });
 
 test("a standalone organization with no publications or teams remains readable", async () => {
@@ -1397,7 +1397,7 @@ function publishedSkill(
   };
 }
 
-async function mountSkillReader(
+async function mountResourceReader(
   role: "admin" | "member" | "viewer" = "member"
 ) {
   const queries = new QueryClient({
@@ -1445,7 +1445,7 @@ test.each(["admin", "member", "viewer"] as const)(
       read.mockRestore();
       privateRead.mockRestore();
     });
-    const { container } = await mountSkillReader(role);
+    const { container } = await mountResourceReader(role);
     expect(read).not.toHaveBeenCalled();
 
     const trigger = container.querySelector<HTMLButtonElement>(
@@ -1477,7 +1477,7 @@ test("shared skill details retry and recheck publication on reopening", async ()
     .mockRejectedValueOnce(new Error("Publication removed"));
 
   cleanups.push(() => read.mockRestore());
-  const { container } = await mountSkillReader();
+  const { container } = await mountResourceReader();
   await openSharedSkill(container);
   expect(
     document.querySelector('[role="dialog"] [role="status"]')
@@ -1526,7 +1526,7 @@ test("late shared skill response cannot replace another team's details", async (
     .mockResolvedValueOnce(publishedSkill("team-b-skill", "Team B content"));
 
   cleanups.push(() => read.mockRestore());
-  const { container, render } = await mountSkillReader();
+  const { container, render } = await mountResourceReader();
   await openSharedSkill(container);
   await render({ ...organization("team-b"), role: "member" });
   expect(document.querySelector('[role="dialog"]')).toBeNull();
@@ -1546,7 +1546,7 @@ test("late shared skill response cannot replace another team's details", async (
 });
 
 test("unavailable shared skills remain non-actionable", async () => {
-  const { container, queries } = await mountSkillReader();
+  const { container, queries } = await mountResourceReader();
   const data = overview("team-a");
   data.sharedResources[1].readiness = "unavailable";
   await act(async () => {
@@ -1560,4 +1560,304 @@ test("unavailable shared skills remain non-actionable", async () => {
     container.querySelector('button[aria-label^="View shared skill"]')
   ).toBeNull();
   expect(container.textContent).toContain(data.sharedResources[1].label);
+});
+
+function publishedDocument(body = "Shared document") {
+  return {
+    contentType: "text/plain; charset=utf-8",
+    data: new TextEncoder().encode(body).buffer,
+  };
+}
+
+async function openSharedKnowledge(container: HTMLElement) {
+  await act(async () => {
+    container
+      .querySelector<HTMLButtonElement>(
+        'button[aria-label^="View shared knowledge"]'
+      )
+      ?.click();
+    await settle();
+  });
+  await act(async () => {
+    await settle();
+  });
+}
+
+async function downloadSharedKnowledge() {
+  await act(async () => {
+    document
+      .querySelector<HTMLButtonElement>('[data-slot="dialog-footer"] button')
+      ?.click();
+    await settle();
+  });
+}
+
+function observeDocumentDownloads() {
+  const downloads: Array<{ filename: string; url: string }> = [];
+
+  const createUrl = spyOn(URL, "createObjectURL").mockReturnValue(
+    "blob:published-document"
+  );
+
+  const revokeUrl = spyOn(URL, "revokeObjectURL").mockImplementation(
+    () => undefined
+  );
+
+  const click = spyOn(
+    window.HTMLAnchorElement.prototype,
+    "click"
+  ).mockImplementation(function (this: HTMLAnchorElement) {
+    downloads.push({ filename: this.download, url: this.href });
+  });
+
+  cleanups.push(() => {
+    createUrl.mockRestore();
+    revokeUrl.mockRestore();
+    click.mockRestore();
+  });
+
+  return { click, createUrl, downloads, revokeUrl };
+}
+
+test.each(["admin", "member", "viewer"] as const)(
+  "shared knowledge preview and download use active tenant for %s",
+  async (role) => {
+    const original = {
+      contentType: "application/pdf",
+      data: new Uint8Array([0, 255, 128, 1]).buffer,
+    };
+
+    const read = spyOn(client, "readPublishedKnowledgeBaseDocument")
+      .mockResolvedValueOnce(publishedDocument('<script>alert("x")</script>'))
+      .mockResolvedValueOnce(original);
+
+    cleanups.push(() => read.mockRestore());
+    const { createUrl, revokeUrl, downloads } = observeDocumentDownloads();
+    const { container } = await mountResourceReader(role);
+    expect(read).not.toHaveBeenCalled();
+
+    const trigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-label^="View shared knowledge"]'
+    );
+
+    trigger?.focus();
+    expect(document.activeElement).toBe(trigger);
+    await openSharedKnowledge(container);
+    expect(read.mock.calls).toEqual([
+      ["team-a", "team-a-knowledge", { render: "text" }],
+    ]);
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog?.querySelector("pre")?.textContent).toBe(
+      '<script>alert("x")</script>'
+    );
+    expect(dialog?.querySelector("script")).toBeNull();
+    expect(dialog?.querySelectorAll("input,textarea,select")).toHaveLength(0);
+    await downloadSharedKnowledge();
+    expect(read.mock.calls[1]).toEqual(["team-a", "team-a-knowledge"]);
+    expect(downloads).toEqual([
+      { filename: "team-a knowledge", url: "blob:published-document" },
+    ]);
+    const blob = createUrl.mock.calls[0]?.[0];
+    expect(blob).toBeInstanceOf(Blob);
+
+    if (!(blob instanceof Blob)) {
+      throw new Error("Expected downloaded document bytes");
+    }
+
+    expect(blob.type).toBe(original.contentType);
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(
+      new Uint8Array(original.data)
+    );
+    expect(revokeUrl.mock.calls).toEqual([["blob:published-document"]]);
+    expect(document.querySelector("a[download]")).toBeNull();
+  }
+);
+
+test("shared knowledge preview retries and hides cached bytes after publication removal", async () => {
+  const pending = Promise.withResolvers<ReturnType<typeof publishedDocument>>();
+
+  const read = spyOn(client, "readPublishedKnowledgeBaseDocument")
+    .mockImplementationOnce(() => pending.promise)
+    .mockResolvedValueOnce(publishedDocument())
+    .mockRejectedValueOnce(new Error("Publication removed"));
+
+  cleanups.push(() => read.mockRestore());
+  const { container } = await mountResourceReader();
+  await openSharedKnowledge(container);
+  expect(
+    document.querySelector('[role="dialog"] [role="status"]')
+  ).not.toBeNull();
+  await act(async () => {
+    pending.reject(new Error("Preview failed"));
+    await settle();
+  });
+  expect(
+    document.querySelector('[role="dialog"] [role="alert"]')
+  ).not.toBeNull();
+  await act(async () => {
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
+      .find((button) => button.textContent === "Retry preview")
+      ?.click();
+    await settle();
+  });
+  await act(async () => {
+    await settle();
+  });
+  expect(document.querySelector('[role="dialog"] pre')?.textContent).toBe(
+    "Shared document"
+  );
+  await act(async () => {
+    document
+      .querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')
+      ?.click();
+    await settle();
+  });
+  await openSharedKnowledge(container);
+  expect(read.mock.calls).toEqual(
+    Array.from({ length: 3 }, () => [
+      "team-a",
+      "team-a-knowledge",
+      { render: "text" },
+    ])
+  );
+  expect(
+    document.querySelector('[role="dialog"] [role="alert"]')
+  ).not.toBeNull();
+  expect(document.querySelector('[role="dialog"] pre')).toBeNull();
+});
+
+test("failed download can retry without using preview bytes", async () => {
+  const read = spyOn(client, "readPublishedKnowledgeBaseDocument")
+    .mockResolvedValueOnce(publishedDocument("Extracted preview"))
+    .mockRejectedValueOnce(new Error("Download denied"))
+    .mockResolvedValueOnce(publishedDocument("Original content"));
+
+  cleanups.push(() => read.mockRestore());
+  const { createUrl, downloads } = observeDocumentDownloads();
+  const { container } = await mountResourceReader();
+  await openSharedKnowledge(container);
+  await downloadSharedKnowledge();
+  expect(
+    document.querySelector('[role="dialog"] [role="alert"]')
+  ).not.toBeNull();
+  expect(downloads).toHaveLength(0);
+  await downloadSharedKnowledge();
+  expect(read.mock.calls).toEqual([
+    ["team-a", "team-a-knowledge", { render: "text" }],
+    ["team-a", "team-a-knowledge"],
+    ["team-a", "team-a-knowledge"],
+  ]);
+  expect(downloads).toHaveLength(1);
+  const blob = createUrl.mock.calls[0]?.[0];
+
+  if (!(blob instanceof Blob)) {
+    throw new Error("Expected downloaded document bytes");
+  }
+
+  expect(await blob.text()).toBe("Original content");
+  expect(document.querySelector('[role="dialog"] [role="alert"]')).toBeNull();
+});
+
+test.each(["preview", "download"] as const)(
+  "late shared knowledge %s cannot act in another team",
+  async (action) => {
+    const pending =
+      Promise.withResolvers<ReturnType<typeof publishedDocument>>();
+
+    const read = spyOn(client, "readPublishedKnowledgeBaseDocument");
+
+    if (action === "download") {
+      read.mockResolvedValueOnce(publishedDocument());
+    }
+
+    read
+      .mockImplementationOnce(() => pending.promise)
+      .mockResolvedValueOnce(publishedDocument("Team B content"));
+    cleanups.push(() => read.mockRestore());
+    const { downloads, createUrl } = observeDocumentDownloads();
+    const { container, render } = await mountResourceReader();
+    await openSharedKnowledge(container);
+
+    if (action === "download") {
+      await act(async () => {
+        const submit = document.querySelector<HTMLButtonElement>(
+          '[data-slot="dialog-footer"] button'
+        );
+
+        submit?.click();
+        submit?.click();
+        await settle();
+      });
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(
+        document.querySelector<HTMLButtonElement>(
+          '[data-slot="dialog-footer"] button'
+        )?.disabled
+      ).toBe(true);
+    }
+
+    await render({ ...organization("team-b"), role: "member" });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    await openSharedKnowledge(container);
+    await act(async () => {
+      pending.resolve(publishedDocument("Old team content"));
+      await settle();
+    });
+    expect(document.querySelector('[role="dialog"] pre')?.textContent).toBe(
+      "Team B content"
+    );
+    expect(document.body.textContent).not.toContain("Old team content");
+    expect(downloads).toHaveLength(0);
+    expect(createUrl).not.toHaveBeenCalled();
+  }
+);
+
+test("unavailable shared knowledge stays non-actionable", async () => {
+  const { container, queries } = await mountResourceReader();
+  const data = overview("team-a");
+  data.sharedResources[0].readiness = "unavailable";
+  await act(async () => {
+    queries.setQueryData(
+      queryKeys.organizationOverview("parent", "team-a"),
+      data
+    );
+    await settle();
+  });
+  expect(
+    container.querySelector('button[aria-label^="View shared knowledge"]')
+  ).toBeNull();
+  expect(container.textContent).toContain(data.sharedResources[0].label);
+});
+
+test("failed download activation releases original bytes and allows another attempt", async () => {
+  const read = spyOn(
+    client,
+    "readPublishedKnowledgeBaseDocument"
+  ).mockResolvedValue(publishedDocument());
+
+  cleanups.push(() => read.mockRestore());
+  const { revokeUrl, downloads, click } = observeDocumentDownloads();
+  click.mockImplementationOnce(() => {
+    throw new Error("Download activation failed");
+  });
+  const { container } = await mountResourceReader();
+  await openSharedKnowledge(container);
+  await downloadSharedKnowledge();
+  expect(
+    document.querySelector('[role="dialog"] [role="alert"]')
+  ).not.toBeNull();
+  expect(
+    document.querySelector<HTMLButtonElement>(
+      '[data-slot="dialog-footer"] button'
+    )?.disabled
+  ).toBe(false);
+  expect(revokeUrl.mock.calls).toEqual([["blob:published-document"]]);
+  expect(document.querySelector("a[download]")).toBeNull();
+  await downloadSharedKnowledge();
+  expect(downloads).toHaveLength(1);
+  expect(revokeUrl.mock.calls).toEqual([
+    ["blob:published-document"],
+    ["blob:published-document"],
+  ]);
+  expect(document.querySelector('[role="dialog"] [role="alert"]')).toBeNull();
 });
