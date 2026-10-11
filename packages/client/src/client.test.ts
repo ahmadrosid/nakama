@@ -9,6 +9,20 @@ import { NakamaAuthExpiredError, NakamaClient } from "./index";
 const organizationRequests = [
   {
     body: null,
+    call: (client: NakamaClient) =>
+      client.getPublishedSkill("team/a?", "publication/a?"),
+    method: "GET",
+    path: "/v1/orgs/team%2Fa%3F/shared-resources/publication%2Fa%3F/skill",
+    response: {
+      skill: {
+        body: "Shared instructions",
+        id: "parent-skill",
+        publicationId: "publication/a?",
+      },
+    },
+  },
+  {
+    body: null,
     call: (client: NakamaClient) => client.getOrganizationOverview("team/a?"),
     method: "GET",
     path: "/v1/orgs/team%2Fa%3F/overview",

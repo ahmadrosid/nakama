@@ -4,6 +4,7 @@ import {
   type ListSkillVersionsResponse,
   NakamaApiError,
   type ProfileResponse,
+  type PublishedSkillResponse,
   type SkillResponse,
   type SyncSkillsResponse,
 } from "@nakama/core";
@@ -12,7 +13,7 @@ import {
   requireActiveOrgIdFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
-import { json, readJson } from "../shared";
+import { getRequestAuth, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
 export function registerSkillRoutes(
@@ -38,29 +39,67 @@ export function registerSkillRoutes(
     skillId: z.string().openapi({ param: { in: "path", name: "skillId" } }),
   });
 
+  const publishedSkillSchema = z.object({
+    createdAt: z.string(),
+    createdBy: z.enum(["agent", "human", "bundled"]),
+    description: z.string(),
+    disableModelInvocation: z.boolean(),
+    enabled: z.boolean(),
+    hasTool: z.boolean(),
+    id: z.string(),
+    name: z.string(),
+    updatedAt: z.string(),
+    publicationId: z.string(),
+    scope: z.literal("parent"),
+    sourceOrganization: z.object({ id: z.string(), name: z.string() }),
+  });
   const listSkillsSchema = z
-    .object({
-      publishedSkills: z
-        .array(
-          z.object({
-            createdAt: z.string(),
-            createdBy: z.enum(["agent", "human", "bundled"]),
-            description: z.string(),
-            disableModelInvocation: z.boolean(),
-            enabled: z.boolean(),
-            hasTool: z.boolean(),
-            id: z.string(),
-            name: z.string(),
-            updatedAt: z.string(),
-            publicationId: z.string(),
-            scope: z.literal("parent"),
-            sourceOrganization: z.object({ id: z.string(), name: z.string() }),
-          })
-        )
-        .optional(),
-    })
+    .object({ publishedSkills: z.array(publishedSkillSchema).optional() })
     .passthrough()
     .openapi("ListSkillsResponse");
+  const publishedSkillResponseSchema = z
+    .object({ skill: publishedSkillSchema.extend({ body: z.string() }) })
+    .openapi("PublishedSkillResponse");
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "get",
+      operationId: "getPublishedSkill",
+      path: "/v1/orgs/{orgId}/shared-resources/{publicationId}/skill",
+      request: {
+        params: z.object({ orgId: z.string(), publicationId: z.string() }),
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: publishedSkillResponseSchema },
+          },
+          description: "Published skill detail",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Error",
+        },
+      },
+      summary: "Read a published parent skill through the active team",
+      tags: ["Skills"],
+    })
+  );
+  app.get(
+    "/v1/orgs/:orgId/shared-resources/:publicationId/skill",
+    async (c) => {
+      const auth = getRequestAuth(c);
+      const orgId = decodeURIComponent(c.req.param("orgId"));
+      if (auth.activeOrgId !== orgId) {
+        throw new NakamaApiError("Not found", 404);
+      }
+      return json<PublishedSkillResponse>(
+        await agent.getPublishedSkill(
+          orgId,
+          decodeURIComponent(c.req.param("publicationId"))
+        )
+      );
+    }
+  );
 
   const skillSchema = z.object({}).passthrough().openapi("SkillResponse");
 

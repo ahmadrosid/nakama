@@ -164,6 +164,7 @@ import type {
   ProfileResponse,
   PublishArtifactShareRequest,
   PublishArtifactShareResponse,
+  PublishedSkillResponse,
   PublishOrgSharedResourceRequest,
   RegenerateNotificationDestinationKeyResponse,
   RenameWorkspaceEntryRequest,
@@ -3404,6 +3405,18 @@ export class NakamaClient {
     return this.request<ListOrgSharedResourcesResponse>(
       `/v1/orgs/${encodeURIComponent(orgId)}/shared-resources`,
       { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
+  async getPublishedSkill(
+    orgId: string,
+    publicationId: string
+  ): Promise<PublishedSkillResponse> {
+    return this.request(
+      `/v1/orgs/${encodeURIComponent(orgId)}/shared-resources/${encodeURIComponent(publicationId)}/skill`,
+      {
+        headers: { "X-Org-Id": orgId },
+      }
     );
   }
 

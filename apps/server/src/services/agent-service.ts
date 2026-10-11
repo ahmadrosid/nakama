@@ -69,6 +69,7 @@ import type {
   ProviderChatOptions,
   ProviderClient,
   ProviderInstance,
+  PublishedSkillResponse,
   RunToolResponse,
   SaveInlineAttachment,
   SendEmailTestResponse,
@@ -4114,6 +4115,13 @@ export class AgentService {
 
   async getSkill(skillId: string, orgId?: string): Promise<SkillResponse> {
     return this.requireSkillsService().getSkill(skillId, orgId);
+  }
+
+  async getPublishedSkill(
+    orgId: string,
+    publicationId: string
+  ): Promise<PublishedSkillResponse> {
+    return this.requireSkillsService().getPublishedSkill(orgId, publicationId);
   }
 
   async listSkillFiles(orgId: string, skillId: string) {

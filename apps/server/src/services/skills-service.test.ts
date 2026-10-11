@@ -9,8 +9,13 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ensureBundledSkillFiles } from "@nakama/core";
+import {
+  ensureBundledSkillFiles,
+  uploadOrganizationKnowledgeBaseDocument,
+} from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { createMinimalHonoApp } from "../http/test-app-helpers";
+import { loginUserSession } from "../http/test-session-helpers";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
 import { SkillsService } from "./skills-service";
 
@@ -178,6 +183,9 @@ describe("SkillsService", () => {
         });
       }
       expect((await service.listSkills("team_a")).publishedSkills).toEqual([]);
+      await expect(
+        service.getPublishedSkill("team_a", publication.id)
+      ).rejects.toMatchObject({ status: 404 });
     }
   );
 
@@ -212,6 +220,131 @@ describe("SkillsService", () => {
     expect(catalog.publishedSkills?.[0]?.id).toBe(skill.id);
     expect(JSON.stringify(catalog.publishedSkills)).not.toContain(alias);
   });
+
+  test.each(["member", "viewer"] as const)(
+    "%s reads shared skill content through either sibling without parent membership",
+    async (role) => {
+      const { db, service, skill, privateSkill, publication } =
+        await setupPublishedSkill();
+      const { app, authService } = createMinimalHonoApp({
+        agent: {
+          getPublishedSkill: (orgId: string, publicationId: string) =>
+            service.getPublishedSkill(orgId, publicationId),
+          getSkill: (id: string, orgId?: string) => service.getSkill(id, orgId),
+        },
+        databaseAdapter: db,
+      });
+      const now = new Date().toISOString();
+      await db.createUser({
+        createdAt: now,
+        email: "skill-reader@example.com",
+        id: "reader",
+        passwordHash: await authService.hashPassword("password123"),
+        updatedAt: now,
+      });
+      for (const orgId of ["team_a", "team_b", "other"]) {
+        await db.upsertOrgMember({
+          createdAt: now,
+          orgId,
+          role,
+          userId: "reader",
+        });
+      }
+      const session = await loginUserSession(
+        app,
+        "skill-reader@example.com",
+        "password123"
+      );
+      const read = (orgId = "team_a", id = publication.id, activeOrg = orgId) =>
+        app.fetch(
+          new Request(
+            `http://localhost:4310/v1/orgs/${orgId}/shared-resources/${id}/skill`,
+            { headers: session.headers({}, activeOrg) }
+          )
+        );
+      for (const orgId of ["team_a", "team_b"]) {
+        const response = await read(orgId);
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.skill).toMatchObject({
+          id: skill.id,
+          publicationId: publication.id,
+          sourceOrganization: { id: "parent", name: "parent" },
+        });
+        expect(body.skill.body).toContain("Published instructions");
+        expect(body.skill).not.toHaveProperty("sourcePath");
+        expect(body.skill).not.toHaveProperty("usage");
+        expect(JSON.stringify(body)).not.toContain(skill.sourcePath);
+      }
+      expect(await db.getOrgMember("parent", "reader")).toBeNull();
+      const foreignSkill = await service.createSkill("other", {
+        description: "Foreign source",
+        name: "foreign-notes",
+        profileId: "profile_other",
+      });
+      const knowledge = await uploadOrganizationKnowledgeBaseDocument(
+        "parent",
+        {
+          data: Buffer.from("Published knowledge").toString("base64"),
+          filename: "shared.txt",
+          mediaType: "text/plain",
+        }
+      );
+      for (const [id, orgId, resourceKind, resourceId] of [
+        ["wrong-kind", "parent", "knowledge", knowledge.document.id],
+        ["foreign-publication", "other", "skill", foreignSkill.skill.id],
+      ] as const) {
+        await db.publishOrgSharedResource({
+          createdAt: now,
+          id,
+          orgId,
+          resourceId,
+          resourceKind,
+          updatedAt: now,
+        });
+      }
+      for (const id of [
+        skill.id,
+        privateSkill.id,
+        "missing-publication",
+        "wrong-kind",
+        "foreign-publication",
+      ]) {
+        expect((await read("team_a", id)).status).toBe(404);
+      }
+      expect((await read("other")).status).toBe(404);
+      expect((await read("team_b", publication.id, "team_a")).status).toBe(404);
+      const deniedParent = await read("parent");
+      expect(deniedParent.status).toBe(404);
+      expect(await deniedParent.text()).not.toContain("Published instructions");
+      const anonymous = await app.fetch(
+        new Request(
+          `http://localhost:4310/v1/orgs/team_a/shared-resources/${publication.id}/skill`
+        )
+      );
+      expect(anonymous.status).toBe(401);
+      await writeFile(
+        join(skill.sourcePath, "SKILL.md"),
+        "---\nname: shared-notes\ndescription: Updated\n---\n\nNew shared instructions\n"
+      );
+      expect((await (await read()).json()).skill.body).toContain(
+        "New shared instructions"
+      );
+      await db.deleteOrgSharedResource("parent", publication.id);
+      expect((await read()).status).toBe(404);
+      const spec = await (
+        await app.fetch(new Request("http://localhost:4310/openapi.json"))
+      ).json();
+      expect(
+        spec.paths["/v1/orgs/{orgId}/shared-resources/{publicationId}/skill"]
+          .get
+      ).toBeDefined();
+      expect(
+        spec.components.schemas.PublishedSkillResponse.properties.skill
+          .properties.body.type
+      ).toBe("string");
+    }
+  );
 
   test("discovers global skills and syncs them to the database", async () => {
     const db = createInMemoryDatabaseAdapter();

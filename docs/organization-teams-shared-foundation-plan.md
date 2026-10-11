@@ -1383,3 +1383,21 @@ No new source file, package, or dependency was added. Steps 2 and 3 remain unche
 Next: permit guarded parent skill detail reads and assignments, then load supporting assets with team execution context and source write protection.
 No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-published-skills-repair-focused.log and /tmp/nakama-published-skills-{core-types,server-types,lint}.log.
+
+2026-10-11: Step 2 slice 2t adds shared skill detail reads through the active team.
+GET /v1/orgs/:orgId/shared-resources/:publicationId/skill returns permitted parent metadata and the published SKILL.md body.
+PublishedSkillResponse and OpenAPI describe this separate response. It excludes source paths, usage data, and script diagnostics with private paths.
+The existing skill service resolver now supplies both catalog entries and detail reads. Each call checks active tenants, current publication, resource kind, source ownership, enabled state, owner profile, and file guards.
+Unavailable sources return a generic 404. Catalogs omit those entries; unexpected database failures remain errors.
+The route verifies its path organization against the authenticated active organization. Members and viewers in either sibling can read without parent membership.
+Tests deny private resource IDs, foreign publication IDs, other resource kinds, unrelated organizations, parent context, wrong active context, anonymous requests, revoked sources, missing files, and symlink escapes.
+Source updates appear on the next read. The existing private source routes and source write permissions remain unchanged.
+NakamaClient.getPublishedSkill sends explicit X-Org-Id and encoded path IDs. Request tests verify response preservation, default scope preservation, and denied access.
+Initial HTTP tests expected 403 for inaccessible parent context; existing tenant middleware returns 404. The fixture now asserts that behavior.
+Additional foreign-kind fixtures initially failed the database's source validation. Corrected fixtures create real source resources before publication.
+Checks: all 176 focused tests passed across seven files; the final skill check passed all 32 tests with the additional publication scope cases.
+Complete core, server, and client type checks passed. Lint passed all 1532 files; git diff --check passed.
+No new source file, package, or dependency was added. Steps 2 and 3 remain unchecked; this slice does not finish a delivery stage.
+Next: connect published skill assignments and prompt discovery, then guarded supporting assets and team execution with source write protection.
+No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-shared-skill-read-{focused,final-focused,core-types,server-types,client-types,lint}.log.

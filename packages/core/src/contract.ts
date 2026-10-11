@@ -2260,6 +2260,10 @@ export interface SkillResponse {
   skill: SkillDetail;
 }
 
+export interface PublishedSkillResponse {
+  skill: PublishedSkillSummary & { body: string };
+}
+
 export interface SkillFilesResponse {
   files: { path: string; type: "file" | "directory" }[];
   truncated: boolean;

@@ -20,6 +20,7 @@ import type {
   ListSkillsResponse,
   ListSkillVersionsResponse,
   PatchSkillRequest,
+  PublishedSkillResponse,
   PublishedSkillSummary,
   SkillFileResponse,
   SkillFilesResponse,
@@ -242,67 +243,20 @@ export class SkillsService {
       !parent.setupPending
     ) {
       const publications = await this.db.listOrgSharedResources(parent.id);
-      const parentProfiles = await this.db.listProfilesForOrg(parent.id);
       for (const publication of publications) {
         if (publication.resourceKind !== "skill") {
           continue;
         }
-        const record = await this.db.getSkill(publication.resourceId);
-        if (
-          !record ||
-          record.orgId !== parent.id ||
-          !record.enabled ||
-          isPluginOwnedSkill(record)
-        ) {
-          continue;
-        }
         try {
-          const { resolved: sourcePath } = await guardFilePath(
-            record.sourcePath,
-            null,
-            undefined,
-            {
-              allowedDirs: [getOrgConfigDir(parent.id)],
-            }
+          const source = await this.resolvePublishedSkill(
+            team.id,
+            publication.id
           );
-          const owner = parentProfiles.find(
-            (profile) =>
-              sourcePath ===
-              resolveProfileSkillDirectory(parent.id, profile.id, record.name)
-          );
-          if (!owner) {
-            continue;
+          publishedSkills.push(source.summary);
+        } catch (error) {
+          if (!(error instanceof NakamaApiError && error.status === 404)) {
+            throw error;
           }
-          const { resolved } = await guardFilePath(
-            path.join(record.sourcePath, SKILL_FILE_NAME),
-            null,
-            undefined,
-            { allowedDirs: [record.sourcePath] }
-          );
-          const parsed = parseSkillMarkdown(
-            await readFile(resolved, "utf8"),
-            resolved
-          );
-          if (parsed.frontmatter.name !== record.name) {
-            continue;
-          }
-          publishedSkills.push({
-            createdAt: record.createdAt,
-            createdBy: record.createdBy,
-            description: parsed.frontmatter.description,
-            disableModelInvocation:
-              parsed.frontmatter.disableModelInvocation ?? false,
-            enabled: record.enabled,
-            hasTool: record.hasTool,
-            id: record.id,
-            name: record.name,
-            publicationId: publication.id,
-            scope: "parent",
-            sourceOrganization: { id: parent.id, name: parent.name },
-            updatedAt: record.updatedAt,
-          });
-        } catch {
-          // A missing or unsafe source must not become an available skill.
         }
       }
     }
@@ -313,6 +267,101 @@ export class SkillsService {
         .filter((skill) => !(orgId && skill.orgId) || skill.orgId === orgId)
         .map((skill) => toSkillSummary(skill)),
     };
+  }
+
+  async getPublishedSkill(
+    orgId: string,
+    publicationId: string
+  ): Promise<PublishedSkillResponse> {
+    const source = await this.resolvePublishedSkill(orgId, publicationId);
+    return { skill: { ...source.summary, body: source.body } };
+  }
+
+  private async resolvePublishedSkill(
+    orgId: string,
+    publicationId: string
+  ): Promise<{ summary: PublishedSkillSummary; body: string }> {
+    const team = await this.db.getOrganizationById(orgId);
+    const parent = team?.parentOrgId
+      ? await this.db.getOrganizationById(team.parentOrgId)
+      : null;
+    if (
+      !team ||
+      team.archivedAt ||
+      team.setupPending ||
+      !parent ||
+      parent.archivedAt ||
+      parent.setupPending
+    ) {
+      throw new NakamaApiError("Skill is unavailable.", 404);
+    }
+    const publication = await this.db.getOrgSharedResource(
+      parent.id,
+      publicationId
+    );
+    if (!publication || publication.resourceKind !== "skill") {
+      throw new NakamaApiError("Skill is unavailable.", 404);
+    }
+    const record = await this.db.getSkill(publication.resourceId);
+    if (
+      !record ||
+      record.orgId !== parent.id ||
+      !record.enabled ||
+      isPluginOwnedSkill(record)
+    ) {
+      throw new NakamaApiError("Skill is unavailable.", 404);
+    }
+    const profiles = await this.db.listProfilesForOrg(parent.id);
+    try {
+      const { resolved: sourcePath } = await guardFilePath(
+        record.sourcePath,
+        null,
+        undefined,
+        { allowedDirs: [getOrgConfigDir(parent.id)] }
+      );
+      if (
+        !profiles.some(
+          (profile) =>
+            sourcePath ===
+            resolveProfileSkillDirectory(parent.id, profile.id, record.name)
+        )
+      ) {
+        throw new NakamaApiError("Skill is unavailable.", 404);
+      }
+      const { resolved } = await guardFilePath(
+        path.join(record.sourcePath, SKILL_FILE_NAME),
+        null,
+        undefined,
+        { allowedDirs: [record.sourcePath] }
+      );
+      const parsed = parseSkillMarkdown(
+        await readFile(resolved, "utf8"),
+        resolved
+      );
+      if (parsed.frontmatter.name !== record.name) {
+        throw new NakamaApiError("Skill is unavailable.", 404);
+      }
+      return {
+        body: parsed.body,
+        summary: {
+          createdAt: record.createdAt,
+          createdBy: record.createdBy,
+          description: parsed.frontmatter.description,
+          disableModelInvocation:
+            parsed.frontmatter.disableModelInvocation ?? false,
+          enabled: record.enabled,
+          hasTool: record.hasTool,
+          id: record.id,
+          name: record.name,
+          publicationId: publication.id,
+          scope: "parent",
+          sourceOrganization: { id: parent.id, name: parent.name },
+          updatedAt: record.updatedAt,
+        },
+      };
+    } catch {
+      throw new NakamaApiError("Skill is unavailable.", 404);
+    }
   }
 
   async createSkill(
