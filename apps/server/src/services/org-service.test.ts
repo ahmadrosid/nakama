@@ -244,14 +244,10 @@ describe("OrgService", () => {
       allowedInviteDomains: ["acme.com"],
     });
 
-    for (const allowedInviteDomains of [
-      ["*.acme.com"],
-      [""],
-      // SAFETY: This deliberately wrong input tests runtime validation.
-      "acme.com" as unknown as string[],
-    ]) {
+    for (const allowedInviteDomains of [["*.acme.com"], [""], "acme.com"]) {
       await expect(
         orgService.updateOrganization(created.organization.id, {
+          // @ts-expect-error A string tests runtime validation of the array contract.
           allowedInviteDomains,
         })
       ).rejects.toMatchObject({ status: 400 });
@@ -1774,6 +1770,7 @@ describe("OrgService", () => {
 
 async function seedTeamParent(db: DatabaseAdapter) {
   const now = new Date().toISOString();
+
   for (const id of ["org_parent", "org_other"]) {
     await db.upsertOrganization({
       createdAt: now,
@@ -1783,6 +1780,7 @@ async function seedTeamParent(db: DatabaseAdapter) {
       updatedAt: now,
     });
   }
+
   for (const id of ["user_creator", "user_other", "user_viewer"]) {
     await db.createUser({
       createdAt: now,
@@ -1792,6 +1790,7 @@ async function seedTeamParent(db: DatabaseAdapter) {
       updatedAt: now,
     });
   }
+
   await db.upsertOrgMember({
     createdAt: now,
     orgId: "org_parent",
@@ -1804,6 +1803,7 @@ async function seedTeamParent(db: DatabaseAdapter) {
     role: "viewer",
     userId: "user_viewer",
   });
+
   return { name: "Team", requestId: "team-request", slug: "team" };
 }
 
@@ -1813,6 +1813,7 @@ async function seedSharedAgentSelection(
 ) {
   await seedTeamParent(db);
   const now = new Date().toISOString();
+
   for (const id of ["org_team_a", "org_team_b"]) {
     await db.upsertOrganization({
       createdAt: now,
@@ -1829,6 +1830,7 @@ async function seedSharedAgentSelection(
       userId: "user_other",
     });
   }
+
   await db.upsertOrgMember({
     createdAt: now,
     orgId: "org_team_a",
@@ -1846,6 +1848,7 @@ async function seedSharedAgentSelection(
     systemPrompt: "Published instructions",
     updatedAt: now,
   });
+
   return service.publishSharedResource(
     "org_parent",
     { resourceId: "profile_template", resourceKind: "agent" },
@@ -1859,11 +1862,13 @@ describe("OrgService shared agent selection", () => {
     async (mode) => {
       const { orgService, databaseAdapter: db } = createOrgService();
       const publication = await seedSharedAgentSelection(db, orgService);
+
       const profile = await orgService.createSharedAgentInstance(
         "org_team_a",
         publication.id,
         "user_other"
       );
+
       const parent = (await db.getOrganizationById("org_parent"))!;
       const team = (await db.getOrganizationById("org_team_a"))!;
       await db.upsertOrganization({ ...parent, monthlyLlmTurnLimit: 1 });
@@ -1878,9 +1883,11 @@ describe("OrgService shared agent selection", () => {
       const quotas = new OrgUsageQuotaService(db);
       expect((await quotas.getStatus("org_parent")).status).toBe("blocked");
       let providerCalls = 0;
+
       const provider = {
         generateChat: async () => {
           providerCalls += 1;
+
           return {
             assistantMessage: { content: "Done", role: "assistant" as const },
             content: "Done",
@@ -1894,9 +1901,11 @@ describe("OrgService shared agent selection", () => {
           handlers: { onChunk: (chunk: string) => void }
         ) => {
           handlers.onChunk("Done");
+
           return provider.generateChat();
         },
       };
+
       const agent = new AgentService(null, null, db);
       agent.setOrgService(orgService);
       Object.assign(agent, {
@@ -1904,6 +1913,7 @@ describe("OrgService shared agent selection", () => {
         createHarnessForProfile: () => ({ provider }),
         resolveProfileTools: async () => [],
       });
+
       const sessionId =
         mode === "automation"
           ? null
@@ -1914,13 +1924,16 @@ describe("OrgService shared agent selection", () => {
               "user_other",
               { cognito: mode === "ephemeral", orgRole: "member" }
             );
+
       const session = sessionId
         ? (await agent.resolveSession(sessionId, "org_team_a"))!
         : null;
+
       const run = () =>
         session
           ? session.send("Team task")
           : agent.runAutomationPrompt("org_team_a", profile.id, "Team task");
+
       await run();
       expect(providerCalls).toBe(1);
       expect(await quotas.getStatus("org_team_a")).toMatchObject({
@@ -1947,11 +1960,13 @@ describe("OrgService shared agent selection", () => {
   test("shared automation runs use team state and record revocation failures without provider calls", async () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     const publication = await seedSharedAgentSelection(db, orgService);
+
     const profile = await orgService.createSharedAgentInstance(
       "org_team_a",
       publication.id,
       "user_other"
     );
+
     const teamDir = getProfileSoulDir("org_team_a", profile.id);
     const sourceDir = getProfileSoulDir("org_parent", "profile_template");
     await mkdir(sourceDir, { recursive: true });
@@ -1960,9 +1975,11 @@ describe("OrgService shared agent selection", () => {
     await writeFile(join(sourceDir, "MEMORY.md"), "Private parent memory");
     const builds: StoredProfileRecord[] = [];
     const turns: GenerateChatInput[] = [];
+
     const provider = {
       generateChat: async (input: GenerateChatInput) => {
         turns.push(input);
+
         return {
           assistantMessage: { content: "Done", role: "assistant" as const },
           content: "Done",
@@ -1975,22 +1992,27 @@ describe("OrgService shared agent selection", () => {
         handlers: { onChunk: (chunk: string) => void }
       ) => {
         handlers.onChunk("Done");
+
         return provider.generateChat(input);
       },
     };
+
     const agent = new AgentService(null, null, db);
     agent.setOrgService(orgService);
     Object.assign(agent, {
       _providerConfigured: true,
       createHarnessForProfile: (settings: StoredProfileRecord) => {
         builds.push(settings);
+
         return { provider };
       },
       resolveProfileTools: async () => [],
     });
+
     const service = new AutomationService(db, {
       getUserTimezone: async () => "UTC",
     });
+
     const automation = await service.create(
       "org_team_a",
       {
@@ -2001,6 +2023,7 @@ describe("OrgService shared agent selection", () => {
       },
       profile.id
     );
+
     const runner = new AutomationRunner(service, agent);
     expect(await runner.run(automation.id)).toEqual({ output: "Done" });
     expect(turns).toHaveLength(1);
@@ -2055,13 +2078,17 @@ describe("OrgService shared agent selection", () => {
         databaseAdapter: db,
         authService,
       } = createOrgService();
+
       const publication = await seedSharedAgentSelection(db, orgService);
+
       const profile = await orgService.createSharedAgentInstance(
         "org_team_a",
         publication.id,
         "user_other"
       );
+
       const passwordHash = await authService.hashPassword("password123");
+
       for (const userId of ["user_other", "user_viewer"]) {
         await db.updateUserPassword(
           userId,
@@ -2069,6 +2096,7 @@ describe("OrgService shared agent selection", () => {
           new Date().toISOString()
         );
       }
+
       let providerCalls = 0;
       const agent = new AgentService(null, null, db);
       agent.setOrgService(orgService);
@@ -2078,6 +2106,7 @@ describe("OrgService shared agent selection", () => {
           provider: {
             generateChat: () => {
               providerCalls += 1;
+
               return Promise.resolve({
                 assistantMessage: { content: "Done", role: "assistant" },
                 content: "Done",
@@ -2089,32 +2118,38 @@ describe("OrgService shared agent selection", () => {
         }),
         resolveProfileTools: async () => [],
       });
+
       const { app } = createMinimalHonoApp({
         agent,
         authService,
         databaseAdapter: db,
         orgService,
       });
+
       const member = await loginUserSession(
         app,
         "user_other@example.com",
         "password123",
         "org_team_a"
       );
+
       const viewer = await loginUserSession(
         app,
         "user_viewer@example.com",
         "password123",
         "org_team_a"
       );
+
       const memberHeaders = member.headers({
         "Content-Type": "application/json",
         "X-CSRF-Token": member.csrfToken,
       });
+
       const viewerHeaders = viewer.headers({
         "Content-Type": "application/json",
         "X-CSRF-Token": viewer.csrfToken,
       });
+
       const create = await app.fetch(
         new Request("http://localhost:4310/v1/sessions", {
           body: JSON.stringify({
@@ -2126,6 +2161,7 @@ describe("OrgService shared agent selection", () => {
           method: "POST",
         })
       );
+
       expect(create.status).toBe(201);
       const body: { sessionId: string } = await create.json();
       const id = body.sessionId;
@@ -2133,6 +2169,7 @@ describe("OrgService shared agent selection", () => {
       await session.send("Saved team turn");
       const history = [...session.getHistory()];
       expect(providerCalls).toBe(1);
+
       for (const path of ["/v1/sessions", `/v1/sessions/${id}/messages`]) {
         const response = await app.fetch(
           new Request(`http://localhost:4310${path}`, {
@@ -2146,13 +2183,16 @@ describe("OrgService shared agent selection", () => {
             method: "POST",
           })
         );
+
         expect(response.status).toBe(403);
       }
+
       await orgService.unpublishSharedResource(
         "org_parent",
         publication.id,
         "user_creator"
       );
+
       for (const path of ["/v1/sessions", `/v1/sessions/${id}/messages`]) {
         const response = await app.fetch(
           new Request(`http://localhost:4310${path}`, {
@@ -2166,26 +2206,33 @@ describe("OrgService shared agent selection", () => {
             method: "POST",
           })
         );
+
         expect(response.status).toBe(404);
       }
+
       expect(providerCalls).toBe(1);
       expect(sessionTurnRegistry.isActive(id)).toBe(false);
+
       const messages = await app.fetch(
         new Request(`http://localhost:4310/v1/sessions/${id}/messages`, {
           headers: member.headers(),
         })
       );
+
       expect(messages.status).toBe(200);
       expect(await messages.json()).toMatchObject({ messages: history });
+
       const foreign = await app.fetch(
         new Request(`http://localhost:4310/v1/sessions/${id}/messages`, {
           headers: member.headers({}, "org_team_b"),
         })
       );
+
       expect(foreign.status).toBe(404);
       expect(await db.getProfileForOrg(profile.id, "org_team_a")).toEqual(
         profile
       );
+
       if (cognito) {
         expect(await db.getSession(id)).toBeNull();
         expect(await db.listMessagesForSession(id)).toEqual([]);
@@ -2200,16 +2247,21 @@ describe("OrgService shared agent selection", () => {
         databaseAdapter: db,
         authService,
       } = createOrgService();
+
       const publication = await seedSharedAgentSelection(db, orgService);
+
       const profile = await orgService.createSharedAgentInstance(
         "org_team_a",
         publication.id,
         "user_other"
       );
+
       let providerCalls = 0;
+
       const provider = {
         generateChat: () => {
           providerCalls += 1;
+
           return Promise.resolve({
             assistantMessage: { content: "Done", role: "assistant" as const },
             content: "Done",
@@ -2221,9 +2273,11 @@ describe("OrgService shared agent selection", () => {
           handlers: { onChunk: (chunk: string) => void }
         ) => {
           handlers.onChunk("Done");
+
           return provider.generateChat();
         },
       };
+
       const agent = new AgentService(null, null, db);
       agent.setOrgService(orgService);
       Object.assign(agent, {
@@ -2231,12 +2285,14 @@ describe("OrgService shared agent selection", () => {
         createHarnessForProfile: () => ({ name: "test", provider }),
         resolveProfileTools: async () => [],
       });
+
       const { app } = createMinimalHonoApp({
         agent,
         authService,
         databaseAdapter: db,
         orgService,
       });
+
       const client = new NakamaClient({
         authToken: await resolveLocalAuthToken(),
         baseUrl: "http://localhost:4310",
@@ -2244,9 +2300,11 @@ describe("OrgService shared agent selection", () => {
           Promise.resolve(app.fetch(new Request(input, init))),
         orgId: "org_team_a",
       });
+
       const session = await client.createSession(channel, {
         profileId: profile.id,
       });
+
       expect(await session.send("Saved team turn")).toBe("Done");
       expect(await session.sendStream("Saved streamed turn", () => {})).toBe(
         "Done"
@@ -2289,6 +2347,7 @@ describe("OrgService shared agent selection", () => {
     const databasePath = join(rootDir, "sqlite", "restore.sqlite");
     const database = await createDatabase(`file:${databasePath}`);
     const db = database.adapter;
+
     try {
       const now = new Date().toISOString();
       await saveUserConfig({
@@ -2305,11 +2364,13 @@ describe("OrgService shared agent selection", () => {
       });
       const orgService = new OrgService(db, new AuthService());
       const publication = await seedSharedAgentSelection(db, orgService);
+
       const profile = await orgService.createSharedAgentInstance(
         "org_team_a",
         publication.id,
         "user_other"
       );
+
       const teamDir = getProfileSoulDir("org_team_a", profile.id);
       const sourceDir = getProfileSoulDir("org_parent", "profile_template");
       await mkdir(sourceDir, { recursive: true });
@@ -2323,10 +2384,12 @@ describe("OrgService shared agent selection", () => {
         _providerConfigured: true,
         createHarnessForProfile: (settings: StoredProfileRecord) => {
           builds.push(settings);
+
           return {
             provider: {
               generateChat: (input: GenerateChatInput) => {
                 turns.push(input);
+
                 return Promise.resolve({
                   assistantMessage: { content: "Done", role: "assistant" },
                   content: "Done",
@@ -2339,6 +2402,7 @@ describe("OrgService shared agent selection", () => {
         },
         resolveProfileTools: async () => [],
       });
+
       const id = await agent.createSession(
         "org_team_a",
         "web",
@@ -2346,6 +2410,7 @@ describe("OrgService shared agent selection", () => {
         "user_other",
         { orgRole: "member" }
       );
+
       const first = (await agent.resolveSession(id, "org_team_a"))!;
       await first.send("Saved turn");
       const savedHistory = [...first.getHistory()];
@@ -2430,6 +2495,7 @@ describe("OrgService shared agent selection", () => {
       modulePath,
       'export const parameters = {type: "object", properties: {value: {type: "string"}}}; export async function run(input) {return input;}'
     );
+
     const record = {
       createdAt: now,
       description: "Probe",
@@ -2448,13 +2514,16 @@ describe("OrgService shared agent selection", () => {
       orgId: "org_parent",
       updatedAt: now,
     };
+
     await db.upsertTool(record);
     await db.upsertTool({ ...record, id: "detail_private", name: "Private" });
+
     const publication = await orgService.publishSharedResource(
       "org_parent",
       { resourceId: record.id, resourceKind: "tool" },
       "user_creator"
     );
+
     const detail = (await service.getTool(record.id, "org_team_a")).tool;
     expect(detail).toMatchObject({
       parameters: { properties: { value: { type: "string" } } },
@@ -2468,9 +2537,11 @@ describe("OrgService shared agent selection", () => {
     await expect(
       service.getToolSource(record.id, "org_team_a")
     ).rejects.toMatchObject({ status: 404 });
+
     const assigned = await service.assignTool("org_team_a", "local_agent", {
       toolId: record.id,
     });
+
     expect(assigned.profile.tools.map((tool) => tool.id)).toContain(record.id);
     expect(await db.getTool(record.id)).toMatchObject({
       handlerConfig: { modulePath },
@@ -2508,11 +2579,13 @@ describe("OrgService shared agent selection", () => {
     await expect(
       service.assignTool("org_team_b", "local_agent", { toolId: record.id })
     ).rejects.toMatchObject({ status: 404 });
+
     const instance = await orgService.createSharedAgentInstance(
       "org_team_a",
       agentPublication.id,
       "user_other"
     );
+
     await expect(
       service.assignTool("org_team_a", instance.id, { toolId: record.id })
     ).rejects.toMatchObject({ status: 403 });
@@ -2556,6 +2629,7 @@ describe("OrgService shared agent selection", () => {
     await seedSharedAgentSelection(db, orgService);
     const service = new ProfileService(db);
     const now = new Date().toISOString();
+
     const record = {
       createdAt: now,
       description: "Published",
@@ -2571,6 +2645,7 @@ describe("OrgService shared agent selection", () => {
       orgId: "org_parent",
       updatedAt: now,
     };
+
     await db.upsertTool(record);
     await db.upsertTool({ ...record, id: "private_tool", name: "Private" });
     await db.upsertTool({
@@ -2593,16 +2668,19 @@ describe("OrgService shared agent selection", () => {
       id: "global_tool",
       orgId: null,
     });
+
     const publication = await orgService.publishSharedResource(
       "org_parent",
       { resourceId: record.id, resourceKind: "tool" },
       "user_creator"
     );
+
     const globalPublication = await orgService.publishSharedResource(
       "org_parent",
       { resourceId: "global_tool", resourceKind: "tool" },
       "user_creator"
     );
+
     const catalog = await service.listTools("org_team_a");
     const shared = catalog.tools.find((tool) => tool.id === record.id)!;
     expect(shared).toMatchObject({
@@ -2662,9 +2740,11 @@ describe("OrgService shared agent selection", () => {
     const parent = (await db.getOrganizationById("org_parent"))!;
     const readOrg = db.getOrganizationById.bind(db);
     let parentView = { ...parent, archivedAt: now };
+
     const lookup = spyOn(db, "getOrganizationById").mockImplementation((id) =>
       id === parent.id ? Promise.resolve(parentView) : readOrg(id)
     );
+
     try {
       expect(
         (await service.listTools("org_team_a")).tools.some(
@@ -2680,6 +2760,7 @@ describe("OrgService shared agent selection", () => {
     } finally {
       lookup.mockRestore();
     }
+
     const team = (await db.getOrganizationById("org_team_a"))!;
     await db.upsertOrganization({ ...team, archivedAt: now });
     expect(
@@ -2705,12 +2786,15 @@ describe("OrgService shared agent selection", () => {
     async (cognito) => {
       const { orgService, databaseAdapter: db } = createOrgService();
       const publication = await seedSharedAgentSelection(db, orgService);
+
       const profile = await orgService.createSharedAgentInstance(
         "org_team_a",
         publication.id,
         "user_other"
       );
+
       const now = new Date().toISOString();
+
       const server = {
         cachedTools: [
           {
@@ -2730,6 +2814,7 @@ describe("OrgService shared agent selection", () => {
         transport: "http" as const,
         updatedAt: now,
       };
+
       await db.upsertMcpServer(server);
       const mcp = new McpService(db, new McpClientManager());
       const call = spyOn(mcp, "callTool").mockResolvedValue({ ok: true });
@@ -2750,6 +2835,7 @@ describe("OrgService shared agent selection", () => {
           },
         }),
       });
+
       try {
         const id = await agent.createSession(
           "org_team_a",
@@ -2758,11 +2844,14 @@ describe("OrgService shared agent selection", () => {
           "user_other",
           { cognito, orgRole: "member" }
         );
+
         const first = (await agent.resolveSession(id, "org_team_a"))!;
         await first.send("First");
         await db.assignMcpServerToProfile("profile_template", server.id);
+
         const detail = (await agent.getProfile("org_team_a", profile.id))
           .profile;
+
         expect(detail.mcpServers.map((item) => item.id)).toEqual([server.id]);
         expect(detail.mcpServerCount).toBe(1);
         expect(await db.listMcpServersForProfile(profile.id)).toEqual([]);
@@ -2770,20 +2859,25 @@ describe("OrgService shared agent selection", () => {
         expect(second).not.toBe(first);
         expect(second.getHistory()).toEqual(first.getHistory());
         await second.send("Second");
+
         const tool = (
           await agent.resolvePluginExecutionTools("org_team_a", profile.id)
         ).find((item) => item.name === "Shared__probe")!;
+
         expect(tool).toBeDefined();
+
         const context = agent.buildPluginToolContext("org_team_a", {
           profileId: profile.id,
           runId: "run",
           workflowId: "workflow",
         });
+
         expect(await tool.run({}, context)).toEqual({ ok: true });
         expect(call.mock.calls[0]?.slice(3)).toEqual([
           "org_team_a",
           profile.id,
         ]);
+
         for (const denied of [
           { ...context, orgRole: "viewer" as const },
           { ...context, orgId: "org_team_b" },
@@ -2793,6 +2887,7 @@ describe("OrgService shared agent selection", () => {
             status: denied.orgRole === "viewer" ? 403 : 404,
           });
         }
+
         expect(call).toHaveBeenCalledTimes(1);
         await db.upsertMcpServer({
           ...server,
@@ -2848,10 +2943,12 @@ describe("OrgService shared agent selection", () => {
           )
         ).rejects.toMatchObject({ status: 409 });
         await db.upsertMcpServer(server);
+
         const scoped = spyOn(
           db,
           "listMcpServersForProfile"
         ).mockResolvedValueOnce([{ ...server, orgId: "org_parent" }]);
+
         try {
           await expect(tool.run({}, context)).rejects.toMatchObject({
             status: 409,
@@ -2859,6 +2956,7 @@ describe("OrgService shared agent selection", () => {
         } finally {
           scoped.mockRestore();
         }
+
         await orgService.unpublishSharedResource(
           "org_parent",
           publication.id,
@@ -2873,6 +2971,7 @@ describe("OrgService shared agent selection", () => {
             (item) => item.role === "user"
           )
         ).toHaveLength(3);
+
         if (cognito) {
           expect(await db.getSession(id)).toBeNull();
         }
@@ -2895,11 +2994,13 @@ describe("OrgService shared agent selection", () => {
     async ({ cognito, handlerType, local = false }) => {
       const { orgService, databaseAdapter: db } = createOrgService();
       const publication = await seedSharedAgentSelection(db, orgService);
+
       let profile = await orgService.createSharedAgentInstance(
         "org_team_a",
         publication.id,
         "user_other"
       );
+
       if (local) {
         profile = { ...profile, id: "local_tool_agent", name: "Local tools" };
         await db.upsertProfile(profile);
@@ -2907,11 +3008,13 @@ describe("OrgService shared agent selection", () => {
           recursive: true,
         });
       }
+
       const assignmentProfileId = local ? profile.id : "profile_template";
       const now = new Date().toISOString();
       await mkdir(getCustomToolsDir(), { recursive: true });
       const filename = handlerType === "javascript" ? "shared.js" : "shared.py";
       const modulePath = join(getCustomToolsDir(), filename);
+
       const source =
         handlerType === "javascript"
           ? `import {writeFile} from "node:fs/promises";
@@ -2931,7 +3034,9 @@ def run(input, context):
 if __name__ == "__main__":
     print(json.dumps(run(json.loads(sys.stdin.read() or "{}"), {})))
 `;
+
       await writeFile(modulePath, source);
+
       const record = {
         createdAt: now,
         description: "Shared probe",
@@ -2946,6 +3051,7 @@ if __name__ == "__main__":
         orgId: "org_parent",
         updatedAt: now,
       };
+
       await db.upsertTool(record);
       await db.upsertTool({
         createdAt: now,
@@ -2957,11 +3063,13 @@ if __name__ == "__main__":
         orgId: null,
         updatedAt: now,
       });
+
       const toolPublication = await orgService.publishSharedResource(
         "org_parent",
         { resourceId: record.id, resourceKind: "tool" },
         "user_creator"
       );
+
       await saveToolApiKey("org_parent", record.id, "parent-key");
       const turns: GenerateChatInput[] = [];
       const agent = new AgentService(null, null, db);
@@ -2972,6 +3080,7 @@ if __name__ == "__main__":
           provider: {
             generateChat(input: GenerateChatInput) {
               turns.push(input);
+
               return Promise.resolve({
                 assistantMessage: { content: "Done", role: "assistant" },
                 content: "Done",
@@ -2982,6 +3091,7 @@ if __name__ == "__main__":
           },
         }),
       });
+
       const id = await agent.createSession(
         "org_team_a",
         "web",
@@ -2989,14 +3099,17 @@ if __name__ == "__main__":
         "user_other",
         { cognito, orgRole: "member" }
       );
+
       const first = (await agent.resolveSession(id, "org_team_a"))!;
       await first.send("First");
       await db.assignToolToProfile(assignmentProfileId, record.id);
       await db.assignToolToProfile(assignmentProfileId, "global_read");
       const second = (await agent.resolveSession(id, "org_team_a"))!;
+
       if (!local) {
         const detail = (await agent.getProfile("org_team_a", profile.id))
           .profile;
+
         expect(detail.tools.map((tool) => tool.id).sort()).toEqual(
           ["global_read", record.id].sort()
         );
@@ -3026,23 +3139,28 @@ if __name__ == "__main__":
         ).toBe(2);
         expect(await db.listToolsForProfile(profile.id)).toEqual([]);
       }
+
       expect(second).not.toBe(first);
       expect(second.getHistory()).toEqual(first.getHistory());
       await second.send("Second");
       expect(turns[1]!.tools?.map((tool) => tool.name)).toContain(
         "shared_probe"
       );
+
       const tools = await agent.resolvePluginExecutionTools(
         "org_team_a",
         profile.id
       );
+
       const tool = tools.find((item) => item.name === "shared_probe")!;
       const read = tools.find((item) => item.name === "read_file")!;
+
       const context = agent.buildPluginToolContext("org_team_a", {
         profileId: profile.id,
         runId: "run",
         workflowId: "workflow",
       });
+
       const teamDir = getProfileSoulDir("org_team_a", profile.id);
       const parentDir = getProfileSoulDir("org_parent", "profile_template");
       await mkdir(parentDir, { recursive: true });
@@ -3072,6 +3190,7 @@ if __name__ == "__main__":
           local ? context : { ...context, workspaceRoot: parentDir }
         )
       ).toHaveProperty("content", "Team note");
+
       for (const denied of [
         { ...context, orgRole: "viewer" as const },
         { ...context, orgId: "org_team_b" },
@@ -3081,6 +3200,7 @@ if __name__ == "__main__":
           status: denied.orgRole === "viewer" ? 403 : 404,
         });
       }
+
       await writeFile(modulePath, source.replace('"first"', '"updated"'));
       await db.upsertTool({ ...record, name: "ask_user_question" });
       await expect(
@@ -3099,9 +3219,11 @@ if __name__ == "__main__":
       const third = (await agent.resolveSession(id, "org_team_a"))!;
       expect(third).not.toBe(second);
       expect(third.getHistory()).toEqual(second.getHistory());
+
       const current = (
         await agent.resolvePluginExecutionTools("org_team_a", profile.id)
       ).find((item) => item.name === "shared_probe")!;
+
       expect(current.parameters).toMatchObject({
         properties: { updated: { type: "string" } },
       });
@@ -3130,6 +3252,7 @@ if __name__ == "__main__":
         publication.id,
         "user_creator"
       );
+
       if (local) {
         expect(await read.run({ path: "note.txt" }, context)).toHaveProperty(
           "content",
@@ -3155,11 +3278,13 @@ if __name__ == "__main__":
           read.run({ path: "note.txt" }, context)
         ).rejects.toMatchObject({ status: 404 });
       }
+
       expect(
         (await agent.getSessionMessages(id, "org_team_a"))!.messages.filter(
           (message) => message.role === "user"
         )
       ).toHaveLength(3);
+
       if (cognito) {
         expect(await db.getSession(id)).toBeNull();
       }
@@ -3177,22 +3302,26 @@ if __name__ == "__main__":
       skillsPostTurnReview: false,
       skillsWriteApproval: false,
     });
+
     for (const teamId of ["org_team_a", "org_team_b"]) {
       await db.upsertOrganization({
         ...(await db.getOrganizationById(teamId))!,
         skillsWriteApproval: teamId === "org_team_a",
       });
     }
+
     const first = await orgService.createSharedAgentInstance(
       "org_team_a",
       publication.id,
       "user_other"
     );
+
     const sibling = await orgService.createSharedAgentInstance(
       "org_team_b",
       publication.id,
       "user_other"
     );
+
     for (const profile of [first, sibling]) {
       expect(profile).toMatchObject({
         automationsEnabled: true,
@@ -3201,6 +3330,7 @@ if __name__ == "__main__":
         skillsWriteApproval: null,
       });
     }
+
     expect(await isSkillWriteApprovalRequired(db, "org_team_a", first.id)).toBe(
       true
     );
@@ -3218,16 +3348,20 @@ if __name__ == "__main__":
     expect(await isSkillWriteApprovalRequired(db, "org_team_a", first.id)).toBe(
       false
     );
+
     const resolved = await orgService.resolveSharedAgentProfile(
       "org_team_a",
       first.id
     );
+
     expect(resolved?.skillsWriteApproval).toBe(false);
+
     const retry = await orgService.createSharedAgentInstance(
       "org_team_a",
       publication.id,
       "user_other"
     );
+
     expect(retry.id).toBe(first.id);
     expect(retry.skillsWriteApproval).toBe(false);
     await expect(
@@ -3237,12 +3371,15 @@ if __name__ == "__main__":
   test("shared profile resolution uses only permitted current source settings", async () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     const publication = await seedSharedAgentSelection(db, orgService);
+
     const profile = await orgService.createSharedAgentInstance(
       "org_team_a",
       publication.id,
       "user_other"
     );
+
     const previousConfig = await loadUserConfig();
+
     try {
       await saveUserConfig({
         defaultProviderId: "shared-provider",
@@ -3274,10 +3411,12 @@ if __name__ == "__main__":
         thinkingEffort: "high",
         thinkingEnabled: true,
       });
+
       const resolved = (await orgService.resolveSharedAgentProfile(
         "org_team_a",
         profile.id
       ))!;
+
       expect(resolved).toMatchObject({
         acpAgent: null,
         acpSettings: null,
@@ -3300,8 +3439,10 @@ if __name__ == "__main__":
       expect(resolved.skillsWriteApproval).toBe(profile.skillsWriteApproval);
       const profiles = new ProfileService(db);
       profiles.setOrgService(orgService);
+
       const detail = (await profiles.getProfile("org_team_a", profile.id))
         .profile;
+
       expect(detail).toMatchObject({
         id: profile.id,
         model: "shared-provider::shared-model",
@@ -3363,12 +3504,15 @@ if __name__ == "__main__":
     async (cognito) => {
       const { orgService, databaseAdapter: db } = createOrgService();
       const publication = await seedSharedAgentSelection(db, orgService);
+
       const profile = await orgService.createSharedAgentInstance(
         "org_team_a",
         publication.id,
         "user_other"
       );
+
       const previousConfig = await loadUserConfig();
+
       const config: UserConfig = {
         defaultProviderId: "first",
         providers: ["first", "second"].map((id) => ({
@@ -3383,6 +3527,7 @@ if __name__ == "__main__":
         thinkingEffort: "medium",
         thinkingEnabled: true,
       };
+
       try {
         await saveUserConfig(config);
         const source = (await db.getProfile("profile_template"))!;
@@ -3410,6 +3555,7 @@ if __name__ == "__main__":
           })
         );
         const codingInput = { command: "echo task" };
+
         const initialCoding = await enrichCodingAgentBashInput(
           db,
           codingInput,
@@ -3417,6 +3563,7 @@ if __name__ == "__main__":
           config,
           orgService
         );
+
         expect(initialCoding.env?.OPENAI_API_KEY).toBe("second-key");
         expect(initialCoding.env?.OPENAI_MODEL).toBe("same-model");
         await expect(
@@ -3431,11 +3578,13 @@ if __name__ == "__main__":
         await expect(
           enrichCodingAgentBashInput(db, codingInput, codingContext, config)
         ).rejects.toMatchObject({ status: 503 });
+
         const modelPublication = await orgService.publishSharedResource(
           "org_parent",
           { resourceId: "second::same-model", resourceKind: "model" },
           "user_creator"
         );
+
         const selections: Array<string | null> = [];
         const agent = new AgentService(config, null, db);
         agent.setOrgService(orgService);
@@ -3447,6 +3596,7 @@ if __name__ == "__main__":
           ) => {
             expect(settings.orgId).toBe("org_team_a");
             selections.push(model);
+
             return {
               provider: {
                 generateChat: () =>
@@ -3461,6 +3611,7 @@ if __name__ == "__main__":
           },
           resolveProfileTools: async () => [],
         });
+
         const id = await agent.createSession(
           "org_team_a",
           "web",
@@ -3468,6 +3619,7 @@ if __name__ == "__main__":
           "user_other",
           { cognito, orgRole: "member" }
         );
+
         const first = (await agent.resolveSession(id, "org_team_a"))!;
         await first.send("Keep history");
         const history = [...first.getHistory()];
@@ -3506,6 +3658,7 @@ if __name__ == "__main__":
         expect(selections).toHaveLength(1);
         Object.assign(agent, { userConfig: config });
         await db.upsertProfile({ ...source, model: "first::same-model" });
+
         const changedCoding = await enrichCodingAgentBashInput(
           db,
           codingInput,
@@ -3513,6 +3666,7 @@ if __name__ == "__main__":
           config,
           orgService
         );
+
         expect(changedCoding.env?.OPENAI_API_KEY).toBe("first-key");
         expect((await db.getProfile(profile.id))!.model).toBe(profile.model);
         expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
@@ -3572,11 +3726,13 @@ if __name__ == "__main__":
     async (cognito) => {
       const { orgService, databaseAdapter: db } = createOrgService();
       const publication = await seedSharedAgentSelection(db, orgService);
+
       const profile = await orgService.createSharedAgentInstance(
         "org_team_a",
         publication.id,
         "user_other"
       );
+
       const teamDir = getProfileSoulDir("org_team_a", profile.id);
       await writeFile(join(teamDir, "MEMORY.md"), "Team memory");
       await writeFile(join(teamDir, "USER.md"), "Team context");
@@ -3612,10 +3768,12 @@ if __name__ == "__main__":
         _providerConfigured: true,
         createHarnessForProfile: (settings: StoredProfileRecord) => {
           builds.push(settings);
+
           return {
             provider: {
               generateChat: (input: GenerateChatInput) => {
                 turns.push(input);
+
                 return Promise.resolve({
                   assistantMessage: { content: "Done", role: "assistant" },
                   content: "Done",
@@ -3630,9 +3788,11 @@ if __name__ == "__main__":
           if (failBuild) {
             throw new Error("Build failed");
           }
+
           return [];
         },
       });
+
       const id = await agent.createSession(
         "org_team_a",
         "web",
@@ -3640,6 +3800,7 @@ if __name__ == "__main__":
         "user_other",
         { cognito, orgRole: "member" }
       );
+
       const first = (await agent.resolveSession(id, "org_team_a"))!;
       await first.send("First");
       expect(turns[0]!.system).toContain("Published identity");
@@ -3647,6 +3808,7 @@ if __name__ == "__main__":
       expect(turns[0]!.system).toContain("Published operations");
       expect(turns[0]!.system).toContain("Team memory");
       expect(turns[0]!.system).toContain("Team user context");
+
       for (const privateText of [
         "Private parent context",
         "Private parent file",
@@ -3655,6 +3817,7 @@ if __name__ == "__main__":
       ]) {
         expect(turns[0]!.system).not.toContain(privateText);
       }
+
       const history = [...first.getHistory()];
       expect(await agent.beginSessionTurn(id, "org_team_a")).toBe(true);
       const source = (await db.getProfile("profile_template"))!;
@@ -3717,6 +3880,7 @@ if __name__ == "__main__":
       expect(fourth).not.toBe(third);
       expect(fourth.getHistory()).toEqual(third.getHistory());
       await fourth.send("Fourth");
+
       for (const removedText of [
         "Published identity",
         "Changed published style",
@@ -3726,6 +3890,7 @@ if __name__ == "__main__":
       ]) {
         expect(turns[3]!.system).not.toContain(removedText);
       }
+
       expect(turns[3]!.system).toContain("Team memory");
       expect(turns[3]!.system).toContain("Team user context");
       expect(
@@ -3748,6 +3913,7 @@ if __name__ == "__main__":
       expect(await readFile(join(teamDir, "USER.md"), "utf8")).toBe(
         "Team context"
       );
+
       if (cognito) {
         expect(await db.getSession(id)).toBeNull();
         expect(await db.listMessagesForSession(id)).toEqual([]);
@@ -3760,11 +3926,13 @@ if __name__ == "__main__":
     async (filename) => {
       const { orgService, databaseAdapter: db } = createOrgService();
       const publication = await seedSharedAgentSelection(db, orgService);
+
       const profile = await orgService.createSharedAgentInstance(
         "org_team_a",
         publication.id,
         "user_other"
       );
+
       const sourceDir = getProfileSoulDir("org_parent", "profile_template");
       await mkdir(sourceDir, { recursive: true });
       await writeFile(join(sourceDir, "MEMORY.md"), "Private parent memory");
@@ -3787,10 +3955,12 @@ if __name__ == "__main__":
       ).rejects.toMatchObject({ status: 404 });
       await rm(filePath, { recursive: true });
       await writeFile(filePath, "Published configuration");
+
       const resolved = (await orgService.resolveSharedAgentProfile(
         "org_team_a",
         profile.id
       ))!;
+
       expect(Object.keys(resolved.publishedSoul).sort()).toEqual([
         "instructions",
         "soul",
@@ -3810,11 +3980,13 @@ if __name__ == "__main__":
     async (cognito) => {
       const { orgService, databaseAdapter: db } = createOrgService();
       const publication = await seedSharedAgentSelection(db, orgService);
+
       const profile = await orgService.createSharedAgentInstance(
         "org_team_a",
         publication.id,
         "user_other"
       );
+
       const agent = new AgentService(null, null, db);
       agent.setOrgService(orgService);
       Object.assign(agent, {
@@ -3832,6 +4004,7 @@ if __name__ == "__main__":
         }),
         resolveProfileTools: async () => [],
       });
+
       const id = await agent.createSession(
         "org_team_a",
         "web",
@@ -3839,6 +4012,7 @@ if __name__ == "__main__":
         "user_other",
         { cognito, orgRole: "member" }
       );
+
       const session = (await agent.resolveSession(id, "org_team_a"))!;
       await session.send("Keep this history");
       const history = [...session.getHistory()];
@@ -3891,6 +4065,7 @@ if __name__ == "__main__":
       expect(await db.getProfileForOrg(profile.id, "org_team_a")).toEqual(
         profile
       );
+
       if (cognito) {
         expect(await db.getSession(id)).toBeNull();
       }
@@ -3902,15 +4077,19 @@ if __name__ == "__main__":
     async (change) => {
       const { orgService, databaseAdapter: db } = createOrgService();
       const publication = await seedSharedAgentSelection(db, orgService);
+
       const profile = await orgService.createSharedAgentInstance(
         "org_team_a",
         publication.id,
         "user_other"
       );
+
       await orgService.resolveSharedAgentProfile("org_team_a", profile.id);
+
       const org = (await db.getOrganizationById(
         change === "parent-archive" ? "org_parent" : "org_team_a"
       ))!;
+
       const unavailable = {
         ...org,
         archivedAt: change.endsWith("archive")
@@ -3919,10 +4098,13 @@ if __name__ == "__main__":
         parentOrgId: change === "reparent" ? null : org.parentOrgId,
         setupPending: change === "team-pending",
       };
+
       const getOrganization = db.getOrganizationById.bind(db);
+
       const read = spyOn(db, "getOrganizationById").mockImplementation((id) =>
         id === org.id ? Promise.resolve(unavailable) : getOrganization(id)
       );
+
       try {
         await expect(
           orgService.resolveSharedAgentProfile("org_team_a", profile.id)
@@ -3930,6 +4112,7 @@ if __name__ == "__main__":
       } finally {
         read.mockRestore();
       }
+
       expect(await db.getProfileForOrg(profile.id, "org_team_a")).toEqual(
         profile
       );
@@ -3939,11 +4122,13 @@ if __name__ == "__main__":
   test("shared runtime fails closed without the organization service", async () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     const publication = await seedSharedAgentSelection(db, orgService);
+
     const profile = await orgService.createSharedAgentInstance(
       "org_team_a",
       publication.id,
       "user_other"
     );
+
     const agent = new AgentService(null, null, db);
     await expect(
       agent.createSession("org_team_a", "web", profile.id, "user_other")
@@ -3959,6 +4144,7 @@ if __name__ == "__main__":
     await writeFile(join(sourceDir, "MEMORY.md"), "Private parent memory");
     await writeFile(join(sourceDir, "USER.md"), "Private parent user context");
     await writeFile(join(sourceDir, "private.txt"), "Private parent file");
+
     const selected = await Promise.all(
       Array.from({ length: 8 }, () =>
         orgService.createSharedAgentInstance(
@@ -3968,6 +4154,7 @@ if __name__ == "__main__":
         )
       )
     );
+
     expect(new Set(selected.map((profile) => profile.id)).size).toBe(1);
     const profile = selected[0];
     expect(profile).toMatchObject({
@@ -4015,11 +4202,13 @@ if __name__ == "__main__":
     expect(await readFile(join(teamDir, "private.txt"), "utf8")).toBe(
       "Private team file"
     );
+
     const sibling = await orgService.createSharedAgentInstance(
       "org_team_b",
       publication.id,
       "user_other"
     );
+
     expect(sibling.id).not.toBe(profile.id);
     expect(sibling.orgId).toBe("org_team_b");
     expect(await readdir(getProfileSoulDir("org_team_b", sibling.id))).toEqual(
@@ -4039,6 +4228,7 @@ if __name__ == "__main__":
   test("selection requires existing team invocation access and a current agent publication", async () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     const publication = await seedSharedAgentSelection(db, orgService);
+
     for (const [userId, status] of [
       ["user_creator", 404],
       ["user_viewer", 403],
@@ -4052,6 +4242,7 @@ if __name__ == "__main__":
         )
       ).rejects.toMatchObject({ status });
     }
+
     const now = new Date().toISOString();
     await db.createUser({
       createdAt: now,
@@ -4099,11 +4290,13 @@ if __name__ == "__main__":
       orgId: "org_parent",
       updatedAt: now,
     });
+
     const toolPublication = await orgService.publishSharedResource(
       "org_parent",
       { resourceId: "tool_parent", resourceKind: "tool" },
       "user_creator"
     );
+
     await expect(
       orgService.createSharedAgentInstance(
         "org_team_a",
@@ -4130,11 +4323,13 @@ if __name__ == "__main__":
       { resourceId: "tool_parent", resourceKind: "tool" },
       "user_creator"
     );
+
     const profile = await orgService.createSharedAgentInstance(
       "org_team_a",
       publication.id,
       "user_other"
     );
+
     await orgService.unpublishSharedResource(
       "org_parent",
       publication.id,
@@ -4150,11 +4345,13 @@ if __name__ == "__main__":
     expect((await db.getProfileForOrg(profile.id, "org_team_a"))?.id).toBe(
       profile.id
     );
+
     const republished = await orgService.publishSharedResource(
       "org_parent",
       { resourceId: "profile_template", resourceKind: "agent" },
       "user_creator"
     );
+
     expect(republished.id).not.toBe(publication.id);
     expect(
       (
@@ -4194,11 +4391,13 @@ if __name__ == "__main__":
     const [stored] = await db.listProfilesForOrg("org_team_a");
     expect(stored).toBeTruthy();
     await rm(profilesDir);
+
     const recovered = await orgService.createSharedAgentInstance(
       "org_team_a",
       publication.id,
       "user_other"
     );
+
     expect(recovered.id).toBe(stored.id);
     const teamDir = getProfileSoulDir("org_team_a", stored.id);
     const foreignDir = getProfileSoulDir("org_parent", "profile_template");
@@ -4290,6 +4489,7 @@ describe("OrgService shared resource publications", () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     await seedSharedAgentSelection(db, orgService);
     const now = new Date().toISOString();
+
     for (const handlerType of ["javascript", "python"] as const) {
       const id = `credential_tool_${handlerType}`;
       await db.upsertTool({
@@ -4306,11 +4506,13 @@ describe("OrgService shared resource publications", () => {
         orgId: "org_parent",
         updatedAt: now,
       });
+
       const publication = await orgService.publishSharedResource(
         "org_parent",
         { resourceId: id, resourceKind: "tool" },
         "user_creator"
       );
+
       await saveToolApiKey("org_parent", id, "private-parent-key");
       await saveToolEnv(
         "org_parent",
@@ -4320,17 +4522,21 @@ describe("OrgService shared resource publications", () => {
           SERVICE_TOKEN: "private-parent-token",
         }
       );
+
       const parent = await orgService.listSharedResources(
         "org_parent",
         "user_creator"
       );
+
       expect(
         parent.resources.find((item) => item.id === publication.id)?.readiness
       ).toBe("ready");
+
       const first = await orgService.listSharedResources(
         "org_team_a",
         "user_other"
       );
+
       expect(
         first.resources.find((item) => item.id === publication.id)?.readiness
       ).toBe("requires_setup");
@@ -4349,10 +4555,12 @@ describe("OrgService shared resource publications", () => {
           SERVICE_TOKEN: "private-team-token",
         }
       );
+
       const ready = await orgService.getOrganizationOverview(
         "org_team_a",
         "user_other"
       );
+
       expect(
         ready.sharedResources.find((item) => item.id === publication.id)
           ?.readiness
@@ -4370,6 +4578,7 @@ describe("OrgService shared resource publications", () => {
         ).resources.find((item) => item.id === publication.id)?.readiness
       ).toBe("requires_setup");
       const tool = (await db.getTool(id))!;
+
       for (const handlerConfig of [
         null,
         [],
@@ -4382,6 +4591,7 @@ describe("OrgService shared resource publications", () => {
           ).resources.find((item) => item.id === publication.id)?.readiness
         ).toBe("unavailable");
       }
+
       await db.upsertTool(tool);
       await db.deleteTool(id);
       expect(
@@ -4395,6 +4605,7 @@ describe("OrgService shared resource publications", () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     await seedTeamParent(db);
     const now = new Date().toISOString();
+
     const profile = {
       createdAt: now,
       id: "profile_template",
@@ -4406,10 +4617,12 @@ describe("OrgService shared resource publications", () => {
       systemPrompt: "Instructions",
       updatedAt: now,
     };
+
     await db.upsertProfile(profile);
     const soulDir = getProfileSoulDir("org_parent", profile.id);
     await mkdir(soulDir, { recursive: true });
     await writeFile(join(soulDir, "MEMORY.md"), "Private source memory");
+
     const tool = {
       createdAt: now,
       description: "Test",
@@ -4420,6 +4633,7 @@ describe("OrgService shared resource publications", () => {
       orgId: "org_parent",
       updatedAt: now,
     };
+
     await db.upsertTool(tool);
     await db.assignToolToProfile(profile.id, tool.id);
     const request = { resourceId: profile.id, resourceKind: "agent" as const };
@@ -4431,16 +4645,19 @@ describe("OrgService shared resource publications", () => {
       { resourceId: tool.id, resourceKind: "tool" },
       "user_creator"
     );
+
     const skillPath = resolveProfileSkillDirectory(
       "org_parent",
       profile.id,
       "template-skill"
     );
+
     await mkdir(skillPath, { recursive: true });
     await writeFile(
       join(skillPath, "SKILL.md"),
       "---\nname: template-skill\ndescription: Test\n---\nInstructions"
     );
+
     const skill = {
       createdAt: now,
       createdBy: "human" as const,
@@ -4454,6 +4671,7 @@ describe("OrgService shared resource publications", () => {
       sourcePath: skillPath,
       updatedAt: now,
     };
+
     await db.upsertSkill(skill);
     await db.assignSkillToProfile(profile.id, skill.id);
     await expect(
@@ -4464,6 +4682,7 @@ describe("OrgService shared resource publications", () => {
       { resourceId: skill.id, resourceKind: "skill" },
       "user_creator"
     );
+
     const { document } = await uploadOrganizationKnowledgeBaseDocument(
       "org_parent",
       {
@@ -4472,6 +4691,7 @@ describe("OrgService shared resource publications", () => {
         mediaType: "text/plain",
       }
     );
+
     await attachSharedKnowledgeBaseDocument(
       "org_parent",
       profile.id,
@@ -4480,16 +4700,19 @@ describe("OrgService shared resource publications", () => {
     await expect(
       orgService.publishSharedResource("org_parent", request, "user_creator")
     ).rejects.toMatchObject({ status: 409 });
+
     const knowledgePublication = await orgService.publishSharedResource(
       "org_parent",
       { resourceId: document.id, resourceKind: "knowledge" },
       "user_creator"
     );
+
     const publication = await orgService.publishSharedResource(
       "org_parent",
       request,
       "user_creator"
     );
+
     expect(
       await orgService.publishSharedResource(
         "org_parent",
@@ -4539,6 +4762,7 @@ describe("OrgService shared resource publications", () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     await seedTeamParent(db);
     const now = new Date().toISOString();
+
     const profile = {
       createdAt: now,
       id: "profile_template",
@@ -4550,7 +4774,9 @@ describe("OrgService shared resource publications", () => {
       systemPrompt: "",
       updatedAt: now,
     };
+
     const request = { resourceId: profile.id, resourceKind: "agent" as const };
+
     for (const changes of [
       { orgId: "org_other" },
       { isDefault: true },
@@ -4561,6 +4787,7 @@ describe("OrgService shared resource publications", () => {
         orgService.publishSharedResource("org_parent", request, "user_creator")
       ).rejects.toMatchObject({ status: 404 });
     }
+
     for (const changes of [
       { acpAgent: { args: ["--token", "parent-secret"], command: "agent" } },
       { acpSettings: { token: "parent-secret" } },
@@ -4571,7 +4798,9 @@ describe("OrgService shared resource publications", () => {
       ).rejects.toMatchObject({ status: 409 });
       expect(await db.listOrgSharedResources("org_parent")).toEqual([]);
     }
+
     await db.upsertProfile(profile);
+
     const globalTool = {
       createdAt: now,
       description: "Test",
@@ -4582,6 +4811,7 @@ describe("OrgService shared resource publications", () => {
       orgId: null,
       updatedAt: now,
     };
+
     await db.upsertTool(globalTool);
     await db.assignToolToProfile(profile.id, globalTool.id);
     await orgService.publishSharedResource(
@@ -4589,11 +4819,13 @@ describe("OrgService shared resource publications", () => {
       request,
       "user_creator"
     );
+
     const parentTool = {
       ...globalTool,
       id: "tool_parent",
       orgId: "org_parent",
     };
+
     await db.upsertTool(parentTool);
     await orgService.publishSharedResource(
       "org_parent",
@@ -4626,10 +4858,12 @@ describe("OrgService shared resource publications", () => {
       request,
       "user_creator"
     );
+
     const scopedServer = spyOn(
       db,
       "listMcpServersForProfile"
     ).mockResolvedValueOnce([{ ...server!, orgId: "org_parent" }]);
+
     try {
       await expect(
         orgService.publishSharedResource("org_parent", request, "user_creator")
@@ -4637,6 +4871,7 @@ describe("OrgService shared resource publications", () => {
     } finally {
       scopedServer.mockRestore();
     }
+
     await db.unassignMcpServerFromProfile(profile.id, "mcp_parent");
     await db.upsertProfile({
       ...profile,
@@ -4653,6 +4888,7 @@ describe("OrgService shared resource publications", () => {
   test("model publications retain provider identity and require current configured selections", async () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     await seedTeamParent(db);
+
     const providers = ["provider_first", "provider_second"].map((id) => ({
       apiKey: "private-provider-key",
       baseUrl: "http://localhost:11434/v1",
@@ -4662,14 +4898,17 @@ describe("OrgService shared resource publications", () => {
       label: id,
       type: "ollama" as const,
     }));
+
     const config = {
       defaultProviderId: providers[0]!.id,
       providers,
       thinkingEffort: "medium" as const,
       thinkingEnabled: true,
     };
+
     await saveUserConfig(config);
     const sourceConfig = await readFile(getUserConfigPath());
+
     const first = await orgService.publishSharedResource(
       "org_parent",
       {
@@ -4678,6 +4917,7 @@ describe("OrgService shared resource publications", () => {
       },
       "user_creator"
     );
+
     const retry = await orgService.publishSharedResource(
       "org_parent",
       {
@@ -4686,7 +4926,9 @@ describe("OrgService shared resource publications", () => {
       },
       "user_creator"
     );
+
     expect(retry).toEqual(first);
+
     const second = await orgService.publishSharedResource(
       "org_parent",
       {
@@ -4695,6 +4937,7 @@ describe("OrgService shared resource publications", () => {
       },
       "user_creator"
     );
+
     expect(second.id).not.toBe(first.id);
     expect(second.resourceId).toBe("provider_second::same-model");
     expect(Object.keys(first).sort()).toEqual([
@@ -4705,6 +4948,7 @@ describe("OrgService shared resource publications", () => {
       "resourceKind",
       "updatedAt",
     ]);
+
     for (const resourceId of [
       "",
       "same-model",
@@ -4725,6 +4969,7 @@ describe("OrgService shared resource publications", () => {
         )
       ).rejects.toMatchObject({ status: 400 });
     }
+
     await expect(
       orgService.publishSharedResource(
         "org_parent",
@@ -4778,6 +5023,7 @@ describe("OrgService shared resource publications", () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     await seedTeamParent(db);
     const now = new Date().toISOString();
+
     for (const orgId of ["org_parent", "org_other", null]) {
       const id = `tool_${orgId ?? "global"}`;
       await db.upsertTool({
@@ -4791,13 +5037,16 @@ describe("OrgService shared resource publications", () => {
         updatedAt: now,
       });
     }
+
     for (const resourceId of ["tool_org_parent", "tool_global"]) {
       const request = { resourceId, resourceKind: "tool" as const };
+
       const publication = await orgService.publishSharedResource(
         "org_parent",
         request,
         "user_creator"
       );
+
       expect(
         await orgService.publishSharedResource(
           "org_parent",
@@ -4814,6 +5063,7 @@ describe("OrgService shared resource publications", () => {
         command: "test",
       });
     }
+
     for (const resourceId of ["tool_org_other", "missing"]) {
       await expect(
         orgService.publishSharedResource(
@@ -4823,6 +5073,7 @@ describe("OrgService shared resource publications", () => {
         )
       ).rejects.toMatchObject({ status: 404 });
     }
+
     await expect(
       orgService.publishSharedResource(
         "org_parent",
@@ -4848,15 +5099,19 @@ describe("OrgService shared resource publications", () => {
       systemPrompt: "",
       updatedAt: now,
     });
+
     const sourcePath = resolveProfileSkillDirectory(
       "org_parent",
       profileId,
       "shared-skill"
     );
+
     const content =
       "---\nname: shared-skill\ndescription: Test skill\n---\nUse this skill.\n";
+
     await mkdir(sourcePath, { recursive: true });
     await writeFile(join(sourcePath, "SKILL.md"), content);
+
     const skill = {
       createdAt: now,
       createdBy: "human" as const,
@@ -4870,13 +5125,16 @@ describe("OrgService shared resource publications", () => {
       sourcePath,
       updatedAt: now,
     };
+
     await db.upsertSkill(skill);
     const request = { resourceId: skill.id, resourceKind: "skill" as const };
+
     const publication = await orgService.publishSharedResource(
       "org_parent",
       request,
       "user_creator"
     );
+
     const sourceAlias = join(getUserConfigDir(), `${profileId}-source-alias`);
     await symlink(sourcePath, sourceAlias);
     await db.upsertSkill({ ...skill, sourcePath: sourceAlias });
@@ -4894,6 +5152,7 @@ describe("OrgService shared resource publications", () => {
       "user_creator"
     );
     expect(await readFile(join(sourcePath, "SKILL.md"), "utf8")).toBe(content);
+
     for (const changes of [
       { enabled: false },
       { orgId: "org_other" },
@@ -4912,7 +5171,9 @@ describe("OrgService shared resource publications", () => {
         orgService.publishSharedResource("org_parent", request, "user_creator")
       ).rejects.toMatchObject({ status: 404 });
     }
+
     await db.upsertSkill(skill);
+
     for (const invalid of [
       "",
       "invalid",
@@ -4923,10 +5184,12 @@ describe("OrgService shared resource publications", () => {
         orgService.publishSharedResource("org_parent", request, "user_creator")
       ).rejects.toMatchObject({ status: 404 });
     }
+
     await rm(join(sourcePath, "SKILL.md"));
     await expect(
       orgService.publishSharedResource("org_parent", request, "user_creator")
     ).rejects.toMatchObject({ status: 404 });
+
     if (process.platform !== "win32") {
       const foreignFile = join(getOrgConfigDir("org_other"), `${profileId}.md`);
       await mkdir(getOrgConfigDir("org_other"), { recursive: true });
@@ -4948,6 +5211,7 @@ describe("OrgService shared resource publications", () => {
         content
       );
     }
+
     expect(await db.listOrgSharedResources("org_parent")).toEqual([]);
   });
 
@@ -4963,45 +5227,54 @@ describe("OrgService shared resource publications", () => {
       await seedTeamParent(db);
       const profiles = new ProfileService(db);
       const attachment = source();
+
       const uploaded = await profiles.uploadOrganizationKnowledgeBaseDocument(
         "org_parent",
         attachment
       );
+
       const other = await profiles.uploadOrganizationKnowledgeBaseDocument(
         "org_parent",
         source()
       );
+
       const publication = await orgService.publishSharedResource(
         "org_parent",
         { resourceId: uploaded.document.id, resourceKind: "knowledge" },
         "user_creator"
       );
+
       const retained = await orgService.publishSharedResource(
         "org_parent",
         { resourceId: other.document.id, resourceKind: "knowledge" },
         "user_creator"
       );
+
       const foreign = await db.publishOrgSharedResource({
         ...publication,
         id: `foreign_${publication.id}`,
         orgId: "org_other",
       });
+
       if (action === "replace") {
         const skipped = await profiles.uploadOrganizationKnowledgeBaseDocument(
           "org_parent",
           attachment,
           "skip"
         );
+
         expect(skipped.document.id).toBe(uploaded.document.id);
         expect(
           await db.getOrgSharedResource("org_parent", publication.id)
         ).toEqual(publication);
+
         const replacement =
           await profiles.uploadOrganizationKnowledgeBaseDocument(
             "org_parent",
             attachment,
             "replace"
           );
+
         expect(replacement.outcome).toBe("replaced");
         expect(replacement.document.id).not.toBe(uploaded.document.id);
       } else {
@@ -5012,6 +5285,7 @@ describe("OrgService shared resource publications", () => {
           )
         ).toEqual({ deleted: true, documentId: uploaded.document.id });
       }
+
       expect(await db.listOrgSharedResources("org_parent")).toEqual([retained]);
       expect(await db.getOrgSharedResource("org_other", foreign.id)).toEqual(
         foreign
@@ -5038,10 +5312,12 @@ describe("OrgService shared resource publications", () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     await seedTeamParent(db);
     const profiles = new ProfileService(db);
+
     const uploaded = await profiles.uploadOrganizationKnowledgeBaseDocument(
       "org_parent",
       source()
     );
+
     const publication = await orgService.publishSharedResource(
       "org_parent",
       {
@@ -5050,9 +5326,11 @@ describe("OrgService shared resource publications", () => {
       },
       "user_creator"
     );
+
     const failure = spyOn(db, "deleteOrgSharedResource").mockRejectedValueOnce(
       new Error("database unavailable")
     );
+
     try {
       await expect(
         profiles.deleteOrganizationKnowledgeBaseDocument(
@@ -5069,6 +5347,7 @@ describe("OrgService shared resource publications", () => {
     } finally {
       failure.mockRestore();
     }
+
     await expect(
       profiles.deleteOrganizationKnowledgeBaseDocument(
         "org_parent",
@@ -5082,21 +5361,26 @@ describe("OrgService shared resource publications", () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     await seedTeamParent(db);
     const profiles = new ProfileService(db);
+
     const uploaded = await profiles.uploadOrganizationKnowledgeBaseDocument(
       "org_parent",
       source()
     );
+
     const entered = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
     const publish = db.publishOrgSharedResource.bind(db);
+
     const pendingWrite = spyOn(
       db,
       "publishOrgSharedResource"
     ).mockImplementation(async (record) => {
       entered.resolve();
       await release.promise;
+
       return publish(record);
     });
+
     const publishing = orgService.publishSharedResource(
       "org_parent",
       {
@@ -5105,11 +5389,14 @@ describe("OrgService shared resource publications", () => {
       },
       "user_creator"
     );
+
     await entered.promise;
+
     const deleting = profiles.deleteOrganizationKnowledgeBaseDocument(
       "org_parent",
       uploaded.document.id
     );
+
     try {
       expect(
         await Promise.race([
@@ -5127,6 +5414,7 @@ describe("OrgService shared resource publications", () => {
       await Promise.allSettled([publishing, deleting]);
       pendingWrite.mockRestore();
     }
+
     await expect(publishing).resolves.toMatchObject({
       resourceId: uploaded.document.id,
     });
@@ -5141,25 +5429,31 @@ describe("OrgService shared resource publications", () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     await seedTeamParent(db);
     const attachment = source();
+
     const { document } = await uploadOrganizationKnowledgeBaseDocument(
       "org_parent",
       attachment
     );
+
     const request = {
       resourceId: document.id,
       resourceKind: "knowledge" as const,
     };
+
     expect(await db.listOrgSharedResources("org_parent")).toEqual([]);
+
     const publication = await orgService.publishSharedResource(
       "org_parent",
       request,
       "user_creator"
     );
+
     const retried = await orgService.publishSharedResource(
       "org_parent",
       request,
       "user_creator"
     );
+
     expect(retried.id).toBe(publication.id);
     expect(await db.listOrgSharedResources("org_parent")).toHaveLength(1);
     expect(publication).toMatchObject({ orgId: "org_parent", ...request });
@@ -5186,11 +5480,13 @@ describe("OrgService shared resource publications", () => {
         )
       )
     ).resolves.toEqual(Buffer.from(attachment.data, "base64"));
+
     const republished = await orgService.publishSharedResource(
       "org_parent",
       request,
       "user_creator"
     );
+
     expect(republished.id).not.toBe(publication.id);
   });
 
@@ -5218,19 +5514,23 @@ describe("OrgService shared resource publications", () => {
       role: "admin",
       userId: "user_other",
     });
+
     const { document } = await uploadOrganizationKnowledgeBaseDocument(
       "org_parent",
       source()
     );
+
     const request = {
       resourceId: document.id,
       resourceKind: "knowledge" as const,
     };
+
     const publication = await orgService.publishSharedResource(
       "org_parent",
       request,
       "user_creator"
     );
+
     for (const actor of ["user_viewer", "user_other", "user_missing"]) {
       await expect(
         orgService.publishSharedResource("org_parent", request, actor)
@@ -5239,6 +5539,7 @@ describe("OrgService shared resource publications", () => {
         orgService.unpublishSharedResource("org_parent", publication.id, actor)
       ).rejects.toMatchObject({ status: 403 });
     }
+
     await expect(
       orgService.publishSharedResource("org_team", request, "user_other")
     ).rejects.toMatchObject({ status: 409 });
@@ -5260,19 +5561,23 @@ describe("OrgService shared resource publications", () => {
       passwordHash: "test",
       updatedAt: now,
     });
+
     const { document } = await uploadOrganizationKnowledgeBaseDocument(
       "org_parent",
       source()
     );
+
     const request = {
       resourceId: document.id,
       resourceKind: "knowledge" as const,
     };
+
     const publication = await orgService.publishSharedResource(
       "org_parent",
       request,
       "user_platform"
     );
+
     expect(
       await orgService.unpublishSharedResource(
         "org_other",
@@ -5300,19 +5605,23 @@ describe("OrgService shared resource publications", () => {
   test("foreign, profile-owned, missing, and failed documents leave publications unchanged", async () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     await seedTeamParent(db);
+
     const foreign = await uploadOrganizationKnowledgeBaseDocument(
       "org_other",
       source()
     );
+
     const profile = await uploadKnowledgeBaseDocument(
       "org_parent",
       "profile_private",
       source()
     );
+
     const missing = await uploadOrganizationKnowledgeBaseDocument(
       "org_parent",
       source()
     );
+
     await rm(
       getKnowledgeBaseStoredDocumentPath(
         getOrgKnowledgeBaseDir("org_parent"),
@@ -5320,15 +5629,19 @@ describe("OrgService shared resource publications", () => {
         missing.document.filename
       )
     );
+
     const failed = await uploadOrganizationKnowledgeBaseDocument(
       "org_parent",
       source()
     );
+
     const manifestPath = getKnowledgeBaseManifestPath(
       getOrgKnowledgeBaseDir("org_parent")
     );
+
     const documents =
       await listOrganizationKnowledgeBaseDocuments("org_parent");
+
     await writeFile(
       manifestPath,
       JSON.stringify({
@@ -5339,6 +5652,7 @@ describe("OrgService shared resource publications", () => {
         ),
       })
     );
+
     for (const resourceId of [
       foreign.document.id,
       profile.document.id,
@@ -5354,6 +5668,7 @@ describe("OrgService shared resource publications", () => {
         )
       ).rejects.toMatchObject({ status: 404 });
     }
+
     expect(await db.listOrgSharedResources("org_parent")).toEqual([]);
   });
 
@@ -5362,15 +5677,18 @@ describe("OrgService shared resource publications", () => {
     async () => {
       const { orgService, databaseAdapter: db } = createOrgService();
       await seedTeamParent(db);
+
       const { document } = await uploadOrganizationKnowledgeBaseDocument(
         "org_parent",
         source()
       );
+
       const stored = getKnowledgeBaseStoredDocumentPath(
         getOrgKnowledgeBaseDir("org_parent"),
         document.id,
         document.filename
       );
+
       const privatePath = join(getOrgConfigDir("org_other"), "private.txt");
       await mkdir(getOrgConfigDir("org_other"), { recursive: true });
       await writeFile(privatePath, "private");
@@ -5393,10 +5711,12 @@ describe("OrgService team setup", () => {
   test("concurrent and later retries return one fully seeded team", async () => {
     const { orgService, databaseAdapter } = createOrgService();
     const request = await seedTeamParent(databaseAdapter);
+
     const [first, retry] = await Promise.all([
       orgService.createTeam("org_parent", request, "user_creator"),
       orgService.createTeam("org_parent", request, "user_creator"),
     ]);
+
     expect(retry.organization.id).toBe(first.organization.id);
     expect(
       (await orgService.createTeam("org_parent", request, "user_creator"))
@@ -5404,17 +5724,22 @@ describe("OrgService team setup", () => {
     ).toBe(first.organization.id);
     expect(first.adminMember?.member.userId).toBe("user_creator");
     expect(first.adminMember?.temporaryPassword).toBeNull();
+
     const team = await databaseAdapter.getOrganizationById(
       first.organization.id
     );
+
     expect(team?.parentOrgId).toBe("org_parent");
     expect(team?.setupPending).toBe(false);
+
     const profiles = await databaseAdapter.listProfilesForOrg(
       first.organization.id
     );
+
     expect(profiles).toHaveLength(2);
     expect(profiles.some((profile) => profile.isDefault)).toBe(true);
     expect(profiles.some((profile) => profile.isSuper)).toBe(true);
+
     for (const profile of profiles) {
       expect(
         await readFile(
@@ -5423,6 +5748,7 @@ describe("OrgService team setup", () => {
         )
       ).toBeTruthy();
     }
+
     await expect(
       orgService.createTeam(
         "org_parent",
@@ -5445,11 +5771,13 @@ describe("OrgService team setup", () => {
   test("another first admin gets team access without adding the creator", async () => {
     const { orgService, databaseAdapter } = createOrgService();
     const request = await seedTeamParent(databaseAdapter);
+
     const created = await orgService.createTeam(
       "org_parent",
       { ...request, adminUserId: "user_other" },
       "user_creator"
     );
+
     expect(created.adminMember?.member.userId).toBe("user_other");
     expect(
       await databaseAdapter.getOrgMember(
@@ -5479,6 +5807,7 @@ describe("OrgService team setup", () => {
         })
       ).id
     ).toBe(created.organization.id);
+
     for (const actor of ["user_viewer", "user_other", "missing"]) {
       await expect(
         orgService.createTeam(
@@ -5488,6 +5817,7 @@ describe("OrgService team setup", () => {
         )
       ).rejects.toMatchObject({ status: 403 });
     }
+
     await expect(
       orgService.createTeam(
         "org_parent",
@@ -5517,16 +5847,20 @@ describe("OrgService team setup", () => {
       await writeFile(parentFile, "Parent private data");
       let failedTeamId = "";
       const original = databaseAdapter.upsertProfile.bind(databaseAdapter);
+
       const profileSpy = spyOn(
         databaseAdapter,
         "upsertProfile"
       ).mockImplementation(async (profile) => {
         failedTeamId = profile.orgId ?? "";
+
         if (stage === "seed" && profile.isSuper) {
           throw new Error("Injected profile failure");
         }
+
         await original(profile);
       });
+
       const completeSpy =
         stage === "complete"
           ? spyOn(
@@ -5534,6 +5868,7 @@ describe("OrgService team setup", () => {
               "completeOrgTeamCreation"
             ).mockResolvedValueOnce(false)
           : null;
+
       try {
         await expect(
           orgService.createTeam("org_parent", request, "user_creator")
@@ -5542,6 +5877,7 @@ describe("OrgService team setup", () => {
         profileSpy.mockRestore();
         completeSpy?.mockRestore();
       }
+
       expect(failedTeamId).toBeTruthy();
       expect(
         await databaseAdapter.getOrganizationById(failedTeamId)
@@ -5558,11 +5894,13 @@ describe("OrgService team setup", () => {
       await expect(access(getOrgConfigDir(failedTeamId))).rejects.toThrow();
       expect(await readFile(parentFile, "utf8")).toBe("Parent private data");
       expect(await databaseAdapter.getUserById("user_creator")).not.toBeNull();
+
       const retry = await orgService.createTeam(
         "org_parent",
         request,
         "user_creator"
       );
+
       expect(
         (await databaseAdapter.getOrganizationById(retry.organization.id))
           ?.setupPending
@@ -5578,14 +5916,17 @@ describe("OrgService team setup", () => {
   test("a failed cleanup keeps the request recoverable with the same team ID", async () => {
     const { orgService, databaseAdapter } = createOrgService();
     const request = await seedTeamParent(databaseAdapter);
+
     const completion = spyOn(
       databaseAdapter,
       "completeOrgTeamCreation"
     ).mockResolvedValueOnce(false);
+
     const cleanup = spyOn(
       databaseAdapter,
       "abortOrgTeamCreation"
     ).mockRejectedValueOnce(new Error("Injected cleanup failure"));
+
     try {
       await expect(
         orgService.createTeam("org_parent", request, "user_creator")
@@ -5594,21 +5935,25 @@ describe("OrgService team setup", () => {
       completion.mockRestore();
       cleanup.mockRestore();
     }
+
     const pending = await databaseAdapter.getOrgTeamCreation(
       "org_parent",
       request.requestId
     );
+
     expect(pending?.completedAt).toBeNull();
     expect(pending?.teamOrgId).toBeTruthy();
     expect(
       (await databaseAdapter.getOrganizationById(pending!.teamOrgId))
         ?.setupPending
     ).toBe(true);
+
     const retry = await orgService.createTeam(
       "org_parent",
       request,
       "user_creator"
     );
+
     expect(retry.organization.id).toBe(pending!.teamOrgId);
     expect(
       await databaseAdapter.listProfilesForOrg(retry.organization.id)
@@ -5653,11 +5998,13 @@ describe("OrgService team setup", () => {
       request.requestId,
       "org_pending"
     );
+
     const created = await orgService.createTeam(
       "org_parent",
       request,
       "user_creator"
     );
+
     await orgService.archiveOrganization(created.organization.id);
     await orgService.archiveOrganization("org_parent");
     await mkdir(getOrgConfigDir("org_parent"), { recursive: true });

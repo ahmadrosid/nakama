@@ -164,11 +164,14 @@ export class OrgService {
     userId: string
   ): Promise<StoredOrganizationRecord> {
     const parent = await this.requireActiveOrganization(orgId);
+
     if (parent.parentOrgId) {
       throw new NakamaApiError("Requires a root organization.", 409);
     }
+
     const user = await this.databaseAdapter.getUserById(userId);
     const membership = await this.databaseAdapter.getOrgMember(orgId, userId);
+
     if (
       !user ||
       user.disabledAt ||
@@ -176,6 +179,7 @@ export class OrgService {
     ) {
       throw new NakamaApiError("Forbidden", 403);
     }
+
     return parent;
   }
 
@@ -185,12 +189,15 @@ export class OrgService {
     actorUserId: string
   ): Promise<StoredOrgSharedResourceRecord> {
     await this.requireParentAdmin(parentOrgId, actorUserId);
+
     const publish = async () => {
       const { resourceId } = await this.validateSharedResourceSource(
         parentOrgId,
         request
       );
+
       const now = new Date().toISOString();
+
       return this.databaseAdapter.publishOrgSharedResource({
         createdAt: now,
         id: `publication_${crypto.randomUUID().replace(/-/g, "")}`,
@@ -200,15 +207,18 @@ export class OrgService {
         updatedAt: now,
       });
     };
+
     if (request.resourceKind === "knowledge") {
       return knowledgeBaseMutationLock.withLock(
         getOrgConfigDir(parentOrgId),
         publish
       );
     }
+
     if (request.resourceKind === "model") {
       return providerPublicationLock.withLock("providers", publish);
     }
+
     return publish();
   }
 
@@ -217,48 +227,62 @@ export class OrgService {
     actorUserId: string
   ): Promise<ListOrgSharedResourcesResponse> {
     const org = await this.requireActiveOrganization(orgId);
+
     const [user, membership] = await Promise.all([
       this.databaseAdapter.getUserById(actorUserId),
       this.databaseAdapter.getOrgMember(orgId, actorUserId),
     ]);
+
     if (!user || user.disabledAt || !(user.isPlatformAdmin || membership)) {
       throw new NakamaApiError("Not found", 404);
     }
+
     const parent = org.parentOrgId
       ? await this.requireActiveOrganization(org.parentOrgId)
       : org;
+
     if (parent.parentOrgId) {
       throw new NakamaApiError("Not found", 404);
     }
+
     const publications = await this.databaseAdapter.listOrgSharedResources(
       parent.id
     );
+
     const resources: ListOrgSharedResourcesResponse["resources"] = [];
+
     for (const publication of publications) {
       let label = publication.resourceId;
+
       let readiness: ListOrgSharedResourcesResponse["resources"][number]["readiness"] =
         "ready";
+
       try {
         ({ label } = await this.validateSharedResourceSource(
           parent.id,
           publication
         ));
+
         if (publication.resourceKind === "tool") {
           const tool = await this.databaseAdapter.getTool(
             publication.resourceId
           );
+
           if (tool && ["javascript", "python"].includes(tool.handlerType)) {
             const config = readHandlerConfig(tool.handlerConfig);
+
             if (!config) {
               throw new NakamaApiError(
                 "Tool configuration is unavailable.",
                 404
               );
             }
+
             const [apiKey, env] = await Promise.all([
               loadToolApiKey(orgId, tool.id),
               loadToolEnv(orgId, tool.id),
             ]);
+
             if (
               (config.requiresApiKey === true && !apiKey) ||
               config.env.some((entry) => !env[entry.name])
@@ -276,8 +300,10 @@ export class OrgService {
         ) {
           throw error;
         }
+
         readiness = "unavailable";
       }
+
       resources.push({
         ...publication,
         label,
@@ -285,6 +311,7 @@ export class OrgService {
         sourceOrganization: { id: parent.id, name: parent.name },
       });
     }
+
     return { resources };
   }
 
@@ -294,26 +321,34 @@ export class OrgService {
   ): Promise<OrganizationOverviewResponse> {
     const { resources } = await this.listSharedResources(orgId, actorUserId);
     const org = await this.requireActiveOrganization(orgId);
+
     const parent = org.parentOrgId
       ? await this.requireActiveOrganization(org.parentOrgId)
       : org;
+
     const [user, memberships, organizations] = await Promise.all([
       this.databaseAdapter.getUserById(actorUserId),
       this.databaseAdapter.listUserOrganizations(actorUserId),
       this.databaseAdapter.listOrganizations(),
     ]);
+
     if (!user || user.disabledAt) {
       throw new NakamaApiError("Not found", 404);
     }
+
     const membershipByOrg = new Map(
       memberships.map((entry) => [entry.organization.id, entry.role])
     );
+
     if (!(user.isPlatformAdmin || membershipByOrg.has(orgId))) {
       throw new NakamaApiError("Not found", 404);
     }
+
     const canReadAllTeams =
       user.isPlatformAdmin || membershipByOrg.get(parent.id) === "admin";
+
     const teams: OrganizationOverviewResponse["teams"] = [];
+
     for (const team of organizations) {
       if (
         team.parentOrgId !== parent.id ||
@@ -323,14 +358,18 @@ export class OrgService {
       ) {
         continue;
       }
+
       const counts = await this.databaseAdapter.getOrganizationResourceCounts(
         team.id
       );
+
       if (!counts) {
         continue;
       }
+
       const knowledgeDir = getOrgKnowledgeBaseDir(team.id);
       let knowledgeCount: number;
+
       try {
         await guardFilePath(knowledgeDir, null, undefined, {
           allowedDirs: [getOrgConfigDir(team.id)],
@@ -348,6 +387,7 @@ export class OrgService {
       } catch {
         throw new NakamaApiError("Team summary is unavailable.", 500);
       }
+
       teams.push({
         canSwitch: Boolean(
           user.isPlatformAdmin || membershipByOrg.has(team.id)
@@ -365,6 +405,7 @@ export class OrgService {
         slug: team.slug,
       });
     }
+
     return {
       activeOrgId: orgId,
       canManageOrganization: Boolean(orgId === parent.id && canReadAllTeams),
@@ -380,42 +421,55 @@ export class OrgService {
     actorUserId: string
   ): Promise<StoredProfileRecord> {
     const team = await this.requireActiveOrganization(teamOrgId);
+
     const [user, membership] = await Promise.all([
       this.databaseAdapter.getUserById(actorUserId),
       this.databaseAdapter.getOrgMember(teamOrgId, actorUserId),
     ]);
+
     if (!user || user.disabledAt || !(membership || user.isPlatformAdmin)) {
       throw new NakamaApiError("Not found", 404);
     }
+
     if (!membership || membership.role === "viewer") {
       throw new NakamaApiError("Forbidden", 403);
     }
+
     if (!team.parentOrgId) {
       throw new NakamaApiError("Shared agents require a team.", 409);
     }
+
     const parent = await this.requireActiveOrganization(team.parentOrgId);
+
     if (parent.parentOrgId) {
       throw new NakamaApiError("Not found", 404);
     }
+
     const publication = await this.databaseAdapter.getOrgSharedResource(
       parent.id,
       publicationId
     );
+
     if (publication?.resourceKind !== "agent") {
       throw new NakamaApiError("Shared agent is unavailable.", 404);
     }
+
     await this.validateSharedResourceSource(parent.id, publication);
+
     const profile = await this.databaseAdapter.createSharedAgentInstance(
       team.id,
       publication.id,
       `profile_${crypto.randomUUID().replace(/-/g, "")}`,
       new Date().toISOString()
     );
+
     try {
       const soulDir = getProfileSoulDir(team.id, profile.id);
+
       const { resolved } = await guardFilePath(soulDir, null, undefined, {
         allowedDirs: [getOrgConfigDir(team.id)],
       });
+
       await ensureDir(resolved);
     } catch {
       // Keep the stable source link so a retry cannot replace existing team work.
@@ -424,6 +478,7 @@ export class OrgService {
         500
       );
     }
+
     return profile;
   }
 
@@ -442,18 +497,24 @@ export class OrgService {
       teamOrgId,
       profileId
     );
+
     if (!instance) {
       return null;
     }
+
     const team = await this.requireActiveOrganization(teamOrgId);
+
     if (team.parentOrgId !== instance.sourceOrgId) {
       throw new NakamaApiError("Shared agent is unavailable.", 404);
     }
+
     const parent = await this.requireActiveOrganization(instance.sourceOrgId);
+
     const publication = await this.databaseAdapter.getOrgSharedResource(
       parent.id,
       instance.publicationId
     );
+
     if (
       parent.parentOrgId ||
       publication?.resourceKind !== "agent" ||
@@ -461,7 +522,9 @@ export class OrgService {
     ) {
       throw new NakamaApiError("Shared agent is unavailable.", 404);
     }
+
     await this.validateSharedResourceSource(parent.id, publication);
+
     const [profile, source] = await Promise.all([
       this.databaseAdapter.getProfileForOrg(profileId, teamOrgId),
       this.databaseAdapter.getProfileForOrg(
@@ -469,6 +532,7 @@ export class OrgService {
         parent.id
       ),
     ]);
+
     if (
       !(profile && source) ||
       source.isDefault ||
@@ -478,6 +542,7 @@ export class OrgService {
     ) {
       throw new NakamaApiError("Shared agent is unavailable.", 404);
     }
+
     return {
       ...profile,
       acpAgent: null,
@@ -509,13 +574,17 @@ export class OrgService {
       soul: undefined,
       style: undefined,
     };
+
     const directory = getProfileSoulDir(parentOrgId, profileId);
+
     try {
       await guardFilePath(directory, null, undefined, {
         allowedDirs: [getOrgConfigDir(parentOrgId)],
       });
+
       try {
         const entry = await lstat(directory);
+
         if (!entry.isDirectory() || entry.isSymbolicLink()) {
           throw new NakamaApiError("Shared agent is unavailable.", 404);
         }
@@ -530,20 +599,25 @@ export class OrgService {
           throw error;
         }
       }
+
       for (const key of ["instructions", "soul", "style"] as const) {
         const filePath = join(directory, SOUL_FILES[key]);
         await guardFilePath(filePath, null, undefined, {
           allowedDirs: [directory],
         });
+
         try {
           if (!(await lstat(filePath)).isFile()) {
             throw new NakamaApiError("Shared agent is unavailable.", 404);
           }
+
           const handle = await open(filePath, constants.O_NOFOLLOW);
+
           try {
             if (!(await handle.stat()).isFile()) {
               throw new NakamaApiError("Shared agent is unavailable.", 404);
             }
+
             publishedSoul[key] =
               (await handle.readFile("utf8")).trim() || undefined;
           } finally {
@@ -564,6 +638,7 @@ export class OrgService {
     } catch {
       throw new NakamaApiError("Shared agent is unavailable.", 404);
     }
+
     return publishedSoul;
   }
 
@@ -573,22 +648,27 @@ export class OrgService {
   ): Promise<{ resourceId: string; label: string }> {
     let resourceId = request.resourceId;
     let label = resourceId;
+
     if (request.resourceKind === "agent") {
       const profile = await this.databaseAdapter.getProfileForOrg(
         resourceId,
         parentOrgId
       );
+
       if (!profile || profile.isDefault || profile.isSuper) {
         throw new NakamaApiError("Agent is unavailable.", 404);
       }
+
       if (profile.acpAgent || profile.acpSettings) {
         throw new NakamaApiError(
           "Agent requires team-local ACP configuration.",
           409
         );
       }
+
       label = profile.name;
       await this.readSharedAgentSoul(parentOrgId, profile.id);
+
       const [tools, skills, servers, toolkits, publications] =
         await Promise.all([
           this.databaseAdapter.listToolsForProfile(profile.id),
@@ -597,6 +677,7 @@ export class OrgService {
           this.databaseAdapter.listProfileComposioToolkits(profile.id),
           this.databaseAdapter.listOrgSharedResources(parentOrgId),
         ]);
+
       if (
         servers.some((server) => server.orgId || !server.enabled) ||
         toolkits.length > 0
@@ -606,22 +687,28 @@ export class OrgService {
           409
         );
       }
+
       const published = new Set(
         publications.map((entry) => `${entry.resourceKind}:${entry.resourceId}`)
       );
+
       const toolNames = new Set<string>();
+
       for (const server of servers) {
         for (const tool of server.cachedTools) {
           const name = namespacedMcpToolName(server.name, tool.name);
+
           if (toolNames.has(name)) {
             throw new NakamaApiError(
               "Agent tool assignments are conflicting.",
               409
             );
           }
+
           toolNames.add(name);
         }
       }
+
       for (const tool of tools) {
         if (
           toolNames.has(tool.name) ||
@@ -632,13 +719,16 @@ export class OrgService {
             409
           );
         }
+
         await this.validateSharedResourceSource(parentOrgId, {
           resourceId: tool.id,
           resourceKind: "tool",
         });
         toolNames.add(tool.name);
       }
+
       const skillNames = new Set<string>();
+
       for (const skill of skills) {
         if (
           !skill.enabled ||
@@ -651,22 +741,27 @@ export class OrgService {
             409
           );
         }
+
         if (skill.orgId) {
           await this.validateSharedResourceSource(parentOrgId, {
             resourceId: skill.id,
             resourceKind: "skill",
           });
         }
+
         skillNames.add(skill.name);
+
         if (skill.hasTool) {
           toolNames.add(skill.name);
         }
       }
+
       try {
         const soulDir = getProfileSoulDir(parentOrgId, profile.id);
         await guardFilePath(soulDir, null, undefined, {
           allowedDirs: [getOrgConfigDir(parentOrgId)],
         });
+
         for (const dir of [
           getKnowledgeBaseDir(parentOrgId, profile.id),
           join(soulDir, "data", "knowledge-base"),
@@ -679,16 +774,19 @@ export class OrgService {
             { allowedDirs: [dir] }
           );
         }
+
         const manifest = await readProfileManifestForReference(
           parentOrgId,
           profile.id
         );
+
         if (manifest.documents.length > 0) {
           throw new NakamaApiError(
             "Agent requires private profile knowledge.",
             409
           );
         }
+
         for (const documentId of manifest.sharedDocumentIds ?? []) {
           if (!published.has(`knowledge:${documentId}`)) {
             throw new NakamaApiError(
@@ -696,6 +794,7 @@ export class OrgService {
               409
             );
           }
+
           await this.validateSharedResourceSource(parentOrgId, {
             resourceId: documentId,
             resourceKind: "knowledge",
@@ -705,8 +804,10 @@ export class OrgService {
         if (error instanceof NakamaApiError) {
           throw error;
         }
+
         throw new NakamaApiError("Agent knowledge is unavailable.", 404);
       }
+
       if (profile.model) {
         await this.validateSharedResourceSource(parentOrgId, {
           resourceId: profile.model,
@@ -722,6 +823,7 @@ export class OrgService {
           missingProvider: "The model provider is unavailable.",
         }
       );
+
       if (
         !(
           selected && modelExistsOnInstance(selected.instance, selected.modelId)
@@ -729,23 +831,30 @@ export class OrgService {
       ) {
         throw new NakamaApiError("Select a configured model.", 400);
       }
+
       resourceId = `${selected.instance.id}::${selected.modelId}`;
       label = selected.modelId;
     } else if (request.resourceKind === "tool") {
       const tool = await this.databaseAdapter.getTool(request.resourceId);
+
       if (!tool || (tool.orgId && tool.orgId !== parentOrgId)) {
         throw new NakamaApiError("Tool is unavailable.", 404);
       }
+
       label = tool.name;
     } else if (request.resourceKind === "skill") {
       const skill = await this.databaseAdapter.getSkill(request.resourceId);
+
       if (!(skill && skill.enabled) || skill.orgId !== parentOrgId) {
         throw new NakamaApiError("Skill is unavailable.", 404);
       }
+
       label = skill.name;
+
       try {
         const profiles =
           await this.databaseAdapter.listProfilesForOrg(parentOrgId);
+
         const { resolved: sourcePath } = await guardFilePath(
           skill.sourcePath,
           null,
@@ -754,24 +863,29 @@ export class OrgService {
             allowedDirs: [getOrgConfigDir(parentOrgId)],
           }
         );
+
         const owner = profiles.find(
           (profile) =>
             sourcePath ===
             resolveProfileSkillDirectory(parentOrgId, profile.id, skill.name)
         );
+
         if (!owner) {
           throw new NakamaApiError("Skill is unavailable.", 404);
         }
+
         const { resolved } = await guardFilePath(
           join(skill.sourcePath, SKILL_FILE_NAME),
           null,
           undefined,
           { allowedDirs: [skill.sourcePath] }
         );
+
         const parsed = parseSkillMarkdown(
           await readFile(resolved, "utf8"),
           resolved
         );
+
         if (parsed.frontmatter.name !== skill.name) {
           throw new NakamaApiError("Skill is unavailable.", 404);
         }
@@ -780,19 +894,25 @@ export class OrgService {
       }
     } else if (request.resourceKind === "knowledge") {
       const dir = getOrgKnowledgeBaseDir(parentOrgId);
+
       try {
         await guardFilePath(dir, null, undefined, {
           allowedDirs: [getOrgConfigDir(parentOrgId)],
         });
+
         const documents =
           await listOrganizationKnowledgeBaseDocuments(parentOrgId);
+
         const document = documents.find(
           (entry) => entry.id === request.resourceId
         );
+
         if (!document || document.status !== "ready") {
           throw new NakamaApiError("Knowledge document is unavailable.", 404);
         }
+
         label = document.filename;
+
         const { resolved } = await guardFilePath(
           getKnowledgeBaseStoredDocumentPath(
             dir,
@@ -803,6 +923,7 @@ export class OrgService {
           undefined,
           { allowedDirs: [dir] }
         );
+
         if (!(await stat(resolved)).isFile()) {
           throw new NakamaApiError("Knowledge document is unavailable.", 404);
         }
@@ -812,6 +933,7 @@ export class OrgService {
     } else {
       throw new NakamaApiError("Unsupported publication kind.", 400);
     }
+
     return { label, resourceId };
   }
 
@@ -821,6 +943,7 @@ export class OrgService {
     actorUserId: string
   ): Promise<boolean> {
     await this.requireParentAdmin(parentOrgId, actorUserId);
+
     return this.databaseAdapter.deleteOrgSharedResource(
       parentOrgId,
       publicationId
@@ -1119,23 +1242,30 @@ export class OrgService {
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(request.requestId)) {
       throw new NakamaApiError("Invalid team request ID.", 400);
     }
+
     const name = request.name.trim();
     const slug = request.slug.trim().toLowerCase();
+
     if (!(name && SLUG_PATTERN.test(slug))) {
       throw new NakamaApiError("Invalid team name or slug.", 400);
     }
+
     const adminUserId = request.adminUserId ?? creatorUserId;
+
     const requestHash = createHash("sha256")
       .update(JSON.stringify({ adminUserId, name, slug }))
       .digest("hex");
+
     return await teamCreationLock.withLock(
       JSON.stringify([parentOrgId, request.requestId]),
       async () => {
         await this.requireParentAdmin(parentOrgId, creatorUserId);
+
         const previous = await this.databaseAdapter.getOrgTeamCreation(
           parentOrgId,
           request.requestId
         );
+
         if (
           previous &&
           (previous.requestHash !== requestHash ||
@@ -1146,19 +1276,24 @@ export class OrgService {
             409
           );
         }
+
         const admin = await this.databaseAdapter.getUserById(adminUserId);
+
         if (!admin || admin.disabledAt) {
           throw new NakamaApiError("Team admin is unavailable.", 400);
         }
+
         const organization = previous
           ? await this.databaseAdapter.getOrganizationById(previous.teamOrgId)
           : {
               ...(await this.buildOrganizationRecord({ name, slug })),
               parentOrgId,
             };
+
         if (!organization || organization.parentOrgId !== parentOrgId) {
           throw new NakamaApiError("Team is unavailable.", 404);
         }
+
         const pending = await this.databaseAdapter.beginOrgTeamCreation({
           adminUserId,
           creatorUserId,
@@ -1166,10 +1301,12 @@ export class OrgService {
           requestHash,
           requestId: request.requestId,
         });
+
         if (!pending.completedAt) {
           try {
             await this.seedOrgProfiles(organization.id);
             await ensureLocalClientAccess(this.databaseAdapter);
+
             if (
               !(await this.databaseAdapter.completeOrgTeamCreation(
                 parentOrgId,
@@ -1195,7 +1332,9 @@ export class OrgService {
             throw error;
           }
         }
+
         const ready = await this.requireActiveOrganization(organization.id);
+
         return {
           adminMember: {
             member: toOrgMemberSummary(admin, "admin", pending.createdAt),
