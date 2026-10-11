@@ -2614,3 +2614,13 @@ Eight new component cases cover both login and setup after logout, a team switch
 Step 5 and delivery stages 3 and 4 remain open. Next, audit organization mutations and platform-list refreshes for late authentication state updates. Import/export/archive/restore compatibility and final delivery checks remain required. Client response guards and UI revision checks do not cancel server mutations or control browser-cookie response ordering. No new file, package, dependency, browser check, full repository suite, build, paid call, push, or PR was added.
 
 Evidence: /tmp/nakama-auth-entry-{before,focused,types,format,oxlint,lint,doctor}.log.
+
+### Slice 3an — Organization lists retain current authentication scope
+
+Organization updates now check authentication and session-read revisions after the mutation, after membership loading, and before clearing queries. An old update cannot restore membership lists or clear the new account's query data. Platform refreshes use the same scope checks and their own request counter. An older success cannot replace the latest platform list, and an older failure cannot replace its error state. Failed platform requests still reject for their callers. Existing tenant and platform authorization checks remain unchanged.
+
+Thirty new component cases cover tenant and platform updates, delays during mutations, membership reads and platform refreshes, platform success and failure, logout, switching, account replacement, normal completion, and a newer platform refresh. They check current identity, membership lists, platform lists, error state, query data, request inputs, and absence of obsolete follow-up membership reads. Eighteen of the initial 24 cases failed before the change. All 201 focused authentication and Organization panel tests passed with 1,515 assertions. Complete web types, scoped anti-slop, Ultracite, and git diff --check passed. React Doctor retained 91/100 with no errors, the two existing complexity warnings, and a new AuthProvider size warning. Required response checks remain in the existing module; no extraction or suppression was added. One verification repair fixed the test table's inferred type.
+
+Step 5 and delivery stages 3 and 4 remain open. Next, protect organization creation and archive continuations before they select a tenant or write authentication state. Import/export/archive/restore compatibility and final delivery checks remain required. These guards do not cancel server mutations. No new file, package, dependency, browser check, full repository suite, build, paid call, push, or PR was added.
+
+Evidence: /tmp/nakama-auth-list-{before,focused,types,format,oxlint,lint,doctor}.log.

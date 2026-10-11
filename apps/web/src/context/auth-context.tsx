@@ -71,14 +71,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const authRevision = useRef(0);
   const sessionRequestRevision = useRef(0);
+  const platformRequestRevision = useRef(0);
 
   const refreshPlatformOrgs = useCallback(async () => {
+    const revision = authRevision.current;
+    const sessionRevision = sessionRequestRevision.current;
+    const requestRevision = ++platformRequestRevision.current;
+
     try {
       const { organizations } = await client.listPlatformOrganizations();
+
+      if (
+        revision !== authRevision.current ||
+        sessionRevision !== sessionRequestRevision.current ||
+        requestRevision !== platformRequestRevision.current
+      ) {
+        return;
+      }
+
       setPlatformOrgs(organizations);
       setPlatformOrgsError(false);
     } catch (error) {
-      setPlatformOrgsError(true);
+      if (
+        revision === authRevision.current &&
+        sessionRevision === sessionRequestRevision.current &&
+        requestRevision === platformRequestRevision.current
+      ) {
+        setPlatformOrgsError(true);
+      }
+
       throw error;
     }
   }, []);
@@ -298,20 +319,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error("Only org admins can edit organizations.");
       }
 
+      const revision = authRevision.current;
+      const sessionRevision = sessionRequestRevision.current;
+
       if (user?.isPlatformAdmin) {
         await client.updatePlatformOrganization(orgId, input);
       } else {
         await client.updateOrganization(orgId, input);
       }
 
+      if (
+        revision !== authRevision.current ||
+        sessionRevision !== sessionRequestRevision.current
+      ) {
+        return;
+      }
+
       const { orgs: nextOrgs } = await client.listUserOrgs();
+
+      if (
+        revision !== authRevision.current ||
+        sessionRevision !== sessionRequestRevision.current
+      ) {
+        return;
+      }
+
       setOrgs(nextOrgs);
 
       if (user?.isPlatformAdmin) {
         await refreshPlatformOrgs();
       }
 
-      resetQueryCache();
+      if (
+        revision === authRevision.current &&
+        sessionRevision === sessionRequestRevision.current
+      ) {
+        resetQueryCache();
+      }
     },
     [orgs, platformOrgs, refreshPlatformOrgs, user?.isPlatformAdmin]
   );

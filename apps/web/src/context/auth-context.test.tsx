@@ -12,6 +12,257 @@ const ORG_A = { id: "org-a", name: "Org A", role: "admin", slug: "org-a" };
 
 const ORG_B = { id: "org-b", name: "Org B", role: "admin", slug: "org-b" };
 
+for (const operation of [
+  "platform",
+  "platform failure",
+  "platform update mutation",
+  "platform update list",
+  "platform update refresh",
+  "team update mutation",
+  "team update list",
+] as const) {
+  const modes = operation.includes("update")
+    ? (["logout", "switch", "account", "current"] as const)
+    : (["logout", "switch", "account", "current", "refresh"] as const);
+
+  test.each([...modes])(
+    `${operation} retains the current authentication lists after %s`,
+    async (mode) => {
+      const user: AuthUserResponse = {
+        activeOrgId: ORG_A.id,
+        email: "admin@example.com",
+        id: "user-a",
+        isPlatformAdmin: !operation.startsWith("team"),
+      };
+
+      const newest = {
+        ...user,
+        activeOrgId: ORG_B.id,
+        id: "user-b",
+        isPlatformAdmin: false,
+      };
+
+      const orgs: UserOrgSummary[] = [ORG_A, ORG_B].map((org) => ({
+        ...org,
+        createdAt: "2026-10-12T00:00:00Z",
+        role: org.id === ORG_B.id ? "viewer" : "admin",
+        updatedAt: "2026-10-12T00:00:00Z",
+      }));
+
+      const renamed = { ...orgs[0]!, name: "Updated" };
+      const updatedOrgs = [renamed, orgs[1]!];
+
+      const pendingMutation =
+        Promise.withResolvers<
+          Awaited<ReturnType<typeof client.updateOrganization>>
+        >();
+
+      const pendingList =
+        Promise.withResolvers<
+          Awaited<ReturnType<typeof client.listUserOrgs>>
+        >();
+
+      const pendingPlatform =
+        Promise.withResolvers<
+          Awaited<ReturnType<typeof client.listPlatformOrganizations>>
+        >();
+
+      const getMe = spyOn(client, "getMe").mockResolvedValue(user);
+
+      const listUserOrgs = spyOn(client, "listUserOrgs").mockResolvedValue({
+        orgs,
+      });
+
+      const platform = spyOn(
+        client,
+        "listPlatformOrganizations"
+      ).mockResolvedValue({ organizations: [orgs[0]!] });
+
+      const update = spyOn(client, "updateOrganization").mockResolvedValue({
+        organization: renamed,
+      });
+
+      const platformUpdate = spyOn(
+        client,
+        "updatePlatformOrganization"
+      ).mockResolvedValue({ organization: renamed });
+
+      const logout = spyOn(client, "logout").mockResolvedValue(undefined);
+      const switchOrg = spyOn(client, "setActiveOrg").mockResolvedValue(newest);
+      let auth!: ReturnType<typeof useAuth>;
+
+      function Probe() {
+        auth = useAuth();
+
+        return null;
+      }
+
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      let previous: Promise<void> | undefined;
+      const error = new Error("platform unavailable");
+      const cacheKey = queryKeys.organizationOverview("parent", ORG_B.id);
+
+      try {
+        await act(async () =>
+          root.render(
+            <AuthProvider>
+              <Probe />
+            </AuthProvider>
+          )
+        );
+
+        if (operation.endsWith("refresh")) {
+          listUserOrgs.mockResolvedValue({ orgs: updatedOrgs });
+        }
+
+        if (operation.endsWith("mutation")) {
+          (user.isPlatformAdmin
+            ? platformUpdate
+            : update
+          ).mockImplementationOnce(() => pendingMutation.promise);
+        } else if (operation.endsWith("list")) {
+          listUserOrgs.mockImplementationOnce(() => pendingList.promise);
+        } else {
+          platform.mockImplementationOnce(() => pendingPlatform.promise);
+        }
+
+        await act(async () => {
+          previous = operation.includes("update")
+            ? auth.updateOrg(ORG_A.id, { name: renamed.name })
+            : auth.refreshPlatformOrgs();
+        });
+
+        if (mode === "logout") {
+          await act(async () => {
+            await auth.logout();
+          });
+        } else if (mode === "switch") {
+          await act(async () => {
+            await auth.switchOrg(ORG_B.id);
+          });
+        } else if (mode === "account") {
+          getMe.mockResolvedValue(newest);
+          listUserOrgs.mockResolvedValue({ orgs: [orgs[1]!] });
+          await act(async () => {
+            await auth.refreshSession();
+          });
+        } else if (mode === "refresh") {
+          platform.mockResolvedValue({ organizations: updatedOrgs });
+          await act(async () => {
+            await auth.refreshPlatformOrgs();
+          });
+        }
+
+        queryClient.setQueryData(cacheKey, 2);
+
+        if (mode === "current") {
+          listUserOrgs.mockResolvedValue({ orgs: updatedOrgs });
+          platform.mockResolvedValue({ organizations: updatedOrgs });
+        }
+
+        pendingMutation.resolve({ organization: renamed });
+        pendingList.resolve({ orgs: updatedOrgs });
+
+        if (operation === "platform failure") {
+          await act(async () => {
+            pendingPlatform.reject(error);
+            await expect(previous).rejects.toBe(error);
+          });
+        } else {
+          pendingPlatform.resolve({
+            organizations: mode === "refresh" ? [orgs[0]!] : updatedOrgs,
+          });
+          await act(async () => {
+            await previous;
+          });
+        }
+
+        const expectedOrgs =
+          mode === "logout"
+            ? []
+            : mode === "account"
+              ? [orgs[1]!]
+              : (mode === "current" && operation.includes("update")) ||
+                  operation.endsWith("refresh")
+                ? updatedOrgs
+                : orgs;
+
+        expect(auth.orgs).toEqual(expectedOrgs);
+        expect(auth.platformOrgs).toEqual(
+          mode === "logout" || mode === "account" || !user.isPlatformAdmin
+            ? []
+            : mode === "refresh" ||
+                (mode === "current" && operation !== "platform failure")
+              ? updatedOrgs
+              : [orgs[0]!]
+        );
+        expect(auth.platformOrgsError).toBe(
+          mode === "current" && operation === "platform failure"
+        );
+        expect(auth.user?.id).toBe(
+          mode === "logout"
+            ? undefined
+            : mode === "current" || mode === "refresh"
+              ? user.id
+              : newest.id
+        );
+        expect(auth.activeOrg?.id).toBe(
+          mode === "logout"
+            ? undefined
+            : mode === "current" || mode === "refresh"
+              ? ORG_A.id
+              : ORG_B.id
+        );
+        expect(queryClient.getQueryData<number>(cacheKey)).toBe(
+          mode === "current" && operation.includes("update") ? undefined : 2
+        );
+
+        if (operation.includes("update")) {
+          expect(
+            user.isPlatformAdmin ? platformUpdate : update
+          ).toHaveBeenCalledWith(ORG_A.id, { name: renamed.name });
+          expect(
+            user.isPlatformAdmin ? update : platformUpdate
+          ).not.toHaveBeenCalled();
+          expect(listUserOrgs).toHaveBeenCalledTimes(
+            operation.endsWith("mutation") && mode !== "current"
+              ? mode === "account"
+                ? 2
+                : 1
+              : mode === "account"
+                ? 3
+                : 2
+          );
+        }
+      } finally {
+        pendingMutation.resolve({ organization: renamed });
+        pendingList.resolve({ orgs });
+        pendingPlatform.resolve({ organizations: [] });
+        await previous?.catch(() => undefined);
+        await act(async () => root.unmount());
+        container.remove();
+
+        for (const request of [
+          getMe,
+          listUserOrgs,
+          platform,
+          update,
+          platformUpdate,
+          logout,
+          switchOrg,
+        ]) {
+          request.mockRestore();
+        }
+
+        queryClient.clear();
+        client.setOrgId(null);
+      }
+    }
+  );
+}
+
 for (const action of ["login", "setup"] as const) {
   test.each(["logout", "switch", "login", "current"] as const)(
     `${action} cannot replace a newer authentication action: %s`,
