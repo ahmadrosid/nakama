@@ -44,6 +44,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateSkillsCuratorConsolidateColumns);
   atomic(migrateOrganizationArchivedAt);
   atomic(migrateOrganizationParent);
+  atomic(migrateOrgSharedResources);
   atomic(migrateSkillUsageTables);
   atomic(migrateTenantOrgScope);
   atomic(migrateSkillOrgIds);
@@ -77,7 +78,6 @@ export function migrateDatabase(db: Database): void {
   atomic((database) =>
     addNullableTextColumnIfMissing(database, "profiles", "acp_settings")
   );
-  atomic(migrateOrgSharedResources);
 }
 
 function migrateOrgSharedResources(db: Database): void {
@@ -102,6 +102,24 @@ CREATE TABLE IF NOT EXISTS shared_agent_instances (
   created_at TEXT NOT NULL,
   UNIQUE (team_org_id, source_profile_id)
 );
+
+CREATE TRIGGER IF NOT EXISTS profiles_unpublish_deleted_source
+AFTER DELETE ON profiles
+BEGIN
+  DELETE FROM org_shared_resources WHERE resource_kind = 'agent' AND resource_id = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS skills_unpublish_deleted_source
+AFTER DELETE ON skills
+BEGIN
+  DELETE FROM org_shared_resources WHERE resource_kind = 'skill' AND resource_id = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS tools_unpublish_deleted_source
+AFTER DELETE ON tools
+BEGIN
+  DELETE FROM org_shared_resources WHERE resource_kind = 'tool' AND resource_id = OLD.id;
+END;
   `);
 }
 

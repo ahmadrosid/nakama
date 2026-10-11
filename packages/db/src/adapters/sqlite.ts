@@ -42,6 +42,7 @@ import type {
   StoredOrgMemberRecord,
   StoredOrgMemoryProposal,
   StoredOrgPluginRecord,
+  StoredOrgSharedResourceRecord,
   StoredPasskeyRecord,
   StoredPluginReleaseRecord,
   StoredProfileChangeEvent,
@@ -2719,6 +2720,39 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     }
   );
 
+  const listOrgSharedResourcesStmt = db.prepare<
+    StoredOrgSharedResourceRecord,
+    SQLQueryBindings[]
+  >(`
+    SELECT id, org_id AS orgId, resource_kind AS resourceKind,
+      resource_id AS resourceId, created_at AS createdAt, updated_at AS updatedAt
+    FROM org_shared_resources WHERE org_id = ? ORDER BY resource_kind, id
+  `);
+  const getOrgSharedResourceStmt = db.prepare<
+    StoredOrgSharedResourceRecord,
+    SQLQueryBindings[]
+  >(`
+    SELECT id, org_id AS orgId, resource_kind AS resourceKind,
+      resource_id AS resourceId, created_at AS createdAt, updated_at AS updatedAt
+    FROM org_shared_resources WHERE org_id = ? AND id = ?
+  `);
+  const getOrgSharedResourceBySourceStmt = db.prepare<
+    StoredOrgSharedResourceRecord,
+    SQLQueryBindings[]
+  >(`
+    SELECT id, org_id AS orgId, resource_kind AS resourceKind,
+      resource_id AS resourceId, created_at AS createdAt, updated_at AS updatedAt
+    FROM org_shared_resources WHERE org_id = ? AND resource_kind = ? AND resource_id = ?
+  `);
+  const publishOrgSharedResourceStmt = db.prepare(`
+    INSERT INTO org_shared_resources (id, org_id, resource_kind, resource_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(org_id, resource_kind, resource_id) DO NOTHING
+  `);
+  const deleteOrgSharedResourceStmt = db.prepare(
+    "DELETE FROM org_shared_resources WHERE org_id = ? AND id = ?"
+  );
+
   const tryMarkOrganizationArchivedStmt = db.prepare(`
     UPDATE organizations AS target
     SET archived_at = ?, updated_at = ?
@@ -3304,6 +3338,56 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.createdAt,
         record.updatedAt
       );
+    }
+  );
+
+  const publishOrgSharedResourceTransaction = db.transaction(
+    (record: StoredOrgSharedResourceRecord) => {
+      const parent = getOrganizationByIdStmt.get(record.orgId);
+      if (!parent || parent.parent_org_id || parent.archived_at) {
+        throw new Error("Publication requires an active root organization");
+      }
+      if (record.resourceKind === "agent") {
+        const profile = getProfileStmt.get(record.resourceId);
+        if (
+          !profile ||
+          profile.org_id !== record.orgId ||
+          profile.is_super ||
+          profile.is_default
+        ) {
+          throw new Error("Agent source cannot be published");
+        }
+      }
+      if (record.resourceKind === "skill") {
+        const skill = getSkillStmt.get(record.resourceId);
+        if (!skill || skill.org_id !== record.orgId || !skill.enabled) {
+          throw new Error("Skill source cannot be published");
+        }
+      }
+      if (record.resourceKind === "tool") {
+        const tool = getToolStmt.get(record.resourceId);
+        if (!tool || (tool.org_id && tool.org_id !== record.orgId)) {
+          throw new Error("Tool source cannot be published");
+        }
+      }
+      // Filesystem knowledge and configured models are validated by OrgService.
+      publishOrgSharedResourceStmt.run(
+        record.id,
+        record.orgId,
+        record.resourceKind,
+        record.resourceId,
+        record.createdAt,
+        record.updatedAt
+      );
+      const published = getOrgSharedResourceBySourceStmt.get(
+        record.orgId,
+        record.resourceKind,
+        record.resourceId
+      );
+      if (!published) {
+        throw new Error("Publication was not saved");
+      }
+      return published;
     }
   );
 
@@ -4081,6 +4165,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return deleteOrgPluginTx(orgId, pluginId, expectedRevision);
     },
 
+    async deleteOrgSharedResource(orgId, id) {
+      return deleteOrgSharedResourceStmt.run(orgId, id).changes > 0;
+    },
+
     async deletePasskeys(userId) {
       deletePasskeysStmt.run(userId);
     },
@@ -4322,6 +4410,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const row = getOrgPluginStmt.get(orgId, pluginId);
 
       return row ? toOrgPluginRecord(row) : null;
+    },
+
+    async getOrgSharedResource(orgId, id) {
+      return getOrgSharedResourceStmt.get(orgId, id) ?? null;
     },
     async getPasskey(userId, credentialId) {
       const row = getPasskeyStmt.get(userId, credentialId);
@@ -4898,6 +4990,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       // SAFETY: The adapter writes this row value through its typed contract.
       return rows.map((row) => toOrgPluginRecord(row as OrgPluginRow));
     },
+
+    async listOrgSharedResources(orgId) {
+      return listOrgSharedResourcesStmt.all(orgId);
+    },
     async listPasskeys(userId) {
       return listPasskeysStmt.all(userId).map((row) => toPasskeyRecord(row));
     },
@@ -5137,6 +5233,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async publishOrgPluginRelease(input) {
       return publishOrgPluginReleaseTx(input);
+    },
+
+    async publishOrgSharedResource(record) {
+      return publishOrgSharedResourceTransaction(record);
     },
 
     async releaseMonthlyLlmQuota(orgId, reservationId) {

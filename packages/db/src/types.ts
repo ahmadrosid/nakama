@@ -555,6 +555,15 @@ export interface PublishOrgPluginReleaseInput {
   selectedVersion: string;
 }
 
+export interface StoredOrgSharedResourceRecord {
+  createdAt: string;
+  id: string;
+  orgId: string;
+  resourceId: string;
+  resourceKind: "knowledge" | "skill" | "agent" | "tool" | "model";
+  updatedAt: string;
+}
+
 export interface StoredOrganizationRecord {
   allowedInviteDomains?: string[];
   archivedAt?: string | null;
@@ -897,6 +906,7 @@ export interface DatabaseAdapter {
     pluginId: string,
     expectedRevision: number
   ): Promise<boolean>;
+  deleteOrgSharedResource(orgId: string, id: string): Promise<boolean>;
   deletePasskeys(userId: string): Promise<void>;
   deletePluginRelease(pluginId: string, version: string): Promise<boolean>;
   deleteProfile(id: string): Promise<boolean>;
@@ -990,6 +1000,10 @@ export interface DatabaseAdapter {
     orgId: string,
     pluginId: string
   ): Promise<StoredOrgPluginRecord | null>;
+  getOrgSharedResource(
+    orgId: string,
+    id: string
+  ): Promise<StoredOrgSharedResourceRecord | null>;
   getPasskey(
     userId: string,
     credentialId: string
@@ -1208,6 +1222,9 @@ export interface DatabaseAdapter {
     status?: OrgMemoryProposalStatus
   ): Promise<StoredOrgMemoryProposal[]>;
   listOrgPlugins(orgId?: string): Promise<StoredOrgPluginRecord[]>;
+  listOrgSharedResources(
+    orgId: string
+  ): Promise<StoredOrgSharedResourceRecord[]>;
   listPasskeys(userId: string): Promise<StoredPasskeyRecord[]>;
 
   listPlatformAdminUsers(): Promise<StoredUserRecord[]>;
@@ -1311,6 +1328,9 @@ export interface DatabaseAdapter {
   publishOrgPluginRelease(
     input: PublishOrgPluginReleaseInput
   ): Promise<PluginPublishResult>;
+  publishOrgSharedResource(
+    record: StoredOrgSharedResourceRecord
+  ): Promise<StoredOrgSharedResourceRecord>;
   /** Gives back one hold taken by tryReserveMonthlyLlmQuota, at most once. */
   releaseMonthlyLlmQuota(orgId: string, reservationId: string): Promise<void>;
   renameFilePins(

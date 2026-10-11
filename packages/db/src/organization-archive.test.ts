@@ -3,7 +3,11 @@ import {
   createSqliteDatabase,
   createSqliteMemoryAdapter,
 } from "./adapters/sqlite";
-import type { DatabaseAdapter } from "./types";
+import type {
+  DatabaseAdapter,
+  StoredOrgSharedResourceRecord,
+  StoredSkillRecord,
+} from "./types";
 
 async function seedTwoActiveOrgs(db: DatabaseAdapter, createdAt: string) {
   await db.upsertOrganization({
@@ -258,5 +262,182 @@ describe("organization archive persistence", () => {
     } finally {
       database.close();
     }
+  });
+});
+
+describe("organization publications", () => {
+  test("publication writes are idempotent and scoped to an active root", async () => {
+    const db = createSqliteMemoryAdapter();
+    const now = "2026-10-11T00:00:00.000Z";
+    await seedTwoActiveOrgs(db, now);
+    await db.upsertOrganization({
+      createdAt: now,
+      id: "team",
+      name: "Team",
+      parentOrgId: "org_a",
+      slug: "team",
+      updatedAt: now,
+    });
+    const source: StoredOrgSharedResourceRecord = {
+      createdAt: now,
+      id: "publication",
+      orgId: "org_a",
+      resourceId: "document",
+      resourceKind: "knowledge",
+      updatedAt: now,
+    };
+    expect(await db.publishOrgSharedResource(source)).toEqual(source);
+    expect(
+      await db.publishOrgSharedResource({
+        ...source,
+        id: "retry",
+        updatedAt: "later",
+      })
+    ).toEqual(source);
+    expect(await db.listOrgSharedResources("org_a")).toEqual([source]);
+    expect(await db.listOrgSharedResources("team")).toEqual([]);
+    expect(await db.getOrgSharedResource("org_b", source.id)).toBeNull();
+    expect(await db.deleteOrgSharedResource("org_b", source.id)).toBe(false);
+    expect(await db.getOrgSharedResource("org_a", source.id)).toEqual(source);
+    for (const orgId of ["missing", "team"]) {
+      await expect(
+        db.publishOrgSharedResource({ ...source, id: "invalid", orgId })
+      ).rejects.toThrow();
+    }
+    expect(await db.tryMarkOrganizationArchived("org_b", now)).toBe(true);
+    await expect(
+      db.publishOrgSharedResource({ ...source, id: "archived", orgId: "org_b" })
+    ).rejects.toThrow();
+    expect(await db.deleteOrgSharedResource("org_a", source.id)).toBe(true);
+    expect(await db.getOrgSharedResource("org_a", source.id)).toBeNull();
+    expect(
+      await db.publishOrgSharedResource({ ...source, id: "republished" })
+    ).toEqual({ ...source, id: "republished" });
+  });
+
+  test("SQL sources require valid ownership and their deletion removes publications", async () => {
+    const db = createSqliteMemoryAdapter();
+    const now = "2026-10-11T00:00:00.000Z";
+    await seedTwoActiveOrgs(db, now);
+    const profile = {
+      createdAt: now,
+      id: "agent",
+      isDefault: false,
+      isSuper: false,
+      model: null,
+      name: "Agent",
+      orgId: "org_a",
+      systemPrompt: "",
+      updatedAt: now,
+    };
+    await db.upsertProfile(profile);
+    await db.upsertProfile({ ...profile, id: "default", isDefault: true });
+    await db.upsertProfile({ ...profile, id: "super", isSuper: true });
+    await db.upsertProfile({ ...profile, id: "foreign", orgId: "org_b" });
+    const skill: StoredSkillRecord = {
+      createdAt: now,
+      createdBy: "human",
+      description: "",
+      disableModelInvocation: false,
+      enabled: true,
+      hasTool: false,
+      id: "skill",
+      name: "Skill",
+      orgId: "org_a",
+      sourcePath: "/source",
+      updatedAt: now,
+    };
+    await db.upsertSkill(skill);
+    await db.upsertSkill({
+      ...skill,
+      id: "foreign-skill",
+      name: "Foreign",
+      orgId: "org_b",
+      sourcePath: "/foreign",
+    });
+    await db.upsertSkill({
+      ...skill,
+      enabled: false,
+      id: "disabled",
+      name: "Disabled",
+      sourcePath: "/disabled",
+    });
+    const tool = {
+      createdAt: now,
+      description: "",
+      handlerConfig: {},
+      handlerType: "javascript",
+      id: "tool",
+      name: "tool",
+      orgId: "org_a",
+      updatedAt: now,
+    };
+    await db.upsertTool(tool);
+    await db.upsertTool({
+      ...tool,
+      id: "foreign-tool",
+      name: "foreign_tool",
+      orgId: "org_b",
+    });
+    await db.upsertTool({
+      ...tool,
+      id: "global-tool",
+      name: "global_tool",
+      orgId: null,
+    });
+    const source: StoredOrgSharedResourceRecord = {
+      createdAt: now,
+      id: "publication",
+      orgId: "org_a",
+      resourceId: "agent",
+      resourceKind: "agent",
+      updatedAt: now,
+    };
+    for (const resourceId of ["missing", "foreign", "default", "super"]) {
+      await expect(
+        db.publishOrgSharedResource({ ...source, resourceId })
+      ).rejects.toThrow();
+    }
+    for (const resourceId of ["missing", "foreign-skill", "disabled"]) {
+      await expect(
+        db.publishOrgSharedResource({
+          ...source,
+          resourceId,
+          resourceKind: "skill",
+        })
+      ).rejects.toThrow();
+    }
+    for (const resourceId of ["missing", "foreign-tool"]) {
+      await expect(
+        db.publishOrgSharedResource({
+          ...source,
+          resourceId,
+          resourceKind: "tool",
+        })
+      ).rejects.toThrow();
+    }
+    for (const resourceKind of ["agent", "skill", "tool"] as const) {
+      await db.publishOrgSharedResource({
+        ...source,
+        id: resourceKind,
+        resourceId: resourceKind,
+        resourceKind,
+      });
+    }
+    await db.publishOrgSharedResource({
+      ...source,
+      id: "global",
+      resourceId: "global-tool",
+      resourceKind: "tool",
+    });
+    await db.deleteProfile("agent");
+    await db.deleteSkill("skill");
+    await db.deleteTool("tool");
+    expect(
+      (await db.listOrgSharedResources("org_a")).map((row) => row.id)
+    ).toEqual(["global"]);
+    expect((await db.getTool("global-tool"))?.orgId).toBeNull();
+    await db.deleteTool("global-tool");
+    expect(await db.listOrgSharedResources("org_a")).toEqual([]);
   });
 });

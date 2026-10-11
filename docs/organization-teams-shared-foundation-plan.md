@@ -326,7 +326,7 @@ Status values: `todo`, `doing`, `done`, `blocked`.
 
 | ID | Delivery stage | Step | Test items | Status | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 1. Schema, contracts, access | Tenant relationship and publication records | 1, 2, 3, 17, 18 | doing | ae7404d0 (1a), 47c456c3 (1b) | Slices 1a–1c complete; adapter and creation work remain |
+| 1 | 1. Schema, contracts, access | Tenant relationship and publication records | 1, 2, 3, 17, 18 | doing | ae7404d0 (1a), 47c456c3 (1b), 69fdbb59 (1c) | Slices 1a–1d complete; agent links and creation work remain |
 | 2 | 1. Schema, contracts, access | Contracts and organization routes | 15, 16 | todo | | |
 | 3a | 2. Resource paths | Knowledge | 4, 5, 6, 21 | todo | | |
 | 3b | 2. Resource paths | Skills | 4, 5, 20 | todo | | |
@@ -345,6 +345,7 @@ Slice log (one row per commit):
 | 2026-10-11 | 1a | Parent schema and idempotent migration; repaired existing database type errors | Fresh and upgrade migration, reference constraints; 145 database tests passed | Parent adapter persistence and archive guards |
 | 2026-10-11 | 1b | Persist parent relationships; reject reparenting, nested teams, inactive parents, unsafe archive and deletion | Lookups, memberships, ordinary updates, lifecycle guards; 147 database tests passed | Publication records and migration |
 | 2026-10-11 | 1c | Publication and shared agent source-link tables; repeatable migration | Five resource kinds, uniqueness, references, revocation survival, cleanup; 149 database tests passed | Publication adapter operations |
+| 2026-10-11 | 1d | Scoped publication reads and writes; idempotent publish; SQL ownership checks and source-deletion triggers | Active root, wrong scope, retry, default/Super Bot rejection, SQL ownership and deletion; 151 database tests passed | Agent source-link operations and atomic team creation |
 
 2026-10-11: Slice 1b passed database tests, the database type check, and `bun x ultracite check`.
 The first test run found an incorrect SQL value count. The repaired query passed all database tests.
@@ -359,3 +360,13 @@ Publication removal and source-profile deletion retain local instances and their
 The first test run exposed existing default-profile migration behavior. Explicit fixture defaults corrected the test.
 Checks: 149 database tests passed; database type check passed; `bun x ultracite check` passed.
 Stage 1 remains incomplete. Next: publication adapter operations and source validation.
+
+2026-10-11: Slice 1d adds publication operations to the existing database adapter.
+Writes check active root status and SQL source ownership inside one transaction.
+Agent publication excludes default and Super Bot profiles. Skill publication excludes disabled and foreign skills.
+Global tools keep global access. Publication removal does not delete source resources.
+Deletion triggers invalidate agent, skill, and tool publications, including when foreign-key enforcement is disabled.
+Knowledge-file validation, configured-model validation, profile skill paths, and agent dependencies remain for OrgService.
+The type check found an invalid skill creator fixture. A typed `human` fixture fixed it.
+Checks: 151 database tests passed; 10 focused tests passed after the fixture repair; database type check and `bun x ultracite check` passed.
+Stage 1 remains incomplete. Next: agent source-link operations and atomic team creation.
