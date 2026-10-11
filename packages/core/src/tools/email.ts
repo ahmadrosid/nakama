@@ -62,7 +62,7 @@ export const emailInputSchema = z.discriminatedUnion("action", [
 
 export type EmailAction = z.infer<typeof emailInputSchema>["action"];
 
-export type EmailToolInput = z.infer<typeof emailInputSchema>;
+export type EmailToolInput = z.input<typeof emailInputSchema>;
 
 /**
  * OpenAI (and several OpenAI-compatible providers) require tool `parameters`
@@ -162,7 +162,9 @@ export interface EmailToolDependencies {
   loadConfig?: typeof loadEmailConfig;
 }
 
-function parseEmailToolInput(input: EmailToolInput): EmailToolInput {
+function parseEmailToolInput(
+  input: EmailToolInput
+): z.output<typeof emailInputSchema> {
   return parseToolInput(emailInputSchema, input);
 }
 
