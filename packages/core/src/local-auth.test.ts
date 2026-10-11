@@ -35,9 +35,13 @@ describe("loadLocalAuthToken", () => {
     const token = await loadLocalAuthToken();
     expect(token).toStartWith("tc_local_");
 
+    if (token === null) {
+      throw new Error("Expected a local token");
+    }
+
     const rawConfig = await readFile(getUserConfigPath(), "utf8");
     expect(rawConfig).toContain("local_auth_token_hash=");
-    expect(rawConfig).not.toContain(token!);
+    expect(rawConfig).not.toContain(token);
 
     const storedToken = await readFile(
       join(getUserConfigDir(), "local-auth-token"),
@@ -45,6 +49,9 @@ describe("loadLocalAuthToken", () => {
     );
 
     expect(storedToken.trim()).toBe(token);
+    await expect(verifyLocalAuthToken(token)).resolves.toEqual({
+      email: "local-client@nakama.internal",
+    });
   });
 
   test("reuses the token from the private local token file", async () => {
