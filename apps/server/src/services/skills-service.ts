@@ -20,6 +20,7 @@ import type {
   ListSkillsResponse,
   ListSkillVersionsResponse,
   PatchSkillRequest,
+  PublishedSkillSummary,
   SkillFileResponse,
   SkillFilesResponse,
   SkillResponse,
@@ -47,6 +48,7 @@ import {
   extractExplicitSkillName,
   fetchGitHubSkillBundle,
   type GitHubSkillBundle,
+  getOrgConfigDir,
   getProfileSoulDir,
   guardFilePath,
   isGlobalSkillSourcePath,
@@ -226,8 +228,87 @@ export class SkillsService {
     }
 
     const skills = await this.db.listSkills();
+    const publishedSkills: PublishedSkillSummary[] = [];
+    const team = orgId ? await this.db.getOrganizationById(orgId) : null;
+    const parent = team?.parentOrgId
+      ? await this.db.getOrganizationById(team.parentOrgId)
+      : null;
+    if (
+      team &&
+      !team.archivedAt &&
+      !team.setupPending &&
+      parent &&
+      !parent.archivedAt &&
+      !parent.setupPending
+    ) {
+      const publications = await this.db.listOrgSharedResources(parent.id);
+      const parentProfiles = await this.db.listProfilesForOrg(parent.id);
+      for (const publication of publications) {
+        if (publication.resourceKind !== "skill") {
+          continue;
+        }
+        const record = await this.db.getSkill(publication.resourceId);
+        if (
+          !record ||
+          record.orgId !== parent.id ||
+          !record.enabled ||
+          isPluginOwnedSkill(record)
+        ) {
+          continue;
+        }
+        try {
+          const { resolved: sourcePath } = await guardFilePath(
+            record.sourcePath,
+            null,
+            undefined,
+            {
+              allowedDirs: [getOrgConfigDir(parent.id)],
+            }
+          );
+          const owner = parentProfiles.find(
+            (profile) =>
+              sourcePath ===
+              resolveProfileSkillDirectory(parent.id, profile.id, record.name)
+          );
+          if (!owner) {
+            continue;
+          }
+          const { resolved } = await guardFilePath(
+            path.join(record.sourcePath, SKILL_FILE_NAME),
+            null,
+            undefined,
+            { allowedDirs: [record.sourcePath] }
+          );
+          const parsed = parseSkillMarkdown(
+            await readFile(resolved, "utf8"),
+            resolved
+          );
+          if (parsed.frontmatter.name !== record.name) {
+            continue;
+          }
+          publishedSkills.push({
+            createdAt: record.createdAt,
+            createdBy: record.createdBy,
+            description: parsed.frontmatter.description,
+            disableModelInvocation:
+              parsed.frontmatter.disableModelInvocation ?? false,
+            enabled: record.enabled,
+            hasTool: record.hasTool,
+            id: record.id,
+            name: record.name,
+            publicationId: publication.id,
+            scope: "parent",
+            sourceOrganization: { id: parent.id, name: parent.name },
+            updatedAt: record.updatedAt,
+          });
+        } catch {
+          // A missing or unsafe source must not become an available skill.
+        }
+      }
+    }
 
     return {
+      publishedSkills,
       skills: skills
         .filter((skill) => !(orgId && skill.orgId) || skill.orgId === orgId)
         .map((skill) => toSkillSummary(skill)),
@@ -2036,9 +2117,10 @@ export class SkillsService {
         continue;
       }
 
-      const group = grouped.get(skill.name) ?? [];
+      const key = JSON.stringify([skill.orgId ?? null, skill.name]);
+      const group = grouped.get(key) ?? [];
       group.push(skill);
-      grouped.set(skill.name, group);
+      grouped.set(key, group);
     }
 
     const profiles = await this.db.listProfiles();

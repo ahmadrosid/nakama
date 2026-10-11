@@ -2234,7 +2234,26 @@ export interface SkillDetail extends SkillSummary {
 }
 
 export interface ListSkillsResponse {
+  publishedSkills?: PublishedSkillSummary[];
   skills: SkillSummary[];
+}
+
+export interface PublishedSkillSummary
+  extends Pick<
+    SkillSummary,
+    | "createdAt"
+    | "createdBy"
+    | "description"
+    | "disableModelInvocation"
+    | "enabled"
+    | "hasTool"
+    | "id"
+    | "name"
+    | "updatedAt"
+  > {
+  publicationId: string;
+  scope: "parent";
+  sourceOrganization: { id: string; name: string };
 }
 
 export interface SkillResponse {

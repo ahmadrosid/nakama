@@ -2647,6 +2647,9 @@ describe("OrgService shared resource publications", () => {
       request,
       "user_creator"
     );
+    const sourceAlias = join(getUserConfigDir(), `${profileId}-source-alias`);
+    await symlink(sourcePath, sourceAlias);
+    await db.upsertSkill({ ...skill, sourcePath: sourceAlias });
     expect(
       await orgService.publishSharedResource(
         "org_parent",
@@ -2654,6 +2657,7 @@ describe("OrgService shared resource publications", () => {
         "user_creator"
       )
     ).toEqual(publication);
+    await db.upsertSkill(skill);
     await orgService.unpublishSharedResource(
       "org_parent",
       publication.id,

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile, rm, stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import {
   createEmailOutboundAdapter,
   type EmailOutboundAdapter,
@@ -557,17 +557,22 @@ export class OrgService {
       try {
         const profiles =
           await this.databaseAdapter.listProfilesForOrg(parentOrgId);
+        const { resolved: sourcePath } = await guardFilePath(
+          skill.sourcePath,
+          null,
+          undefined,
+          {
+            allowedDirs: [getOrgConfigDir(parentOrgId)],
+          }
+        );
         const owner = profiles.find(
           (profile) =>
-            resolve(skill.sourcePath) ===
+            sourcePath ===
             resolveProfileSkillDirectory(parentOrgId, profile.id, skill.name)
         );
         if (!owner) {
           throw new NakamaApiError("Skill is unavailable.", 404);
         }
-        await guardFilePath(skill.sourcePath, null, undefined, {
-          allowedDirs: [getOrgConfigDir(parentOrgId)],
-        });
         const { resolved } = await guardFilePath(
           join(skill.sourcePath, SKILL_FILE_NAME),
           null,

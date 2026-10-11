@@ -1366,3 +1366,20 @@ The exact remaining cause is unverified. Next investigation: compare stored sour
 No step or delivery stage is complete. Product changes and tests remain uncommitted for investigation.
 No type check, full lint, full-suite run, browser check, build, push, or PR ran after the failed focused gate.
 Evidence: /tmp/nakama-published-skills-{focused,format}.log.
+
+2026-10-11: Step 2 slice 2s completes the published parent skill metadata catalog after the failed iteration.
+A local reproduction confirmed the remaining failure: stored paths used /var while profile directory resolution returned /private/var.
+Catalog and publication validation now compare the guarded, resolved source path with the canonical parent profile skill directory.
+Both paths retain source tenant and SKILL.md boundary checks. Tests accept valid aliases and reject files outside the source directory.
+ListSkillsResponse declares a separate optional publishedSkills field. OpenAPI declares its permitted metadata, publication ID, parent scope, and source organization.
+The existing skills array retains local and global records. Parent entries exclude source paths, body contents, and private usage data.
+Each catalog call rechecks active team and parent records, current publications, enabled source records, profile ownership, and source files.
+Duplicate cleanup now groups by tenant and name. Equal parent and team names retain separate IDs instead of merging stored records.
+Tests cover two siblings, an unrelated organization, local name collisions, global compatibility, revocation, disabled sources, missing files, and archive rules.
+They also cover source updates, aliases, symlink denial, and database failures. The broad focused run passed all 112 tests across three files.
+The server type check found an optional frontmatter flag. The catalog now returns false when the flag is absent, matching existing skill behavior.
+Checks: all 112 focused tests passed after repair; complete core and server type checks passed; lint passed all 1532 files; git diff --check passed.
+No new source file, package, or dependency was added. Steps 2 and 3 remain unchecked; this slice does not finish a delivery stage.
+Next: permit guarded parent skill detail reads and assignments, then load supporting assets with team execution context and source write protection.
+No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-published-skills-repair-focused.log and /tmp/nakama-published-skills-{core-types,server-types,lint}.log.

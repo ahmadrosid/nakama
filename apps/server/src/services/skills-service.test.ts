@@ -1,9 +1,17 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureBundledSkillFiles } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { createDefaultProfile } from "./agent-service-test-fixtures";
 import { SkillsService } from "./skills-service";
 
 const ORG_ID = "org_test";
@@ -33,6 +41,176 @@ describe("SkillsService", () => {
 
   afterEach(() => {
     delete process.env.NAKAMA_CONFIG_DIR;
+  });
+
+  async function setupPublishedSkill() {
+    const db = createInMemoryDatabaseAdapter();
+    const now = new Date().toISOString();
+    for (const id of ["parent", "team_a", "team_b", "other"]) {
+      await db.upsertOrganization({
+        archivedAt: null,
+        createdAt: now,
+        id,
+        name: id,
+        parentOrgId: id.startsWith("team_") ? "parent" : null,
+        slug: id,
+        updatedAt: now,
+      });
+      await db.upsertProfile({
+        ...createDefaultProfile(),
+        id: `profile_${id}`,
+        isDefault: false,
+        orgId: id,
+      });
+    }
+    const service = new SkillsService(db);
+    const skill = (
+      await service.createSkill("parent", {
+        body: "Published instructions",
+        description: "Published notes",
+        name: "shared-notes",
+        profileId: "profile_parent",
+      })
+    ).skill;
+    const privateSkill = (
+      await service.createSkill("parent", {
+        body: "Private instructions",
+        description: "Private notes",
+        name: "private-notes",
+        profileId: "profile_parent",
+      })
+    ).skill;
+    const local = (
+      await service.createSkill("team_a", {
+        description: "Local notes",
+        name: "shared-notes",
+        profileId: "profile_team_a",
+      })
+    ).skill;
+    const sibling = (
+      await service.createSkill("team_b", {
+        description: "Private sibling",
+        name: "sibling-only",
+        profileId: "profile_team_b",
+      })
+    ).skill;
+    const publication = await db.publishOrgSharedResource({
+      createdAt: now,
+      id: "published_skill",
+      orgId: "parent",
+      resourceId: skill.id,
+      resourceKind: "skill",
+      updatedAt: now,
+    });
+    return { db, local, privateSkill, publication, service, sibling, skill };
+  }
+
+  test("team catalogs separate parent publications and preserve local and global skills", async () => {
+    const { service, skill, privateSkill, local, sibling } =
+      await setupPublishedSkill();
+    const a = await service.listSkills("team_a");
+    const b = await service.listSkills("team_b");
+    expect(a.publishedSkills).toEqual(b.publishedSkills);
+    expect(a.publishedSkills).toHaveLength(1);
+    expect(a.publishedSkills?.[0]).toMatchObject({
+      id: skill.id,
+      publicationId: "published_skill",
+      scope: "parent",
+      sourceOrganization: { id: "parent", name: "parent" },
+    });
+    expect(JSON.stringify(a.publishedSkills)).not.toContain(skill.sourcePath);
+    expect(a.publishedSkills?.[0]).not.toHaveProperty("sourcePath");
+    expect(JSON.stringify(a.publishedSkills)).not.toContain(
+      "Published instructions"
+    );
+    expect(a.skills.some((item) => item.id === local.id)).toBe(true);
+    expect(a.skills.some((item) => item.name === "weather")).toBe(true);
+    expect(
+      a.skills.some((item) =>
+        [skill.id, privateSkill.id, sibling.id].includes(item.id)
+      )
+    ).toBe(false);
+    expect((await service.listSkills("other")).publishedSkills).toEqual([]);
+    expect((await service.listSkills("parent")).publishedSkills).toEqual([]);
+  });
+
+  test.each([
+    "revoke",
+    "disabled",
+    "missing",
+    "file-symlink",
+    "team-archive",
+    "parent-archive",
+  ] as const)(
+    "parent catalog removes unavailable entries after %s",
+    async (change) => {
+      const { db, service, skill, publication } = await setupPublishedSkill();
+      expect((await service.listSkills("team_a")).publishedSkills).toHaveLength(
+        1
+      );
+      if (change === "revoke") {
+        await db.deleteOrgSharedResource("parent", publication.id);
+      } else if (change === "disabled") {
+        await db.upsertSkill({
+          ...(await db.getSkill(skill.id))!,
+          enabled: false,
+        });
+      } else if (change === "missing" || change === "file-symlink") {
+        await rm(join(skill.sourcePath, "SKILL.md"));
+        if (change === "file-symlink") {
+          const secret = join(configDir, "secret.md");
+          await writeFile(secret, "Private bytes");
+          await symlink(secret, join(skill.sourcePath, "SKILL.md"));
+        }
+      } else {
+        const id = change === "team-archive" ? "team_a" : "parent";
+        if (change === "parent-archive") {
+          for (const childId of ["team_a", "team_b"]) {
+            await db.upsertOrganization({
+              ...(await db.getOrganizationById(childId))!,
+              archivedAt: new Date().toISOString(),
+            });
+          }
+        }
+        await db.upsertOrganization({
+          ...(await db.getOrganizationById(id))!,
+          archivedAt: new Date().toISOString(),
+        });
+      }
+      expect((await service.listSkills("team_a")).publishedSkills).toEqual([]);
+    }
+  );
+
+  test("parent catalog reads current metadata and preserves database failures", async () => {
+    const { db, service, skill } = await setupPublishedSkill();
+    await writeFile(
+      join(skill.sourcePath, "SKILL.md"),
+      "---\nname: shared-notes\ndescription: Updated source\n---\n\nUpdated body\n"
+    );
+    expect(
+      (await service.listSkills("team_a")).publishedSkills?.[0]?.description
+    ).toBe("Updated source");
+    const read = spyOn(db, "listOrgSharedResources").mockRejectedValueOnce(
+      new Error("database unavailable")
+    );
+    try {
+      await expect(service.listSkills("team_a")).rejects.toThrow();
+    } finally {
+      read.mockRestore();
+    }
+  });
+
+  test("parent catalog accepts a source alias within its guarded source tenant", async () => {
+    const { db, service, skill } = await setupPublishedSkill();
+    const alias = join(configDir, "published-source-alias");
+    await symlink(skill.sourcePath, alias);
+    await db.upsertSkill({
+      ...(await db.getSkill(skill.id))!,
+      sourcePath: alias,
+    });
+    const catalog = await service.listSkills("team_a");
+    expect(catalog.publishedSkills?.[0]?.id).toBe(skill.id);
+    expect(JSON.stringify(catalog.publishedSkills)).not.toContain(alias);
   });
 
   test("discovers global skills and syncs them to the database", async () => {
