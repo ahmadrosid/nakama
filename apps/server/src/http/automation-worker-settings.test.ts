@@ -6,6 +6,7 @@ import { createMinimalHonoApp } from "./test-app-helpers";
 import {
   loginUserSession,
   setupFreshInstallSession,
+  type TestBrowserSession,
 } from "./test-session-helpers";
 
 setupTestConfigDir("nakama-automation-worker-settings-test-");
@@ -62,7 +63,7 @@ describe("automation worker settings routes", () => {
       orgId
     );
 
-    const update = (session: typeof admin, minutes: number) =>
+    const update = (session: TestBrowserSession, minutes?: number) =>
       app.fetch(
         new Request("http://localhost:4310/v1/settings/automation-worker", {
           body: JSON.stringify({ pollIntervalMinutes: minutes }),
@@ -88,6 +89,10 @@ describe("automation worker settings routes", () => {
     );
 
     expect(await getSaved.json()).toEqual({ pollIntervalMinutes: 10 });
-    expect((await update(admin, 0)).status).toBe(400);
+
+    for (const minutes of [undefined, 0, 1441, 1.5, Number.NaN]) {
+      expect((await update(admin, minutes)).status).toBe(400);
+      expect(await databaseAdapter.getWorkspaceSettings()).toEqual(stored);
+    }
   });
 });

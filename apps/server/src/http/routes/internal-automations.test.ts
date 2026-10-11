@@ -4,16 +4,21 @@ import { createInMemoryDatabaseAdapter } from "@nakama/db";
 import { AuthService } from "../../services/auth-service";
 import { AutomationService } from "../../services/automation-service";
 import { OrgService } from "../../services/org-service";
+import { setupTestConfigDir } from "../../test-config-dir";
 import { createHonoApp } from "../app";
 import type { ServerOptions } from "../context";
 import { seedLocalClientUser } from "../test-org-helpers";
 import { setupFreshInstallSession } from "../test-session-helpers";
 
+setupTestConfigDir("nakama-internal-automations-test-");
+
 const PROFILE_ID = "profile_default";
 
 const ORG_ID = "org_default";
 
-function createServerOptions(overrides: Partial<ServerOptions> = {}) {
+function createServerOptions(
+  overrides: Partial<Omit<ServerOptions, "databaseAdapter">> = {}
+) {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const authService = new AuthService();
   const orgService = new OrgService(databaseAdapter, authService);

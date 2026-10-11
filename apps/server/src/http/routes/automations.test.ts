@@ -15,14 +15,16 @@ import {
 import { AuthService } from "../../services/auth-service";
 import { AutomationService } from "../../services/automation-service";
 import { OrgService } from "../../services/org-service";
-import { createHonoApp } from "../app";
-import type { ServerOptions } from "../context";
+import { setupTestConfigDir } from "../../test-config-dir";
+import { createMinimalHonoApp } from "../test-app-helpers";
 import { seedOrgForUser } from "../test-org-helpers";
 import {
   type AppFetch,
   loginUserSession,
   setupFreshInstallSession,
 } from "../test-session-helpers";
+
+setupTestConfigDir("nakama-automation-routes-");
 
 const PROFILE_ID = "profile_default";
 
@@ -31,7 +33,7 @@ const MEMBER_EMAIL = "member@example.com";
 const MEMBER_PASSWORD = "password123";
 
 interface RouteTestFixture {
-  app: ReturnType<typeof createHonoApp>;
+  app: ReturnType<typeof createMinimalHonoApp>["app"];
   authService: AuthService;
   automationService: AutomationService;
   databaseAdapter: DatabaseAdapter;
@@ -46,23 +48,16 @@ function createFixture(): RouteTestFixture {
     getUserTimezone: async () => "UTC",
   });
 
-  // Only the automation surface is exercised; the remaining collaborators are
-  // unreachable stubs, so they are cast once instead of fully constructed.
-  // SAFETY: This test controls the fixture shape at this boundary.
-  const options = {
+  const { app } = createMinimalHonoApp({
     agent: { providerConfigured: true, runAutomation: async () => ({}) },
     authService,
     automationService,
     databaseAdapter,
-    mcpService: {},
     orgService,
-    systemStatus: {},
-    webDistDir: null,
-    workerManager: {},
-  } as ServerOptions;
+  });
 
   return {
-    app: createHonoApp(options),
+    app,
     authService,
     automationService,
     databaseAdapter,
