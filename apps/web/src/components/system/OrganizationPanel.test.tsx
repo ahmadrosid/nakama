@@ -15,6 +15,7 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { OrgSettingsProfileBooleanOverrideField } from "@/components/profiles/ProfileOrgBooleanOverrideField";
 import { ProfileSkillsSettingsSection } from "@/components/profiles/ProfileSkillsSettingsSection";
+import { OrgMembersCard } from "@/components/settings/OrgMembersCard";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
 import { SOUL_FILES } from "@/components/soul-tools/soul-files";
 import { useActiveChatProfileStore } from "@/context/active-chat-profile-store";
@@ -226,6 +227,119 @@ for (const role of ["member", "viewer"] as const) {
     });
   }
 }
+
+test.each(["team", "parent", "standalone"] as const)(
+  "%s settings keep scoped IDs and accessible member actions",
+  async (context) => {
+    const queries = new QueryClient({
+      defaultOptions: { queries: { enabled: false, retry: false } },
+    });
+
+    const org = {
+      ...organization(context),
+      parentOrgId: context === "team" ? "parent" : null,
+      role: "admin" as const,
+    };
+
+    const member = {
+      createdAt: "2026-10-12T00:00:00Z",
+      email: "writer@example.com",
+      name: "Writer",
+      phone: null,
+      role: "member" as const,
+      userId: "writer",
+    };
+
+    queries.setQueryData(queryKeys.orgMembers(org.id), { members: [member] });
+
+    const clipboardDescriptor = Object.getOwnPropertyDescriptor(
+      navigator,
+      "clipboard"
+    );
+
+    const write = mock(async (_value: string) => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: write },
+    });
+    cleanups.push(() => {
+      if (clipboardDescriptor) {
+        Object.defineProperty(navigator, "clipboard", clipboardDescriptor);
+      } else {
+        Reflect.deleteProperty(navigator, "clipboard");
+      }
+    });
+
+    const { container, render } = mount(
+      queries,
+      undefined,
+      undefined,
+      undefined,
+      <OrgMembersCard />
+    );
+
+    await render(org);
+    const label = context === "team" ? "Team" : "Organization";
+    expect(
+      [...container.querySelectorAll("span")].some(
+        (entry) => entry.textContent === label
+      )
+    ).toBe(true);
+    expect(container.querySelector("code")?.textContent).toBe(org.id);
+    const copyLabel = context === "team" ? "Copy team ID" : "Copy org ID";
+
+    const copy = container.querySelector<HTMLButtonElement>(
+      `button[aria-label="${copyLabel}"]`
+    )!;
+
+    expect(copy).not.toBeNull();
+    expect(copy.disabled).toBe(false);
+    await act(async () => copy.focus());
+    expect(document.activeElement).toBe(copy);
+    await act(async () => {
+      copy.click();
+      await settle();
+    });
+    expect(write).toHaveBeenCalledWith(org.id);
+
+    for (const name of [
+      "Invite by email",
+      "Add member",
+      "Edit Writer",
+      "Remove Writer",
+    ]) {
+      const action = container.querySelector<HTMLButtonElement>(
+        `button[aria-label="${name}"]`
+      )!;
+
+      expect(action).not.toBeNull();
+      expect(action.disabled).toBe(false);
+      await act(async () => action.focus());
+      expect(document.activeElement).toBe(action);
+    }
+
+    const next = { ...org, id: `${org.id}-next` };
+    queries.setQueryData(queryKeys.orgMembers(next.id), { members: [] });
+    await render(next);
+    expect(container.querySelector("code")?.textContent).toBe(next.id);
+
+    const nextCopy = container.querySelector<HTMLButtonElement>(
+      `button[aria-label="${copyLabel}"]`
+    )!;
+
+    expect(nextCopy).not.toBeNull();
+    await act(async () => {
+      nextCopy.click();
+      await settle();
+    });
+    expect(write).toHaveBeenLastCalledWith(next.id);
+    await render({ ...next, role: "viewer" });
+    expect(container.querySelector("code")).toBeNull();
+    expect(
+      container.querySelector('button[aria-label="Add member"]')
+    ).toBeNull();
+  }
+);
 
 test("admin settings remain available and disappear after a role change", async () => {
   const queries = new QueryClient({

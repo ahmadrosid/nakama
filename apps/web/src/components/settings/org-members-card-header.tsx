@@ -11,6 +11,7 @@ import { OrgMemberInvitePopover } from "@/components/settings/org-member-dialogs
 
 export function OrgMembersCardHeader({
   orgId,
+  isTeam = false,
   inviteOpen,
   inviteEmail,
   inviteRole,
@@ -23,6 +24,7 @@ export function OrgMembersCardHeader({
   onAddMember,
 }: {
   orgId: string;
+  isTeam?: boolean;
   inviteOpen: boolean;
   inviteEmail: string;
   inviteRole: OrgRole;
@@ -50,13 +52,21 @@ export function OrgMembersCardHeader({
     <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <span className="shrink-0 font-normal text-foreground text-sm leading-none">
-          Organization
+          {isTeam ? "Team" : "Organization"}
         </span>
         <code className="inline-flex h-7 max-w-[14rem] items-center truncate rounded border border-border bg-muted/30 px-1.5 font-mono text-2xs text-foreground leading-none sm:max-w-xs">
           {orgId}
         </code>
         <Button
-          aria-label={copiedOrgId ? "Copied org ID" : "Copy org ID"}
+          aria-label={
+            isTeam
+              ? copiedOrgId
+                ? "Copied team ID"
+                : "Copy team ID"
+              : copiedOrgId
+                ? "Copied org ID"
+                : "Copy org ID"
+          }
           className="size-7 shrink-0"
           onClick={() => void handleCopyOrgId()}
           size="icon-sm"

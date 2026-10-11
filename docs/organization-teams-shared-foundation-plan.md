@@ -2468,3 +2468,15 @@ React Doctor retained 91/100 with no errors. Two complexity warnings remain in t
 Steps 4 and 5 and delivery stages 3 and 4 remain open. Next: audit remaining assignment surfaces, then accessible team settings actions and compatibility labels. No server permission, file, package, or dependency was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
 
 Evidence: /tmp/nakama-template-assignments-{focused,api,types,format,oxlint,doctor,lint}.log.
+
+### Slice 3z — Team settings ID and accessible actions
+
+The existing member settings header now identifies child tenants as Team. Root and standalone tenants retain Organization. Team copy controls use team-specific accessible names and copy the stored tenant ID. The header remounts with a distinct tenant-scoped key so copy confirmation cannot carry over to the next selected tenant. Existing copy, invitation, addition, edit, and removal controls already have accessible names; they remain in place.
+
+Three new component cases mount the existing member card for a team, parent, and standalone tenant. They check exact copied IDs, named enabled actions, keyboard focus, copy-state reset and new IDs after switching, and removal of admin controls after a viewer role change. All 144 component tests passed with 1062 assertions. Complete web types, scoped anti-slop, Ultracite, and git diff --check passed. React Doctor retained 91/100 with the same two assignment complexity warnings and no errors.
+
+One verification repair gave the header a distinct key from its sibling invite-domain form and wrapped test focus changes in act. The tests passed without the duplicate-key or focus warnings after the repair. No server permission, file, package, dependency, or new abstraction was added.
+
+Steps 4 and 5 and delivery stages 3 and 4 remain open. Next: audit the remaining Organization screen requirements, including layout, wrapping, keyboard actions, and retained settings. Client labels and compatibility also remain open. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
+
+Evidence: /tmp/nakama-team-settings-{focused,types,format,oxlint,doctor,lint}.log.

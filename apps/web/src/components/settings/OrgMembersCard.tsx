@@ -342,6 +342,8 @@ export function OrgMembersCard() {
             inviteOpen={state.inviteOpen}
             invitePending={inviteMutation.isPending}
             inviteRole={state.inviteRole}
+            isTeam={Boolean(activeOrg.parentOrgId)}
+            key={`members-header:${activeOrg.id}`}
             onAddMember={() => {
               dispatch({ type: "reset-add" });
               dispatch({ type: "clear-secrets" });
