@@ -235,9 +235,11 @@ export class SkillsService {
     const skills = await this.db.listSkills();
     const publishedSkills: PublishedSkillSummary[] = [];
     const team = orgId ? await this.db.getOrganizationById(orgId) : null;
+
     const parent = team?.parentOrgId
       ? await this.db.getOrganizationById(team.parentOrgId)
       : null;
+
     if (
       team &&
       !team.archivedAt &&
@@ -247,15 +249,18 @@ export class SkillsService {
       !parent.setupPending
     ) {
       const publications = await this.db.listOrgSharedResources(parent.id);
+
       for (const publication of publications) {
         if (publication.resourceKind !== "skill") {
           continue;
         }
+
         try {
           const source = await this.resolvePublishedSkill(
             team.id,
             publication.id
           );
+
           publishedSkills.push(source.summary);
         } catch (error) {
           if (!(error instanceof NakamaApiError && error.status === 404)) {
@@ -278,6 +283,7 @@ export class SkillsService {
     publicationId: string
   ): Promise<PublishedSkillResponse> {
     const source = await this.resolvePublishedSkill(orgId, publicationId);
+
     return { skill: { ...source.summary, body: source.body } };
   }
 
@@ -286,15 +292,18 @@ export class SkillsService {
     skillId: string
   ): Promise<PublishedSkillSummary> {
     const team = await this.db.getOrganizationById(orgId);
+
     const publication = team?.parentOrgId
       ? (await this.db.listOrgSharedResources(team.parentOrgId)).find(
           (entry) =>
             entry.resourceKind === "skill" && entry.resourceId === skillId
         )
       : null;
+
     if (!publication) {
       throw new NakamaApiError("Skill is unavailable.", 404);
     }
+
     return (await this.resolvePublishedSkill(orgId, publication.id)).summary;
   }
 
@@ -309,9 +318,11 @@ export class SkillsService {
     sourceProfileId: string;
   }> {
     const team = await this.db.getOrganizationById(orgId);
+
     const parent = team?.parentOrgId
       ? await this.db.getOrganizationById(team.parentOrgId)
       : null;
+
     if (
       !team ||
       team.archivedAt ||
@@ -322,14 +333,18 @@ export class SkillsService {
     ) {
       throw new NakamaApiError("Skill is unavailable.", 404);
     }
+
     const publication = await this.db.getOrgSharedResource(
       parent.id,
       publicationId
     );
+
     if (!publication || publication.resourceKind !== "skill") {
       throw new NakamaApiError("Skill is unavailable.", 404);
     }
+
     const record = await this.db.getSkill(publication.resourceId);
+
     if (
       !record ||
       record.orgId !== parent.id ||
@@ -338,7 +353,9 @@ export class SkillsService {
     ) {
       throw new NakamaApiError("Skill is unavailable.", 404);
     }
+
     const profiles = await this.db.listProfilesForOrg(parent.id);
+
     try {
       const { resolved: sourcePath } = await guardFilePath(
         record.sourcePath,
@@ -346,27 +363,33 @@ export class SkillsService {
         undefined,
         { allowedDirs: [getOrgConfigDir(parent.id)] }
       );
+
       const owner = profiles.find(
         (profile) =>
           sourcePath ===
           resolveProfileSkillDirectory(parent.id, profile.id, record.name)
       );
+
       if (!owner) {
         throw new NakamaApiError("Skill is unavailable.", 404);
       }
+
       const { resolved } = await guardFilePath(
         path.join(record.sourcePath, SKILL_FILE_NAME),
         null,
         undefined,
         { allowedDirs: [record.sourcePath] }
       );
+
       const parsed = parseSkillMarkdown(
         await readFile(resolved, "utf8"),
         resolved
       );
+
       if (parsed.frontmatter.name !== record.name) {
         throw new NakamaApiError("Skill is unavailable.", 404);
       }
+
       return {
         body: parsed.body,
         directory: sourcePath,
@@ -1243,6 +1266,7 @@ export class SkillsService {
     skillId: string
   ): Promise<SkillFilesResponse> {
     const root = await this.skillFilesRoot(orgId, skillId);
+
     return this.listFilesInRoot(root);
   }
 
@@ -1254,6 +1278,7 @@ export class SkillsService {
       orgId,
       publicationId
     );
+
     try {
       return await this.listFilesInRoot(directory);
     } catch {
@@ -1320,6 +1345,7 @@ export class SkillsService {
     filePath: string
   ): Promise<SkillFileResponse> {
     const root = await this.skillFilesRoot(orgId, skillId);
+
     return this.readFileFromRoot(root, filePath);
   }
 
@@ -1332,12 +1358,14 @@ export class SkillsService {
       orgId,
       publicationId
     );
+
     try {
       return await this.readFileFromRoot(directory, filePath);
     } catch (error) {
       if (error instanceof NakamaApiError) {
         throw error;
       }
+
       throw new NakamaApiError("Skill file is unavailable.", 404);
     }
   }
@@ -1350,34 +1378,43 @@ export class SkillsService {
     maxBytes: number
   ): Promise<Uint8Array> {
     const profile = await this.db.getProfile(profileId);
+
     if (profile?.orgId !== orgId) {
       throw new NakamaApiError("Profile not found.", 404);
     }
+
     const { summary, directory } = await this.resolvePublishedSkill(
       orgId,
       publicationId
     );
+
     const assigned = await this.getAssignedSkills(orgId, profileId);
+
     if (!assigned.some((item) => item.id === summary.id)) {
       throw new NakamaApiError("Skill is unavailable.", 404);
     }
+
     if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
       throw new NakamaApiError("Invalid file size limit.", 400);
     }
+
     try {
       const bytes = await this.readBytesFromRoot(
         directory,
         filePath,
         Math.min(maxBytes, 10 * 1024 * 1024)
       );
+
       if (!bytes) {
         throw new NakamaApiError("Skill file exceeds the size limit.", 413);
       }
+
       return bytes;
     } catch (error) {
       if (error instanceof NakamaApiError) {
         throw error;
       }
+
       throw new NakamaApiError("Skill file is unavailable.", 404);
     }
   }
@@ -1387,6 +1424,7 @@ export class SkillsService {
     filePath: string
   ): Promise<SkillFileResponse> {
     const bytes = await this.readBytesFromRoot(root, filePath, 1024 * 1024);
+
     if (!bytes) {
       return {
         content: null,
@@ -1394,6 +1432,7 @@ export class SkillsService {
         unavailableReason: "Preview is limited to files up to 1 MB.",
       };
     }
+
     const mediaType = inferArtifactMimeType(filePath);
 
     if (mediaType.startsWith("image/")) {
@@ -1508,6 +1547,7 @@ export class SkillsService {
     const assigned = (await this.getPromptSkills(orgId, profileId)).filter(
       (item) => item.discovered.sourceOrganization
     );
+
     if (recordUsage) {
       void this.recordCatalogViews(
         orgId,
@@ -1516,7 +1556,9 @@ export class SkillsService {
         usageContext
       );
     }
+
     const discovered = assigned.map((item) => item.discovered);
+
     return [
       composeSkillsCatalog(discovered),
       composeAgentBrowserCapabilityPrompt(discovered),
@@ -1585,12 +1627,15 @@ export class SkillsService {
     profileId: string
   ): Promise<SkillSummary[]> {
     const profile = await this.db.getProfile(profileId);
+
     if (profile?.orgId !== orgId) {
       throw new NakamaApiError("Profile not found.", 404);
     }
+
     const records = (await this.db.listSkillsForProfile(profileId)).filter(
       (record) => !record.orgId || record.orgId === orgId
     );
+
     const usage = await this.listSkillUsageForProfile(profileId);
 
     return toSkillSummaries(records, usage);
@@ -1602,16 +1647,21 @@ export class SkillsService {
   ): Promise<string> {
     const assigned = await this.getPromptSkills(orgId, profileId);
     const instance = await this.db.getSharedAgentInstance(orgId, profileId);
+
     const shared = assigned.filter(
       (item) => item.discovered.sourceOrganization && item.discovered.hasTool
     );
+
     if (shared.length === 0 && !instance) {
       return "";
     }
+
     const hash = createHash("sha256");
+
     if (instance) {
       hash.update(JSON.stringify(assigned.map((item) => item.record)));
     }
+
     for (const item of shared.sort((a, b) =>
       a.record.id.localeCompare(b.record.id)
     )) {
@@ -1619,10 +1669,12 @@ export class SkillsService {
         orgId,
         item.record.id
       );
+
       const source = await this.resolvePublishedSkill(
         orgId,
         publication.publicationId
       );
+
       hash.update(JSON.stringify(publication));
       hash.update(
         JSON.stringify(
@@ -1643,9 +1695,11 @@ export class SkillsService {
         )
       );
       const listing = await this.listFilesInRoot(source.directory);
+
       if (listing.truncated) {
         throw new NakamaApiError("Shared skill code is unavailable.", 503);
       }
+
       for (const file of listing.files.filter(
         (entry) =>
           entry.type === "file" &&
@@ -1657,13 +1711,16 @@ export class SkillsService {
           file.path,
           10 * 1024 * 1024
         );
+
         if (!bytes) {
           throw new NakamaApiError("Shared skill code is unavailable.", 503);
         }
+
         hash.update(file.path);
         hash.update(bytes);
       }
     }
+
     return hash.digest("hex");
   }
 
@@ -1672,11 +1729,13 @@ export class SkillsService {
     profileId: string
   ): Promise<ToolDefinition[]> {
     const assigned = await this.getPromptSkills(orgId, profileId);
+
     const tools = await this.loadAssignedSkillTools(
       orgId,
       profileId,
       assigned.filter((item) => !item.discovered.sourceOrganization)
     );
+
     for (const item of assigned.filter(
       (entry) => entry.discovered.sourceOrganization
     )) {
@@ -1684,6 +1743,7 @@ export class SkillsService {
         orgId,
         item.record.id
       );
+
       for (const tool of await this.loadPublishedSkillTools(
         orgId,
         profileId,
@@ -1693,9 +1753,11 @@ export class SkillsService {
           ...tool,
           run: async (input, context) => {
             requireToolNotViewer(context);
+
             if (context.orgId !== orgId || context.profileId !== profileId) {
               throw new NakamaApiError("Skill is unavailable.", 404);
             }
+
             const current = (
               await this.loadPublishedSkillTools(
                 orgId,
@@ -1703,9 +1765,11 @@ export class SkillsService {
                 publication.publicationId
               )
             ).find((entry) => entry.name === tool.name);
+
             if (!current) {
               throw new NakamaApiError("Skill tool is unavailable.", 404);
             }
+
             try {
               return await current.run(
                 input,
@@ -1724,12 +1788,14 @@ export class SkillsService {
         });
       }
     }
+
     if (new Set(tools.map((tool) => tool.name)).size !== tools.length) {
       throw new NakamaApiError(
         "Conflicting skill tool names are assigned.",
         409
       );
     }
+
     return tools;
   }
 
@@ -1739,19 +1805,25 @@ export class SkillsService {
     publicationId: string
   ): Promise<ToolDefinition[]> {
     const profile = await this.db.getProfile(profileId);
+
     if (profile?.orgId !== orgId) {
       throw new NakamaApiError("Profile not found.", 404);
     }
+
     const source = await this.resolvePublishedSkill(orgId, publicationId);
     const assigned = await this.getAssignedSkills(orgId, profileId);
     const record = assigned.find((item) => item.id === source.summary.id);
+
     if (!record) {
       throw new NakamaApiError("Skill is unavailable.", 404);
     }
+
     const discovered = await discoverSkillDirectory(source.directory);
+
     if (!discovered) {
       throw new NakamaApiError("Skill is unavailable.", 404);
     }
+
     try {
       return await this.loadAssignedSkillTools(
         source.summary.sourceOrganization.id,
@@ -1906,6 +1978,7 @@ export class SkillsService {
     const javascriptSkills = skillTools
       .filter((item) => !item.discovered.toolPath?.endsWith(".py"))
       .map((item) => item.discovered);
+
     const javascriptTools = sharedContext
       ? (
           await Promise.all(
@@ -1979,9 +2052,11 @@ export class SkillsService {
 
   async listSkillsForProfile(profileId: string): Promise<SkillSummary[]> {
     const profile = await this.db.getProfile(profileId);
+
     const skills = profile?.orgId
       ? await this.getAssignedSkills(profile.orgId, profileId)
       : await this.db.listSkillsForProfile(profileId);
+
     return skills
       .filter((record) => !record.orgId || record.orgId === profile?.orgId)
       .map((record) => toSkillSummary(record));
@@ -2194,9 +2269,11 @@ export class SkillsService {
     profileId: string
   ): Promise<StoredSkillRecord[]> {
     const instance = await this.db.getSharedAgentInstance(orgId, profileId);
+
     if (!instance) {
       return this.db.listSkillsForProfile(profileId);
     }
+
     const [team, parent, publication, source] = await Promise.all([
       this.db.getOrganizationById(orgId),
       this.db.getOrganizationById(instance.sourceOrgId),
@@ -2206,6 +2283,7 @@ export class SkillsService {
       ),
       this.db.getProfileForOrg(instance.sourceProfileId, instance.sourceOrgId),
     ]);
+
     if (
       !team ||
       team.archivedAt ||
@@ -2225,8 +2303,10 @@ export class SkillsService {
     ) {
       throw new NakamaApiError("Shared agent is unavailable.", 404);
     }
+
     const assigned = await this.db.listSkillsForProfile(source.id);
     const publications = await this.db.listOrgSharedResources(parent.id);
+
     if (
       assigned.some(
         (skill) =>
@@ -2242,6 +2322,7 @@ export class SkillsService {
     ) {
       throw new NakamaApiError("Shared agent skills are unavailable.", 409);
     }
+
     return assigned;
   }
 
@@ -2252,26 +2333,43 @@ export class SkillsService {
     Array<{ discovered: DiscoveredSkill; record: StoredSkillRecord }>
   > {
     const profile = await this.db.getProfile(profileId);
+
     if (profile?.orgId !== orgId) {
       throw new NakamaApiError("Profile not found.", 404);
     }
+
     const result = await this.getAssignedDiscoveredSkills(orgId, profileId);
     const team = await this.db.getOrganizationById(orgId);
+
     const publications = team?.parentOrgId
       ? await this.db.listOrgSharedResources(team.parentOrgId)
       : [];
+
     for (const record of await this.getAssignedSkills(orgId, profileId)) {
       if (!record.orgId || record.orgId === orgId) {
         continue;
       }
+
       const publication = publications.find(
         (item) => item.resourceKind === "skill" && item.resourceId === record.id
       );
+
       if (!publication) {
         continue;
       }
+
       try {
         const source = await this.resolvePublishedSkill(orgId, publication.id);
+
+        if (
+          result.some((item) => item.discovered.name === source.summary.name)
+        ) {
+          throw new NakamaApiError(
+            "Conflicting skill names are assigned.",
+            409
+          );
+        }
+
         const code = await discoverSkillDirectory(source.directory);
         const directory = `published-skill://${encodeURIComponent(publication.id)}`;
         result.push({
@@ -2302,11 +2400,7 @@ export class SkillsService {
         }
       }
     }
-    if (
-      new Set(result.map((item) => item.discovered.name)).size !== result.length
-    ) {
-      throw new NakamaApiError("Conflicting skill names are assigned.", 409);
-    }
+
     return result;
   }
 
@@ -2336,6 +2430,7 @@ export class SkillsService {
       if (record.orgId && record.orgId !== orgId) {
         continue;
       }
+
       if (isPluginOwnedSkill(record)) {
         const directory = await this.copyPluginSkillToProfile(
           orgId,
