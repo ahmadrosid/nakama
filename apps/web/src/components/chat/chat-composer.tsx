@@ -659,6 +659,7 @@ export function ChatComposer(props: ChatComposerProps) {
   );
 
   const [commandPrefix, setCommandPrefix] = useState<string | null>(null);
+
   const commandContext = useMemo(
     () => ({ prefix: commandPrefix, setPrefix: setCommandPrefix }),
     [commandPrefix]

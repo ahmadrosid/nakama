@@ -98,6 +98,7 @@ export function ChatSkillPicker({
             const active = index === activeIndex;
             const description = suggestionDescription(suggestion);
             const token = suggestionToken(suggestion);
+
             const startsSection =
               index === 0 || suggestions[index - 1].kind !== suggestion.kind;
 
