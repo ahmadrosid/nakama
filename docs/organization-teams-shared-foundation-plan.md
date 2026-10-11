@@ -1354,3 +1354,15 @@ Steps 2 and 3 remain unchecked. This slice does not finish a delivery stage.
 Next: connect published parent skills to discovery and assignments, preserving source write protection and team execution context.
 No full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-parent-prompt-{focused,core-types,server-types,lint}.log.
+
+2026-10-11: Step 2 slice 2s stopped after two failed repair attempts, as required by the iteration rules.
+Uncommitted changes add a separate publishedSkills contract, its OpenAPI schema, and parent catalog resolution without private source paths.
+The proposed catalog checks active tenants, publication kind, source ownership, enabled state, parent profile ownership, and guarded SKILL.md reads.
+The first run failed because test organizations lacked slug values. The first repair supplied slugs and preserved parent archive guards in the fixture.
+The next run returned no published skill. Inspection found duplicate cleanup grouped equal skill names across tenants.
+The second repair separated duplicate cleanup by tenant and name. The catalog still returned no published skill.
+Final focused result: 21 existing tests passed and eight new tests failed. Each failed before the expected parent catalog entry appeared.
+The exact remaining cause is unverified. Next investigation: compare stored source paths with canonical profile skill directories and inspect source records after discovery.
+No step or delivery stage is complete. Product changes and tests remain uncommitted for investigation.
+No type check, full lint, full-suite run, browser check, build, push, or PR ran after the failed focused gate.
+Evidence: /tmp/nakama-published-skills-{focused,format}.log.
