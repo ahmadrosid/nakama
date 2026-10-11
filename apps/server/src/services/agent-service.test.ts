@@ -56,6 +56,7 @@ describe("provider model publication removal", () => {
   async function setup(customModels?: ProviderInstance["customModels"]) {
     const db = createInMemoryDatabaseAdapter();
     const now = new Date().toISOString();
+
     const config = {
       defaultProviderId: "provider-one",
       providers: ["provider-one", "provider-one-extra", "provider-two"].map(
@@ -74,6 +75,7 @@ describe("provider model publication removal", () => {
         })
       ),
     };
+
     await saveUserConfig(config);
     await db.createUser({
       createdAt: now,
@@ -82,6 +84,7 @@ describe("provider model publication removal", () => {
       passwordHash: "test",
       updatedAt: now,
     });
+
     for (const id of ["root", "archived", "other"]) {
       await db.upsertOrganization({
         archivedAt: null,
@@ -97,6 +100,7 @@ describe("provider model publication removal", () => {
         role: "admin",
         userId: "admin",
       });
+
       for (const [kind, resourceId] of [
         ["model", "provider-one::gpt-4o-mini"],
         ["model", "provider-two::gpt-4o-mini"],
@@ -112,6 +116,7 @@ describe("provider model publication removal", () => {
           updatedAt: now,
         });
       }
+
       if (customModels) {
         for (const providerId of ["provider-one", "provider-two"]) {
           await db.publishOrgSharedResource({
@@ -124,6 +129,7 @@ describe("provider model publication removal", () => {
           });
         }
       }
+
       if (id === "archived") {
         await db.upsertOrganization({
           archivedAt: now,
@@ -135,6 +141,7 @@ describe("provider model publication removal", () => {
         });
       }
     }
+
     return {
       config,
       db,
@@ -148,6 +155,7 @@ describe("provider model publication removal", () => {
     expect(await service.deleteProvider("provider-one")).toEqual({
       defaultProviderId: "provider-one-extra",
     });
+
     for (const id of ["root", "archived", "other"]) {
       const publications = await db.listOrgSharedResources(id);
       expect(publications).toHaveLength(3);
@@ -166,6 +174,7 @@ describe("provider model publication removal", () => {
         )
       ).toBe(true);
     }
+
     expect(
       (await loadUserConfig())?.providers.map((entry) => entry.id)
     ).toEqual(["provider-one-extra", "provider-two"]);
@@ -182,9 +191,11 @@ describe("provider model publication removal", () => {
 
   test("a deletion retry revokes references after a database failure", async () => {
     const { db, service } = await setup();
+
     const failure = spyOn(db, "deleteOrgSharedResource").mockRejectedValueOnce(
       new Error("database unavailable")
     );
+
     try {
       await expect(service.deleteProvider("provider-one")).rejects.toThrow();
       expect(
@@ -200,7 +211,9 @@ describe("provider model publication removal", () => {
     } finally {
       failure.mockRestore();
     }
+
     await expect(service.deleteProvider("provider-one")).rejects.toThrow();
+
     for (const org of await db.listOrganizations()) {
       expect(
         (await db.listOrgSharedResources(org.id)).filter(
@@ -218,6 +231,7 @@ describe("provider model publication removal", () => {
     const configPath = getUserConfigPath();
     await rm(configPath);
     await mkdir(configPath);
+
     try {
       await expect(service.deleteProvider("provider-one")).rejects.toThrow();
       expect(
@@ -228,6 +242,7 @@ describe("provider model publication removal", () => {
       await rm(configPath, { recursive: true });
       await saveUserConfig(config);
     }
+
     await expect(service.deleteProvider("provider-one")).resolves.toMatchObject(
       { defaultProviderId: "provider-one-extra" }
     );
@@ -238,20 +253,25 @@ describe("provider model publication removal", () => {
     const entered = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
     const publish = db.publishOrgSharedResource.bind(db);
+
     const pending = spyOn(db, "publishOrgSharedResource").mockImplementation(
       async (record) => {
         entered.resolve();
         await release.promise;
+
         return publish(record);
       }
     );
+
     const publishing = orgService.publishSharedResource(
       "root",
       { resourceId: "provider-one::gpt-4o-mini", resourceKind: "model" },
       "admin"
     );
+
     await entered.promise;
     const deleting = service.deleteProvider("provider-one");
+
     try {
       expect(
         await Promise.race([
@@ -264,6 +284,7 @@ describe("provider model publication removal", () => {
       await Promise.allSettled([publishing, deleting]);
       pending.mockRestore();
     }
+
     await expect(publishing).resolves.toMatchObject({
       resourceId: "provider-one::gpt-4o-mini",
     });
@@ -281,6 +302,7 @@ describe("provider model publication removal", () => {
 
   test("provider updates remove only invalid model references and never republish restored models", async () => {
     const { db, service } = await setup([keptModel, removedModel]);
+
     const before = new Map(
       await Promise.all(
         (await db.listOrganizations()).map(
@@ -289,19 +311,24 @@ describe("provider model publication removal", () => {
         )
       )
     );
+
     await service.updateProvider("provider-one", { label: "Updated provider" });
+
     for (const [id, publications] of before) {
       expect(await db.listOrgSharedResources(id)).toEqual(publications);
     }
+
     const updated = await service.updateProvider("provider-one", {
       customModels: [keptModel],
     });
+
     expect(updated.provider).toMatchObject({
       id: "provider-one",
       label: "Updated provider",
       modelCount: 1,
     });
     expect(JSON.stringify(updated)).not.toContain("private-provider-key");
+
     for (const [id, publications] of before) {
       expect(await db.listOrgSharedResources(id)).toEqual(
         publications.filter(
@@ -309,6 +336,7 @@ describe("provider model publication removal", () => {
         )
       );
     }
+
     await service.updateProvider("provider-one", {
       customModels: [keptModel, removedModel],
     });
@@ -326,14 +354,17 @@ describe("provider model publication removal", () => {
 
   test("provider shortlist updates preserve other global provider access and publications", async () => {
     const { config, db } = await setup();
+
     const instance: ProviderInstance = {
       ...config.providers[0]!,
       customModels: [keptModel, removedModel],
     };
+
     const configured = {
       ...config,
       providers: [instance, ...config.providers.slice(1)],
     };
+
     await saveUserConfig(configured);
     const service = new AgentService(configured, null, db);
     const before = await db.listOrgSharedResources("root");
@@ -373,6 +404,7 @@ describe("provider model publication removal", () => {
     const configPath = getUserConfigPath();
     await rm(configPath);
     await mkdir(configPath);
+
     try {
       await expect(
         service.updateProvider("provider-one", { customModels: [keptModel] })
@@ -387,9 +419,11 @@ describe("provider model publication removal", () => {
 
   test("an update retry removes stale references before restoring the model", async () => {
     const { db, service } = await setup([keptModel, removedModel]);
+
     const failure = spyOn(db, "deleteOrgSharedResource").mockRejectedValueOnce(
       new Error("database unavailable")
     );
+
     try {
       await expect(
         service.updateProvider("provider-one", { customModels: [keptModel] })
@@ -405,9 +439,11 @@ describe("provider model publication removal", () => {
     } finally {
       failure.mockRestore();
     }
+
     await service.updateProvider("provider-one", {
       customModels: [keptModel, removedModel],
     });
+
     for (const org of await db.listOrganizations()) {
       expect(
         (await db.listOrgSharedResources(org.id)).some(
@@ -422,23 +458,29 @@ describe("provider model publication removal", () => {
     const entered = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
     const remove = db.deleteOrgSharedResource.bind(db);
+
     const pending = spyOn(db, "deleteOrgSharedResource").mockImplementation(
       async (orgId, id) => {
         entered.resolve();
         await release.promise;
+
         return remove(orgId, id);
       }
     );
+
     const updating = service.updateProvider("provider-one", {
       customModels: [keptModel],
     });
+
     await entered.promise;
     let publicationFinished = false;
+
     const publishing = orgService.publishSharedResource(
       "root",
       { resourceId: `provider-one::${removedModel.id}`, resourceKind: "model" },
       "admin"
     );
+
     const observed = publishing.then(
       () => {
         publicationFinished = true;
@@ -447,6 +489,7 @@ describe("provider model publication removal", () => {
         publicationFinished = true;
       }
     );
+
     try {
       await Bun.sleep(20);
       expect(publicationFinished).toBe(false);
@@ -455,6 +498,7 @@ describe("provider model publication removal", () => {
       await Promise.allSettled([updating, observed]);
       pending.mockRestore();
     }
+
     await expect(updating).resolves.toMatchObject({
       provider: { id: "provider-one", modelCount: 1 },
     });
@@ -472,11 +516,13 @@ describe("shared agent direct configuration", () => {
 
   test("blocks source configuration writes after revocation and keeps team memory writable", async () => {
     const db = createInMemoryDatabaseAdapter();
+
     const source = {
       ...createDefaultProfile(),
       isDefault: false,
       orgId: TEST_ORG_ID,
     };
+
     for (const id of [source.orgId, "team"]) {
       await db.upsertOrganization({
         createdAt: source.createdAt,
@@ -487,8 +533,10 @@ describe("shared agent direct configuration", () => {
         updatedAt: source.updatedAt,
       });
     }
+
     await db.upsertProfile(source);
     const storedSource = await db.getProfile(source.id);
+
     const publication = await db.publishOrgSharedResource({
       createdAt: source.createdAt,
       id: "publication",
@@ -497,15 +545,18 @@ describe("shared agent direct configuration", () => {
       resourceKind: "agent",
       updatedAt: source.updatedAt,
     });
+
     const profile = await db.createSharedAgentInstance(
       "team",
       publication.id,
       "shared",
       source.createdAt
     );
+
     const service = new AgentService(null, null, db);
     const directory = getProfileSoulDir("team", profile.id);
     await mkdir(directory, { recursive: true });
+
     for (const file of [
       "SOUL.md",
       "STYLE.md",
@@ -515,11 +566,14 @@ describe("shared agent direct configuration", () => {
     ]) {
       await writeFile(path.join(directory, file), file);
     }
+
     const meta = { actorUserId: "admin", source: "dashboard" as const };
+
     for (const revoked of [false, true]) {
       if (revoked) {
         await db.deleteOrgSharedResource(source.orgId, publication.id);
       }
+
       for (const key of ["soul", "style", "instructions"]) {
         await expect(
           service.writeProfileSoulFile(
@@ -531,12 +585,14 @@ describe("shared agent direct configuration", () => {
           )
         ).rejects.toMatchObject({ status: 403 });
       }
+
       await expect(
         service.setAcpDraftSetting("team", profile.id, "model", "Changed")
       ).rejects.toMatchObject({ status: 403 });
       expect(await db.getProfile(profile.id)).toEqual(profile);
       expect(await db.listProfileChangeEvents("team", profile.id)).toEqual([]);
     }
+
     await expect(
       service.writeProfileSoulFile(
         source.orgId,
@@ -546,9 +602,11 @@ describe("shared agent direct configuration", () => {
         meta
       )
     ).rejects.toMatchObject({ status: 404 });
+
     for (const file of ["SOUL.md", "STYLE.md", "INSTRUCTIONS.md", "USER.md"]) {
       expect(await readFile(path.join(directory, file), "utf8")).toBe(file);
     }
+
     await service.writeProfileSoulFile(
       "team",
       profile.id,
@@ -1347,10 +1405,12 @@ describe("AgentService vision settings", () => {
 
       try {
         const db = createInMemoryDatabaseAdapter();
+
         const profile = {
           ...createDefaultProfile(),
           model: "primary::deepseek-v4-flash",
         };
+
         await db.upsertProfile(profile);
         const tracker = new LlmUsageTracker(db);
 
