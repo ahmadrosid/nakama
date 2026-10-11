@@ -21,6 +21,7 @@ import { createMinimalHonoApp } from "../test-app-helpers";
 import {
   createOrgAdminSession,
   loginUserSession,
+  seedOrgAdmin,
   setupFreshInstallSession,
 } from "../test-session-helpers";
 
@@ -1068,6 +1069,121 @@ async function setupSession(email: string) {
 }
 
 describe("organization knowledge base routes", () => {
+  test("catalog permits tenant admins and checks both tenant membership and path scope", async () => {
+    const { app, authService, databaseAdapter, profileService } = createApp();
+
+    const admin = await seedOrgAdmin(databaseAdapter, {
+      authService,
+      email: "knowledge-catalog-admin@example.com",
+      orgId: "knowledge-catalog-parent",
+    });
+
+    const session = await loginUserSession(
+      app,
+      admin.email,
+      admin.password,
+      admin.orgId
+    );
+
+    const now = new Date().toISOString();
+    const documentIds = new Map<string, string>();
+
+    for (const orgId of [
+      admin.orgId,
+      "knowledge-catalog-team",
+      "knowledge-catalog-sibling",
+      "knowledge-catalog-other",
+    ]) {
+      if (orgId !== admin.orgId) {
+        await databaseAdapter.upsertOrganization({
+          createdAt: now,
+          id: orgId,
+          name: orgId,
+          parentOrgId: orgId === "knowledge-catalog-other" ? null : admin.orgId,
+          slug: orgId,
+          updatedAt: now,
+        });
+      }
+
+      const { document } =
+        await profileService.uploadOrganizationKnowledgeBaseDocument(
+          orgId,
+          textDocument(`Private handbook for ${orgId}`)
+        );
+
+      documentIds.set(orgId, document.id);
+    }
+
+    await databaseAdapter.upsertOrgMember({
+      createdAt: now,
+      orgId: "knowledge-catalog-team",
+      role: "admin",
+      userId: admin.userId,
+    });
+
+    for (const orgId of [admin.orgId, "knowledge-catalog-team"]) {
+      const response = await app.fetch(
+        new Request(`${BASE}/v1/orgs/${orgId}/knowledge-base`, {
+          headers: session.headers({}, orgId),
+        })
+      );
+
+      expect(response.status).toBe(200);
+
+      const result: Awaited<
+        ReturnType<ProfileService["listOrganizationKnowledgeBase"]>
+      > = await response.json();
+
+      expect(result.documents.map((document) => document.id)).toEqual([
+        documentIds.get(orgId)!,
+      ]);
+    }
+
+    for (const orgId of [
+      admin.orgId,
+      "knowledge-catalog-sibling",
+      "knowledge-catalog-other",
+    ]) {
+      const response = await app.fetch(
+        new Request(`${BASE}/v1/orgs/${orgId}/knowledge-base`, {
+          headers: session.headers({}, "knowledge-catalog-team"),
+        })
+      );
+
+      expect(response.status).toBe(404);
+    }
+
+    for (const orgId of [
+      "knowledge-catalog-sibling",
+      "knowledge-catalog-other",
+    ]) {
+      const response = await app.fetch(
+        new Request(`${BASE}/v1/orgs/${orgId}/knowledge-base`, {
+          headers: session.headers({}, orgId),
+        })
+      );
+
+      expect(response.status).toBe(404);
+    }
+
+    for (const role of ["member", "viewer"] as const) {
+      await databaseAdapter.upsertOrgMember({
+        createdAt: now,
+        orgId: admin.orgId,
+        role,
+        userId: admin.userId,
+      });
+
+      const response = await app.fetch(
+        new Request(`${BASE}/v1/orgs/${admin.orgId}/knowledge-base`, {
+          headers: session.headers({}, admin.orgId),
+        })
+      );
+
+      expect(response.status).toBe(403);
+    }
+  });
+
   test("upload validation and duplicate handling match the profile route", async () => {
     const { orgId, post } = await setupSession("platform-kb-1@example.com");
     const path = `/v1/orgs/${orgId}/knowledge-base`;
@@ -1239,7 +1355,6 @@ describe("organization knowledge base routes", () => {
     );
 
     const requests: Array<[string, string]> = [
-      [`/v1/orgs/${orgId}/knowledge-base`, "GET"],
       [`/v1/orgs/${orgId}/knowledge-base`, "POST"],
       [`/v1/orgs/${orgId}/knowledge-base/kb_1`, "DELETE"],
       [`/v1/orgs/${orgId}/knowledge-base/kb_1/content`, "GET"],

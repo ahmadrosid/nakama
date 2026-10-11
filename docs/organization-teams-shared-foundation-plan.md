@@ -2342,3 +2342,15 @@ The route audit found an unfinished access requirement. Existing GET organizatio
 Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: resolve parent-admin catalog read permissions, then root document actions and shared-template field controls. No package, dependency, file, server route, or new read permission was added in this slice. No browser check, full suite, build, paid call, push, or PR ran. Browser destination rendering and final delivery checks remain unverified.
 
 Evidence: /tmp/nakama-root-source-links-{focused,types,oxlint,lint,doctor}.log.
+
+### Slice 3p — Tenant-admin source catalog reads
+
+GET /v1/skills and GET /v1/orgs/:orgId/knowledge-base now use the existing tenant-admin-or-platform-admin guard. Parent admins can read their own source catalogs for publication selectors. Team admins can read their own local catalogs. Existing tenant filtering and the knowledge path/context equality check remain in place. This slice does not change detail, content, file, version, or write permissions.
+
+All 98 HTTP tests passed across three existing files with 513 assertions. New tests use real catalog services and authenticated non-platform admins. They cover parent and team catalogs, private parent and sibling isolation, unrelated tenant headers, mismatched knowledge paths, member/viewer denial, and retained global skill availability. Skill creation remains denied to tenant admins. Existing knowledge write/content restrictions and platform skill installation tests still pass. The existing app test now expects successful admin skill catalog reads.
+
+Complete server types, scoped anti-slop, Ultracite, and git diff --check passed. One verification repair corrected test fixtures: profile-free skills are global, so private fixtures must belong to profiles. It also corrected unrelated-tenant denial expectations to the existing 404 behavior. No production repair or rule suppression was needed.
+
+Steps 2, 4, and 5 and delivery stages 3 and 4 remain open. Next: scoped parent-admin detail reads and root document actions, then shared-template field controls. No package, dependency, file, or endpoint was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
+
+Evidence: /tmp/nakama-admin-catalog-{focused,types,oxlint,lint}.log.

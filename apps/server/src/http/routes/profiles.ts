@@ -1751,7 +1751,7 @@ export function registerProfileRoutes(
   );
 
   app.get("/v1/orgs/:orgId/knowledge-base", async (c) => {
-    requirePlatformAdminFromContext(c);
+    requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
 
     if (orgId !== decodeURIComponent(c.req.param("orgId"))) {

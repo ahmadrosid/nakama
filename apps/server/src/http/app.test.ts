@@ -96,6 +96,7 @@ function createServerOptions() {
       ) => ({
         sessions: [{ id: `${profileId}-${channel}` }],
       }),
+      listSkills: async () => ({ skills: [] }),
       providerConfigured: true,
       resolveSession: async () => ({
         send: async (input: { message: string }) => `reply:${input.message}`,
@@ -2308,7 +2309,7 @@ describe("createHonoApp", () => {
         new Request("http://localhost:4310/v1/skills", { headers: orgHeaders })
       );
 
-      expect(skillsResponse.status).toBe(403);
+      expect(skillsResponse.status).toBe(200);
     });
     test("returns generic passkey options without authentication", async () => {
       const app = createHonoApp(createServerOptions());
