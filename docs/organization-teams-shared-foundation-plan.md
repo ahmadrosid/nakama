@@ -1197,3 +1197,18 @@ Step 2 and delivery stage 1 remain incomplete. Shared-agent selection still has 
 No browser or external provider calls ran. Stale provider cassettes, full tests, and builds remain unresolved.
 Next: expose the authorized shared-agent selection service through HTTP and return a team-owned ProfileResponse.
 Evidence: /tmp/nakama-shared-import-guards-tests.log, /tmp/nakama-shared-import-guards-server-types.log, /tmp/nakama-shared-import-guards-lint.log.
+
+2026-10-11: Step 2 slice 2i adds POST /v1/orgs/:orgId/shared-agents/:publicationId/instance with its OpenAPI contract.
+The route checks active tenant context and existing invocation permission, derives the publication through OrgService, and returns the normal team ProfileResponse. Concurrent selection and retries return one stable team profile.
+Unsupported ACP commands and draft settings now reject publication and selection. The SQLite transaction repeats this check before creating or returning an instance, so a source update cannot copy parent ACP credentials between validation and insertion.
+HTTP tests cover separate sibling instances, ignored parent overrides, direct source IDs, wrong resource kinds, viewer denial, CSRF, parent-only membership, root context, revoked membership, source changes, revocation, republish recovery, and guarded workspace setup failure without lost team memory.
+Database tests cover ACP source changes during creation and retry. Existing source private files remain unchanged; new team workspaces contain no copied parent files.
+The initial focused run used the wrong membership-removal status. The next run found an invalid tool fixture. Correcting both fixtures passed the suite. The type check required ACP arguments instead of an unsupported env field; the corrected fixture passed all repeated focused checks.
+The stage gate found an unused internal web export and generated desktop declarations in knip. The helper is now private, generated desktop output is excluded, and an obsolete unresolved-import exception was removed. Existing composer tests preserve behavior; knip now passes.
+Checks: all 136 focused tests passed; complete server, database, and web type checks passed; lint passed all 1532 files; knip passed; git diff --check passed.
+Full suite attempt 1: 4734 passed, 22 skipped, 100 failed, and one unhandled error. Sandbox port restrictions contributed failures.
+Full suite attempt 2 ran outside the sandbox with isolated configuration and provider replay: 4769 passed, 22 skipped, 69 failed. Browser test setup is missing under the root command; the two existing OpenAI fixtures still return empty responses. Delivery stage 1 remains incomplete.
+Automatic approval review previously rejected provider recording because sending its test payload and tool schema to OpenAI lacked explicit human approval. No provider recording or browser automation ran during this slice. No push or PR ran.
+Step 2 remains unchecked until its delivery gate passes. Full-suite repair stopped after the two runs; shared-reference portability and runtime configuration refresh remain incomplete.
+Next: repair the root browser test setup, then resolve the provider fixtures after the required permission is supplied. Recheck delivery stage 1 before marking it complete.
+Evidence: /tmp/nakama-shared-selection-http-tests.log, /tmp/nakama-shared-selection-http-{server,db,web}-types.log, /tmp/nakama-shared-selection-http-lint.log, /tmp/nakama-stage-one-knip.log, /tmp/nakama-stage-one-full-tests.log, /tmp/nakama-stage-one-full-tests-unsandboxed.log.

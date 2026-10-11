@@ -484,6 +484,39 @@ async function seedSharedAgent(db: DatabaseAdapter) {
 }
 
 describe("shared agent instance persistence", () => {
+  test("unsupported ACP configuration cannot enter a team through selection or retry", async () => {
+    const db = createSqliteMemoryAdapter();
+    const { now, publication, source } = await seedSharedAgent(db);
+    const instance = await db.createSharedAgentInstance(
+      "team_a",
+      publication.id,
+      "instance",
+      now
+    );
+    const link = await db.getSharedAgentInstance("team_a", instance.id);
+    for (const changes of [
+      { acpAgent: { args: ["--token", "parent-secret"], command: "agent" } },
+      { acpSettings: { token: "parent-secret" } },
+    ]) {
+      await db.upsertProfile({ ...source, ...changes });
+      for (const teamOrgId of ["team_a", "team_b"]) {
+        await expect(
+          db.createSharedAgentInstance(
+            teamOrgId,
+            publication.id,
+            "new-instance",
+            now
+          )
+        ).rejects.toThrow();
+      }
+      expect(await db.getProfile("new-instance")).toBeNull();
+      expect(await db.getProfile(instance.id)).toEqual(instance);
+      expect(await db.getSharedAgentInstance("team_a", instance.id)).toEqual(
+        link
+      );
+    }
+  });
+
   test("concurrent selections create one team profile without source history or assignments", async () => {
     const db = createSqliteMemoryAdapter();
     const { now, publication, source } = await seedSharedAgent(db);

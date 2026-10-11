@@ -391,6 +391,12 @@ export class OrgService {
       if (!profile || profile.isDefault || profile.isSuper) {
         throw new NakamaApiError("Agent is unavailable.", 404);
       }
+      if (profile.acpAgent || profile.acpSettings) {
+        throw new NakamaApiError(
+          "Agent requires team-local ACP configuration.",
+          409
+        );
+      }
       label = profile.name;
       const [tools, skills, servers, toolkits, publications] =
         await Promise.all([

@@ -180,7 +180,7 @@ export function matchComposerAddCommand(
   return command?.action ?? null;
 }
 
-export function profileCanUseLearnCommand(skills: SkillSummary[]): boolean {
+function profileCanUseLearnCommand(skills: SkillSummary[]): boolean {
   return skills.some((skill) => skill.name === "manage-skills");
 }
 

@@ -10,10 +10,12 @@ import type {
   OrgLlmQuotaStatusResponse,
   OrgMemberResponse,
   OrgSharedResourceResponse,
+  ProfileResponse,
 } from "@nakama/core/contract";
 import { OrgUsageQuotaService } from "../../services/org-usage-quota-service";
 import type { ServerOptions } from "../context";
 import {
+  requireNotViewer,
   requireOrgAdminFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
 } from "../org-guards";
@@ -129,6 +131,64 @@ export function registerOrgMemberRoutes(
       .string()
       .openapi({ param: { in: "path", name: "publicationId" } }),
   });
+  app.openAPIRegistry.registerPath(
+    createRoute({
+      method: "post",
+      operationId: "createSharedAgentInstance",
+      path: "/v1/orgs/{orgId}/shared-agents/{publicationId}/instance",
+      request: { params: sharedResourceParams },
+      responses: {
+        200: {
+          content: {
+            "application/json": {
+              schema: z.object({}).passthrough().openapi("ProfileResponse"),
+            },
+          },
+          description: "Team agent instance created or recovered",
+        },
+        403: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Agent invocation access required",
+        },
+        404: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Organization or publication unavailable",
+        },
+        409: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Template cannot be used by this team",
+        },
+        500: {
+          content: { "application/json": { schema: errorSchema } },
+          description: "Instance setup failed; retry selection",
+        },
+      },
+      summary: "Select a published agent in the active team",
+      tags: ["Organizations"],
+    })
+  );
+  app.post(
+    "/v1/orgs/:orgId/shared-agents/:publicationId/instance",
+    async (c) => {
+      const auth = getRequestAuth(c);
+      const orgId = decodeURIComponent(c.req.param("orgId"));
+      if (auth.activeOrgId !== orgId) {
+        return errorResponse("Not found", 404);
+      }
+      requireNotViewer(auth);
+      if (!orgService) {
+        return errorResponse("Organization service not configured", 500);
+      }
+      const profile = await orgService.createSharedAgentInstance(
+        orgId,
+        decodeURIComponent(c.req.param("publicationId")),
+        auth.user.id
+      );
+      return json<ProfileResponse>(
+        await options.agent.getProfile(orgId, profile.id)
+      );
+    }
+  );
   const listSharedResourcesResponseSchema = z
     .object({
       resources: z.array(

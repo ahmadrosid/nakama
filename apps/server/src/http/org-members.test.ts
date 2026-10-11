@@ -1,9 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import {
   getKnowledgeBaseManifestPath,
   getOrgKnowledgeBaseDir,
+  getProfileSoulDir,
   resolveProfileSkillDirectory,
   saveUserConfig,
   uploadOrganizationKnowledgeBaseDocument,
@@ -13,9 +22,12 @@ import type {
   ListOrgSharedResourcesResponse,
   OrganizationOverviewResponse,
   OrgSharedResourceResponse,
+  ProfileResponse,
   PublishOrgSharedResourceRequest,
 } from "@nakama/core/contract";
 import { LOCAL_CLIENT_USER_ID } from "@nakama/core/local-auth";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import { ProfileService } from "../services/profile-service";
 import { setupTestConfigDir } from "../test-config-dir";
 import { createMinimalHonoApp } from "./test-app-helpers";
 import {
@@ -24,6 +36,268 @@ import {
 } from "./test-session-helpers";
 
 setupTestConfigDir("nakama-org-members-test-");
+
+test("shared agent selection returns stable team profiles and enforces invocation access", async () => {
+  const db = createInMemoryDatabaseAdapter();
+  const profileService = new ProfileService(db);
+  const { app, authService, orgService } = createMinimalHonoApp({
+    agent: {
+      getProfile: (orgId: string, profileId: string) =>
+        profileService.getProfile(orgId, profileId),
+    },
+    databaseAdapter: db,
+  });
+  const now = new Date().toISOString();
+  for (const id of ["org_parent", "org_team_a", "org_team_b", "org_other"]) {
+    await db.upsertOrganization({
+      createdAt: now,
+      id,
+      name: id,
+      parentOrgId: id.startsWith("org_team") ? "org_parent" : null,
+      slug: id.replace(/_/g, "-"),
+      updatedAt: now,
+    });
+  }
+  for (const id of ["user_reader", "user_parent_admin"]) {
+    await db.createUser({
+      createdAt: now,
+      email: `${id}@example.com`,
+      id,
+      passwordHash: await authService.hashPassword("password123"),
+      updatedAt: now,
+    });
+  }
+  for (const orgId of ["org_team_a", "org_team_b", "org_other"]) {
+    await db.upsertOrgMember({
+      createdAt: now,
+      orgId,
+      role: "member",
+      userId: "user_reader",
+    });
+  }
+  await db.upsertOrgMember({
+    createdAt: now,
+    orgId: "org_parent",
+    role: "admin",
+    userId: "user_parent_admin",
+  });
+  const source = {
+    createdAt: now,
+    id: "profile_template",
+    isDefault: false,
+    isSuper: false,
+    model: null,
+    name: "Template",
+    orgId: "org_parent",
+    systemPrompt: "Published instructions",
+    updatedAt: now,
+  };
+  await db.upsertProfile(source);
+  const sourceDir = getProfileSoulDir(source.orgId, source.id);
+  await mkdir(sourceDir, { recursive: true });
+  for (const file of ["MEMORY.md", "USER.md", "private.txt"]) {
+    await writeFile(join(sourceDir, file), `Private ${file}`);
+  }
+  const publication = await orgService.publishSharedResource(
+    "org_parent",
+    { resourceId: source.id, resourceKind: "agent" },
+    "user_parent_admin"
+  );
+  const session = await loginUserSession(
+    app,
+    "user_reader@example.com",
+    "password123",
+    "org_team_a"
+  );
+  const post = (
+    pathOrg = "org_team_a",
+    publicationId = publication.id,
+    activeOrg = "org_team_a"
+  ) =>
+    app.fetch(
+      new Request(
+        `http://localhost:4310/v1/orgs/${pathOrg}/shared-agents/${publicationId}/instance`,
+        {
+          body: JSON.stringify({
+            parentOrgId: "org_other",
+            profileId: source.id,
+          }),
+          headers: session.headers(
+            {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": session.csrfToken,
+            },
+            activeOrg
+          ),
+          method: "POST",
+        }
+      )
+    );
+  const responses = await Promise.all([post(), post(), post()]);
+  const results: ProfileResponse[] = [];
+  for (const response of responses) {
+    expect(response.status).toBe(200);
+    results.push(await response.json());
+  }
+  const profileId = results[0]?.profile.id;
+  expect(profileId).toBeTruthy();
+  if (!profileId) {
+    throw new Error("Missing team profile");
+  }
+  expect(new Set(results.map((result) => result.profile.id)).size).toBe(1);
+  expect(profileId).not.toBe(source.id);
+  expect(await db.getProfileForOrg(profileId, "org_team_a")).toBeTruthy();
+  expect(await db.getProfileForOrg(profileId, "org_parent")).toBeNull();
+  expect(results[0]?.profile).toMatchObject({
+    acpAgent: null,
+    mcpServers: [],
+    name: source.name,
+    skills: [],
+    systemPrompt: source.systemPrompt,
+    tools: [],
+  });
+  expect(await db.listProfilesForOrg("org_team_a")).toHaveLength(1);
+  const teamDir = getProfileSoulDir("org_team_a", profileId);
+  expect(await readdir(teamDir)).toEqual([]);
+  await writeFile(join(teamDir, "MEMORY.md"), "Team memory");
+  expect((await post()).status).toBe(200);
+  expect(await readFile(join(teamDir, "MEMORY.md"), "utf8")).toBe(
+    "Team memory"
+  );
+  const savedTeamDir = `${teamDir}-saved`;
+  await rename(teamDir, savedTeamDir);
+  await symlink(sourceDir, teamDir);
+  const failedSetup = await post();
+  expect(failedSetup.status).toBe(500);
+  expect(JSON.stringify(await failedSetup.json())).not.toContain(sourceDir);
+  expect(await db.listProfilesForOrg("org_team_a")).toHaveLength(1);
+  await rm(teamDir);
+  await rename(savedTeamDir, teamDir);
+  expect((await post()).status).toBe(200);
+  expect(await readFile(join(teamDir, "MEMORY.md"), "utf8")).toBe(
+    "Team memory"
+  );
+  const sibling = await post("org_team_b", publication.id, "org_team_b");
+  expect(sibling.status).toBe(200);
+  const siblingResult: ProfileResponse = await sibling.json();
+  expect(siblingResult.profile.id).not.toBe(profileId);
+  expect(
+    await db.getProfileForOrg(siblingResult.profile.id, "org_team_b")
+  ).toBeTruthy();
+  expect((await post("org_team_b")).status).toBe(404);
+  expect((await post("org_team_a", source.id)).status).toBe(404);
+  expect((await post("org_team_a", "missing")).status).toBe(404);
+  await db.upsertTool({
+    createdAt: now,
+    description: "Published tool",
+    handlerConfig: {},
+    handlerType: "bash",
+    id: "published-tool",
+    name: "published-tool",
+    orgId: "org_parent",
+    updatedAt: now,
+  });
+  const wrongKind = await db.publishOrgSharedResource({
+    createdAt: now,
+    id: "wrong-kind",
+    orgId: "org_parent",
+    resourceId: "published-tool",
+    resourceKind: "tool",
+    updatedAt: now,
+  });
+  expect((await post("org_team_a", wrongKind.id)).status).toBe(404);
+  expect((await post("org_other", publication.id, "org_other")).status).toBe(
+    409
+  );
+  await db.upsertOrgMember({
+    createdAt: now,
+    orgId: "org_team_a",
+    role: "viewer",
+    userId: "user_reader",
+  });
+  expect((await post()).status).toBe(403);
+  await db.upsertOrgMember({
+    createdAt: now,
+    orgId: "org_team_a",
+    role: "member",
+    userId: "user_reader",
+  });
+  const csrf = await app.fetch(
+    new Request(
+      `http://localhost:4310/v1/orgs/org_team_a/shared-agents/${publication.id}/instance`,
+      { headers: session.headers({}, "org_team_a"), method: "POST" }
+    )
+  );
+  expect(csrf.status).toBe(403);
+  const parentSession = await loginUserSession(
+    app,
+    "user_parent_admin@example.com",
+    "password123",
+    "org_parent"
+  );
+  for (const [orgId, expected] of [
+    ["org_team_a", 404],
+    ["org_parent", 409],
+  ] as const) {
+    const response = await app.fetch(
+      new Request(
+        `http://localhost:4310/v1/orgs/${orgId}/shared-agents/${publication.id}/instance`,
+        {
+          headers: parentSession.headers(
+            { "X-CSRF-Token": parentSession.csrfToken },
+            orgId
+          ),
+          method: "POST",
+        }
+      )
+    );
+    expect(response.status).toBe(expected);
+  }
+  await db.upsertProfile({
+    ...source,
+    acpAgent: { args: ["--token", "parent-secret"], command: "agent" },
+  });
+  const unsupported = await post();
+  expect(unsupported.status).toBe(409);
+  expect(JSON.stringify(await unsupported.json())).not.toContain(
+    "parent-secret"
+  );
+  await db.upsertProfile(source);
+  await orgService.unpublishSharedResource(
+    "org_parent",
+    publication.id,
+    "user_parent_admin"
+  );
+  expect((await post()).status).toBe(404);
+  expect(await readFile(join(teamDir, "MEMORY.md"), "utf8")).toBe(
+    "Team memory"
+  );
+  for (const file of ["MEMORY.md", "USER.md", "private.txt"]) {
+    expect(await readFile(join(sourceDir, file), "utf8")).toBe(
+      `Private ${file}`
+    );
+  }
+  const republished = await orgService.publishSharedResource(
+    "org_parent",
+    { resourceId: source.id, resourceKind: "agent" },
+    "user_parent_admin"
+  );
+  const recovered = await post("org_team_a", republished.id);
+  expect(recovered.status).toBe(200);
+  const recoveredResult: ProfileResponse = await recovered.json();
+  expect(recoveredResult.profile.id).toBe(profileId);
+  expect(await db.listProfilesForOrg("org_team_a")).toHaveLength(1);
+  await db.deleteOrgMember("org_team_a", "user_reader");
+  expect((await post("org_team_a", republished.id)).status).toBe(404);
+  const specResponse = await app.fetch(
+    new Request("http://localhost:4310/openapi.json")
+  );
+  const spec = await specResponse.json();
+  expect(
+    spec.paths["/v1/orgs/{orgId}/shared-agents/{publicationId}/instance"].post
+      .responses["200"]
+  ).toBeTruthy();
+});
 
 test("organization overview filters teams, counts local additions, and preserves tenant boundaries", async () => {
   const {

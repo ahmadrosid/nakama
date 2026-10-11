@@ -2330,6 +2330,16 @@ describe("OrgService shared resource publications", () => {
         orgService.publishSharedResource("org_parent", request, "user_creator")
       ).rejects.toMatchObject({ status: 404 });
     }
+    for (const changes of [
+      { acpAgent: { args: ["--token", "parent-secret"], command: "agent" } },
+      { acpSettings: { token: "parent-secret" } },
+    ]) {
+      await db.upsertProfile({ ...profile, ...changes });
+      await expect(
+        orgService.publishSharedResource("org_parent", request, "user_creator")
+      ).rejects.toMatchObject({ status: 409 });
+      expect(await db.listOrgSharedResources("org_parent")).toEqual([]);
+    }
     await db.upsertProfile(profile);
     const globalTool = {
       createdAt: now,

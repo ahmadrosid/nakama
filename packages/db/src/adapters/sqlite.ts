@@ -3538,7 +3538,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         !(publication && source) ||
         source.org_id !== parent.id ||
         source.is_super ||
-        source.is_default
+        source.is_default ||
+        source.acp_agent ||
+        source.acp_settings
       ) {
         throw new Error("Shared agent source is unavailable");
       }

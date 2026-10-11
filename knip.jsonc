@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
-  "ignore": ["tools/oxlint/anti-slop/**"],
+  "ignore": ["tools/oxlint/anti-slop/**", "apps/desktop/dist/**"],
   // First-run baseline: teach the graph, then ignore leftovers instead of deleting unused code.
   "workspaces": {
     "packages/telegram-manager": {
@@ -51,8 +51,6 @@
   },
   // Ships with Windows; desktop quit uses it to confirm a leftover pid is bun.
   "ignoreBinaries": ["tasklist"],
-  // Type-only import Knip cannot resolve.
-  "ignoreUnresolved": ["../../services/auth-service"],
   // These are intentional until the duplicate access rules and MDX package metadata are resolved.
   "ignoreIssues": {
     "apps/web/src/lib/navigation.ts": ["duplicates"],
