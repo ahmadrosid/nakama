@@ -271,7 +271,8 @@ describe("mcp tool bridge", () => {
       "profile_test"
     )[0]!;
 
-    expect(tool.parameters.properties).not.toHaveProperty("nakamaContext");
+    expect(tool.parameters?.properties).toBeDefined();
+    expect(tool.parameters?.properties).not.toHaveProperty("nakamaContext");
     await tool.run(
       { nakamaContext: { images: [] }, query: "read it" },
       {

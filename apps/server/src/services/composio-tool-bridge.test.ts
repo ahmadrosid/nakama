@@ -3,7 +3,6 @@ import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveComposioCallbackBaseUrl } from "./composio-callback-url";
-import type { ComposioService } from "./composio-service";
 import {
   buildComposioConnectTools,
   buildComposioToolDefinitions,
@@ -65,61 +64,61 @@ describe("composio-tool-bridge", () => {
   });
 
   test("exposes search + invoke meta-tools for connected assignments", async () => {
-    // SAFETY: The test fixture matches the contract used by this test.
-    const composioService = {
-      async getAssignedToolkitRecords() {
-        return [
-          {
-            allowedActions: null,
-            orgToolkit: {
-              cachedTools: [
-                {
-                  description: "Send an email",
-                  inputSchema: { properties: {}, type: "object" },
-                  name: "Send Email",
-                  slug: "GMAIL_SEND_EMAIL",
-                },
-                {
-                  description: "Manage",
-                  inputSchema: { properties: {}, type: "object" },
-                  name: "Manage",
-                  slug: "COMPOSIO_MANAGE_CONNECTIONS",
-                },
-              ],
-              createdAt: "2026-01-01T00:00:00.000Z",
-              displayName: "Gmail",
-              id: "ctk_1",
-              lastError: null,
-              orgId: "org_1",
-              status: "enabled",
-              toolkitSlug: "gmail",
-              updatedAt: "2026-01-01T00:00:00.000Z",
+    const composioService: Parameters<typeof buildComposioToolDefinitions>[3] =
+      {
+        async getAssignedToolkitRecords() {
+          return [
+            {
+              allowedActions: null,
+              orgToolkit: {
+                cachedTools: [
+                  {
+                    description: "Send an email",
+                    inputSchema: { properties: {}, type: "object" },
+                    name: "Send Email",
+                    slug: "GMAIL_SEND_EMAIL",
+                  },
+                  {
+                    description: "Manage",
+                    inputSchema: { properties: {}, type: "object" },
+                    name: "Manage",
+                    slug: "COMPOSIO_MANAGE_CONNECTIONS",
+                  },
+                ],
+                createdAt: "2026-01-01T00:00:00.000Z",
+                displayName: "Gmail",
+                id: "ctk_1",
+                lastError: null,
+                orgId: "org_1",
+                status: "enabled",
+                toolkitSlug: "gmail",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+              },
+              userConnection: {
+                connectedAccountId: "ca_1",
+                createdAt: "2026-01-01T00:00:00.000Z",
+                id: "cuc_1",
+                lastError: null,
+                oauthStateHash: null,
+                orgId: "org_1",
+                sessionIdEnc: null,
+                status: "connected",
+                toolkitId: "ctk_1",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+                userId: "usr_1",
+              },
             },
-            userConnection: {
-              connectedAccountId: "ca_1",
-              createdAt: "2026-01-01T00:00:00.000Z",
-              id: "cuc_1",
-              lastError: null,
-              oauthStateHash: null,
-              orgId: "org_1",
-              sessionIdEnc: null,
-              status: "connected",
-              toolkitId: "ctk_1",
-              updatedAt: "2026-01-01T00:00:00.000Z",
-              userId: "usr_1",
-            },
-          },
-        ];
-      },
-      async getProfileSessionEndpoint() {
-        return {
-          headers: {},
-          sessionId: "sess_1",
-          url: "https://mcp.example.com",
-        };
-      },
-      isAvailable: async () => true,
-    } as ComposioService;
+          ];
+        },
+        async getProfileSessionEndpoint() {
+          return {
+            headers: {},
+            sessionId: "sess_1",
+            url: "https://mcp.example.com",
+          };
+        },
+        isAvailable: async () => true,
+      };
 
     const manager = new McpClientManager();
     manager.connectHttpEndpoint = async () => [];
@@ -151,61 +150,61 @@ describe("composio-tool-bridge", () => {
   });
 
   test("search returns all actions for empty query and filters by toolkit_slug", async () => {
-    // SAFETY: The test fixture matches the contract used by this test.
-    const composioService = {
-      async getAssignedToolkitRecords() {
-        return [
-          {
-            allowedActions: null,
-            orgToolkit: {
-              cachedTools: [
-                {
-                  description: "send",
-                  inputSchema: {},
-                  name: "Send",
-                  slug: "GMAIL_SEND_EMAIL",
-                },
-                {
-                  description: "fetch",
-                  inputSchema: {},
-                  name: "Fetch",
-                  slug: "GMAIL_FETCH_EMAILS",
-                },
-              ],
-              createdAt: "2026-01-01T00:00:00.000Z",
-              displayName: "Gmail",
-              id: "ctk_1",
-              lastError: null,
-              orgId: "org_1",
-              status: "enabled",
-              toolkitSlug: "gmail",
-              updatedAt: "2026-01-01T00:00:00.000Z",
+    const composioService: Parameters<typeof buildComposioToolDefinitions>[3] =
+      {
+        async getAssignedToolkitRecords() {
+          return [
+            {
+              allowedActions: null,
+              orgToolkit: {
+                cachedTools: [
+                  {
+                    description: "send",
+                    inputSchema: {},
+                    name: "Send",
+                    slug: "GMAIL_SEND_EMAIL",
+                  },
+                  {
+                    description: "fetch",
+                    inputSchema: {},
+                    name: "Fetch",
+                    slug: "GMAIL_FETCH_EMAILS",
+                  },
+                ],
+                createdAt: "2026-01-01T00:00:00.000Z",
+                displayName: "Gmail",
+                id: "ctk_1",
+                lastError: null,
+                orgId: "org_1",
+                status: "enabled",
+                toolkitSlug: "gmail",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+              },
+              userConnection: {
+                connectedAccountId: "ca_1",
+                createdAt: "2026-01-01T00:00:00.000Z",
+                id: "cuc_1",
+                lastError: null,
+                oauthStateHash: null,
+                orgId: "org_1",
+                sessionIdEnc: null,
+                status: "connected",
+                toolkitId: "ctk_1",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+                userId: "usr_1",
+              },
             },
-            userConnection: {
-              connectedAccountId: "ca_1",
-              createdAt: "2026-01-01T00:00:00.000Z",
-              id: "cuc_1",
-              lastError: null,
-              oauthStateHash: null,
-              orgId: "org_1",
-              sessionIdEnc: null,
-              status: "connected",
-              toolkitId: "ctk_1",
-              updatedAt: "2026-01-01T00:00:00.000Z",
-              userId: "usr_1",
-            },
-          },
-        ];
-      },
-      async getProfileSessionEndpoint() {
-        return {
-          headers: {},
-          sessionId: "sess_1",
-          url: "https://mcp.example.com",
-        };
-      },
-      isAvailable: async () => true,
-    } as ComposioService;
+          ];
+        },
+        async getProfileSessionEndpoint() {
+          return {
+            headers: {},
+            sessionId: "sess_1",
+            url: "https://mcp.example.com",
+          };
+        },
+        isAvailable: async () => true,
+      };
 
     const manager = new McpClientManager();
     manager.connectHttpEndpoint = async () => [];
@@ -242,61 +241,61 @@ describe("composio-tool-bridge", () => {
   });
 
   test("invoke rejects actions not in allowedActions", async () => {
-    // SAFETY: The test fixture matches the contract used by this test.
-    const composioService = {
-      async getAssignedToolkitRecords() {
-        return [
-          {
-            allowedActions: ["GMAIL_SEND_EMAIL"],
-            orgToolkit: {
-              cachedTools: [
-                {
-                  description: "send",
-                  inputSchema: {},
-                  name: "Send",
-                  slug: "GMAIL_SEND_EMAIL",
-                },
-                {
-                  description: "delete",
-                  inputSchema: {},
-                  name: "Delete",
-                  slug: "GMAIL_DELETE_EMAIL",
-                },
-              ],
-              createdAt: "2026-01-01T00:00:00.000Z",
-              displayName: "Gmail",
-              id: "ctk_1",
-              lastError: null,
-              orgId: "org_1",
-              status: "enabled",
-              toolkitSlug: "gmail",
-              updatedAt: "2026-01-01T00:00:00.000Z",
+    const composioService: Parameters<typeof buildComposioToolDefinitions>[3] =
+      {
+        async getAssignedToolkitRecords() {
+          return [
+            {
+              allowedActions: ["GMAIL_SEND_EMAIL"],
+              orgToolkit: {
+                cachedTools: [
+                  {
+                    description: "send",
+                    inputSchema: {},
+                    name: "Send",
+                    slug: "GMAIL_SEND_EMAIL",
+                  },
+                  {
+                    description: "delete",
+                    inputSchema: {},
+                    name: "Delete",
+                    slug: "GMAIL_DELETE_EMAIL",
+                  },
+                ],
+                createdAt: "2026-01-01T00:00:00.000Z",
+                displayName: "Gmail",
+                id: "ctk_1",
+                lastError: null,
+                orgId: "org_1",
+                status: "enabled",
+                toolkitSlug: "gmail",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+              },
+              userConnection: {
+                connectedAccountId: "ca_1",
+                createdAt: "2026-01-01T00:00:00.000Z",
+                id: "cuc_1",
+                lastError: null,
+                oauthStateHash: null,
+                orgId: "org_1",
+                sessionIdEnc: null,
+                status: "connected",
+                toolkitId: "ctk_1",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+                userId: "usr_1",
+              },
             },
-            userConnection: {
-              connectedAccountId: "ca_1",
-              createdAt: "2026-01-01T00:00:00.000Z",
-              id: "cuc_1",
-              lastError: null,
-              oauthStateHash: null,
-              orgId: "org_1",
-              sessionIdEnc: null,
-              status: "connected",
-              toolkitId: "ctk_1",
-              updatedAt: "2026-01-01T00:00:00.000Z",
-              userId: "usr_1",
-            },
-          },
-        ];
-      },
-      async getProfileSessionEndpoint() {
-        return {
-          headers: {},
-          sessionId: "sess_1",
-          url: "https://mcp.example.com",
-        };
-      },
-      isAvailable: async () => true,
-    } as ComposioService;
+          ];
+        },
+        async getProfileSessionEndpoint() {
+          return {
+            headers: {},
+            sessionId: "sess_1",
+            url: "https://mcp.example.com",
+          };
+        },
+        isAvailable: async () => true,
+      };
 
     const manager = new McpClientManager();
     manager.connectHttpEndpoint = async () => [];
@@ -334,55 +333,55 @@ describe("composio-tool-bridge", () => {
   });
 
   test("invoke truncates large tool results", async () => {
-    // SAFETY: The test fixture matches the contract used by this test.
-    const composioService = {
-      async getAssignedToolkitRecords() {
-        return [
-          {
-            allowedActions: null,
-            orgToolkit: {
-              cachedTools: [
-                {
-                  description: "fetch",
-                  inputSchema: {},
-                  name: "Fetch",
-                  slug: "GMAIL_FETCH_EMAILS",
-                },
-              ],
-              createdAt: "2026-01-01T00:00:00.000Z",
-              displayName: "Gmail",
-              id: "ctk_1",
-              lastError: null,
-              orgId: "org_1",
-              status: "enabled",
-              toolkitSlug: "gmail",
-              updatedAt: "2026-01-01T00:00:00.000Z",
+    const composioService: Parameters<typeof buildComposioToolDefinitions>[3] =
+      {
+        async getAssignedToolkitRecords() {
+          return [
+            {
+              allowedActions: null,
+              orgToolkit: {
+                cachedTools: [
+                  {
+                    description: "fetch",
+                    inputSchema: {},
+                    name: "Fetch",
+                    slug: "GMAIL_FETCH_EMAILS",
+                  },
+                ],
+                createdAt: "2026-01-01T00:00:00.000Z",
+                displayName: "Gmail",
+                id: "ctk_1",
+                lastError: null,
+                orgId: "org_1",
+                status: "enabled",
+                toolkitSlug: "gmail",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+              },
+              userConnection: {
+                connectedAccountId: "ca_1",
+                createdAt: "2026-01-01T00:00:00.000Z",
+                id: "cuc_1",
+                lastError: null,
+                oauthStateHash: null,
+                orgId: "org_1",
+                sessionIdEnc: null,
+                status: "connected",
+                toolkitId: "ctk_1",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+                userId: "usr_1",
+              },
             },
-            userConnection: {
-              connectedAccountId: "ca_1",
-              createdAt: "2026-01-01T00:00:00.000Z",
-              id: "cuc_1",
-              lastError: null,
-              oauthStateHash: null,
-              orgId: "org_1",
-              sessionIdEnc: null,
-              status: "connected",
-              toolkitId: "ctk_1",
-              updatedAt: "2026-01-01T00:00:00.000Z",
-              userId: "usr_1",
-            },
-          },
-        ];
-      },
-      async getProfileSessionEndpoint() {
-        return {
-          headers: {},
-          sessionId: "sess_1",
-          url: "https://mcp.example.com",
-        };
-      },
-      isAvailable: async () => true,
-    } as ComposioService;
+          ];
+        },
+        async getProfileSessionEndpoint() {
+          return {
+            headers: {},
+            sessionId: "sess_1",
+            url: "https://mcp.example.com",
+          };
+        },
+        isAvailable: async () => true,
+      };
 
     const bigPayload = {
       messages: Array.from({ length: 5000 }, (_, i) => ({
@@ -419,55 +418,55 @@ describe("composio-tool-bridge", () => {
   });
 
   test("invoke matches action slug case-insensitively", async () => {
-    // SAFETY: The test fixture matches the contract used by this test.
-    const composioService = {
-      async getAssignedToolkitRecords() {
-        return [
-          {
-            allowedActions: null,
-            orgToolkit: {
-              cachedTools: [
-                {
-                  description: "send",
-                  inputSchema: {},
-                  name: "Send",
-                  slug: "GMAIL_SEND_EMAIL",
-                },
-              ],
-              createdAt: "2026-01-01T00:00:00.000Z",
-              displayName: "Gmail",
-              id: "ctk_1",
-              lastError: null,
-              orgId: "org_1",
-              status: "enabled",
-              toolkitSlug: "gmail",
-              updatedAt: "2026-01-01T00:00:00.000Z",
+    const composioService: Parameters<typeof buildComposioToolDefinitions>[3] =
+      {
+        async getAssignedToolkitRecords() {
+          return [
+            {
+              allowedActions: null,
+              orgToolkit: {
+                cachedTools: [
+                  {
+                    description: "send",
+                    inputSchema: {},
+                    name: "Send",
+                    slug: "GMAIL_SEND_EMAIL",
+                  },
+                ],
+                createdAt: "2026-01-01T00:00:00.000Z",
+                displayName: "Gmail",
+                id: "ctk_1",
+                lastError: null,
+                orgId: "org_1",
+                status: "enabled",
+                toolkitSlug: "gmail",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+              },
+              userConnection: {
+                connectedAccountId: "ca_1",
+                createdAt: "2026-01-01T00:00:00.000Z",
+                id: "cuc_1",
+                lastError: null,
+                oauthStateHash: null,
+                orgId: "org_1",
+                sessionIdEnc: null,
+                status: "connected",
+                toolkitId: "ctk_1",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+                userId: "usr_1",
+              },
             },
-            userConnection: {
-              connectedAccountId: "ca_1",
-              createdAt: "2026-01-01T00:00:00.000Z",
-              id: "cuc_1",
-              lastError: null,
-              oauthStateHash: null,
-              orgId: "org_1",
-              sessionIdEnc: null,
-              status: "connected",
-              toolkitId: "ctk_1",
-              updatedAt: "2026-01-01T00:00:00.000Z",
-              userId: "usr_1",
-            },
-          },
-        ];
-      },
-      async getProfileSessionEndpoint() {
-        return {
-          headers: {},
-          sessionId: "sess_1",
-          url: "https://mcp.example.com",
-        };
-      },
-      isAvailable: async () => true,
-    } as ComposioService;
+          ];
+        },
+        async getProfileSessionEndpoint() {
+          return {
+            headers: {},
+            sessionId: "sess_1",
+            url: "https://mcp.example.com",
+          };
+        },
+        isAvailable: async () => true,
+      };
 
     const manager = new McpClientManager();
     manager.connectHttpEndpoint = async () => [];
@@ -492,55 +491,55 @@ describe("composio-tool-bridge", () => {
   });
 
   test("invoke defaults missing arguments to empty object", async () => {
-    // SAFETY: The test fixture matches the contract used by this test.
-    const composioService = {
-      async getAssignedToolkitRecords() {
-        return [
-          {
-            allowedActions: null,
-            orgToolkit: {
-              cachedTools: [
-                {
-                  description: "send",
-                  inputSchema: {},
-                  name: "Send",
-                  slug: "GMAIL_SEND_EMAIL",
-                },
-              ],
-              createdAt: "2026-01-01T00:00:00.000Z",
-              displayName: "Gmail",
-              id: "ctk_1",
-              lastError: null,
-              orgId: "org_1",
-              status: "enabled",
-              toolkitSlug: "gmail",
-              updatedAt: "2026-01-01T00:00:00.000Z",
+    const composioService: Parameters<typeof buildComposioToolDefinitions>[3] =
+      {
+        async getAssignedToolkitRecords() {
+          return [
+            {
+              allowedActions: null,
+              orgToolkit: {
+                cachedTools: [
+                  {
+                    description: "send",
+                    inputSchema: {},
+                    name: "Send",
+                    slug: "GMAIL_SEND_EMAIL",
+                  },
+                ],
+                createdAt: "2026-01-01T00:00:00.000Z",
+                displayName: "Gmail",
+                id: "ctk_1",
+                lastError: null,
+                orgId: "org_1",
+                status: "enabled",
+                toolkitSlug: "gmail",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+              },
+              userConnection: {
+                connectedAccountId: "ca_1",
+                createdAt: "2026-01-01T00:00:00.000Z",
+                id: "cuc_1",
+                lastError: null,
+                oauthStateHash: null,
+                orgId: "org_1",
+                sessionIdEnc: null,
+                status: "connected",
+                toolkitId: "ctk_1",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+                userId: "usr_1",
+              },
             },
-            userConnection: {
-              connectedAccountId: "ca_1",
-              createdAt: "2026-01-01T00:00:00.000Z",
-              id: "cuc_1",
-              lastError: null,
-              oauthStateHash: null,
-              orgId: "org_1",
-              sessionIdEnc: null,
-              status: "connected",
-              toolkitId: "ctk_1",
-              updatedAt: "2026-01-01T00:00:00.000Z",
-              userId: "usr_1",
-            },
-          },
-        ];
-      },
-      async getProfileSessionEndpoint() {
-        return {
-          headers: {},
-          sessionId: "sess_1",
-          url: "https://mcp.example.com",
-        };
-      },
-      isAvailable: async () => true,
-    } as ComposioService;
+          ];
+        },
+        async getProfileSessionEndpoint() {
+          return {
+            headers: {},
+            sessionId: "sess_1",
+            url: "https://mcp.example.com",
+          };
+        },
+        isAvailable: async () => true,
+      };
 
     const manager = new McpClientManager();
     manager.connectHttpEndpoint = async () => [];
@@ -571,43 +570,43 @@ describe("composio-tool-bridge", () => {
   });
 
   test("returns no tools when an assigned toolkit is not connected", async () => {
-    // SAFETY: The test fixture matches the contract used by this test.
-    const composioService = {
-      async getAssignedToolkitRecords() {
-        return [
-          {
-            allowedActions: null,
-            orgToolkit: {
-              cachedTools: [
-                {
-                  description: "send",
-                  inputSchema: {},
-                  name: "Send",
-                  slug: "GMAIL_SEND_EMAIL",
-                },
-              ],
-              createdAt: "2026-01-01T00:00:00.000Z",
-              displayName: "Gmail",
-              id: "ctk_1",
-              lastError: null,
-              orgId: "org_1",
-              status: "enabled",
-              toolkitSlug: "gmail",
-              updatedAt: "2026-01-01T00:00:00.000Z",
+    const composioService: Parameters<typeof buildComposioToolDefinitions>[3] =
+      {
+        async getAssignedToolkitRecords() {
+          return [
+            {
+              allowedActions: null,
+              orgToolkit: {
+                cachedTools: [
+                  {
+                    description: "send",
+                    inputSchema: {},
+                    name: "Send",
+                    slug: "GMAIL_SEND_EMAIL",
+                  },
+                ],
+                createdAt: "2026-01-01T00:00:00.000Z",
+                displayName: "Gmail",
+                id: "ctk_1",
+                lastError: null,
+                orgId: "org_1",
+                status: "enabled",
+                toolkitSlug: "gmail",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+              },
+              userConnection: null,
             },
-            userConnection: null,
-          },
-        ];
-      },
-      async getProfileSessionEndpoint() {
-        return {
-          headers: {},
-          sessionId: "sess_1",
-          url: "https://mcp.example.com",
-        };
-      },
-      isAvailable: async () => true,
-    } as ComposioService;
+          ];
+        },
+        async getProfileSessionEndpoint() {
+          return {
+            headers: {},
+            sessionId: "sess_1",
+            url: "https://mcp.example.com",
+          };
+        },
+        isAvailable: async () => true,
+      };
 
     const manager = new McpClientManager();
     manager.connectHttpEndpoint = async () => [];
@@ -628,10 +627,16 @@ describe("composio-tool-bridge", () => {
   });
 
   test("returns no tools when user id is missing", async () => {
-    // SAFETY: The test fixture matches the contract used by this test.
-    const composioService = {
-      isAvailable: async () => true,
-    } as ComposioService;
+    const composioService: Parameters<typeof buildComposioToolDefinitions>[3] =
+      {
+        async getAssignedToolkitRecords() {
+          throw new Error("Missing user must not load assignments");
+        },
+        async getProfileSessionEndpoint() {
+          throw new Error("Missing user must not create a session");
+        },
+        isAvailable: async () => true,
+      };
 
     const manager = new McpClientManager();
 
@@ -644,11 +649,19 @@ describe("composio-tool-bridge", () => {
     );
 
     expect(tools).toEqual([]);
+
+    await expect(
+      buildComposioConnectTools("org_1", "", "profile_1", {
+        ...composioService,
+        async connectToolkit() {
+          throw new Error("Missing user must not start OAuth");
+        },
+      })
+    ).resolves.toEqual([]);
   });
 
   test("exposes connect tool when assigned toolkit is not connected", async () => {
-    // SAFETY: The test fixture matches the contract used by this test.
-    const composioService = {
+    const composioService: Parameters<typeof buildComposioConnectTools>[3] = {
       async connectToolkit() {
         return { redirectUrl: "https://oauth.example.com/authorize" };
       },
@@ -679,7 +692,7 @@ describe("composio-tool-bridge", () => {
         ];
       },
       isAvailable: async () => true,
-    } as ComposioService;
+    };
 
     const tools = await buildComposioConnectTools(
       "org_1",
@@ -704,8 +717,7 @@ describe("composio-tool-bridge", () => {
   });
 
   test("connect tool rejects loopback callback URLs", async () => {
-    // SAFETY: The test fixture matches the contract used by this test.
-    const composioService = {
+    const composioService: Parameters<typeof buildComposioConnectTools>[3] = {
       async connectToolkit() {
         throw new Error("should not be called");
       },
@@ -729,7 +741,7 @@ describe("composio-tool-bridge", () => {
         ];
       },
       isAvailable: async () => true,
-    } as ComposioService;
+    };
 
     const tools = await buildComposioConnectTools(
       "org_1",
