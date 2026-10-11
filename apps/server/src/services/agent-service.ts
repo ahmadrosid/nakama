@@ -3018,6 +3018,9 @@ export class AgentService {
     value: string
   ): Promise<AcpSessionSettingsResponse> {
     const profile = await this.requireProfile(orgId, profileId);
+    if (await this.db.getSharedAgentInstance(orgId, profileId)) {
+      throw new NakamaApiError("Shared agent configuration is read-only.", 403);
+    }
     await this.registerAcpDraftTools(orgId, profile);
 
     const agentOptions = acpOptionsForProfile(
@@ -4368,6 +4371,13 @@ export class AgentService {
       throw new Error(`Invalid soul file key: ${key}`);
     }
 
+    if (
+      key !== "memory" &&
+      (await this.db.getSharedAgentInstance(orgId, profileId))
+    ) {
+      throw new NakamaApiError("Shared agent configuration is read-only.", 403);
+    }
+
     const field = soulFieldFromKey(key);
     const soulDir = getProfileSoulDir(orgId, profileId);
 
@@ -4649,14 +4659,14 @@ export class AgentService {
 
   private async requireProfileRecord(
     profileId: string
-  ): Promise<StoredProfileRecord> {
+  ): Promise<StoredProfileRecord & { orgId: string }> {
     const profile = await this.db.getProfile(profileId);
 
     if (!profile?.orgId) {
       throw new Error("Profile not found.");
     }
 
-    return profile;
+    return { ...profile, orgId: profile.orgId };
   }
 
   private async resolveSessionProfile(
@@ -5059,6 +5069,10 @@ export class AgentService {
           }
         );
 
+        if (!visionProvider) {
+          throw new NakamaApiError(VISION_MODEL_REQUIRED_MESSAGE, 400);
+        }
+
         if (this.llmUsageTracker) {
           visionProvider = wrapProviderWithUsageTracking(
             visionProvider,
@@ -5285,7 +5299,7 @@ export class AgentService {
     harness: CodingAgentHarnessStatus,
     workspaceRoot: string,
     probeContext: {
-      userConfig: typeof this.userConfig;
+      userConfig: UserConfig | null;
       profileModel: string | null;
     }
   ): Promise<string> {
@@ -5450,7 +5464,7 @@ export class AgentService {
     );
 
     const resolvedProvider =
-      primarySupportsVision === false
+      provider && primarySupportsVision === false
         ? wrapProviderForNonVision(provider)
         : provider;
 

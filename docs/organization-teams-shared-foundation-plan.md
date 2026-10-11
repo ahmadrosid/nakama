@@ -1173,3 +1173,16 @@ Step 2 and delivery stage 1 remain incomplete. Direct soul writes, integration c
 No browser or external provider calls ran. Stale provider cassettes, full tests, and builds remain unresolved.
 Next: guard direct soul and integration configuration writes on shared profiles, while retaining team-owned memory and user context.
 Evidence: /tmp/nakama-shared-profile-guards-tests.log, /tmp/nakama-shared-profile-guards-server-types.log, /tmp/nakama-shared-profile-guards-lint.log.
+
+2026-10-11: Step 2 slice 2g complete — direct soul and integration configuration write guards.
+AgentService rejects shared-profile identity, style, instructions, and ACP draft setting changes before file, audit, agent-process, or database writes. Team memory remains writable; USER.md stays unchanged.
+ComposioService rejects assignment replacement on shared instances and skips default-profile auto-assignment when the selected default has a shared source link. Disabling a toolkit still removes obsolete assignments.
+Scoped profile checks run first. Guards retain the source link after publication removal, so revocation cannot create an editable local profile.
+Tests cover published and revoked instances, foreign IDs, unchanged records, files and audit history, permitted team memory, local soul edits, empty integration replacements, default auto-assignment, and local integration assignment controls.
+The first test run found a fixture comparison against an unnormalized profile. The stored snapshot fixed it. The first type check found optional fixture orgId values; an explicit test orgId fixed them.
+This slice includes the previously authorized agent service and Composio fixture type repairs in the same files. Existing tests cover those repairs; other cleanup remains uncommitted.
+Checks: all 59 focused tests passed; complete server type check passed; lint passed all 1532 files; git diff --check passed.
+Step 2 and delivery stage 1 remain incomplete. Import paths and the shared-agent selection HTTP route still need checks. Runtime source composition and refresh remain in step 3.
+No browser or external provider calls ran. Stale provider cassettes, full tests, and builds remain unresolved.
+Next: check import paths for shared-profile configuration writes before exposing shared-agent selection through HTTP.
+Evidence: /tmp/nakama-shared-direct-config-tests.log, /tmp/nakama-shared-direct-config-server-types.log, /tmp/nakama-shared-direct-config-lint.log.

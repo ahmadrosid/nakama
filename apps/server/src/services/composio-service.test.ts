@@ -15,7 +15,14 @@ const USER_ID = "user_admin";
 
 const ORG_ID = "org_1";
 
-function createMockClient(): ComposioApiClient {
+function createMockClient(): Pick<
+  ComposioApiClient,
+  | "createProfileSession"
+  | "deleteConnectedAccount"
+  | "linkToolkitAccount"
+  | "listCatalogToolkits"
+  | "listSessionTools"
+> {
   return {
     async createProfileSession(
       userId,
@@ -64,11 +71,11 @@ function createMockClient(): ComposioApiClient {
 
 function injectMockComposioClient(
   service: ComposioService,
-  client: ComposioApiClient
+  client: Partial<ReturnType<typeof createMockClient>>
 ): void {
   Object.assign(service, {
     apiClientCache: {
-      client,
+      client: { ...createMockClient(), ...client },
       key: TEST_API_KEY,
     },
   });
@@ -137,6 +144,85 @@ async function createConfiguredService() {
 }
 
 describe("ComposioService", () => {
+  test("shared profiles reject integration assignments and default auto-assignment after revocation", async () => {
+    const { db, service, restore } = await createConfiguredService();
+    try {
+      const now = new Date().toISOString();
+      for (const id of ["parent", ORG_ID]) {
+        await db.upsertOrganization({
+          createdAt: now,
+          id,
+          name: id,
+          parentOrgId: id === ORG_ID ? "parent" : null,
+          slug: id,
+          updatedAt: now,
+        });
+      }
+      await db.upsertProfile({
+        createdAt: now,
+        id: "template",
+        isDefault: false,
+        isSuper: false,
+        model: null,
+        name: "Template",
+        orgId: "parent",
+        systemPrompt: "",
+        updatedAt: now,
+      });
+      const publication = await db.publishOrgSharedResource({
+        createdAt: now,
+        id: "publication",
+        orgId: "parent",
+        resourceId: "template",
+        resourceKind: "agent",
+        updatedAt: now,
+      });
+      const profile = await db.createSharedAgentInstance(
+        ORG_ID,
+        publication.id,
+        "shared",
+        now
+      );
+      // Existing databases can contain a shared profile marked as the default.
+      await db.upsertProfile({ ...profile, isDefault: true });
+      for (const revoked of [false, true]) {
+        if (revoked) {
+          await db.deleteOrgSharedResource("parent", publication.id);
+        }
+        const toolkit = await service.enableToolkit(ORG_ID, {
+          toolkitSlug: "gmail",
+        });
+        expect(await db.listProfileComposioToolkits(profile.id)).toEqual([]);
+        for (const assignments of [
+          [],
+          [{ allowedActions: null, toolkitId: toolkit.id }],
+        ]) {
+          await expect(
+            service.updateProfileAssignments(ORG_ID, profile, { assignments })
+          ).rejects.toMatchObject({ status: 403 });
+        }
+        expect(await db.listProfileComposioToolkits(profile.id)).toEqual([]);
+        await service.disableToolkit(ORG_ID, "gmail");
+      }
+      await expect(
+        service.updateProfileAssignments("parent", profile, { assignments: [] })
+      ).rejects.toMatchObject({ status: 404 });
+      expect(await db.listProfileComposioToolkits("template")).toEqual([]);
+      await db.upsertProfile({ ...profile, id: "local", isDefault: true });
+      await db.upsertProfile({ ...profile, isDefault: false });
+      await service.enableToolkit(ORG_ID, { toolkitSlug: "gmail" });
+      expect(await db.listProfileComposioToolkits("local")).toHaveLength(1);
+      await service.updateProfileAssignments(
+        ORG_ID,
+        { ...profile, id: "local" },
+        { assignments: [] }
+      );
+      expect(await db.listProfileComposioToolkits("local")).toEqual([]);
+    } finally {
+      restore();
+    }
+  });
+
   test("enableToolkit creates org-scoped toolkit row", async () => {
     const { service, restore } = await createConfiguredService();
 
@@ -169,6 +255,7 @@ describe("ComposioService", () => {
         name: "Default",
         orgId: ORG_ID,
         systemPrompt: "",
+        updatedAt: new Date().toISOString(),
       });
       await db.upsertProfile({
         createdAt: new Date().toISOString(),
@@ -179,6 +266,7 @@ describe("ComposioService", () => {
         name: "Super Bot",
         orgId: ORG_ID,
         systemPrompt: "",
+        updatedAt: new Date().toISOString(),
       });
 
       const toolkit = await service.enableToolkit(ORG_ID, {
@@ -208,6 +296,7 @@ describe("ComposioService", () => {
         name: "Default",
         orgId: ORG_ID,
         systemPrompt: "",
+        updatedAt: new Date().toISOString(),
       });
 
       const toolkit = await service.enableToolkit(ORG_ID, {

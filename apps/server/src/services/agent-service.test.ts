@@ -1,11 +1,19 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   type ChatCompletionResult,
   ensureBundledSkillFiles,
   type GenerateChatInput,
+  getProfileSoulDir,
   loadDiscordConfigFile,
   loadTelegramConfigFile,
   loadWhatsAppConfigFile,
@@ -20,10 +28,12 @@ import type { StoredProfileRecord } from "@nakama/db";
 import {
   createInMemoryDatabaseAdapter,
   createSqliteDatabase,
+  mergeWorkspaceSettings,
   WORKSPACE_SETTINGS_ID,
 } from "@nakama/db";
 import { createMinimalHonoApp } from "../http/test-app-helpers";
 import { setupFreshInstallSession } from "../http/test-session-helpers";
+import { asTestFetch } from "../providers/test-helpers";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
 import { createDefaultProfile } from "./agent-service-test-fixtures";
@@ -32,6 +42,111 @@ import { resolveDefaultModelForInstance } from "./provider-instance-helpers";
 import { sessionTurnRegistry } from "./session-turn-registry";
 
 const TEST_ORG_ID = "org_test";
+
+describe("shared agent direct configuration", () => {
+  setupTestConfigDir("nakama-shared-direct-config-");
+
+  test("blocks source configuration writes after revocation and keeps team memory writable", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const source = {
+      ...createDefaultProfile(),
+      isDefault: false,
+      orgId: TEST_ORG_ID,
+    };
+    for (const id of [source.orgId, "team"]) {
+      await db.upsertOrganization({
+        createdAt: source.createdAt,
+        id,
+        name: id,
+        parentOrgId: id === "team" ? source.orgId : null,
+        slug: id,
+        updatedAt: source.updatedAt,
+      });
+    }
+    await db.upsertProfile(source);
+    const storedSource = await db.getProfile(source.id);
+    const publication = await db.publishOrgSharedResource({
+      createdAt: source.createdAt,
+      id: "publication",
+      orgId: source.orgId,
+      resourceId: source.id,
+      resourceKind: "agent",
+      updatedAt: source.updatedAt,
+    });
+    const profile = await db.createSharedAgentInstance(
+      "team",
+      publication.id,
+      "shared",
+      source.createdAt
+    );
+    const service = new AgentService(null, null, db);
+    const directory = getProfileSoulDir("team", profile.id);
+    await mkdir(directory, { recursive: true });
+    for (const file of [
+      "SOUL.md",
+      "STYLE.md",
+      "INSTRUCTIONS.md",
+      "MEMORY.md",
+      "USER.md",
+    ]) {
+      await writeFile(path.join(directory, file), file);
+    }
+    const meta = { actorUserId: "admin", source: "dashboard" as const };
+    for (const revoked of [false, true]) {
+      if (revoked) {
+        await db.deleteOrgSharedResource(source.orgId, publication.id);
+      }
+      for (const key of ["soul", "style", "instructions"]) {
+        await expect(
+          service.writeProfileSoulFile(
+            "team",
+            profile.id,
+            key,
+            { content: "Changed" },
+            meta
+          )
+        ).rejects.toMatchObject({ status: 403 });
+      }
+      await expect(
+        service.setAcpDraftSetting("team", profile.id, "model", "Changed")
+      ).rejects.toMatchObject({ status: 403 });
+      expect(await db.getProfile(profile.id)).toEqual(profile);
+      expect(await db.listProfileChangeEvents("team", profile.id)).toEqual([]);
+    }
+    await expect(
+      service.writeProfileSoulFile(
+        source.orgId,
+        profile.id,
+        "soul",
+        { content: "Changed" },
+        meta
+      )
+    ).rejects.toMatchObject({ status: 404 });
+    for (const file of ["SOUL.md", "STYLE.md", "INSTRUCTIONS.md", "USER.md"]) {
+      expect(await readFile(path.join(directory, file), "utf8")).toBe(file);
+    }
+    await service.writeProfileSoulFile(
+      "team",
+      profile.id,
+      "memory",
+      { content: "Team memory" },
+      meta
+    );
+    expect(await readFile(path.join(directory, "MEMORY.md"), "utf8")).toBe(
+      "Team memory"
+    );
+    expect(await db.getProfile(source.id)).toEqual(storedSource);
+    await service.writeProfileSoulFile(source.orgId, source.id, "style", {
+      content: "Local style",
+    });
+    expect(
+      await readFile(
+        path.join(getProfileSoulDir(source.orgId, source.id), "STYLE.md"),
+        "utf8"
+      )
+    ).toBe("Local style");
+  });
+});
 
 import { SkillsService } from "./skills-service";
 
@@ -597,7 +712,7 @@ describe("AgentService thinking provider options", () => {
 
 test("rejects a Netra provider when the model endpoint rejects its API key", async () => {
   using fetchMock = spyOn(globalThis, "fetch").mockImplementation(
-    async () => new Response("invalid key", { status: 401 })
+    asTestFetch(async () => new Response("invalid key", { status: 401 }))
   );
 
   const service = new AgentService(null, null, createInMemoryDatabaseAdapter());
@@ -613,8 +728,10 @@ test("rejects a Netra provider when the model endpoint rejects its API key", asy
 });
 
 test("discovers the supported Netra model without a custom base URL", async () => {
-  using fetchMock = spyOn(globalThis, "fetch").mockImplementation(async () =>
-    Response.json({ data: [{ id: NETRA_AGENT_MODEL_ID }] })
+  using fetchMock = spyOn(globalThis, "fetch").mockImplementation(
+    asTestFetch(async () =>
+      Response.json({ data: [{ id: NETRA_AGENT_MODEL_ID }] })
+    )
   );
 
   const service = new AgentService(null, null, createInMemoryDatabaseAdapter());
@@ -745,7 +862,7 @@ describe("AgentService usage pricing context", () => {
     );
 
     using fetchMock = spyOn(globalThis, "fetch").mockImplementation(
-      async (...args: Parameters<typeof fetch>) => {
+      asTestFetch(async (...args: Parameters<typeof fetch>) => {
         const init = args[1];
         const body = JSON.parse(String(init?.body));
 
@@ -762,13 +879,14 @@ describe("AgentService usage pricing context", () => {
           choices: [{ message: { content: "ok" } }],
           usage: { completion_tokens: 20_000, prompt_tokens: 100_000 },
         });
-      }
+      })
     );
 
     const id = await service.createSession(ORG_ID, "web", profile.id);
     const session = await service.resolveSession(id, ORG_ID);
     await session!.send({
-      message: [{ data: "aGVsbG8=", mediaType: "image/png", type: "image" }],
+      images: [{ data: "aGVsbG8=", mediaType: "image/png" }],
+      message: "Describe the image",
     });
     const byModel = await tracker.getStatsByModel(ORG_ID);
     expect(
@@ -787,6 +905,95 @@ describe("AgentService usage pricing context", () => {
 });
 
 describe("AgentService vision settings", () => {
+  setupTestConfigDir("nakama-vision-settings-");
+
+  test.each(["primary", "vision"] as const)(
+    "handles missing %s credentials without a provider call",
+    async (missing) => {
+      const originalDeepseekKey = process.env.DEEPSEEK_API_KEY;
+      const originalOpenaiKey = process.env.OPENAI_API_KEY;
+      delete process.env.DEEPSEEK_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+
+      using fetchMock = spyOn(globalThis, "fetch").mockImplementation(
+        asTestFetch(async () => {
+          throw new Error("Unexpected provider call");
+        })
+      );
+
+      try {
+        const db = createInMemoryDatabaseAdapter();
+        const profile = {
+          ...createDefaultProfile(),
+          model: "primary::deepseek-v4-flash",
+        };
+        await db.upsertProfile(profile);
+        const tracker = new LlmUsageTracker(db);
+
+        const service = new AgentService(
+          {
+            defaultProviderId: "primary",
+            providers: [
+              {
+                apiKey: missing === "primary" ? "" : "test",
+                createdAt: profile.createdAt,
+                id: "primary",
+                label: "Primary",
+                type: "deepseek",
+              },
+              {
+                apiKey: "",
+                createdAt: profile.createdAt,
+                id: "vision",
+                label: "Vision",
+                type: "openai",
+              },
+            ],
+            visionModel: "vision::gpt-4o-mini",
+          },
+          null,
+          db,
+          tracker
+        );
+
+        const id = await service.createSession(ORG_ID, "web", profile.id);
+        const session = await service.resolveSession(id, ORG_ID);
+        expect(session).not.toBeNull();
+
+        if (missing === "primary") {
+          await session!.send("Hello");
+          expect(session!.getHistory().map((message) => message.role)).toEqual([
+            "user",
+            "assistant",
+          ]);
+        } else {
+          await expect(
+            session!.send({
+              images: [{ data: "aGVsbG8=", mediaType: "image/png" }],
+              message: "Describe",
+            })
+          ).rejects.toMatchObject({ status: 400 });
+          expect(session!.getHistory()).toEqual([]);
+        }
+
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect((await tracker.getStats(ORG_ID)).requestCount).toBe(0);
+      } finally {
+        if (originalDeepseekKey === undefined) {
+          delete process.env.DEEPSEEK_API_KEY;
+        } else {
+          process.env.DEEPSEEK_API_KEY = originalDeepseekKey;
+        }
+
+        if (originalOpenaiKey === undefined) {
+          delete process.env.OPENAI_API_KEY;
+        } else {
+          process.env.OPENAI_API_KEY = originalOpenaiKey;
+        }
+      }
+    }
+  );
+
   test("persists vision model in the database", async () => {
     const db = createInMemoryDatabaseAdapter();
 
@@ -875,16 +1082,18 @@ describe("AgentService transcription settings", () => {
     "does not reset coding-agent passthrough when $field is saved",
     async ({ field, model, save }) => {
       const db = createInMemoryDatabaseAdapter();
-      await db.upsertWorkspaceSettings({
-        codingAgentHarnesses: [],
-        codingAgentProviderPassthrough: false,
-        id: "workspace-settings",
-        imageModel: null,
-        selectedCodingAgentHarness: null,
-        transcriptionModel: null,
-        updatedAt: new Date().toISOString(),
-        visionModel: null,
-      });
+      await db.upsertWorkspaceSettings(
+        mergeWorkspaceSettings(null, {
+          codingAgentHarnesses: [],
+          codingAgentProviderPassthrough: false,
+          id: "workspace-settings",
+          imageModel: null,
+          selectedCodingAgentHarness: null,
+          transcriptionModel: null,
+          updatedAt: new Date().toISOString(),
+          visionModel: null,
+        })
+      );
 
       const service = new AgentService(
         {
@@ -944,24 +1153,26 @@ describe("AgentService coding delegation context", () => {
   test("includes harness command template and backend guidance for bash delegation", async () => {
     const db = createInMemoryDatabaseAdapter();
     await installFakeOpenCode(tempBinDir);
-    await db.upsertWorkspaceSettings({
-      codingAgentHarnesses: [
-        {
-          args: [],
-          command: "opencode",
-          enabled: true,
-          id: "coding-harness-opencode",
-          kind: "opencode",
-          name: "OpenCode",
-        },
-      ],
-      id: WORKSPACE_SETTINGS_ID,
-      imageModel: null,
-      selectedCodingAgentHarness: null,
-      transcriptionModel: null,
-      updatedAt: new Date().toISOString(),
-      visionModel: null,
-    });
+    await db.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(null, {
+        codingAgentHarnesses: [
+          {
+            args: [],
+            command: "opencode",
+            enabled: true,
+            id: "coding-harness-opencode",
+            kind: "opencode",
+            name: "OpenCode",
+          },
+        ],
+        id: WORKSPACE_SETTINGS_ID,
+        imageModel: null,
+        selectedCodingAgentHarness: null,
+        transcriptionModel: null,
+        updatedAt: new Date().toISOString(),
+        visionModel: null,
+      })
+    );
 
     const service = new AgentService(null, null, db);
 
@@ -978,15 +1189,17 @@ describe("AgentService coding delegation context", () => {
 
   test("lists install commands when no coding agent CLI is installed", async () => {
     const db = createInMemoryDatabaseAdapter();
-    await db.upsertWorkspaceSettings({
-      codingAgentHarnesses: [],
-      id: WORKSPACE_SETTINGS_ID,
-      imageModel: null,
-      selectedCodingAgentHarness: null,
-      transcriptionModel: null,
-      updatedAt: new Date().toISOString(),
-      visionModel: null,
-    });
+    await db.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(null, {
+        codingAgentHarnesses: [],
+        id: WORKSPACE_SETTINGS_ID,
+        imageModel: null,
+        selectedCodingAgentHarness: null,
+        transcriptionModel: null,
+        updatedAt: new Date().toISOString(),
+        visionModel: null,
+      })
+    );
 
     const service = new AgentService(null, null, db);
 
@@ -1023,32 +1236,34 @@ describe("AgentService coding delegation context", () => {
       0o755
     );
 
-    await db.upsertWorkspaceSettings({
-      codingAgentHarnesses: [
-        {
-          args: [],
-          command: "opencode",
-          enabled: true,
-          id: "coding-harness-opencode",
-          kind: "opencode",
-          name: "OpenCode",
-        },
-        {
-          args: [],
-          command: "claude",
-          enabled: true,
-          id: "coding-harness-claude-code",
-          kind: "claude_code",
-          name: "Claude Code",
-        },
-      ],
-      id: WORKSPACE_SETTINGS_ID,
-      imageModel: null,
-      selectedCodingAgentHarness: "coding-harness-opencode",
-      transcriptionModel: null,
-      updatedAt: new Date().toISOString(),
-      visionModel: null,
-    });
+    await db.upsertWorkspaceSettings(
+      mergeWorkspaceSettings(null, {
+        codingAgentHarnesses: [
+          {
+            args: [],
+            command: "opencode",
+            enabled: true,
+            id: "coding-harness-opencode",
+            kind: "opencode",
+            name: "OpenCode",
+          },
+          {
+            args: [],
+            command: "claude",
+            enabled: true,
+            id: "coding-harness-claude-code",
+            kind: "claude_code",
+            name: "Claude Code",
+          },
+        ],
+        id: WORKSPACE_SETTINGS_ID,
+        imageModel: null,
+        selectedCodingAgentHarness: "coding-harness-opencode",
+        transcriptionModel: null,
+        updatedAt: new Date().toISOString(),
+        visionModel: null,
+      })
+    );
 
     const service = new AgentService(null, null, db);
 
@@ -1401,11 +1616,11 @@ describe("AgentService bot token validation", () => {
     const botToken = "123456:QA-fake-token-xyz";
     let requestCount = 0;
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = (async () => {
+    globalThis.fetch = asTestFetch(async () => {
       requestCount += 1;
 
       return new Response(JSON.stringify({ ok: false }), { status: 401 });
-    }) as typeof fetch;
+    });
 
     const service = new AgentService(
       null,
@@ -1462,11 +1677,11 @@ describe("AgentService bot token validation", () => {
     const botToken = "123456:QA-fake-token-xyz";
     let requestCount = 0;
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = (async () => {
+    globalThis.fetch = asTestFetch(async () => {
       requestCount += 1;
 
       return new Response(null, { status: 401 });
-    }) as typeof fetch;
+    });
 
     const service = new AgentService(
       null,
@@ -1521,11 +1736,13 @@ describe("AgentService bot token validation", () => {
 
   test("preserves Telegram config after a rejected replacement and on token-less edits", async () => {
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = (async () =>
-      new Response(
-        JSON.stringify({ ok: true, result: { id: 123_456, is_bot: true } }),
-        { status: 200 }
-      )) as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      async () =>
+        new Response(
+          JSON.stringify({ ok: true, result: { id: 123_456, is_bot: true } }),
+          { status: 200 }
+        )
+    );
 
     const service = new AgentService(
       null,
@@ -1541,8 +1758,9 @@ describe("AgentService bot token validation", () => {
     const beforeReplacement = await loadTelegramConfigFile(TEST_ORG_ID);
 
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = (async () =>
-      new Response(null, { status: 401 })) as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      async () => new Response(null, { status: 401 })
+    );
     await expect(
       service.setTelegramSettings(TEST_ORG_ID, {
         allowedUserIds: "43",
@@ -1555,9 +1773,9 @@ describe("AgentService bot token validation", () => {
     );
 
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = (async () => {
+    globalThis.fetch = asTestFetch(async () => {
       throw new Error("Token-less Telegram edits must not call the provider.");
-    }) as typeof fetch;
+    });
     await service.setTelegramSettings(TEST_ORG_ID, {
       allowedUserIds: "43",
       profileId: "edited",
@@ -1571,10 +1789,12 @@ describe("AgentService bot token validation", () => {
 
   test("revalidates a cached Discord token and preserves config when rejected", async () => {
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = (async () =>
-      new Response(JSON.stringify({ id: "1525937133096013954" }), {
-        status: 200,
-      })) as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      async () =>
+        new Response(JSON.stringify({ id: "1525937133096013954" }), {
+          status: 200,
+        })
+    );
 
     const service = new AgentService(
       null,
@@ -1591,11 +1811,11 @@ describe("AgentService bot token validation", () => {
     let rejectedRequestCount = 0;
 
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = (async () => {
+    globalThis.fetch = asTestFetch(async () => {
       rejectedRequestCount += 1;
 
       return new Response(null, { status: 401 });
-    }) as typeof fetch;
+    });
     await expect(
       service.setDiscordSettings({
         allowedUserIds: "987654321098765432",
@@ -1623,8 +1843,9 @@ describe("AgentService bot token validation", () => {
     const { app } = createMinimalHonoApp({ agent: service, databaseAdapter });
     const session = await setupFreshInstallSession(app, databaseAdapter);
     // SAFETY: This test controls the fixture shape at this boundary.
-    globalThis.fetch = (async () =>
-      new Response(null, { status: 401 })) as typeof fetch;
+    globalThis.fetch = asTestFetch(
+      async () => new Response(null, { status: 401 })
+    );
 
     for (const channel of ["telegram", "discord"] as const) {
       const botToken = `rejected-${channel}-token`;
