@@ -578,18 +578,65 @@ export function createSqliteMemoryAdapter(): DatabaseAdapter {
   return createSqliteDatabaseAdapter(db);
 }
 
+interface TrackedDatabaseHandle {
+  close: () => void;
+  db: Database;
+}
+
+/**
+ * bun on macOS throws "database is locked" from `db.close(true)` while any
+ * prepared statement exists — including never-executed ones — and the throw
+ * leaves the database open, so callers that need a real close (tests, the
+ * restore flow's file moves) fail or silently leak the handle. Finalizing the
+ * statements first makes close() actually close. Statements are tracked by
+ * overriding `prepare` on this instance; every other Database member is
+ * untouched, so migrateDatabase() and the adapter are covered as-is.
+ */
+function openTrackedDatabase(databasePath: string): TrackedDatabaseHandle {
+  const db = openPrivateDatabase(databasePath);
+  const statements = new Set<{ finalize: () => void }>();
+
+  const prepare = db.prepare.bind(db);
+
+  // SAFETY: own-property override shadows the prototype method, and the
+  // wrapped call forwards the exact argument list to the original prepare.
+  db.prepare = ((...args: Parameters<Database["prepare"]>) => {
+    const statement = prepare(...args);
+
+    statements.add(statement);
+
+    return statement;
+  }) as Database["prepare"];
+
+  return {
+    close() {
+      for (const statement of statements) {
+        try {
+          statement.finalize();
+        } catch {
+          // Already finalized or the database is gone; close proceeds.
+        }
+      }
+
+      statements.clear();
+      db.close(true);
+    },
+    db,
+  };
+}
+
 export async function createSqliteDatabase(
   databaseUrl: string
 ): Promise<SqliteDatabase> {
   const databasePath = resolveDatabasePath(databaseUrl);
 
-  let db = openPrivateDatabase(databasePath);
-  migrateDatabase(db);
-  let adapter = createSqliteDatabaseAdapter(db);
+  let current = openTrackedDatabase(databasePath);
+  migrateDatabase(current.db);
+  let adapter = createSqliteDatabaseAdapter(current.db);
 
   // Stable proxy so services keep one adapter reference across reopen().
   const adapterProxy = new Proxy(adapter, {
-    get(_target, property) {
+    get(_target, property, receiver) {
       const value = Object.entries(adapter).find(
         ([key]) => key === String(property)
       )?.[1];
@@ -601,19 +648,18 @@ export async function createSqliteDatabase(
   return {
     adapter: adapterProxy,
     close() {
-      db.close(true);
+      current.close();
     },
     release() {
-      db.close(true);
+      current.close();
     },
     async reopen() {
-      const nextDb = openPrivateDatabase(databasePath);
-      migrateDatabase(nextDb);
-      const nextAdapter = createSqliteDatabaseAdapter(nextDb);
-      const previousDb = db;
-      db = nextDb;
-      adapter = nextAdapter;
-      previousDb.close(true);
+      const next = openTrackedDatabase(databasePath);
+      migrateDatabase(next.db);
+      adapter = createSqliteDatabaseAdapter(next.db);
+      const previous = current;
+      current = next;
+      previous.close();
     },
   };
 }

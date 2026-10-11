@@ -20,6 +20,17 @@ interface PluginCleanupRow {
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
+function closeDatabase(db: Database): void {
+  try {
+    db.close(true);
+  } catch {
+    // bun on macOS throws "database is locked" from close(true) while the
+    // transient statements migrateDatabase prepares are not yet collected.
+    // The lazy close defers to GC, which is enough for test cleanup.
+    db.close();
+  }
+}
+
 test.each(["normal upgrade", "retry after failed cleanup"])(
   "removes legacy Google Meet plugin records: %s",
   (scenario) => {
@@ -1592,7 +1603,7 @@ test("file pins migrate existing databases, survive reopen and cascade with prof
       INSERT INTO profiles (id, name, org_id, created_at, updated_at) VALUES ('pin-profile', 'Pins', 'pin-org', 'now', 'now');
       INSERT INTO file_pins VALUES ('pin-org', 'pin-user', 'pin-profile', 'notes.md');
     `);
-    db.close(true);
+    closeDatabase(db);
     db = new Database(filename);
     migrateDatabase(db);
     expect(db.query("SELECT path FROM file_pins").all()).toEqual([
@@ -1601,7 +1612,7 @@ test("file pins migrate existing databases, survive reopen and cascade with prof
     db.exec("DELETE FROM profiles WHERE id = 'pin-profile'");
     expect(db.query("SELECT path FROM file_pins").all()).toEqual([]);
   } finally {
-    db.close(true);
+    closeDatabase(db);
     rmSync(directory, { force: true, recursive: true });
   }
 });
