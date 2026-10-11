@@ -2434,3 +2434,15 @@ The complete web type check passed. React Doctor remained at 91/100 with no issu
 Steps 4 and 5 and delivery stages 3 and 4 remain open. Next: verify shared assignment controls and remove forbidden clone and transfer actions. Accessible team settings actions and compatibility labels remain open. No server permission changed. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
 
 Evidence: /tmp/nakama-template-soul-{focused,api,types,format,oxlint,doctor,lint}.log.
+
+### Slice 3w — Shared-agent clone and transfer actions
+
+Shared instances no longer offer Duplicate or Move agent, including instances with unavailable publications. Local profiles retain their existing platform-admin actions. Import, export, and delete controls retain their existing permissions. The clone handlers check the current target's ownership and platform authority. An open clone dialog closes when ownership changes. The transfer dialog uses the existing edit permission for both visibility and destination queries. Its mutation also rejects shared profiles before saving or transferring them.
+
+Seven new cases use the real profile page hook, configuration tab, and dialogs. They cover available and unavailable shared instances, platform authority, ordinary tenant admins, retained local cloning and transfer selection, denied forced clone requests, and removal of open dialogs after ownership changes. All 127 component tests passed with 834 assertions. The existing server regression passed with 19 assertions, confirming denied assignment, clone, transfer, and avatar mutations without data changes.
+
+The complete web type check passed. React Doctor remained at 91/100 with no issues. Two verification repairs simplified the transfer visibility check and placed it inside the existing dialog. This removed a new complexity warning without adding a helper or suppressing a rule. Scoped anti-slop, Ultracite, and git diff --check passed.
+
+Steps 4 and 5 and delivery stages 3 and 4 remain open. Next: verify shared assignment and behavior controls, then accessible team settings actions and compatibility labels. No server permission, package, dependency, or file was added. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
+
+Evidence: /tmp/nakama-template-actions-{focused,api,types,format,oxlint,doctor,lint}.log.

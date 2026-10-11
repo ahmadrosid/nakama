@@ -225,7 +225,7 @@ function RemoveAssignmentDialog({
 }
 
 export function ProfilesDialogs(state: ProfilesPageState) {
-  const { activeOrg } = useAuth();
+  const { activeOrg, user } = useAuth();
 
   const {
     allSkills,
@@ -347,7 +347,13 @@ export function ProfilesDialogs(state: ProfilesPageState) {
 
       <CloneProfileDialog
         busy={busy}
-        cloneTargetId={cloneTargetId}
+        cloneTargetId={
+          user?.isPlatformAdmin === true &&
+          cloneTarget &&
+          !cloneTarget.sharedAgent
+            ? cloneTargetId
+            : null
+        }
         cloneTargetName={cloneTarget?.name}
         isPending={cloneProfileMutation.isPending}
         onConfirm={() => void handleCloneConfirm()}

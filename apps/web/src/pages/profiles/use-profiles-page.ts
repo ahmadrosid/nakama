@@ -834,6 +834,12 @@ export function useProfilesPage() {
   }
 
   function openCloneDialog(profileId: string) {
+    const profile = profiles.find((entry) => entry.id === profileId);
+
+    if (!profile || profile.sharedAgent || user?.isPlatformAdmin !== true) {
+      return;
+    }
+
     setCloneTargetId(profileId);
   }
 
@@ -857,8 +863,13 @@ export function useProfilesPage() {
 
   async function handleCloneConfirm() {
     const profileId = cloneTargetId;
+    const profile = profiles.find((entry) => entry.id === profileId);
 
-    if (!profileId) {
+    if (
+      !(profileId && profile) ||
+      profile.sharedAgent ||
+      user?.isPlatformAdmin !== true
+    ) {
       return;
     }
 

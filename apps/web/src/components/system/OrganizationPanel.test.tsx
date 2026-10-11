@@ -27,6 +27,8 @@ import {
   ProfileConfigIdentitySection,
   ProfileSystemPromptCard,
 } from "@/pages/profiles/profile-config-identity-section";
+import { ProfileConfigTab } from "@/pages/profiles/profile-config-tab";
+import { ProfilesDialogs } from "@/pages/profiles/profiles-dialogs";
 import { useProfilesPage } from "@/pages/profiles/use-profiles-page";
 import { OrganizationOverview } from "./OrganizationPanel";
 
@@ -2461,6 +2463,239 @@ test("soul editing waits for profile ownership and rechecks an open dialog", asy
   ).toBe(false);
   expect(write).not.toHaveBeenCalled();
 });
+
+function ProfileActionsProbe() {
+  const state = useProfilesPage();
+
+  return (
+    <>
+      <ProfileConfigTab state={state} />
+      <ProfilesDialogs {...state} />
+      <button
+        onClick={() =>
+          state.selectedId && state.openCloneDialog(state.selectedId)
+        }
+        type="button"
+      >
+        Attempt clone
+      </button>
+      <button onClick={() => void state.handleCloneConfirm()} type="button">
+        Attempt clone confirmation
+      </button>
+    </>
+  );
+}
+
+function observeProfileActions(
+  shared: boolean,
+  available = true,
+  platformAdmin = true
+) {
+  const queries = new QueryClient({
+    defaultOptions: {
+      queries: {
+        enabled: false,
+        retry: false,
+        staleTime: Number.POSITIVE_INFINITY,
+      },
+    },
+  });
+
+  const profile = sharedAgentInstance().profile;
+
+  if (shared) {
+    profile.sharedAgent!.available = available;
+  } else {
+    delete profile.sharedAgent;
+  }
+
+  queries.setQueryData(queryKeys.profiles.all, [profile]);
+  queries.setQueryData(queryKeys.profiles.detail(profile.id), profile);
+  queries.setQueryData(queryKeys.composio.profileToolkits(profile.id), {
+    assignments: [],
+  });
+  queries.setQueryData(queryKeys.soul.profile(profile.id), {
+    active: false,
+    directory: "/team/workspace",
+    files: {
+      examples: false,
+      instructions: false,
+      memory: false,
+      soul: false,
+      style: false,
+    },
+  } satisfies SoulStatusResponse);
+
+  const clone = spyOn(client, "cloneProfile").mockRejectedValue(
+    new Error("Retry clone")
+  );
+
+  const move = spyOn(client, "moveProfile");
+
+  const destinations = spyOn(
+    client,
+    "listPlatformOrganizations"
+  ).mockResolvedValue({ organizations: [organization("other")] });
+
+  cleanups.push(() => {
+    clone.mockRestore();
+    move.mockRestore();
+    destinations.mockRestore();
+  });
+
+  return {
+    ...mount(
+      queries,
+      undefined,
+      undefined,
+      {
+        email: "admin@example.com",
+        id: "admin",
+        isPlatformAdmin: platformAdmin,
+      },
+      <ProfileActionsProbe />
+    ),
+    clone,
+    destinations,
+    move,
+    profile,
+    queries,
+  };
+}
+
+test.each([
+  { available: true, platformAdmin: true, shared: true },
+  { available: false, platformAdmin: true, shared: true },
+  { available: true, platformAdmin: false, shared: true },
+  { available: true, platformAdmin: false, shared: false },
+  { available: true, platformAdmin: true, shared: false },
+])(
+  "profile actions retain permissions and shared ownership %j",
+  async (scenario) => {
+    const { container, render, clone, move, destinations, profile } =
+      observeProfileActions(
+        scenario.shared,
+        scenario.available,
+        scenario.platformAdmin
+      );
+
+    await render({ ...organization("team-a"), role: "admin" });
+
+    const actions = [
+      ...container.querySelectorAll<HTMLButtonElement>("footer button"),
+    ];
+
+    const duplicate = actions.find(
+      (button) => button.textContent === "Duplicate"
+    );
+
+    const transfer = actions.find(
+      (button) => button.textContent === "Move agent"
+    );
+
+    expect(Boolean(duplicate)).toBe(scenario.platformAdmin && !scenario.shared);
+    expect(Boolean(transfer)).toBe(scenario.platformAdmin && !scenario.shared);
+    expect(
+      actions.some((button) => button.textContent === "Import agent")
+    ).toBe(true);
+    expect(
+      actions.some((button) => button.textContent === "Export agent")
+    ).toBe(true);
+    expect(
+      actions.some((button) => button.textContent === "Delete agent")
+    ).toBe(scenario.platformAdmin);
+
+    const attempt = [
+      ...container.querySelectorAll<HTMLButtonElement>("button"),
+    ].find((button) => button.textContent === "Attempt clone")!;
+
+    await act(async () => {
+      attempt.click();
+      await settle();
+    });
+
+    const confirm = [
+      ...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
+    ].find((button) => button.textContent === "Clone");
+
+    if (scenario.platformAdmin && !scenario.shared) {
+      expect(confirm).toBeDefined();
+      await act(async () => {
+        confirm!.click();
+        await settle();
+      });
+      expect(clone).toHaveBeenCalledWith(profile.id);
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+      await act(async () => {
+        [
+          ...document.querySelectorAll<HTMLButtonElement>(
+            '[role="dialog"] button'
+          ),
+        ]
+          .find((button) => button.textContent === "Cancel")!
+          .click();
+        await settle();
+      });
+      await act(async () => {
+        transfer!.click();
+        await settle();
+      });
+      expect(destinations).toHaveBeenCalledTimes(1);
+      expect(
+        document.querySelector('[aria-label="Destination organization"]')
+      ).not.toBeNull();
+    } else {
+      expect(confirm).toBeUndefined();
+      await act(async () => {
+        [...container.querySelectorAll<HTMLButtonElement>("button")]
+          .find(
+            (button) => button.textContent === "Attempt clone confirmation"
+          )!
+          .click();
+        await settle();
+      });
+      expect(clone).not.toHaveBeenCalled();
+      expect(destinations).not.toHaveBeenCalled();
+    }
+
+    expect(move).not.toHaveBeenCalled();
+  }
+);
+
+for (const action of ["Duplicate", "Move agent"] as const) {
+  test(`${action} dialog closes when its local profile becomes shared`, async () => {
+    const { container, render, profile, queries, clone, move } =
+      observeProfileActions(false);
+
+    await render({ ...organization("team-a"), role: "admin" });
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>("footer button")]
+        .find((button) => button.textContent === action)!
+        .click();
+      await settle();
+    });
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    await act(async () => {
+      const shared = {
+        ...profile,
+        sharedAgent: sharedAgentInstance().profile.sharedAgent,
+      };
+
+      queries.setQueryData(queryKeys.profiles.all, [shared]);
+      queries.setQueryData(queryKeys.profiles.detail(profile.id), shared);
+      await settle();
+    });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Attempt clone confirmation")!
+        .click();
+      await settle();
+    });
+    expect(clone).not.toHaveBeenCalled();
+    expect(move).not.toHaveBeenCalled();
+  });
+}
 
 function ProfileIdentityProbe() {
   const state = useProfilesPage();
