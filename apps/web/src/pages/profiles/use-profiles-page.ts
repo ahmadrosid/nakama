@@ -152,7 +152,6 @@ export function useProfilesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { profileId: liveChatProfileId } = useActiveChatProfile();
   const { user } = useAuth();
-  const canManageProfile = user?.isPlatformAdmin === true;
 
   const {
     data: profiles = [],
@@ -187,6 +186,9 @@ export function useProfilesPage() {
     error: detailError,
     refetch: refetchDetail,
   } = useProfileQuery(selectedId);
+
+  const canManageProfile =
+    user?.isPlatformAdmin === true && Boolean(detail && !detail.sharedAgent);
 
   const updateMutation = useUpdateProfileMutation();
 
@@ -338,7 +340,7 @@ export function useProfilesPage() {
       const snapshot = editStateRef.current;
       const { selectedId: profileId, detail: profileDetail } = snapshot;
 
-      if (!(profileId && profileDetail)) {
+      if (!(profileId && profileDetail) || profileDetail.sharedAgent) {
         return;
       }
 
@@ -385,7 +387,7 @@ export function useProfilesPage() {
       detail: profileDetail,
     } = editStateRef.current;
 
-    if (!(profileId && profileDetail)) {
+    if (!(profileId && profileDetail) || profileDetail.sharedAgent) {
       return true;
     }
 
@@ -495,36 +497,48 @@ export function useProfilesPage() {
 
   const handleEditNameChange = useCallback(
     (value: string) => {
+      if (!canManageProfile) {
+        return;
+      }
+
       setEditName(value);
       editStateRef.current.editName = value;
       scheduleSave(profileTextSaveDelayMs);
     },
-    [scheduleSave]
+    [canManageProfile, scheduleSave]
   );
 
   const handleEditPromptChange = useCallback(
     (value: string) => {
+      if (!canManageProfile) {
+        return;
+      }
+
       setEditPrompt(value);
       editStateRef.current.editPrompt = value;
       scheduleSave(profileTextSaveDelayMs);
     },
-    [scheduleSave]
+    [canManageProfile, scheduleSave]
   );
 
   const handleEditModelChange = useCallback(
     (model: string | null) => {
+      if (!canManageProfile) {
+        return;
+      }
+
       setEditModel(model);
       editStateRef.current.editModel = model;
       scheduleSave(profileModelSaveDelayMs);
     },
-    [scheduleSave]
+    [canManageProfile, scheduleSave]
   );
 
   // Saved right away, not debounced: the agent is a choice, not text. An empty
   // preset id returns the profile to the built-in chat.
   const handleEditAcpAgent = useCallback(
     async (presetId: string) => {
-      if (!selectedId) {
+      if (!(selectedId && canManageProfile)) {
         return;
       }
 
@@ -542,7 +556,7 @@ export function useProfilesPage() {
         setError(formatError(err));
       }
     },
-    [acpAgentPresets, selectedId, updateProfile]
+    [acpAgentPresets, canManageProfile, selectedId, updateProfile]
   );
 
   const switchingProfileRef = useRef(false);
@@ -1123,7 +1137,7 @@ export function useProfilesPage() {
 
     event.target.value = "";
 
-    if (!(selectedId && file)) {
+    if (!(selectedId && file && canManageProfile)) {
       return;
     }
 
@@ -1148,7 +1162,7 @@ export function useProfilesPage() {
   }
 
   async function handleAvatarRemove() {
-    if (!selectedId) {
+    if (!(selectedId && canManageProfile)) {
       return;
     }
 

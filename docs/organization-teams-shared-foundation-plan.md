@@ -2408,3 +2408,17 @@ All 119 focused component and navigation tests passed with 723 assertions. Four 
 The complete web type check passed. React Doctor stayed at 91/100 with no issues. Steps 4 and 5 and delivery stages 3 and 4 remain open. Next: shared-template field controls, accessible team settings actions, and compatibility labels. No new file, package, dependency, server permission, or browser check was added. Full release checks, builds, docs, push, and PR remain required.
 
 Evidence: /tmp/nakama-overview-access-{focused,types,format,oxlint,doctor,lint}.log.
+
+### Slice 3u — Shared-agent identity controls
+
+The existing profile page edit permission now requires a loaded local profile. Shared-agent instances remain read-only even for platform admins, including instances whose publication is unavailable. Existing identity controls use that permission to disable name, prompt, model, chat-agent, and avatar changes. Local profiles retain their platform-admin edit permission. Team memory and session operations are unchanged.
+
+Identity change handlers reject drafts without edit permission. Save scheduling and save execution also reject shared instances from their current profile snapshot. Chat-agent updates and avatar handlers check the same permission before starting a mutation. This prevents a shared instance from submitting identity changes through an open or delayed control. Server permissions remain unchanged.
+
+Four new cases use the real profile page hook and existing identity components in the shared-feature test file. They cover available and unavailable templates, ordinary tenant admins, and editable local profiles. They check disabled controls, retained identity content, denied forced saves and avatar removal, and the exact local save payload. All 107 component tests passed with 702 assertions. The complete web type check passed. React Doctor remained at 91/100 with no issues.
+
+One verification repair corrected the prompt assertion to use the existing preview edit button, since its text editor mounts only inside an open dialog. The repair also kept denied drafts unchanged and made the avatar mock's void result explicit. No new file, package, dependency, helper abstraction, or rule suppression was added.
+
+Steps 4 and 5 and delivery stages 3 and 4 remain open. Next: verify shared assignment controls, keep template soul files read-only while retaining team memory, and review clone and transfer controls. Accessible team settings actions and compatibility labels also remain open. No browser check, full suite, build, paid call, push, or PR ran. Final delivery checks remain required.
+
+Evidence: /tmp/nakama-template-identity-{focused,types,format,oxlint,doctor,lint}.log.

@@ -9,7 +9,7 @@ import type {
   ToolResponse,
 } from "@nakama/core/contract";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { useActiveChatProfileStore } from "@/context/active-chat-profile-store";
@@ -20,6 +20,11 @@ import {
 import { client } from "@/lib/client";
 import { queryKeys } from "@/lib/query-keys";
 import { OrganizationPage } from "@/pages/OrganizationPage";
+import {
+  ProfileConfigIdentitySection,
+  ProfileSystemPromptCard,
+} from "@/pages/profiles/profile-config-identity-section";
+import { useProfilesPage } from "@/pages/profiles/use-profiles-page";
 import { OrganizationOverview } from "./OrganizationPanel";
 
 const cleanups: Array<() => void> = [];
@@ -95,7 +100,8 @@ function mount(
   user: AuthContextValue["user"] = {
     email: "creator@example.com",
     id: "creator",
-  }
+  },
+  content?: ReactNode
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -138,7 +144,8 @@ function mount(
           <QueryClientProvider client={queryClient}>
             <MemoryRouter initialEntries={["/system/organization"]}>
               <AuthContext.Provider value={auth}>
-                {page ? <OrganizationPage /> : <OrganizationOverview />}
+                {content ??
+                  (page ? <OrganizationPage /> : <OrganizationOverview />)}
                 <ChatLocation />
               </AuthContext.Provider>
             </MemoryRouter>
@@ -2275,6 +2282,170 @@ function sharedAgentInstance(): ProfileResponse {
     },
   };
 }
+
+function ProfileIdentityProbe() {
+  const state = useProfilesPage();
+
+  return (
+    <>
+      <ProfileConfigIdentitySection state={state} />
+      <ProfileSystemPromptCard state={state} />
+      <button
+        onClick={async () => {
+          state.handleEditNameChange("Changed name");
+          state.handleEditPromptChange("Changed prompt");
+          state.handleEditModelChange("provider-a::same-model");
+          await state.flushSave();
+        }}
+        type="button"
+      >
+        Attempt identity save
+      </button>
+      <button
+        onClick={async () => {
+          await state.handleEditAcpAgent("");
+          await state.handleAvatarRemove();
+        }}
+        type="button"
+      >
+        Attempt identity actions
+      </button>
+    </>
+  );
+}
+
+test.each([
+  { available: true, platformAdmin: true, shared: true },
+  { available: false, platformAdmin: true, shared: true },
+  { available: true, platformAdmin: false, shared: false },
+  { available: true, platformAdmin: true, shared: false },
+])(
+  "profile identity controls follow template ownership %j",
+  async (scenario) => {
+    const queries = new QueryClient({
+      defaultOptions: {
+        queries: {
+          enabled: false,
+          retry: false,
+          staleTime: Number.POSITIVE_INFINITY,
+        },
+      },
+    });
+
+    const response = sharedAgentInstance();
+
+    if (scenario.shared) {
+      response.profile.sharedAgent!.available = scenario.available;
+    } else {
+      delete response.profile.sharedAgent;
+    }
+
+    response.profile.systemPrompt = "Original prompt";
+    queries.setQueryData(queryKeys.profiles.all, [response.profile]);
+    queries.setQueryData(
+      queryKeys.profiles.detail(response.profile.id),
+      response.profile
+    );
+    queries.setQueryData(queryKeys.models, configuredSharedModels());
+    queries.setQueryData(
+      queryKeys.composio.profileToolkits(response.profile.id),
+      {
+        assignments: [],
+      }
+    );
+    const update = spyOn(client, "updateProfile").mockResolvedValue(response);
+
+    const avatar = spyOn(client, "deleteProfileAvatar").mockResolvedValue(
+      undefined
+    );
+
+    const profileRead = spyOn(client, "getProfile").mockResolvedValue(response);
+
+    const profilesRead = spyOn(client, "listProfiles").mockResolvedValue({
+      profiles: [response.profile],
+    });
+
+    cleanups.push(() => {
+      update.mockRestore();
+      avatar.mockRestore();
+      profileRead.mockRestore();
+      profilesRead.mockRestore();
+    });
+
+    const { container, render } = mount(
+      queries,
+      undefined,
+      undefined,
+      {
+        email: "admin@example.com",
+        id: "admin",
+        isPlatformAdmin: scenario.platformAdmin,
+      },
+      <ProfileIdentityProbe />
+    );
+
+    await render({ ...organization("team-a"), role: "admin" });
+    const readOnly = scenario.shared || !scenario.platformAdmin;
+
+    const name = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Name"]'
+    )!;
+
+    const prompt = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Edit system prompt"]'
+    )!;
+
+    expect(name.disabled).toBe(readOnly);
+    expect(name.readOnly).toBe(readOnly);
+    expect(prompt.disabled).toBe(readOnly);
+    expect(
+      container.querySelector<HTMLInputElement>('input[type="file"]')?.disabled
+    ).toBe(readOnly);
+    expect(
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Select model"]'
+      )?.disabled
+    ).toBe(readOnly);
+    expect(
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Chat agent"]'
+      )?.disabled
+    ).toBe(readOnly);
+    expect(name.value).toBe(response.profile.name);
+    expect(prompt.textContent).toBe(response.profile.systemPrompt);
+
+    const actions = [
+      ...container.querySelectorAll<HTMLButtonElement>("button"),
+    ];
+
+    await act(async () => {
+      actions
+        .find((button) => button.textContent === "Attempt identity save")!
+        .click();
+      await settle();
+    });
+
+    if (readOnly) {
+      await act(async () => {
+        actions
+          .find((button) => button.textContent === "Attempt identity actions")!
+          .click();
+        await settle();
+      });
+      expect(update).not.toHaveBeenCalled();
+      expect(avatar).not.toHaveBeenCalled();
+      expect(name.value).toBe(response.profile.name);
+      expect(prompt.textContent).toBe(response.profile.systemPrompt);
+    } else {
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(update).toHaveBeenCalledWith(response.profile.id, {
+        model: "provider-a::same-model",
+        name: "Changed name",
+        systemPrompt: "Changed prompt",
+      });
+    }
+  }
+);
 
 function observeAgentSelection() {
   const state = useActiveChatProfileStore.getState();
