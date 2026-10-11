@@ -43,6 +43,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateOrgLlmMonthlyQuotaTable);
   atomic(migrateSkillsCuratorConsolidateColumns);
   atomic(migrateOrganizationArchivedAt);
+  atomic(migrateOrganizationParent);
   atomic(migrateSkillUsageTables);
   atomic(migrateTenantOrgScope);
   atomic(migrateSkillOrgIds);
@@ -147,7 +148,7 @@ function applyBootstrapSchema(db: Database): void {
     )
     .get();
 
-  if ((current.version ?? 0) >= BOOTSTRAP_SCHEMA_VERSION) {
+  if ((current?.version ?? 0) >= BOOTSTRAP_SCHEMA_VERSION) {
     return;
   }
 
@@ -1150,6 +1151,25 @@ function migrateOrgLlmMonthlyQuotaTable(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_org_llm_quota_reservations_org
       ON org_llm_quota_reservations(org_id);
+  `);
+}
+
+function migrateOrganizationParent(db: Database): void {
+  const columns = db
+    .prepare<{ name: string }, SQLQueryBindings[]>(
+      "PRAGMA table_info(organizations)"
+    )
+    .all();
+
+  if (!columns.some((column) => column.name === "parent_org_id")) {
+    db.exec(`
+      ALTER TABLE organizations ADD COLUMN parent_org_id TEXT
+        REFERENCES organizations (id) ON DELETE RESTRICT CHECK (parent_org_id <> id);
+    `);
+  }
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS organizations_parent_org_id ON organizations (parent_org_id);
   `);
 }
 

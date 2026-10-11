@@ -1,5 +1,6 @@
 import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
+import type { PluginManifest } from "@nakama/core";
 import { createInMemoryDatabaseAdapter } from "./index";
 import { migrateDatabase } from "./migrate";
 import type { StoredSkillRecord, StoredToolRecord } from "./types";
@@ -75,7 +76,7 @@ function createLegacyHostDatabase(): Database {
   return db;
 }
 
-function notesManifest(version = "1.0.0") {
+function notesManifest(version = "1.0.0"): PluginManifest {
   return {
     actions: [
       {

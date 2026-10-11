@@ -20,6 +20,78 @@ interface PluginCleanupRow {
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
+test.each(["fresh", "upgrade"])(
+  "organization parent migration preserves tenants and enforces references: %s",
+  (scenario) => {
+    const db = new Database(":memory:");
+
+    try {
+      migrateDatabase(db);
+      if (scenario === "upgrade") {
+        db.exec(`
+          DROP INDEX organizations_parent_org_id;
+          ALTER TABLE organizations DROP COLUMN parent_org_id;
+        `);
+      }
+
+      db.exec(`
+        INSERT INTO organizations (id, name, slug, created_at, updated_at)
+          VALUES ('parent', 'Parent', 'parent', 'now', 'now'),
+                 ('team', 'Team', 'team', 'now', 'now');
+        INSERT INTO profiles (id, name, org_id, created_at, updated_at)
+          VALUES ('team-profile', 'Team agent', 'team', 'now', 'now');
+        INSERT INTO users (id, email, name, created_at, updated_at)
+          VALUES ('team-user', 'team@example.com', 'Team user', 'now', 'now');
+        INSERT INTO org_members (org_id, user_id, role, created_at)
+          VALUES ('team', 'team-user', 'admin', 'now');
+      `);
+      const profiles = db.query("SELECT * FROM profiles").all();
+      const memberships = db.query("SELECT * FROM org_members").all();
+
+      migrateDatabase(db);
+      migrateDatabase(db);
+
+      expect(
+        db
+          .query("SELECT id, parent_org_id FROM organizations ORDER BY id")
+          .all()
+      ).toEqual([
+        { id: "parent", parent_org_id: null },
+        { id: "team", parent_org_id: null },
+      ]);
+      expect(db.query("SELECT * FROM profiles").all()).toEqual(profiles);
+      expect(db.query("SELECT * FROM org_members").all()).toEqual(memberships);
+      expect(() =>
+        db.exec(
+          "UPDATE organizations SET parent_org_id = 'missing' WHERE id = 'team'"
+        )
+      ).toThrow();
+      expect(() =>
+        db.exec("UPDATE organizations SET parent_org_id = id WHERE id = 'team'")
+      ).toThrow();
+
+      db.exec(
+        "UPDATE organizations SET parent_org_id = 'parent' WHERE id = 'team'"
+      );
+      migrateDatabase(db);
+      expect(
+        db
+          .query("SELECT parent_org_id FROM organizations WHERE id = 'team'")
+          .get()
+      ).toEqual({ parent_org_id: "parent" });
+      expect(() =>
+        db.exec("DELETE FROM organizations WHERE id = 'parent'")
+      ).toThrow();
+      expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
+      db.exec("DELETE FROM organizations WHERE id = 'team'");
+      db.exec("DELETE FROM organizations WHERE id = 'parent'");
+      expect(db.query("SELECT id FROM organizations").all()).toEqual([]);
+    } finally {
+      db.close();
+    }
+  }
+);
+
 test.each(["normal upgrade", "retry after failed cleanup"])(
   "removes legacy Google Meet plugin records: %s",
   (scenario) => {
@@ -382,8 +454,8 @@ describe("coding-delegation skill rename migration", () => {
         )
         .get("skill_coding");
 
-      expect(skill.name).toBe("coding-agent");
-      expect(skill.source_path).toBe(
+      expect(skill?.name).toBe("coding-agent");
+      expect(skill?.source_path).toBe(
         "/tmp/.nakama/agent/skills/coding-agent/SKILL.md"
       );
     } finally {
@@ -454,7 +526,7 @@ describe("coding-delegation skill rename migration", () => {
         .get("super_bot");
 
       expect(skills).toEqual([{ id: "skill_canonical", name: "coding-agent" }]);
-      expect(assignment.skill_id).toBe("skill_canonical");
+      expect(assignment?.skill_id).toBe("skill_canonical");
     } finally {
       db.close();
     }
@@ -693,8 +765,8 @@ describe("schema bootstrap version", () => {
         >("PRAGMA foreign_keys")
         .get();
 
-      expect(schemaVersion.version).toBe(1);
-      expect(foreignKeys.foreign_keys).toBe(1);
+      expect(schemaVersion?.version).toBe(1);
+      expect(foreignKeys?.foreign_keys).toBe(1);
     } finally {
       db.close();
     }
@@ -861,8 +933,8 @@ describe("organization schema migration", () => {
         )
         .get("org_acme", "user_admin");
 
-      expect(member.role).toBe("admin");
-      expect(member.user_context).toBeNull();
+      expect(member?.role).toBe("admin");
+      expect(member?.user_context).toBeNull();
     } finally {
       db.close();
     }
@@ -904,7 +976,7 @@ describe("organization schema migration", () => {
         )
         .get("org_acme", "user_legacy");
 
-      expect(member.user_context).toBe("# From users table");
+      expect(member?.user_context).toBe("# From users table");
     } finally {
       db.close();
     }
@@ -1107,13 +1179,13 @@ describe("organization schema migration", () => {
         )
         .get("org_legacy");
 
-      expect(row.archived_at).toBeNull();
+      expect(row?.archived_at).toBeNull();
       expect(
         db
           .prepare<{ allowed_invite_domains: string }, SQLQueryBindings[]>(
             "SELECT allowed_invite_domains FROM organizations WHERE id = ?"
           )
-          .get("org_legacy").allowed_invite_domains
+          .get("org_legacy")?.allowed_invite_domains
       ).toBe("[]");
     } finally {
       db.close();
@@ -1495,7 +1567,7 @@ describe("ephemeral attachment marking", () => {
         )
         .get();
 
-      expect(existing.ephemeral).toBe(0);
+      expect(existing?.ephemeral).toBe(0);
     } finally {
       db.close();
     }

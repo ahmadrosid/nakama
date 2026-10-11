@@ -376,6 +376,7 @@ CREATE TABLE IF NOT EXISTS user_passkey_challenges (
 CREATE TABLE IF NOT EXISTS organizations (
   allowed_invite_domains TEXT NOT NULL DEFAULT '[]',
   id TEXT PRIMARY KEY NOT NULL,
+  parent_org_id TEXT REFERENCES organizations (id) ON DELETE RESTRICT CHECK (parent_org_id <> id),
   name TEXT NOT NULL,
   slug TEXT NOT NULL,
   skills_write_approval INTEGER NOT NULL DEFAULT 0,

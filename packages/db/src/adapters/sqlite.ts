@@ -1032,7 +1032,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
       if (profile.is_default) {
         const successor = db
-          .query<{ id: string }>(
+          .query<{ id: string }, SQLQueryBindings[]>(
             "SELECT id FROM profiles WHERE org_id = ? AND id != ? AND is_super = 0 ORDER BY created_at LIMIT 1"
           )
           .get(sourceOrgId, profileId);
@@ -3288,7 +3288,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     }) => {
       const row = countHumanUsersStmt.get(LOCAL_CLIENT_USER_ID);
 
-      if (row.count > 0) {
+      if ((row?.count ?? 0) > 0) {
         return false;
       }
 
@@ -3483,7 +3483,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         const owned = getOwnedSkillIdStmt.get(
           input.orgId,
           input.pluginId,
-          skill.pluginKey
+          skill.pluginKey ?? null
         );
 
         const id = owned?.id ?? skill.id;
@@ -3519,7 +3519,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         const owned = getOwnedToolIdStmt.get(
           input.orgId,
           input.pluginId,
-          tool.pluginKey
+          tool.pluginKey ?? null
         );
 
         const id = owned?.id ?? tool.id;
@@ -3538,6 +3538,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       }
 
       const published = getOrgPluginStmt.get(input.orgId, input.pluginId);
+
+      if (!published) {
+        throw new Error("Published plugin state is missing.");
+      }
 
       return { ok: true, revision: published.revision };
     }
@@ -3586,6 +3590,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       }
 
       const saved = getOrgPluginStmt.get(input.orgId, input.pluginId);
+
+      if (!saved) {
+        throw new Error("Saved plugin state is missing.");
+      }
 
       return { ok: true, revision: saved.revision };
     }
@@ -3714,13 +3722,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async countHumanUsers() {
       const row = countHumanUsersStmt.get(LOCAL_CLIENT_USER_ID);
 
-      return row.count;
+      return row?.count ?? 0;
     },
 
     async countOrgMemoryProposals(orgId, status) {
       const row = countOrgMemoryProposalsStmt.get(orgId, status);
 
-      return row.count;
+      return row?.count ?? 0;
     },
 
     async countPendingSkillProposals(orgId, profileId) {
@@ -3731,13 +3739,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           : countPendingSkillProposalsStmt.get(orgId)
       ) as { count: number };
 
-      return row.count;
+      return row?.count ?? 0;
     },
 
     async countProfileMcpAssignments() {
       const row = countProfileMcpAssignmentsStmt.get();
 
-      return row.count;
+      return row?.count ?? 0;
     },
 
     async countUnreadAutomationRunsByOrg(userId, orgId) {
@@ -3751,13 +3759,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async countUnusedMfaBackupCodes(userId) {
       const row = countUnusedMfaBackupCodesStmt.get(userId);
 
-      return Number(row.count);
+      return Number(row?.count ?? 0);
     },
 
     async countUsers() {
       const row = countUsersStmt.get();
 
-      return row.count;
+      return row?.count ?? 0;
     },
     async createArtifactShare(record) {
       createArtifactShareStmt.run(
@@ -3950,6 +3958,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.skillId
       );
 
+      if (!row) {
+        throw new Error("Created skill version is missing.");
+      }
+
       return { ...record, version: row.version };
     },
 
@@ -4001,12 +4013,12 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async deleteOrganization(id) {
       const foreignKeys = db
-        .query<{
-          foreign_keys: number;
-        }>("PRAGMA foreign_keys")
+        .query<{ foreign_keys: number }, SQLQueryBindings[]>(
+          "PRAGMA foreign_keys"
+        )
         .get();
 
-      const restoreForeignKeys = foreignKeys.foreign_keys === 0;
+      const restoreForeignKeys = foreignKeys?.foreign_keys === 0;
 
       if (restoreForeignKeys) {
         db.exec("PRAGMA foreign_keys = ON");
@@ -4738,7 +4750,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async listFilePins(orgId, userId, profileId) {
       return db
-        .query<{ path: string }>(
+        .query<{ path: string }, SQLQueryBindings[]>(
           "SELECT path FROM file_pins WHERE org_id = ? AND user_id = ? AND profile_id = ? ORDER BY path"
         )
         .all(orgId, userId, profileId)
@@ -5743,7 +5755,7 @@ function normalizeSkillCreatedBy(
 function toMcpServerRecord(row: McpServerRow): StoredMcpServerRecord {
   return {
     // SAFETY: The adapter writes this row value through its typed contract.
-    cachedTools: parseJson(
+    cachedTools: JSON.parse(
       row.cached_tools
     ) as StoredMcpServerRecord["cachedTools"],
     config: parseJson(row.config),
@@ -5803,7 +5815,7 @@ function toPluginReleaseRecord(
     createdAt: row.created_at,
     digest: row.digest ?? "",
     // SAFETY: The adapter writes this row value through its typed contract.
-    manifest: parseJson(row.manifest) as StoredPluginReleaseRecord["manifest"],
+    manifest: JSON.parse(row.manifest) as StoredPluginReleaseRecord["manifest"],
     pluginId: row.plugin_id,
     version: row.version,
   };
@@ -5834,18 +5846,18 @@ type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-type JsonRecord = { [key: string]: JsonValue };
+type JsonRecord = Record<string, unknown>;
 
-function isJsonRecord(value: JsonValue | undefined): value is JsonRecord {
+function isJsonRecord(value: unknown): value is JsonRecord {
   return value instanceof Object && !Array.isArray(value);
 }
 
-function isJsonString(value: JsonValue | undefined): value is string {
+function isJsonString(value: unknown): value is string {
   return Object.prototype.toString.call(value) === "[object String]";
 }
 
 function isAgentTodo(
-  value: JsonValue
+  value: unknown
 ): value is StoredSessionRecord["agentTodos"][number] {
   if (!isJsonRecord(value)) {
     return false;
@@ -5865,7 +5877,7 @@ function isAgentTodo(
 }
 
 function isAgentQuestionChoice(
-  value: JsonValue
+  value: unknown
 ): value is AgentQuestionnaire["questions"][number]["choices"][number] {
   return (
     isJsonRecord(value) &&
@@ -5877,7 +5889,7 @@ function isAgentQuestionChoice(
 }
 
 function isAgentQuestion(
-  value: JsonValue
+  value: unknown
 ): value is AgentQuestionnaire["questions"][number] {
   return (
     isJsonRecord(value) &&
@@ -5904,7 +5916,7 @@ function parseAgentTodos(
   }
 
   try {
-    const parsed: JsonValue = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
 
     if (!Array.isArray(parsed)) {
       return [];
@@ -5924,7 +5936,7 @@ function parseAgentQuestionnaire(
   }
 
   try {
-    const parsed: JsonValue = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
 
     if (!isJsonRecord(parsed)) {
       return null;

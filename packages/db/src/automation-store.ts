@@ -57,7 +57,7 @@ function fromRecord(record: StoredAutomationRecord): StoredAutomation {
 function toRecord(definition: StoredAutomation): StoredAutomationRecord {
   const now = new Date().toISOString();
 
-  const storedDefinition = {
+  const storedDefinition: Omit<AutomationDefinition, "id" | "name"> = {
     description: definition.description,
     prompt: definition.prompt,
     steps: definition.steps,

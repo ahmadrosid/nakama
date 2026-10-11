@@ -84,13 +84,12 @@ test("retired sessions cannot be read, paged, mutated or resurrected, including 
       "normal",
     ]);
     expect(
-      (
-        await db.listSessionSummaries("p", ["web"], { limit: 1, orgId: "o" })
-      ).map((s) => s.id)
+      (await db.listSessionSummaries("p", ["web"], { limit: 1 })).map(
+        (s) => s.id
+      )
     ).toEqual(["normal"]);
     expect(
       await db.listSessionSummaries("p", ["web"], {
-        orgId: "o",
         query: "private",
       })
     ).toEqual([]);
