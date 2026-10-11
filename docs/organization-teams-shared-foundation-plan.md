@@ -1793,3 +1793,12 @@ Checks: 136 OrgService and HTTP session scope tests passed across two files. The
 Steps 2 and 3 and delivery stage 2 remain unchecked. Next: verify CLI, channel, and automation revocation plus team quota and credential ownership, then run the delivery-stage gate.
 No new source file, package, dependency, or runtime abstraction was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
 Evidence: /tmp/nakama-shared-http-revocation-focused.log, /tmp/nakama-shared-http-revocation-types.log, and /tmp/nakama-shared-http-revocation-lint.log.
+
+### Slice 2az — automation runner shared source revocation
+Added an integration test through AutomationService, AutomationRunner, and the real AgentService automation execution path. A published shared agent runs with its team profile ID, published source instructions and style, and team memory. Parent private memory stays outside the provider request. The test uses a fake streaming provider and sends no external request.
+After publication removal, the runner records a failed run before creating a provider or making another provider call. The earlier completed run remains unchanged. Foreign team execution is denied. Runs do not create chat sessions, and local profile rows, team memory, and parent memory remain unchanged.
+No runtime change was needed. Existing requireExecutionProfile checks protect runAutomationPrompt before tool and provider setup. Channel and CLI entry points, team quota, and credential ownership checks remain open.
+Checks: 137 OrgService and automation service tests passed across two files. The complete server type check, lint across 1532 files, and git diff --check passed. Two verification repairs completed the streaming provider fixture and supplied the required automation description.
+Steps 2 and 3 and delivery stage 2 remain unchecked. Next: verify CLI and channel revocation plus team quota and credential ownership, then run the delivery-stage gate.
+No new source file, package, dependency, or runtime abstraction was added. No paid provider call, full-suite rerun, browser check, build, push, or PR ran. Other authorized type cleanup remains uncommitted.
+Evidence: /tmp/nakama-shared-automation-revocation-focused.log, /tmp/nakama-shared-automation-revocation-types.log, and /tmp/nakama-shared-automation-revocation-lint.log.

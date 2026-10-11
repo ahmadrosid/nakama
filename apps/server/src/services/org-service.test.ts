@@ -46,6 +46,8 @@ import { loginUserSession } from "../http/test-session-helpers";
 import { setupTestConfigDir } from "../test-config-dir";
 import { AgentService } from "./agent-service";
 import { AuthService } from "./auth-service";
+import { AutomationRunner } from "./automation-runner";
+import { AutomationService } from "./automation-service";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
 import {
   loadToolApiKey,
@@ -1844,6 +1846,109 @@ async function seedSharedAgentSelection(
 }
 
 describe("OrgService shared agent selection", () => {
+  test("shared automation runs use team state and record revocation failures without provider calls", async () => {
+    const { orgService, databaseAdapter: db } = createOrgService();
+    const publication = await seedSharedAgentSelection(db, orgService);
+    const profile = await orgService.createSharedAgentInstance(
+      "org_team_a",
+      publication.id,
+      "user_other"
+    );
+    const teamDir = getProfileSoulDir("org_team_a", profile.id);
+    const sourceDir = getProfileSoulDir("org_parent", "profile_template");
+    await mkdir(sourceDir, { recursive: true });
+    await writeFile(join(teamDir, "MEMORY.md"), "Team automation memory");
+    await writeFile(join(sourceDir, "STYLE.md"), "Published automation style");
+    await writeFile(join(sourceDir, "MEMORY.md"), "Private parent memory");
+    const builds: StoredProfileRecord[] = [];
+    const turns: GenerateChatInput[] = [];
+    const provider = {
+      generateChat: async (input: GenerateChatInput) => {
+        turns.push(input);
+        return {
+          assistantMessage: { content: "Done", role: "assistant" as const },
+          content: "Done",
+          toolCalls: [],
+        };
+      },
+      name: "test",
+      streamChat: async (
+        input: GenerateChatInput,
+        handlers: { onChunk: (chunk: string) => void }
+      ) => {
+        handlers.onChunk("Done");
+        return provider.generateChat(input);
+      },
+    };
+    const agent = new AgentService(null, null, db);
+    agent.setOrgService(orgService);
+    Object.assign(agent, {
+      _providerConfigured: true,
+      createHarnessForProfile: (settings: StoredProfileRecord) => {
+        builds.push(settings);
+        return { provider };
+      },
+      resolveProfileTools: async () => [],
+    });
+    const service = new AutomationService(db, {
+      getUserTimezone: async () => "UTC",
+    });
+    const automation = await service.create(
+      "org_team_a",
+      {
+        description: "Run the shared agent in its team",
+        name: "Shared automation",
+        prompt: "Perform the team task",
+        trigger: { type: "manual" },
+      },
+      profile.id
+    );
+    const runner = new AutomationRunner(service, agent);
+    expect(await runner.run(automation.id)).toEqual({ output: "Done" });
+    expect(turns).toHaveLength(1);
+    expect(builds[0]).toMatchObject({
+      id: profile.id,
+      orgId: "org_team_a",
+      systemPrompt: "Published instructions",
+    });
+    expect(turns[0]?.system).toContain("Published automation style");
+    expect(turns[0]?.system).toContain("Team automation memory");
+    expect(turns[0]?.system).not.toContain("Private parent memory");
+    const completedRuns = await service.listRuns(automation.id, "org_team_a");
+    expect(completedRuns).toHaveLength(1);
+    expect(completedRuns[0]).toMatchObject({
+      output: "Done",
+      status: "completed",
+    });
+    await orgService.unpublishSharedResource(
+      "org_parent",
+      publication.id,
+      "user_creator"
+    );
+    expect((await runner.run(automation.id)).error).toBeDefined();
+    expect(turns).toHaveLength(1);
+    expect(builds).toHaveLength(1);
+    const runs = await service.listRuns(automation.id, "org_team_a");
+    expect(runs).toHaveLength(2);
+    expect(runs.filter((run) => run.status === "failed")).toHaveLength(1);
+    expect(runs.find((run) => run.status === "completed")).toEqual(
+      completedRuns[0]
+    );
+    await expect(
+      agent.runAutomationPrompt("org_team_b", profile.id, "Foreign task")
+    ).rejects.toMatchObject({ status: 404 });
+    expect(turns).toHaveLength(1);
+    expect(await db.listSessions()).toEqual([]);
+    expect(await db.getProfileForOrg(profile.id, "org_team_a")).toEqual(
+      profile
+    );
+    expect(await readFile(join(teamDir, "MEMORY.md"), "utf8")).toBe(
+      "Team automation memory"
+    );
+    expect(await readFile(join(sourceDir, "MEMORY.md"), "utf8")).toBe(
+      "Private parent memory"
+    );
+  });
   test.each([false, true])(
     "HTTP shared sessions deny revoked turns and viewer writes for cognito=%s",
     async (cognito) => {
