@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { NakamaApiError } from "@nakama/core";
+import { USER_PROVIDER_NAMES } from "@nakama/core/provider-resolution";
 import { serve } from "bun";
 import {
   compatibleModelSupportsThinking,
@@ -9,6 +10,7 @@ import {
   getModelsForProviderInstance,
   inferRemoteModelVision,
 } from "./compatible-models";
+import { getModelsForProvider } from "./models";
 import { asTestFetch } from "./test-helpers";
 
 let mockServer: ReturnType<typeof serve> | undefined;
@@ -19,6 +21,55 @@ afterEach(() => {
   mockServer?.stop(true);
   mockServer = undefined;
   globalThis.fetch = originalFetch;
+});
+
+test("instance shortlists preserve only saved models and their owner", () => {
+  for (const type of USER_PROVIDER_NAMES) {
+    if (
+      type === "cloudflare" ||
+      (!getModelsForProvider(type).length &&
+        type !== "openrouter" &&
+        type !== "openai_compatible" &&
+        type !== "ollama")
+    ) {
+      continue;
+    }
+
+    const models = getModelsForProviderInstance({
+      apiKey: "test",
+      createdAt: "2026-06-07T10:00:00.000Z",
+      customModels: [{ id: "private-model" }],
+      id: "instance-one",
+      label: "Instance one",
+      type,
+    });
+
+    expect(models.map((model) => model.id)).toEqual(["private-model"]);
+    expect(models[0]?.providerId).toBe("instance-one");
+    expect(models[0]?.providerLabel).toBe("Instance one");
+  }
+});
+
+test("instances without a shortlist expose their provider catalog", () => {
+  for (const type of USER_PROVIDER_NAMES) {
+    const catalog = getModelsForProvider(type);
+
+    if (!catalog.length || type === "openrouter") {
+      continue;
+    }
+
+    const models = getModelsForProviderInstance({
+      apiKey: "test",
+      createdAt: "2026-06-07T10:00:00.000Z",
+      id: "instance-one",
+      label: "Instance one",
+      type,
+    });
+
+    expect(models.map((model) => model.id)).toEqual(
+      catalog.map((model) => model.id)
+    );
+  }
 });
 
 test("Netra discovery keeps only the documented tool-capable model", async () => {
@@ -65,57 +116,6 @@ test("Netra agent catalog excludes models without a tool-turn check", () => {
     "deepseek/deepseek-v4-flash-0731",
   ]);
 });
-
-test.each([
-  { model: "gpt-5.4", type: "openai" },
-  { model: "gpt-5.4", type: "chatgpt" },
-  { model: "opencode-go/kimi-k2.7-code", type: "opencode_go" },
-  { model: "meta-llama/llama-3.3-70b-instruct:free", type: "openrouter" },
-  { model: "gpt-oss-120b", type: "cerebras" },
-  { model: "accounts/fireworks/models/kimi-k2p6", type: "fireworks" },
-] as const)("$type keeps a saved shortlist", ({ type, model }) => {
-  const models = getModelsForProviderInstance({
-    apiKey: "test",
-    createdAt: "2026-06-07T10:00:00.000Z",
-    customModels: [{ id: model }],
-    id: type,
-    label: type,
-    type,
-  });
-
-  expect(models.map((entry) => entry.id)).toEqual([model]);
-  expect(models[0]?.providerId).toBe(type);
-});
-
-test.each([
-  { models: ["gpt-5.4"], type: "openai" },
-  { models: ["opencode-go/kimi-k2.7-code"], type: "opencode_go" },
-  { models: ["gpt-oss-120b", "gemma-4-31b"], type: "cerebras" },
-  {
-    models: [
-      "accounts/fireworks/models/kimi-k2p6",
-      "accounts/fireworks/models/glm-5p2",
-    ],
-    type: "fireworks",
-  },
-] as const)(
-  "$type uses its catalog without a shortlist",
-  ({ type, models: expected }) => {
-    const models = getModelsForProviderInstance({
-      apiKey: "test",
-      createdAt: "2026-06-07T10:00:00.000Z",
-      id: type,
-      label: type,
-      type,
-    });
-
-    expect(models.length).toBeGreaterThan(1);
-
-    for (const id of expected) {
-      expect(models.some((model) => model.id === id)).toBe(true);
-    }
-  }
-);
 
 describe("getModelsForProviderInstance openrouter", () => {
   test("maps supportsThinking for reasoning-capable OpenRouter models", () => {

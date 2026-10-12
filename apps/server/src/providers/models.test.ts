@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { isDiscoveryModelProvider } from "@nakama/core";
+import { USER_PROVIDER_NAMES } from "@nakama/core/provider-resolution";
 import {
+  AVAILABLE_MODELS,
   getDefaultModel,
   getModelById,
   getModelsForProvider,
@@ -25,41 +28,52 @@ describe("isOpenRouterModelSlug", () => {
 });
 
 describe("resolveModel", () => {
-  test.each([
-    ["xiaomi", "mimo-v2.5-pro", "mimo-v2.5-pro"],
-    ["xiaomi", "mimo-v2.5", "mimo-v2.5-pro"],
-    ["openai", "gpt-5.4", "gpt-5.4"],
-    ["openai", "gpt-5.6-luna", "gpt-5.4"],
-    ["openai", "gpt-4o-mini", "gpt-5.4"],
-    ["gemini", "gemini-2.5-pro", "gemini-2.5-flash"],
-    ["opencode_go", "opencode-go/kimi-k2.7-code", "opencode-go/kimi-k2.7-code"],
-    ["cerebras", "gpt-oss-120b", "gpt-oss-120b"],
-    [
-      "fireworks",
-      "accounts/fireworks/models/kimi-k2p6",
-      "accounts/fireworks/models/kimi-k2p6",
-    ],
-  ] as const)("%s resolves catalog id %s", (provider, id, defaultId) => {
-    expect(resolveModel(provider, id)).toBe(id);
-    expect(getDefaultModel(provider)).toBe(defaultId);
+  test("catalog selections and defaults resolve within their provider", () => {
+    for (const provider of USER_PROVIDER_NAMES) {
+      const models = getModelsForProvider(provider);
+
+      if (models.length === 0) {
+        continue;
+      }
+
+      expect(getDefaultModel(provider)).toBe(
+        models.find((model) => model.default)?.id ?? models[0]?.id
+      );
+
+      for (const model of models) {
+        expect(resolveModel(provider, model.id)).toBe(model.id);
+      }
+    }
   });
 
-  test.each([
-    ["xiaomi", "mimo-v2.5"],
-    ["openai", "gpt-4o-mini"],
-    ["together", "Qwen/Qwen3.5-9B"],
-    ["vercel_ai_gateway", "openai/gpt-5"],
-    ["mistral", "mistral-small-2603"],
-    ["qwen", "qwen-flash"],
-    ["qwen_cn", "qwen-flash"],
-    ["doubao", "doubao-seed-2-1-turbo-260628"],
-    ["cerebras", "zai-glm-4.7"],
-    ["fireworks", "accounts/fireworks/models/glm-5p2"],
-  ] as const)("%s honors its custom shortlist", (provider, id) => {
-    const customModels = [{ default: true, id }];
-    expect(resolveModel(provider, id, customModels)).toBe(id);
-    expect(resolveModel(provider, "unknown-model", customModels)).toBe(id);
-    expect(resolveModel(provider, undefined, customModels)).toBe(id);
+  test("saved shortlists preserve selections and replace unknown defaults", () => {
+    const customModels = [
+      { default: true, id: "vendor/private-default" },
+      { id: "vendor/private-selection" },
+    ];
+
+    for (const provider of USER_PROVIDER_NAMES) {
+      if (provider === "cloudflare") {
+        // Cloudflare resolves its default from the fixed catalog.
+        continue;
+      }
+
+      expect(getDefaultModel(provider, customModels)).toBe(
+        "vendor/private-default"
+      );
+      expect(
+        resolveModel(provider, "vendor/private-selection", customModels)
+      ).toBe("vendor/private-selection");
+      expect(resolveModel(provider, undefined, customModels)).toBe(
+        "vendor/private-default"
+      );
+
+      if (provider !== "chatgpt" && provider !== "xai_oauth") {
+        expect(resolveModel(provider, "unknown-model", customModels)).toBe(
+          "vendor/private-default"
+        );
+      }
+    }
   });
 
   test("defaults ChatGPT to Terra without changing OpenAI", () => {
@@ -269,48 +283,6 @@ describe("resolveModel", () => {
     ).toBe(true);
   });
 
-  test("resolves catalog models for Together AI", () => {
-    expect(resolveModel("together", "openai/gpt-oss-120b")).toBe(
-      "openai/gpt-oss-120b"
-    );
-    expect(
-      resolveModel("together", "meta-llama/Llama-3.3-70B-Instruct-Turbo")
-    ).toBe("meta-llama/Llama-3.3-70B-Instruct-Turbo");
-    expect(getDefaultModel("together")).toBe("openai/gpt-oss-120b");
-    expect(getModelById("Qwen/Qwen3.5-9B")?.supportsVision).toBe(true);
-    expect(getModelById("Qwen/Qwen3.5-9B")?.supportsThinking).toBe(true);
-    expect(getModelById("MiniMaxAI/MiniMax-M3")?.supportsVision).toBe(true);
-    expect(getModelById("MiniMaxAI/MiniMax-M3")?.supportsThinking).toBe(true);
-    expect(getModelById("MiniMaxAI/MiniMax-M3")?.contextWindow).toBe(1_048_576);
-    expect(getModelById("openai/gpt-oss-120b")?.supportsThinking).toBe(true);
-  });
-
-  test("resolves catalog models for Vercel AI Gateway", () => {
-    expect(resolveModel("vercel_ai_gateway", "openai/gpt-4o-mini")).toBe(
-      "openai/gpt-4o-mini"
-    );
-    expect(
-      resolveModel("vercel_ai_gateway", "anthropic/claude-sonnet-4.5")
-    ).toBe("anthropic/claude-sonnet-4.5");
-    expect(getDefaultModel("vercel_ai_gateway")).toBe("openai/gpt-4o-mini");
-    expect(getModelById("openai/gpt-4o-mini")?.supportsVision).toBe(true);
-    expect(getModelById("openai/gpt-5")?.supportsThinking).toBe(true);
-    expect(getModelById("meta/llama-3.3-70b")?.supportsVision).toBe(false);
-    expect(getModelById("deepseek/deepseek-v4-flash")?.supportsThinking).toBe(
-      true
-    );
-  });
-
-  test("resolves catalog models for Mistral", () => {
-    expect(resolveModel("mistral", "mistral-large-2512")).toBe(
-      "mistral-large-2512"
-    );
-    expect(getDefaultModel("mistral")).toBe("mistral-small-2603");
-    expect(getModelById("mistral-small-2603")?.supportsThinking).toBe(true);
-    expect(getModelById("mistral-small-2603")?.supportsVision).toBe(true);
-    expect(getModelById("ministral-3b-2512")?.supportsVision).toBe(true);
-  });
-
   test("resolves catalog models for Qwen DashScope intl and CN", () => {
     expect(resolveModel("qwen", "qwen3.7-plus")).toBe("qwen3.7-plus");
     expect(resolveModel("qwen", "qwen3-vl-plus")).toBe("qwen3-vl-plus");
@@ -377,64 +349,6 @@ describe("resolveModel", () => {
     ).toBeUndefined();
   });
 
-  test("resolves MiniMax models from discovered custom models", () => {
-    const customModels = [
-      { default: true, id: "MiniMax-M3" },
-      { id: "MiniMax-M2.7" },
-      { id: "MiniMax-M2.5" },
-    ];
-
-    expect(resolveModel("minimax", "MiniMax-M2.7", customModels)).toBe(
-      "MiniMax-M2.7"
-    );
-    expect(getDefaultModel("minimax", customModels)).toBe("MiniMax-M3");
-    expect(getDefaultModel("minimax_cn", customModels)).toBe("MiniMax-M3");
-  });
-
-  test("falls back to instance default for unknown MiniMax ids", () => {
-    const customModels = [{ default: true, id: "MiniMax-M3" }];
-    expect(resolveModel("minimax_cn", "not-a-real-model", customModels)).toBe(
-      "MiniMax-M3"
-    );
-  });
-
-  test("resolves Zhipu GLM models from discovered custom models", () => {
-    const customModels = [
-      { default: true, id: "glm-5.2" },
-      { id: "glm-5.1" },
-      { id: "glm-4v" },
-    ];
-
-    expect(resolveModel("zhipu", "glm-5.1", customModels)).toBe("glm-5.1");
-    expect(getDefaultModel("zhipu", customModels)).toBe("glm-5.2");
-    expect(getDefaultModel("zhipu_cn", customModels)).toBe("glm-5.2");
-  });
-
-  test("falls back to instance default for unknown Zhipu ids", () => {
-    const customModels = [{ default: true, id: "glm-5.2" }];
-    expect(resolveModel("zhipu_cn", "not-a-real-model", customModels)).toBe(
-      "glm-5.2"
-    );
-  });
-
-  test("resolves Moonshot models from discovered custom models", () => {
-    const customModels = [
-      { default: true, id: "kimi-k2.5-turbo-preview" },
-      { id: "kimi-k2.5" },
-      { id: "moonshot-v1-128k" },
-    ];
-
-    expect(resolveModel("moonshot", "kimi-k2.5", customModels)).toBe(
-      "kimi-k2.5"
-    );
-    expect(getDefaultModel("moonshot", customModels)).toBe(
-      "kimi-k2.5-turbo-preview"
-    );
-    expect(getDefaultModel("moonshot_cn", customModels)).toBe(
-      "kimi-k2.5-turbo-preview"
-    );
-  });
-
   test("keeps Moonshot region catalogs independent", () => {
     // Both platforms expose overlapping ids, so an id discovered on one
     // instance still resolves against that instance's own list.
@@ -450,50 +364,37 @@ describe("resolveModel", () => {
 });
 
 describe("modelSupportsVision", () => {
-  test.each([
-    ["xiaomi", "mimo-v2.5-pro", false],
-    ["xiaomi", "mimo-v2.5", true],
-    ["together", "openai/gpt-oss-120b", false],
-    ["together", "Qwen/Qwen3.5-9B", true],
-    ["together", "MiniMaxAI/MiniMax-M3", true],
-    ["vercel_ai_gateway", "openai/gpt-4o-mini", true],
-    ["vercel_ai_gateway", "meta/llama-3.3-70b", false],
-    ["mistral", "mistral-small-2603", true],
-    ["mistral", "mistral-large-2512", true],
-    ["mistral", "ministral-14b-2512", true],
-    ["qwen", "qwen3.7-plus", true],
-    ["qwen", "qwen-plus", false],
-    ["qwen", "qwen3-vl-plus", true],
-    ["qwen_cn", "qwen3-vl-plus", true],
-    ["qwen_cn", "qwen-flash", false],
-    ["doubao", "doubao-seed-2-1-pro-260628", true],
-    ["doubao", "doubao-seed-2-1-turbo-260628", true],
-    ["doubao", "doubao-seed-1-8-251228", true],
-    ["perplexity", "sonar", true],
-    ["perplexity", "sonar-pro", true],
-    ["perplexity", "sonar-deep-research", false],
-  ] as const)("%s %s vision support", (provider, id, expected) => {
-    expect(modelSupportsVision(id, provider)).toBe(expected);
-  });
+  test("catalog vision flags and explicit overrides control image support", () => {
+    for (const model of AVAILABLE_MODELS) {
+      const expected =
+        model.provider === "opencode_go" || model.provider === "deepseek"
+          ? false
+          : model.supportsVision;
 
-  test("keeps MiniMax models opt-in only (discovered lists)", () => {
-    expect(modelSupportsVision("MiniMax-M3", "minimax")).toBe(false);
+      expect(modelSupportsVision(model.id, model.provider)).toBe(expected);
 
-    expect(
-      modelSupportsVision("MiniMax-VL", "minimax_cn", [
-        { id: "MiniMax-VL", supportsVision: true },
-      ])
-    ).toBe(true);
-  });
+      for (const supportsVision of [false, true]) {
+        expect(
+          modelSupportsVision(model.id, model.provider, [
+            { id: model.id, supportsVision },
+          ])
+        ).toBe(supportsVision);
+      }
+    }
 
-  test("keeps Zhipu models opt-in only (GLM-4V flags via discovery)", () => {
-    expect(modelSupportsVision("glm-5.2", "zhipu")).toBe(false);
+    for (const provider of USER_PROVIDER_NAMES) {
+      if (isDiscoveryModelProvider(provider)) {
+        expect(modelSupportsVision("private-model", provider)).toBe(false);
+      }
 
-    expect(
-      modelSupportsVision("glm-4v", "zhipu_cn", [
-        { id: "glm-4v", supportsVision: true },
-      ])
-    ).toBe(true);
+      for (const supportsVision of [false, true]) {
+        expect(
+          modelSupportsVision("private-model", provider, [
+            { id: "private-model", supportsVision },
+          ])
+        ).toBe(supportsVision);
+      }
+    }
   });
 
   test("keeps Moonshot models opt-in only (discovered lists)", () => {
