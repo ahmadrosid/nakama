@@ -112,7 +112,7 @@ describe("WorkflowRunner", () => {
     const failingSteps: WorkflowStep[] = [
       {
         id: "fetch",
-        input: {},
+        input: { query: "news" },
         kind: "tool",
         tool: "web_search",
       },
@@ -142,11 +142,24 @@ describe("WorkflowRunner", () => {
       },
     };
 
+    const updates: Array<{ input?: unknown; status: string }> = [];
+    service.updateRunStep = async (_runId, _id, update) => {
+      updates.push(update);
+    };
+
     const runner = new WorkflowRunner(service, agent);
     const result = await runner.run("workflow_test");
 
     expect(result.error).toMatch(/cannot be executed locally/i);
     expect(summarizeCalled).toBe(false);
+    expect(updates).toEqual([
+      {
+        error: "web_search cannot be executed locally.",
+        input: { query: "news" },
+        output: { error: "web_search cannot be executed locally." },
+        status: "failed",
+      },
+    ]);
   });
 
   test("compares template-shaped input strings without resolving them twice", async () => {
@@ -248,7 +261,16 @@ function createWorkflowServiceStub(workflow: StoredWorkflow) {
     async get(id: string) {
       return id === workflow.id ? workflow : null;
     },
-    async updateRunStep() {},
+    async updateRunStep(
+      _runId: string,
+      _id: string,
+      _update: {
+        error?: string;
+        input?: unknown;
+        output?: unknown;
+        status: string;
+      }
+    ) {},
   };
 }
 

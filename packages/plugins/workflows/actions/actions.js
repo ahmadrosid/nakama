@@ -388,6 +388,7 @@ class WorkflowRunner {
       if (step.kind === "summarize") {
         continue;
       }
+      let failure;
       const stepRecord = await this.workflowService.createRunStep(runId, step, position);
       try {
         const result = await this.executeDataStep(step, bag(), {
@@ -395,12 +396,17 @@ class WorkflowRunner {
           runId,
           workflowId: workflow.id
         });
-        stepOutputs[step.id] = result.output;
         await this.workflowService.updateRunStep(runId, stepRecord.id, {
+          error: result.error,
           input: result.input,
           output: result.output,
-          status: "completed"
+          status: result.error ? "failed" : "completed"
         });
+        if (result.error) {
+          failure = result.error;
+        } else {
+          stepOutputs[step.id] = result.output;
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         await this.workflowService.updateRunStep(runId, stepRecord.id, {
@@ -408,6 +414,9 @@ class WorkflowRunner {
           status: "failed"
         });
         throw new Error(message);
+      }
+      if (failure) {
+        throw new Error(failure);
       }
     }
     const summarizeStep = workflow.steps.find((step) => step.kind === "summarize");
@@ -437,10 +446,7 @@ class WorkflowRunner {
       const input = parseWorkflowRecord(resolveWorkflowValue(parseWorkflowValue(step.input), bag));
       const output = await this.agentService.executeTool(context.profileId, step.tool, input, context.runId, context.workflowId);
       const toolError = readToolError(output);
-      if (toolError) {
-        throw new Error(toolError);
-      }
-      return { input, output };
+      return toolError ? { error: toolError, input, output } : { input, output };
     }
     if (step.kind === "compare") {
       const left = resolveWorkflowValue(step.left, bag);
@@ -451,10 +457,15 @@ class WorkflowRunner {
         right: parseWorkflowValue(right),
         tolerance: step.tolerance
       });
+      const input = { left, op: step.op, right };
       if (!result.ok) {
-        throw new Error(`Compare step ${step.id} failed: ${JSON.stringify(result)}`);
+        return {
+          error: `Compare step ${step.id} failed: ${JSON.stringify(result)}`,
+          input,
+          output: result
+        };
       }
-      return { input: { left, op: step.op, right }, output: result };
+      return { input, output: result };
     }
     if (step.kind === "assert") {
       const result = executeAssert({
@@ -462,13 +473,15 @@ class WorkflowRunner {
         expected: parseWorkflowValue(step.expected),
         path: step.path
       });
+      const input = { expected: result.expected, path: step.path };
       if (!result.ok) {
-        throw new Error(`Assert step ${step.id} failed: expected ${JSON.stringify(result.expected)}, got ${JSON.stringify(result.actual)}`);
+        return {
+          error: `Assert step ${step.id} failed: expected ${JSON.stringify(result.expected)}, got ${JSON.stringify(result.actual)}`,
+          input,
+          output: result
+        };
       }
-      return {
-        input: { expected: result.expected, path: step.path },
-        output: result
-      };
+      return { input, output: result };
     }
     if (step.kind === "template") {
       const output = resolveTemplateString(step.template, bag);
@@ -491,8 +504,6 @@ function readToolError(output) {
 
 // src/workflow-service.ts
 import { Database } from "bun:sqlite";
-
-// src/workflow-validate.ts
 function validateWorkflowInput(input) {
   const name = input.name?.trim() ?? "";
   if (!name) {
@@ -503,7 +514,6 @@ function validateWorkflowInput(input) {
   }
 }
 
-// src/workflow-service.ts
 class WorkflowService {
   orgId;
   db;
