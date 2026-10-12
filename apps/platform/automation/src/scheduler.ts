@@ -1,10 +1,40 @@
 import type { NakamaClient } from "@nakama/client";
+import { resolveCuratorScheduleAction } from "@nakama/core";
 import {
   AutomationScheduler,
   type AutomationSchedulerStatus,
 } from "@nakama/core/automation-scheduler";
 import type { AutomationSchedule } from "@nakama/core/contract";
-import { tickSkillCurator } from "./curator-tick";
+
+async function tickSkillCurator(
+  client: Pick<
+    NakamaClient,
+    "listSkillCuratorOrgs" | "runSkillCuratorInternal"
+  >,
+  now = new Date()
+): Promise<{ ran: number; skipped: number }> {
+  const { orgs } = await client.listSkillCuratorOrgs();
+  let ran = 0;
+  let skipped = 0;
+
+  for (const org of orgs) {
+    const action = resolveCuratorScheduleAction({
+      enabled: org.skillsCuratorEnabled,
+      lastRunAt: org.skillsCuratorLastRunAt,
+      now,
+    });
+
+    if (action === "skip") {
+      skipped += 1;
+      continue;
+    }
+
+    await client.runSkillCuratorInternal(org.id, { trigger: action });
+    ran += 1;
+  }
+
+  return { ran, skipped };
+}
 
 export class AutomationWorkerScheduler {
   private readonly scheduler: AutomationScheduler;
@@ -46,16 +76,20 @@ export class AutomationWorkerScheduler {
       }
 
       this.pollInFlight = true;
+
       try {
         const settings = await this.client
           .getAutomationWorkerSettings()
           .catch(() => null);
+
         const nextIntervalMs = settings
           ? settings.pollIntervalMinutes * 60 * 1000
           : (this.pollIntervalMs ?? intervalMs);
+
         if (nextIntervalMs !== this.pollIntervalMs) {
           this.beginPolling(nextIntervalMs);
         }
+
         await this.scheduler.reload();
         await this.tickCurator();
         this.notifyStatus();
@@ -92,9 +126,11 @@ export class AutomationWorkerScheduler {
   ): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
     try {
       await this.client.runAutomationInternal(automationId, orgId);
+
       return { ok: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+
       return { error: message, ok: false };
     }
   }

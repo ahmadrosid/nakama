@@ -13,6 +13,7 @@ async function createService(): Promise<{
 }> {
   const db = createInMemoryDatabaseAdapter();
   await db.upsertProfile(createDefaultProfile());
+
   return { db, service: new AgentService(null, null, db) };
 }
 
@@ -37,20 +38,24 @@ describe("listSessions reports the live turn", () => {
 
   test("a session is active only while its turn is running", async () => {
     const { db, service } = await createService();
+
     const sessionId = await service.createSession(
       ORG_ID,
       "web",
       "profile_default",
       null
     );
+
     await seedFirstMessage(db, sessionId);
 
     const idle = await service.listSessions(ORG_ID, "profile_default", "web", {
       isPlatformAdmin: true,
     });
+
     expect(idle.sessions.map((session) => session.active)).toEqual([false]);
 
     expect(sessionTurnRegistry.beginTurn(sessionId).started).toBe(true);
+
     try {
       const running = await service.listSessions(
         ORG_ID,
@@ -58,6 +63,7 @@ describe("listSessions reports the live turn", () => {
         "web",
         { isPlatformAdmin: true }
       );
+
       expect(running.sessions.map((session) => session.active)).toEqual([true]);
     } finally {
       sessionTurnRegistry.endTurn(sessionId, { reply: "ok", type: "done" });
@@ -71,6 +77,7 @@ describe("listSessions reports the live turn", () => {
       "web",
       { isPlatformAdmin: true }
     );
+
     expect(settled.sessions.map((session) => session.active)).toEqual([false]);
   });
 });
@@ -83,6 +90,7 @@ describe("listSessions pages the merged history", () => {
   async function seedHistory() {
     const { db, service } = await createService();
     const ids: string[] = [];
+
     for (const channel of [
       "web",
       "telegram",
@@ -96,37 +104,44 @@ describe("listSessions pages the merged history", () => {
         "profile_default",
         null
       );
+
       await seedFirstMessage(db, id);
       ids.push(id);
     }
+
     // Pinned sorts first, so the cursor has to carry it across pages too.
+    // SAFETY: This test controls the fixture shape at this boundary.
     await service.updateSessionPinned(ids[0] as string, ORG_ID, true);
+
     return { db, ids, service };
   }
 
   test("following nextCursor returns every session once, in list order", async () => {
     const { service } = await seedHistory();
+
     const all = await service.listSessions(
       ORG_ID,
       "profile_default",
       CHANNELS,
       ACCESS
     );
+
     expect(all.nextCursor).toBeUndefined();
     expect(all.sessions).toHaveLength(5);
 
     const paged: string[] = [];
     const sizes: number[] = [];
     let cursor: string | undefined;
+
     do {
       const page = await service.listSessions(
         ORG_ID,
         "profile_default",
         CHANNELS,
         ACCESS,
-        undefined,
         { cursor, limit: 2 }
       );
+
       paged.push(...page.sessions.map((session) => session.id));
       sizes.push(page.sessions.length);
       expect(page.stale).toBe(false);
@@ -139,24 +154,25 @@ describe("listSessions pages the merged history", () => {
 
   test("a page asked for after a chat moved across its cursor is stale", async () => {
     const { db, service } = await seedHistory();
+
     const listPage = (cursor?: string) =>
-      service.listSessions(
-        ORG_ID,
-        "profile_default",
-        CHANNELS,
-        ACCESS,
-        undefined,
-        { cursor, limit: 2 }
-      );
+      service.listSessions(ORG_ID, "profile_default", CHANNELS, ACCESS, {
+        cursor,
+        limit: 2,
+      });
+
     const first = await listPage();
+
     const all = await service.listSessions(
       ORG_ID,
       "profile_default",
       CHANNELS,
       ACCESS
     );
+
     // The oldest chat gets a new message, which lifts it above the cursor
     // before the second page is asked for.
+    // SAFETY: This test controls the fixture shape at this boundary.
     const oldest = all.sessions.at(-1)?.id as string;
     await db.appendMessagesForSession(oldest, [
       {
@@ -175,14 +191,15 @@ describe("listSessions pages the merged history", () => {
 
   test("a page that ends exactly at the last session has no next page", async () => {
     const { service } = await seedHistory();
+
     const page = await service.listSessions(
       ORG_ID,
       "profile_default",
       CHANNELS,
       ACCESS,
-      undefined,
       { limit: 5 }
     );
+
     expect(page.sessions).toHaveLength(5);
     expect(page.nextCursor).toBeNull();
   });
@@ -190,19 +207,16 @@ describe("listSessions pages the merged history", () => {
   test("a cursor that is not ours is a 400", async () => {
     const { service } = await seedHistory();
     await expect(
-      service.listSessions(
-        ORG_ID,
-        "profile_default",
-        CHANNELS,
-        ACCESS,
-        undefined,
-        { cursor: "not-a-cursor", limit: 2 }
-      )
+      service.listSessions(ORG_ID, "profile_default", CHANNELS, ACCESS, {
+        cursor: "not-a-cursor",
+        limit: 2,
+      })
     ).rejects.toMatchObject({ status: 400 });
   });
 
   test("getSessionSummary finds one session and misses an unknown one", async () => {
     const { ids, service } = await seedHistory();
+    // SAFETY: This test controls the fixture shape at this boundary.
     const telegramId = ids[1] as string;
     const summary = await service.getSessionSummary(telegramId, ORG_ID);
     expect(summary).toMatchObject({ channel: "telegram", id: telegramId });
@@ -228,24 +242,29 @@ describe("listSessions searches titles and message text", () => {
       "profile_default",
       null
     );
+
     await db.appendMessagesForSession(
       id,
       messages.map((payload, seq) => ({
         createdAt: new Date().toISOString(),
         id: `msg_${id}_${seq}`,
+        // SAFETY: This test controls the fixture shape at this boundary.
         payload: payload as never,
         seq,
         sessionId: id,
       }))
     );
+
     if (title) {
       await db.renameSessionTitle(id, title);
     }
+
     return id;
   }
 
   async function seedSearchable() {
     const { db, service } = await createService();
+
     const ids = {
       array: await seedChat(db, service, "telegram", [
         { content: "hi", role: "user" },
@@ -272,6 +291,7 @@ describe("listSessions searches titles and message text", () => {
         { content: "invoice 100x in the tool output", role: "tool" },
       ]),
     };
+
     const search = async (query: string) =>
       (
         await service.listSessions(
@@ -280,10 +300,10 @@ describe("listSessions searches titles and message text", () => {
           CHANNELS,
           ACCESS,
           undefined,
-          undefined,
           query
         )
       ).sessions.map((session) => session.id);
+
     return { ids, search, service };
   }
 
@@ -297,6 +317,7 @@ describe("listSessions searches titles and message text", () => {
 
   test("ignores case for ASCII letters only", async () => {
     const { db, service } = await createService();
+
     const id = await seedChat(
       db,
       service,
@@ -304,6 +325,7 @@ describe("listSessions searches titles and message text", () => {
       [{ content: "notes", role: "user" }],
       "École d'été"
     );
+
     const search = async (query: string) =>
       (
         await service.listSessions(
@@ -312,10 +334,10 @@ describe("listSessions searches titles and message text", () => {
           CHANNELS,
           ACCESS,
           undefined,
-          undefined,
           query
         )
       ).sessions.map((session) => session.id);
+
     expect(await search("ÉCOLE")).toEqual([id]);
     expect(await search("D'été")).toEqual([id]);
     // SQLite folds ASCII only: a non-ASCII letter matches in its own case.
@@ -339,29 +361,31 @@ describe("listSessions searches titles and message text", () => {
     const { ids, service } = await seedSearchable();
     const paged: string[] = [];
     let cursor: string | undefined;
+
     do {
       const page = await service.listSessions(
         ORG_ID,
         "profile_default",
         CHANNELS,
         ACCESS,
-        undefined,
         { cursor, limit: 1 },
         "i"
       );
+
       expect(page.stale).toBe(false);
       paged.push(...page.sessions.map((session) => session.id));
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
+
     const all = await service.listSessions(
       ORG_ID,
       "profile_default",
       CHANNELS,
       ACCESS,
       undefined,
-      undefined,
       "i"
     );
+
     expect(paged).toEqual(all.sessions.map((session) => session.id));
     expect(paged).toContain(ids.invoice);
     expect(new Set(paged).size).toBe(paged.length);

@@ -13,7 +13,7 @@ There is no bot participant joining the call.
 
 ## What you need
 
-- An organization admin who can install and enable the Google Meet plugin
+- An organization admin who can configure Google Meet
 - An OpenAI key for transcription. This is a secret key from OpenAI that pays for turning speech into text.
 - Google Chrome with the Nakama extension installed
 - A Google Meet call that you are allowed to record and transcribe
@@ -22,9 +22,9 @@ Always tell participants before transcription starts. Follow your organization's
 
 ## Set up Google Meet
 
-### 1. Install the plugin
+### 1. Open Google Meet
 
-Open **System → Plugins** and install the official **Google Meet** plugin. An organization admin then enables it for the active organization.
+Open **Control center → Workspace → Google Meet**. It is included in Nakama. An organization admin can enable or disable it in **Google Meet → Settings**.
 
 ### 2. Add the OpenAI key
 
@@ -32,7 +32,7 @@ Open **Google Meet → Settings**, enter the OpenAI key, and save it. This key i
 
 ### 3. Install the Chrome extension
 
-Ask your Nakama administrator for the Google Meet extension folder. This is a one-time setup in Chrome:
+Download the extension from the **Google Meet** page and unzip it. This is a one-time setup in Chrome:
 
 1. Open `chrome://extensions`
 2. Turn on **Developer mode**
@@ -43,12 +43,11 @@ Keep the extension enabled while you use Google Meet.
 
 ## Start a transcription
 
-1. Open the Google Meet call in Chrome.
-2. Open **Google Meet** in Nakama.
-3. Enter the Meet link and choose the maximum meeting time.
-4. Choose **Start capture session**.
+1. Open **Google Meet** in Nakama and connect the Chrome extension.
+2. Open your Google Meet call in Chrome.
+3. Open the extension panel and start capture.
 
-Nakama sends a one-time private connection link to the extension. The extension finds the matching Meet tab and starts sending audio. If it does not start, copy the backup link shown on the page into the extension popup.
+Keep the Nakama page open. The extension receives a one-time connection link and sends audio to Nakama.
 
 The meeting moves through **Waiting**, **Transcribing**, and **Finished**. Open the meeting in Nakama to see new text while the call is running.
 
@@ -67,7 +66,9 @@ Ask questions such as:
 
 > Summarize the action items from meeting ABC.
 
-The agent only sees meetings that the current user is allowed to see.
+Assign the Google Meet tools and skill to the profile you want to use. The agent only sees meetings owned by that profile and permitted for the current user. Captures started from the page have no profile assigned; read those transcripts on the page.
+
+You can also upload a Markdown transcript (up to 1 MiB) or audio file (up to 7 MiB). Audio uploads use the organization's regular transcription settings; live capture uses the key saved in Google Meet settings.
 
 ## Stop and save
 
@@ -77,9 +78,32 @@ If Chrome closes or the connection breaks, Nakama keeps the text collected so fa
 
 ## Remote Nakama servers
 
-If Chrome and Nakama run on different computers, ask your administrator to connect them through a secure web address that supports a live connection. The address should start with `wss://`.
+The capture service binds to `127.0.0.1` by default. If Chrome runs on another
+computer, your administrator must make the capture WebSocket reachable through
+a secure address and set these variables on the Nakama server before starting
+Nakama:
 
-Do not share the connection links. They contain a temporary private passcode for one organization and one meeting.
+- `NAKAMA_MEET_CAPTURE_HOST` sets the capture listener's bind address. Set it to
+  `0.0.0.0` when a container or reverse proxy must connect to the listener.
+- `NAKAMA_MEET_CAPTURE_ORIGIN` sets the complete WebSocket URL that Nakama gives
+  the Chrome extension. Use `wss://` and include the `/capture` path.
+- `NAKAMA_MEET_CAPTURE_PORT` sets the capture listener's port. Without it Nakama
+  picks a free port on each start, so set it when a reverse proxy needs a fixed
+  target.
+
+For example, configure a reverse proxy at `meet-capture.example.com` with these
+server environment variables:
+
+```bash
+export NAKAMA_MEET_CAPTURE_HOST=0.0.0.0
+export NAKAMA_MEET_CAPTURE_PORT=4320
+export NAKAMA_MEET_CAPTURE_ORIGIN=wss://meet-capture.example.com/capture
+```
+
+Restart Nakama after changing any of these variables. The reverse
+proxy must forward WebSocket upgrade requests to the capture listener. Do not
+share the connection links; they contain a temporary private passcode for one
+organization and one meeting.
 
 ## Troubleshooting
 
@@ -88,12 +112,12 @@ Do not share the connection links. They contain a temporary private passcode for
 - Make sure the Meet tab is open in Chrome.
 - Make sure the extension is enabled.
 - Refresh both the Nakama Google Meet page and the Meet tab.
-- Use the backup link in the extension popup.
+- Connect the extension to the active Nakama organization again.
 
 ### The meeting is ready but no transcript appears
 
 - Check that the OpenAI key is saved in **Google Meet → Settings**.
-- Check that the background service is running in **System → Workers**.
+- Check that Google Meet is enabled in **Google Meet → Settings**. Capture starts automatically; there is no separate worker to start.
 - Confirm that Chrome allowed microphone access.
 - Confirm that participants are speaking in the Meet tab being captured.
 

@@ -13,6 +13,7 @@ setupTestConfigDir("nakama-org-memory-routes-test-");
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const orgMemoryService = new OrgMemoryService(databaseAdapter);
+
   return {
     ...createMinimalHonoApp({ databaseAdapter, orgMemoryService }),
     orgMemoryService,
@@ -24,11 +25,13 @@ const BASE = "http://localhost:4310";
 describe("org memory routes (v1)", () => {
   test("rejects an unknown proposal status filter", async () => {
     const { app, databaseAdapter } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "status-admin@org.com"
     );
+
     const orgId = adminSession.orgId!;
 
     const response = await app.fetch(
@@ -42,11 +45,13 @@ describe("org memory routes (v1)", () => {
 
   test("admin can add a fact, get memory, search, pin, unpin, archive", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin@org.com"
     );
+
     const orgId = adminSession.orgId!;
 
     const addResp = await app.fetch(
@@ -59,7 +64,9 @@ describe("org memory routes (v1)", () => {
         method: "POST",
       })
     );
+
     expect(addResp.status).toBe(200);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const afterAdd = (await addResp.json()) as { content: string };
     expect(afterAdd.content).toContain("- deploys ship on Tuesdays");
     expect(afterAdd.content).toContain("## Pinned");
@@ -69,7 +76,9 @@ describe("org memory routes (v1)", () => {
         headers: adminSession.headers({}, orgId),
       })
     );
+
     expect(getResp.status).toBe(200);
+    // SAFETY: This test controls the fixture shape at this boundary.
     expect(((await getResp.json()) as { content: string }).content).toContain(
       "deploys ship on Tuesdays"
     );
@@ -84,10 +93,14 @@ describe("org memory routes (v1)", () => {
         method: "POST",
       })
     );
+
     expect(searchResp.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const searchBody = (await searchResp.json()) as {
       matches: { bullet: string }[];
     };
+
     expect(searchBody.matches.some((m) => m.bullet.includes("Tuesdays"))).toBe(
       true
     );
@@ -102,8 +115,10 @@ describe("org memory routes (v1)", () => {
         method: "POST",
       })
     );
+
     expect(unpinResp.status).toBe(200);
     expect(
+      // SAFETY: This test controls the fixture shape at this boundary.
       ((await unpinResp.json()) as { content: string }).content
     ).not.toContain("deploys ship on Tuesdays");
 
@@ -118,6 +133,7 @@ describe("org memory routes (v1)", () => {
         method: "POST",
       })
     );
+
     const archiveResp = await app.fetch(
       new Request(`${BASE}/v1/orgs/${orgId}/memory/archive`, {
         body: JSON.stringify({ entries: ["stale fact"] }),
@@ -128,7 +144,9 @@ describe("org memory routes (v1)", () => {
         method: "POST",
       })
     );
+
     expect(archiveResp.status).toBe(200);
+    // SAFETY: This test controls the fixture shape at this boundary.
     expect(((await archiveResp.json()) as { archived: number }).archived).toBe(
       1
     );
@@ -136,11 +154,13 @@ describe("org memory routes (v1)", () => {
 
   test("member can read and search but not mutate", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin2@org.com"
     );
+
     const orgId = adminSession.orgId!;
 
     // add a fact as admin
@@ -171,10 +191,14 @@ describe("org memory routes (v1)", () => {
         method: "POST",
       })
     );
+
     expect(addMemberResp.status).toBe(201);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const memberProvisioned = (await addMemberResp.json()) as {
       temporaryPassword: string;
     };
+
     const memberSession = await loginUserSession(
       app,
       "member2@org.com",
@@ -187,6 +211,7 @@ describe("org memory routes (v1)", () => {
         headers: memberSession.headers({}, orgId),
       })
     );
+
     expect(getResp.status).toBe(200);
 
     const searchResp = await app.fetch(
@@ -199,6 +224,7 @@ describe("org memory routes (v1)", () => {
         method: "POST",
       })
     );
+
     expect(searchResp.status).toBe(200);
 
     const putResp = await app.fetch(
@@ -213,16 +239,19 @@ describe("org memory routes (v1)", () => {
         method: "PUT",
       })
     );
+
     expect(putResp.status).toBe(403);
   });
 
   test("viewer is blocked from read and search", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin3@org.com"
     );
+
     const orgId = adminSession.orgId!;
 
     const addViewerResp = await app.fetch(
@@ -240,9 +269,12 @@ describe("org memory routes (v1)", () => {
         method: "POST",
       })
     );
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const viewerProvisioned = (await addViewerResp.json()) as {
       temporaryPassword: string;
     };
+
     const viewerSession = await loginUserSession(
       app,
       "viewer3@org.com",
@@ -255,6 +287,7 @@ describe("org memory routes (v1)", () => {
         headers: viewerSession.headers({}, orgId),
       })
     );
+
     expect(getResp.status).toBe(403);
 
     const searchResp = await app.fetch(
@@ -267,19 +300,23 @@ describe("org memory routes (v1)", () => {
         method: "POST",
       })
     );
+
     expect(searchResp.status).toBe(403);
   });
 
   test("PUT oversized body is rejected; cross-org is 404", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin4@org.com"
     );
+
     const orgId = adminSession.orgId!;
 
     const huge = "x".repeat(10_000);
+
     const oversized = await app.fetch(
       new Request(`${BASE}/v1/orgs/${orgId}/memory`, {
         body: JSON.stringify({ content: huge }),
@@ -290,6 +327,7 @@ describe("org memory routes (v1)", () => {
         method: "PUT",
       })
     );
+
     expect(oversized.status).toBe(400);
 
     // cross-org: target a different orgId than the session's active org
@@ -298,16 +336,19 @@ describe("org memory routes (v1)", () => {
         headers: adminSession.headers({}, orgId),
       })
     );
+
     expect(crossResp.status).toBe(404);
   });
 
   test("unpin/archive missing bullet returns 404", async () => {
     const { app, authService, databaseAdapter } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin5@org.com"
     );
+
     const orgId = adminSession.orgId!;
 
     const unpinResp = await app.fetch(
@@ -320,6 +361,7 @@ describe("org memory routes (v1)", () => {
         method: "POST",
       })
     );
+
     expect(unpinResp.status).toBe(404);
 
     const archiveResp = await app.fetch(
@@ -332,22 +374,26 @@ describe("org memory routes (v1)", () => {
         method: "POST",
       })
     );
+
     expect(archiveResp.status).toBe(404);
   });
 
   test("admin can list, approve, and reject proposals; member cannot list", async () => {
     const { app, authService, databaseAdapter, orgMemoryService } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin6@org.com"
     );
+
     const orgId = adminSession.orgId!;
 
     const proposed = await orgMemoryService.propose(orgId, {
       bullet: "deploy freeze on Fridays",
       profileId: "profile_a",
     });
+
     expect(proposed.outcome).toBe("created");
 
     const listResp = await app.fetch(
@@ -355,11 +401,15 @@ describe("org memory routes (v1)", () => {
         headers: adminSession.headers({}, orgId),
       })
     );
+
     expect(listResp.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const listBody = (await listResp.json()) as {
       proposals: { id: string; bullet: string }[];
       pendingCount: number;
     };
+
     expect(listBody.pendingCount).toBe(1);
     expect(listBody.proposals[0]?.bullet).toBe("deploy freeze on Fridays");
 
@@ -376,7 +426,9 @@ describe("org memory routes (v1)", () => {
         }
       )
     );
+
     expect(approveResp.status).toBe(200);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const approveBody = (await approveResp.json()) as { content: string };
     expect(approveBody.content).toContain("deploy freeze on Fridays");
 
@@ -394,31 +446,39 @@ describe("org memory routes (v1)", () => {
         method: "POST",
       })
     );
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const memberProvisioned = (await memberResp.json()) as {
       temporaryPassword: string;
     };
+
     const memberSession = await loginUserSession(
       app,
       "member6@org.com",
       memberProvisioned.temporaryPassword,
       orgId
     );
+
     const memberListResp = await app.fetch(
       new Request(`${BASE}/v1/orgs/${orgId}/memory/proposals`, {
         headers: memberSession.headers({}, orgId),
       })
     );
+
     expect(memberListResp.status).toBe(403);
   });
 
   test("approve proposal from wrong org returns 404", async () => {
     const { app, databaseAdapter, orgMemoryService } = createApp();
+
     const adminSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "admin7@org.com"
     );
+
     const orgId = adminSession.orgId!;
+
     const proposed = await orgMemoryService.propose(orgId, {
       bullet: "org scoped fact",
     });
@@ -436,6 +496,7 @@ describe("org memory routes (v1)", () => {
         }
       )
     );
+
     expect(otherOrgResp.status).toBe(404);
   });
 });

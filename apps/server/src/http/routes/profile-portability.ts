@@ -26,12 +26,14 @@ export function registerProfilePortabilityRoutes(
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
+
   const importRequestSchema = z
     .object({
       data: z.string(),
       name: z.string().optional(),
     })
     .openapi("PreviewProfilePackImportRequest");
+
   const restoreRequestSchema = z
     .object({
       confirm: z.boolean(),
@@ -39,10 +41,12 @@ export function registerProfilePortabilityRoutes(
       name: z.string().optional(),
     })
     .openapi("ImportProfilePackRequest");
+
   const previewResponseSchema = z
     .object({})
     .passthrough()
     .openapi("ProfilePackPreviewResponse");
+
   const importResponseSchema = z
     .object({})
     .passthrough()
@@ -175,7 +179,8 @@ export function registerProfilePortabilityRoutes(
       const result = await createProfilePackExport(db, orgId, profileId, {
         includeCustomTools: auth.isPlatformAdmin,
       });
-      return new Response(result.data, {
+
+      return new Response(new Uint8Array(result.data), {
         headers: {
           "Content-Disposition": `attachment; filename="${result.filename}"`,
           "Content-Type": "application/zip",
@@ -190,6 +195,7 @@ export function registerProfilePortabilityRoutes(
     const auth = requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const db = requireDatabase(options);
+
     const body = await readJson<{ data: string; name?: string }>(
       c.req.raw,
       importRequestSchema
@@ -200,8 +206,12 @@ export function registerProfilePortabilityRoutes(
         db,
         orgId,
         decodeArchiveRequestData(body.data),
-        { restoreCustomTools: auth.isPlatformAdmin }
+        {
+          isPlatformAdmin: auth.isPlatformAdmin,
+          restoreCustomTools: auth.isPlatformAdmin,
+        }
       );
+
       return json<ProfilePackPreviewResponse>(
         body.name?.trim()
           ? { ...preview, plannedName: body.name.trim() }
@@ -216,6 +226,7 @@ export function registerProfilePortabilityRoutes(
     const auth = requireOrgAdminOrPlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const db = requireDatabase(options);
+
     const body = await readJson<ProfilePackImportRequest>(
       c.req.raw,
       restoreRequestSchema
@@ -229,10 +240,12 @@ export function registerProfilePortabilityRoutes(
         {
           actorUserId: auth.user.id,
           confirm: body.confirm,
+          isPlatformAdmin: auth.isPlatformAdmin,
           name: body.name,
           restoreCustomTools: auth.isPlatformAdmin,
         }
       );
+
       return json<ProfilePackImportResponse>(imported);
     } catch (error) {
       return formatPackError(error);
@@ -244,13 +257,15 @@ function requireDatabase(options: ServerOptions) {
   if (!options.databaseAdapter) {
     throw new NakamaApiError("Database is not configured.", 500);
   }
+
   return options.databaseAdapter;
 }
 
-function formatPackError(error: unknown): Response {
+function formatPackError<T>(error: T): Response {
   if (error instanceof NakamaApiError) {
     return errorResponse(error.message, error.status);
   }
+
   return errorResponse(
     error instanceof Error ? error.message : String(error),
     400

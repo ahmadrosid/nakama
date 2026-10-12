@@ -5,7 +5,13 @@ description: Run Nakama locally in a desktop app.
 
 Nakama Desktop includes its own server and the existing web interface. Open the app to start everything locally; no separate server or Docker installation is needed.
 
-The desktop app is a development preview for Apple Silicon Macs running macOS 26. There is no signed public download yet.
+Download the signed macOS app from [desktop releases](https://github.com/ahmadrosid/nakama/releases?q=desktop-v). It requires macOS 15 or later on Apple Silicon.
+
+## Windows installation
+
+Windows installer builds target Windows 10 build 19041+ and Windows 11 x64. In [desktop releases](https://github.com/ahmadrosid/nakama/releases?q=desktop-v), choose the `x64-Setup.exe` installer when available. Run it to install for your Windows account, then open Nakama. Updates and uninstalling preserve your saved data.
+
+Releases through 0.1.8 do not include this installer. Check [Windows availability](https://github.com/ahmadrosid/nakama/blob/main/apps/desktop/README.md#windows-installation) before downloading. Until a verified installer is published, use the [web demo](https://demo.getnakama.cloud/) or [run Nakama with Docker](/docker). Unsigned `.msix` files from older releases are for Microsoft Store submission and cannot be installed by double-clicking.
 
 ## Get started
 

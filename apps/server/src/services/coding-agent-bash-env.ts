@@ -1,5 +1,10 @@
-import type { ToolContext, UserConfig } from "@nakama/core";
+import {
+  NakamaApiError,
+  type ToolContext,
+  type UserConfig,
+} from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
+import type { BashInput } from "../tools/bash";
 import {
   inferCodingAgentHarnessKind,
   isCodingAgentCommand,
@@ -10,37 +15,79 @@ import {
   mergeCodingAgentSpawnEnv,
   resolveCodingAgentSpawnBundle,
 } from "./coding-agent-spawn-env";
+import type { OrgService } from "./org-service";
+import {
+  modelExistsOnInstance,
+  resolveConfiguredModelInstance,
+} from "./provider-instance-helpers";
 
-export async function resolveProfileModelId(
+async function resolveProfileModelId(
   db: DatabaseAdapter,
-  profileId: string
+  profileId: string,
+  context: ToolContext,
+  userConfig: UserConfig | null | undefined,
+  orgService?: OrgService
 ): Promise<string | null> {
-  const profile = await db.getProfile(profileId);
+  const profile = context.orgId
+    ? await db.getProfileForOrg(profileId, context.orgId)
+    : await db.getProfile(profileId);
+
+  if (!profile) {
+    throw new NakamaApiError("Profile not found.", 404);
+  }
+
+  if (
+    profile.orgId &&
+    (await db.getSharedAgentInstance(profile.orgId, profileId))
+  ) {
+    if (!(context.orgId && orgService)) {
+      throw new NakamaApiError("Shared agent is unavailable.", 503);
+    }
+
+    const shared = await orgService.resolveSharedAgentProfile(
+      context.orgId,
+      profileId
+    );
+
+    if (!shared) {
+      throw new NakamaApiError("Shared agent is unavailable.", 404);
+    }
+
+    const selected = resolveConfiguredModelInstance(userConfig, shared.model, {
+      invalid: "Select a configured model.",
+      missingProvider: "The model provider is unavailable.",
+    });
+
+    if (
+      selected &&
+      !modelExistsOnInstance(selected.instance, selected.modelId)
+    ) {
+      throw new NakamaApiError("Select a configured model.", 400);
+    }
+
+    return shared.model?.trim() || null;
+  }
 
   return profile?.model?.trim() || null;
 }
 
 export async function enrichCodingAgentBashInput(
   db: DatabaseAdapter,
-  input: unknown,
+  input: BashInput,
   context: ToolContext,
-  userConfig: UserConfig | null | undefined
-): Promise<unknown> {
-  if (typeof input !== "object" || input === null) {
-    return input;
-  }
-
-  const record = input as Record<string, unknown>;
-  const command =
-    typeof record.command === "string" ? record.command.trim() : "";
+  userConfig: UserConfig | null | undefined,
+  orgService?: OrgService
+): Promise<BashInput> {
+  const command = input.command.trim();
 
   if (!command) {
     return input;
   }
 
   const workspace = await loadCodingAgentWorkspaceSettings(db);
-  const codingAgentRequested = record.codingAgent === true;
+  const codingAgentRequested = input.codingAgent === true;
   const matchesHarness = isCodingAgentCommand(command, workspace.harnesses);
+
   const inferredKind = inferCodingAgentHarnessKind(
     command,
     workspace.harnesses
@@ -58,8 +105,15 @@ export async function enrichCodingAgentBashInput(
 
   const profileModel =
     context.profileId !== undefined && context.profileId.length > 0
-      ? await resolveProfileModelId(db, context.profileId)
+      ? await resolveProfileModelId(
+          db,
+          context.profileId,
+          context,
+          userConfig,
+          orgService
+        )
       : null;
+
   const harness = await resolveCodingAgentHarness(db, inferredKind, {
     profileModel,
     providerPassthroughEnabled: workspace.providerPassthroughEnabled,
@@ -71,7 +125,7 @@ export async function enrichCodingAgentBashInput(
     harness.kind === "cursor_agent"
   ) {
     return {
-      ...record,
+      ...input,
       codingAgent: true,
     };
   }
@@ -81,7 +135,9 @@ export async function enrichCodingAgentBashInput(
     profileModel,
     userConfig,
   });
-  const explicitEnv = readStringRecord(record.env);
+
+  const explicitEnv = input.env;
+
   const mergedEnv = mergeCodingAgentSpawnEnv(process.env, spawn.env, {
     callerEnv: explicitEnv,
     protectCredentialKeys: spawn.env && Object.keys(spawn.env).length > 0,
@@ -91,33 +147,14 @@ export async function enrichCodingAgentBashInput(
     return input;
   }
 
-  const envRecord = Object.fromEntries(
-    Object.entries(mergedEnv).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string"
-    )
-  );
-
-  return {
-    ...record,
+  const enriched: BashInput = {
+    ...input,
     codingAgent: true,
-    ...(Object.keys(envRecord).length > 0 ? { env: envRecord } : {}),
   };
-}
 
-function readStringRecord(value: unknown): Record<string, string> {
-  if (typeof value !== "object" || value === null) {
-    return {};
+  if (Object.keys(mergedEnv).length > 0) {
+    enriched.env = mergedEnv;
   }
 
-  const entries = Object.entries(value as Record<string, unknown>).flatMap(
-    ([key, entry]) => {
-      if (typeof entry !== "string") {
-        return [];
-      }
-
-      return [[key, entry] as const];
-    }
-  );
-
-  return Object.fromEntries(entries);
+  return enriched;
 }

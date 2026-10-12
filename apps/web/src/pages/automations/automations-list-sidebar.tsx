@@ -3,7 +3,6 @@ import {
   AutomationListItem,
   AutomationListSkeleton,
   AutomationSearch,
-  AutomationsEmptyState,
 } from "@/pages/automations/automations-components";
 import type { AutomationsPageState } from "@/pages/automations/use-automations-page";
 
@@ -51,10 +50,6 @@ export function AutomationsListSidebar(state: ListState) {
       <div className="min-h-0 flex-1 overflow-y-auto">
         {initialLoading ? (
           <AutomationListSkeleton />
-        ) : automations.length === 0 ? (
-          <div className="flex min-h-[12rem] items-center justify-center">
-            <AutomationsEmptyState />
-          </div>
         ) : filteredAutomations.length === 0 ? (
           <div className="flex min-h-[12rem] flex-col items-center justify-center px-2 py-10 text-center">
             <Search01Icon

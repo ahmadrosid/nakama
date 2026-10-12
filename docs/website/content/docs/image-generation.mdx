@@ -9,10 +9,10 @@ An agent with the `generate_image` tool can produce an image from a text prompt.
 
 Two things are required.
 
-1. **An OpenAI provider.** Image generation runs against OpenAI's Images API, so the instance needs a provider of type `openai` with a working key. Nakama uses your default provider when it is an OpenAI one, otherwise the first OpenAI provider configured. The key comes from that provider, or from `OPENAI_API_KEY`.
-2. **A model, set in Settings.** Pick **Image generation model** in the same card group as the vision and transcription models. The only allowlisted choice today is `gpt-image-2`.
+1. **An AI-image provider.** Image generation runs against the OpenAI Images API contract, served by an `openai` provider or an **OpenAI-compatible** provider with a base URL (that is, a self-hosted backend). Nakama uses your default provider when it matches, otherwise the first eligible provider configured. The key comes from that provider, or from `OPENAI_API_KEY`.
+2. **A model, set in AI Providers.** Pick **Image generation model** in the same card group as the vision and transcription models. The choices are `gpt-image-2` against an OpenAI provider, or any model of an OpenAI-compatible provider, stored as `<providerId>::<modelId>`. See [Self-hosted models](/providers#self-hosted--local-models-for-image-generation-and-transcription).
 
-Until a model is set, the tool refuses with `Configure an image generation model in Settings before generating images.` The card shows **Not configured** in that state, and **No OpenAI provider** when the provider is the missing half.
+Until a model is set, the tool refuses with `Configure an image generation model in Settings before generating images.` The card shows **Not configured** in that state, and **No image provider** when the provider is the missing half.
 
 Assign the `generate_image` tool to a profile the same way as any other builtin. See [Builtin tools](/builtin-tools).
 
@@ -28,7 +28,7 @@ To be explicit, type `@` in the web chat composer, pick **@image**, and describe
 | `filename` | no | Output name under `artifacts/`, defaults to a generated `.png` |
 | `size` | no | `1024x1024` (default), `1024x1536`, `1536x1024`, or `auto` |
 
-The model is deliberately **not** a parameter. It comes from Settings, so a prompt cannot talk the agent into a model the workspace has not allowlisted. An unsupported size is rejected with the allowed list rather than silently rounded to the nearest one.
+The model is deliberately **not** a parameter. It comes from **AI Providers**, so a prompt cannot talk the agent into a model the workspace has not allowlisted. An unsupported size is rejected with the allowed list rather than silently rounded to the nearest one.
 
 ## Where the image goes
 
@@ -38,9 +38,9 @@ Each generated image is written under the profile workspace:
 ~/.nakama/orgs/{orgId}/profiles/{profileId}/artifacts/
 ```
 
-The image appears in **Files** with its type, size, and timestamp detected automatically. When the call happens inside a chat session, the image is also saved as a session attachment, which is what makes it render inline in the conversation rather than only in the Files list. Web chat and the channel bridges both recognize `generate_image` output, so a Telegram or Discord turn gets the picture too.
+The image appears in **Browse Files → Artifacts** with its type, size, and timestamp detected automatically. When the call happens inside a chat session, the image is also saved as a session attachment, which makes it render inline in web chat. Web chat and channel bridges recognize `generate_image` output, so Telegram and Discord turns also get the picture. The tool refuses generated files over 5 MB.
 
-Attachments are capped at 5 MB.
+Channel behavior follows each channel's artifact rules. Telegram receives a share link after the save and caps a native document attachment at 5 MB. Discord sends supported native attachments up to 8 MB and otherwise falls back to the share link. WhatsApp automatically sends the newly saved PNG as a native document up to 16 MB. See [Artifacts on channels](/artifacts#artifact-limits-and-channels) for the delivery details.
 
 See [Artifacts and files](/artifacts) for previewing, editing, and publishing what comes out.
 
@@ -50,6 +50,7 @@ Every generation records usage through the same token pricing bridge as chat, so
 
 ## Limits
 
-- One model, `gpt-image-2`, and one provider type, OpenAI. There is no Stability, Replicate, or local diffusion path.
+- `gpt-image-2` on an OpenAI provider, or a model of an OpenAI-compatible provider with a base URL that speaks the OpenAI Images API (see [Self-hosted models](/providers#self-hosted--local-models-for-image-generation-and-transcription)). There is no Stability or Replicate path.
 - No image editing or variations. Generation from a prompt only.
 - No streaming or progress. A generation is one tool call that returns when the image is ready. A provider that has not answered completely within 180 seconds fails with a timeout error, and stopping the chat aborts the request.
+- One PNG per call, up to 5 MB, with `1024x1024`, `1024x1536`, `1536x1024`, or `auto` output size.

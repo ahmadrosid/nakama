@@ -44,6 +44,9 @@ const CHATGPT_MODELS: ProviderModelOption[] = [
   { default: true, id: "gpt-5.6-terra", name: "GPT-5.6 Terra" },
   { id: "gpt-5.6-sol", name: "GPT-5.6 Sol" },
   { id: "gpt-5.6-luna", name: "GPT-5.6 Luna" },
+  { id: "gpt-6.1-sol", name: "GPT-6.1 Sol" },
+  { id: "gpt-6-sol", name: "GPT-6 Sol" },
+  { id: "gpt-6-luna", name: "GPT-6 Luna" },
   { id: "gpt-6-astra", name: "GPT-6 Astra" },
   { id: "gpt-5.5", name: "GPT-5.5" },
 ].map((model) => ({
@@ -92,6 +95,16 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
   },
   {
     contextWindow: 1_000_000,
+    id: "claude-sonnet-5-5",
+    inputPerMillionUsd: 2,
+    maxOutputTokens: 128_000,
+    name: "Sonnet 5.5",
+    outputPerMillionUsd: 10,
+    provider: "anthropic",
+    supportsThinking: true,
+  },
+  {
+    contextWindow: 1_000_000,
     id: "claude-opus-5",
     inputPerMillionUsd: 5,
     maxOutputTokens: 128_000,
@@ -122,6 +135,16 @@ const BASE_MODELS: ProviderModelOption[] = withVisionDefaults([
   },
   // OpenAI API limits and base text prices: https://developers.openai.com/api/docs/models
   // GPT-6, Luna, GPT-5.5 and GPT-5.4 charge more above 272k input tokens.
+  {
+    contextWindow: 1_050_000,
+    id: "gpt-6.1-sol",
+    inputPerMillionUsd: 2,
+    maxOutputTokens: 128_000,
+    name: "GPT-6.1 Sol",
+    outputPerMillionUsd: 10,
+    provider: "openai",
+    supportsThinking: true,
+  },
   {
     contextWindow: 1_050_000,
     id: "gpt-6-sol",
@@ -890,7 +913,7 @@ export const AVAILABLE_MODELS: ProviderModelOption[] = [
 ];
 
 export function validateOpenRouterCustomModels(
-  entries: unknown
+  entries: CustomModelEntry[]
 ): CustomModelEntry[] {
   const models = validateCustomModels(entries);
 
@@ -906,13 +929,13 @@ export function validateOpenRouterCustomModels(
 }
 
 export function validateCerebrasCustomModels(
-  entries: unknown
+  entries: CustomModelEntry[]
 ): CustomModelEntry[] {
   return validateCustomModels(entries);
 }
 
 export function validateFireworksCustomModels(
-  entries: unknown
+  entries: CustomModelEntry[]
 ): CustomModelEntry[] {
   const models = validateCustomModels(entries);
 
@@ -924,7 +947,7 @@ export function validateFireworksCustomModels(
 }
 
 export function validateOllamaCustomModels(
-  entries: unknown
+  entries: CustomModelEntry[]
 ): CustomModelEntry[] {
   const models = validateCustomModels(entries);
 
@@ -935,12 +958,12 @@ export function validateOllamaCustomModels(
   return models;
 }
 
-export function isCloudflareModelId(model: string): boolean {
+function isCloudflareModelId(model: string): boolean {
   return model.trim().startsWith("@cf/") || model.trim().startsWith("@hf/");
 }
 
 export function validateCloudflareCustomModels(
-  entries: unknown
+  entries: CustomModelEntry[]
 ): CustomModelEntry[] {
   const models = validateCustomModels(entries);
 
@@ -955,12 +978,12 @@ export function validateCloudflareCustomModels(
   return models;
 }
 
-export function isOpenCodeGoModelId(model: string): boolean {
+function isOpenCodeGoModelId(model: string): boolean {
   return model.trim().startsWith("opencode-go/");
 }
 
 export function validateOpenCodeGoCustomModels(
-  entries: unknown
+  entries: CustomModelEntry[]
 ): CustomModelEntry[] {
   const models = validateCustomModels(entries);
 
@@ -985,14 +1008,20 @@ export function getModelById(modelId: string): ProviderModelOption | undefined {
  * entry every custom provider would silently compact at the fallback window.
  * Entries that leave the sizes blank keep the catalog value, then the fallback.
  */
+export interface ProviderModelLimits {
+  contextWindow: number;
+  maxOutputTokens: number;
+}
+
 export function resolveModelLimits(
   provider: ProviderName,
   modelId: string,
   customModels?: CustomModelEntry[]
-): { contextWindow: number; maxOutputTokens: number } {
+): ProviderModelLimits {
   const catalog = getModelsForProvider(provider).find(
     (model) => model.id === modelId
   );
+
   const custom = findCustomModel(customModels, modelId);
 
   return {
@@ -1055,6 +1084,7 @@ export function getDefaultModel(
   }
 
   const models = getModelsForProvider(provider);
+
   const fallback =
     provider === "openrouter"
       ? "anthropic/claude-sonnet-4-6"
@@ -1085,6 +1115,7 @@ export function getDefaultModel(
                               : provider === "cloudflare"
                                 ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
                                 : "gpt-5.4";
+
   return models.find((model) => model.default)?.id ?? models[0]?.id ?? fallback;
 }
 
@@ -1221,6 +1252,7 @@ export function modelSupportsVision(
     }
 
     const catalog = getModelById(modelId);
+
     return catalog?.supportsVision ?? false;
   }
 
@@ -1241,7 +1273,7 @@ export function modelSupportsVision(
   }
 }
 
-export const TRANSCRIPTION_MODEL_IDS = new Set([
+const TRANSCRIPTION_MODEL_IDS = new Set([
   "whisper-1",
   "gpt-4o-transcribe",
   "gpt-4o-mini-transcribe",
@@ -1251,6 +1283,13 @@ export function modelSupportsTranscription(
   modelId: string,
   provider: ProviderName
 ): boolean {
+  // openai_compatible instances are self-hosted Whisper-style endpoints whose
+  // model id is user-defined; any non-empty id is accepted. First-party
+  // openai stays restricted to the allowlist.
+  if (provider === "openai_compatible") {
+    return Boolean(modelId.trim());
+  }
+
   if (provider !== "openai") {
     return false;
   }
@@ -1264,13 +1303,15 @@ export const IMAGE_GENERATION_MODEL_ID = "gpt-image-2";
 /** Sole allowlisted workspace selection: provider type + model id. */
 export const IMAGE_GENERATION_SELECTION = `openai::${IMAGE_GENERATION_MODEL_ID}`;
 
-export const IMAGE_GENERATION_MODEL_IDS = new Set([IMAGE_GENERATION_MODEL_ID]);
+const IMAGE_GENERATION_MODEL_IDS = new Set([IMAGE_GENERATION_MODEL_ID]);
 
 export function modelSupportsImageGeneration(
   modelId: string,
   provider: ProviderName
 ): boolean {
-  if (provider !== "openai") {
+  // openai_compatible instances route through the OpenAI Images API against
+  // the configured baseUrl; both flavors use the same model allowlist.
+  if (provider !== "openai" && provider !== "openai_compatible") {
     return false;
   }
 
@@ -1280,5 +1321,13 @@ export function modelSupportsImageGeneration(
 export function isAllowedImageGenerationSelection(
   value: string | null | undefined
 ): boolean {
-  return value?.trim() === IMAGE_GENERATION_SELECTION;
+  const trimmed = value?.trim();
+
+  if (trimmed === IMAGE_GENERATION_SELECTION) {
+    return true;
+  }
+
+  // Self-hosted OpenAI-compatible backends carry a baseUrl and reuse the same
+  // Images API + model allowlist, selected via `openai_compatible::gpt-image-2`.
+  return trimmed === `openai_compatible::${IMAGE_GENERATION_MODEL_ID}`;
 }

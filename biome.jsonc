@@ -10,7 +10,8 @@
     "includes": [
       "!packages/plugins/*/actions",
       "!packages/plugins/*/ui/app.js",
-      "!packages/plugins/*/workers"
+      "!packages/plugins/*/workers",
+      "!tools/oxlint/anti-slop"
     ]
   },
   "css": {

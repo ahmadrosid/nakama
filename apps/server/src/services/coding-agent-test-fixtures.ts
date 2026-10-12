@@ -7,8 +7,10 @@ export async function withFastCliProbes<T>(run: () => Promise<T>): Promise<T> {
     grace: process.env.NAKAMA_CLI_SIGTERM_GRACE_MS,
     timeout: process.env.NAKAMA_CLI_PROBE_TIMEOUT_MS,
   };
+
   process.env.NAKAMA_CLI_PROBE_TIMEOUT_MS = "1000";
   process.env.NAKAMA_CLI_SIGTERM_GRACE_MS = "100";
+
   try {
     return await run();
   } finally {
@@ -17,6 +19,7 @@ export async function withFastCliProbes<T>(run: () => Promise<T>): Promise<T> {
     } else {
       process.env.NAKAMA_CLI_PROBE_TIMEOUT_MS = previous.timeout;
     }
+
     if (previous.grace === undefined) {
       delete process.env.NAKAMA_CLI_SIGTERM_GRACE_MS;
     } else {
@@ -34,6 +37,7 @@ export async function waitForPidFile(
   while (Date.now() < deadline) {
     try {
       const pid = Number.parseInt(await readFile(pidFile, "utf8"), 10);
+
       if (Number.isInteger(pid)) {
         return pid;
       }

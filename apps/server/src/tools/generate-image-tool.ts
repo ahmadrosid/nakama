@@ -5,12 +5,14 @@ import {
   inferArtifactMimeType,
   MAX_IMAGE_BYTES,
   NakamaApiError,
+  type ProviderInstance,
   pathExists,
   type ToolContext,
   type ToolDefinition,
   type UserConfig,
 } from "@nakama/core";
 import type { DatabaseAdapter } from "@nakama/db";
+import { z } from "zod";
 import { createAttachmentSaver } from "../services/attachment-service";
 import {
   generateImageWithOpenAI,
@@ -44,13 +46,7 @@ export function formatImageMentionContext(
     : `The user tagged @image, but the ${GENERATE_IMAGE_TOOL_NAME} tool is not assigned to this agent. Tell them image generation is off here: assign the ${GENERATE_IMAGE_TOOL_NAME} tool to this agent and pick an image generation model in Settings.`;
 }
 
-export interface GenerateImageToolInput {
-  filename?: string;
-  prompt: string;
-  size?: string;
-}
-
-export interface GenerateImageToolSuccess {
+interface GenerateImageToolSuccess {
   attachmentId: string | null;
   mimeType: string;
   model: string;
@@ -58,13 +54,29 @@ export interface GenerateImageToolSuccess {
   sizeBytes: number;
 }
 
-export interface GenerateImageToolFailure {
+interface GenerateImageToolFailure {
   error: string;
 }
 
 export type GenerateImageToolOutput =
   | GenerateImageToolSuccess
   | GenerateImageToolFailure;
+
+const GenerateImageInputSchema = z.object({
+  filename: z.string().optional().catch(undefined),
+  model: z.unknown().optional(),
+  prompt: z.string().optional().catch(undefined),
+  size: z.string().optional().catch(undefined),
+});
+
+const ErrorInputSchema = z.union([
+  z.instanceof(Error),
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+  z.undefined(),
+]);
 
 export interface GenerateImageToolDeps {
   db: DatabaseAdapter;
@@ -75,7 +87,9 @@ export interface GenerateImageToolDeps {
   recordUsage?: (
     modelId: string,
     inputTokens: number,
-    outputTokens: number
+    outputTokens: number,
+    providerInstance: ProviderInstance,
+    attribution: { orgId: string; profileId: string; userId?: string }
   ) => void;
 }
 
@@ -108,22 +122,29 @@ export function createGenerateImageTool(
       type: "object",
     },
     async run(input, context) {
-      return runGenerateImageTool(input, context, deps);
+      const parsedInput = GenerateImageInputSchema.safeParse(input);
+
+      if (!parsedInput.success) {
+        return { error: "prompt is required." };
+      }
+
+      return runGenerateImageTool(parsedInput.data, context, deps);
     },
   };
 }
 
 export async function runGenerateImageTool(
-  input: unknown,
+  input: z.infer<typeof GenerateImageInputSchema>,
   context: ToolContext,
   deps: GenerateImageToolDeps
 ): Promise<GenerateImageToolOutput> {
-  const prompt = readString(input, "prompt")?.trim();
+  const prompt = input.prompt?.trim();
+
   if (!prompt) {
     return { error: "prompt is required." };
   }
 
-  if (hasOwnKey(input, "model")) {
+  if (Object.hasOwn(input, "model")) {
     return {
       error:
         "model is not a generate_image parameter; configure it in Settings.",
@@ -132,27 +153,38 @@ export async function runGenerateImageTool(
 
   const orgId = context.orgId?.trim();
   const profileId = context.profileId?.trim();
+
   if (!(orgId && profileId)) {
     return { error: "orgId and profileId are required." };
   }
 
-  const sizeRaw = readString(input, "size")?.trim();
+  const sizeRaw = input.size?.trim();
   let size: string;
+
   try {
     size = normalizeImageGenerationSize(sizeRaw);
   } catch (error) {
-    return { error: errorMessage(error) };
+    return {
+      error: errorMessage(
+        ErrorInputSchema.catch(new Error(String(error))).parse(error)
+      ),
+    };
   }
 
-  const filenameHint = readString(input, "filename");
+  const filenameHint = input.filename;
 
   await deps.ensureSettingsLoaded();
 
   let selection;
+
   try {
     selection = resolveImageGenerationSelection(deps.getUserConfig());
   } catch (error) {
-    return { error: errorMessage(error) };
+    return {
+      error: errorMessage(
+        ErrorInputSchema.catch(new Error(String(error))).parse(error)
+      ),
+    };
   }
 
   if (!selection) {
@@ -161,16 +193,22 @@ export async function runGenerateImageTool(
 
   const generate = deps.generateImage ?? generateImageWithOpenAI;
   let result;
+
   try {
     result = await generate({
       apiKey: selection.apiKey,
+      baseUrl: selection.baseUrl,
       model: selection.model,
       prompt,
       signal: context.signal,
       size,
     });
   } catch (error) {
-    return { error: errorMessage(error) };
+    return {
+      error: errorMessage(
+        ErrorInputSchema.catch(new Error(String(error))).parse(error)
+      ),
+    };
   }
 
   if (result.data.byteLength === 0) {
@@ -185,19 +223,24 @@ export async function runGenerateImageTool(
 
   const workspaceRoot =
     context.workspaceRoot?.trim() || getProfileSoulDir(orgId, profileId);
+
   if (!path.isAbsolute(workspaceRoot)) {
     throw new Error(
       "workspaceRoot must be an absolute path; relative roots resolve against process.cwd() and break profile isolation."
     );
   }
+
   const artifactsDir = path.join(workspaceRoot, "artifacts");
   const outputName = resolveOutputFilename(filenameHint, result.mediaType);
+
   const targetPath = await uniqueArtifactPath(
     path.join(artifactsDir, outputName)
   );
+
   const relativePath = normalizeRelativePath(
     path.relative(workspaceRoot, targetPath)
   );
+
   const sizeBytes = result.data.byteLength;
 
   await mkdir(artifactsDir, { recursive: true });
@@ -206,7 +249,12 @@ export async function runGenerateImageTool(
     await writeFile(targetPath, result.data);
   } catch (error) {
     await unlink(targetPath).catch(() => undefined);
-    return { error: errorMessage(error) };
+
+    return {
+      error: errorMessage(
+        ErrorInputSchema.catch(new Error(String(error))).parse(error)
+      ),
+    };
   }
 
   let attachmentId: string | null = null;
@@ -216,6 +264,7 @@ export async function runGenerateImageTool(
   if (sessionId && channel) {
     try {
       const trackEphemeral = context.trackEphemeralAttachment;
+
       const save = createAttachmentSaver(deps.db, {
         channel,
         ephemeral: Boolean(trackEphemeral),
@@ -223,17 +272,24 @@ export async function runGenerateImageTool(
         profileId,
         sessionId: trackEphemeral ? null : sessionId,
       });
+
       const saved = await save({
         bytes: Buffer.from(result.data),
         filename: path.basename(targetPath),
         kind: "image",
         mediaType: result.mediaType,
       });
+
       attachmentId = saved.attachmentId;
       trackEphemeral?.(attachmentId);
     } catch (error) {
       await unlink(targetPath).catch(() => undefined);
-      return { error: errorMessage(error) };
+
+      return {
+        error: errorMessage(
+          ErrorInputSchema.catch(new Error(String(error))).parse(error)
+        ),
+      };
     }
   }
 
@@ -241,7 +297,9 @@ export async function runGenerateImageTool(
     deps.recordUsage(
       result.model,
       result.usage.inputTokens,
-      result.usage.outputTokens
+      result.usage.outputTokens,
+      selection.instance,
+      { orgId, profileId, userId: context.userId }
     );
   }
 
@@ -267,6 +325,7 @@ async function uniqueArtifactPath(filePath: string): Promise<string> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const suffix = attempt === 0 ? date : `${date}-${attempt + 1}`;
     const candidate = path.join(directory, `${baseName}-${suffix}${extension}`);
+
     if (!(await pathExists(candidate))) {
       return candidate;
     }
@@ -285,6 +344,7 @@ function resolveOutputFilename(
       : mediaType === "image/webp"
         ? ".webp"
         : ".png";
+
   const raw = filename?.trim() || DEFAULT_FILENAME;
   let base = path.basename(raw.replace(/\\/g, "/"));
 
@@ -303,27 +363,18 @@ function normalizeRelativePath(relativePath: string): string {
   return relativePath.replace(/\\/g, "/");
 }
 
-function hasOwnKey(input: unknown, key: string): boolean {
-  return (
-    typeof input === "object" && input !== null && Object.hasOwn(input, key)
-  );
-}
+function errorMessage(error: z.infer<typeof ErrorInputSchema>): string {
+  const nakamaError = z.instanceof(NakamaApiError).safeParse(error);
 
-function readString(input: unknown, key: string): string | null {
-  if (typeof input !== "object" || input === null || !(key in input)) {
-    return null;
+  if (nakamaError.success) {
+    return nakamaError.data.message;
   }
 
-  const value = (input as Record<string, unknown>)[key];
-  return typeof value === "string" ? value : null;
-}
+  const regularError = z.instanceof(Error).safeParse(error);
 
-function errorMessage(error: unknown): string {
-  if (error instanceof NakamaApiError) {
-    return error.message;
+  if (regularError.success && regularError.data.message.trim()) {
+    return regularError.data.message;
   }
-  if (error instanceof Error && error.message.trim()) {
-    return error.message;
-  }
+
   return String(error);
 }

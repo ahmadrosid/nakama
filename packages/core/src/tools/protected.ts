@@ -4,6 +4,7 @@ export const BUILTIN_TOOL_IDS = {
   email: "tool_email",
   extract_document_text: "tool_extract_document_text",
   knowledge_base_search: "tool_knowledge_base_search",
+  list_artifacts: "tool_list_artifacts",
   read_file: "tool_read_file",
   search_files: "tool_search_files",
   sqlite: "tool_sqlite",
@@ -14,9 +15,13 @@ export const BUILTIN_TOOL_IDS = {
 } as const;
 
 export const BASH_TOOL_ID = "tool_bash";
+
 export const SUB_AGENT_TOOL_ID = "tool_sub_agent";
+
 export const GENERATE_IMAGE_TOOL_ID = "tool_generate_image";
+
 export const LIST_PROFILE_SESSIONS_TOOL_ID = "tool_list_profile_sessions";
+
 export const READ_PROFILE_SESSION_TOOL_ID = "tool_read_profile_session";
 
 export const PROTECTED_TOOL_IDS = new Set<string>([

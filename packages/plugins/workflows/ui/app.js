@@ -509,6 +509,16 @@ var style_default = `[data-plugin-id="workflows"] {
 }
 `;
 
+// src/workflow-ops.ts
+function parseWorkflowValue(value) {
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) {
+    throw new Error("Workflow values must be JSON serializable.");
+  }
+  const parsed = JSON.parse(serialized);
+  return parsed;
+}
+
 // src/ui.tsx
 var inject = ["slots", "host", "styles", "ui"];
 var stepFields = {
@@ -519,16 +529,22 @@ var stepFields = {
 };
 function parseValue(value) {
   try {
-    return JSON.parse(value);
+    return parseWorkflowValue(JSON.parse(value));
   } catch {
     return value;
   }
+}
+function readWorkflowString(value) {
+  return value === String(value) ? value : null;
+}
+function isWorkflowRecord(value) {
+  return value instanceof Object && !Array.isArray(value);
 }
 function draftStep(step) {
   return {
     fields: Object.fromEntries(Object.entries(step).filter(([key]) => key !== "id" && key !== "kind").map(([key, value]) => [
       key,
-      typeof value === "string" && !["left", "right", "expected", "tolerance"].includes(key) ? value : JSON.stringify(value, null, 2)
+      value === String(value) && !["left", "right", "expected", "tolerance"].includes(key) ? value : JSON.stringify(value, null, 2)
     ])),
     id: step.id,
     key: crypto.randomUUID(),
@@ -676,12 +692,12 @@ function apply(ctx) {
       href: "/system?tab=mcp"
     }, "Open MCP settings") : null);
   }
-  const action = async (name, input) => await ctx.host.call(name, input);
+  const action = (name, input) => ctx.host.call(name, input);
   function WorkflowRunCard({ input, result, status }) {
-    const workflowId = typeof input?.workflowId === "string" ? input.workflowId : null;
+    const workflowId = input && readWorkflowString(input.workflowId);
     const [workflow, setWorkflow] = React.useState(null);
     const [liveRun, setLiveRun] = React.useState(null);
-    const record = result && typeof result === "object" ? result : null;
+    const record = result ?? null;
     React.useEffect(() => {
       if (!workflowId) {
         return;
@@ -730,9 +746,9 @@ function apply(ctx) {
       const stepStatus = receipt?.status ?? "pending";
       const definition = workflow?.steps.find((item) => item.id === step.id);
       const detail = definition?.kind === "tool" ? definition.tool : definition?.kind === "summarize" ? definition.prompt : definition?.kind === "template" ? definition.template : step.kind;
-      const output = receipt?.output;
-      const content = output && typeof output === "object" && "content" in output ? output.content : null;
-      const meta = receipt?.error ?? (typeof content === "string" ? `${content.trim().split(/\s+/).filter(Boolean).length} words` : stepStatus === "completed" ? step.kind === "summarize" ? "Written" : "Done" : stepStatus);
+      const output = receipt?.output === undefined ? undefined : parseWorkflowValue(receipt.output);
+      const content = isWorkflowRecord(output) ? readWorkflowString(output.content) : null;
+      const meta = receipt?.error ?? (content === null ? stepStatus === "completed" ? step.kind === "summarize" ? "Written" : "Done" : stepStatus : `${content.trim().split(/\s+/).filter(Boolean).length} words`);
       return /* @__PURE__ */ React.createElement("li", {
         "data-status": stepStatus,
         key: step.id
@@ -754,10 +770,7 @@ function apply(ctx) {
     const [error, setError] = React.useState("");
     React.useEffect(() => {
       let active = true;
-      Promise.all([
-        action("list_workflows"),
-        action("profiles")
-      ]).then(([workflows, profiles]) => {
+      Promise.all([action("list_workflows"), action("profiles")]).then(([workflows, profiles]) => {
         if (active) {
           setData({ profiles, workflows });
           setSelectedId(workflows[0]?.id ?? null);
@@ -996,8 +1009,8 @@ function apply(ctx) {
       if (!workflow || dirty || !enabled) {
         return;
       }
-      const input = JSON.parse(runInput || "{}");
-      if (!input || typeof input !== "object" || Array.isArray(input)) {
+      const input = parseWorkflowValue(JSON.parse(runInput || "{}"));
+      if (!isWorkflowRecord(input)) {
         throw new Error("Run input must be a JSON object.");
       }
       const result = await action("run_workflow", {

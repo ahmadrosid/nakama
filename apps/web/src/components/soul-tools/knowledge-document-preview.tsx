@@ -32,13 +32,17 @@ function buildKnowledgeDocumentContentUrl(
   options: { inline?: boolean; render?: "text" } = {}
 ): string {
   const query = new URLSearchParams();
+
   if (options.inline) {
     query.set("inline", "1");
   }
+
   if (options.render) {
     query.set("render", options.render);
   }
+
   const queryString = query.toString();
+
   return `/v1/profiles/${encodeURIComponent(profileId)}/knowledge-base/${encodeURIComponent(documentId)}/content${queryString ? `?${queryString}` : ""}`;
 }
 
@@ -66,27 +70,32 @@ export function KnowledgeDocumentPreview({
   const open = activeId === id;
   const [fullscreen, setFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
+
   const [previewMode, setPreviewMode] =
     useState<ArtifactPreviewMode>("preview");
 
   const canPreview = document.status === "ready";
   const downloadUrl = `${client.baseUrl}${buildKnowledgeDocumentContentUrl(profileId, document.id)}`;
   const isMarkdown = isMarkdownArtifactMimeType(document.mediaType);
+
   const isSpreadsheet = isDelimitedSpreadsheetFile(
     document.filename,
     document.mediaType
   );
+
   const showPreviewToggle = artifactCanTogglePreviewSource({
     isHtml: false,
     isMarkdown,
     isSpreadsheet,
   });
+
   const header = artifactPanelHeaderMeta({
     filename: document.filename,
     mimeType: document.mediaType,
     showPreviewToggle,
     sizeBytes: document.sizeBytes,
   });
+
   const language = artifactCodeLanguage(document.filename);
   const downloadLabel = downloadActionLabel(document.mediaType);
   const artifactRef = toArtifactRef(document);
@@ -104,6 +113,7 @@ export function KnowledgeDocumentPreview({
     }
 
     const timeout = window.setTimeout(() => setCopied(false), 2000);
+
     return () => window.clearTimeout(timeout);
   }, [copied]);
 
@@ -208,12 +218,14 @@ export function KnowledgeDocumentPreview({
   async function copyDocument() {
     try {
       let text = content;
+
       if (!text) {
         const result = await client.readKnowledgeBaseDocumentContent(
           profileId,
           document.id,
           { inline: true, render: "text" }
         );
+
         text = new TextDecoder().decode(result.data);
         setContent(text);
       }

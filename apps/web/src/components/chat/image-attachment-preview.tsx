@@ -13,6 +13,7 @@ interface ImageAttachmentPreviewProps {
 
 function previewText(description?: string | null): string | null {
   const described = description?.trim();
+
   return described || null;
 }
 
@@ -27,10 +28,12 @@ export function ImageAttachmentPreview({
   const attachmentPanel = useOptionalChatAttachmentPanel();
   const show = attachmentPanel?.show;
   const hide = attachmentPanel?.hide;
+
   const interactive =
     !onRemove &&
     Boolean(attachmentPanel) &&
     Boolean(url || description?.trim());
+
   const chipPreview = previewText(description);
 
   useEffect(() => {

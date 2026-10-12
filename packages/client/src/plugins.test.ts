@@ -4,15 +4,18 @@ import { NakamaClient } from "./index";
 function captureClient() {
   const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> =
     [];
+
   const client = new NakamaClient({
     authToken: "local-auth-token",
     baseUrl: "http://localhost:4310",
     fetch: async (input, init) => {
       fetchCalls.push({ init, input });
+
       return Response.json({ ok: true, plugins: [], releases: [] });
     },
     orgId: "org_cookie",
   });
+
   return { client, fetchCalls };
 }
 

@@ -1,4 +1,5 @@
 import {
+  type CreateNotificationDestinationRequest,
   createId,
   type ListNotificationDestinationsResponse,
   NakamaApiError,
@@ -8,6 +9,7 @@ import {
   normalizeCreateNotificationDestinationRequest,
   normalizeUpdateNotificationDestinationRequest,
   type RegenerateNotificationDestinationKeyResponse,
+  type UpdateNotificationDestinationRequest,
 } from "@nakama/core";
 import type {
   DatabaseAdapter,
@@ -15,28 +17,46 @@ import type {
 } from "@nakama/db";
 import type { AuthService } from "./auth-service";
 
-export function notificationDestinationWebhookPath(
-  destinationId: string
-): string {
+function notificationDestinationWebhookPath(destinationId: string): string {
   return `/v1/notify/${encodeURIComponent(destinationId)}`;
 }
 
 function toSummary(
   record: StoredNotificationDestinationRecord
 ): NotificationDestinationSummary {
-  return {
-    channel: record.channel,
+  const common = {
     createdAt: record.createdAt,
     id: record.id,
     name: record.name,
-    telegram: {
-      chatId: record.config.chatId,
-      profileId: record.config.profileId,
-      topicId: record.config.topicId ?? null,
-    },
     updatedAt: record.updatedAt,
     webhookPath: notificationDestinationWebhookPath(record.id),
   };
+
+  if (record.channel === "telegram") {
+    return {
+      ...common,
+      channel: record.channel,
+      telegram: { ...record.config, topicId: record.config.topicId ?? null },
+    };
+  }
+
+  if (record.channel === "discord") {
+    return { ...common, channel: record.channel, discord: record.config };
+  }
+
+  return { ...common, channel: record.channel, whatsapp: record.config };
+}
+
+function destinationConfig(request: CreateNotificationDestinationRequest) {
+  if (request.channel === "telegram") {
+    return { channel: request.channel, config: request.telegram };
+  }
+
+  if (request.channel === "discord") {
+    return { channel: request.channel, config: request.discord };
+  }
+
+  return { channel: request.channel, config: request.whatsapp };
 }
 
 export class NotificationDestinationService {
@@ -47,6 +67,7 @@ export class NotificationDestinationService {
 
   private async requireChannelProfile(orgId: string, profileId?: string) {
     const profiles = await this.databaseAdapter.listProfilesForOrg(orgId);
+
     if (!(profileId && profiles.some((profile) => profile.id === profileId))) {
       throw new NakamaApiError("Choose an agent in this organization.", 400);
     }
@@ -55,24 +76,22 @@ export class NotificationDestinationService {
   async list(orgId: string): Promise<ListNotificationDestinationsResponse> {
     const destinations =
       await this.databaseAdapter.listNotificationDestinationsForOrg(orgId);
+
     return { destinations: destinations.map(toSummary) };
   }
 
   async create(
     orgId: string,
-    input: unknown
+    input: CreateNotificationDestinationRequest
   ): Promise<NotificationDestinationWithSecret> {
     const request = normalizeCreateNotificationDestinationRequest(input);
-    await this.requireChannelProfile(orgId, request.telegram.profileId);
+    const configured = destinationConfig(request);
+    await this.requireChannelProfile(orgId, configured.config.profileId);
     const apiKey = nanoid(32);
     const now = new Date().toISOString();
+
     const record: StoredNotificationDestinationRecord = {
-      channel: request.channel,
-      config: {
-        chatId: request.telegram.chatId,
-        profileId: request.telegram.profileId,
-        topicId: request.telegram.topicId ?? null,
-      },
+      ...configured,
       createdAt: now,
       id: createId("dest"),
       name: request.name,
@@ -92,23 +111,27 @@ export class NotificationDestinationService {
   async update(
     orgId: string,
     destinationId: string,
-    input: unknown
+    input: UpdateNotificationDestinationRequest
   ): Promise<NotificationDestinationSummary> {
     const existing = await this.getOwnedRecord(orgId, destinationId);
-    const request = normalizeUpdateNotificationDestinationRequest(input);
-    await this.requireChannelProfile(orgId, request.telegram.profileId);
+
+    const request = normalizeUpdateNotificationDestinationRequest(
+      input,
+      existing.channel
+    );
+
+    const configured = destinationConfig(request);
+    await this.requireChannelProfile(orgId, configured.config.profileId);
+
     const updated: StoredNotificationDestinationRecord = {
       ...existing,
-      config: {
-        chatId: request.telegram.chatId,
-        profileId: request.telegram.profileId,
-        topicId: request.telegram.topicId ?? null,
-      },
+      ...configured,
       name: request.name,
       updatedAt: new Date().toISOString(),
     };
 
     await this.databaseAdapter.upsertNotificationDestination(updated);
+
     return toSummary(updated);
   }
 
@@ -118,6 +141,7 @@ export class NotificationDestinationService {
   ): Promise<RegenerateNotificationDestinationKeyResponse> {
     const existing = await this.getOwnedRecord(orgId, destinationId);
     const apiKey = nanoid(32);
+
     const updated: StoredNotificationDestinationRecord = {
       ...existing,
       secretHash: this.authService.hashToken(apiKey),

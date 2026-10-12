@@ -18,19 +18,24 @@ import type {
   CreateSkillRequest,
   InstallSkillRequest,
   ListSkillsResponse,
+  ListSkillVersionsResponse,
   PatchSkillRequest,
+  PublishedSkillResponse,
+  PublishedSkillSummary,
   SkillFileResponse,
   SkillFilesResponse,
   SkillResponse,
   SkillSummary,
   SkillUsageSummary,
   SyncSkillsResponse,
+  ToolContext,
   ToolDefinition,
 } from "@nakama/core";
 import {
   assertNotBundledSkillName,
   assertValidSkillName,
   BUNDLED_SKILL_NAMES,
+  buildToolExecutionContext,
   composeAgentBrowserCapabilityPrompt,
   composeMatchedSkillsPrompt,
   composeSkillMarkdown,
@@ -46,6 +51,7 @@ import {
   extractExplicitSkillName,
   fetchGitHubSkillBundle,
   type GitHubSkillBundle,
+  getOrgConfigDir,
   getProfileSoulDir,
   guardFilePath,
   isGlobalSkillSourcePath,
@@ -61,6 +67,7 @@ import {
   pickPreferredSkillSourcePath,
   readUploadedSkillBundle,
   removeProfileSkillSupportingFile,
+  requireToolNotViewer,
   resolveProfileSkillDirectory,
   resolveProfileSkillSupportingFilePath,
   resolveSkillCodeExecutionPolicy,
@@ -76,6 +83,7 @@ import type {
   StoredSkillRecord,
   StoredSkillUsageRecord,
 } from "@nakama/db";
+import { loadJavascriptSkillTool } from "./javascript-tool-loader";
 import type { PluginService } from "./plugin-service";
 import {
   type ProfileChangeMeta,
@@ -96,10 +104,21 @@ function isPluginOwnedSkill(record: StoredSkillRecord): boolean {
   return Boolean(record.pluginId && record.pluginKey);
 }
 
+function assertEditableSkill(record: StoredSkillRecord): void {
+  if (isPluginOwnedSkill(record)) {
+    throw new Error("Plugin-owned skills cannot be edited.");
+  }
+
+  if (bundledSkillNames.has(record.name)) {
+    throw new Error("Bundled system skills cannot be edited.");
+  }
+}
+
 function parseSkillsAddCommand(command: string): string {
   const tokens = command
     .match(/"[^"]*"|'[^']*'|\S+/g)
     ?.map((token) => token.replace(/^("|')|("|')$/g, ""));
+
   if (
     !tokens ||
     tokens.length < 4 ||
@@ -116,6 +135,7 @@ function parseSkillsAddCommand(command: string): string {
   const source = tokens[3];
   const skillIndex = tokens.indexOf("--skill");
   const skillName = skillIndex >= 0 ? tokens[skillIndex + 1] : undefined;
+
   if (!(source && skillName) || tokens.length !== skillIndex + 2) {
     throw new NakamaApiError(
       "Include one skill, for example: npx skills add vercel-labs/agent-skills --skill pdf.",
@@ -124,6 +144,7 @@ function parseSkillsAddCommand(command: string): string {
   }
 
   let baseUrl: URL;
+
   try {
     baseUrl = new URL(
       source.includes("://") ? source : `https://github.com/${source}`
@@ -134,6 +155,7 @@ function parseSkillsAddCommand(command: string): string {
       400
     );
   }
+
   if (
     baseUrl.hostname !== "github.com" ||
     baseUrl.pathname.split("/").filter(Boolean).length !== 2
@@ -143,6 +165,7 @@ function parseSkillsAddCommand(command: string): string {
       400
     );
   }
+
   return `${baseUrl.origin}${baseUrl.pathname}/tree/HEAD/${encodeURIComponent(skillName)}`;
 }
 
@@ -210,16 +233,193 @@ export class SkillsService {
     }
 
     const skills = await this.db.listSkills();
+    const publishedSkills: PublishedSkillSummary[] = [];
+    const team = orgId ? await this.db.getOrganizationById(orgId) : null;
+
+    const parent = team?.parentOrgId
+      ? await this.db.getOrganizationById(team.parentOrgId)
+      : null;
+
+    if (
+      team &&
+      !team.archivedAt &&
+      !team.setupPending &&
+      parent &&
+      !parent.archivedAt &&
+      !parent.setupPending
+    ) {
+      const publications = await this.db.listOrgSharedResources(parent.id);
+
+      for (const publication of publications) {
+        if (publication.resourceKind !== "skill") {
+          continue;
+        }
+
+        try {
+          const source = await this.resolvePublishedSkill(
+            team.id,
+            publication.id
+          );
+
+          publishedSkills.push(source.summary);
+        } catch (error) {
+          if (!(error instanceof NakamaApiError && error.status === 404)) {
+            throw error;
+          }
+        }
+      }
+    }
+
     return {
+      publishedSkills,
       skills: skills
         .filter((skill) => !(orgId && skill.orgId) || skill.orgId === orgId)
-        .map(toSkillSummary),
+        .map((skill) => toSkillSummary(skill)),
     };
+  }
+
+  async getPublishedSkill(
+    orgId: string,
+    publicationId: string
+  ): Promise<PublishedSkillResponse> {
+    const source = await this.resolvePublishedSkill(orgId, publicationId);
+
+    return { skill: { ...source.summary, body: source.body } };
+  }
+
+  async getPublishedSkillSummaryForResource(
+    orgId: string,
+    skillId: string
+  ): Promise<PublishedSkillSummary> {
+    const team = await this.db.getOrganizationById(orgId);
+
+    const publication = team?.parentOrgId
+      ? (await this.db.listOrgSharedResources(team.parentOrgId)).find(
+          (entry) =>
+            entry.resourceKind === "skill" && entry.resourceId === skillId
+        )
+      : null;
+
+    if (!publication) {
+      throw new NakamaApiError("Skill is unavailable.", 404);
+    }
+
+    return (await this.resolvePublishedSkill(orgId, publication.id)).summary;
+  }
+
+  private async resolvePublishedSkill(
+    orgId: string,
+    publicationId: string
+  ): Promise<{
+    summary: PublishedSkillSummary;
+    body: string;
+    directory: string;
+    includeBodyOnMatch: boolean;
+    sourceProfileId: string;
+  }> {
+    const team = await this.db.getOrganizationById(orgId);
+
+    const parent = team?.parentOrgId
+      ? await this.db.getOrganizationById(team.parentOrgId)
+      : team;
+
+    if (
+      !team ||
+      team.archivedAt ||
+      team.setupPending ||
+      !parent ||
+      parent.archivedAt ||
+      parent.setupPending
+    ) {
+      throw new NakamaApiError("Skill is unavailable.", 404);
+    }
+
+    const publication = await this.db.getOrgSharedResource(
+      parent.id,
+      publicationId
+    );
+
+    if (!publication || publication.resourceKind !== "skill") {
+      throw new NakamaApiError("Skill is unavailable.", 404);
+    }
+
+    const record = await this.db.getSkill(publication.resourceId);
+
+    if (
+      !record ||
+      record.orgId !== parent.id ||
+      !record.enabled ||
+      isPluginOwnedSkill(record)
+    ) {
+      throw new NakamaApiError("Skill is unavailable.", 404);
+    }
+
+    const profiles = await this.db.listProfilesForOrg(parent.id);
+
+    try {
+      const { resolved: sourcePath } = await guardFilePath(
+        record.sourcePath,
+        null,
+        undefined,
+        { allowedDirs: [getOrgConfigDir(parent.id)] }
+      );
+
+      const owner = profiles.find(
+        (profile) =>
+          sourcePath ===
+          resolveProfileSkillDirectory(parent.id, profile.id, record.name)
+      );
+
+      if (!owner) {
+        throw new NakamaApiError("Skill is unavailable.", 404);
+      }
+
+      const { resolved } = await guardFilePath(
+        path.join(record.sourcePath, SKILL_FILE_NAME),
+        null,
+        undefined,
+        { allowedDirs: [record.sourcePath] }
+      );
+
+      const parsed = parseSkillMarkdown(
+        await readFile(resolved, "utf8"),
+        resolved
+      );
+
+      if (parsed.frontmatter.name !== record.name) {
+        throw new NakamaApiError("Skill is unavailable.", 404);
+      }
+
+      return {
+        body: parsed.body,
+        directory: sourcePath,
+        includeBodyOnMatch: parsed.frontmatter.includeBodyOnMatch ?? false,
+        sourceProfileId: owner.id,
+        summary: {
+          createdAt: record.createdAt,
+          createdBy: record.createdBy,
+          description: parsed.frontmatter.description,
+          disableModelInvocation:
+            parsed.frontmatter.disableModelInvocation ?? false,
+          enabled: record.enabled,
+          hasTool: record.hasTool,
+          id: record.id,
+          name: record.name,
+          publicationId: publication.id,
+          scope: "parent",
+          sourceOrganization: { id: parent.id, name: parent.name },
+          updatedAt: record.updatedAt,
+        },
+      };
+    } catch {
+      throw new NakamaApiError("Skill is unavailable.", 404);
+    }
   }
 
   async createSkill(
     orgId: string,
-    request: CreateSkillRequest
+    request: CreateSkillRequest,
+    options?: { meta?: ProfileChangeMeta }
   ): Promise<SkillResponse> {
     const name = request.name.trim();
 
@@ -235,6 +435,7 @@ export class SkillsService {
     }
 
     const profileId = request.profileId?.trim() || undefined;
+
     const directory = await createSkillFile({
       body: request.body,
       description: request.description.trim(),
@@ -259,6 +460,13 @@ export class SkillsService {
       throw new Error("Skill was created but could not be synced.");
     }
 
+    await this.recordSkillVersion(
+      record,
+      null,
+      await readFile(path.join(directory, SKILL_FILE_NAME), "utf8"),
+      options?.meta
+    );
+
     return this.getSkill(record.id);
   }
 
@@ -266,10 +474,11 @@ export class SkillsService {
     orgId: string,
     skillId: string,
     request: PatchSkillRequest,
-    options?: { profileId?: string }
+    options?: { meta?: ProfileChangeMeta; profileId?: string }
   ): Promise<SkillResponse> {
     const hasDescription = request.description !== undefined;
     const hasBody = request.body !== undefined;
+
     const hasDisableModelInvocation =
       request.disableModelInvocation !== undefined;
 
@@ -278,18 +487,12 @@ export class SkillsService {
     }
 
     const record = await this.requireSkill(skillId);
-
-    if (isPluginOwnedSkill(record)) {
-      throw new Error("Plugin-owned skills cannot be edited.");
-    }
-
-    if (bundledSkillNames.has(record.name)) {
-      throw new Error("Bundled system skills cannot be edited.");
-    }
+    assertEditableSkill(record);
 
     const skillFilePath = path.join(record.sourcePath, SKILL_FILE_NAME);
     const existing = await readFile(skillFilePath, "utf8");
     const parsed = parseSkillMarkdown(existing, skillFilePath);
+
     const description =
       request.description === undefined
         ? parsed.frontmatter.description
@@ -300,6 +503,7 @@ export class SkillsService {
     }
 
     const body = request.body === undefined ? parsed.body : request.body;
+
     const disableModelInvocation =
       request.disableModelInvocation === undefined
         ? parsed.frontmatter.disableModelInvocation
@@ -325,7 +529,12 @@ export class SkillsService {
       "patched"
     );
 
+    await this.recordSkillVersion(synced, existing, content, options?.meta, {
+      note: request.note,
+    });
+
     const profileId = options?.profileId?.trim();
+
     if (profileId) {
       await this.recordPatch(orgId, profileId, synced.id);
     }
@@ -368,20 +577,25 @@ export class SkillsService {
     }
 
     const profile = await this.db.getProfileForOrg(profileId, orgId);
+
     if (!profile) {
       throw new NakamaApiError("Profile not found.", 404);
     }
 
     const commandUrl = command ? parseSkillsAddCommand(command) : "";
+
     const bundle = request.zipBase64
       ? (() => {
           const archive = Buffer.from(request.zipBase64!, "base64");
+
           if (archive.length > 50 * 1024 * 1024) {
             throw new NakamaApiError("Skill ZIP is too large.", 400);
           }
+
           return readUploadedSkillBundle(archive);
         })()
       : await fetchGitHubSkillBundle(url || commandUrl);
+
     const { content } = bundle;
 
     try {
@@ -402,6 +616,7 @@ export class SkillsService {
         content,
         { createdBy: "human", supportingFiles: bundle.files }
       );
+
       return { skill: installed.skill };
     } catch (error) {
       if (error instanceof NakamaApiError) {
@@ -443,6 +658,7 @@ export class SkillsService {
     const changeMeta = options?.changeMeta;
 
     const existingByName = await this.getMutableSkillByName(name, orgId);
+
     if (
       existingByName &&
       !isPathWithinProfileSkillsDir(orgId, profileId, existingByName.sourcePath)
@@ -457,13 +673,16 @@ export class SkillsService {
       isPathWithinProfileSkillsDir(orgId, profileId, existingByName.sourcePath)
     ) {
       const assigned = await this.db.listSkillsForProfile(profileId);
+
       if (assigned.some((skill) => skill.id === existingByName.id)) {
         const skillFile = path.join(existingByName.sourcePath, SKILL_FILE_NAME);
         const existingContent = await readFile(skillFile, "utf8");
         const nextContent = content.endsWith("\n") ? content : `${content}\n`;
+
         const normalizedExisting = existingContent.endsWith("\n")
           ? existingContent
           : `${existingContent}\n`;
+
         if (normalizedExisting !== nextContent) {
           throw new Error(
             `Skill "${name}" is already assigned to this profile. Use action patch or edit to update it.`
@@ -475,23 +694,27 @@ export class SkillsService {
     // A reinstall may repair missing files, but must never overwrite local edits.
     if (options?.supportingFiles) {
       const directory = resolveProfileSkillDirectory(orgId, profileId, name);
+
       try {
         const existing = await readFile(
           path.join(directory, SKILL_FILE_NAME),
           "utf8"
         );
+
         if (existing.trimEnd() !== content.trimEnd()) {
           throw new Error(
             `Skill "${name}" already exists with different content.`
           );
         }
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        if (!hasSystemErrorCode(error, ["ENOENT"])) {
           throw error;
         }
       }
     }
+
     const missingFiles: GitHubSkillBundle["files"] = [];
+
     for (const file of options?.supportingFiles ?? []) {
       const { absolutePath } = resolveProfileSkillSupportingFilePath(
         orgId,
@@ -499,17 +722,20 @@ export class SkillsService {
         name,
         file.path
       );
+
       try {
         const existing = await readFile(absolutePath);
+
         if (!existing.equals(Buffer.from(file.content))) {
           throw new Error(
             `Supporting file "${file.path}" already exists with different content.`
           );
         }
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        if (!hasSystemErrorCode(error, ["ENOENT"])) {
           throw error;
         }
+
         missingFiles.push(file);
       }
     }
@@ -517,6 +743,7 @@ export class SkillsService {
     // Publish SKILL.md last. If a disk write fails, remove only files this call added.
     const addedPaths: string[] = [];
     let written: Awaited<ReturnType<typeof writeRawProfileSkillMarkdown>>;
+
     try {
       for (const file of missingFiles) {
         const added = await writeProfileSkillSupportingFile({
@@ -527,8 +754,10 @@ export class SkillsService {
           profileId,
           relativePath: file.path,
         });
+
         addedPaths.push(added.absolutePath);
       }
+
       written = await writeRawProfileSkillMarkdown({
         allowExisting: true,
         content,
@@ -556,6 +785,7 @@ export class SkillsService {
     );
 
     const response = await this.getSkill(record.id);
+
     return { ...response, created: written.created };
   }
 
@@ -567,6 +797,7 @@ export class SkillsService {
     meta?: ProfileChangeMeta
   ): Promise<SkillResponse> {
     const skillName = assertValidSkillName(name);
+
     const { name: parsedName } = parseRawProfileSkillContent(
       content,
       orgId,
@@ -584,12 +815,11 @@ export class SkillsService {
       profileId,
       skillName
     );
-    const beforeContent = meta
-      ? await readFile(
-          path.join(recordBefore.sourcePath, SKILL_FILE_NAME),
-          "utf8"
-        )
-      : null;
+
+    const beforeContent = await readFile(
+      path.join(recordBefore.sourcePath, SKILL_FILE_NAME),
+      "utf8"
+    );
 
     const written = await writeRawProfileSkillMarkdown({
       allowExisting: true,
@@ -611,6 +841,7 @@ export class SkillsService {
     );
 
     await this.recordPatch(orgId, profileId, record.id);
+    await this.recordSkillVersion(record, beforeContent, content, meta);
 
     if (meta && beforeContent !== content) {
       await recordProfileChangeEvent(this.db, {
@@ -675,18 +906,21 @@ export class SkillsService {
     newString: string,
     meta?: ProfileChangeMeta
   ): Promise<SkillResponse> {
-    let beforeContent: string | null = null;
     if (meta) {
-      const recordBefore = await this.assertProfileOwnedSkill(
+      await this.assertProfileOwnedSkill(
         orgId,
         profileId,
         assertValidSkillName(name)
       );
-      beforeContent = await readFile(
-        path.join(recordBefore.sourcePath, SKILL_FILE_NAME),
-        "utf8"
-      );
     }
+
+    const beforeContent = await readFile(
+      path.join(
+        resolveProfileSkillDirectory(orgId, profileId, name),
+        SKILL_FILE_NAME
+      ),
+      "utf8"
+    ).catch(() => null);
 
     const patched = await patchSkillFile({
       name,
@@ -704,11 +938,14 @@ export class SkillsService {
 
     await this.recordPatch(orgId, profileId, record.id);
 
+    const afterContent = await readFile(
+      path.join(record.sourcePath, SKILL_FILE_NAME),
+      "utf8"
+    );
+
+    await this.recordSkillVersion(record, beforeContent, afterContent, meta);
+
     if (meta) {
-      const afterContent = await readFile(
-        path.join(record.sourcePath, SKILL_FILE_NAME),
-        "utf8"
-      );
       await recordProfileChangeEvent(this.db, {
         actorUserId: meta.actorUserId,
         afterValue: afterContent,
@@ -733,6 +970,7 @@ export class SkillsService {
     assertNotBundledSkillName(skillName);
 
     const record = await this.getMutableSkillByName(skillName, orgId);
+
     if (!record) {
       throw new Error(`Skill "${skillName}" not found.`);
     }
@@ -827,13 +1065,17 @@ export class SkillsService {
 
   async getSkill(skillId: string, orgId?: string): Promise<SkillResponse> {
     const record = await this.requireSkill(skillId);
+
     if (orgId && record.orgId && record.orgId !== orgId) {
       throw new NakamaApiError("Skill not found.", 404);
     }
+
     const directory = await this.resolveSkillDirectory(record);
+
     const discovered = directory
       ? await discoverSkillDirectory(directory)
       : null;
+
     const body =
       discovered?.body ?? (await readSkillBody(directory ?? record.sourcePath));
 
@@ -846,18 +1088,172 @@ export class SkillsService {
     };
   }
 
+  async listSkillVersions(
+    orgId: string,
+    skillId: string
+  ): Promise<ListSkillVersionsResponse> {
+    const record = await this.db.getSkill(skillId);
+
+    if (!record || (record.orgId && record.orgId !== orgId)) {
+      throw new NakamaApiError("Skill not found.", 404);
+    }
+
+    const actorNames = new Map<string, Promise<string | null>>();
+
+    const actorName = (userId: string) => {
+      let name = actorNames.get(userId);
+
+      if (!name) {
+        name = this.db
+          .getUserById(userId)
+          .then((user) => user?.name?.trim() || null);
+        actorNames.set(userId, name);
+      }
+
+      return name;
+    };
+
+    const versions = await this.db.listSkillVersions(skillId);
+
+    const currentContent = await readFile(
+      path.join(record.sourcePath, SKILL_FILE_NAME),
+      "utf8"
+    ).catch(() => "");
+
+    const ownerOrgId = record.orgId;
+
+    const proposals = ownerOrgId
+      ? (
+          await this.db.listSkillProposals(ownerOrgId, { status: "pending" })
+        ).filter(
+          (proposal) =>
+            proposal.skillName === record.name &&
+            isPathWithinProfileSkillsDir(
+              ownerOrgId,
+              proposal.profileId,
+              record.sourcePath
+            )
+        )
+      : [];
+
+    const pending = await Promise.all(
+      proposals.map(async (proposal) => {
+        let content: string | null = null;
+
+        if (proposal.action === "edit") {
+          content = proposal.content;
+        } else if (
+          proposal.action === "patch" &&
+          proposal.patchOldString &&
+          proposal.patchNewString !== null &&
+          currentContent.split(proposal.patchOldString).length === 2
+        ) {
+          const newString = proposal.patchNewString;
+          content = currentContent.replace(
+            proposal.patchOldString,
+            () => newString
+          );
+        }
+
+        return content === null
+          ? null
+          : {
+              content,
+              createdAt: proposal.createdAt,
+              id: proposal.id,
+              proposedByName: proposal.proposedByUserId
+                ? await actorName(proposal.proposedByUserId)
+                : null,
+            };
+      })
+    );
+
+    return {
+      currentContent,
+      pending: pending
+        .filter((entry) => entry !== null)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      versions: await Promise.all(
+        versions.map(async (version) => ({
+          actorName: version.actorUserId
+            ? await actorName(version.actorUserId)
+            : null,
+          content: version.content,
+          createdAt: version.createdAt,
+          id: version.id,
+          kind: version.kind,
+          note: version.note,
+          source: version.source,
+          version: version.version,
+        }))
+      ),
+    };
+  }
+
+  async restoreSkillVersion(
+    orgId: string,
+    skillId: string,
+    versionId: string,
+    meta?: ProfileChangeMeta
+  ): Promise<SkillResponse> {
+    const record = await this.db.getSkill(skillId);
+
+    if (!record || (record.orgId && record.orgId !== orgId)) {
+      throw new NakamaApiError("Skill not found.", 404);
+    }
+
+    assertEditableSkill(record);
+    const version = await this.db.getSkillVersion(skillId, versionId);
+
+    if (!version) {
+      throw new NakamaApiError("Skill version not found.", 404);
+    }
+
+    const skillFilePath = path.join(record.sourcePath, SKILL_FILE_NAME);
+    const existing = await readFile(skillFilePath, "utf8");
+
+    const currentName = parseSkillMarkdown(existing, skillFilePath).frontmatter
+      .name;
+
+    if (
+      parseSkillMarkdown(version.content, skillFilePath).frontmatter.name !==
+      currentName
+    ) {
+      throw new NakamaApiError("A restore cannot rename the skill.", 409);
+    }
+
+    await writeFile(skillFilePath, version.content, "utf8");
+
+    const synced = await this.syncSkillRecordFromDirectory(
+      record.sourcePath,
+      currentName,
+      "patched"
+    );
+
+    await this.recordSkillVersion(synced, existing, version.content, meta, {
+      kind: "restored",
+      note: `Restored v${version.version}`,
+    });
+
+    return this.getSkill(synced.id);
+  }
+
   private async skillFilesRoot(
     orgId: string,
     skillId: string
   ): Promise<string> {
     const record = await this.db.getSkill(skillId);
+
     if (!record || (record.orgId && record.orgId !== orgId)) {
       throw new NakamaApiError("Skill not found.", 404);
     }
+
     const directory = await this.resolveSkillDirectory(record);
+
     if (!directory) {
       throw new NakamaApiError("Skill files are unavailable.", 404);
     }
+
     try {
       return await realpath(directory);
     } catch {
@@ -870,8 +1266,30 @@ export class SkillsService {
     skillId: string
   ): Promise<SkillFilesResponse> {
     const root = await this.skillFilesRoot(orgId, skillId);
+
+    return this.listFilesInRoot(root);
+  }
+
+  async listPublishedSkillFiles(
+    orgId: string,
+    publicationId: string
+  ): Promise<SkillFilesResponse> {
+    const { directory } = await this.resolvePublishedSkill(
+      orgId,
+      publicationId
+    );
+
+    try {
+      return await this.listFilesInRoot(directory);
+    } catch {
+      throw new NakamaApiError("Skill files are unavailable.", 404);
+    }
+  }
+
+  private async listFilesInRoot(root: string): Promise<SkillFilesResponse> {
     const files: SkillFilesResponse["files"] = [];
     let truncated = false;
+
     async function visit(
       directory: string,
       prefix: string,
@@ -879,14 +1297,17 @@ export class SkillsService {
     ): Promise<void> {
       if (depth > 12) {
         truncated = true;
+
         return;
       }
+
       const entries = await readdir(directory, { withFileTypes: true });
       entries.sort(
         (a, b) =>
           Number(b.isDirectory()) - Number(a.isDirectory()) ||
           a.name.localeCompare(b.name)
       );
+
       for (const entry of entries) {
         if (
           entry.isSymbolicLink() ||
@@ -894,21 +1315,27 @@ export class SkillsService {
         ) {
           continue;
         }
+
         if (files.length >= 1000) {
           truncated = true;
+
           return;
         }
+
         const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
         files.push({
           path: relative,
           type: entry.isDirectory() ? "directory" : "file",
         });
+
         if (entry.isDirectory()) {
           await visit(path.join(directory, entry.name), relative, depth + 1);
         }
       }
     }
+
     await visit(root, "", 0);
+
     return { files, truncated };
   }
 
@@ -918,6 +1345,127 @@ export class SkillsService {
     filePath: string
   ): Promise<SkillFileResponse> {
     const root = await this.skillFilesRoot(orgId, skillId);
+
+    return this.readFileFromRoot(root, filePath);
+  }
+
+  async readPublishedSkillFile(
+    orgId: string,
+    publicationId: string,
+    filePath: string
+  ): Promise<SkillFileResponse> {
+    const { directory } = await this.resolvePublishedSkill(
+      orgId,
+      publicationId
+    );
+
+    try {
+      return await this.readFileFromRoot(directory, filePath);
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        throw error;
+      }
+
+      throw new NakamaApiError("Skill file is unavailable.", 404);
+    }
+  }
+
+  async readPublishedSkillFileForProfile(
+    orgId: string,
+    profileId: string,
+    publicationId: string,
+    filePath: string,
+    maxBytes: number
+  ): Promise<Uint8Array> {
+    const profile = await this.db.getProfile(profileId);
+
+    if (profile?.orgId !== orgId) {
+      throw new NakamaApiError("Profile not found.", 404);
+    }
+
+    const { summary, directory } = await this.resolvePublishedSkill(
+      orgId,
+      publicationId
+    );
+
+    const assigned = await this.getAssignedSkills(orgId, profileId);
+
+    if (!assigned.some((item) => item.id === summary.id)) {
+      throw new NakamaApiError("Skill is unavailable.", 404);
+    }
+
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
+      throw new NakamaApiError("Invalid file size limit.", 400);
+    }
+
+    try {
+      const bytes = await this.readBytesFromRoot(
+        directory,
+        filePath,
+        Math.min(maxBytes, 10 * 1024 * 1024)
+      );
+
+      if (!bytes) {
+        throw new NakamaApiError("Skill file exceeds the size limit.", 413);
+      }
+
+      return bytes;
+    } catch (error) {
+      if (error instanceof NakamaApiError) {
+        throw error;
+      }
+
+      throw new NakamaApiError("Skill file is unavailable.", 404);
+    }
+  }
+
+  private async readFileFromRoot(
+    root: string,
+    filePath: string
+  ): Promise<SkillFileResponse> {
+    const bytes = await this.readBytesFromRoot(root, filePath, 1024 * 1024);
+
+    if (!bytes) {
+      return {
+        content: null,
+        path: filePath,
+        unavailableReason: "Preview is limited to files up to 1 MB.",
+      };
+    }
+
+    const mediaType = inferArtifactMimeType(filePath);
+
+    if (mediaType.startsWith("image/")) {
+      return {
+        content: null,
+        image: { dataBase64: bytes.toString("base64"), mediaType },
+        path: filePath,
+      };
+    }
+
+    try {
+      if (bytes.includes(0)) {
+        throw new Error("Binary file");
+      }
+
+      return {
+        content: new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+        path: filePath,
+      };
+    } catch {
+      return {
+        content: null,
+        path: filePath,
+        unavailableReason: "Preview is unavailable for binary files.",
+      };
+    }
+  }
+
+  private async readBytesFromRoot(
+    root: string,
+    filePath: string,
+    maxBytes: number
+  ): Promise<Buffer | null> {
     if (
       !filePath ||
       filePath.includes("\0") ||
@@ -927,62 +1475,40 @@ export class SkillsService {
     ) {
       throw new NakamaApiError("Invalid skill file path.", 400);
     }
+
     let target: string;
+
     try {
       target = await realpath(path.join(root, filePath));
     } catch {
       throw new NakamaApiError("Skill file not found.", 404);
     }
+
     if (!target.startsWith(`${root}${path.sep}`)) {
       throw new NakamaApiError("File is outside the skill directory.", 403);
     }
+
     const handle = await open(target, "r");
+
     try {
       const stat = await handle.stat();
+
       if (!stat.isFile()) {
         throw new NakamaApiError("Select a file.", 400);
       }
-      const maxBytes = 1024 * 1024;
+
       if (stat.size > maxBytes) {
-        return {
-          content: null,
-          path: filePath,
-          unavailableReason: "Preview is limited to files up to 1 MB.",
-        };
+        return null;
       }
+
       const buffer = Buffer.alloc(maxBytes + 1);
       const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+
       if (bytesRead > maxBytes) {
-        return {
-          content: null,
-          path: filePath,
-          unavailableReason: "Preview is limited to files up to 1 MB.",
-        };
+        return null;
       }
-      const bytes = buffer.subarray(0, bytesRead);
-      const mediaType = inferArtifactMimeType(filePath);
-      if (mediaType.startsWith("image/")) {
-        return {
-          content: null,
-          image: { dataBase64: bytes.toString("base64"), mediaType },
-          path: filePath,
-        };
-      }
-      try {
-        if (bytes.includes(0)) {
-          throw new Error("Binary file");
-        }
-        return {
-          content: new TextDecoder("utf-8", { fatal: true }).decode(bytes),
-          path: filePath,
-        };
-      } catch {
-        return {
-          content: null,
-          path: filePath,
-          unavailableReason: "Preview is unavailable for binary files.",
-        };
-      }
+
+      return buffer.subarray(0, bytesRead);
     } finally {
       await handle.close();
     }
@@ -994,9 +1520,13 @@ export class SkillsService {
     usageContext?: SkillUsageRecordingContext,
     // False in a cognito session: a usage row records which skills the chat
     // touched, which is a durable trace of what it was about.
-    recordUsage = true
+    recordUsage = true,
+    includeParent = true
   ): Promise<string> {
-    const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
+    const assigned = includeParent
+      ? await this.getPromptSkills(orgId, profileId)
+      : await this.getAssignedDiscoveredSkills(orgId, profileId);
+
     const skillIds = assigned
       .map((item) => item.record.id)
       .filter((skillId): skillId is string => Boolean(skillId));
@@ -1008,11 +1538,44 @@ export class SkillsService {
     return composeSkillsCatalog(assigned.map((item) => item.discovered));
   }
 
+  async composePublishedSkillsCatalogForProfile(
+    orgId: string,
+    profileId: string,
+    usageContext?: SkillUsageRecordingContext,
+    recordUsage = true
+  ): Promise<string> {
+    const assigned = (await this.getPromptSkills(orgId, profileId)).filter(
+      (item) => item.discovered.sourceOrganization
+    );
+
+    if (recordUsage) {
+      void this.recordCatalogViews(
+        orgId,
+        profileId,
+        assigned.map((item) => item.record.id),
+        usageContext
+      );
+    }
+
+    const discovered = assigned.map((item) => item.discovered);
+
+    return [
+      composeSkillsCatalog(discovered),
+      composeAgentBrowserCapabilityPrompt(discovered),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  }
+
   async composeAgentBrowserCapabilityForProfile(
     orgId: string,
-    profileId: string
+    profileId: string,
+    includeParent = true
   ): Promise<string> {
-    const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
+    const assigned = includeParent
+      ? await this.getPromptSkills(orgId, profileId)
+      : await this.getAssignedDiscoveredSkills(orgId, profileId);
+
     return composeAgentBrowserCapabilityPrompt(
       assigned.map((item) => item.discovered)
     );
@@ -1029,7 +1592,7 @@ export class SkillsService {
       usageContext?: SkillUsageRecordingContext;
     } = {}
   ): Promise<string> {
-    const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
+    const assigned = await this.getPromptSkills(orgId, profileId);
     const discovered = assigned.map((item) => item.discovered);
     const matched = matchSkillsForMessage(discovered, userMessage);
     const explicitSkillName = extractExplicitSkillName(userMessage);
@@ -1052,6 +1615,7 @@ export class SkillsService {
     const prompt = composeMatchedSkillsPrompt(matched, {
       explicitInvocation: explicitSkillName !== null,
     });
+
     const extraContext =
       matched.length > 0 ? await options.appendContext?.(matched) : "";
 
@@ -1062,16 +1626,222 @@ export class SkillsService {
     orgId: string,
     profileId: string
   ): Promise<SkillSummary[]> {
-    const records = await this.db.listSkillsForProfile(profileId);
+    const profile = await this.db.getProfile(profileId);
+
+    if (profile?.orgId !== orgId) {
+      throw new NakamaApiError("Profile not found.", 404);
+    }
+
+    const records = (await this.db.listSkillsForProfile(profileId)).filter(
+      (record) => !record.orgId || record.orgId === orgId
+    );
+
     const usage = await this.listSkillUsageForProfile(profileId);
+
     return toSkillSummaries(records, usage);
+  }
+
+  async capabilityRevisionForProfile(
+    orgId: string,
+    profileId: string
+  ): Promise<string> {
+    const assigned = await this.getPromptSkills(orgId, profileId);
+    const instance = await this.db.getSharedAgentInstance(orgId, profileId);
+
+    const shared = assigned.filter(
+      (item) => item.discovered.sourceOrganization && item.discovered.hasTool
+    );
+
+    if (shared.length === 0 && !instance) {
+      return "";
+    }
+
+    const hash = createHash("sha256");
+
+    if (instance) {
+      hash.update(JSON.stringify(assigned.map((item) => item.record)));
+    }
+
+    for (const item of shared.sort((a, b) =>
+      a.record.id.localeCompare(b.record.id)
+    )) {
+      const publication = await this.getPublishedSkillSummaryForResource(
+        orgId,
+        item.record.id
+      );
+
+      const source = await this.resolvePublishedSkill(
+        orgId,
+        publication.publicationId
+      );
+
+      hash.update(JSON.stringify(publication));
+      hash.update(
+        JSON.stringify(
+          await this.db.getOrganizationById(
+            source.summary.sourceOrganization.id
+          )
+        )
+      );
+      hash.update(
+        JSON.stringify(await this.db.getProfile(source.sourceProfileId))
+      );
+      hash.update(
+        JSON.stringify(
+          await this.db.listSkillProposals(
+            source.summary.sourceOrganization.id,
+            { profileId: source.sourceProfileId, status: "approved" }
+          )
+        )
+      );
+      const listing = await this.listFilesInRoot(source.directory);
+
+      if (listing.truncated) {
+        throw new NakamaApiError("Shared skill code is unavailable.", 503);
+      }
+
+      for (const file of listing.files.filter(
+        (entry) =>
+          entry.type === "file" &&
+          (entry.path === SKILL_FILE_NAME ||
+            /\.(?:py|js|ts|mjs|cjs|jsx|tsx)$/i.test(entry.path))
+      )) {
+        const bytes = await this.readBytesFromRoot(
+          source.directory,
+          file.path,
+          10 * 1024 * 1024
+        );
+
+        if (!bytes) {
+          throw new NakamaApiError("Shared skill code is unavailable.", 503);
+        }
+
+        hash.update(file.path);
+        hash.update(bytes);
+      }
+    }
+
+    return hash.digest("hex");
   }
 
   async loadToolsForProfile(
     orgId: string,
     profileId: string
   ): Promise<ToolDefinition[]> {
-    const assigned = await this.getAssignedDiscoveredSkills(orgId, profileId);
+    const assigned = await this.getPromptSkills(orgId, profileId);
+
+    const tools = await this.loadAssignedSkillTools(
+      orgId,
+      profileId,
+      assigned.filter((item) => !item.discovered.sourceOrganization)
+    );
+
+    for (const item of assigned.filter(
+      (entry) => entry.discovered.sourceOrganization
+    )) {
+      const publication = await this.getPublishedSkillSummaryForResource(
+        orgId,
+        item.record.id
+      );
+
+      for (const tool of await this.loadPublishedSkillTools(
+        orgId,
+        profileId,
+        publication.publicationId
+      )) {
+        tools.push({
+          ...tool,
+          run: async (input, context) => {
+            requireToolNotViewer(context);
+
+            if (context.orgId !== orgId || context.profileId !== profileId) {
+              throw new NakamaApiError("Skill is unavailable.", 404);
+            }
+
+            const current = (
+              await this.loadPublishedSkillTools(
+                orgId,
+                profileId,
+                publication.publicationId
+              )
+            ).find((entry) => entry.name === tool.name);
+
+            if (!current) {
+              throw new NakamaApiError("Skill tool is unavailable.", 404);
+            }
+
+            try {
+              return await current.run(
+                input,
+                buildToolExecutionContext({
+                  ...context,
+                  workspaceRoot: undefined,
+                })
+              );
+            } catch {
+              throw new NakamaApiError(
+                "Shared skill code is unavailable.",
+                503
+              );
+            }
+          },
+        });
+      }
+    }
+
+    if (new Set(tools.map((tool) => tool.name)).size !== tools.length) {
+      throw new NakamaApiError(
+        "Conflicting skill tool names are assigned.",
+        409
+      );
+    }
+
+    return tools;
+  }
+
+  private async loadPublishedSkillTools(
+    orgId: string,
+    profileId: string,
+    publicationId: string
+  ): Promise<ToolDefinition[]> {
+    const profile = await this.db.getProfile(profileId);
+
+    if (profile?.orgId !== orgId) {
+      throw new NakamaApiError("Profile not found.", 404);
+    }
+
+    const source = await this.resolvePublishedSkill(orgId, publicationId);
+    const assigned = await this.getAssignedSkills(orgId, profileId);
+    const record = assigned.find((item) => item.id === source.summary.id);
+
+    if (!record) {
+      throw new NakamaApiError("Skill is unavailable.", 404);
+    }
+
+    const discovered = await discoverSkillDirectory(source.directory);
+
+    if (!discovered) {
+      throw new NakamaApiError("Skill is unavailable.", 404);
+    }
+
+    try {
+      return await this.loadAssignedSkillTools(
+        source.summary.sourceOrganization.id,
+        source.sourceProfileId,
+        [{ discovered, record }],
+        buildToolExecutionContext({ orgId, profileId })
+      );
+    } catch {
+      throw new NakamaApiError("Shared skill code is unavailable.", 503);
+    }
+  }
+
+  private async loadAssignedSkillTools(
+    orgId: string,
+    profileId: string,
+    assigned: Array<{ discovered: DiscoveredSkill; record: StoredSkillRecord }>,
+    sharedContext?: ToolContext
+  ): Promise<ToolDefinition[]> {
     // What a member asks the agent to write lands under this profile's own
     // skills dir, and a skill's tool module and `scripts:` entries are host
     // code. The setting alone cannot approve files written before it was on:
@@ -1084,24 +1854,29 @@ export class SkillsService {
       this.db,
       orgId,
       profileId
-    ).catch((error: unknown) => {
+    ).catch((error) => {
       console.warn(
         `[nakama:skills] Treating ${orgId}/${profileId} skill code as unapproved:`,
         error instanceof Error ? error.message : error
       );
+
       return false;
     });
+
     const approvedCode = new Map<string, Set<string>>();
+
     if (memberAuthoredCodeApproved) {
       const proposals = await this.db
         .listSkillProposals(orgId, { profileId, status: "approved" })
-        .catch((error: unknown) => {
+        .catch((error) => {
           console.warn(
             "[nakama:skills] Could not read approved skill code:",
             error
           );
+
           return [];
         });
+
       for (const proposal of proposals) {
         const files =
           proposal.action === "create"
@@ -1120,6 +1895,7 @@ export class SkillsService {
                   },
                 ]
               : [];
+
         for (const file of files) {
           const key = `${proposal.skillName}/${file.path.replaceAll("\\", "/")}`;
           const hashes = approvedCode.get(key) ?? new Set<string>();
@@ -1128,39 +1904,51 @@ export class SkillsService {
         }
       }
     }
+
     const codeIsReviewed = async (skill: DiscoveredSkill): Promise<boolean> => {
       const directories = [skill.directory];
+
       while (directories.length > 0) {
         const directory = directories.pop()!;
+
         for (const entry of await readdir(directory, { withFileTypes: true })) {
           const file = path.join(directory, entry.name);
+
           if (entry.isSymbolicLink()) {
             return false;
           }
+
           if (entry.isDirectory()) {
             directories.push(file);
           } else if (/\.(?:py|js|ts|mjs|cjs|jsx|tsx)$/i.test(entry.name)) {
             const key = `${skill.name}/${path.relative(skill.directory, file).split(path.sep).join("/")}`;
+
             const digest = createHash("sha256")
               .update(await readFile(file))
               .digest("hex");
+
             if (!approvedCode.get(key)?.has(digest)) {
               return false;
             }
           }
         }
       }
+
       return true;
     };
+
     const loadable: typeof assigned = [];
+
     const blocked: Array<{
       discovered: DiscoveredSkill;
       reason: string;
     }> = [];
+
     for (const item of assigned) {
       if (isPluginOwnedSkill(item.record)) {
         continue;
       }
+
       const reviewed =
         memberAuthoredCodeApproved &&
         isMemberAuthoredSkillDirectory({
@@ -1170,33 +1958,48 @@ export class SkillsService {
         })
           ? await codeIsReviewed(item.discovered).catch(() => false)
           : memberAuthoredCodeApproved;
+
       const policy = resolveSkillCodeExecutionPolicy({
         directory: item.discovered.directory,
         memberAuthoredCodeApproved: reviewed,
         orgId,
         profileId,
       });
+
       if (policy.executable) {
         loadable.push(item);
       } else {
         blocked.push({ discovered: item.discovered, reason: policy.reason });
       }
     }
+
     const skillTools = loadable.filter((item) => item.discovered.hasTool);
-    const javascriptTools = await loadSkillTools(
-      skillTools
-        .filter((item) => !item.discovered.toolPath?.endsWith(".py"))
-        .map((item) => item.discovered)
-    );
+
+    const javascriptSkills = skillTools
+      .filter((item) => !item.discovered.toolPath?.endsWith(".py"))
+      .map((item) => item.discovered);
+
+    const javascriptTools = sharedContext
+      ? (
+          await Promise.all(
+            javascriptSkills.map((skill) =>
+              loadJavascriptSkillTool(skill, sharedContext)
+            )
+          )
+        ).filter((tool): tool is ToolDefinition => tool !== null)
+      : await loadSkillTools(javascriptSkills);
+
     const pythonTools = await Promise.all(
       skillTools
         .filter((item) => item.discovered.toolPath?.endsWith(".py"))
         .map((item) =>
           loadPythonSkillTool(item.discovered, undefined, {
             exposeConfigDir: isGlobalSkillSourcePath(item.discovered.directory),
+            useWorkspaceCwd: Boolean(sharedContext),
           })
         )
     );
+
     // Scripts named in `scripts:` each become their own tool, so a skill is no
     // longer capped at the single tool.py slot.
     const declaredTools = await Promise.all(
@@ -1204,10 +2007,12 @@ export class SkillsService {
         item.discovered.scriptTools.map((script) =>
           loadPythonSkillTool(item.discovered, script, {
             exposeConfigDir: isGlobalSkillSourcePath(item.discovered.directory),
+            useWorkspaceCwd: Boolean(sharedContext),
           })
         )
       )
     );
+
     // The refusals keep the tool names occupied so the model is told why the
     // skill's code did nothing, rather than finding an unknown tool and
     // answering from the script's text as if it had run. A blocked tool
@@ -1223,6 +2028,7 @@ export class SkillsService {
             }),
           ]
         : [];
+
       return [
         ...moduleStub,
         ...discovered.scriptTools.map((script) =>
@@ -1234,6 +2040,7 @@ export class SkillsService {
         ),
       ];
     });
+
     return [
       ...javascriptTools,
       ...refusals,
@@ -1244,8 +2051,15 @@ export class SkillsService {
   }
 
   async listSkillsForProfile(profileId: string): Promise<SkillSummary[]> {
-    const skills = await this.db.listSkillsForProfile(profileId);
-    return skills.map((record) => toSkillSummary(record));
+    const profile = await this.db.getProfile(profileId);
+
+    const skills = profile?.orgId
+      ? await this.getAssignedSkills(profile.orgId, profileId)
+      : await this.db.listSkillsForProfile(profileId);
+
+    return skills
+      .filter((record) => !record.orgId || record.orgId === profile?.orgId)
+      .map((record) => toSkillSummary(record));
   }
 
   async recordCatalogViews(
@@ -1263,6 +2077,7 @@ export class SkillsService {
     for (const skillId of skillIds) {
       if (context) {
         const dedupeKey = `${context.sessionId}:${skillId}`;
+
         if (context.seenCatalogSkillIds.has(dedupeKey)) {
           continue;
         }
@@ -1333,7 +2148,11 @@ export class SkillsService {
     patchedAt?: string;
   }): Promise<void> {
     try {
-      const assigned = await this.db.listSkillsForProfile(input.profileId);
+      const assigned = await this.getAssignedSkills(
+        input.orgId,
+        input.profileId
+      );
+
       if (!assigned.some((skill) => skill.id === input.skillId)) {
         return;
       }
@@ -1357,10 +2176,13 @@ export class SkillsService {
     record: StoredSkillRecord
   ): Promise<string | null> {
     const profile = await this.db.getProfile(profileId);
+
     if (profile?.orgId !== orgId || record.orgId !== orgId) {
       return null;
     }
+
     const source = await this.resolveSkillDirectory(record);
+
     if (!source) {
       return null;
     }
@@ -1379,12 +2201,14 @@ export class SkillsService {
       undefined,
       { cwd: workspace }
     );
+
     if (await pathExists(path.join(directory, SKILL_FILE_NAME))) {
       return directory;
     }
 
     await mkdir(parent, { mode: 0o700, recursive: true });
     const staging = await mkdtemp(path.join(parent, ".copy-"));
+
     try {
       await cp(source, staging, {
         filter: async (file) => {
@@ -1393,19 +2217,21 @@ export class SkillsService {
               "Plugin skill bundles cannot contain symbolic links."
             );
           }
+
           return true;
         },
         recursive: true,
       });
+
       try {
         await rename(staging, directory);
       } catch (error) {
         // Another request may have published the same immutable release.
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code !== "EEXIST" && code !== "ENOTEMPTY") {
+        if (!hasSystemErrorCode(error, ["EEXIST", "ENOTEMPTY"])) {
           throw error;
         }
       }
+
       return directory;
     } finally {
       await rm(staging, { force: true, recursive: true });
@@ -1422,10 +2248,13 @@ export class SkillsService {
     // revoked skill after cleanup has completed.
     const key = JSON.stringify([orgId, profileId]);
     const previous = this.profileSkillSyncs.get(key) ?? Promise.resolve();
+
     const pending = previous
       .catch(() => undefined)
       .then(() => this.syncAssignedDiscoveredSkills(orgId, profileId));
+
     this.profileSkillSyncs.set(key, pending);
+
     try {
       return await pending;
     } finally {
@@ -1435,39 +2264,190 @@ export class SkillsService {
     }
   }
 
+  private async getAssignedSkills(
+    orgId: string,
+    profileId: string
+  ): Promise<StoredSkillRecord[]> {
+    const instance = await this.db.getSharedAgentInstance(orgId, profileId);
+
+    if (!instance) {
+      return this.db.listSkillsForProfile(profileId);
+    }
+
+    const [team, parent, publication, source] = await Promise.all([
+      this.db.getOrganizationById(orgId),
+      this.db.getOrganizationById(instance.sourceOrgId),
+      this.db.getOrgSharedResource(
+        instance.sourceOrgId,
+        instance.publicationId
+      ),
+      this.db.getProfileForOrg(instance.sourceProfileId, instance.sourceOrgId),
+    ]);
+
+    if (
+      !team ||
+      team.archivedAt ||
+      team.setupPending ||
+      team.parentOrgId !== instance.sourceOrgId ||
+      !parent ||
+      parent.archivedAt ||
+      parent.setupPending ||
+      parent.parentOrgId ||
+      publication?.resourceKind !== "agent" ||
+      publication.resourceId !== instance.sourceProfileId ||
+      !source ||
+      source.isDefault ||
+      source.isSuper ||
+      source.acpAgent ||
+      source.acpSettings
+    ) {
+      throw new NakamaApiError("Shared agent is unavailable.", 404);
+    }
+
+    const assigned = await this.db.listSkillsForProfile(source.id);
+    const publications = await this.db.listOrgSharedResources(parent.id);
+
+    if (
+      assigned.some(
+        (skill) =>
+          !skill.enabled ||
+          (skill.orgId &&
+            (skill.orgId !== parent.id ||
+              !publications.some(
+                (entry) =>
+                  entry.resourceKind === "skill" &&
+                  entry.resourceId === skill.id
+              )))
+      )
+    ) {
+      throw new NakamaApiError("Shared agent skills are unavailable.", 409);
+    }
+
+    return assigned;
+  }
+
+  private async getPromptSkills(
+    orgId: string,
+    profileId: string
+  ): Promise<
+    Array<{ discovered: DiscoveredSkill; record: StoredSkillRecord }>
+  > {
+    const profile = await this.db.getProfile(profileId);
+
+    if (profile?.orgId !== orgId) {
+      throw new NakamaApiError("Profile not found.", 404);
+    }
+
+    const result = await this.getAssignedDiscoveredSkills(orgId, profileId);
+    const team = await this.db.getOrganizationById(orgId);
+
+    const publications = team?.parentOrgId
+      ? await this.db.listOrgSharedResources(team.parentOrgId)
+      : [];
+
+    for (const record of await this.getAssignedSkills(orgId, profileId)) {
+      if (!record.orgId || record.orgId === orgId) {
+        continue;
+      }
+
+      const publication = publications.find(
+        (item) => item.resourceKind === "skill" && item.resourceId === record.id
+      );
+
+      if (!publication) {
+        continue;
+      }
+
+      try {
+        const source = await this.resolvePublishedSkill(orgId, publication.id);
+
+        if (
+          result.some((item) => item.discovered.name === source.summary.name)
+        ) {
+          throw new NakamaApiError(
+            "Conflicting skill names are assigned.",
+            409
+          );
+        }
+
+        const code = await discoverSkillDirectory(source.directory);
+        const directory = `published-skill://${encodeURIComponent(publication.id)}`;
+        result.push({
+          discovered: {
+            body: source.body,
+            description: source.summary.description,
+            directory,
+            disableModelInvocation: source.summary.disableModelInvocation,
+            hasTool: code?.hasTool ?? false,
+            includeBodyOnMatch: source.includeBodyOnMatch,
+            name: source.summary.name,
+            scriptIssues: code?.scriptIssues ?? [],
+            scriptTools: (code?.scriptTools ?? []).map((script) => ({
+              ...script,
+              path: `${directory}/${path.relative(source.directory, script.path).split(path.sep).join("/")}`,
+            })),
+            skillFilePath: `${directory}/${SKILL_FILE_NAME}`,
+            sourceOrganization: source.summary.sourceOrganization,
+            toolPath: code?.toolPath
+              ? `${directory}/${path.basename(code.toolPath)}`
+              : null,
+          },
+          record,
+        });
+      } catch (error) {
+        if (!(error instanceof NakamaApiError && error.status === 404)) {
+          throw error;
+        }
+      }
+    }
+
+    return result;
+  }
+
   private async syncAssignedDiscoveredSkills(
     orgId: string,
     profileId: string
   ): Promise<
     Array<{ discovered: DiscoveredSkill; record: StoredSkillRecord }>
   > {
-    const assigned = await this.db.listSkillsForProfile(profileId);
+    const assigned = await this.getAssignedSkills(orgId, profileId);
     const discovered = await discoverSkills({ orgId, profileId });
+
     const bySourcePath = new Map(
       discovered.map((skill) => [skill.directory, skill])
     );
+
     const standaloneByName = new Map(
       discovered.map((skill) => [skill.name, skill])
     );
+
     const resolved: Array<{
       discovered: DiscoveredSkill;
       record: StoredSkillRecord;
     }> = [];
 
     for (const record of assigned) {
+      if (record.orgId && record.orgId !== orgId) {
+        continue;
+      }
+
       if (isPluginOwnedSkill(record)) {
         const directory = await this.copyPluginSkillToProfile(
           orgId,
           profileId,
           record
         );
+
         if (!directory) {
           continue;
         }
+
         const pluginSkill = await discoverSkillDirectory(directory);
+
         if (!pluginSkill) {
           continue;
         }
+
         resolved.push({
           discovered: { ...pluginSkill, hasTool: false, toolPath: null },
           record,
@@ -1479,6 +2459,7 @@ export class SkillsService {
         bySourcePath.get(record.sourcePath) ??
         standaloneByName.get(record.name) ??
         null;
+
       if (match) {
         resolved.push({ discovered: match, record });
       }
@@ -1488,11 +2469,12 @@ export class SkillsService {
       orgId,
       profileId,
       new Set(
-        resolved
-          .filter((item) => isPluginOwnedSkill(item.record))
-          .map((item) => item.discovered.directory)
+        resolved.flatMap((item) =>
+          isPluginOwnedSkill(item.record) ? [item.discovered.directory] : []
+        )
       )
     );
+
     return resolved;
   }
 
@@ -1502,17 +2484,23 @@ export class SkillsService {
     retained: Set<string>
   ): Promise<void> {
     const profile = await this.db.getProfile(profileId);
+
     if (profile?.orgId !== orgId || !this.pluginService) {
       return;
     }
+
     const workspace = getProfileSoulDir(orgId, profileId);
     const parent = path.join(workspace, "skills", ".plugins");
+
     if (!(await pathExists(parent))) {
       return;
     }
+
     await guardFilePath(parent, null, undefined, { cwd: workspace });
+
     for (const entry of await readdir(parent)) {
       const directory = path.join(parent, entry);
+
       // Only delete host-generated release copies, never unrelated files.
       if (/^[a-f0-9]{64}$/.test(entry) && !retained.has(directory)) {
         await guardFilePath(directory, null, undefined, { cwd: workspace });
@@ -1528,12 +2516,14 @@ export class SkillsService {
       if (!(this.pluginService && record.orgId)) {
         return null;
       }
+
       return this.pluginService.resolveEnabledSkillDirectory(
         record.orgId,
         record.pluginId,
         record.pluginKey
       );
     }
+
     return record.sourcePath;
   }
 
@@ -1542,6 +2532,7 @@ export class SkillsService {
     orgId: string
   ): Promise<StoredSkillRecord | null> {
     const skills = await this.db.listSkills();
+
     return (
       skills.find(
         (skill) =>
@@ -1559,6 +2550,7 @@ export class SkillsService {
     createdBy?: SkillCreatedBy
   ): Promise<StoredSkillRecord> {
     const discovered = await discoverSkillDirectory(directory);
+
     if (!discovered) {
       throw new Error(`Skill was ${verb} but could not be discovered.`);
     }
@@ -1580,6 +2572,7 @@ export class SkillsService {
       const now = new Date().toISOString();
       const updated = { ...record, createdBy, updatedAt: now };
       await this.db.upsertSkill(updated);
+
       return updated;
     }
 
@@ -1591,26 +2584,32 @@ export class SkillsService {
     createdByOverride?: SkillCreatedBy
   ): Promise<{ created: boolean }> {
     const existingByPath = await this.db.getSkillBySourcePath(skill.directory);
+
     const existingByName = existingByPath
       ? null
       : await this.db.getSkillByName(
           skill.name,
           orgIdFromSkillSourcePath(skill.directory)
         );
+
     const existing =
       existingByPath ??
       (existingByName && !isPluginOwnedSkill(existingByName)
         ? existingByName
         : null);
+
     const now = new Date().toISOString();
+
     const defaultCreatedBy: SkillCreatedBy = isGlobalSkillSourcePath(
       skill.directory
     )
       ? "bundled"
       : "human";
+
     const sourcePath = existing
       ? pickPreferredSkillSourcePath(existing.sourcePath, skill.directory)
       : skill.directory;
+
     const record: StoredSkillRecord = {
       createdAt: existing?.createdAt ?? now,
       createdBy: existing?.createdBy ?? createdByOverride ?? defaultCreatedBy,
@@ -1631,6 +2630,46 @@ export class SkillsService {
     return { created: existing === null };
   }
 
+  /** Snapshot SKILL.md after a write. The first tracked change also keeps the prior content. */
+  private async recordSkillVersion(
+    record: StoredSkillRecord,
+    beforeContent: string | null,
+    afterContent: string,
+    meta?: ProfileChangeMeta,
+    options?: { kind?: "restored"; note?: string | null }
+  ): Promise<void> {
+    if (beforeContent === afterContent) {
+      return;
+    }
+
+    if (
+      beforeContent !== null &&
+      (await this.db.listSkillVersions(record.id, { limit: 1 })).length === 0
+    ) {
+      await this.db.createSkillVersion({
+        actorUserId: null,
+        content: beforeContent,
+        createdAt: record.createdAt,
+        id: createId("skill_version"),
+        kind: "original",
+        note: null,
+        skillId: record.id,
+        source: null,
+      });
+    }
+
+    await this.db.createSkillVersion({
+      actorUserId: meta?.actorUserId?.trim() || null,
+      content: afterContent,
+      createdAt: new Date().toISOString(),
+      id: createId("skill_version"),
+      kind: options?.kind ?? (beforeContent === null ? "created" : "updated"),
+      note: options?.note?.trim() || null,
+      skillId: record.id,
+      source: meta?.source ?? null,
+    });
+  }
+
   private async requireSkill(skillId: string): Promise<StoredSkillRecord> {
     const skill = await this.db.getSkill(skillId);
 
@@ -1649,6 +2688,7 @@ export class SkillsService {
     assertNotBundledSkillName(name);
 
     const record = await this.getMutableSkillByName(name, orgId);
+
     if (!record) {
       throw new Error(`Skill "${name}" not found.`);
     }
@@ -1666,6 +2706,7 @@ export class SkillsService {
     }
 
     const skillFile = path.join(record.sourcePath, SKILL_FILE_NAME);
+
     try {
       await readFile(skillFile, "utf8");
     } catch {
@@ -1683,9 +2724,11 @@ export class SkillsService {
       if (isPluginOwnedSkill(skill)) {
         continue;
       }
-      const group = grouped.get(skill.name) ?? [];
+
+      const key = JSON.stringify([skill.orgId ?? null, skill.name]);
+      const group = grouped.get(key) ?? [];
       group.push(skill);
-      grouped.set(skill.name, group);
+      grouped.set(key, group);
     }
 
     const profiles = await this.db.listProfiles();
@@ -1696,6 +2739,7 @@ export class SkillsService {
       }
 
       const canonical = dedupeSkillsByName(group)[0];
+
       if (!canonical) {
         continue;
       }
@@ -1722,6 +2766,14 @@ export class SkillsService {
       }
     }
   }
+}
+
+function hasSystemErrorCode<T>(error: T, codes: string[]): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    codes.includes(String(error.code))
+  );
 }
 
 function toSkillSummary(
@@ -1773,9 +2825,11 @@ function toSkillUsageSummary(
 async function readSkillBody(sourcePath: string): Promise<string> {
   try {
     const content = await readFile(`${sourcePath}/SKILL.md`, "utf8");
+
     const bodyMatch = content.match(
       /^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S]*)$/
     );
+
     return bodyMatch?.[1]?.trim() ?? "";
   } catch {
     return "";
@@ -1789,6 +2843,7 @@ export function toSkillSummaries(
   const usageBySkillId = new Map(
     usageRecords.map((usage) => [usage.skillId, usage])
   );
+
   return records.map((record) => ({
     ...toSkillSummary(record, usageBySkillId.get(record.id) ?? null),
     usage: toSkillUsageSummary(usageBySkillId.get(record.id)),

@@ -16,11 +16,26 @@ import {
   useRestoreDataImport,
 } from "@/hooks/use-data-portability";
 import { formatError } from "@/lib/client";
-import { downloadArchive } from "@/lib/download-archive";
+
+/** Trigger a browser download for an in-memory archive. */
+function downloadArchive(filename: string, data: ArrayBuffer): void {
+  const url = URL.createObjectURL(
+    new Blob([data], { type: "application/zip" })
+  );
+
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
 
 const DownloadIcon = ({ className }: SVGProps<SVGSVGElement>) => (
   <Download04Icon className={className} />
 );
+
 const UploadIcon = ({ className }: SVGProps<SVGSVGElement>) => (
   <Upload04Icon className={className} />
 );
@@ -28,17 +43,21 @@ const UploadIcon = ({ className }: SVGProps<SVGSVGElement>) => (
 export function DataPortabilityPanel() {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
   const [preview, setPreview] = useState<DataImportPreviewResponse | null>(
     null
   );
+
   const [error, setError] = useState<string | null>(null);
   const exportMutation = useExportData();
   const previewMutation = usePreviewDataImport();
   const restoreMutation = useRestoreDataImport();
+
   const isBusy =
     exportMutation.isPending ||
     previewMutation.isPending ||
     restoreMutation.isPending;
+
   const restoreAvailable = canRestoreDataImport({
     pending: restoreMutation.isPending,
     previewReady: Boolean(preview),
@@ -47,6 +66,7 @@ export function DataPortabilityPanel() {
 
   async function handleExport() {
     setError(null);
+
     try {
       const result = await exportMutation.mutateAsync();
       downloadArchive(result.filename, result.data);
@@ -78,11 +98,13 @@ export function DataPortabilityPanel() {
     }
 
     setError(null);
+
     try {
       await restoreMutation.mutateAsync({ confirm: true, file: selectedFile });
       toast("Backup restored.");
       setPreview(null);
       setSelectedFile(null);
+
       if (inputRef.current) {
         inputRef.current.value = "";
       }

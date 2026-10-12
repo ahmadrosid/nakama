@@ -24,6 +24,7 @@ test("extracts plain text from a docx", async () => {
 test("falls back to reading HTML that was saved under a .docx name", async () => {
   const html =
     "<html><head><style>body { color: #333; }</style></head><body><h1>Judul</h1><p>Isi</p></body></html>";
+
   const markdown = await convertDocxToMarkdown(Buffer.from(html, "utf8"));
 
   expect(markdown).toContain("# Judul");

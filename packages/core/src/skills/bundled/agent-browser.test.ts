@@ -30,6 +30,7 @@ describe("ensureBundledSkillFiles for agent-browser", () => {
       "agent-browser",
       "SKILL.md"
     );
+
     await mkdir(join(configDir, "agent", "skills", "agent-browser"), {
       recursive: true,
     });

@@ -37,16 +37,21 @@ export function renderTelegramRichText(text: string): string {
 }
 
 /** Placeholder bare http(s) URLs so underscore italic stripping cannot mangle path tokens. */
-function protectBareUrls(text: string): { text: string; urls: string[] } {
+function protectBareUrls(text: string) {
   const urls: string[] = [];
+
   // Stop at whitespace, markdown/HTML delimiters, and common trailing punctuation.
   const protectedText = text.replace(/https?:\/\/[^\s<>\]"'()]+/g, (url) => {
     const token = `@@TCURL${urls.length}@@`;
     urls.push(url);
+
     return token;
   });
 
-  return { text: protectedText, urls };
+  return { text: protectedText, urls } satisfies {
+    text: string;
+    urls: string[];
+  };
 }
 
 function restoreBareUrls(text: string, urls: string[]): string {
@@ -59,11 +64,9 @@ function restoreBareUrls(text: string, urls: string[]): string {
   return result;
 }
 
-function protectFencedCodeBlocks(text: string): {
-  text: string;
-  blocks: string[];
-} {
+function protectFencedCodeBlocks(text: string) {
   const blocks: string[] = [];
+
   const protectedText = text.replace(
     /```[\w]*\n?([\s\S]*?)```/g,
     (_, code: string) => {
@@ -71,11 +74,15 @@ function protectFencedCodeBlocks(text: string): {
       blocks.push(
         `<pre><code>${escapeTelegramHtml(trimFenceNewlines(code))}</code></pre>`
       );
+
       return token;
     }
   );
 
-  return { blocks, text: protectedText };
+  return { blocks, text: protectedText } satisfies {
+    blocks: string[];
+    text: string;
+  };
 }
 
 function renderInlineTelegramFormatting(text: string): string {
@@ -135,6 +142,7 @@ export function splitIntoChatBubbles(text: string, maxChars = 400): string[] {
     .split(/\n\n+/)
     .map((part) => part.trim())
     .filter(Boolean);
+
   const merged: string[] = [];
   let current = "";
 

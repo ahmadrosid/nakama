@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { asTestFetch } from "../test-helpers";
 import { fetchOllamaModels } from "./models";
 
 describe("fetchOllamaModels", () => {
@@ -9,7 +10,7 @@ describe("fetchOllamaModels", () => {
 
   test("uses /v1/models when available", async () => {
     using _fetchMock = spyOn(globalThis, "fetch").mockImplementation(
-      async (input) => {
+      asTestFetch(async (input) => {
         const url = String(input);
 
         if (url.endsWith("/models")) {
@@ -19,7 +20,7 @@ describe("fetchOllamaModels", () => {
         }
 
         throw new Error(`unexpected fetch: ${url}`);
-      }
+      })
     );
 
     const models = await fetchOllamaModels("http://localhost:11434/v1");
@@ -29,7 +30,7 @@ describe("fetchOllamaModels", () => {
 
   test("falls back to /api/tags when /v1/models fails", async () => {
     using _fetchMock = spyOn(globalThis, "fetch").mockImplementation(
-      async (input) => {
+      asTestFetch(async (input) => {
         const url = String(input);
 
         if (url.endsWith("/models")) {
@@ -46,7 +47,7 @@ describe("fetchOllamaModels", () => {
         }
 
         throw new Error(`unexpected fetch: ${url}`);
-      }
+      })
     );
 
     const models = await fetchOllamaModels("http://localhost:11434/v1");
@@ -59,8 +60,9 @@ describe("fetchOllamaModels", () => {
 
   test("sends Authorization header to /api/tags when apiKey is set", async () => {
     const seen: string[] = [];
+
     using _fetchMock = spyOn(globalThis, "fetch").mockImplementation(
-      async (input, init) => {
+      asTestFetch(async (input, init) => {
         const url = String(input);
 
         if (url.endsWith("/models")) {
@@ -68,11 +70,8 @@ describe("fetchOllamaModels", () => {
         }
 
         if (url.endsWith("/api/tags")) {
-          seen.push(
-            String(
-              (init?.headers as Record<string, string>)?.Authorization ?? ""
-            )
-          );
+          seen.push(new Headers(init?.headers).get("Authorization") ?? "");
+
           return new Response(
             JSON.stringify({ models: [{ name: "gpt-oss:120b" }] }),
             {
@@ -82,7 +81,7 @@ describe("fetchOllamaModels", () => {
         }
 
         throw new Error(`unexpected fetch: ${url}`);
-      }
+      })
     );
 
     await fetchOllamaModels("https://ollama.com/v1", "secret-key");

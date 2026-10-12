@@ -17,6 +17,7 @@ async function seedOrgWithAdmins(
   });
 
   const userIds: string[] = [];
+
   for (const [index, role] of roles.entries()) {
     const userId = `user_${index}`;
     await db.createUser({
@@ -40,6 +41,7 @@ async function seedOrgWithAdmins(
 
 async function adminCount(db: DatabaseAdapter): Promise<number> {
   const members = await db.listOrgMembers("org_a");
+
   return members.filter((member) => member.role === "admin").length;
 }
 

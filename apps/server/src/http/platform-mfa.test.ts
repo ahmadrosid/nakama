@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { loadLocalAuthToken } from "@nakama/core";
 import { DEMO_LOGIN_HOST } from "@nakama/core/demo-login";
 import { getMfaEncryptionKey } from "../services/mfa-config";
 import {
@@ -10,11 +9,10 @@ import {
 } from "../services/mfa-crypto";
 import { setupTestConfigDir } from "../test-config-dir";
 import { createMinimalHonoApp } from "./test-app-helpers";
-import { seedLocalClientUser, seedOrgForUser } from "./test-org-helpers";
-import type { AppFetch } from "./test-session-helpers";
 import {
   browserSessionFromResponse,
   loginPlatformAdminSession,
+  seedOrgAdmin,
   setupFreshInstallSession,
 } from "./test-session-helpers";
 
@@ -22,10 +20,8 @@ setupTestConfigDir("nakama-platform-mfa-test-");
 
 test("platform admin configures MFA and login requires the user's TOTP", async () => {
   const { app, authService, databaseAdapter } = createMinimalHonoApp();
-  const session = await setupFreshInstallSession(
-    app as AppFetch,
-    databaseAdapter
-  );
+
+  const session = await setupFreshInstallSession(app, databaseAdapter);
 
   const policyResponse = await app.fetch(
     new Request("http://localhost:4310/v1/settings/mfa", {
@@ -37,6 +33,7 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
       method: "PUT",
     })
   );
+
   expect(policyResponse.status).toBe(200);
   expect(await policyResponse.json()).toMatchObject({
     enabled: true,
@@ -44,6 +41,7 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
     keyConfigured: true,
     required: true,
   });
+
   const demoPolicyResponse = await app.fetch(
     new Request(`http://${DEMO_LOGIN_HOST}/v1/settings/mfa`, {
       body: JSON.stringify({ enabled: false }),
@@ -54,9 +52,11 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
       method: "PUT",
     })
   );
+
   expect(demoPolicyResponse.status).toBe(403);
 
   const user = await databaseAdapter.getUserByEmail("admin@example.com");
+
   if (!user) {
     throw new Error("Expected setup user");
   }
@@ -71,15 +71,38 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
       method: "POST",
     })
   );
+
   expect(unenrolledLogin.status).toBe(200);
   expect(await unenrolledLogin.json()).toMatchObject({
     mfaEnrolled: false,
     mfaRequired: true,
   });
+
   const platformSession = await loginPlatformAdminSession(
-    app as AppFetch,
+    app,
     authService,
     databaseAdapter
+  );
+
+  // Required policy covers the platform-admin flag itself, so enroll the
+  // platform admin before it is used to administer the policy below.
+  const platformUser = await databaseAdapter.getUserByEmail(
+    "platform@example.com"
+  );
+
+  if (!platformUser) {
+    throw new Error("Expected platform admin user");
+  }
+
+  await databaseAdapter.updateUserMfa(
+    platformUser.id,
+    {
+      enabled: true,
+      mfaTotpLastStep: null,
+      pendingTotpSecretEnc: null,
+      totpSecretEnc: encryptTotpSecret(generateTotpSecret()),
+    },
+    new Date().toISOString()
   );
 
   const memberOnlyPolicy = await app.fetch(
@@ -95,7 +118,38 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
       method: "PUT",
     })
   );
+
   expect(memberOnlyPolicy.status).toBe(200);
+
+  if (!session.orgId) {
+    throw new Error("Expected setup organization");
+  }
+
+  await seedOrgAdmin(databaseAdapter, {
+    authService,
+    email: "viewer@example.com",
+    orgId: session.orgId,
+    role: "viewer",
+    userId: "user_mfa_viewer",
+  });
+
+  const viewerLogin = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/login", {
+      body: JSON.stringify({
+        email: "viewer@example.com",
+        password: "password123",
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    })
+  );
+
+  expect(await viewerLogin.json()).toMatchObject({
+    mfaRequired: false,
+  });
+
+  // The setup user is a platform admin, so the required policy covers it even
+  // though its "admin" org role is not in enforcedRoles.
   const memberOnlyLogin = await app.fetch(
     new Request("http://localhost:4310/v1/auth/login", {
       body: JSON.stringify({
@@ -106,9 +160,11 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
       method: "POST",
     })
   );
+
   expect(await memberOnlyLogin.json()).toMatchObject({
-    mfaRequired: false,
+    mfaRequired: true,
   });
+
   const adminOnlyPolicy = await app.fetch(
     new Request("http://localhost:4310/v1/settings/mfa", {
       body: JSON.stringify({ enforcedRoles: ["admin"] }),
@@ -122,6 +178,7 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
       method: "PUT",
     })
   );
+
   expect(adminOnlyPolicy.status).toBe(200);
   const secret = generateTotpSecret();
 
@@ -154,6 +211,7 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
       method: "POST",
     })
   );
+
   expect(missingCode.status).toBe(401);
 
   const validCode = await app.fetch(
@@ -167,7 +225,9 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
       method: "POST",
     })
   );
+
   expect(validCode.status).toBe(200);
+
   const replayedCode = await app.fetch(
     new Request("http://localhost:4310/v1/auth/login", {
       body: JSON.stringify({
@@ -179,7 +239,9 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
       method: "POST",
     })
   );
+
   expect(replayedCode.status).toBe(401);
+
   const backupLogin = await app.fetch(
     new Request("http://localhost:4310/v1/auth/login", {
       body: JSON.stringify({
@@ -191,7 +253,9 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
       method: "POST",
     })
   );
+
   expect(backupLogin.status).toBe(200);
+
   const reusedBackupLogin = await app.fetch(
     new Request("http://localhost:4310/v1/auth/login", {
       body: JSON.stringify({
@@ -203,6 +267,7 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
       method: "POST",
     })
   );
+
   expect(reusedBackupLogin.status).toBe(401);
   expect(await reusedBackupLogin.json()).toMatchObject({
     error: "Backup code is invalid or has already been used.",
@@ -232,6 +297,7 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
       method: "POST",
     })
   );
+
   expect(disableResponse.status).toBe(200);
   expect(
     await databaseAdapter.consumeMfaBackupCode(
@@ -247,7 +313,9 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
       method: "POST",
     })
   );
+
   expect(startResponse.status).toBe(200);
+  // SAFETY: The test checks this response against the endpoint contract asserted below.
   const startBody = (await startResponse.json()) as { secret: string };
   const pendingUser = await databaseAdapter.getUserById(user.id);
   expect(pendingUser?.mfaTotpSecretEnc).toBeNull();
@@ -263,10 +331,12 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
       method: "POST",
     })
   );
+
   expect(verifyResponse.status).toBe(200);
   const enrolledUser = await databaseAdapter.getUserById(user.id);
   expect(enrolledUser?.mfaTotpSecretEnc).toBeTruthy();
   expect(enrolledUser?.mfaTotpPendingSecretEnc).toBeNull();
+  // SAFETY: The test checks this response against the endpoint contract asserted below.
   const verifyBody = (await verifyResponse.json()) as { backupCodes: string[] };
 
   const staleBackupLogin = await app.fetch(
@@ -280,10 +350,12 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
       method: "POST",
     })
   );
+
   expect(staleBackupLogin.status).toBe(401);
   expect(await staleBackupLogin.json()).toMatchObject({
     error: "Backup code is invalid or has already been used.",
   });
+
   const disableWithBackupResponse = await app.fetch(
     new Request("http://localhost:4310/v1/auth/mfa/disable", {
       body: JSON.stringify({ backupCode: verifyBody.backupCodes[0] }),
@@ -294,19 +366,14 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
       method: "POST",
     })
   );
+
   expect(disableWithBackupResponse.status).toBe(200);
 });
 
-test("blocks API keys from mutating browser MFA enrollment", async () => {
+test("blocks a platform admin without an organization until MFA is enrolled", async () => {
   const { app, authService, databaseAdapter } = createMinimalHonoApp();
-  const setupSession = await setupFreshInstallSession(
-    app as AppFetch,
-    databaseAdapter
-  );
-  const orgId = setupSession.orgId;
-  if (!orgId) {
-    throw new Error("Expected setup organization");
-  }
+
+  const setupSession = await setupFreshInstallSession(app, databaseAdapter);
 
   const policyResponse = await app.fetch(
     new Request("http://localhost:4310/v1/settings/mfa", {
@@ -318,168 +385,308 @@ test("blocks API keys from mutating browser MFA enrollment", async () => {
       method: "PUT",
     })
   );
+
   expect(policyResponse.status).toBe(200);
 
-  const user = await databaseAdapter.getUserByEmail("admin@example.com");
-  if (!user) {
-    throw new Error("Expected setup user");
+  // No organization membership at all: the platform-admin flag is the only
+  // authority this session carries.
+  const platformSession = await loginPlatformAdminSession(
+    app,
+    authService,
+    databaseAdapter
+  );
+
+  const platformUser = await databaseAdapter.getUserByEmail(
+    "platform@example.com"
+  );
+
+  if (!platformUser) {
+    throw new Error("Expected platform admin user");
   }
 
-  const apiKey = `nk_live_${"d".repeat(64)}`;
-  await databaseAdapter.createApiKey({
-    createdAt: new Date().toISOString(),
-    createdByUserId: user.id,
-    environment: "live",
-    expiresAt: null,
-    id: "pending-mfa-api-key",
-    keyPrefix: apiKey.slice(0, 20),
-    lastUsedAt: null,
-    name: "Pending MFA test key",
-    orgId,
-    revokedAt: null,
-    secretHash: authService.hashToken(apiKey),
-  });
+  expect(
+    await databaseAdapter.listUserOrganizations(platformUser.id)
+  ).toHaveLength(0);
 
-  const loginResponse = await app.fetch(
-    new Request("http://localhost:4310/v1/auth/login", {
-      body: JSON.stringify({
-        email: "admin@example.com",
-        password: "password123",
-      }),
-      headers: { "Content-Type": "application/json" },
-      method: "POST",
+  const blockedOrgs = await app.fetch(
+    new Request("http://localhost:4310/v1/platform/orgs", {
+      headers: platformSession.headers(),
     })
   );
-  expect(loginResponse.status).toBe(200);
-  expect(await loginResponse.json()).toMatchObject({
-    mfaEnrolled: false,
-    mfaRequired: true,
+
+  expect(blockedOrgs.status).toBe(403);
+  expect(await blockedOrgs.json()).toMatchObject({
+    error: "Complete MFA enrollment before accessing this resource.",
   });
-  const pendingSession = browserSessionFromResponse(loginResponse, orgId);
 
-  const blockedProfiles = await app.fetch(
-    new Request("http://localhost:4310/v1/profiles", {
-      headers: pendingSession.headers(),
-    })
-  );
-  expect(blockedProfiles.status).toBe(403);
-
-  const blockedApiKeyMint = await app.fetch(
-    new Request(`http://localhost:4310/v1/orgs/${orgId}/api-keys`, {
-      body: JSON.stringify({ name: "should-not-exist" }),
-      headers: pendingSession.headers({
+  const blockedOrgCreate = await app.fetch(
+    new Request("http://localhost:4310/v1/platform/orgs", {
+      body: JSON.stringify({ name: "Should Not Exist", slug: "nope" }),
+      headers: platformSession.headers({
         "Content-Type": "application/json",
-        "X-CSRF-Token": pendingSession.csrfToken,
+        "X-CSRF-Token": platformSession.csrfToken,
       }),
       method: "POST",
     })
   );
-  expect(blockedApiKeyMint.status).toBe(403);
 
-  const policyRead = await app.fetch(
-    new Request("http://localhost:4310/v1/settings/mfa", {
-      headers: pendingSession.headers(),
-    })
-  );
-  expect(policyRead.status).toBe(200);
-
-  const apiKeyProfiles = await app.fetch(
-    new Request("http://localhost:4310/v1/profiles", {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    })
-  );
-  expect(apiKeyProfiles.status).toBe(200);
-
-  await seedLocalClientUser(databaseAdapter);
-  const localToken = await loadLocalAuthToken();
-  if (!localToken) {
-    throw new Error("Expected local auth token");
-  }
-  await seedOrgForUser(databaseAdapter, "local-client@nakama.internal", orgId);
-  const localTokenProfiles = await app.fetch(
-    new Request("http://localhost:4310/v1/profiles", {
-      headers: { Authorization: `Bearer ${localToken}`, "X-Org-Id": orgId },
-    })
-  );
-  expect(localTokenProfiles.status).toBe(200);
-
-  const logoutLogin = await app.fetch(
-    new Request("http://localhost:4310/v1/auth/login", {
-      body: JSON.stringify({
-        email: "admin@example.com",
-        password: "password123",
-      }),
-      headers: { "Content-Type": "application/json" },
-      method: "POST",
-    })
-  );
-  const logoutSession = browserSessionFromResponse(logoutLogin, orgId);
-  const logoutResponse = await app.fetch(
-    new Request("http://localhost:4310/v1/auth/logout", {
-      headers: logoutSession.headers({
-        "X-CSRF-Token": logoutSession.csrfToken,
-      }),
-      method: "POST",
-    })
-  );
-  expect(logoutResponse.status).toBe(200);
-  const apiKeyStart = await app.fetch(
-    new Request("http://localhost:4310/v1/auth/mfa/totp/start", {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      method: "POST",
-    })
-  );
-  expect(apiKeyStart.status).toBe(403);
+  expect(blockedOrgCreate.status).toBe(403);
 
   const startResponse = await app.fetch(
     new Request("http://localhost:4310/v1/auth/mfa/totp/start", {
-      headers: pendingSession.headers({
-        "X-CSRF-Token": pendingSession.csrfToken,
+      headers: platformSession.headers({
+        "X-CSRF-Token": platformSession.csrfToken,
       }),
       method: "POST",
     })
   );
+
   expect(startResponse.status).toBe(200);
+  // SAFETY: The test checks this response against the endpoint contract asserted below.
   const startBody = (await startResponse.json()) as { secret: string };
-  const apiKeyVerify = await app.fetch(
-    new Request("http://localhost:4310/v1/auth/mfa/totp/verify", {
-      body: JSON.stringify({ code: "000000" }),
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      method: "POST",
-    })
-  );
-  expect(apiKeyVerify.status).toBe(403);
 
   const verifyResponse = await app.fetch(
     new Request("http://localhost:4310/v1/auth/mfa/totp/verify", {
       body: JSON.stringify({ code: createTotpCode(startBody.secret) }),
-      headers: pendingSession.headers({
+      headers: platformSession.headers({
         "Content-Type": "application/json",
-        "X-CSRF-Token": pendingSession.csrfToken,
+        "X-CSRF-Token": platformSession.csrfToken,
       }),
       method: "POST",
     })
   );
+
   expect(verifyResponse.status).toBe(200);
-  const apiKeyDisable = await app.fetch(
-    new Request("http://localhost:4310/v1/auth/mfa/disable", {
-      body: JSON.stringify({ backupCode: "API-KEY-MUST-NOT-DISABLE" }),
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
+
+  const allowedOrgs = await app.fetch(
+    new Request("http://localhost:4310/v1/platform/orgs", {
+      headers: platformSession.headers(),
+    })
+  );
+
+  expect(allowedOrgs.status).toBe(200);
+  // SAFETY: The test checks this response against the endpoint contract asserted below.
+  expect(
+    (await allowedOrgs.json()) as { organizations: unknown[] }
+  ).toMatchObject({
+    organizations: expect.any(Array),
+  });
+});
+
+test("MFA enrollment and disable revoke other browser sessions", async () => {
+  const { app, databaseAdapter } = createMinimalHonoApp();
+
+  const current = await setupFreshInstallSession(app, databaseAdapter);
+
+  const policyResponse = await app.fetch(
+    new Request("http://localhost:4310/v1/settings/mfa", {
+      body: JSON.stringify({ enabled: true }),
+      headers: current.headers({
         "Content-Type": "application/json",
-      },
+        "X-CSRF-Token": current.csrfToken,
+      }),
+      method: "PUT",
+    })
+  );
+
+  expect(policyResponse.status).toBe(200);
+
+  const enrollmentStart = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/mfa/totp/start", {
+      headers: current.headers({ "X-CSRF-Token": current.csrfToken }),
       method: "POST",
     })
   );
-  expect(apiKeyDisable.status).toBe(403);
 
-  const unblockedProfiles = await app.fetch(
-    new Request("http://localhost:4310/v1/profiles", {
-      headers: pendingSession.headers(),
+  expect(enrollmentStart.status).toBe(200);
+  // SAFETY: The test checks this response against the endpoint contract asserted below.
+  const enrollmentBody = (await enrollmentStart.json()) as { secret: string };
+
+  const oldSessionResponse = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/login", {
+      body: JSON.stringify({
+        email: "admin@example.com",
+        password: "password123",
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
     })
   );
-  expect(unblockedProfiles.status).toBe(200);
+
+  expect(oldSessionResponse.status).toBe(200);
+  const oldSession = browserSessionFromResponse(oldSessionResponse);
+
+  const enrollment = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/mfa/totp/verify", {
+      body: JSON.stringify({ code: createTotpCode(enrollmentBody.secret) }),
+      headers: current.headers({
+        "Content-Type": "application/json",
+        "X-CSRF-Token": current.csrfToken,
+      }),
+      method: "POST",
+    })
+  );
+
+  expect(enrollment.status).toBe(200);
+
+  // SAFETY: The test checks this response against the endpoint contract asserted below.
+  const enrollmentResult = (await enrollment.json()) as {
+    backupCodes: string[];
+  };
+
+  expect(
+    (
+      await app.fetch(
+        new Request("http://localhost:4310/v1/auth/me", {
+          headers: oldSession.headers(),
+        })
+      )
+    ).status
+  ).toBe(401);
+  expect(
+    (
+      await app.fetch(
+        new Request("http://localhost:4310/v1/auth/me", {
+          headers: current.headers(),
+        })
+      )
+    ).status
+  ).toBe(200);
+
+  const sessionAfterEnrollment = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/login", {
+      body: JSON.stringify({
+        backupCode: enrollmentResult.backupCodes[0],
+        email: "admin@example.com",
+        password: "password123",
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    })
+  );
+
+  expect(sessionAfterEnrollment.status).toBe(200);
+  const sessionToRevoke = browserSessionFromResponse(sessionAfterEnrollment);
+
+  const disable = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/mfa/disable", {
+      body: JSON.stringify({ backupCode: enrollmentResult.backupCodes[1] }),
+      headers: current.headers({
+        "Content-Type": "application/json",
+        "X-CSRF-Token": current.csrfToken,
+      }),
+      method: "POST",
+    })
+  );
+
+  expect(disable.status).toBe(200);
+  expect(
+    (
+      await app.fetch(
+        new Request("http://localhost:4310/v1/auth/me", {
+          headers: sessionToRevoke.headers(),
+        })
+      )
+    ).status
+  ).toBe(401);
+  expect(
+    (
+      await app.fetch(
+        new Request("http://localhost:4310/v1/auth/me", {
+          headers: current.headers(),
+        })
+      )
+    ).status
+  ).toBe(200);
+});
+
+test("malformed passkey credentials cannot change authentication factors", async () => {
+  const { app, databaseAdapter } = createMinimalHonoApp();
+  const session = await setupFreshInstallSession(app, databaseAdapter);
+  const user = await databaseAdapter.getUserByEmail("admin@example.com");
+
+  if (!user) {
+    throw new Error("Expected setup user");
+  }
+
+  const before = await databaseAdapter.listPasskeys(user.id);
+
+  for (const credential of [
+    {},
+    { id: 7 },
+    {
+      clientExtensionResults: {},
+      id: "fake",
+      rawId: "fake",
+      response: { clientDataJSON: 7 },
+      type: "public-key",
+    },
+  ]) {
+    const login = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/login", {
+        body: JSON.stringify({
+          email: user.email,
+          passkey: credential,
+          passkeyChallenge: "fake",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+
+    expect(login.status).toBe(400);
+
+    const enrollment = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/mfa/passkey/verify", {
+        body: JSON.stringify({ challenge: "fake", credential }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(enrollment.status).toBe(400);
+
+    const removal = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/mfa/passkey/disable", {
+        body: JSON.stringify({ challenge: "fake", credential }),
+        headers: session.headers({
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        }),
+        method: "POST",
+      })
+    );
+
+    expect(removal.status).toBe(400);
+  }
+
+  expect(await databaseAdapter.listPasskeys(user.id)).toEqual(before);
+  expect((await databaseAdapter.getUserById(user.id))?.mfaEnabled).toBe(false);
+
+  const unknownCredential = await app.fetch(
+    new Request("http://localhost:4310/v1/auth/login", {
+      body: JSON.stringify({
+        email: user.email,
+        passkey: {
+          clientExtensionResults: { credProps: { rk: true } },
+          id: "fake",
+          rawId: "fake",
+          response: {
+            authenticatorData: "fake",
+            clientDataJSON: "fake",
+            signature: "fake",
+          },
+          type: "public-key",
+        },
+        passkeyChallenge: "fake",
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    })
+  );
+
+  expect(unknownCredential.status).toBe(401);
 });

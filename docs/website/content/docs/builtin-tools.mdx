@@ -88,7 +88,7 @@ Active `MEMORY.md` has a **4096-byte** soft limit. Default and super-bot profile
 
 ## Artifact saves
 
-Artifacts are files your agent creates and saves for you — reports, summaries, generated text, Word documents, and other outputs you can preview or download later from the dashboard [Files page](/artifacts) or from web chat.
+Artifacts are files your agent creates and saves for you: reports, summaries, generated text, Word documents, and other outputs you can preview or download later from **Browse Files → Artifacts** or from web chat.
 
 They are not a separate builtin. Agents use `write_file` or `write_docx` with the `save-artifact` bundled skill under `artifacts/`. Nakama derives the file type, size, and timestamp automatically.
 
@@ -216,7 +216,7 @@ Search text in files under the profile workspace.
 
 ### `knowledge_base_search`
 
-Search uploaded knowledge base documents for relevant facts. The Knowledge tab can also show inherited URL sources, such as the Nakama documentation index at `llms.txt`; use `web_fetch` on that index and on specific `.md` pages — not `knowledge_base_search`.
+Search uploaded knowledge base documents for relevant facts. **Browse Files → Knowledge** can also show inherited URL sources, such as the Nakama documentation index at `llms.txt`; use `web_fetch` on that index and on specific `.md` pages, not `knowledge_base_search`.
 
 | Parameter | Type | Required | Notes |
 |-----------|------|----------|-------|
@@ -241,7 +241,7 @@ Search the web for current information.
 
 **Availability:** When assigned **and** the configured provider is OpenAI or Anthropic with a valid API key. Not available on OpenRouter. On Gemini, web search is disabled when other local tools are present on the same turn.
 
-**Custom search back-end:** Set a provider under **Settings → Web search** (Exa, Firecrawl, or any endpoint that answers with JSON search results) to run the search on Nakama instead of the model provider. This removes the provider restriction above and returns `{ provider, query, results: [{ title, url, snippet }] }`. Leave it on **Built-in** to keep the provider-hosted search.
+**Custom search back-end:** Set a provider under **Control center → Agent tools → AI Providers → Web search** (Exa, Firecrawl, or any endpoint that answers with JSON search results) to run the search on Nakama instead of the model provider. This removes the provider restriction above and returns `{ provider, query, results: [{ title, url, snippet }] }`. Leave it on **Built-in** to keep the provider-hosted search.
 
 ### `web_fetch`
 
@@ -262,7 +262,7 @@ Fetch a single public HTTP(S) URL and return its content. HTML pages are convert
 
 ### `email`
 
-List, read, search, and send email through the deployment mailbox configured in Settings.
+List, read, search, and send email through the deployment mailbox configured in **Control center → Agent tools → Tools**.
 
 | Parameter | Type | Required | Notes |
 |-----------|------|----------|-------|
@@ -455,13 +455,13 @@ The `email` tool uses a deployment-global mailbox. Required keys in `~/.nakama/c
 - Resolvable `from` address
 - TLS flags as needed
 
-Org admins configure these from the web **System → Tools** page.
+Org admins configure these from **Control center → Agent tools → Tools**.
 
 ### Web search
 
 Requires an OpenAI or Anthropic provider with a configured API key, or an Exa or Firecrawl search back-end.
 
-Org admins can point `web_search` at an external search API from the web **Settings → Web search** panel: pick **Exa** or **Firecrawl**, then supply the API key. The key is stored in the `[web_search]` section of `~/.nakama/config.ini` and is only ever returned masked.
+Org admins can point `web_search` at an external search API from **Control center → Agent tools → AI Providers → Web search**: pick **Exa** or **Firecrawl**, then supply the API key. The key is stored in the `[web_search]` section of `~/.nakama/config.ini` and is only ever returned masked.
 
 Leave the provider on **Built-in** to keep using the model provider's own hosted search.
 
@@ -471,7 +471,7 @@ Upload documents via the profile dashboard or API. Search only indexes extracted
 
 ### Data portability
 
-Platform admins can export and import the whole local Nakama data root from **Settings** in the dashboard.
+Platform admins can export and import the whole local Nakama data root from **Control center → Workspace → Settings**.
 Use **Export ZIP** to download a backup.
 Exports are `.zip` backups and should be handled as sensitive files because they can include local auth, provider configuration, custom tools, skills, profile workspaces, and a local SQLite database.
 
@@ -480,7 +480,7 @@ Confirmed restore replaces the current local data root; selective merge, schedul
 
 ## Custom tools
 
-Custom tools live in `~/.nakama/tools/` (follows `NAKAMA_CONFIG_DIR` if set) and are registered by a platform admin from **System → Tools**. Each tool points at a module file and can then be assigned to profiles like any builtin.
+Custom tools live in `~/.nakama/tools/` (follows `NAKAMA_CONFIG_DIR` if set) and are registered by a platform admin from **Control center → Agent tools → Tools**. Each tool points at a module file and can then be assigned to agents like any builtin.
 
 Two handler types are supported, and both run as a subprocess per call rather than inside the Nakama server process:
 
@@ -490,6 +490,22 @@ Two handler types are supported, and both run as a subprocess per call rather th
 | `python` | `*.py` | A `python3` subprocess per call |
 
 Neither handler inherits the server's full environment. The child process only gets `PATH` (to resolve the interpreter), `NAKAMA_CONFIG_DIR`, and `NAKAMA_WORKSPACE_ROOT` (the active profile workspace) — provider API keys and anything else in the server's environment are not visible to a tool. The child's working directory is the tool's own file, not the server's checkout, so relative file access stays scoped to `~/.nakama/tools/`.
+
+### Giving a tool its settings
+
+Some custom tools call a paid or private API. They need a key, and often a base URL or an account ID. Nakama keeps these values out of chat, out of the model, and out of the tool's source.
+
+When Super Bot builds such a tool, it lists the settings the tool needs, for example `WEATHER_API_URL` and a secret `WEATHER_API_KEY`. Org admins fill them in:
+
+- **Tool playground** — open the tool. The **Configuration** card shows one field per setting. Enter the values, then **Save**. Use **Update** to change them later. A blank secret field keeps the saved value.
+- **Configure card in chat** — shown when a tool runs before its settings are saved. It opens the playground.
+- **Super Bot setup card** — for a tool that only needs one API key, the approval card asks for it.
+
+![The tool playground with saved settings and a successful run](/screenshots/tool-playground-api-key.png)
+
+Each setting reaches the tool as an environment variable with the same name. A tool with a single key reads it from `NAKAMA_TOOL_API_KEY`. Values belong to one organization and one tool, and are encrypted at rest. Secret values are never shown again after saving, and if a tool echoes one in its output or errors, Nakama replaces it with `[REDACTED]`. Plain values such as URLs stay visible so admins can edit them.
+
+Setting names use `UPPER_SNAKE_CASE`. Names that change how the tool process starts, such as `PATH`, `NODE_OPTIONS`, or `PYTHONPATH`, and names starting with `NAKAMA_` are not allowed.
 
 ### Authoring a JavaScript tool
 

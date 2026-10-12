@@ -18,7 +18,9 @@ import {
 setupTestConfigDir("nakama-org-curator-test-");
 
 const BASE = "http://localhost:4310";
+
 const NOW = new Date("2026-08-15T12:00:00.000Z");
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe("org curator routes", () => {
@@ -27,6 +29,7 @@ describe("org curator routes", () => {
     const session = await setupFreshInstallSession(app, databaseAdapter);
     const orgId = session.orgId!;
     const profile = (await databaseAdapter.listProfilesForOrg(orgId))[0]!;
+
     const skillId = await addUnusedSkill({
       configDir: process.env.NAKAMA_CONFIG_DIR!,
       db: databaseAdapter,
@@ -50,6 +53,7 @@ describe("org curator routes", () => {
     );
 
     expect(response.status).toBe(200);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await response.json()) as { result: { archived: number } };
     expect(body.result.archived).toBe(1);
     expect(await databaseAdapter.listSkillsForProfile(profile.id)).not.toEqual(
@@ -115,7 +119,10 @@ describe("org curator routes", () => {
         method: "POST",
       })
     );
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const invited = (await inviteResp.json()) as { temporaryPassword: string };
+
     const member = await loginUserSession(
       app,
       "member@org.com",
@@ -156,6 +163,7 @@ describe("org curator routes", () => {
     await orgService.updateOrganization(orgId, { skillsCuratorEnabled: true });
 
     const token = await loadLocalAuthToken();
+
     const response = await app.fetch(
       new Request(`${BASE}/v1/internal/curator/orgs/${orgId}/run`, {
         body: JSON.stringify({ trigger: "seed" }),
@@ -168,9 +176,12 @@ describe("org curator routes", () => {
     );
 
     expect(response.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await response.json()) as {
       result: { archived: number; trigger: string };
     };
+
     expect(body.result.trigger).toBe("seed");
     expect(body.result.archived).toBe(0);
     const org = await orgService.getOrganization(orgId);
@@ -207,6 +218,7 @@ describe("org curator routes", () => {
     await orgService.updateOrganization(orgId, { skillsCuratorEnabled: true });
 
     const token = await loadLocalAuthToken();
+
     const response = await app.fetch(
       new Request(`${BASE}/v1/internal/curator/orgs`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -214,6 +226,7 @@ describe("org curator routes", () => {
     );
 
     expect(response.status).toBe(200);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await response.json()) as { orgs: Array<{ id: string }> };
     expect(body.orgs.map((org) => org.id)).toEqual([orgId]);
   });
@@ -231,6 +244,7 @@ describe("org curator routes", () => {
     });
 
     const token = await loadLocalAuthToken();
+
     const response = await app.fetch(
       new Request(`${BASE}/v1/internal/curator/orgs`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -238,6 +252,7 @@ describe("org curator routes", () => {
     );
 
     expect(response.status).toBe(200);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await response.json()) as { orgs: Array<{ id: string }> };
     expect(body.orgs).toEqual([]);
   });
@@ -255,6 +270,7 @@ describe("org curator routes", () => {
     });
 
     const token = await loadLocalAuthToken();
+
     const response = await app.fetch(
       new Request(`${BASE}/v1/internal/curator/orgs/${orgId}/run`, {
         body: JSON.stringify({ trigger: "schedule" }),
@@ -278,6 +294,7 @@ async function addUnusedSkill(input: {
   profileId: string;
 }): Promise<string> {
   const skillId = `skill_${input.name}`;
+
   const sourcePath = join(
     input.configDir,
     "orgs",
@@ -287,6 +304,7 @@ async function addUnusedSkill(input: {
     "skills",
     input.name
   );
+
   await mkdir(sourcePath, { recursive: true });
   await writeFile(
     join(sourcePath, "SKILL.md"),
@@ -314,5 +332,6 @@ async function addUnusedSkill(input: {
     useDelta: 1,
     usedAt: new Date(NOW.getTime() - 95 * DAY_MS).toISOString(),
   });
+
   return skillId;
 }

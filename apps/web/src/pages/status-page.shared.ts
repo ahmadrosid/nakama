@@ -9,6 +9,8 @@ import {
 
 type ServiceStatusTone = "ok" | "warn" | "bad" | "muted";
 
+type ServiceStatus = { status: string; tone: ServiceStatusTone };
+
 export function buildServiceColumns(status: SystemStatusResponse) {
   const {
     automationWorker,
@@ -55,7 +57,7 @@ export function buildServiceColumns(status: SystemStatusResponse) {
 
 function automationServiceStatus(
   automationWorker: SystemStatusResponse["automationWorker"]
-): { status: string; tone: ServiceStatusTone } {
+): ServiceStatus {
   if (!automationWorker.process?.managed) {
     return { status: "PM2 unavailable", tone: "warn" };
   }
@@ -73,7 +75,7 @@ function automationServiceStatus(
 
 function telegramServiceStatus(
   telegramWorker: SystemStatusResponse["telegramWorker"]
-): { status: string; tone: ServiceStatusTone } {
+): ServiceStatus {
   if (!telegramWorker.configured) {
     return { status: "Not set up", tone: "muted" };
   }
@@ -91,7 +93,7 @@ function telegramServiceStatus(
 
 function whatsappServiceStatus(
   whatsappWorker: SystemStatusResponse["whatsappWorker"]
-): { status: string; tone: ServiceStatusTone } {
+): ServiceStatus {
   if (!whatsappWorker.configured) {
     return { status: "Not set up", tone: "muted" };
   }
@@ -109,7 +111,7 @@ function whatsappServiceStatus(
 
 function discordServiceStatus(
   discordWorker: SystemStatusResponse["discordWorker"]
-): { status: string; tone: ServiceStatusTone } {
+): ServiceStatus {
   if (!discordWorker.configured) {
     return { status: "Not set up", tone: "muted" };
   }

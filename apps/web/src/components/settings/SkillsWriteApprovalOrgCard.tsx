@@ -50,6 +50,7 @@ export function SkillsWriteApprovalOrgCard() {
   const { data: proposalsData } = useSkillProposals(orgId, {
     status: "pending",
   });
+
   const { data: profiles = [] } = useProfilesQuery();
   const pendingCount = proposalsData?.pendingCount ?? 0;
 
@@ -67,12 +68,13 @@ export function SkillsWriteApprovalOrgCard() {
 
   async function handleToggle(checked: boolean) {
     setBusy(true);
+
     try {
       await updateOrg(activeOrg!.id, { skillsWriteApproval: checked });
       toast(
         checked
-          ? "Skill write approval enabled."
-          : "Skill write approval disabled."
+          ? "Approval before saving skills turned on."
+          : "Approval before saving skills turned off."
       );
     } catch (err) {
       toast(formatError(err));
@@ -86,7 +88,7 @@ export function SkillsWriteApprovalOrgCard() {
       <div className="border-border border-b px-4 py-3">
         <div className="flex items-center justify-between gap-4">
           <p className="font-medium text-foreground text-sm">
-            Skill write approval
+            Ask me before a bot saves a skill
           </p>
           {activeTab === "gate" ? (
             <div className="flex shrink-0 items-center gap-2">

@@ -21,16 +21,20 @@ export function registerSkillProposalRoutes(
   options: ServerOptions
 ): void {
   const skillProposalService = options.skillProposalService;
+
   const errorSchema = z
     .object({ error: z.string() })
     .openapi("ApiErrorResponse");
+
   const orgIdParam = z.object({
     orgId: z.string().openapi({ param: { in: "path", name: "orgId" } }),
   });
+
   const listSkillProposalsResponseSchema = z
     .object({})
     .passthrough()
     .openapi("ListSkillProposalsResponse");
+
   const skillProposalResponseSchema = z
     .object({})
     .passthrough()
@@ -41,9 +45,11 @@ export function registerSkillProposalRoutes(
     authOrgId: string
   ): string {
     const orgId = decodeURIComponent(c.req.param("orgId"));
+
     if (authOrgId !== orgId) {
       throw new NakamaApiError("Not found", 404);
     }
+
     return orgId;
   }
 
@@ -51,6 +57,7 @@ export function registerSkillProposalRoutes(
     if (!skillProposalService) {
       throw new NakamaApiError("Skill proposal service not configured", 500);
     }
+
     return skillProposalService;
   }
 
@@ -96,22 +103,27 @@ export function registerSkillProposalRoutes(
     const auth = requireNotViewerFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
+
     const status = parseOptionalQueryEnum(c.req.query("status"), [
       "pending",
       "approved",
       "rejected",
     ]);
+
     const profileId = c.req.query("profileId");
     const sessionId = c.req.query("sessionId");
     const isOrgAdmin = auth.orgRole === "admin" || auth.isPlatformAdmin;
+
     if (!(isOrgAdmin || sessionId)) {
       throw new NakamaApiError("Forbidden", 403);
     }
+
     const result = await service.listProposals(orgId, {
       profileId: profileId || undefined,
       sessionId: sessionId || undefined,
       status,
     });
+
     return json<ListSkillProposalsResponse>({
       pendingCount: result.pendingCount,
       proposals: result.proposals.map(toSkillProposal),
@@ -164,11 +176,13 @@ export function registerSkillProposalRoutes(
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const proposalId = decodeURIComponent(c.req.param("proposalId"));
     const service = requireService();
+
     const proposal = await service.approveProposal(
       orgId,
       proposalId,
       auth.user.id
     );
+
     return json<SkillProposalResponse>({ proposal: toSkillProposal(proposal) });
   });
 
@@ -218,11 +232,13 @@ export function registerSkillProposalRoutes(
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const proposalId = decodeURIComponent(c.req.param("proposalId"));
     const service = requireService();
+
     const proposal = await service.rejectProposal(
       orgId,
       proposalId,
       auth.user.id
     );
+
     return json<SkillProposalResponse>({ proposal: toSkillProposal(proposal) });
   });
 }

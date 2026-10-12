@@ -6,11 +6,14 @@ export function renderTelegramRichText(text: string): string {
   return restoreProtectedBlocks(formattedText, protectedBlocks.blocks).trim();
 }
 
-function protectFencedCodeBlocks(text: string): {
-  text: string;
+interface ProtectedTelegramCodeBlocks {
   blocks: string[];
-} {
+  text: string;
+}
+
+function protectFencedCodeBlocks(text: string): ProtectedTelegramCodeBlocks {
   const blocks: string[] = [];
+
   const protectedText = text.replace(
     /```[\w]*\n?([\s\S]*?)```/g,
     (_, code: string) => {
@@ -18,6 +21,7 @@ function protectFencedCodeBlocks(text: string): {
       blocks.push(
         `<pre><code>${escapeTelegramHtml(trimFenceNewlines(code))}</code></pre>`
       );
+
       return token;
     }
   );

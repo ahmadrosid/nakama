@@ -31,6 +31,7 @@ import {
   SUPER_BOT_SYSTEM_PROMPT,
   SUPER_BOT_TOOL_AUTHORING_RULES,
 } from "@nakama/db";
+import { z } from "zod";
 import { createProviderForInstance } from "../providers/create";
 import { ProfileService } from "../services/profile-service";
 import { SuperBotSessionState } from "../services/super-bot-session-state";
@@ -42,12 +43,37 @@ import {
 import { createSuperBotTools } from "./super-bot-tools";
 
 const cassetteName = "super-bot-create-profile";
+
 const modelId = "deepseek-v4-flash";
+
 const deepseekChatCompletionsUrl = "https://api.deepseek.com/chat/completions";
+
 const ORG_ID = "org_super_bot_llm";
+
 const SESSION_ID = "session_super_bot_llm";
+
 const USER_ASK = "Create a Refund Support Bot for customer refund questions.";
+
 const MAX_TURNS = 5;
+
+const CreateProfileArgumentsSchema = z
+  .object({
+    isSuper: z.boolean().optional(),
+    name: z.string(),
+    soulFiles: z.record(z.string(), z.string()),
+  })
+  .passthrough();
+
+const CreatedProfileSchema = z.object({
+  profile: z.object({
+    id: z.string(),
+    isSuper: z.boolean(),
+    name: z.string(),
+    skills: z.array(z.object({ name: z.string() })),
+    systemPrompt: z.string(),
+    tools: z.array(z.object({ name: z.string() })),
+  }),
+});
 
 const DEFAULT_TOOL_NAMES = [
   "read_file",
@@ -59,6 +85,7 @@ const DEFAULT_TOOL_NAMES = [
 ] as const;
 
 let tempConfigDir: string | null = null;
+
 let previousConfigDir: string | undefined;
 
 afterEach(async () => {
@@ -76,6 +103,7 @@ afterEach(async () => {
 
 async function resolveDeepseekInstance(): Promise<ProviderInstance | null> {
   const config = await loadUserConfig();
+
   const configured =
     config?.providers.find(
       (provider) => provider.type === "deepseek" && provider.apiKey.trim()
@@ -86,6 +114,7 @@ async function resolveDeepseekInstance(): Promise<ProviderInstance | null> {
   }
 
   const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
+
   if (!apiKey) {
     return null;
   }
@@ -104,6 +133,7 @@ async function seedDefaultBundledSkills(
   root: string
 ): Promise<void> {
   const now = new Date().toISOString();
+
   for (const name of DEFAULT_BUNDLED_SKILL_NAMES) {
     await db.upsertSkill({
       createdAt: now,
@@ -122,6 +152,7 @@ async function seedDefaultBundledSkills(
 
 async function buildSuperBotSystemPrompt(): Promise<string> {
   const skillBody = await readBundledSkillBody("create-profile");
+
   return [
     SUPER_BOT_SYSTEM_PROMPT.trim(),
     "",
@@ -163,9 +194,11 @@ test(
     const tools = createSuperBotTools(profileService, sessionState);
     const toolDefs = tools.map(toLlmToolDefinition);
     const toolContext = { orgId: ORG_ID, sessionId: SESSION_ID };
+
     const createProfileTool = tools.find(
       (entry) => entry.name === "create_profile"
     );
+
     if (!createProfileTool) {
       throw new Error("create_profile tool missing");
     }
@@ -205,6 +238,7 @@ test(
           const found = result.toolCalls?.find(
             (call) => call.name === "create_profile"
           );
+
           if (found) {
             createCall = found;
             break;
@@ -213,9 +247,11 @@ test(
           if (result.toolCalls?.length) {
             for (const call of result.toolCalls) {
               const tool = tools.find((entry) => entry.name === call.name);
+
               const output = tool
                 ? await tool.run(call.arguments, toolContext)
                 : { error: `Unknown tool: ${call.name}` };
+
               messages.push({
                 content: JSON.stringify(output),
                 name: call.name,
@@ -223,6 +259,7 @@ test(
                 toolCallId: call.id,
               });
             }
+
             continue;
           }
 
@@ -238,36 +275,25 @@ test(
 
         expect(createCall?.name).toBe("create_profile");
 
-        const args = createCall?.arguments ?? {};
-        expect(typeof args.name).toBe("string");
-        expect(String(args.name).toLowerCase()).toContain("refund");
+        const args = CreateProfileArgumentsSchema.parse(
+          createCall?.arguments ?? {}
+        );
+
+        expect(args.name.toLowerCase()).toContain("refund");
         expect(args.isSuper).not.toBe(true);
 
-        const soulFiles = args.soulFiles;
-        expect(typeof soulFiles === "object" && soulFiles !== null).toBe(true);
-        const soul = soulFiles as Record<string, unknown>;
-        expect(typeof soul["SOUL.md"]).toBe("string");
-        expect(typeof soul["STYLE.md"]).toBe("string");
-        expect(typeof soul["INSTRUCTIONS.md"]).toBe("string");
-        expect(String(soul["SOUL.md"]).trim().length).toBeGreaterThan(0);
-        expect(String(soul["STYLE.md"]).trim().length).toBeGreaterThan(0);
-        expect(String(soul["INSTRUCTIONS.md"]).trim().length).toBeGreaterThan(
-          0
-        );
+        const soul = args.soulFiles;
+        expect(soul["SOUL.md"].trim().length).toBeGreaterThan(0);
+        expect(soul["STYLE.md"].trim().length).toBeGreaterThan(0);
+        expect(soul["INSTRUCTIONS.md"].trim().length).toBeGreaterThan(0);
+
         if ("MEMORY.md" in soul) {
           expect(String(soul["MEMORY.md"] ?? "").trim()).toBe("");
         }
 
-        const created = (await createProfileTool.run(args, toolContext)) as {
-          profile: {
-            id: string;
-            name: string;
-            systemPrompt: string;
-            isSuper: boolean;
-            tools: Array<{ name: string }>;
-            skills: Array<{ name: string }>;
-          };
-        };
+        const created = CreatedProfileSchema.parse(
+          await createProfileTool.run(args, toolContext)
+        );
 
         expect(created.profile.name.toLowerCase()).toContain("refund");
         expect(created.profile.isSuper).toBe(false);
@@ -276,6 +302,7 @@ test(
         const assignedToolNames = created.profile.tools.map(
           (tool) => tool.name
         );
+
         for (const toolName of DEFAULT_TOOL_NAMES) {
           expect(assignedToolNames).toContain(toolName);
         }
@@ -283,6 +310,7 @@ test(
         const assignedSkillNames = created.profile.skills.map(
           (skill) => skill.name
         );
+
         for (const skillName of DEFAULT_BUNDLED_SKILL_NAMES) {
           expect(assignedSkillNames).toContain(skillName);
         }
@@ -294,12 +322,15 @@ test(
           "profiles",
           created.profile.id
         );
+
         const soulMd = await readFile(join(soulDir, "SOUL.md"), "utf8");
         const styleMd = await readFile(join(soulDir, "STYLE.md"), "utf8");
+
         const instructionsMd = await readFile(
           join(soulDir, "INSTRUCTIONS.md"),
           "utf8"
         );
+
         const memoryMd = await readFile(join(soulDir, "MEMORY.md"), "utf8");
 
         expect(soulMd.trim().length).toBeGreaterThan(0);

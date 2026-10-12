@@ -15,22 +15,27 @@ import { createCustomWebSearchTool } from "@nakama/core/tools/custom-web-search"
 import { emailTool } from "@nakama/core/tools/email";
 import { loadWebSearchConfig } from "@nakama/core/web-search-config";
 import type { DatabaseAdapter, StoredToolRecord } from "@nakama/db";
-import { bashTool, runBash } from "../tools/bash";
+import { type BashInput, bashTool, runBash } from "../tools/bash";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
 import { getCustomToolHandler } from "./custom-tool-handlers";
+import type { CustomToolRecord } from "./custom-tool-shared";
+import type { OrgService } from "./org-service";
 import type { PluginService } from "./plugin-service";
 import { actorMayInvoke, PluginHostError } from "./plugin-service";
 
 export type ServerToolOverrides = {
+  googleMeet?: ToolDefinition[];
   generateImage?: ToolDefinition | null;
   session?: ToolDefinition[];
   subAgent?: ToolDefinition | null;
 };
 
 export type ResolveStoredToolsOptions = {
+  orgService?: OrgService;
   actorRole?: PluginActorRole;
   pluginService?: PluginService | null;
   serverTools?: ServerToolOverrides;
+  sharedContext?: ToolContext;
   userConfig?: UserConfig | null;
 };
 
@@ -46,7 +51,7 @@ export function omitUnavailableBuiltinTools(
 }
 
 export async function resolveProfileStoredTools(
-  records: StoredToolRecord[],
+  records: CustomToolRecord[],
   db?: DatabaseAdapter,
   builtinOverrides: ToolDefinition[] = [],
   options: ResolveStoredToolsOptions = {}
@@ -56,12 +61,14 @@ export async function resolveProfileStoredTools(
   const customWebSearch = createCustomWebSearchTool(
     await loadWebSearchConfig()
   );
+
   const tools = await resolveToolsFromStorage(
     records,
     db,
     customWebSearch ? [...builtinOverrides, customWebSearch] : builtinOverrides,
     options
   );
+
   return omitUnavailableBuiltinTools(
     tools,
     isEmailConfigComplete(await loadEmailConfig())
@@ -69,19 +76,26 @@ export async function resolveProfileStoredTools(
 }
 
 export async function resolveToolsFromStorage(
-  records: StoredToolRecord[],
+  records: CustomToolRecord[],
   db?: DatabaseAdapter,
   builtinOverrides: ToolDefinition[] = [],
   options: ResolveStoredToolsOptions = {}
 ): Promise<ToolDefinition[]> {
   const builtinMap = new Map(
-    [...builtinTools, ...builtinOverrides].map((tool) => [tool.name, tool])
+    [
+      ...builtinTools,
+      ...builtinOverrides,
+      ...(options.serverTools?.googleMeet ?? []),
+    ].map((tool) => [tool.name, tool])
   );
+
   const serverTools = buildServerTools(
     db,
     options.userConfig,
-    options.serverTools
+    options.serverTools,
+    options.orgService
   );
+
   const resolved: ToolDefinition[] = [];
 
   for (const record of records) {
@@ -90,7 +104,8 @@ export async function resolveToolsFromStorage(
       builtinMap,
       serverTools,
       options.pluginService,
-      options.actorRole
+      options.actorRole,
+      options.sharedContext
     );
 
     if (tool) {
@@ -102,11 +117,12 @@ export async function resolveToolsFromStorage(
 }
 
 async function resolveStoredTool(
-  record: StoredToolRecord,
+  record: CustomToolRecord,
   builtinMap: Map<string, ToolDefinition>,
   serverTools: Map<string, ToolDefinition>,
   pluginService?: PluginService | null,
-  actorRole?: PluginActorRole
+  actorRole?: PluginActorRole,
+  sharedContext?: ToolContext
 ): Promise<ToolDefinition | null> {
   if (record.handlerType === "builtin") {
     return builtinMap.get(record.name) ?? null;
@@ -128,7 +144,7 @@ async function resolveStoredTool(
   const customHandler = getCustomToolHandler(record.handlerType);
 
   if (customHandler) {
-    return customHandler.load(record);
+    return customHandler.load(record, sharedContext);
   }
 
   return null;
@@ -137,9 +153,13 @@ async function resolveStoredTool(
 function buildServerTools(
   db?: DatabaseAdapter,
   userConfig?: UserConfig | null,
-  overrides: ServerToolOverrides = {}
+  overrides: ServerToolOverrides = {},
+  orgService?: OrgService
 ): Map<string, ToolDefinition> {
-  const bash = db ? createCodingAgentAwareBashTool(db, userConfig) : bashTool;
+  const bash = db
+    ? createCodingAgentAwareBashTool(db, userConfig, orgService)
+    : bashTool;
+
   const map = new Map<string, ToolDefinition>([[bash.name, bash]]);
 
   if (overrides.subAgent) {
@@ -159,8 +179,9 @@ function buildServerTools(
 
 function createCodingAgentAwareBashTool(
   db: DatabaseAdapter,
-  userConfig?: UserConfig | null
-): ToolDefinition {
+  userConfig?: UserConfig | null,
+  orgService?: OrgService
+): ToolDefinition<BashInput> {
   return {
     ...bashTool,
     run: async (input, context: ToolContext) => {
@@ -168,8 +189,10 @@ function createCodingAgentAwareBashTool(
         db,
         input,
         context,
-        userConfig
+        userConfig,
+        orgService
       );
+
       return runBash(enriched, context);
     },
   };
@@ -183,6 +206,7 @@ async function loadPluginTool(
   const pluginId = record.pluginId;
   const actionKey = record.pluginKey;
   const orgId = record.orgId;
+
   if (!(pluginService && pluginId && actionKey && orgId)) {
     return null;
   }
@@ -192,9 +216,11 @@ async function loadPluginTool(
     pluginId,
     actionKey
   );
+
   if (!action) {
     return null;
   }
+
   if (actorRole && !actorMayInvoke(action.access, actorRole)) {
     return null;
   }
@@ -209,6 +235,7 @@ async function loadPluginTool(
     async run(input, context) {
       const trustedOrgId = context.orgId?.trim();
       const trustedProfileId = context.profileId?.trim();
+
       if (!(trustedOrgId && trustedProfileId)) {
         throw new PluginHostError("invalid_input");
       }
@@ -224,6 +251,7 @@ async function loadPluginTool(
         sessionId: context.sessionId,
         signal: context.signal,
       });
+
       return invoked.result;
     },
   };
@@ -237,6 +265,7 @@ export function pluginActorFromContext(
     context.channel === "whatsapp" ||
     context.channel === "discord" ||
     context.channel === "slack";
+
   return {
     id: context.userId?.trim() ?? "",
     role: messagingChannel
@@ -251,9 +280,10 @@ function pluginActorRoleFromOrgRole(
   if (role === "admin" || role === "member" || role === "viewer") {
     return role;
   }
+
   return "viewer";
 }
 
-function isJsonSchema(value: unknown): value is JsonSchema {
-  return typeof value === "object" && value !== null;
+function isJsonSchema<T>(value: T): value is T & JsonSchema {
+  return value instanceof Object && !Array.isArray(value);
 }

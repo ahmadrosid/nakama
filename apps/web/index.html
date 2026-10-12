@@ -25,11 +25,14 @@
     <meta content="Nakama" name="apple-mobile-web-app-title">
     <script>
     "use strict";
+
     (() => {
       var stored = localStorage.getItem("nakama-theme");
+
       var resolved = window.matchMedia("(prefers-color-scheme: dark)").matches
         ? "dark"
         : "light";
+
       if (stored === "light" || stored === "dark") {
         resolved = stored;
       } else if (stored === "system") {
@@ -37,9 +40,12 @@
           ? "dark"
           : "light";
       }
+
       document.documentElement.classList.toggle("dark", resolved === "dark");
       document.documentElement.style.colorScheme = resolved;
+
       var favicon = document.querySelector('link[rel="icon"]');
+
       if (favicon) {
         favicon.setAttribute(
           "href",

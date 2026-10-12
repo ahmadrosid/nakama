@@ -17,7 +17,7 @@ import {
   type SelectedProvider,
 } from "@/lib/models";
 
-export type ProviderSelectValue = SelectedProvider | "__browse__";
+type ProviderSelectValue = SelectedProvider | "__browse__";
 
 interface ProviderSelectProps {
   className?: string;

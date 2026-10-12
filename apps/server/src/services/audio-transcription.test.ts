@@ -37,7 +37,7 @@ describe("resolveTranscriptionProviderSelection", () => {
       defaultProviderId: "p-gemini",
       providers: [
         {
-          apiKey: "key",
+          apiKey: "test-key",
           createdAt: "2026-01-01T00:00:00.000Z",
           id: "p-gemini",
           label: "Gemini",
@@ -48,7 +48,48 @@ describe("resolveTranscriptionProviderSelection", () => {
     };
 
     expect(() => resolveTranscriptionProviderSelection(config)).toThrow(
-      "Audio transcription requires an OpenAI provider."
+      "Audio transcription requires an OpenAI or OpenAI-compatible provider with a base URL."
+    );
+  });
+
+  test("resolves openai_compatible provider with a baseUrl", () => {
+    const config: UserConfig = {
+      defaultProviderId: "p-local",
+      providers: [
+        {
+          apiKey: "local-key",
+          baseUrl: "http://100.64.0.1:8000/v1",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          id: "p-local",
+          label: "Local Whisper",
+          type: "openai_compatible",
+        },
+      ],
+      transcriptionModel: "p-local::whisper-large-v3",
+    };
+
+    const resolved = resolveTranscriptionProviderSelection(config);
+    expect(resolved?.model).toBe("whisper-large-v3");
+    expect(resolved?.instance.type).toBe("openai_compatible");
+  });
+
+  test("rejects openai_compatible provider without a baseUrl", () => {
+    const config: UserConfig = {
+      defaultProviderId: "p-local",
+      providers: [
+        {
+          apiKey: "local-key",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          id: "p-local",
+          label: "Local Whisper",
+          type: "openai_compatible",
+        },
+      ],
+      transcriptionModel: "p-local::whisper-large-v3",
+    };
+
+    expect(() => resolveTranscriptionProviderSelection(config)).toThrow(
+      "Audio transcription requires an OpenAI or OpenAI-compatible provider with a base URL."
     );
   });
 

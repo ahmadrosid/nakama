@@ -65,6 +65,7 @@ describe("isProviderConfigured", () => {
 
 describe("ensureProviderConfigured", () => {
   let configDir = "";
+
   const envKeys = [
     "NAKAMA_CONFIG_DIR",
     "NAKAMA_PROVIDER",
@@ -73,7 +74,11 @@ describe("ensureProviderConfigured", () => {
     "ANTHROPIC_API_KEY",
     "OPENROUTER_API_KEY",
     "GEMINI_API_KEY",
+    "NETRA_API_KEY",
+    "NETRA_API_KEY_FILE",
+    "NETRA_MODEL",
   ] as const;
+
   const previousEnv: Partial<
     Record<(typeof envKeys)[number], string | undefined>
   > = {};
@@ -136,6 +141,25 @@ describe("ensureProviderConfigured", () => {
     expect(userConfig?.providers[0]?.apiKey).toBe("");
     expect(await readFile(getUserConfigPath(), "utf8")).not.toContain(
       "sk-mounted"
+    );
+  });
+
+  test("boots a Cloud Netra instance with its default model", async () => {
+    snapshotEnv();
+    configDir = await mkdtemp(join(tmpdir(), "nakama-setup-netra-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    process.env.NETRA_API_KEY = "netra-test-key";
+    process.env.NETRA_MODEL = "deepseek/deepseek-v4-flash-0731";
+
+    const { provider, userConfig } = await ensureProviderConfigured();
+
+    expect(provider).not.toBeNull();
+    expect(userConfig?.providers[0]?.type).toBe("netra");
+    expect(userConfig?.providers[0]?.customModels).toEqual([
+      { default: true, id: "deepseek/deepseek-v4-flash-0731" },
+    ]);
+    expect(await readFile(getUserConfigPath(), "utf8")).not.toContain(
+      "netra-test-key"
     );
   });
 });

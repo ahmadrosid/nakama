@@ -1,3 +1,4 @@
+import { z } from "@hono/zod-openapi";
 import { NakamaApiError } from "@nakama/core";
 import {
   listCodingHarnessLoginCommands,
@@ -16,11 +17,16 @@ export function registerCodingHarnessSettingsRoutes(
   app: HonoApp,
   options: ServerOptions
 ): void {
+  const databaseAdapter = options.databaseAdapter;
+
+  if (!databaseAdapter) {
+    return;
+  }
+
   app.get("/v1/settings/coding-harnesses", async (c) => {
     requireActiveOrgIdFromContext(c);
-    const settings = await loadCodingAgentWorkspaceSettings(
-      options.databaseAdapter
-    );
+
+    const settings = await loadCodingAgentWorkspaceSettings(databaseAdapter);
 
     return json({
       loginCommands: listCodingHarnessLoginCommands(),
@@ -32,21 +38,22 @@ export function registerCodingHarnessSettingsRoutes(
     // Workspace-global, same bar as other install-wide settings (#305).
     // Per-org isolation of this flag is #307.
     requirePlatformAdminFromContext(c);
-    const body = await readJson<{ providerPassthroughEnabled?: boolean }>(
-      c.req.raw
+
+    const body = await readJson(
+      c.req.raw,
+      z.object({ providerPassthroughEnabled: z.boolean().optional() }).strict()
     );
 
-    if (typeof body.providerPassthroughEnabled !== "boolean") {
+    if (body.providerPassthroughEnabled === undefined) {
       throw new NakamaApiError(
         "providerPassthroughEnabled must be a boolean.",
         400
       );
     }
 
-    const settings = await saveCodingAgentWorkspaceSettings(
-      options.databaseAdapter,
-      { providerPassthroughEnabled: body.providerPassthroughEnabled }
-    );
+    const settings = await saveCodingAgentWorkspaceSettings(databaseAdapter, {
+      providerPassthroughEnabled: body.providerPassthroughEnabled,
+    });
 
     return json({
       loginCommands: listCodingHarnessLoginCommands(),

@@ -1,7 +1,8 @@
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
+import { z } from "zod";
+import { createChatLock } from "./channel-chat-lock";
 import type { ListUserOrgsResponse, UserOrgSummary } from "./contract";
 import { readTextOrNull, writeTextFile } from "./fs";
-import { getUserConfigDir } from "./user-config";
 
 export type ChannelOrgSelectionChannel = "telegram" | "whatsapp" | "discord";
 
@@ -12,11 +13,14 @@ export interface ChannelOrgRecord {
 
 type ChannelOrgMap = Record<string, ChannelOrgRecord>;
 
-export function getChannelOrgSelectionPath(
-  channel: ChannelOrgSelectionChannel
-): string {
-  return join(getUserConfigDir(), channel, "org-selection.json");
-}
+const ChannelOrgMapSchema = z.record(
+  z.string(),
+  z.object({ orgId: z.string(), updatedAt: z.string() })
+);
+
+// Each save rewrites the whole map. Unserialized, an older snapshot can be
+// renamed into place after a newer one and undo it on the next restart.
+const saveLock = createChatLock();
 
 export class ChannelOrgStore {
   private readonly path: string;
@@ -31,21 +35,12 @@ export class ChannelOrgStore {
 
     if (raw === null) {
       this.map = {};
+
       return;
     }
 
-    const parsed = JSON.parse(raw) as unknown;
-
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      Array.isArray(parsed)
-    ) {
-      this.map = {};
-      return;
-    }
-
-    this.map = parsed as ChannelOrgMap;
+    const parsed = ChannelOrgMapSchema.safeParse(JSON.parse(raw));
+    this.map = parsed.success ? parsed.data : {};
   }
 
   get(channelUserId: string): ChannelOrgRecord | undefined {
@@ -64,9 +59,11 @@ export class ChannelOrgStore {
   }
 
   async save(): Promise<void> {
-    await writeTextFile(this.path, `${JSON.stringify(this.map, null, 2)}\n`, {
-      ensureDir: dirname(this.path),
-    });
+    await saveLock.withLock(this.path, () =>
+      writeTextFile(this.path, `${JSON.stringify(this.map, null, 2)}\n`, {
+        ensureDir: dirname(this.path),
+      })
+    );
   }
 }
 
@@ -77,6 +74,7 @@ export function formatOrgSelectionPrompt(
   const current = currentOrgId
     ? orgs.find((org) => org.id === currentOrgId)
     : undefined;
+
   const lines = [
     "Choose an organization (reply with a number or slug):",
     "",
@@ -95,16 +93,19 @@ export function findOrgBySelectionInput(
   orgs: UserOrgSummary[]
 ): UserOrgSummary | null {
   const trimmed = input.trim();
+
   if (!trimmed || trimmed.startsWith("/")) {
     return null;
   }
 
   const index = Number(trimmed);
+
   if (Number.isInteger(index) && index >= 1 && index <= orgs.length) {
     return orgs[index - 1] ?? null;
   }
 
   const normalized = trimmed.toLowerCase();
+
   return (
     orgs.find(
       (org) =>
@@ -113,24 +114,6 @@ export function findOrgBySelectionInput(
         org.name.toLowerCase() === normalized
     ) ?? null
   );
-}
-
-export function isOrgSelectionInput(input: string, orgCount: number): boolean {
-  if (orgCount <= 1) {
-    return false;
-  }
-
-  const trimmed = input.trim();
-  if (!trimmed || trimmed.startsWith("/") || /\s/.test(trimmed)) {
-    return false;
-  }
-
-  const index = Number(trimmed);
-  if (Number.isInteger(index) && index >= 1 && index <= orgCount) {
-    return true;
-  }
-
-  return trimmed.length > 0;
 }
 
 export type PrepareChannelOrgResult =
@@ -153,12 +136,16 @@ export async function prepareChannelOrgContext(options: {
   if (orgs.length === 1) {
     const org = orgs[0];
     const storedOrgId = options.getSelectedOrgId();
+
     if (storedOrgId && storedOrgId !== org.id) {
       const selectionInput = options.text?.trim();
+
       if (selectionInput) {
         const picked = findOrgBySelectionInput(selectionInput, orgs);
+
         if (picked) {
           await options.saveSelectedOrgId(picked.id);
+
           return {
             justSelected: true,
             orgId: picked.id,
@@ -167,27 +154,34 @@ export async function prepareChannelOrgContext(options: {
           };
         }
       }
+
       return {
         message: formatOrgSelectionPrompt(orgs, storedOrgId),
         status: "prompt",
       };
     }
+
     if (storedOrgId !== org.id) {
       await options.saveSelectedOrgId(org.id);
     }
+
     return { orgId: org.id, orgName: org.name, status: "ready" };
   }
 
   const storedOrgId = options.getSelectedOrgId();
+
   const storedOrg = storedOrgId
     ? orgs.find((org) => org.id === storedOrgId)
     : undefined;
 
   const selectionInput = options.text?.trim();
+
   if (selectionInput) {
     const picked = findOrgBySelectionInput(selectionInput, orgs);
+
     if (picked) {
       await options.saveSelectedOrgId(picked.id);
+
       return {
         justSelected: true,
         orgId: picked.id,

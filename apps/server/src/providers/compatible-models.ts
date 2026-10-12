@@ -2,14 +2,25 @@ import type { ProviderInstance, ProviderName } from "@nakama/core";
 import {
   type CustomModelEntry,
   findCustomModel,
+  NakamaApiError,
   normalizeBaseUrl,
 } from "@nakama/core";
+import {
+  defaultDiscoveryBaseUrl,
+  NETRA_AGENT_MODEL_ID,
+} from "@nakama/core/discovery-providers";
 import OpenAI from "openai";
 import type { ProviderModelOption } from "./models";
 import { AVAILABLE_MODELS } from "./models";
 import { openRouterSlugSupportsThinking } from "./openrouter/thinking";
+import {
+  type ProviderJsonRecord,
+  parseJsonRecord,
+  readProviderString,
+} from "./shared";
 
 const DEFAULT_CONTEXT_WINDOW = 128_000;
+
 const DEFAULT_MAX_OUTPUT = 8192;
 
 function resolveOpenRouterCatalogThinking(entry: CustomModelEntry): boolean {
@@ -20,27 +31,37 @@ function resolveOpenRouterCatalogThinking(entry: CustomModelEntry): boolean {
   return openRouterSlugSupportsThinking(entry.id);
 }
 
-export function openRouterCustomModelsToCatalog(
+function openRouterCustomModelsToCatalog(
   entries: CustomModelEntry[]
 ): ProviderModelOption[] {
-  return entries.map((entry) => ({
-    contextWindow: DEFAULT_CONTEXT_WINDOW,
-    id: entry.id,
-    maxOutputTokens: DEFAULT_MAX_OUTPUT,
-    name: entry.name?.trim() || entry.id,
-    provider: "openrouter" as const,
-    supportsThinking: resolveOpenRouterCatalogThinking(entry),
-    ...(entry.default ? { default: true } : {}),
-    ...(entry.supportsVision === undefined
-      ? {}
-      : { supportsVision: entry.supportsVision }),
-    ...(entry.inputPerMillionUsd === undefined
-      ? {}
-      : { inputPerMillionUsd: entry.inputPerMillionUsd }),
-    ...(entry.outputPerMillionUsd === undefined
-      ? {}
-      : { outputPerMillionUsd: entry.outputPerMillionUsd }),
-  }));
+  return entries.map((entry) => {
+    const model: ProviderModelOption = {
+      contextWindow: DEFAULT_CONTEXT_WINDOW,
+      id: entry.id,
+      maxOutputTokens: DEFAULT_MAX_OUTPUT,
+      name: entry.name?.trim() || entry.id,
+      provider: "openrouter",
+      supportsThinking: resolveOpenRouterCatalogThinking(entry),
+    };
+
+    if (entry.default) {
+      model.default = true;
+    }
+
+    if (entry.supportsVision !== undefined) {
+      model.supportsVision = entry.supportsVision;
+    }
+
+    if (entry.inputPerMillionUsd !== undefined) {
+      model.inputPerMillionUsd = entry.inputPerMillionUsd;
+    }
+
+    if (entry.outputPerMillionUsd !== undefined) {
+      model.outputPerMillionUsd = entry.outputPerMillionUsd;
+    }
+
+    return model;
+  });
 }
 
 function resolveCerebrasCatalogThinking(entry: CustomModelEntry): boolean {
@@ -51,27 +72,37 @@ function resolveCerebrasCatalogThinking(entry: CustomModelEntry): boolean {
   return false;
 }
 
-export function cerebrasCustomModelsToCatalog(
+function cerebrasCustomModelsToCatalog(
   entries: CustomModelEntry[]
 ): ProviderModelOption[] {
-  return entries.map((entry) => ({
-    contextWindow: DEFAULT_CONTEXT_WINDOW,
-    id: entry.id,
-    maxOutputTokens: DEFAULT_MAX_OUTPUT,
-    name: entry.name?.trim() || entry.id,
-    provider: "cerebras" as const,
-    supportsThinking: resolveCerebrasCatalogThinking(entry),
-    ...(entry.supportsVision === undefined
-      ? {}
-      : { supportsVision: entry.supportsVision }),
-    ...(entry.default ? { default: true } : {}),
-    ...(entry.inputPerMillionUsd === undefined
-      ? {}
-      : { inputPerMillionUsd: entry.inputPerMillionUsd }),
-    ...(entry.outputPerMillionUsd === undefined
-      ? {}
-      : { outputPerMillionUsd: entry.outputPerMillionUsd }),
-  }));
+  return entries.map((entry) => {
+    const model: ProviderModelOption = {
+      contextWindow: DEFAULT_CONTEXT_WINDOW,
+      id: entry.id,
+      maxOutputTokens: DEFAULT_MAX_OUTPUT,
+      name: entry.name?.trim() || entry.id,
+      provider: "cerebras",
+      supportsThinking: resolveCerebrasCatalogThinking(entry),
+    };
+
+    if (entry.supportsVision !== undefined) {
+      model.supportsVision = entry.supportsVision;
+    }
+
+    if (entry.default) {
+      model.default = true;
+    }
+
+    if (entry.inputPerMillionUsd !== undefined) {
+      model.inputPerMillionUsd = entry.inputPerMillionUsd;
+    }
+
+    if (entry.outputPerMillionUsd !== undefined) {
+      model.outputPerMillionUsd = entry.outputPerMillionUsd;
+    }
+
+    return model;
+  });
 }
 
 function resolveFireworksCatalogThinking(entry: CustomModelEntry): boolean {
@@ -82,7 +113,7 @@ function resolveFireworksCatalogThinking(entry: CustomModelEntry): boolean {
   return false;
 }
 
-export function fireworksCustomModelsToCatalog(
+function fireworksCustomModelsToCatalog(
   entries: CustomModelEntry[]
 ): ProviderModelOption[] {
   const staticModels = AVAILABLE_MODELS.filter(
@@ -111,6 +142,7 @@ export function catalogCustomModelsToCatalog(
 
   return entries.map((entry) => {
     const existing = staticById.get(entry.id);
+
     const model: ProviderModelOption = {
       ...(existing ?? {
         contextWindow: DEFAULT_CONTEXT_WINDOW,
@@ -126,11 +158,13 @@ export function catalogCustomModelsToCatalog(
     if (entry.default) {
       model.default = true;
     }
+
     if (entry.supportsVision !== undefined) {
       model.supportsVision = entry.supportsVision;
     } else if (provider === "chatgpt" || provider === "xai_oauth") {
       model.supportsVision = true;
     }
+
     if (entry.supportsThinking !== undefined) {
       model.supportsThinking = entry.supportsThinking;
     } else if (
@@ -146,9 +180,11 @@ export function catalogCustomModelsToCatalog(
     ) {
       model.supportsThinking = false;
     }
+
     if (entry.inputPerMillionUsd !== undefined) {
       model.inputPerMillionUsd = entry.inputPerMillionUsd;
     }
+
     if (entry.outputPerMillionUsd !== undefined) {
       model.outputPerMillionUsd = entry.outputPerMillionUsd;
     }
@@ -157,7 +193,7 @@ export function catalogCustomModelsToCatalog(
   });
 }
 
-export function customModelsToCatalog(
+function customModelsToCatalog(
   entries: CustomModelEntry[],
   provider: ProviderName = "openai_compatible"
 ): ProviderModelOption[] {
@@ -173,15 +209,19 @@ export function customModelsToCatalog(
     if (entry.default) {
       model.default = true;
     }
+
     if (entry.supportsThinking !== undefined) {
       model.supportsThinking = entry.supportsThinking;
     }
+
     if (entry.supportsVision !== undefined) {
       model.supportsVision = entry.supportsVision;
     }
+
     if (entry.inputPerMillionUsd !== undefined) {
       model.inputPerMillionUsd = entry.inputPerMillionUsd;
     }
+
     if (entry.outputPerMillionUsd !== undefined) {
       model.outputPerMillionUsd = entry.outputPerMillionUsd;
     }
@@ -190,7 +230,7 @@ export function customModelsToCatalog(
   });
 }
 
-export function ensureCurrentModelInCatalog(
+function ensureCurrentModelInCatalog(
   catalog: ProviderModelOption[],
   currentModel: string | null | undefined,
   provider: ProviderName = "openai_compatible"
@@ -201,19 +241,19 @@ export function ensureCurrentModelInCatalog(
     return catalog;
   }
 
-  return [
-    ...catalog,
-    {
-      contextWindow: DEFAULT_CONTEXT_WINDOW,
-      id: trimmed,
-      maxOutputTokens: DEFAULT_MAX_OUTPUT,
-      name: trimmed,
-      provider,
-      ...(provider === "openrouter"
-        ? { supportsThinking: openRouterSlugSupportsThinking(trimmed) }
-        : {}),
-    },
-  ];
+  const model: ProviderModelOption = {
+    contextWindow: DEFAULT_CONTEXT_WINDOW,
+    id: trimmed,
+    maxOutputTokens: DEFAULT_MAX_OUTPUT,
+    name: trimmed,
+    provider,
+  };
+
+  if (provider === "openrouter") {
+    model.supportsThinking = openRouterSlugSupportsThinking(trimmed);
+  }
+
+  return [...catalog, model];
 }
 
 export function getModelsForProviderInstance(
@@ -227,22 +267,36 @@ export function getModelsForProviderInstance(
       providerLabel: instance.label,
     }));
 
+  if (instance.type === "netra") {
+    return annotate(
+      customModelsToCatalog(
+        (instance.customModels ?? []).filter(
+          (entry) => entry.id === NETRA_AGENT_MODEL_ID
+        ),
+        "netra"
+      )
+    );
+  }
+
   if (instance.type === "openai_compatible") {
     const entries = instance.customModels ?? [];
+
     return annotate(
       ensureCurrentModelInCatalog(
-        customModelsToCatalog(entries),
+        customModelsToCatalog(entries, instance.type),
         currentModel,
-        "openai_compatible"
+        instance.type
       )
     );
   }
 
   if (instance.type === "openrouter") {
     const entries = instance.customModels ?? [];
+
     const catalog = entries.length
       ? openRouterCustomModelsToCatalog(entries)
       : [];
+
     return annotate(
       ensureCurrentModelInCatalog(catalog, currentModel, "openrouter")
     );
@@ -250,12 +304,15 @@ export function getModelsForProviderInstance(
 
   if (instance.type === "cerebras") {
     const entries = instance.customModels ?? [];
+
     const staticModels = AVAILABLE_MODELS.filter(
       (model) => model.provider === "cerebras"
     );
+
     const catalog = entries.length
       ? cerebrasCustomModelsToCatalog(entries)
       : staticModels;
+
     return annotate(
       ensureCurrentModelInCatalog(catalog, currentModel, "cerebras")
     );
@@ -263,12 +320,15 @@ export function getModelsForProviderInstance(
 
   if (instance.type === "fireworks") {
     const entries = instance.customModels ?? [];
+
     const staticModels = AVAILABLE_MODELS.filter(
       (model) => model.provider === "fireworks"
     );
+
     const catalog = entries.length
       ? fireworksCustomModelsToCatalog(entries)
       : staticModels;
+
     return annotate(
       ensureCurrentModelInCatalog(catalog, currentModel, "fireworks")
     );
@@ -276,6 +336,7 @@ export function getModelsForProviderInstance(
 
   if (instance.type === "ollama") {
     const entries = instance.customModels ?? [];
+
     return annotate(
       ensureCurrentModelInCatalog(
         customModelsToCatalog(entries, "ollama"),
@@ -303,10 +364,12 @@ export function getModelsForProviderInstance(
     instance.type === "opencode_go"
   ) {
     const entries = instance.customModels ?? [];
+
     if (entries.length) {
       const staticModels = AVAILABLE_MODELS.filter(
         (model) => model.provider === instance.type
       );
+
       return annotate(
         ensureCurrentModelInCatalog(
           catalogCustomModelsToCatalog(entries, staticModels, instance.type),
@@ -333,6 +396,7 @@ export function resolveOpenRouterDefaultModel(
   }
 
   const catalog = openRouterCustomModelsToCatalog(customModels ?? []);
+
   return (
     catalog.find((entry) => entry.default)?.id ??
     catalog[0]?.id ??
@@ -351,6 +415,7 @@ export function resolveCerebrasDefaultModel(
   }
 
   const catalog = cerebrasCustomModelsToCatalog(customModels ?? []);
+
   return (
     catalog.find((entry) => entry.default)?.id ??
     catalog[0]?.id ??
@@ -369,6 +434,7 @@ export function resolveFireworksDefaultModel(
   }
 
   const catalog = fireworksCustomModelsToCatalog(customModels ?? []);
+
   return (
     catalog.find((entry) => entry.default)?.id ??
     catalog[0]?.id ??
@@ -400,21 +466,28 @@ function catalogVisionForModelId(modelId: string): boolean | undefined {
   return AVAILABLE_MODELS.find((model) => model.id === modelId)?.supportsVision;
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+function asRecord<Value>(value: Value): ProviderJsonRecord | null {
+  if (!(value instanceof Object) || Array.isArray(value)) {
     return null;
   }
 
-  return value as Record<string, unknown>;
+  // SAFETY: Remote model entries come from JSON provider responses.
+  return value as ProviderJsonRecord;
 }
 
-function stringListIncludes(value: unknown, needle: string): boolean {
+function stringListIncludes<Value>(value: Value, needle: string): boolean {
   return Array.isArray(value) && value.includes(needle);
 }
 
-export function inferRemoteModelVision(
-  record: Record<string, unknown>
+export function inferRemoteModelVision<Value>(
+  input: Value
 ): boolean | undefined {
+  const record = asRecord(input);
+
+  if (!record) {
+    return undefined;
+  }
+
   if (record.supports_vision === true || record.supportsVision === true) {
     return true;
   }
@@ -424,59 +497,64 @@ export function inferRemoteModelVision(
   }
 
   const capabilities = asRecord(record.capabilities);
+
   if (capabilities?.vision === true) {
     return true;
   }
+
   if (capabilities?.vision === false) {
     return false;
   }
 
   const architecture = asRecord(record.architecture);
+
   if (architecture) {
-    if (
-      typeof architecture.modality === "string" &&
-      architecture.modality.includes("image")
-    ) {
+    if (readProviderString(architecture.modality)?.includes("image")) {
       return true;
     }
+
     if (stringListIncludes(architecture.input_modalities, "image")) {
       return true;
     }
   }
 
   const modalities = asRecord(record.modalities);
+
   if (stringListIncludes(modalities?.input, "image")) {
     return true;
   }
 }
 
-export function customModelEntryFromRemoteRecord(
-  value: unknown
+export function customModelEntryFromRemoteRecord<Value>(
+  value: Value
 ): CustomModelEntry | null {
   const record = asRecord(value);
+
   const id =
-    typeof record?.id === "string"
-      ? record.id.trim()
-      : typeof record?.name === "string"
-        ? record.name.trim()
-        : "";
+    readProviderString(record?.id)?.trim() ||
+    readProviderString(record?.name)?.trim() ||
+    "";
 
   if (!id) {
     return null;
   }
 
-  const name =
-    typeof record.name === "string" && record.name.trim()
-      ? record.name.trim()
-      : id;
+  const recordName = readProviderString(record?.name)?.trim();
+  const name = recordName || id;
+
   const supportsVision =
     inferRemoteModelVision(record) ?? catalogVisionForModelId(id);
 
-  return {
+  const model: CustomModelEntry = {
     id,
     name,
-    ...(supportsVision === undefined ? {} : { supportsVision }),
   };
+
+  if (supportsVision !== undefined) {
+    model.supportsVision = supportsVision;
+  }
+
+  return model;
 }
 
 export async function fetchRemoteOpenAIModels(
@@ -484,6 +562,7 @@ export async function fetchRemoteOpenAIModels(
   apiKey: string
 ): Promise<CustomModelEntry[]> {
   const normalized = normalizeBaseUrl(baseUrl);
+
   const client = new OpenAI({
     apiKey: apiKey || "not-needed",
     baseURL: normalized,
@@ -496,6 +575,7 @@ export async function fetchRemoteOpenAIModels(
 
     for await (const model of page) {
       const entry = customModelEntryFromRemoteRecord(model);
+
       if (entry && !ids.has(entry.id)) {
         ids.add(entry.id);
         entries.push(entry);
@@ -512,16 +592,41 @@ export async function fetchRemoteOpenAIModels(
   return fetchRemoteOpenAIModelsRaw(normalized, apiKey);
 }
 
+export async function fetchNetraModels(
+  apiKey: string
+): Promise<CustomModelEntry[]> {
+  const entries = await fetchRemoteOpenAIModels(
+    defaultDiscoveryBaseUrl("netra")!,
+    apiKey
+  );
+
+  return entries
+    .filter((entry) => entry.id === NETRA_AGENT_MODEL_ID)
+    .map((entry) => ({
+      ...entry,
+      name: "DeepSeek V4 Flash 0731",
+      supportsThinking: true,
+      supportsVision: false,
+    }));
+}
+
 async function fetchRemoteOpenAIModelsRaw(
   baseUrl: string,
   apiKey: string
 ): Promise<CustomModelEntry[]> {
-  const response = await fetch(`${baseUrl}/models`, {
-    headers: {
-      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      Accept: "application/json",
-    },
-  });
+  let response: Response;
+
+  try {
+    const headers = new Headers({ Accept: "application/json" });
+
+    if (apiKey) {
+      headers.set("Authorization", `Bearer ${apiKey}`);
+    }
+
+    response = await fetch(`${baseUrl}/models`, { headers });
+  } catch {
+    throw new NakamaApiError("Could not reach the model endpoint.", 502);
+  }
 
   if (!response.ok) {
     const body = await response.text();
@@ -531,23 +636,27 @@ async function fetchRemoteOpenAIModelsRaw(
     );
 
     if (response.status === 401 || response.status === 403) {
-      throw new Error(
-        "Add an API key before discovering models from this endpoint."
+      throw new NakamaApiError(
+        "The model endpoint rejected this API key. Check the key and try again.",
+        400
       );
     }
 
-    throw new Error(`Could not fetch models (${response.status}): ${body}`);
+    throw new NakamaApiError(
+      `Could not load models from this endpoint (${response.status}). Try again.`,
+      502
+    );
   }
 
-  const payload = (await response.json()) as {
-    data?: unknown[];
-  };
+  const payload = parseJsonRecord(await response.text());
+  const data = Array.isArray(payload.data) ? payload.data : [];
 
-  const entries = (payload.data ?? [])
+  const entries = data
     .map((entry) => customModelEntryFromRemoteRecord(entry))
     .filter((entry): entry is CustomModelEntry => entry !== null);
 
   const unique = new Map<string, CustomModelEntry>();
+
   for (const entry of entries) {
     if (!unique.has(entry.id)) {
       unique.set(entry.id, entry);
@@ -574,6 +683,7 @@ export function resolveCompatibleDefaultModel(
   }
 
   const catalog = customModelsToCatalog(customModels ?? []);
+
   return (
     catalog.find((entry) => entry.default)?.id ??
     catalog[0]?.id ??

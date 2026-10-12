@@ -1,45 +1,55 @@
-import type { ChatMessage } from "./contract";
+import { z } from "zod";
+import type { ChatMessage, JsonValue } from "./contract";
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null
-    ? (value as Record<string, unknown>)
-    : null;
+type JsonObject = Record<string, JsonValue>;
+
+const JsonObjectSchema = z.record(z.string(), z.json());
+
+const ReasoningSummarySchema = z.array(
+  z.object({ text: z.string().optional() })
+);
+
+function asRecord(value: JsonValue): JsonObject | null {
+  const parsed = JsonObjectSchema.safeParse(value);
+
+  return parsed.success ? parsed.data : null;
 }
 
-function readTrimmedText(value: unknown): string | undefined {
-  if (typeof value !== "string") {
+function readTrimmedText(value: JsonValue | undefined): string | undefined {
+  const parsed = z.string().safeParse(value);
+
+  if (!parsed.success) {
     return;
   }
 
-  const text = value.trim();
+  const text = parsed.data.trim();
+
   return text || undefined;
 }
 
-function extractThinkingBlockText(
-  block: Record<string, unknown>
-): string | undefined {
+function extractThinkingBlockText(block: JsonObject): string | undefined {
   return block.type === "thinking"
     ? readTrimmedText(block.thinking)
     : undefined;
 }
 
-function extractReasoningSummaryTexts(
-  block: Record<string, unknown>
-): string[] {
-  if (block.type !== "reasoning" || !Array.isArray(block.summary)) {
+function extractReasoningSummaryTexts(block: JsonObject): string[] {
+  if (block.type !== "reasoning") {
     return [];
   }
 
-  return block.summary
-    .map((entry) => asRecord(entry))
-    .flatMap((entry) => {
-      if (!entry) {
-        return [];
-      }
+  const summary = ReasoningSummarySchema.safeParse(block.summary);
 
-      const text = readTrimmedText(entry.text);
-      return text ? [text] : [];
-    });
+  if (!summary.success) {
+    return [];
+  }
+
+  return summary.data.flatMap(({ text }) => {
+    const parsedText = z.string().safeParse(text);
+    const trimmed = parsedText.success ? parsedText.data.trim() : "";
+
+    return trimmed ? [trimmed] : [];
+  });
 }
 
 export function extractThinkingFromAssistantMessage(
@@ -51,11 +61,15 @@ export function extractThinkingFromAssistantMessage(
     return direct;
   }
 
-  return extractThinkingFromProviderContent(message.providerContent);
+  const parsed = z.array(z.json()).safeParse(message.providerContent);
+
+  return parsed.success
+    ? extractThinkingFromProviderContent(parsed.data)
+    : undefined;
 }
 
 export function extractThinkingFromProviderContent(
-  content: unknown[] | undefined
+  content: JsonValue[] | undefined
 ): string | undefined {
   if (!content?.length) {
     return;
@@ -81,5 +95,6 @@ export function extractThinkingFromProviderContent(
   }
 
   const combined = parts.join("\n\n").trim();
+
   return combined || undefined;
 }

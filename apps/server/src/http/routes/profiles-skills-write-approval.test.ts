@@ -13,15 +13,15 @@ setupTestConfigDir("nakama-profiles-skills-write-approval-test-");
 function createApp() {
   const databaseAdapter = createInMemoryDatabaseAdapter();
   const profileService = new ProfileService(databaseAdapter);
+
   return {
     ...createMinimalHonoApp({
       agent: {
-        updateProfile: (orgId: string, profileId: string, body: unknown) =>
-          profileService.updateProfile(
-            orgId,
-            profileId,
-            body as Parameters<ProfileService["updateProfile"]>[2]
-          ),
+        updateProfile: (
+          orgId: string,
+          profileId: string,
+          body: Parameters<ProfileService["updateProfile"]>[2]
+        ) => profileService.updateProfile(orgId, profileId, body),
       },
       databaseAdapter,
     }),
@@ -34,11 +34,13 @@ const BASE = "http://localhost:4310";
 describe("profile skillsWriteApproval auth", () => {
   test("org admin can patch skillsWriteApproval only; other fields forbidden", async () => {
     const { app, databaseAdapter } = createApp();
+
     const platformSession = await setupFreshInstallSession(
       app,
       databaseAdapter,
       "platform@org.com"
     );
+
     const orgId = platformSession.orgId!;
 
     const inviteResp = await app.fetch(
@@ -55,7 +57,10 @@ describe("profile skillsWriteApproval auth", () => {
         method: "POST",
       })
     );
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const invited = (await inviteResp.json()) as { temporaryPassword: string };
+
     const orgAdminSession = await loginUserSession(
       app,
       "orgadmin@org.com",
@@ -75,10 +80,14 @@ describe("profile skillsWriteApproval auth", () => {
         method: "PUT",
       })
     );
+
     expect(okResp.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const okBody = (await okResp.json()) as {
       profile: { skillsWriteApproval: boolean | null };
     };
+
     expect(okBody.profile.skillsWriteApproval).toBe(true);
 
     const reviewResp = await app.fetch(
@@ -91,10 +100,14 @@ describe("profile skillsWriteApproval auth", () => {
         method: "PUT",
       })
     );
+
     expect(reviewResp.status).toBe(200);
+
+    // SAFETY: This test controls the fixture shape at this boundary.
     const reviewBody = (await reviewResp.json()) as {
       profile: { skillsPostTurnReview: boolean | null };
     };
+
     expect(reviewBody.profile.skillsPostTurnReview).toBe(true);
 
     const forbiddenResp = await app.fetch(
@@ -107,6 +120,7 @@ describe("profile skillsWriteApproval auth", () => {
         method: "PUT",
       })
     );
+
     expect(forbiddenResp.status).toBe(403);
   });
 });

@@ -1,8 +1,27 @@
-import type { OrgMemberSummary, OrgRole } from "@nakama/core/contract";
+import type { OrgMemberSummary } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@nakama/ui/dropdown-menu";
 import { Spinner } from "@nakama/ui/spinner";
-import { Delete02Icon, Edit03Icon } from "hugeicons-react";
-import { OrgMemberRoleSelect } from "@/components/settings/org-member-role-select";
+import { Delete02Icon, Edit03Icon, MoreHorizontalIcon } from "hugeicons-react";
+
+const JOINED_FORMAT = new Intl.DateTimeFormat("en-US", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+const CELL = "px-4 py-3 align-middle";
+
+function formatJoined(value: string) {
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime()) ? "" : JOINED_FORMAT.format(date);
+}
 
 export function OrgMembersTable({
   members,
@@ -10,7 +29,6 @@ export function OrgMembersTable({
   isLoading,
   updatePending,
   removePending,
-  onRoleChange,
   onEdit,
   onRemove,
 }: {
@@ -19,7 +37,6 @@ export function OrgMembersTable({
   isLoading: boolean;
   updatePending: boolean;
   removePending: boolean;
-  onRoleChange: (userId: string, role: OrgRole) => void;
   onEdit: (member: OrgMemberSummary) => void;
   onRemove: (member: OrgMemberSummary) => void;
 }) {
@@ -39,68 +56,86 @@ export function OrgMembersTable({
   }
 
   return (
-    <ul
+    <table
       aria-label="Organization members"
-      className="divide-y divide-border text-sm"
+      className="w-full table-fixed text-sm"
     >
-      {members.map((member) => {
-        const isSelf = member.email === currentUserEmail;
-        const displayName = member.name?.trim() || member.email;
+      <thead>
+        <tr className="bg-muted/40 text-left text-muted-foreground">
+          <th className="px-4 py-2.5 font-normal">Name</th>
+          <th className="w-20 px-2 py-2.5 font-normal sm:w-28">Role</th>
+          <th className="w-28 px-2 py-2.5 font-normal sm:w-36">Joined</th>
+          <th className="w-12 px-2 py-2.5">
+            <span className="sr-only">Actions</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-border border-border border-t">
+        {members.map((member) => {
+          const isSelf = member.email === currentUserEmail;
+          const displayName = member.name?.trim() || member.email;
 
-        return (
-          <li
-            className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-            key={member.userId}
-          >
-            <div className="min-w-0 flex-1 basis-40">
-              <p className="truncate font-normal text-foreground">
-                {displayName}
-                {isSelf ? (
-                  <span className="ml-1.5 font-normal text-muted-foreground text-xs">
-                    (you)
-                  </span>
-                ) : null}
-              </p>
-              {member.name ? (
-                <p className="truncate text-muted-foreground text-xs">
-                  {member.email}
+          return (
+            <tr key={member.userId}>
+              <td className={CELL}>
+                <p className="truncate text-foreground">
+                  {displayName}
+                  {isSelf ? (
+                    <span className="ml-1.5 text-muted-foreground">(you)</span>
+                  ) : null}
                 </p>
-              ) : null}
-            </div>
-            <div className="flex shrink-0 items-center gap-3">
-              <OrgMemberRoleSelect
-                disabled={updatePending}
-                onChange={(role) => onRoleChange(member.userId, role)}
-                value={member.role}
-              />
-              <div className="flex items-center justify-end gap-1">
-                <Button
-                  aria-label={`Edit ${displayName}`}
-                  className="text-muted-foreground"
-                  disabled={updatePending}
-                  onClick={() => onEdit(member)}
-                  size="icon-sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  <Edit03Icon className="size-3.5" />
-                </Button>
-                <Button
-                  aria-label={`Remove ${displayName}`}
-                  className="text-muted-foreground hover:text-destructive"
-                  disabled={removePending}
-                  onClick={() => onRemove(member)}
-                  size="icon-sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  <Delete02Icon className="size-3.5" />
-                </Button>
-              </div>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
+                {member.name ? (
+                  <p className="truncate text-muted-foreground">
+                    {member.email}
+                  </p>
+                ) : null}
+              </td>
+              <td className={`${CELL} px-2 capitalize`}>{member.role}</td>
+              <td className={`${CELL} px-2 text-muted-foreground`}>
+                {formatJoined(member.createdAt)}
+              </td>
+              <td className={`${CELL} px-2 text-right`}>
+                {isSelf ? null : (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          aria-label={`Actions for ${displayName}`}
+                          className="text-muted-foreground"
+                          size="icon-sm"
+                          type="button"
+                          variant="ghost"
+                        />
+                      }
+                    >
+                      <MoreHorizontalIcon aria-hidden className="size-4" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        aria-label={`Edit ${displayName}`}
+                        disabled={updatePending}
+                        onClick={() => onEdit(member)}
+                      >
+                        <Edit03Icon aria-hidden />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        aria-label={`Remove ${displayName}`}
+                        disabled={removePending}
+                        onClick={() => onRemove(member)}
+                        variant="destructive"
+                      >
+                        <Delete02Icon aria-hidden />
+                        Remove
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }

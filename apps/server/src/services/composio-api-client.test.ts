@@ -28,6 +28,20 @@ describe("extractComposioListItems", () => {
 });
 
 describe("parseCatalogToolkitItem", () => {
+  test("ignores malformed optional catalog fields", () => {
+    expect(
+      parseCatalogToolkitItem({
+        meta: { logo: false },
+        name: 42,
+        slug: "gmail",
+      })
+    ).toEqual({
+      description: null,
+      logoUrl: null,
+      name: "gmail",
+      slug: "gmail",
+    });
+  });
   test("maps logo from toolkit meta", () => {
     expect(
       parseCatalogToolkitItem({
@@ -63,6 +77,19 @@ describe("parseCatalogToolkitItem", () => {
 });
 
 describe("parseLinkRedirectUrl", () => {
+  test("handles direct URLs and invalid optional URL fields", () => {
+    expect(parseLinkRedirectUrl("https://oauth.example/direct")).toBe(
+      "https://oauth.example/direct"
+    );
+    expect(parseLinkRedirectUrl("invalid")).toBeNull();
+    expect(parseLinkRedirectUrl({ redirectUrl: 42 })).toBeNull();
+    expect(
+      parseLinkRedirectUrl({
+        authorization_url: "https://oauth.example/fallback",
+        redirectUrl: null,
+      })
+    ).toBe("https://oauth.example/fallback");
+  });
   test("reads redirectUrl and snake_case variants", () => {
     expect(
       parseLinkRedirectUrl({ redirectUrl: "https://oauth.example/start" })
@@ -82,6 +109,30 @@ describe("parseLinkRedirectUrl", () => {
 });
 
 describe("resolveAuthConfigId", () => {
+  test("uses a custom auth config when the toolkit has no managed credentials", async () => {
+    const composio = {
+      authConfigs: {
+        async create() {
+          throw new Error("should not create when a custom config exists");
+        },
+        async list(query: { toolkit?: string }) {
+          expect(query).toEqual({ toolkit: "metaads" });
+
+          return {
+            items: [
+              { id: "ac_managed", isComposioManaged: true },
+              { id: "ac_custom", isComposioManaged: false },
+            ],
+          };
+        },
+      },
+    };
+
+    await expect(resolveAuthConfigId(composio, "MetaAds")).resolves.toBe(
+      "ac_custom"
+    );
+  });
+
   test("reuses an existing composio-managed auth config", async () => {
     const composio = {
       authConfigs: {
@@ -104,6 +155,7 @@ describe("resolveAuthConfigId", () => {
       authConfigs: {
         async create(toolkitSlug: string) {
           expect(toolkitSlug).toBe("gmail");
+
           return { id: "ac_new" };
         },
         async list() {

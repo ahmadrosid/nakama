@@ -65,7 +65,9 @@ if (isRotateTokenCommand()) {
     await runRotateToken();
     process.exit(0);
   } catch (error) {
-    console.error(formatRotateTokenError(error));
+    console.error(
+      formatRotateTokenError(error instanceof Error ? error : String(error))
+    );
     process.exit(1);
   }
 }
@@ -73,6 +75,7 @@ if (isRotateTokenCommand()) {
 async function resolveTheme(): Promise<Theme> {
   try {
     const explicit = parseThemeArg();
+
     if (explicit) {
       return explicit;
     }
@@ -81,15 +84,20 @@ async function resolveTheme(): Promise<Theme> {
       console.error(error.message);
       process.exit(1);
     }
+
     throw error;
   }
+
   if (process.env.NAKAMA_THEME === "light") {
     return "light";
   }
+
   if (process.env.NAKAMA_THEME === "dark") {
     return "dark";
   }
+
   const detected = await detectTheme();
+
   return detected ?? "dark";
 }
 
@@ -100,32 +108,39 @@ registerCleanupHandlers(async () => {
 });
 
 const cliTheme = await resolveTheme();
+
 setTheme(cliTheme);
 
 try {
   const connectionArgs = parseConnectionArgs();
+
   if (
     connectionArgs.command === "login" &&
     !(process.stdin.isTTY && process.stdout.isTTY)
   ) {
     throw new Error("Login requires an interactive terminal.");
   }
+
   let serverUrl = normalizeServerUrl(
     connectionArgs.serverUrl ??
       (process.env.NAKAMA_SERVER_URL?.trim() || undefined) ??
       (await loadSavedCliServerUrl()) ??
       resolveServerUrl()
   );
+
   const remote = !isLocalServer(serverUrl);
   let client: NakamaClient;
+
   if (remote) {
     const connection = await createRemoteConnection(serverUrl);
     client = connection.client;
+
     if (connectionArgs.command === "logout") {
       await connection.logout();
       console.log("Logged out.");
       process.exit(0);
     }
+
     const login = () =>
       promptRemoteLogin(
         serverUrl,
@@ -134,6 +149,7 @@ try {
             normalizeServerUrl(url) === serverUrl
               ? connection
               : await createRemoteConnection(url);
+
           signal?.throwIfAborted();
           await target.logout();
           signal?.throwIfAborted();
@@ -143,19 +159,24 @@ try {
         },
         abortController.signal
       );
+
     if (connectionArgs.command === "login") {
       await login();
     }
+
     let user;
+
     try {
       user = await client.getMe();
     } catch (error) {
       if (!(error instanceof NakamaApiError && error.status === 401)) {
         throw error;
       }
+
       await login();
       user = await client.getMe();
     }
+
     await saveCliServerUrl(serverUrl);
     setCliConfigScope(serverUrl, user.id);
   } else {
@@ -164,6 +185,7 @@ try {
       console.log("Logged out.");
       process.exit(0);
     }
+
     client = new NakamaClient({
       authToken: (await loadLocalAuthToken("cli@nakama.internal")) ?? undefined,
       baseUrl: serverUrl,

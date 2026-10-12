@@ -1,23 +1,42 @@
 import { join } from "node:path";
+import { z } from "zod";
 import {
   assertChannelPath,
   type BotChannelConfigFile,
   type ChannelOwner,
   claimChannelIdentity,
-  generateHandshakeCode,
+  createPairingCodeSecret,
   getChannelConfigDir,
+  hasActiveHandshakeCode,
   isBotChannelUserAuthorized,
   maskBotToken,
   releaseChannelClaims,
   resetChannelConversationState,
-  resolveHandshakeCodeOnSave,
+  resolveHandshakeOnSave,
   verifyAndPairBotChannelUser,
 } from "./channel-config-shared";
+import type { JsonValue } from "./contract";
 import { parseSlackMemberIdInput } from "./contract";
 import { parseIni, readTextOrNull, writeTextFile } from "./fs";
 
+export {
+  hasActiveHandshakeCode,
+  isPairingCodeActive,
+  looksLikePairingCode,
+} from "./channel-config-shared";
+
+export { generatePairingCode } from "./pairing-code";
+
 export const DEFAULT_SLACK_PROFILE_ID = "default";
+
 export const SLACK_API_BASE_URL = "https://slack.com/api";
+
+const SlackApiResponseSchema = z
+  .object({
+    error: z.string().optional(),
+    ok: z.boolean().optional(),
+  })
+  .passthrough();
 
 export interface SlackConfigFile extends BotChannelConfigFile<string> {
   /** Any full member of the bot's own workspace may chat, without pairing. */
@@ -53,6 +72,7 @@ export function getSlackConfigPath(owner: ChannelOwner): string {
   const path = join(getSlackConfigDir(owner), "config.ini");
   assertChannelPath(path);
   assertChannelPath(`${path}.tmp`);
+
   return path;
 }
 
@@ -60,13 +80,22 @@ export function getSlackConfigPath(owner: ChannelOwner): string {
 export async function callSlackApi<T extends object = object>(
   method: string,
   token: string,
-  body: Record<string, unknown> = {}
+  body: Record<string, JsonValue | undefined> = {}
 ): Promise<T> {
   // Read methods such as users.info ignore JSON bodies, and form encoding
   // works for every method, so JSON is only used for nested values (blocks).
   const flat = Object.values(body).every(
-    (value) => value === undefined || typeof value === "string"
+    (value) => value === undefined || z.string().safeParse(value).success
   );
+
+  const headers = new Headers({
+    Authorization: `Bearer ${token}`,
+  });
+
+  if (!flat) {
+    headers.set("Content-Type", "application/json; charset=utf-8");
+  }
+
   const response = await fetch(`${SLACK_API_BASE_URL}/${method}`, {
     body: flat
       ? new URLSearchParams(
@@ -75,17 +104,18 @@ export async function callSlackApi<T extends object = object>(
           )
         )
       : JSON.stringify(body),
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(flat ? {} : { "Content-Type": "application/json; charset=utf-8" }),
-    },
+    headers,
     method: "POST",
     signal: AbortSignal.timeout(15_000),
   });
-  const payload = (await response.json()) as T & {
-    error?: string;
-    ok?: boolean;
-  };
+
+  const parsed = SlackApiResponseSchema.safeParse(await response.json());
+
+  if (!parsed.success) {
+    throw new Error(`Slack ${method} returned invalid JSON.`);
+  }
+
+  const payload = parsed.data;
 
   if (!payload.ok) {
     throw new Error(
@@ -93,7 +123,8 @@ export async function callSlackApi<T extends object = object>(
     );
   }
 
-  return payload;
+  // SAFETY: Each call site supplies T for the documented success payload of this Slack method.
+  return payload as T;
 }
 
 export function parseSlackUserIds(raw: string): string[] {
@@ -138,6 +169,7 @@ export async function loadSlackConfigFile(
     appToken: values.app_token?.trim() ?? "",
     botToken,
     handshakeCode: values.handshake_code?.trim() || null,
+    handshakeExpiresAt: values.handshake_expires_at?.trim() || null,
     pairedUserIds: paired ? parseSlackUserIds(paired) : [],
     profileId: values.profile_id?.trim() || DEFAULT_SLACK_PROFILE_ID,
   };
@@ -153,7 +185,14 @@ async function writeSlackConfigFile(
     `app_token=${config.appToken}`,
     `profile_id=${config.profileId}`,
     ...(config.allowWorkspace ? ["allow_workspace=true"] : []),
-    ...(config.handshakeCode ? [`handshake_code=${config.handshakeCode}`] : []),
+    ...(config.handshakeCode
+      ? [
+          `handshake_code=${config.handshakeCode}`,
+          ...(config.handshakeExpiresAt
+            ? [`handshake_expires_at=${config.handshakeExpiresAt}`]
+            : []),
+        ]
+      : []),
     ...(config.pairedUserIds.length > 0
       ? [`paired_user_ids=${config.pairedUserIds.join(",")}`]
       : []),
@@ -177,7 +216,11 @@ export function toSlackSettingsPublic(
     appTokenMasked: file?.appToken ? maskBotToken(file.appToken) : null,
     botTokenMasked: file ? maskBotToken(file.botToken) : null,
     configured: Boolean(file?.botToken && file.appToken),
-    handshakeCode: file?.handshakeCode ?? null,
+    // An expired code is worse than none: the dashboard would offer a secret
+    // that no longer works.
+    handshakeCode: hasActiveHandshakeCode(file)
+      ? (file?.handshakeCode ?? null)
+      : null,
     pairedUserIds: file?.pairedUserIds ?? [],
     profileId: file?.profileId ?? DEFAULT_SLACK_PROFILE_ID,
   };
@@ -198,6 +241,7 @@ export async function validateSlackTokens(tokens: {
     if (!tokens.botToken.startsWith("xoxb-")) {
       throw new Error("Bot token must start with xoxb-.");
     }
+
     await callSlackApi("auth.test", tokens.botToken);
   }
 
@@ -205,6 +249,7 @@ export async function validateSlackTokens(tokens: {
     if (!tokens.appToken.startsWith("xapp-")) {
       throw new Error("App token must start with xapp-.");
     }
+
     // Fails with not_allowed_token_type / invalid_auth when Socket Mode or
     // the connections:write scope is missing. The returned URL is discarded.
     await callSlackApi("apps.connections.open", tokens.appToken);
@@ -222,14 +267,18 @@ export async function checkSlackTokensMatch(tokens: {
   botToken: string;
 }): Promise<void> {
   const appId = slackAppIdFromToken(tokens.appToken);
+
   if (!appId) {
     return;
   }
+
   const { bot_id: botId } = await callSlackApi<{ bot_id: string }>(
     "auth.test",
     tokens.botToken
   );
+
   let botAppId: string | undefined;
+
   try {
     ({
       bot: { app_id: botAppId },
@@ -242,8 +291,10 @@ export async function checkSlackTokensMatch(tokens: {
     if (error instanceof Error && error.message.endsWith("missing_scope")) {
       return;
     }
+
     throw error;
   }
+
   if (botAppId && botAppId !== appId) {
     throw new Error(
       "The bot token and the app token come from different Slack apps. Copy both from the same app."
@@ -292,6 +343,7 @@ export async function checkSlackWorkspaceAccess(
     "auth.test",
     botToken
   );
+
   try {
     await callSlackApi("users.info", botToken, { user: botUserId });
   } catch (error) {
@@ -300,6 +352,7 @@ export async function checkSlackWorkspaceAccess(
         "Everyone in the workspace needs the users:read scope. Add it under OAuth & Permissions in the Slack app, reinstall the app, then save again."
       );
     }
+
     throw error;
   }
 }
@@ -316,6 +369,7 @@ function slackAppIdFromToken(appToken: string): string | null {
  */
 function slackConnectionIdentity(config: SlackConfigFile): string {
   const appId = slackAppIdFromToken(config.appToken);
+
   return appId ? `app:${appId}` : `bot:${config.botToken}`;
 }
 
@@ -335,7 +389,9 @@ export async function saveSlackConfig(
     input.allowedUserIds === undefined
       ? (existing?.allowedUserIds.join(",") ?? "")
       : input.allowedUserIds;
+
   const allowedUserIds = parseSlackUserIds(allowedRaw);
+
   const next: SlackConfigFile = {
     allowedUserIds,
     allowWorkspace:
@@ -344,7 +400,7 @@ export async function saveSlackConfig(
         : input.allowWorkspace === true,
     appToken,
     botToken,
-    handshakeCode: resolveHandshakeCodeOnSave(existing, allowedUserIds),
+    ...resolveHandshakeOnSave(existing, allowedUserIds),
     // The dashboard edits one access list (paired + allowed), so a paired
     // member left out of the submitted list loses access too.
     pairedUserIds:
@@ -358,19 +414,24 @@ export async function saveSlackConfig(
 
   const identity = slackConnectionIdentity(next);
   const rollback = await claimChannelIdentity("slack", owner, identity);
+
   const appChanged =
     existing !== null && slackConnectionIdentity(existing) !== identity;
+
   try {
     // Another Slack app means other channels and users: old threads are void.
     if (appChanged) {
       await resetChannelConversationState("slack", owner);
     }
+
     await writeSlackConfigFile(owner, next);
   } catch (error) {
     await rollback();
     throw error;
   }
+
   await releaseChannelClaims("slack", owner, identity);
+
   return toSlackSettingsPublic(next);
 }
 
@@ -383,8 +444,16 @@ export async function regenerateSlackHandshake(
     throw new Error("Save the Slack tokens before generating a pairing code.");
   }
 
-  const next = { ...existing, handshakeCode: generateHandshakeCode() };
+  const { code, expiresAt } = createPairingCodeSecret();
+
+  const next = {
+    ...existing,
+    handshakeCode: code,
+    handshakeExpiresAt: expiresAt,
+  };
+
   await writeSlackConfigFile(owner, next);
+
   return toSlackSettingsPublic(next);
 }
 
@@ -394,6 +463,7 @@ export function verifyAndPairSlackUser(
   userId: string
 ): Promise<{ ok: boolean; message: string }> {
   return verifyAndPairBotChannelUser<string, SlackConfigFile>({
+    configDir: getSlackConfigDir(owner),
     handshakeInput,
     isAuthorized: isSlackUserAuthorized,
     label: "Slack",

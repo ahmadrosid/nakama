@@ -36,6 +36,7 @@ import { Message, MessageContent } from "@/components/ai-elements/message";
 import { ArtifactAttachmentPreview } from "@/components/chat/artifact-attachment-preview";
 import {
   AssistantTurnSegmentView,
+  LocalCitationPreview,
   ProfileCreatedCard,
 } from "@/components/chat/assistant-tool-group";
 import { segmentAssistantTurn } from "@/components/chat/assistant-tool-group.shared";
@@ -43,6 +44,7 @@ import { ToolCredentialCard } from "@/components/chat/chat-add-capabilities-dial
 import { ChatUsageBadge } from "@/components/chat/chat-usage-badge";
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
+import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
 import { useArtifactsExist } from "@/hooks/use-resource-mutations";
 import { extractTurnArtifacts } from "@/lib/chat-artifacts";
 import {
@@ -50,11 +52,6 @@ import {
   formatSessionTimestamp,
   isEditableUserMessage,
 } from "@/lib/chat-history";
-import {
-  followOutputBehavior,
-  listOverflowsViewport,
-  shouldAutoscrollOnHeightGrowth,
-} from "@/lib/chat-list-stickiness";
 import {
   groupMessagesIntoTurns,
   type IndexedMessage,
@@ -69,6 +66,15 @@ import {
 import { sumChatUsage } from "@/lib/chat-usage";
 import { formatElapsedSeconds, useElapsedSeconds } from "@/lib/elapsed-time";
 import { isPastedTextDocument } from "@/lib/pasted-text";
+import { listOverflowsViewport } from "./chat-message-list.shared";
+
+function followOutputBehavior(atBottom: boolean): false | "auto" {
+  return atBottom ? "auto" : false;
+}
+
+function shouldAutoscrollOnHeightGrowth(atBottom: boolean): boolean {
+  return atBottom;
+}
 
 /** Top/bottom inset as Virtuoso Header/Footer — never put padding on the scroller. */
 function VirtuosoEdgePad() {
@@ -121,6 +127,7 @@ interface ChatMessageListProps {
   onEditMessage?: (message: ChatListItem, text: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
   profileId?: string | null;
+  readOnly?: boolean;
   sessionId?: string;
   showThinking?: boolean;
   /** Show tokens and estimated cost under each completed assistant turn. */
@@ -128,10 +135,12 @@ interface ChatMessageListProps {
   /** True while the assistant reply SSE stream is in flight. */
   streamActive?: boolean;
   turnStartedAt?: string | null;
+  workStreamActive?: boolean;
 }
 
 export function ChatMessageList(props: ChatMessageListProps) {
-  const sessionAnchor = props.messages[0]?.id ?? "empty";
+  const sessionAnchor = props.sessionId ?? props.messages[0]?.id ?? "empty";
+
   return <ChatMessageListSession key={sessionAnchor} {...props} />;
 }
 
@@ -145,8 +154,10 @@ function ChatMessageListSession({
   modelLabel,
   branchingMessageId,
   actionsDisabled = false,
+  readOnly = false,
   streamActive = false,
   turnStartedAt = null,
+  workStreamActive = streamActive,
   onBranchMessage,
   onEditMessage,
   onRetryMessage,
@@ -162,9 +173,27 @@ function ChatMessageListSession({
   const lastListHeightRef = useRef(0);
   const didInitialPinRef = useRef(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const canPreviewCitations = useOptionalChatAttachmentPanel() !== null;
+
+  const [citationPreview, setCitationPreview] = useState<{
+    path: string;
+    profileId: string;
+  } | null>(null);
+
+  const openCitationPreview = useCallback(
+    (path: string) => {
+      if (profileId) {
+        setCitationPreview({ path, profileId });
+      }
+    },
+    [profileId]
+  );
+
+  const closeCitationPreview = useCallback(() => setCitationPreview(null), []);
 
   const showAwaitingPlaceholder =
     streamActive && isAwaitingModelResponse(messages);
+
   const awaitingLabel = showAwaitingPlaceholder
     ? awaitingModelLabel(messages)
     : null;
@@ -172,6 +201,7 @@ function ChatMessageListSession({
   const pinLatest = useCallback((behavior: "auto" | "smooth") => {
     const scroller = scrollerRef.current;
     const listHeight = lastListHeightRef.current;
+
     // Per Virtuoso docs: omit alignToBottom for top packing. Never use
     // scrollToIndex({ align: "end" }) when content still fits the viewport —
     // that is what packs short threads to the bottom.
@@ -181,8 +211,10 @@ function ChatMessageListSession({
       if (scroller) {
         scroller.scrollTop = 0;
       }
+
       return;
     }
+
     virtuosoRef.current?.scrollToIndex({
       align: "end",
       behavior,
@@ -219,6 +251,7 @@ function ChatMessageListSession({
   // align-end semantics, so skip it while the list still fits the viewport.
   const handleFollowOutput = useCallback((_atBottom: boolean) => {
     const scroller = scrollerRef.current;
+
     if (
       !(
         scroller &&
@@ -227,6 +260,7 @@ function ChatMessageListSession({
     ) {
       return false;
     }
+
     return followOutputBehavior(stickIntentRef.current);
   }, []);
 
@@ -240,6 +274,7 @@ function ChatMessageListSession({
       if (!didInitialPinRef.current) {
         didInitialPinRef.current = true;
         pinLatest("auto");
+
         return;
       }
 
@@ -285,8 +320,12 @@ function ChatMessageListSession({
             modelLabel={modelLabel}
             onBranchMessage={onBranchMessage}
             onContinueToolSetup={onContinueToolSetup}
+            onOpenFileCitation={
+              canPreviewCitations ? openCitationPreview : undefined
+            }
             onRetryMessage={onRetryMessage}
             profileId={profileId}
+            readOnly={readOnly}
             sessionId={sessionId}
             showAwaiting={
               turnIndex === turns.length - 1 && awaitingLabel === "Working…"
@@ -295,7 +334,9 @@ function ChatMessageListSession({
             showUsage={showUsage}
             streamActive={streamActive}
             turnStartedAt={turnStartedAt}
-            workStreamActive={streamActive && turnIndex === turns.length - 1}
+            workStreamActive={
+              workStreamActive && turnIndex === turns.length - 1
+            }
           />
         </div>
       );
@@ -303,19 +344,23 @@ function ChatMessageListSession({
     [
       sessionId,
       onContinueToolSetup,
+      readOnly,
       actionsDisabled,
       awaitingLabel,
       branchingMessageId,
+      canPreviewCitations,
       contentClassName,
       modelLabel,
       onBranchMessage,
       onEditMessage,
       onRetryMessage,
+      openCitationPreview,
       profileId,
       showThinking,
       showUsage,
       streamActive,
       turnStartedAt,
+      workStreamActive,
       turns.length,
     ]
   );
@@ -361,11 +406,21 @@ function ChatMessageListSession({
         />
         <ConversationScrollButton />
       </Conversation>
+      {/* Keep the preview mounted when Virtuoso removes the citation row. */}
+      {citationPreview ? (
+        <LocalCitationPreview
+          key={`${citationPreview.profileId}:${citationPreview.path}`}
+          onClose={closeCitationPreview}
+          path={citationPreview.path}
+          profileId={citationPreview.profileId}
+        />
+      ) : null}
     </ConversationStickinessProvider>
   );
 }
 
 function AssistantTurn({
+  readOnly = false,
   sessionId,
   onContinueToolSetup,
   workStreamActive,
@@ -380,8 +435,10 @@ function AssistantTurn({
   showAwaiting,
   turnStartedAt,
   onBranchMessage,
+  onOpenFileCitation,
   onRetryMessage,
 }: {
+  readOnly?: boolean;
   sessionId?: string;
   onContinueToolSetup?: (setupId: string) => Promise<void>;
   workStreamActive: boolean;
@@ -396,6 +453,7 @@ function AssistantTurn({
   showAwaiting?: boolean;
   turnStartedAt?: string | null;
   onBranchMessage?: (message: ChatListItem) => void;
+  onOpenFileCitation?: (path: string) => void;
   onRetryMessage?: (message: ChatListItem) => void;
 }) {
   const turnMessages = messages.map(({ message }) => message);
@@ -404,19 +462,23 @@ function AssistantTurn({
   const artifactTurnKey = messages.map(({ message }) => message.id).join(":");
   const anchorMessage = findAssistantTurnAnchor(turnMessages);
   const turnComplete = isAssistantTurnComplete(turnMessages);
+  const interactiveTurnComplete = !readOnly && turnComplete;
   // A later tool call (`rm`, delete_file) or the Files page can remove a file
   // the transcript still names; its chip would only open a 404.
   const artifactExists = useArtifactsExist(artifacts, profileId, turnComplete);
   const liveArtifacts = artifacts.filter((_, index) => artifactExists[index]);
   // Wait for the full SSE reply (tools + final summary), not the brief gap after tool_end.
   const showArtifacts = turnComplete && liveArtifacts.length > 0;
+
   const showActions =
     !streamActive &&
-    turnComplete &&
+    interactiveTurnComplete &&
     anchorMessage != null &&
     !anchorMessage.failed;
+
   const retryDisabled =
     actionsDisabled || branchingMessageId === anchorMessage?.id;
+
   const turnUsage = showUsage ? sumChatUsage(turnMessages) : undefined;
 
   return (
@@ -429,6 +491,7 @@ function AssistantTurn({
               : `text:${segment.message.id}`
           }
           modelLabel={modelLabel}
+          onOpenFileCitation={onOpenFileCitation}
           onRetryMessage={onRetryMessage}
           profileId={profileId}
           retryDisabled={retryDisabled}
@@ -440,7 +503,7 @@ function AssistantTurn({
         <TurnAwaitingElapsed startedAt={turnStartedAt} />
       ) : null}
       {!workStreamActive &&
-        turnComplete &&
+        interactiveTurnComplete &&
         turnMessages
           .filter((message) => message.toolResult != null)
           .map((message) => (
@@ -468,8 +531,11 @@ function AssistantTurn({
           })}
         </div>
       ) : null}
-      <CreatedProfiles complete={turnComplete} messages={turnMessages} />
-      {showActions && anchorMessage ? (
+      <CreatedProfiles
+        complete={interactiveTurnComplete}
+        messages={turnMessages}
+      />
+      {showActions ? (
         <AssistantMessageActions
           actionsDisabled={actionsDisabled}
           busy={branchingMessageId === anchorMessage.id}
@@ -494,17 +560,21 @@ function CreatedProfiles({
   if (!complete) {
     return null;
   }
+
   const profiles = messages.flatMap((message) => {
     if (message.tool !== "create_profile") {
       return [];
     }
 
     const profile = parseProfileCreatedResult(message.toolResult);
+
     return profile ? [profile] : [];
   });
+
   if (profiles.length === 0) {
     return null;
   }
+
   return (
     <div className="flex w-full flex-col gap-2">
       {profiles.map((profile) => (
@@ -540,6 +610,7 @@ function ChatMessageRow({
   onEditMessage?: (message: ChatListItem, text: string) => void;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
+
   const canEdit =
     Boolean(onEditMessage) && !disabled && isEditableUserMessage(message);
 
@@ -551,6 +622,7 @@ function ChatMessageRow({
       if (!trimmed || unchanged) {
         return;
       }
+
       setDraft(null);
       onEditMessage?.(message, trimmed);
     }
@@ -569,8 +641,10 @@ function ChatMessageRow({
               if (event.key === "Escape") {
                 event.preventDefault();
                 setDraft(null);
+
                 return;
               }
+
               if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
                 event.preventDefault();
                 submit();
@@ -669,7 +743,7 @@ function isBranchableAssistantMessage(message: ChatListItem): boolean {
     message.role === "assistant" &&
     !message.failed &&
     !message.streaming &&
-    typeof message.historyIndex === "number" &&
+    message.historyIndex != null &&
     Boolean(message.createdAt)
   );
 }
@@ -713,9 +787,11 @@ function AssistantMessageActions({
     try {
       await navigator.clipboard.writeText(content);
       setCopied(true);
+
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current);
       }
+
       copyTimeoutRef.current = setTimeout(() => {
         setCopied(false);
         copyTimeoutRef.current = null;
@@ -826,6 +902,7 @@ function UserMessageContent({ message }: { message: ChatListItem }) {
     message.documents?.filter((document) =>
       isPastedTextDocument(document.filename, document.mediaType)
     ) ?? [];
+
   const otherDocuments =
     message.documents?.filter(
       (document) => !isPastedTextDocument(document.filename, document.mediaType)

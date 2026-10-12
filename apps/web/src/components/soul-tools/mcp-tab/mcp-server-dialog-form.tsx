@@ -35,6 +35,12 @@ function testResultTone(
   return result.requiresAuthorization ? "pending" : "bad";
 }
 
+const KIND_TITLE: Record<McpServerKind, string> = {
+  http: "HTTP server",
+  signin: "Hosted server",
+  stdio: "Command server",
+};
+
 function kindHint(kind: McpServerKind): string {
   if (kind === "signin") {
     return "A hosted server that signs you in through your browser (OAuth). Nakama registers itself with the provider and stores the grant, so there is no key to paste.";
@@ -51,6 +57,7 @@ export function McpServerDialogForm({
   idPrefix,
   isEdit,
   nameAutoFocus = true,
+  showKindPicker = true,
   kind,
   name,
   url,
@@ -60,8 +67,6 @@ export function McpServerDialogForm({
   env,
   formDisabled,
   loadingForm,
-  canSubmit,
-  testing,
   testResult,
   submitError,
   onKindChange,
@@ -72,11 +77,11 @@ export function McpServerDialogForm({
   onCommandChange,
   onArgsChange,
   onEnvChange,
-  onTestConnection,
 }: {
   idPrefix: string;
   isEdit: boolean;
   nameAutoFocus?: boolean;
+  showKindPicker?: boolean;
   kind: McpServerKind;
   name: string;
   url: string;
@@ -86,8 +91,6 @@ export function McpServerDialogForm({
   env: McpHeaderRow[];
   formDisabled: boolean;
   loadingForm: boolean;
-  canSubmit: boolean;
-  testing: boolean;
   testResult: {
     ok: boolean;
     toolCount: number;
@@ -104,7 +107,6 @@ export function McpServerDialogForm({
   onCommandChange: (value: string) => void;
   onArgsChange: (args: string[]) => void;
   onEnvChange: (rows: McpHeaderRow[]) => void;
-  onTestConnection: () => void;
 }) {
   if (loadingForm) {
     return (
@@ -117,52 +119,59 @@ export function McpServerDialogForm({
 
   return (
     <div className="space-y-5">
-      <McpFormField
-        action={
-          <Button
-            className="text-muted-foreground hover:text-foreground"
-            disabled={formDisabled}
-            onClick={onOpenImport}
-            size="xs"
-            type="button"
-            variant="ghost"
-          >
-            <CodeIcon aria-hidden />
-            Import JSON
-          </Button>
-        }
-        label="Server type"
-      >
-        <div
-          aria-label="MCP server type"
-          className="segmented-control w-full"
-          role="tablist"
-        >
-          {(
-            [
-              { id: "http" as const, label: "HTTP" },
-              { id: "signin" as const, label: "Sign-in" },
-              { id: "stdio" as const, label: "Command" },
-            ] as const
-          ).map((item) => (
-            <button
-              aria-controls={`${idPrefix}-transport-panel-${item.id}`}
-              aria-selected={kind === item.id}
-              className="segmented-control-item"
-              data-active={kind === item.id || undefined}
-              disabled={formDisabled || isEdit}
-              id={`${idPrefix}-transport-${item.id}`}
-              key={item.id}
-              onClick={() => onKindChange(item.id)}
-              role="tab"
+      {showKindPicker ? (
+        <McpFormField
+          action={
+            <Button
+              className="text-muted-foreground hover:text-foreground"
+              disabled={formDisabled}
+              onClick={onOpenImport}
+              size="xs"
               type="button"
+              variant="ghost"
             >
-              {item.label}
-            </button>
-          ))}
+              <CodeIcon aria-hidden />
+              Import JSON
+            </Button>
+          }
+          label="Server type"
+        >
+          <div
+            aria-label="MCP server type"
+            className="segmented-control w-full"
+            role="tablist"
+          >
+            {(
+              [
+                { id: "http" as const, label: "HTTP" },
+                { id: "signin" as const, label: "Sign-in" },
+                { id: "stdio" as const, label: "Command" },
+              ] as const
+            ).map((item) => (
+              <button
+                aria-controls={`${idPrefix}-transport-panel-${item.id}`}
+                aria-selected={kind === item.id}
+                className="segmented-control-item"
+                data-active={kind === item.id || undefined}
+                disabled={formDisabled || isEdit}
+                id={`${idPrefix}-transport-${item.id}`}
+                key={item.id}
+                onClick={() => onKindChange(item.id)}
+                role="tab"
+                type="button"
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-muted-foreground text-xs">{kindHint(kind)}</p>
+        </McpFormField>
+      ) : (
+        <div className="flex flex-col gap-1">
+          <h3 className="font-semibold text-base">{KIND_TITLE[kind]}</h3>
+          <p className="text-muted-foreground text-sm">{kindHint(kind)}</p>
         </div>
-        <p className="mt-2 text-muted-foreground text-xs">{kindHint(kind)}</p>
-      </McpFormField>
+      )}
 
       <McpFormField htmlFor={`${idPrefix}-name`} label="Name">
         <Input
@@ -245,17 +254,6 @@ export function McpServerDialogForm({
           </>
         )}
       </div>
-
-      <Button
-        className="self-start"
-        disabled={formDisabled || !canSubmit}
-        onClick={onTestConnection}
-        size="sm"
-        type="button"
-        variant="outline"
-      >
-        {testing ? <Spinner className="size-4" /> : "Test connection"}
-      </Button>
 
       {testResult ? (
         <div className="space-y-3">

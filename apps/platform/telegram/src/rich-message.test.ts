@@ -8,6 +8,7 @@ describe("createTelegramRichMessenger", () => {
       text: "hello",
       userId: 42,
     });
+
     const messenger = createTelegramRichMessenger(ctx);
 
     await messenger.send("Hello **world** and `code`");
@@ -22,6 +23,7 @@ describe("createTelegramRichMessenger", () => {
       text: "hello",
       userId: 42,
     });
+
     const messenger = createTelegramRichMessenger(ctx);
 
     await messenger.edit(7, "Done **now**");
@@ -38,6 +40,7 @@ describe("createTelegramRichMessenger", () => {
       text: "hello",
       userId: 42,
     });
+
     const messenger = createTelegramRichMessenger(ctx);
 
     await messenger.send("Hello **world** and `code`");
@@ -53,6 +56,7 @@ describe("createTelegramRichMessenger", () => {
       text: "hello",
       userId: 42,
     });
+
     const messenger = createTelegramRichMessenger(ctx);
 
     await messenger.edit(7, "Done **now**");
@@ -64,11 +68,14 @@ describe("createTelegramRichMessenger", () => {
   test("sendRaw preserves share URLs without markdown stripping", async () => {
     const shareUrl =
       "http://127.0.0.1:4310/s/tc_share_a7e24436b9bd4ec8bd60edba6d403c74f0b19596f27b440db85d7f171299bbdc";
+
     const footer = `slides.html: ${shareUrl}`;
+
     const { ctx, replies, replyOptions } = createMessageContext({
       text: "hello",
       userId: 42,
     });
+
     const messenger = createTelegramRichMessenger(ctx);
 
     await messenger.sendRaw(footer);

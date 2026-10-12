@@ -1,8 +1,36 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { streamFromChunks } from "../test-helpers";
+import { asTestFetch, streamFromChunks } from "../test-helpers";
 import { createOpenAIProvider } from "./index";
 
 const originalFetch = globalThis.fetch;
+
+type CapturedOpenAIRequest = {
+  messages?: Array<{
+    content?: string | null;
+    reasoning_content?: string;
+    role?: string;
+    tool_calls?: Array<{
+      function?: { arguments?: string; name?: string };
+      id?: string;
+    }>;
+  }>;
+  model?: string;
+  reasoning?: unknown;
+  reasoning_effort?: string;
+  stream_options?: unknown;
+  thinking?: { type: string };
+};
+
+type OpenAIStreamDelta = {
+  content?: string;
+  reasoning_content?: string;
+  tool_calls?: Array<{
+    function?: { arguments?: string; name?: string };
+    id?: string;
+    index?: number;
+    type?: "function";
+  }>;
+};
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -11,7 +39,7 @@ afterEach(() => {
 describe("OpenAI provider streaming", () => {
   test("streams chat completion chunks", async () => {
     const fetchMock = mock(
-      async () =>
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
         new Response(
           streamFromChunks([
             'data:{"choices":[{"delta":{"content":"Hel"}}]}\r\n\r\n',
@@ -22,7 +50,7 @@ describe("OpenAI provider streaming", () => {
         )
     );
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAIProvider({
       apiKey: "sk-test",
@@ -30,6 +58,7 @@ describe("OpenAI provider streaming", () => {
     });
 
     const chunks: string[] = [];
+
     const result = await provider.streamChat(
       {
         messages: [{ content: "Say hello", role: "user" }],
@@ -43,9 +72,12 @@ describe("OpenAI provider streaming", () => {
     expect(result.content).toBe("Hello");
     expect(chunks).toEqual(["Hel", "lo"]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // SAFETY: fetchWithoutIdleTimeout adds idleTimeout to the RequestInit passed to fetch.
     const streamInit = fetchMock.mock.calls[0]?.[1] as
       | (RequestInit & { idleTimeout?: number })
       | undefined;
+
     expect(streamInit?.idleTimeout).toBe(0);
     const body = JSON.parse(String(streamInit?.body));
     expect(body.model).toBe("gpt-5.4");
@@ -56,7 +88,11 @@ describe("OpenAI provider streaming", () => {
   test("appends Perplexity citations from the final stream chunk", async () => {
     const fetchMock = mock(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
-        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        // SAFETY: The provider serializes this request body immediately before fetch.
+        const body = JSON.parse(String(init?.body)) as {
+          stream_options?: unknown;
+        };
+
         expect(body.stream_options).toBeUndefined();
 
         return new Response(
@@ -69,7 +105,8 @@ describe("OpenAI provider streaming", () => {
         );
       }
     );
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAIProvider({
       apiKey: "pplx-test",
@@ -77,6 +114,7 @@ describe("OpenAI provider streaming", () => {
       model: "sonar",
       providerName: "perplexity",
     });
+
     const chunks: string[] = [];
 
     const result = await provider.streamChat(
@@ -92,49 +130,186 @@ describe("OpenAI provider streaming", () => {
     expect(chunks.join("")).toBe(result.content);
   });
 
-  test("streams responses api text and thinking", async () => {
-    const fetchMock = mock(async (input: RequestInfo | URL) => {
-      expect(String(input)).toBe("https://api.openai.com/v1/responses");
+  test.each([false, true])(
+    "streams GPT-6.1 Sol tools through Responses (thinking: %s)",
+    async (enabled) => {
+      const fetchMock = mock(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          expect(String(input)).toBe("https://api.openai.com/v1/responses");
+          const body = JSON.parse(String(init?.body));
+          expect(body.model).toBe("gpt-6.1-sol");
+          expect(body.reasoning).toEqual(
+            enabled ? { effort: "medium", summary: "auto" } : undefined
+          );
+          expect(body.reasoning_effort).toBeUndefined();
+          expect(body.tools).toHaveLength(1);
 
-      return new Response(
-        streamFromChunks([
-          'event: response.output_text.delta\r\ndata:{"type":"response.output_text.delta","delta":"Hi"}\r\n\r\n',
-          'data:{"type":"response.reasoning_summary_text.delta","delta":"Plan"}\r\n\r\n',
-          'data:{"type":"response.output_item.done","item":{"id":"msg_1","type":"message","content":[{"type":"output_text","text":"Hi"}]}}\r\n\r\n',
-          "data:[DONE]\r\n\r\n",
-        ]),
-        { headers: { "Content-Type": "text/event-stream" }, status: 200 }
+          return new Response(
+            streamFromChunks([
+              'event: response.output_text.delta\r\ndata:{"type":"response.output_text.delta","delta":"Hi"}\r\n\r\n',
+              'data:{"type":"response.reasoning_summary_text.delta","delta":"Plan"}\r\n\r\n',
+              'data:{"type":"response.output_item.done","item":{"id":"msg_1","type":"message","content":[{"type":"output_text","text":"Hi"}]}}\r\n\r\n',
+              "data:[DONE]\r\n\r\n",
+            ]),
+            { headers: { "Content-Type": "text/event-stream" }, status: 200 }
+          );
+        }
       );
-    });
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+      globalThis.fetch = asTestFetch(fetchMock);
 
-    const provider = createOpenAIProvider({
-      apiKey: "sk-test",
-      model: "gpt-5.4",
-    });
+      const provider = createOpenAIProvider({
+        apiKey: "sk-test",
+        model: "gpt-6.1-sol",
+      });
 
-    const chunks: string[] = [];
-    const thinking: string[] = [];
-    const result = await provider.streamChat(
-      {
-        messages: [{ content: "Think, then answer", role: "user" }],
-        providerOptions: {
-          thinking: { effort: "medium", enabled: true },
+      const chunks: string[] = [];
+      const thinking: string[] = [];
+
+      const result = await provider.streamChat(
+        {
+          messages: [{ content: "Think, then answer", role: "user" }],
+          providerOptions: {
+            thinking: { effort: "medium", enabled },
+          },
+          system: "You are helpful.",
+          tools: [
+            {
+              description: "Search files",
+              name: "search_files",
+              parameters: { properties: {}, type: "object" },
+            },
+          ],
         },
-        system: "You are helpful.",
-      },
+        {
+          onChunk: (delta) => chunks.push(delta),
+          onThinking: (delta) => thinking.push(delta),
+        }
+      );
+
+      expect(result.content).toBe("Hi");
+      expect(result.assistantMessage.thinking).toBe("Plan");
+      expect(chunks).toEqual(["Hi"]);
+      expect(thinking).toEqual(["Plan"]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  test("uses streamed text when no output item arrives", async () => {
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            streamFromChunks([
+              'data:{"type":"response.output_text.delta","delta":"Hi"}\r\n\r\n',
+              'data:{"type":"response.completed","response":{"output":[]}}\r\n\r\n',
+            ]),
+            { status: 200 }
+          )
+      )
+    );
+
+    const result = await createOpenAIProvider({
+      apiKey: "sk-test",
+      model: "gpt-6.1-sol",
+    }).streamChat(
       {
-        onChunk: (delta) => chunks.push(delta),
-        onThinking: (delta) => thinking.push(delta),
-      }
+        messages: [{ content: "Say hi", role: "user" }],
+        providerOptions: { thinking: { enabled: true } },
+        system: "Be brief.",
+      },
+      { onChunk: () => {} }
     );
 
     expect(result.content).toBe("Hi");
-    expect(result.assistantMessage.thinking).toBe("Plan");
-    expect(chunks).toEqual(["Hi"]);
-    expect(thinking).toEqual(["Plan"]);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("accepts null error, incomplete_details, and usage in lifecycle events", async () => {
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            streamFromChunks([
+              'data:{"type":"response.created","response":{"error":null,"incomplete_details":null,"usage":null,"output":[]}}\r\n\r\n',
+              'data:{"type":"response.output_text.delta","delta":"Hi"}\r\n\r\n',
+              'data:{"type":"response.completed","response":{"error":null,"incomplete_details":null,"output":[],"usage":{"input_tokens":3,"output_tokens":1,"total_tokens":4}}}\r\n\r\n',
+            ]),
+            { status: 200 }
+          )
+      )
+    );
+
+    const result = await createOpenAIProvider({
+      apiKey: "sk-test",
+      model: "gpt-6.1-sol",
+    }).streamChat(
+      {
+        messages: [{ content: "Say hi", role: "user" }],
+        providerOptions: { thinking: { enabled: true } },
+        system: "Be brief.",
+      },
+      { onChunk: () => {} }
+    );
+
+    expect(result.content).toBe("Hi");
+    expect(result.usage?.totalTokens).toBe(4);
+  });
+
+  test("uses completed response output when item events are absent", async () => {
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            streamFromChunks([
+              'data:{"type":"response.completed","response":{"output":[{"id":"msg_1","type":"message","content":[{"type":"output_text","text":"Hi"}]}]}}\r\n\r\n',
+            ]),
+            { status: 200 }
+          )
+      )
+    );
+
+    const result = await createOpenAIProvider({
+      apiKey: "sk-test",
+      model: "gpt-6.1-sol",
+    }).streamChat(
+      {
+        messages: [{ content: "Say hi", role: "user" }],
+        providerOptions: { thinking: { enabled: true } },
+        system: "Be brief.",
+      },
+      { onChunk: () => {} }
+    );
+
+    expect(result.content).toBe("Hi");
+  });
+
+  test("reports a failed Responses stream", async () => {
+    globalThis.fetch = asTestFetch(
+      mock(
+        async () =>
+          new Response(
+            streamFromChunks([
+              'data:{"type":"response.output_text.delta","delta":"Partial"}\r\n\r\n',
+              'data:{"type":"response.failed","response":{"error":{"message":"Provider failed"}}}\r\n\r\n',
+            ]),
+            { status: 200 }
+          )
+      )
+    );
+
+    expect(
+      createOpenAIProvider({
+        apiKey: "sk-test",
+        model: "gpt-6.1-sol",
+      }).streamChat(
+        {
+          messages: [{ content: "Say hi", role: "user" }],
+          providerOptions: { thinking: { enabled: true } },
+          system: "Be brief.",
+        },
+        { onChunk: () => {} }
+      )
+    ).rejects.toThrow();
   });
 
   test("streams chat completion chunks when thinking is enabled for an unsupported model", async () => {
@@ -150,7 +325,7 @@ describe("OpenAI provider streaming", () => {
       );
     });
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAIProvider({
       apiKey: "sk-test",
@@ -178,7 +353,12 @@ describe("OpenAI provider streaming", () => {
     const fetchMock = mock(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         expect(String(input)).toBe("https://api.openai.com/v1/responses");
-        const body = JSON.parse(String(init?.body)) as { reasoning?: unknown };
+
+        // SAFETY: The provider serializes this request body immediately before fetch.
+        const body = JSON.parse(String(init?.body)) as {
+          reasoning?: unknown;
+        };
+
         expect(body.reasoning).toBeUndefined();
 
         return new Response(
@@ -192,7 +372,7 @@ describe("OpenAI provider streaming", () => {
       }
     );
 
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const provider = createOpenAIProvider({
       apiKey: "sk-test",
@@ -225,7 +405,7 @@ describe("OpenAI provider streaming", () => {
       providerName: "deepseek",
     });
 
-  const sseResponse = (...deltas: Record<string, unknown>[]) =>
+  const sseResponse = (...deltas: OpenAIStreamDelta[]) =>
     new Response(
       streamFromChunks([
         ...deltas.map(
@@ -237,22 +417,28 @@ describe("OpenAI provider streaming", () => {
     );
 
   const mockFetchBodies = (
-    handler: (call: number, body: Record<string, unknown>) => Response
+    handler: (call: number, body: CapturedOpenAIRequest) => Response
   ) => {
-    const bodies: Array<Record<string, unknown>> = [];
+    const bodies: CapturedOpenAIRequest[] = [];
     let callCount = 0;
+
     const fetchMock = mock(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
         callCount += 1;
-        const body = JSON.parse(String(init?.body ?? "{}")) as Record<
-          string,
-          unknown
-        >;
+
+        // SAFETY: The provider serializes this request body immediately before fetch.
+        const body = JSON.parse(
+          String(init?.body ?? "{}")
+        ) as CapturedOpenAIRequest;
+
         bodies.push(body);
+
         return handler(callCount, body);
       }
     );
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    globalThis.fetch = asTestFetch(fetchMock);
+
     return { bodies, fetchMock };
   };
 
@@ -276,6 +462,7 @@ describe("OpenAI provider streaming", () => {
     );
 
     const provider = deepseekProvider();
+
     const request = {
       providerOptions: { thinking: { effort: "high" as const, enabled: true } },
       system: "You are helpful.",
@@ -324,12 +511,12 @@ describe("OpenAI provider streaming", () => {
     expect(second.content).toBe("Done");
     expect(fetchMock).toHaveBeenCalledTimes(2);
 
-    const followUpMessages = (bodies[1]?.messages ?? []) as Array<
-      Record<string, unknown>
-    >;
+    const followUpMessages = bodies[1]?.messages ?? [];
+
     const assistantWithTools = followUpMessages.find(
       (message) => message.role === "assistant" && message.tool_calls
     );
+
     expect(assistantWithTools?.reasoning_content).toBe("Need lookup");
     expect(assistantWithTools?.tool_calls).toBeDefined();
   });
@@ -339,6 +526,7 @@ describe("OpenAI provider streaming", () => {
       expect(body.model).toBe("deepseek-flash");
       expect(body.thinking).toEqual({ type: "disabled" });
       expect(body.reasoning_effort).toBeUndefined();
+
       return sseResponse({ content: "Hi" });
     });
 
@@ -362,7 +550,8 @@ describe("OpenAI provider streaming", () => {
         ],
       })
     );
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    globalThis.fetch = asTestFetch(fetchMock);
 
     const result = await deepseekProvider().generateChat({
       messages: [{ content: "Think", role: "user" }],

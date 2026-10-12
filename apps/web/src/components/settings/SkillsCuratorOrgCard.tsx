@@ -10,6 +10,7 @@ import { client, formatError } from "@/lib/client";
 
 function parseIntegerInput(value: string): number | undefined {
   const parsed = Number(value);
+
   return Number.isInteger(parsed) ? parsed : undefined;
 }
 
@@ -19,6 +20,7 @@ function formatRunTime(value: string | null | undefined): string {
   }
 
   const time = Date.parse(value);
+
   if (Number.isNaN(time)) {
     return "Never";
   }
@@ -33,6 +35,7 @@ async function updateOrgFlag(
   setBusy: (value: boolean) => void
 ): Promise<void> {
   setBusy(true);
+
   try {
     await updateOrg(orgId, patch);
   } catch (error) {
@@ -48,6 +51,7 @@ async function updatePollInterval(
   setPollIntervalMinutes: (value: number | null) => void
 ): Promise<void> {
   setBusy(true);
+
   try {
     const settings = await client.setAutomationWorkerSettings(value);
     setPollIntervalMinutes(settings.pollIntervalMinutes);
@@ -66,9 +70,11 @@ async function runSkillCurator(
   setLastRunAt: (value: string | null) => void
 ): Promise<void> {
   setRunning(true);
+
   try {
     const { result } = await client.runOrgSkillCurator(orgId, { dryRun });
     setLatest(result);
+
     if (!dryRun && result.status === "completed") {
       setLastRunAt(result.finishedAt);
     }
@@ -88,7 +94,7 @@ function loadSkillsCuratorLatest(
     return;
   }
 
-  void loadLatest(orgId).catch((error: unknown) => {
+  void loadLatest(orgId).catch((error) => {
     toast(formatError(error));
   });
 }
@@ -105,7 +111,7 @@ function loadAutomationPollInterval(
   void client
     .getAutomationWorkerSettings()
     .then((settings) => setPollIntervalMinutes(settings.pollIntervalMinutes))
-    .catch((error: unknown) => toast(formatError(error)));
+    .catch((error) => toast(formatError(error)));
 }
 
 function useSkillsCuratorOrgCard() {
@@ -114,6 +120,7 @@ function useSkillsCuratorOrgCard() {
   const [running, setRunning] = useState(false);
   const [latest, setLatest] = useState<SkillCuratorRunResult | null>(null);
   const [lastRunAt, setLastRunAt] = useState<string | null>(null);
+
   const [pollIntervalMinutes, setPollIntervalMinutes] = useState<number | null>(
     null
   );
@@ -170,10 +177,10 @@ function SkillsCuratorFreshnessFields({
 }) {
   return (
     <div className="border-border border-b px-4 py-3">
-      <p className="font-medium text-foreground text-sm">Freshness clocks</p>
+      <p className="font-medium text-foreground text-sm">Unused skills</p>
       <div className="mt-3 grid grid-cols-2 gap-3">
         <label className="grid gap-1 text-muted-foreground text-xs">
-          Stale after
+          Mark unused after (days)
           <input
             aria-label="Stale after days"
             className="h-8 rounded-md border border-input bg-background px-2 text-foreground text-sm"
@@ -182,6 +189,7 @@ function SkillsCuratorFreshnessFields({
             min={1}
             onBlur={(event) => {
               const value = parseIntegerInput(event.currentTarget.value);
+
               if (value !== undefined) {
                 onUpdateFlag({ skillsCuratorStaleAfterDays: value });
               }
@@ -190,7 +198,7 @@ function SkillsCuratorFreshnessFields({
           />
         </label>
         <label className="grid gap-1 text-muted-foreground text-xs">
-          Archive after
+          Hide after (days)
           <input
             aria-label="Archive after days"
             className="h-8 rounded-md border border-input bg-background px-2 text-foreground text-sm"
@@ -200,6 +208,7 @@ function SkillsCuratorFreshnessFields({
             min={2}
             onBlur={(event) => {
               const value = parseIntegerInput(event.currentTarget.value);
+
               if (value !== undefined) {
                 onUpdateFlag({ skillsCuratorArchiveAfterDays: value });
               }
@@ -226,7 +235,7 @@ function SkillsCuratorPollIntervalField({
   return (
     <div className="border-border border-b px-4 py-3">
       <label className="grid gap-1 text-muted-foreground text-xs">
-        Automation worker poll interval (minutes)
+        Check for work every (minutes)
         <input
           aria-label="Automation worker poll interval minutes"
           className="h-8 rounded-md border border-input bg-background px-2 text-foreground text-sm"
@@ -235,12 +244,14 @@ function SkillsCuratorPollIntervalField({
           min={1}
           onBlur={(event) => {
             const value = parseIntegerInput(event.currentTarget.value);
+
             if (value !== undefined) {
               onPollIntervalCommit(value);
             }
           }}
           onChange={(event) => {
             const value = event.currentTarget.valueAsNumber;
+
             if (Number.isFinite(value)) {
               onPollIntervalChange(value);
             }
@@ -268,7 +279,7 @@ function SkillsCuratorRunSection({
     <div className="flex flex-col gap-3 px-4 py-3">
       <p className="text-muted-foreground text-xs tabular-nums">
         {latest?.dryRun ? "Preview · " : null}
-        Last run {lastRunLabel}
+        Last clean-up: {lastRunLabel}
       </p>
       {latest ? (
         <p className="text-muted-foreground text-xs tabular-nums">
@@ -290,7 +301,7 @@ function SkillsCuratorRunSection({
           size="sm"
           variant="outline"
         >
-          Dry run
+          Preview changes
         </Button>
         <Button disabled={running} onClick={() => onRun(false)} size="sm">
           Run now
@@ -331,7 +342,9 @@ export function SkillsCuratorOrgCard() {
       <div className="border-border border-b px-4 py-3">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="font-medium text-foreground text-sm">Skill curator</p>
+            <p className="font-medium text-foreground text-sm">
+              Auto clean-up of skills
+            </p>
           </div>
           <div className="flex shrink-0 items-center gap-2 pt-0.5">
             {busy ? <Spinner /> : null}
@@ -356,7 +369,7 @@ export function SkillsCuratorOrgCard() {
       </div>
       <div className="border-border border-b px-4 py-3">
         <div className="flex items-center justify-between gap-4">
-          <p className="text-foreground text-sm">Consolidate</p>
+          <p className="text-foreground text-sm">Merge similar skills</p>
           <div className="flex shrink-0 items-center gap-2">
             {busy ? <Spinner /> : null}
             <Switch

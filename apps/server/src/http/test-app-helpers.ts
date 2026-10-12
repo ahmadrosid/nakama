@@ -24,6 +24,7 @@ export type CreateMinimalHonoAppOverrides = {
   composioService?: ServerOptions["composioService"];
   databaseAdapter?: DatabaseAdapter;
   mcpService?: ServerOptions["mcpService"] | object;
+  onBeforeDataRestore?: ServerOptions["onBeforeDataRestore"];
   onDataRestored?: ServerOptions["onDataRestored"];
   orgMemoryService?: ServerOptions["orgMemoryService"];
   orgService?: ServerOptions["orgService"];
@@ -41,9 +42,12 @@ export function createMinimalHonoApp(
 ) {
   const databaseAdapter =
     overrides.databaseAdapter ?? createInMemoryDatabaseAdapter();
+
   const authService = overrides.authService ?? new AuthService();
+
   const orgService =
     overrides.orgService ?? new OrgService(databaseAdapter, authService);
+
   const skillCuratorService =
     overrides.skillCuratorService ??
     new SkillCuratorService(
@@ -51,6 +55,7 @@ export function createMinimalHonoApp(
       new SkillsService(databaseAdapter)
     );
 
+  // SAFETY: Route tests provide every service method their requests call.
   const app = createHonoApp({
     agent: (overrides.agent ?? defaultAgent) as ServerOptions["agent"],
     authService,
@@ -59,6 +64,7 @@ export function createMinimalHonoApp(
     composioService: overrides.composioService,
     databaseAdapter,
     mcpService: (overrides.mcpService ?? {}) as ServerOptions["mcpService"],
+    onBeforeDataRestore: overrides.onBeforeDataRestore,
     onDataRestored: overrides.onDataRestored,
     orgMemoryService: overrides.orgMemoryService,
     orgService,

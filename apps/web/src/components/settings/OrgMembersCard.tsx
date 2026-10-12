@@ -1,7 +1,10 @@
 import type { OrgMemberSummary, OrgRole } from "@nakama/core/contract";
+import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
+import { Input } from "@nakama/ui/input";
 import { toast } from "@nakama/ui/toast";
-import { useReducer } from "react";
+import { Cancel01Icon } from "hugeicons-react";
+import { useReducer, useState } from "react";
 import {
   type OrgMemberAddCredentials,
   OrgMemberAddDialog,
@@ -9,7 +12,8 @@ import {
   OrgMemberRemoveDialog,
 } from "@/components/settings/org-member-dialogs";
 import {
-  OrgMembersCardHeader,
+  OrgIdRow,
+  OrgMembersActions,
   OrgMembersSecretBanner,
 } from "@/components/settings/org-members-card-header";
 import { OrgMembersTable } from "@/components/settings/org-members-table";
@@ -126,58 +130,29 @@ function orgMembersReducer(
   }
 }
 
-export function OrgMembersCard() {
-  const { user, activeOrg } = useAuth();
-  const orgId = activeOrg?.id ?? null;
+function useOrgMemberActions(
+  orgId: string,
+  state: OrgMembersState,
+  dispatch: React.Dispatch<OrgMembersAction>
+) {
+  const inviteMutation = useInviteOrgMember(orgId);
+  const addMutation = useAddOrgMember(orgId);
+  const updateMemberMutation = useUpdateOrgMember(orgId);
+  const removeMutation = useRemoveOrgMember(orgId);
 
-  const {
-    data,
-    isLoading,
-    error: loadError,
-  } = useOrgMembers(activeOrg?.role === "admin" ? orgId : null);
-  const inviteMutation = useInviteOrgMember(orgId ?? "");
-  const addMutation = useAddOrgMember(orgId ?? "");
-  const updateMemberMutation = useUpdateOrgMember(orgId ?? "");
-  const removeMutation = useRemoveOrgMember(orgId ?? "");
-  const [state, dispatch] = useReducer(
-    orgMembersReducer,
-    initialOrgMembersState
-  );
+  async function copyWithHint(
+    value: string,
+    key: "secretHint" | "addCopyHint"
+  ) {
+    let hint = "Copied to clipboard.";
 
-  if (!activeOrg || activeOrg.role !== "admin") {
-    return null;
-  }
-
-  const members = data?.members ?? [];
-
-  async function copySecret(value: string) {
     try {
       await navigator.clipboard.writeText(value);
-      dispatch({
-        type: "patch",
-        values: { secretHint: "Copied to clipboard." },
-      });
     } catch {
-      dispatch({
-        type: "patch",
-        values: { secretHint: "Could not copy — select and copy manually." },
-      });
+      hint = "Could not copy — select and copy manually.";
     }
-  }
 
-  async function copyAddCredential(value: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      dispatch({
-        type: "patch",
-        values: { addCopyHint: "Copied to clipboard." },
-      });
-    } catch {
-      dispatch({
-        type: "patch",
-        values: { addCopyHint: "Could not copy — select and copy manually." },
-      });
-    }
+    dispatch({ type: "patch", values: { [key]: hint } });
   }
 
   function handleInviteSubmit(event: React.FormEvent) {
@@ -186,8 +161,10 @@ export function OrgMembersCard() {
     dispatch({ type: "clear-secrets" });
 
     const email = state.inviteEmail.trim();
+
     if (!email) {
       dispatch({ type: "patch", values: { formError: "Email is required." } });
+
       return;
     }
 
@@ -200,6 +177,7 @@ export function OrgMembersCard() {
           if (result.delivered) {
             toast(`Invitation sent to ${email}.`);
           }
+
           dispatch({
             type: "patch",
             values: {
@@ -230,6 +208,7 @@ export function OrgMembersCard() {
         type: "patch",
         values: { formError: "Name and email are required." },
       });
+
       return;
     }
 
@@ -251,6 +230,7 @@ export function OrgMembersCard() {
                 formError: null,
               },
             });
+
             return;
           }
 
@@ -261,18 +241,9 @@ export function OrgMembersCard() {
     );
   }
 
-  function handleRoleChange(userId: string, role: OrgRole) {
-    updateMemberMutation.mutate(
-      { request: { role }, userId },
-      {
-        onError: (err) =>
-          dispatch({ type: "patch", values: { formError: formatError(err) } }),
-      }
-    );
-  }
-
   function handleEditSubmit(event: React.FormEvent) {
     event.preventDefault();
+
     if (!state.editingMember) {
       return;
     }
@@ -319,6 +290,58 @@ export function OrgMembersCard() {
     });
   }
 
+  return {
+    addMutation,
+    copyWithHint,
+    handleAddSubmit,
+    handleEditSubmit,
+    handleInviteSubmit,
+    handleRemove,
+    handleRemoveConfirm,
+    inviteMutation,
+    removeMutation,
+    updateMemberMutation,
+  };
+}
+
+export function OrgMembersCard() {
+  const { user, activeOrg, updateOrg } = useAuth();
+  const orgId = activeOrg?.id ?? null;
+
+  const {
+    data,
+    isLoading,
+    error: loadError,
+  } = useOrgMembers(activeOrg?.role === "admin" ? orgId : null);
+
+  const [tab, setTab] = useState<"members" | "settings">("members");
+
+  const [state, dispatch] = useReducer(
+    orgMembersReducer,
+    initialOrgMembersState
+  );
+
+  const actions = useOrgMemberActions(orgId ?? "", state, dispatch);
+
+  if (!activeOrg || activeOrg.role !== "admin") {
+    return null;
+  }
+
+  const {
+    addMutation,
+    inviteMutation,
+    removeMutation,
+    updateMemberMutation,
+    copyWithHint,
+    handleAddSubmit,
+    handleEditSubmit,
+    handleInviteSubmit,
+    handleRemove,
+    handleRemoveConfirm,
+  } = actions;
+
+  const members = data?.members ?? [];
+
   const statusLine =
     state.formError ?? (loadError ? formatError(loadError) : null);
 
@@ -326,65 +349,93 @@ export function OrgMembersCard() {
     <>
       <Card className="w-full shadow-none">
         <CardContent className="divide-y divide-border p-0">
-          <OrgMembersCardHeader
-            inviteEmail={state.inviteEmail}
-            inviteFormError={state.formError}
-            inviteOpen={state.inviteOpen}
-            invitePending={inviteMutation.isPending}
-            inviteRole={state.inviteRole}
-            onAddMember={() => {
-              dispatch({ type: "reset-add" });
-              dispatch({ type: "clear-secrets" });
-              dispatch({ type: "patch", values: { addOpen: true } });
-            }}
-            onInviteEmailChange={(value) =>
-              dispatch({ type: "patch", values: { inviteEmail: value } })
-            }
-            onInviteOpenChange={(open) => {
-              dispatch({ type: "patch", values: { inviteOpen: open } });
-              if (open) {
-                dispatch({ type: "reset-invite" });
-                dispatch({ type: "clear-secrets" });
-              } else {
-                dispatch({ type: "reset-invite" });
-              }
-            }}
-            onInviteRoleChange={(value) =>
-              dispatch({ type: "patch", values: { inviteRole: value } })
-            }
-            onInviteSubmit={handleInviteSubmit}
-            orgId={activeOrg.id}
-          />
+          <div
+            aria-label="Organization sections"
+            className="flex items-center justify-between gap-3 px-4 py-2"
+            role="tablist"
+          >
+            <OrgMembersTabs onChange={setTab} value={tab} />
+            {tab === "members" ? (
+              <OrgMembersActions
+                inviteEmail={state.inviteEmail}
+                inviteFormError={state.formError}
+                inviteOpen={state.inviteOpen}
+                invitePending={inviteMutation.isPending}
+                inviteRole={state.inviteRole}
+                onAddMember={() => {
+                  dispatch({ type: "reset-add" });
+                  dispatch({ type: "clear-secrets" });
+                  dispatch({ type: "patch", values: { addOpen: true } });
+                }}
+                onInviteEmailChange={(value) =>
+                  dispatch({ type: "patch", values: { inviteEmail: value } })
+                }
+                onInviteOpenChange={(open) => {
+                  dispatch({ type: "patch", values: { inviteOpen: open } });
 
-          {state.secretValue ? (
-            <OrgMembersSecretBanner
-              onCopy={() => void copySecret(state.secretValue!)}
-              secretHint={state.secretHint}
-              secretValue={state.secretValue}
-            />
-          ) : null}
-
-          <div>
-            <OrgMembersTable
-              currentUserEmail={user?.email}
-              isLoading={isLoading}
-              members={members}
-              onEdit={(member) => dispatch({ member, type: "open-edit" })}
-              onRemove={handleRemove}
-              onRoleChange={handleRoleChange}
-              removePending={removeMutation.isPending}
-              updatePending={updateMemberMutation.isPending}
-            />
-
-            {statusLine ? (
-              <p
-                className="px-4 pt-2 pb-3 text-destructive text-sm"
-                role="alert"
-              >
-                {statusLine}
-              </p>
+                  if (open) {
+                    dispatch({ type: "reset-invite" });
+                    dispatch({ type: "clear-secrets" });
+                  } else {
+                    dispatch({ type: "reset-invite" });
+                  }
+                }}
+                onInviteRoleChange={(value) =>
+                  dispatch({ type: "patch", values: { inviteRole: value } })
+                }
+                onInviteSubmit={handleInviteSubmit}
+              />
             ) : null}
           </div>
+
+          {tab === "settings" ? (
+            <>
+              <InviteDomainsForm
+                allowedDomains={activeOrg.allowedInviteDomains ?? []}
+                key={activeOrg.id}
+                onSave={(domains) =>
+                  updateOrg(activeOrg.id, { allowedInviteDomains: domains })
+                }
+              />
+              <OrgIdRow
+                isTeam={Boolean(activeOrg.parentOrgId)}
+                orgId={activeOrg.id}
+              />
+            </>
+          ) : (
+            <>
+              {state.secretValue ? (
+                <OrgMembersSecretBanner
+                  onCopy={() =>
+                    void copyWithHint(state.secretValue!, "secretHint")
+                  }
+                  secretHint={state.secretHint}
+                  secretValue={state.secretValue}
+                />
+              ) : null}
+
+              <div>
+                <OrgMembersTable
+                  currentUserEmail={user?.email}
+                  isLoading={isLoading}
+                  members={members}
+                  onEdit={(member) => dispatch({ member, type: "open-edit" })}
+                  onRemove={handleRemove}
+                  removePending={removeMutation.isPending}
+                  updatePending={updateMemberMutation.isPending}
+                />
+
+                {statusLine ? (
+                  <p
+                    className="px-4 pt-2 pb-3 text-destructive text-sm"
+                    role="alert"
+                  >
+                    {statusLine}
+                  </p>
+                ) : null}
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -392,7 +443,7 @@ export function OrgMembersCard() {
         addPending={addMutation.isPending}
         dispatch={dispatch}
         onAddSubmit={handleAddSubmit}
-        onCopyAddCredential={copyAddCredential}
+        onCopyAddCredential={(value) => copyWithHint(value, "addCopyHint")}
         onEditSubmit={handleEditSubmit}
         onRemoveConfirm={handleRemoveConfirm}
         orgName={activeOrg.name}
@@ -401,6 +452,151 @@ export function OrgMembersCard() {
         updatePending={updateMemberMutation.isPending}
       />
     </>
+  );
+}
+
+function OrgMembersTabs({
+  value,
+  onChange,
+}: {
+  value: "members" | "settings";
+  onChange: (tab: "members" | "settings") => void;
+}) {
+  return (
+    <div className="flex gap-1">
+      {(
+        [
+          ["members", "Members"],
+          ["settings", "Settings"],
+        ] as const
+      ).map(([tab, label]) => (
+        <Button
+          aria-selected={value === tab}
+          key={tab}
+          onClick={() => onChange(tab)}
+          role="tab"
+          size="sm"
+          type="button"
+          variant={value === tab ? "secondary" : "ghost"}
+        >
+          {label}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+function InviteDomainsForm({
+  allowedDomains,
+  onSave,
+}: {
+  allowedDomains: string[];
+  onSave: (domains: string[]) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(next: string[]) {
+    setSaving(true);
+    setError(null);
+
+    try {
+      await onSave(next);
+      toast("Invite settings saved.");
+
+      return true;
+    } catch (err) {
+      setError(formatError(err));
+
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function addDraft() {
+    const added = draft
+      .split(/[,\s]+/)
+      .map((domain) => domain.trim().toLowerCase())
+      .filter(Boolean);
+
+    if (added.length === 0) {
+      return;
+    }
+
+    if (await save([...new Set([...allowedDomains, ...added])])) {
+      setDraft("");
+    }
+  }
+
+  return (
+    <div className="space-y-2 px-4 py-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-medium text-foreground text-sm">Who can join</p>
+        {allowedDomains.length > 0 && (
+          <span className="text-muted-foreground text-sm tabular-nums">
+            {allowedDomains.length}{" "}
+            {allowedDomains.length === 1 ? "domain" : "domains"}
+          </span>
+        )}
+      </div>
+      <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+        {allowedDomains.length === 0 && (
+          <p className="px-4 py-3 text-muted-foreground text-sm">
+            Anyone can be invited
+          </p>
+        )}
+        {allowedDomains.map((domain) => (
+          <div
+            className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
+            key={domain}
+          >
+            <span className="min-w-0 break-all">{domain}</span>
+            <Button
+              aria-label={`Remove ${domain}`}
+              disabled={saving}
+              onClick={() =>
+                void save(allowedDomains.filter((entry) => entry !== domain))
+              }
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <Cancel01Icon aria-hidden className="size-4" />
+            </Button>
+          </div>
+        ))}
+        <div className="flex items-center gap-2 bg-background p-2">
+          <Input
+            aria-label="Add email domain"
+            className="min-w-0 flex-1"
+            disabled={saving}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void addDraft();
+              }
+            }}
+            placeholder="Add a domain, e.g. acme.com"
+            value={draft}
+          />
+          <Button
+            disabled={saving || draft.trim() === ""}
+            onClick={() => void addDraft()}
+            type="button"
+          >
+            Add
+          </Button>
+        </div>
+      </div>
+      {error ? (
+        <p className="text-destructive text-sm" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -452,6 +648,7 @@ function OrgMembersCardDialogs({
         onCopyCredential={(value) => void onCopyAddCredential(value)}
         onOpenChange={(open) => {
           dispatch({ type: "patch", values: { addOpen: open } });
+
           if (!open) {
             dispatch({ type: "reset-add" });
           }
@@ -478,6 +675,7 @@ function OrgMembersCardDialogs({
         }
         onOpenChange={(open) => {
           dispatch({ type: "patch", values: { editOpen: open } });
+
           if (!open) {
             dispatch({ type: "reset-edit" });
           }

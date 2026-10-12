@@ -3,6 +3,7 @@ import type { OllamaHostMode } from "./contract";
 export type { OllamaHostMode };
 
 export const OLLAMA_LOCAL_DEFAULT_BASE_URL = "http://localhost:11434/v1";
+
 export const OLLAMA_CLOUD_DEFAULT_BASE_URL = "https://ollama.com/v1";
 
 export function parseOllamaHostMode(

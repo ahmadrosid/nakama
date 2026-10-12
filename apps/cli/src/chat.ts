@@ -1,6 +1,7 @@
 import type {
   NakamaClient,
   RemoteChatSession,
+  SendMessageArg,
   StreamHandlers,
 } from "@nakama/client";
 import {
@@ -16,11 +17,11 @@ import {
   type SoulStatusResponse,
   type UserContextStatusResponse,
 } from "@nakama/core";
+import { isAbortError } from "@nakama/core/channel-active-stream";
 import { loadSavedCliOrgId, saveCliProfileId } from "./cli-config";
 import {
   effectiveModelState,
   formatSlashCommands,
-  isActiveModelOption,
   resolveModelSwitchTarget,
   resolveSlashCommand,
   resolveSuggestions,
@@ -40,7 +41,6 @@ import {
   type PromptLineResult,
   promptLine,
 } from "./prompt";
-import { sendStreamCancellable } from "./stream-abort";
 import { styledLine } from "./styled-text";
 import { TerminalInput } from "./terminal-input";
 import { getTerminalColumns } from "./terminal-layout";
@@ -49,19 +49,52 @@ import { printLine } from "./terminal-safe";
 import { stripAnsi, truncateText } from "./text-measure";
 import { ThinkingIndicator } from "./thinking-indicator";
 
+async function sendStreamCancellable(
+  session: RemoteChatSession,
+  input: SendMessageArg,
+  handlers: StreamHandlers,
+  options?: { signal?: AbortSignal }
+): Promise<{ aborted: boolean }> {
+  try {
+    await session.sendStream(input, handlers, options);
+
+    return { aborted: false };
+  } catch (error) {
+    if (isAbortError(error)) {
+      return { aborted: true };
+    }
+
+    throw error;
+  }
+}
+
 const HELP_TEXT = `${formatSlashCommands()}\n\n@/path/to/image.png [message]   attach an image from file\n/paste                            attach image from clipboard (recommended)\nCtrl+V / Cmd+V (empty paste)      attach image when terminal supports it\nPageUp/PageDown                   scroll conversation history\nHome/End                          jump to oldest/newest visible history`;
 
 /** Debounce bare ESC so alt-prefix / slow paste chunks do not abort. */
 const ESC_ABORT_DEBOUNCE_MS = 50;
+
 const MAX_PENDING_MESSAGES = 20;
+
 // ponytail: fixed preview cap; add interactive expansion if full tool history is needed.
 const MAX_TOOL_PREVIEW_LENGTH = 160;
 
-export function previewToolValue(value: unknown): string {
+type CliJsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | CliJsonValue[]
+  | { [key: string]: CliJsonValue };
+
+type ToolPreviewValue = CliJsonValue | undefined;
+
+type ToolInput = Record<string, CliJsonValue>;
+
+export function previewToolValue(value: ToolPreviewValue): string {
   let text: string;
 
-  if (typeof value === "string") {
-    text = value.replace(/\s+/g, " ");
+  if (Object.prototype.toString.call(value) === "[object String]") {
+    text = String(value).replace(/\s+/g, " ");
   } else {
     try {
       text = JSON.stringify(value) ?? String(value);
@@ -75,31 +108,42 @@ export function previewToolValue(value: unknown): string {
     : text;
 }
 
-export function toolResultFailed(result: unknown): boolean {
-  if (!result || typeof result !== "object") {
-    return false;
-  }
+interface CliToolResult {
+  error?: unknown;
+  isError?: boolean;
+}
 
-  const value = result as Record<string, unknown>;
-  return value.isError === true || value.error != null;
+function isCliToolResult(value: unknown): value is CliToolResult {
+  return value instanceof Object && !Array.isArray(value);
+}
+
+export function toolResultFailed(result: CliToolResult): boolean {
+  return result.isError === true || result.error != null;
 }
 
 export function formatToolCall(
   tool: string,
-  input: Record<string, unknown>,
+  input: ToolInput,
   status: "running" | "done" | "error",
   elapsedMs?: number,
   width = getTerminalColumns()
 ): string {
   const detail = input.path ?? input.file_path ?? input.command ?? input.query;
+
   const summary =
-    typeof detail === "string" ? formatCliDisplayPath(detail) : "";
+    Object.prototype.toString.call(detail) === "[object String]"
+      ? formatCliDisplayPath(String(detail))
+      : "";
+
   const marker = status === "running" ? "⠋" : status === "error" ? "✗" : "✓";
+
   const duration =
     elapsedMs === undefined ? "" : `  ${(elapsedMs / 1000).toFixed(1)}s`;
+
   const text = stripAnsi(`${marker} ${tool}${summary ? `  ${summary}` : ""}`)
     .replace(/\s+/g, " ")
     .trim();
+
   return truncateText(
     `${truncateText(text, Math.max(1, width - duration.length - 2))}${duration}`,
     Math.max(1, width - 2)
@@ -122,11 +166,7 @@ export function needsTrailingStreamNewline(lastChunk: string | null): boolean {
 }
 
 /** Promise-based chat exit — no setInterval polling of an `exiting` flag. */
-export function createChatExitController(signal?: AbortSignal): {
-  readonly exiting: boolean;
-  requestExit: () => void;
-  wait: () => Promise<void>;
-} {
+export function createChatExitController(signal?: AbortSignal) {
   let exiting = false;
   let resolveWait: (() => void) | null = null;
 
@@ -143,12 +183,15 @@ export function createChatExitController(signal?: AbortSignal): {
     requestExit,
     async wait(): Promise<void> {
       signal?.addEventListener("abort", requestExit);
+
       try {
         if (signal?.aborted) {
           requestExit();
         }
+
         await new Promise<void>((resolve) => {
           resolveWait = resolve;
+
           if (exiting) {
             resolveWait = null;
             resolve();
@@ -173,8 +216,10 @@ export async function runChat(options: RunChatOptions): Promise<void> {
   const startup = await resolveStartupProfile(options.client, {
     profileId: options.profileId,
   });
+
   let currentProfileId = startup.profileId;
   let currentProfile = startup.profile;
+
   let session = await options.client.createSession(options.channel, {
     codingWorkspaceRoot: options.codingWorkspaceRoot,
     profileId: currentProfileId,
@@ -205,6 +250,7 @@ export async function runChat(options: RunChatOptions): Promise<void> {
         "Restart the server to pick up the latest API:\n  bun run dev:server"
       );
     }
+
     console.log("");
   }
 
@@ -227,6 +273,7 @@ export async function runChat(options: RunChatOptions): Promise<void> {
       session,
       terminalInput,
     });
+
     return;
   }
 
@@ -265,11 +312,13 @@ async function runStickyChat(
   let switchingOrg = false;
   let orgsCache: ListUserOrgsResponse["orgs"] = [];
   let currentOrgId = await loadSavedCliOrgId();
+
   try {
     orgsCache = (await options.client.listUserOrgs()).orgs;
   } catch {
     // Keep chat available if the organization list cannot be loaded.
   }
+
   let abortController: AbortController | null = null;
   let lastUserMessage: string | null = null;
   let modelsCache: ModelsResponse | null = null;
@@ -308,8 +357,8 @@ async function runStickyChat(
     renderer.appendOutputLine(text);
   }
 
-  function writeError(error: unknown): void {
-    for (const line of formatErrorLines(error)) {
+  function writeError(cause: unknown): void {
+    for (const line of formatErrorLines(cause)) {
       writeOutput(line);
     }
   }
@@ -321,14 +370,17 @@ async function runStickyChat(
   function createStreamHandlers(): StreamHandlers & { finishTools(): void } {
     const activeTools = new Map<
       string,
-      { tool: string; input: Record<string, unknown>; startedAt: number }
+      { tool: string; input: ToolInput; startedAt: number }
     >();
+
     let completed = 0;
     let failedCount = 0;
     let startedAt: number | undefined;
     let endedAt = 0;
+
     const toolSummary = () =>
       `${completed} ${completed === 1 ? "tool" : "tools"} completed${failedCount ? ` · ${failedCount} failed` : ""}`;
+
     const showRunningTool = () => {
       const active = activeTools.values().next().value;
       renderer.setStatusLine(
@@ -351,13 +403,17 @@ async function runStickyChat(
           : styledLine(toolSummary(), { dim: true })
       );
     };
+
     const finishTools = () => {
       if (startedAt === undefined) {
         return;
       }
+
       const interrupted = activeTools.size;
+
       const elapsed =
         ((interrupted ? performance.now() : endedAt) - startedAt) / 1000;
+
       renderer.setStatusLine(null);
       renderer.appendToolLine(
         styledLine(
@@ -369,34 +425,43 @@ async function runStickyChat(
       failedCount = 0;
       startedAt = undefined;
     };
+
     return {
       finishTools,
       onChunk: (delta) => {
         thinkingIndicator.stop();
+
         if (activeTools.size === 0) {
           finishTools();
         }
+
         renderer.appendStreamChunk(delta);
       },
       onThinking: () => {
         if (activeTools.size > 0) {
           return;
         }
+
         finishTools();
         thinkingIndicator.start();
       },
       onToolEnd: (event) => {
         const active = activeTools.get(event.toolCallId);
         activeTools.delete(event.toolCallId);
-        const failed = toolResultFailed(event.result);
+
+        const failed =
+          isCliToolResult(event.result) && toolResultFailed(event.result);
+
         completed += 1;
         failedCount += Number(failed);
         endedAt = performance.now();
+
         if (activeTools.size === 0) {
           thinkingIndicator.start();
         } else {
           showRunningTool();
         }
+
         if (failed) {
           renderer.appendToolLine(
             styledLine(
@@ -412,16 +477,24 @@ async function runStickyChat(
               }
             )
           );
+          const serializedResult = JSON.stringify(event.result);
+
+          const previewValue: ToolPreviewValue =
+            serializedResult === undefined
+              ? String(event.result)
+              : JSON.parse(serializedResult);
+
           renderer.appendToolLine(
-            styledLine(`  ${previewToolValue(event.result)}`, { color: "red" })
+            styledLine(`  ${previewToolValue(previewValue)}`, { color: "red" })
           );
         }
       },
       onToolStart: (event) => {
         thinkingIndicator.stop();
         startedAt ??= performance.now();
+        const serializedInput = JSON.stringify(event.input);
         activeTools.set(event.toolCallId, {
-          input: event.input,
+          input: serializedInput ? JSON.parse(serializedInput) : {},
           startedAt: performance.now(),
           tool: event.tool,
         });
@@ -438,6 +511,7 @@ async function runStickyChat(
     }
 
     const handlers = createStreamHandlers();
+
     try {
       return await sendStreamCancellable(session, input, handlers, {
         signal: abortController?.signal,
@@ -488,8 +562,10 @@ async function runStickyChat(
     if (chatExit.exiting) {
       return;
     }
+
     if (isStreaming) {
       writeOutput("Wait for the current response to finish.");
+
       return;
     }
 
@@ -538,6 +614,7 @@ async function runStickyChat(
       });
     } catch (error) {
       writeError(error);
+
       return;
     }
 
@@ -545,27 +622,33 @@ async function runStickyChat(
       writeOutput(
         "Chat changed while preparing the message. Please send it again."
       );
+
       return;
     }
+
     if (isStreaming && queue.length >= MAX_PENDING_MESSAGES) {
       writeOutput(
         "Pending queue is full. Wait for a response before sending again."
       );
+
       return;
     }
 
     lastUserMessage = sendInput.message || line;
+
     const pending: PendingMessage = {
       images: promptResult.images,
       line,
       sendInput,
     };
+
     renderer.scrollToLatest();
 
     if (isStreaming) {
       renderer.appendUserMessage(line, { placement: "below_status" });
       queue.push({ ...pending, echoed: true });
       syncPendingMessages();
+
       return;
     }
 
@@ -582,17 +665,21 @@ async function runStickyChat(
     if (line === "/clear") {
       if (isStreaming) {
         writeOutput("Wait for the current response to finish.");
+
         return "handled";
       }
+
       await session.clear();
       lastUserMessage = null;
       renderer.clear();
+
       return "handled";
     }
 
     if (line === "/compact") {
       if (isStreaming) {
         writeOutput("Wait for the current response to finish.");
+
         return "handled";
       }
 
@@ -634,6 +721,7 @@ async function runStickyChat(
     if (line === "/paste") {
       if (isStreaming) {
         writeOutput("Wait for the current response to finish.");
+
         return "handled";
       }
 
@@ -645,6 +733,7 @@ async function runStickyChat(
           writeOutput(
             "No image on clipboard. Copy a screenshot or image first."
           );
+
           return "handled";
         }
 
@@ -679,9 +768,12 @@ async function runStickyChat(
     if (line === "/org" || line.startsWith("/org ")) {
       if (isStreaming || queue.length > 0 || activeCommands > 1) {
         writeOutput("Wait for the current response or command to finish.");
+
         return "handled";
       }
+
       switchingOrg = true;
+
       try {
         const next = await switchChatOrg(
           options.client,
@@ -690,6 +782,7 @@ async function runStickyChat(
           writeOutput,
           options.codingWorkspaceRoot
         );
+
         if (next) {
           currentOrgId = next.orgId;
           options.client = next.client;
@@ -714,6 +807,7 @@ async function runStickyChat(
       } finally {
         switchingOrg = false;
       }
+
       return "handled";
     }
 
@@ -756,6 +850,7 @@ async function runStickyChat(
 
     if (isStreaming) {
       writeOutput("Wait for the current response to finish.");
+
       return "handled";
     }
 
@@ -773,6 +868,7 @@ async function runStickyChat(
         effort = arg;
       } else {
         writeOutput("Usage: /thinking [on|off|low|medium|high]");
+
         return "handled";
       }
 
@@ -780,6 +876,7 @@ async function runStickyChat(
         effort,
         enabled,
       });
+
       session = await options.client.createSession(options.channel, {
         codingWorkspaceRoot: options.codingWorkspaceRoot,
         profileId: currentProfileId,
@@ -794,6 +891,7 @@ async function runStickyChat(
     }
 
     syncPendingMessages();
+
     return "handled";
   }
 
@@ -804,16 +902,19 @@ async function runStickyChat(
       writeOutput(
         `Debug overlay: ${renderer.isDebugOverlayEnabled() ? "on" : "off"}`
       );
+
       return "handled";
     }
 
     if (arg !== "on" && arg !== "off") {
       writeOutput("Usage: /debug [on|off]");
+
       return "handled";
     }
 
     renderer.setDebugOverlay(arg === "on");
     writeOutput(`Debug overlay ${arg}.`);
+
     return "handled";
   }
 
@@ -822,6 +923,7 @@ async function runStickyChat(
 
     if (isStreaming) {
       writeOutput("Wait for the current response to finish.");
+
       return "handled";
     }
 
@@ -830,10 +932,12 @@ async function runStickyChat(
 
       if (!modelsCache?.models.length) {
         writeOutput("No models available.");
+
         return "handled";
       }
 
       prompt?.prefill("/model ");
+
       return "handled";
     }
 
@@ -843,6 +947,7 @@ async function runStickyChat(
 
       if (target === "unknown") {
         writeOutput(`Unknown model: ${modelArg}`);
+
         return "handled";
       }
 
@@ -850,6 +955,7 @@ async function runStickyChat(
         writeOutput(
           `Ambiguous model: ${modelArg}. Choose a provider-specific model from /model.`
         );
+
         return "handled";
       }
 
@@ -868,6 +974,7 @@ async function runStickyChat(
     }
 
     syncPendingMessages();
+
     return "handled";
   }
 
@@ -887,6 +994,7 @@ async function runStickyChat(
 
     if (isStreaming) {
       writeOutput("Wait for the current response to finish.");
+
       return "handled";
     }
 
@@ -896,11 +1004,13 @@ async function runStickyChat(
 
       if (!nextProfile) {
         writeOutput(`Unknown profile: ${profileArg}`);
+
         return "handled";
       }
 
       if (nextProfile.id === currentProfileId) {
         writeOutput(`Already using ${nextProfile.name}.`);
+
         return "handled";
       }
 
@@ -922,12 +1032,14 @@ async function runStickyChat(
     }
 
     syncPendingMessages();
+
     return "handled";
   }
 
   async function handleCreateCommand(line: string): Promise<"handled"> {
     if (isStreaming) {
       writeOutput("Wait for the current response to finish.");
+
       return "handled";
     }
 
@@ -935,6 +1047,7 @@ async function runStickyChat(
 
     if (!promptText) {
       writeOutput("Usage: /create [prompt]");
+
       return "handled";
     }
 
@@ -951,6 +1064,7 @@ async function runStickyChat(
   async function handleSoulCommand(line: string): Promise<"handled"> {
     if (isStreaming) {
       writeOutput("Wait for the current response to finish.");
+
       return "handled";
     }
 
@@ -959,12 +1073,14 @@ async function runStickyChat(
     try {
       if (subcommand === "init") {
         const result = await options.client.initProfileSoul(currentProfileId);
+
         for (const outputLine of formatSoulInitLines(result, options.verbose)) {
           writeOutput(outputLine);
         }
       } else {
         const status =
           await options.client.getProfileSoulStatus(currentProfileId);
+
         for (const outputLine of formatSoulStatusLines(
           status,
           options.verbose
@@ -982,6 +1098,7 @@ async function runStickyChat(
   async function handleUserCommand(line: string): Promise<"handled"> {
     if (isStreaming) {
       writeOutput("Wait for the current response to finish.");
+
       return "handled";
     }
 
@@ -990,11 +1107,13 @@ async function runStickyChat(
     try {
       if (subcommand === "init") {
         const result = await options.client.initUserContext();
+
         for (const outputLine of formatUserInitLines(result)) {
           writeOutput(outputLine);
         }
       } else {
         const status = await options.client.getUserContext();
+
         for (const outputLine of formatUserStatusLines(status)) {
           writeOutput(outputLine);
         }
@@ -1029,6 +1148,7 @@ async function runStickyChat(
     onCancel: () => {
       if (isStreaming && abortController) {
         abortController.abort();
+
         return;
       }
 
@@ -1037,26 +1157,31 @@ async function runStickyChat(
     onScrollHistory: (event) => {
       if (event === "line_up") {
         renderer.scrollLines(1);
+
         return;
       }
 
       if (event === "line_down") {
         renderer.scrollLines(-1);
+
         return;
       }
 
       if (event === "page_up") {
         renderer.scrollPage(1);
+
         return;
       }
 
       if (event === "page_down") {
         renderer.scrollPage(-1);
+
         return;
       }
 
       if (event === "home") {
         renderer.scrollPage(10_000);
+
         return;
       }
 
@@ -1065,17 +1190,21 @@ async function runStickyChat(
     onSubmit: async (result) => {
       if (switchingOrg) {
         writeOutput("Wait for the organization switch to finish.");
+
         return;
       }
+
       const line = result.text.trim();
       const hasImages = Boolean(result.images?.length);
 
       if (!(line || hasImages)) {
         return;
       }
+
       if (resolveSlashCommand(line) || isExitCommand(line)) {
         let outcome: "handled" | "exit" | "unhandled";
         activeCommands += 1;
+
         try {
           outcome = await handleSlashCommand(line);
         } finally {
@@ -1084,6 +1213,7 @@ async function runStickyChat(
 
         if (outcome === "exit") {
           chatExit.requestExit();
+
           return;
         }
 
@@ -1174,6 +1304,7 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
     lastChunk = null;
     abortController = new AbortController();
     thinkingIndicator.start();
+
     const stopEscListener = startEscAbortListener(() => {
       abortController?.abort();
     });
@@ -1205,6 +1336,7 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
       }
 
       process.stdout.write("\x1b[2m[stopped]\x1b[0m\n");
+
       return;
     }
 
@@ -1294,6 +1426,7 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
             printLine,
             options.codingWorkspaceRoot
           );
+
           if (next) {
             options.client = next.client;
             options.offline = next.offline;
@@ -1309,6 +1442,7 @@ async function runBlockingChat(context: ChatContext): Promise<void> {
         } catch (error) {
           printError(error);
         }
+
         continue;
       }
 
@@ -1369,6 +1503,7 @@ async function printCurrentModel(
 
   if (!(models.provider && active.modelId)) {
     write("No model configured.");
+
     return;
   }
 
@@ -1388,6 +1523,7 @@ export function formatStatusLines(
 
   if (!health.providerConfigured) {
     lines.push("Chat runs in offline mode without an API key.");
+
     return lines;
   }
 
@@ -1412,6 +1548,7 @@ async function printStatus(
   cachedModels: ModelsResponse | null
 ): Promise<void> {
   const health = await client.health();
+
   const models = health.providerConfigured
     ? (cachedModels ?? (await client.getModels()))
     : null;
@@ -1421,55 +1558,19 @@ async function printStatus(
   }
 }
 
-async function printModels(
-  client: NakamaClient,
-  write: (text: string) => void = printLine,
-  profile: ProfileSummary | null = null,
-  cachedModels: ModelsResponse | null = null
-): Promise<void> {
-  const models = cachedModels ?? (await client.getModels());
-
-  if (!models.provider || models.models.length === 0) {
-    write("No models available.");
-    return;
-  }
-
-  const active = profile
-    ? effectiveModelState(profile, models)
-    : { modelId: null, providerId: models.currentProviderId };
-
-  write(`Provider: ${models.provider}`);
-  write(`Current: ${active.modelId ?? "none"}`);
-
-  for (const model of models.models) {
-    const markers = [
-      isActiveModelOption(model, active) ? "*" : " ",
-      model.default ? "(default)" : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
-
-    write(
-      `${markers} ${model.name} [${model.providerLabel ?? model.provider}] (${model.id})`
-    );
-  }
-
-  write("Use /model <id> or /model <provider-id>::<id> to switch.");
+function formatError(cause: unknown): string {
+  return formatClientError(cause);
 }
 
-function formatError(error: unknown): string {
-  return formatClientError(error);
-}
-
-export function formatErrorLines(error: unknown): string[] {
-  return ["", ...formatError(error).split(/\r?\n/)];
+export function formatErrorLines(cause: unknown): string[] {
+  return ["", ...formatError(cause).split(/\r?\n/)];
 }
 
 /** Disable raw mode only when stdin is a TTY currently in raw mode. */
 export function disableRawModeIfActive(
   stdin: NodeJS.ReadStream = process.stdin
 ): void {
-  if (!(stdin.isTTY && stdin.isRaw && typeof stdin.setRawMode === "function")) {
+  if (!(stdin.isTTY && stdin.isRaw)) {
     return;
   }
 
@@ -1507,10 +1608,7 @@ export function isEscInterruptKey(key: string): boolean {
 export function createDebouncedEscAbortHandler(
   onAbort: () => void,
   debounceMs = ESC_ABORT_DEBOUNCE_MS
-): {
-  onData: (chunk: Buffer | string) => void;
-  dispose: () => void;
-} {
+) {
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   const clearPending = (): void => {
@@ -1531,6 +1629,7 @@ export function createDebouncedEscAbortHandler(
           timer = null;
           onAbort();
         }, debounceMs);
+
         return;
       }
 
@@ -1563,8 +1662,8 @@ function startEscAbortListener(onAbort: () => void): () => void {
   };
 }
 
-function printError(error: unknown): void {
-  for (const line of formatErrorLines(error)) {
+function printError(cause: unknown): void {
+  for (const line of formatErrorLines(cause)) {
     printLine(line);
   }
 }
@@ -1587,6 +1686,7 @@ function formatProfilesLines(
   }
 
   lines.push("Use /profile <name> to switch.");
+
   return lines;
 }
 
@@ -1635,10 +1735,12 @@ function formatSoulInitLines(
 
   if (result.created.length === 0) {
     lines.push("Templates already exist — nothing created.");
+
     return lines;
   }
 
   lines.push("Created:");
+
   for (const file of result.created) {
     lines.push(`  ${file}`);
   }
@@ -1646,6 +1748,7 @@ function formatSoulInitLines(
   lines.push(
     "Edit SOUL.md, STYLE.md, and INSTRUCTIONS.md, then start a new session."
   );
+
   return lines;
 }
 
@@ -1681,5 +1784,6 @@ function formatUserInitLines(result: InitUserContextResponse): string[] {
 
 function isExitCommand(line: string): boolean {
   const normalized = line.trim().toLowerCase();
+
   return normalized === "/exit" || normalized === "/quit";
 }

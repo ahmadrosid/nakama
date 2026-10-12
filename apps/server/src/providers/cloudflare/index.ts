@@ -13,6 +13,7 @@ export function resolveCloudflareBaseUrl(
   instance?: ProviderInstance | null
 ): string {
   const trimmed = instance?.baseUrl?.trim();
+
   if (trimmed) {
     return normalizeBaseUrl(trimmed);
   }

@@ -6,6 +6,7 @@ export function composeAgentBrowserCapabilityPrompt(
   skills: Pick<DiscoveredSkill, "name">[]
 ): string {
   const skill = skills.find((entry) => entry.name === AGENT_BROWSER_SKILL_NAME);
+
   if (!skill) {
     return "";
   }
@@ -27,10 +28,13 @@ function describeSkillTooling(skill: DiscoveredSkill): string {
   if (skill.hasTool) {
     return " (includes tool)";
   }
+
   const count = skill.scriptIssues.length;
+
   if (count === 0) {
     return "";
   }
+
   return ` (ships ${count} script${count === 1 ? "" : "s"} that cannot run here; do not answer from their source, say they are unavailable)`;
 }
 
@@ -47,7 +51,7 @@ export function composeSkillsCatalog(skills: DiscoveredSkill[]): string {
     "",
     ...skills.map(
       (skill) =>
-        `- **${skill.name}**: ${skill.description}${describeSkillTooling(skill)} (instructions: ${JSON.stringify(skill.skillFilePath)})`
+        `- **${skill.name}**: ${skill.description}${describeSkillTooling(skill)}${skill.sourceOrganization ? ` (shared from ${JSON.stringify(skill.sourceOrganization.name)}; source is read-only)` : ""} (instructions: ${JSON.stringify(skill.skillFilePath)})`
     ),
   ];
 
@@ -63,6 +67,7 @@ export function composeMatchedSkillsPrompt(
   }
 
   const explicitInvocation = options.explicitInvocation ?? false;
+
   const sections = skills.map((skill) => {
     const header = `# Active Skill: ${skill.name}`;
     const description = skill.description.trim();
@@ -70,11 +75,16 @@ export function composeMatchedSkillsPrompt(
     const body = includeBody ? skill.body.trim() : "";
 
     const location = `Instruction file: ${JSON.stringify(skill.skillFilePath)}. Pass this full path to read_file and omit cwd. Resolve relative references and assets to full paths from ${JSON.stringify(skill.directory)} and omit cwd for those reads too.`;
+
     const loading = includeBody
       ? "Follow the instructions below and read any references they require before starting the task."
       : "Before starting the task, use read_file to read the full instruction file, then read any references it requires. This description is not the full skill. If the instructions cannot be read, report the problem instead of claiming to use the skill.";
 
-    return [header, description, location, loading, body]
+    const source = skill.sourceOrganization
+      ? `Shared from ${JSON.stringify(skill.sourceOrganization.name)}. The source is read-only. Use the published-skill paths only with read_file.`
+      : "";
+
+    return [header, description, source, location, loading, body]
       .filter(Boolean)
       .join("\n");
   });

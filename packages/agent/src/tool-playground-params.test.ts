@@ -35,6 +35,7 @@ describe("tool playground params", () => {
     const result = await suggestToolParamsFromPrompt(
       { description: "Echo", prompt: "test", toolName: "echo" },
       {
+        // SAFETY: This test double only calls generateText, and this is its complete implementation.
         provider: {
           generateText: async () => '{"query":"nakama"}',
         } as never,

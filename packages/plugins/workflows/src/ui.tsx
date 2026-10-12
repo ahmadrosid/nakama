@@ -10,20 +10,47 @@ import type {
 import type * as UI from "@nakama/ui";
 import type * as ReactType from "react";
 import css from "../ui/style.css" with { type: "text" };
+import {
+  parseWorkflowValue,
+  type WorkflowRecord,
+  type WorkflowValue,
+} from "./workflow-ops";
 
 type Profile = { id: string; name: string; isDefault?: boolean };
+
 type StepDraft = {
   key: string;
   id: string;
   kind: string;
   fields: Record<string, string>;
 };
+
+type WorkflowActionResult = {
+  error?: string;
+  name?: string;
+  run?: WorkflowRunRecord;
+};
+
+type ActionResponses = {
+  create_workflow: StoredWorkflow;
+  database: { preview?: WorkflowValue; tables: Array<{ name: string }> };
+  delete_workflow: { deleted: boolean };
+  get_workflow: StoredWorkflow | null;
+  list_workflows: StoredWorkflow[];
+  profiles: Profile[];
+  run_workflow: WorkflowActionResult;
+  runs: WorkflowRunRecord[];
+  tools: Array<{ name: string }>;
+  update_workflow: StoredWorkflow;
+};
+
 type ToolRenderProps = {
   action: string;
-  input?: Record<string, unknown>;
-  result?: unknown;
+  input?: WorkflowRecord;
+  result?: WorkflowActionResult;
   status: "running" | "done";
 };
+
 type Context = {
   React: typeof ReactType;
   ui: typeof UI;
@@ -36,22 +63,39 @@ type Context = {
     ): void;
   };
   styles(css: string): void;
-  host: { call(action: string, input?: unknown): Promise<unknown> };
+  host: {
+    call<Action extends keyof ActionResponses>(
+      action: Action,
+      input?: WorkflowRecord
+    ): Promise<ActionResponses[Action]>;
+  };
 };
+
 export const inject = ["slots", "host", "styles", "ui"];
-const stepFields: Record<string, string[]> = {
+
+const stepFields = {
   assert: ["path", "expected"],
   compare: ["left", "op", "right", "tolerance"],
   template: ["template"],
   tool: ["tool", "input"],
-};
-function parseValue(value: string): unknown {
+} satisfies Record<string, string[]>;
+
+function parseValue(value: string): WorkflowValue {
   try {
-    return JSON.parse(value);
+    return parseWorkflowValue(JSON.parse(value));
   } catch {
     return value;
   }
 }
+
+function readWorkflowString(value: WorkflowValue | undefined): string | null {
+  return value === String(value) ? value : null;
+}
+
+function isWorkflowRecord(value: WorkflowValue): value is WorkflowRecord {
+  return value instanceof Object && !Array.isArray(value);
+}
+
 function draftStep(step: WorkflowStep): StepDraft {
   return {
     fields: Object.fromEntries(
@@ -59,7 +103,7 @@ function draftStep(step: WorkflowStep): StepDraft {
         .filter(([key]) => key !== "id" && key !== "kind")
         .map(([key, value]) => [
           key,
-          typeof value === "string" &&
+          value === String(value) &&
           !["left", "right", "expected", "tolerance"].includes(key)
             ? value
             : JSON.stringify(value, null, 2),
@@ -70,6 +114,7 @@ function draftStep(step: WorkflowStep): StepDraft {
     kind: step.kind,
   };
 }
+
 function serializeSteps(steps: StepDraft[]) {
   return steps.map(({ id, kind, fields }) => ({
     id,
@@ -91,6 +136,7 @@ function serializeSteps(steps: StepDraft[]) {
 
 export function apply(ctx: Context) {
   const React = ctx.React;
+
   const {
     Button,
     Input,
@@ -172,6 +218,7 @@ export function apply(ctx: Context) {
     disabled: boolean;
   }) {
     const [open, setOpen] = React.useState(false);
+
     return (
       <Popover onOpenChange={setOpen} open={open}>
         <PopoverTrigger
@@ -237,6 +284,7 @@ export function apply(ctx: Context) {
       warning: "M12 3 2 21h20L12 3ZM12 9v5M12 17h.01",
       workflow: "M4 3h6v6H4V3ZM14 15h6v6h-6v-6ZM7 9v9h7M10 6h7v9",
     };
+
     return (
       <svg
         aria-hidden="true"
@@ -253,11 +301,14 @@ export function apply(ctx: Context) {
       </svg>
     );
   }
+
   ctx.styles(css);
+
   function WorkflowError({ message }: { message: string }) {
     const connectionError = /^MCP server "([^"]+)" is not connected\.$/.exec(
       message
     );
+
     return (
       <div className="workflow-error" role="alert">
         <Icon kind="warning" />
@@ -270,38 +321,46 @@ export function apply(ctx: Context) {
       </div>
     );
   }
-  const action = async <T,>(name: string, input?: unknown): Promise<T> =>
-    (await ctx.host.call(name, input)) as T;
+
+  const action = <Action extends keyof ActionResponses>(
+    name: Action,
+    input?: WorkflowRecord
+  ): Promise<ActionResponses[Action]> => ctx.host.call(name, input);
 
   function WorkflowRunCard({ input, result, status }: ToolRenderProps) {
-    const workflowId =
-      typeof input?.workflowId === "string" ? input.workflowId : null;
+    const workflowId = input && readWorkflowString(input.workflowId);
+
     const [workflow, setWorkflow] = React.useState<StoredWorkflow | null>(null);
+
     const [liveRun, setLiveRun] = React.useState<WorkflowRunRecord | null>(
       null
     );
-    const record =
-      result && typeof result === "object"
-        ? (result as { name?: string; run?: WorkflowRunRecord; error?: string })
-        : null;
+
+    const record = result ?? null;
+
     React.useEffect(() => {
       if (!workflowId) {
         return;
       }
+
       let active = true;
       let timer: ReturnType<typeof setTimeout> | undefined;
+
       const load = async () => {
         try {
-          const definition = await action<StoredWorkflow>("get_workflow", {
+          const definition = await action("get_workflow", {
             workflowId,
           });
+
           if (active) {
             setWorkflow(definition);
           }
+
           if (status === "running") {
-            const runs = await action<WorkflowRunRecord[]>("runs", {
+            const runs = await action("runs", {
               workflowId,
             });
+
             if (active) {
               setLiveRun(runs.find((run) => run.status === "running") ?? null);
             }
@@ -309,11 +368,14 @@ export function apply(ctx: Context) {
         } catch {
           // The recorded result remains readable if the workflow was removed.
         }
+
         if (active && status === "running") {
           timer = setTimeout(load, 1500);
         }
       };
+
       void load();
+
       return () => {
         active = false;
         clearTimeout(timer);
@@ -321,12 +383,15 @@ export function apply(ctx: Context) {
     }, [workflowId, status]);
     const run = record?.run ?? (status === "running" ? liveRun : null);
     const receipts = run?.steps ?? [];
+
     const steps =
       workflow?.steps ??
       receipts.map((receipt) => ({ id: receipt.stepId, kind: receipt.kind }));
+
     const complete = receipts.filter(
       (receipt) => receipt.status === "completed"
     ).length;
+
     const label =
       run?.status === "failed" || record?.error
         ? "Failed"
@@ -335,6 +400,7 @@ export function apply(ctx: Context) {
           : run?.status === "completed"
             ? "Done"
             : "Finished";
+
     return (
       <section aria-label="Workflow run" className="workflow-chat-card">
         <header>
@@ -351,9 +417,11 @@ export function apply(ctx: Context) {
           {steps.map((step) => {
             const receipt = receipts.find((item) => item.stepId === step.id);
             const stepStatus = receipt?.status ?? "pending";
+
             const definition = workflow?.steps.find(
               (item) => item.id === step.id
             );
+
             const detail =
               definition?.kind === "tool"
                 ? definition.tool
@@ -362,20 +430,26 @@ export function apply(ctx: Context) {
                   : definition?.kind === "template"
                     ? definition.template
                     : step.kind;
-            const output = receipt?.output;
-            const content =
-              output && typeof output === "object" && "content" in output
-                ? output.content
-                : null;
+
+            const output =
+              receipt?.output === undefined
+                ? undefined
+                : parseWorkflowValue(receipt.output);
+
+            const content = isWorkflowRecord(output)
+              ? readWorkflowString(output.content)
+              : null;
+
             const meta =
               receipt?.error ??
-              (typeof content === "string"
-                ? `${content.trim().split(/\s+/).filter(Boolean).length} words`
-                : stepStatus === "completed"
+              (content === null
+                ? stepStatus === "completed"
                   ? step.kind === "summarize"
                     ? "Written"
                     : "Done"
-                  : stepStatus);
+                  : stepStatus
+                : `${content.trim().split(/\s+/).filter(Boolean).length} words`);
+
             return (
               <li data-status={stepStatus} key={step.id}>
                 <span aria-label={stepStatus} className="workflow-chat-mark">
@@ -413,14 +487,12 @@ export function apply(ctx: Context) {
       workflows: StoredWorkflow[];
       profiles: Profile[];
     } | null>(null);
+
     const [selectedId, setSelectedId] = React.useState<string | null>(null);
     const [error, setError] = React.useState("");
     React.useEffect(() => {
       let active = true;
-      Promise.all([
-        action<StoredWorkflow[]>("list_workflows"),
-        action<Profile[]>("profiles"),
-      ])
+      Promise.all([action("list_workflows"), action("profiles")])
         .then(([workflows, profiles]) => {
           if (active) {
             setData({ profiles, workflows });
@@ -432,19 +504,23 @@ export function apply(ctx: Context) {
             setError(String(error.message ?? error));
           }
         });
+
       return () => {
         active = false;
       };
     }, []);
+
     const saved = async (id?: string) => {
-      const workflows = await action<StoredWorkflow[]>("list_workflows");
+      const workflows = await action("list_workflows");
       setData((current) => current && { ...current, workflows });
       setSelectedId((current) =>
         current === selectedId ? (id ?? workflows[0]?.id ?? null) : current
       );
     };
+
     const selected =
       data?.workflows.find((workflow) => workflow.id === selectedId) ?? null;
+
     return (
       <main className="workflows-page">
         {data &&
@@ -541,27 +617,34 @@ export function apply(ctx: Context) {
     onSaved(id?: string): Promise<void>;
   }) {
     const [name, setName] = React.useState(workflow?.name ?? "");
+
     const [description, setDescription] = React.useState(
       workflow?.description ?? ""
     );
+
     const [agentId, setAgentId] = React.useState(
       workflow?.profileId ??
         profiles.find((p) => p.isDefault)?.id ??
         profiles[0]?.id ??
         ""
     );
+
     const [enabled, setEnabled] = React.useState(workflow?.enabled ?? true);
+
     const summaryStep = workflow?.steps.find(
       (step) => step.kind === "summarize"
     );
+
     const [summary, setSummary] = React.useState(
       summaryStep?.prompt ?? "Summarize only the step results."
     );
+
     const [steps, setSteps] = React.useState<StepDraft[]>(() =>
       (workflow?.steps.filter((step) => step.kind !== "summarize") ?? []).map(
         draftStep
       )
     );
+
     const [runInput, setRunInput] = React.useState("{}");
     const [busy, setBusy] = React.useState(false);
     const [error, setError] = React.useState("");
@@ -578,7 +661,7 @@ export function apply(ctx: Context) {
       let active = true;
       setTools([]);
       setToolsError("");
-      action<Array<{ name: string }>>("tools", { agentId })
+      action("tools", { agentId })
         .then((result) => {
           if (active) {
             setTools(result);
@@ -589,6 +672,7 @@ export function apply(ctx: Context) {
             setToolsError(String(error.message ?? error));
           }
         });
+
       return () => {
         active = false;
       };
@@ -596,11 +680,14 @@ export function apply(ctx: Context) {
     React.useEffect(() => {
       setPanelTab("configure");
       setExpanded(false);
+
       if (!selection) {
         return;
       }
+
       const previous = document.activeElement;
       panelRef.current?.focus();
+
       return () => {
         if (previous instanceof HTMLElement && previous.isConnected) {
           previous.focus();
@@ -611,33 +698,41 @@ export function apply(ctx: Context) {
       if (!selection) {
         return;
       }
+
       const onKey = (event: KeyboardEvent) => {
         if (event.key !== "Escape" || event.defaultPrevented) {
           return;
         }
+
         if (expanded) {
           setExpanded(false);
         } else {
           setSelection("");
         }
       };
+
       window.addEventListener("keydown", onKey);
+
       return () => window.removeEventListener("keydown", onKey);
     }, [selection, expanded]);
     const selectedIndex = steps.findIndex((step) => step.key === selection);
     const selectedStep = steps[selectedIndex];
+
     const initialDraft = React.useRef(
       JSON.stringify({ agentId, description, enabled, name, steps, summary })
     );
+
     const dirty =
       initialDraft.current !==
       JSON.stringify({ agentId, description, enabled, name, steps, summary });
+
     const mounted = React.useRef(true);
     const inFlight = React.useRef(false);
     React.useEffect(() => {
       mounted.current = true;
+
       if (workflow) {
-        action<WorkflowRunRecord[]>("runs", { workflowId: workflow.id })
+        action("runs", { workflowId: workflow.id })
           .then((result) => {
             if (mounted.current) {
               setRuns(result);
@@ -649,17 +744,21 @@ export function apply(ctx: Context) {
             }
           });
       }
+
       return () => {
         mounted.current = false;
       };
     }, [workflow]);
+
     const perform = async (work: () => Promise<void>) => {
       if (inFlight.current) {
         return;
       }
+
       inFlight.current = true;
       setBusy(true);
       setError("");
+
       try {
         await work();
       } catch (error) {
@@ -668,11 +767,13 @@ export function apply(ctx: Context) {
         }
       } finally {
         inFlight.current = false;
+
         if (mounted.current) {
           setBusy(false);
         }
       }
     };
+
     const save = (event: ReactType.FormEvent) => {
       event.preventDefault();
       void perform(async () => {
@@ -682,7 +783,8 @@ export function apply(ctx: Context) {
             "Enter a workflow name, choose an agent, and add summary instructions."
           );
         }
-        const result = await action<StoredWorkflow>(
+
+        const result = await action(
           workflow ? "update_workflow" : "create_workflow",
           {
             agentId,
@@ -700,27 +802,33 @@ export function apply(ctx: Context) {
             workflowId: workflow?.id,
           }
         );
+
         if (mounted.current) {
           await onSaved(result.id);
         }
       });
     };
+
     const updateStep = (key: string, update: Partial<StepDraft>) =>
       setSteps((current) =>
         current.map((step) =>
           step.key === key ? { ...step, ...update } : step
         )
       );
+
     const moveStep = (key: string, delta: number) =>
       setSteps((current) => {
         const next = [...current];
         const index = next.findIndex((step) => step.key === key);
         const target = index + delta;
+
         if (target >= 0 && target < next.length) {
           [next[index], next[target]] = [next[target]!, next[index]!];
         }
+
         return next;
       });
+
     const addStep = (database = false) => {
       const step: StepDraft = {
         fields: database
@@ -730,36 +838,48 @@ export function apply(ctx: Context) {
         key: crypto.randomUUID(),
         kind: "tool",
       };
+
       setSteps((current) => [...current, step]);
       setSelection(step.key);
     };
+
     const runWorkflow = () =>
       void perform(async () => {
         if (!workflow || dirty || !enabled) {
           return;
         }
-        const input: unknown = JSON.parse(runInput || "{}");
-        if (!input || typeof input !== "object" || Array.isArray(input)) {
+
+        const input: WorkflowValue = parseWorkflowValue(
+          JSON.parse(runInput || "{}")
+        );
+
+        if (!isWorkflowRecord(input)) {
           throw new Error("Run input must be a JSON object.");
         }
-        const result = await action<{ error?: string }>("run_workflow", {
+
+        const result = await action("run_workflow", {
           input,
           workflowId: workflow.id,
         });
-        const history = await action<WorkflowRunRecord[]>("runs", {
+
+        const history = await action("runs", {
           workflowId: workflow.id,
         });
+
         if (mounted.current) {
           setRuns(history);
         }
+
         if (result.error) {
           throw new Error(result.error);
         }
       });
+
     const title = (id: string) =>
       id
         .replace(/[_-]+/g, " ")
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
     return (
       <section className="workflow-editor">
         <form onSubmit={save}>
@@ -1187,6 +1307,7 @@ export function apply(ctx: Context) {
                       step.stepId ===
                       (selectedStep?.id ?? summaryStep?.id ?? "summary")
                   );
+
                   return receipt ? (
                     <div className="workflow-step-fields">
                       <p>{receipt.status}</p>
@@ -1285,6 +1406,7 @@ export function apply(ctx: Context) {
                     await action("delete_workflow", {
                       workflowId: workflow!.id,
                     });
+
                     if (mounted.current) {
                       await onSaved();
                     }
@@ -1304,10 +1426,12 @@ export function apply(ctx: Context) {
 
   function DatabasePanel() {
     const [table, setTable] = React.useState("");
+
     const [data, setData] = React.useState<{
       tables: Array<{ name: string }>;
-      preview?: unknown;
+      preview?: WorkflowValue;
     } | null>(null);
+
     const [error, setError] = React.useState("");
     const [loading, setLoading] = React.useState(true);
     const [retry, setRetry] = React.useState(0);
@@ -1315,10 +1439,7 @@ export function apply(ctx: Context) {
       let active = true;
       setLoading(true);
       setError("");
-      action<{ tables: Array<{ name: string }>; preview?: unknown }>(
-        "database",
-        table ? { table } : {}
-      )
+      action("database", table ? { table } : {})
         .then((result) => {
           if (active) {
             setData(result);
@@ -1334,10 +1455,12 @@ export function apply(ctx: Context) {
             setLoading(false);
           }
         });
+
       return () => {
         active = false;
       };
     }, [table, retry]);
+
     return (
       <div aria-busy={loading} className="workflow-step-fields">
         {error ? (

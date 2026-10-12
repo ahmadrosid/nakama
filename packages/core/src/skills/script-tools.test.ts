@@ -5,6 +5,7 @@ import path from "node:path";
 import { resolveSkillScripts } from "./script-tools";
 
 const BODY = "def hitung(b, h):\n    return b * h * h / 6\n";
+
 const HARNESS =
   '\ndef run(input, context):\n    return {"w": hitung(input["b"], input["h"])}\n\n' +
   'if __name__ == "__main__":\n    import sys, json\n' +
@@ -12,23 +13,28 @@ const HARNESS =
 
 async function skillDir(files: Record<string, string>): Promise<string> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "skill-scripts-"));
+
   for (const [relative, content] of Object.entries(files)) {
     const full = path.join(dir, relative);
     await mkdir(path.dirname(full), { recursive: true });
     await writeFile(full, content);
   }
+
   return dir;
 }
 
 test("a script nothing can run is reported instead of ignored", async () => {
   // The three layouts an author reaches for first, none of which any loader
   // reached before. Each used to discover as a skill with no tool at all.
-  for (const layout of [
+  const layouts: Record<string, string>[] = [
     { "scripts/hitung.py": BODY },
     { "hitung.py": BODY },
     { "helper.js": "export const x = 1;\n" },
-  ]) {
+  ];
+
+  for (const layout of layouts) {
     const directory = await skillDir({ "SKILL.md": "---\n---\n", ...layout });
+
     const resolved = await resolveSkillScripts({
       declared: [],
       directory,
@@ -127,6 +133,7 @@ test("a module docstring with its summary on the next line still describes the t
     "SKILL.md": "---\n---\n",
     "scripts/hitung_balok.py": `"""\nSection modulus of a rectangle.\n\nLonger prose nobody needs in a tool description.\n"""\n${BODY}${HARNESS}`,
   });
+
   const resolved = await resolveSkillScripts({
     declared: ["scripts/hitung_balok.py"],
     directory,
@@ -145,6 +152,7 @@ test("a script missing both pieces is told about both at once", async () => {
     "SKILL.md": "---\n---\n",
     "scripts/hitung_balok.py": BODY,
   });
+
   const resolved = await resolveSkillScripts({
     declared: ["scripts/hitung_balok.py"],
     directory,
@@ -163,6 +171,7 @@ test("a skill name providers would reject is slugified, and a long one is trimme
     "SKILL.md": "---\n---\n",
     "scripts/hitung_balok.py": `"""Section modulus."""\n${BODY}${HARNESS}`,
   });
+
   const punctuated = await resolveSkillScripts({
     declared: ["scripts/hitung_balok.py"],
     directory,
@@ -178,6 +187,7 @@ test("a skill name providers would reject is slugified, and a long one is trimme
     skillName: "a".repeat(80),
     toolPath: null,
   });
+
   const name = long.tools[0]?.name ?? "";
 
   expect(name.length).toBeLessThanOrEqual(64);
@@ -192,6 +202,7 @@ test("a script that needs a package Python does not ship says so at discovery", 
     "SKILL.md": "---\n---\n",
     "scripts/chart.py": `"""Draw a chart."""\nimport json\nimport matplotlib.pyplot as plt\nfrom reportlab.lib import colors\n${BODY}${HARNESS}`,
   });
+
   const resolved = await resolveSkillScripts({
     declared: ["scripts/chart.py"],
     directory,
@@ -202,8 +213,10 @@ test("a script that needs a package Python does not ship says so at discovery", 
   // Still a tool: the dependency is a warning about the runtime, not a defect
   // in the script.
   expect(resolved.tools).toHaveLength(1);
+
   const reason =
     resolved.issues.find((i) => i.path === "scripts/chart.py")?.reason ?? "";
+
   expect(reason).toContain("matplotlib");
   expect(reason).toContain("reportlab");
   // json ships with Python and must not be named.
@@ -216,6 +229,7 @@ test("a script that only uses the standard library is reported clean", async () 
     "SKILL.md": "---\n---\n",
     "scripts/plain.py": `"""Plain maths."""\nimport math\nfrom decimal import Decimal\n${BODY}${HARNESS}`,
   });
+
   const resolved = await resolveSkillScripts({
     declared: ["scripts/plain.py"],
     directory,
@@ -239,6 +253,7 @@ test("a skill's own modules are not mistaken for packages to install", async () 
     "scripts/limits.py": `"""Limits."""\nPHI = 0.9\n${BODY}${HARNESS}`,
     "scripts/material.py": `"""Material properties."""\n${BODY}${HARNESS}`,
   });
+
   const resolved = await resolveSkillScripts({
     declared: ["scripts/beam.py", "scripts/limits.py", "scripts/material.py"],
     directory,
@@ -247,8 +262,10 @@ test("a skill's own modules are not mistaken for packages to install", async () 
   });
 
   expect(resolved.tools).toHaveLength(3);
+
   const reason =
     resolved.issues.find((i) => i.path === "scripts/beam.py")?.reason ?? "";
+
   expect(reason).toContain("matplotlib");
   expect(reason).not.toContain("material");
   expect(reason).not.toContain("limits");
@@ -266,6 +283,7 @@ test("a script that prints its result is accepted, not read as missing a harness
       'if __name__ == "__main__":\n    import sys, json\n' +
       "    print(json.dumps(run(json.loads(sys.stdin.read() or '{}'), {})))\n",
   });
+
   const resolved = await resolveSkillScripts({
     declared: ["scripts/printed.py"],
     directory,

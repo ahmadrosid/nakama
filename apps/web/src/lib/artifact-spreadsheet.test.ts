@@ -11,6 +11,7 @@ describe("artifact spreadsheet", () => {
       "customers.csv",
       'name,company\n"Ada, Lovelace",Acme\n'
     );
+
     expect(rows).toEqual([
       ["name", "company"],
       ["Ada, Lovelace", "Acme"],

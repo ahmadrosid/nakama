@@ -41,11 +41,13 @@ describe("chat history route helpers", () => {
         setItem: (key: string, value: string) => store.set(key, value),
       },
     });
+
     try {
       const key = chatComposerDraftKey("alice", "org", "profile", "session");
       storeComposerDraft(key, "unfinished thought");
       expect(readComposerDraft(key)).toBe("unfinished thought");
       expect(readComposerDraft(key)).toBe("unfinished thought");
+
       for (const other of [
         chatComposerDraftKey("bob", "org", "profile", "session"),
         chatComposerDraftKey("alice", "other-org", "profile", "session"),
@@ -55,6 +57,7 @@ describe("chat history route helpers", () => {
       ]) {
         expect(readComposerDraft(other)).toBe("");
       }
+
       expect(
         chatComposerDraftKey(undefined, "org", "profile", null)
       ).toBeNull();
@@ -118,6 +121,7 @@ describe("chat history route helpers", () => {
       const keys = Array.from({ length: 20 }, (_, index) =>
         storeChatDraft(`draft-${index}`)
       );
+
       expect(new Set(keys).size).toBe(keys.length);
       expect(consumeStoredChatDraft(keys[0]!)).toBe("draft-0");
       expect(consumeStoredChatDraft(keys[1]!)).toBe("draft-1");
@@ -240,10 +244,11 @@ describe("chat history route helpers", () => {
     });
 
     try {
-      writeStoredActiveChatProfileId("super");
+      writeStoredActiveChatProfileId("super", "org-a");
 
       expect(
         resolveRecentChatsProfileId({
+          orgId: "org-a",
           profiles,
           search: "",
         })
@@ -285,7 +290,7 @@ describe("chat history route helpers", () => {
     expect(resolveDefaultProfileId([{ id: "alpha" }])).toBe("alpha");
   });
 
-  test("readInitialDraftChatProfileId restores stored selection on refresh", () => {
+  test("readInitialDraftChatProfileId restores the active org selection", () => {
     const store = new Map<string, string>();
     const previousLocalStorage = globalThis.localStorage;
     Object.defineProperty(globalThis, "localStorage", {
@@ -302,26 +307,48 @@ describe("chat history route helpers", () => {
     });
 
     try {
-      writeStoredActiveChatProfileId("super");
+      writeStoredActiveChatProfileId("super", "org-a");
+      store.set("nakama:active-chat-profile", "global-profile");
 
       expect(
         readInitialDraftChatProfileId({
+          orgId: "org-b",
+          search: "",
+        })
+      ).toBe("");
+      expect(store.has("nakama:active-chat-profile")).toBe(false);
+
+      expect(
+        readInitialDraftChatProfileId({
+          orgId: "org-a",
           search: "",
         })
       ).toBe("super");
 
       expect(
         readInitialDraftChatProfileId({
+          orgId: "org-a",
           search: "?new=1&profile=default",
         })
       ).toBe("default");
 
       expect(
         readInitialDraftChatProfileId({
+          orgId: "org-a",
           routeProfileId: "session-profile",
           search: "",
         })
       ).toBe("session-profile");
+
+      expect(
+        readInitialDraftChatProfileId({
+          currentOrgId: "orgA",
+          currentProfileId: "profileA",
+          orgId: "orgB",
+          routeProfileId: "profileA",
+          search: "",
+        })
+      ).toBe("");
     } finally {
       Object.defineProperty(globalThis, "localStorage", {
         configurable: true,

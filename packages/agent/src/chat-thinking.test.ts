@@ -15,6 +15,7 @@ describe("thinking provider options", () => {
     async (ending) => {
       let now = 1000;
       const clock = spyOn(Date, "now").mockImplementation(() => now);
+
       try {
         const provider = createCapturingProvider(textReply(""));
         provider.streamChat = (_input, handlers) => {
@@ -23,6 +24,7 @@ describe("thinking provider options", () => {
           handlers.onThinking?.(" continues");
           handlers.onChunk("");
           now = 9000;
+
           if (ending === "tool") {
             handlers.onToolStart?.({
               input: {},
@@ -38,12 +40,15 @@ describe("thinking provider options", () => {
             });
             now = 30_000;
           }
+
           return Promise.resolve(textReply(""));
         };
+
         const session = createAgentChatSession(
           { provider },
           { enableToolLoop: false }
         );
+
         await session.sendStream("hello", { onChunk() {} });
         expect(session.getHistory().at(-1)).toMatchObject({
           thinkingDurationMs: 8000,
@@ -57,6 +62,7 @@ describe("thinking provider options", () => {
   test("retains reasoning duration in history without counting answer generation", async () => {
     let now = 1000;
     const clock = spyOn(Date, "now").mockImplementation(() => now);
+
     try {
       const provider = createCapturingProvider(textReply("Answer"));
       provider.streamChat = (_input, handlers) => {
@@ -65,6 +71,7 @@ describe("thinking provider options", () => {
         now = 11_000;
         handlers.onChunk("Answer");
         now = 31_000;
+
         return Promise.resolve({
           ...textReply("Answer"),
           assistantMessage: {
@@ -74,10 +81,12 @@ describe("thinking provider options", () => {
           },
         });
       };
+
       const session = createAgentChatSession(
         { provider },
         { enableToolLoop: false }
       );
+
       await session.sendStream("hello", { onChunk() {} });
       expect(
         JSON.parse(JSON.stringify(session.getHistory())).at(-1)

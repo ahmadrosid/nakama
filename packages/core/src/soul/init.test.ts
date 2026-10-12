@@ -82,7 +82,7 @@ describe("initSoulDirectory seeding", () => {
         "examples/good-outputs.md",
         "examples/bad-outputs.md",
       ]);
-      expect(stack.files.soul.trim().length).toBeGreaterThan(0);
+      expect(stack.files.soul?.trim().length).toBeGreaterThan(0);
       expect(stack.loaded.length).toBeGreaterThan(0);
     } finally {
       await rm(directory, { force: true, recursive: true });

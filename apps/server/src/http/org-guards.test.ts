@@ -25,6 +25,7 @@ describe("org guards", () => {
   test("requireOrgAdmin rejects members and viewers", () => {
     expect(() => requireOrgAdmin(auth("member"))).toThrow(NakamaApiError);
     expect(() => requireOrgAdmin(auth("viewer"))).toThrow(NakamaApiError);
+
     try {
       requireOrgAdmin(auth("member"));
     } catch (error) {

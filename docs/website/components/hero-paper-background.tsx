@@ -67,14 +67,18 @@ export function HeroPaperBackground() {
 
   useEffect(() => {
     const container = ref.current;
+
     if (!container) {
       return;
     }
+
     const canvas = document.createElement("canvas");
     const gl = canvas.getContext("webgl", { alpha: true, antialias: false });
+
     if (!gl) {
       return;
     }
+
     const shaders: WebGLShader[] = [];
     const program = gl.createProgram();
     const buffer = gl.createBuffer();
@@ -97,6 +101,7 @@ export function HeroPaperBackground() {
       if (!gl || disposed || failed || video.readyState < 2) {
         return;
       }
+
       try {
         gl.texImage2D(
           gl.TEXTURE_2D,
@@ -121,13 +126,16 @@ export function HeroPaperBackground() {
 
     function animate(now: number) {
       frame = 0;
+
       if (disposed || failed || !visible || document.hidden || motion.matches) {
         return;
       }
+
       if (now - previousFrame >= 1000 / 30) {
         draw(now);
         previousFrame = now;
       }
+
       if (!failed) {
         frame = requestAnimationFrame(animate);
       }
@@ -135,10 +143,13 @@ export function HeroPaperBackground() {
 
     function syncPlayback() {
       stop();
+
       if (disposed || failed || !visible || document.hidden) {
         return;
       }
+
       draw(performance.now());
+
       if (!(motion.matches || failed)) {
         // Autoplay can be refused in low-power mode; keep the still frame.
         video
@@ -164,6 +175,7 @@ export function HeroPaperBackground() {
       if (!(gl && program)) {
         return;
       }
+
       const width = container!.clientWidth;
       const height = container!.clientHeight;
       const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -189,32 +201,41 @@ export function HeroPaperBackground() {
       visible = entry?.isIntersecting ?? false;
       syncPlayback();
     });
+
     const observer = new ResizeObserver(resize);
 
     try {
       if (!(program && buffer && texture)) {
         throw new Error("WebGL unavailable");
       }
+
       for (const [type, source] of [
         [gl.VERTEX_SHADER, VERTEX],
         [gl.FRAGMENT_SHADER, FRAGMENT],
       ] as const) {
         const shader = gl.createShader(type);
+
         if (!shader) {
           throw new Error("WebGL unavailable");
         }
+
         shaders.push(shader);
         gl.shaderSource(shader, source);
         gl.compileShader(shader);
+
         if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
           throw new Error("Shader compilation failed");
         }
+
         gl.attachShader(program, shader);
       }
+
       gl.linkProgram(program);
+
       if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
         throw new Error("Shader linking failed");
       }
+
       gl.useProgram(program);
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.bufferData(
@@ -262,9 +283,11 @@ export function HeroPaperBackground() {
       gl.deleteTexture(texture);
       gl.deleteBuffer(buffer);
       gl.deleteProgram(program);
+
       for (const shader of shaders) {
         gl.deleteShader(shader);
       }
+
       canvas.remove();
       delete container.dataset.ready;
     };

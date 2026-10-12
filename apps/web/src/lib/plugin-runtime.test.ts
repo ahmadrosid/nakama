@@ -39,6 +39,7 @@ describe("native plugin activation", () => {
       },
       options()
     );
+
     const html = renderToString(createElement(runtime.Page));
     expect(html).toContain('data-slot="button"');
     expect(html).toContain('value="Workflow"');
@@ -53,6 +54,7 @@ describe("native plugin activation", () => {
         import.meta.url
       ).href
     );
+
     let Page!: React.ComponentType;
     let stylesheet = "";
     module.apply({
@@ -84,6 +86,7 @@ describe("native plugin activation", () => {
           import.meta.url
         ).href
       );
+
       const workflow = {
         description: "Fetch and summarize the news",
         enabled: true,
@@ -96,6 +99,7 @@ describe("native plugin activation", () => {
         ],
         version: 1,
       };
+
       // Seed the two page states for server rendering; all component hooks still
       // run through the real host React dispatcher. Effects do not run in SSR.
       const initialStates = [
@@ -106,14 +110,18 @@ describe("native plugin activation", () => {
         },
         selection === "empty" ? null : selection === "draft" ? "" : workflow.id,
       ];
+
       let stateIndex = 0;
       let Page!: React.ComponentType;
       module.apply({
         ...options(),
         React: {
           ...React,
+          // SAFETY: The test controls this fixture or mock and asserts the resulting behavior.
+          // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser accepts untrusted provider or tool output and decodes it at this boundary.
           useState: ((initial: unknown) => {
             const index = stateIndex++;
+
             const value =
               index < initialStates.length
                 ? initialStates[index]
@@ -122,6 +130,7 @@ describe("native plugin activation", () => {
                   : index === 15 && selection === "summary"
                     ? "summary"
                     : initial;
+
             return React.useState(value);
           }) as typeof React.useState,
         },
@@ -134,20 +143,25 @@ describe("native plugin activation", () => {
         ui,
       });
       const html = renderToString(createElement(Page));
+
       if (selection === "empty") {
         expect(html).toContain("Create your first workflow");
         expect(html).toContain("Create workflow");
         expect(html).not.toContain("<form");
         expect(html).not.toContain("Test run");
+
         return;
       }
+
       if (selection === "draft") {
         expect(html).toContain("<form");
         expect(html).toContain('aria-label="Workflow name"');
         expect(html).toContain('type="submit"');
         expect(html).not.toContain("Create your first workflow");
+
         return;
       }
+
       expect(html).toContain('aria-label="Workflows"');
       expect(html).toContain('aria-current="true"');
       expect(html).toContain("Fetch Hn");
@@ -157,14 +171,17 @@ describe("native plugin activation", () => {
       expect(html).toContain('data-slot="input"');
       expect(html).toMatch(/<button[^>]*>.*?Test run<\/button>/s);
       expect(html).not.toContain('type="submit"');
+
       if (selection === "data") {
         expect(html).toContain('aria-label="Workflow data"');
         expect(html).toContain('aria-label="Workflow views"');
         expect(html).toContain('aria-busy="true"');
         expect(html).not.toContain('role="dialog"');
         expect(html).not.toContain('aria-label="Step views"');
+
         return;
       }
+
       if (selection) {
         expect(html).toContain('aria-label="Workflow step"');
         expect(html).toContain('aria-label="Expand step"');
@@ -185,6 +202,7 @@ describe("native plugin activation", () => {
             ctx.effect(() => {
               active++;
               controller.abort();
+
               return () => {
                 active--;
               };
@@ -201,12 +219,14 @@ describe("native plugin activation", () => {
   test("registers a React component with declared services and cleans effects on unload", async () => {
     const calls: unknown[] = [];
     let context!: PluginClientContext;
+
     const runtime = await activatePlugin(
       {
         apply(ctx) {
           context = ctx;
           ctx.effect(() => {
             calls.push("start");
+
             return () => {
               calls.push("stop");
             };
@@ -219,6 +239,7 @@ describe("native plugin activation", () => {
       },
       options()
     );
+
     expect(renderToString(createElement(runtime.Page))).toContain("org-a:dark");
     expect(await context.host.call("save", {})).toBe("saved");
     runtime.dispose();
@@ -235,6 +256,7 @@ describe("native plugin activation", () => {
           apply(ctx) {
             ctx.effect(() => {
               active++;
+
               return () => {
                 active--;
               };
@@ -262,10 +284,13 @@ describe("native plugin activation", () => {
         options()
       )
     ).rejects.toThrow();
+
+    // SAFETY: This test uses an unsupported inject value to verify activation rejects it.
     const unavailable = {
       apply() {},
-      inject: ["database"],
-    } as unknown as PluginClientModule;
+      inject: ["database"] as never,
+    } as PluginClientModule;
+
     await expect(activatePlugin(unavailable, options())).rejects.toThrow();
     await expect(
       activatePlugin(
@@ -302,22 +327,26 @@ describe("native plugin activation", () => {
     const controller = new AbortController();
     let active = 0;
     let context!: PluginClientContext;
+
     const pending = activatePlugin(
       {
         apply(ctx) {
           context = ctx;
           ctx.effect(() => {
             active++;
+
             return () => {
               active--;
             };
           });
+
           return new Promise(() => {});
         },
         inject: ["slots"],
       },
       options(controller)
     );
+
     await Promise.resolve();
     controller.abort();
     await expect(pending).rejects.toThrow();
@@ -329,6 +358,7 @@ describe("native plugin activation", () => {
     const controller = new AbortController();
     let resolve!: (value: string) => void;
     let context!: PluginClientContext;
+
     const runtime = await activatePlugin(
       {
         apply(ctx) {
@@ -347,6 +377,7 @@ describe("native plugin activation", () => {
         },
       }
     );
+
     const response = context.host.call("list");
     controller.abort();
     resolve("old org data");
@@ -357,6 +388,7 @@ describe("native plugin activation", () => {
 
 test("tool renderers receive tool props and are removed on unload", async () => {
   let context!: PluginClientContext;
+
   const runtime = await activatePlugin(
     {
       apply(ctx) {
@@ -370,6 +402,7 @@ test("tool renderers receive tool props and are removed on unload", async () => 
     },
     options()
   );
+
   const Renderer = runtime.tools.get("list")!;
   expect(
     renderToString(
@@ -406,10 +439,12 @@ test("duplicate and invalid tool slots fail activation", async () => {
 });
 
 test("tool matching resolves normalized names only against the owning plugin's actions", () => {
+  // SAFETY: The test controls this fixture or mock and asserts the resulting behavior.
   const plugin = {
     actions: [{ key: "list-items" }],
     pluginId: "my-notes",
   } as Parameters<typeof findPluginTool>[0][number];
+
   expect(findPluginTool([plugin], "plugin_my_notes__list_items")).toEqual({
     action: "list-items",
     plugin,
@@ -424,6 +459,7 @@ test("the Workflows plugin owns the run result renderer", async () => {
     new URL("../../../../packages/plugins/workflows/ui/app.js", import.meta.url)
       .href
   );
+
   const renderers = new Map<string, React.ComponentType>();
   module.apply({
     ...options(),
@@ -436,9 +472,12 @@ test("the Workflows plugin owns the run result renderer", async () => {
     styles() {},
     ui,
   });
+
+  // SAFETY: The test controls this fixture or mock and asserts the resulting behavior.
   const Renderer = renderers.get("tool:run_workflow") as React.ComponentType<
     import("./plugin-runtime").PluginToolProps
   >;
+
   const html = renderToString(
     createElement(Renderer, {
       action: "run_workflow",
@@ -459,6 +498,7 @@ test("the Workflows plugin owns the run result renderer", async () => {
       status: "done",
     })
   );
+
   expect(html).toContain("News digest");
   expect(html).toContain("2 words");
   expect(html).toContain("Fetch News");

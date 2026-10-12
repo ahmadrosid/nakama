@@ -1,35 +1,19 @@
-import type { SkillSummary } from "@nakama/core/contract";
 import { cn } from "@nakama/ui/utils";
 import {
   getMentionTokenRanges,
-  getReservedCommandTokenRanges,
-  getSkillTokenRanges,
-  profileCanUseLearnCommand,
   type SkillTokenRange,
 } from "@/lib/chat-composer-skills";
 
 interface ChatSkillTokenOverlayProps {
   className?: string;
-  skills: SkillSummary[];
   value: string;
 }
 
 export function ChatSkillTokenOverlay({
   value,
-  skills,
   className,
 }: ChatSkillTokenOverlayProps) {
-  const skillRanges = getSkillTokenRanges(value).filter((range) =>
-    skills.some((skill) => skill.name === range.name)
-  );
-  const commandRanges = getReservedCommandTokenRanges(value, {
-    enableLearn: profileCanUseLearnCommand(skills),
-  });
-  const tokenRanges = [
-    ...skillRanges,
-    ...commandRanges,
-    ...getMentionTokenRanges(value),
-  ].sort((a, b) => a.start - b.start);
+  const tokenRanges = getMentionTokenRanges(value);
 
   if (tokenRanges.length === 0) {
     return null;

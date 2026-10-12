@@ -29,6 +29,7 @@ describe("stripMarkdownForTelegram", () => {
   test("preserves legacy share tokens with underscores in bare URLs", () => {
     const shareUrl =
       "http://127.0.0.1:4310/s/tc_share_a7e24436b9bd4ec8bd60edba6d403c74f0b19596f27b440db85d7f171299bbdc";
+
     const footer =
       `context-engineering-slides.html: ${shareUrl}\n` +
       "Set Web Public URL in Nakama settings for absolute share links.";
@@ -41,6 +42,7 @@ describe("stripMarkdownForTelegram", () => {
   test("preserves current nkshare tokens in bare URLs", () => {
     const shareUrl =
       "https://app.example/s/nksharea7e24436b9bd4ec8bd60edba6d403c74f0b19596f27b440db85d7f171299bbdc";
+
     expect(stripMarkdownForTelegram(`file.html: ${shareUrl}`)).toContain(
       "nkshare"
     );
@@ -137,6 +139,7 @@ describe("splitIntoChatBubbles", () => {
     const bubbles = splitIntoChatBubbles(text, 50);
 
     expect(bubbles.length).toBeGreaterThan(1);
+
     for (const bubble of bubbles) {
       expect(bubble.length).toBeLessThanOrEqual(50);
     }

@@ -16,23 +16,32 @@ import { filterModelsByProvider, formatProviderLabel } from "@/lib/models";
 import { queryKeys } from "@/lib/query-keys";
 
 function modelListFieldsFromCatalog(model: ProviderModelOption): ModelListRow {
-  return {
+  const row: ModelListRow = {
     id: model.id,
     name: model.name,
-    ...(model.default ? { default: true } : {}),
-    ...(model.inputPerMillionUsd === undefined
-      ? {}
-      : { inputPerMillionUsd: model.inputPerMillionUsd }),
-    ...(model.outputPerMillionUsd === undefined
-      ? {}
-      : { outputPerMillionUsd: model.outputPerMillionUsd }),
-    ...(model.supportsThinking === undefined
-      ? {}
-      : { supportsThinking: model.supportsThinking }),
-    ...(model.supportsVision === undefined
-      ? {}
-      : { supportsVision: model.supportsVision }),
   };
+
+  if (model.default) {
+    row.default = true;
+  }
+
+  if (model.inputPerMillionUsd !== undefined) {
+    row.inputPerMillionUsd = model.inputPerMillionUsd;
+  }
+
+  if (model.outputPerMillionUsd !== undefined) {
+    row.outputPerMillionUsd = model.outputPerMillionUsd;
+  }
+
+  if (model.supportsThinking !== undefined) {
+    row.supportsThinking = model.supportsThinking;
+  }
+
+  if (model.supportsVision !== undefined) {
+    row.supportsVision = model.supportsVision;
+  }
+
+  return row;
 }
 
 function mergeBrowseModels(
@@ -87,6 +96,7 @@ export function CatalogProviderModelFields({
   const showBrowse = isBrowsing || customModels.length === 0;
   const { data: modelsResponse } = useModelsQuery();
   const providerLabel = formatProviderLabel(provider);
+
   const canDiscoverRemote =
     ["openai", "chatgpt", "xai_oauth"].includes(provider) &&
     Boolean(providerInstanceId);
@@ -96,6 +106,7 @@ export function CatalogProviderModelFields({
       modelsResponse?.catalog ?? modelsResponse?.models ?? [],
       provider
     );
+
     if (fromApi.length > 0) {
       return fromApi;
     }
@@ -136,6 +147,7 @@ export function CatalogProviderModelFields({
       new Set(
         customModels.flatMap((model) => {
           const id = model.id.trim();
+
           return id ? [id] : [];
         })
       ),
@@ -145,6 +157,7 @@ export function CatalogProviderModelFields({
   const addCatalogModel = (model: ProviderModelOption) => {
     if (usedIds.has(model.id)) {
       setIsBrowsing(false);
+
       return;
     }
 

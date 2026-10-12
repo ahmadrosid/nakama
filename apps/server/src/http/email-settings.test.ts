@@ -10,6 +10,7 @@ setupTestConfigDir("nakama-email-route-");
 describe("email settings routes", () => {
   test("org admin can read and update email settings without exposing password", async () => {
     const databaseAdapter = createInMemoryDatabaseAdapter();
+
     const { app } = createMinimalHonoApp({
       agent: new AgentService(null, null, databaseAdapter),
       databaseAdapter,
@@ -22,8 +23,9 @@ describe("email settings routes", () => {
         headers: session.headers(),
       })
     );
+
     expect(getEmpty.status).toBe(200);
-    const emptyBody = (await getEmpty.json()) as Record<string, unknown>;
+    const emptyBody = await getEmpty.json();
     expect(emptyBody.configured).toBe(false);
     expect("password" in emptyBody).toBe(false);
 
@@ -43,11 +45,15 @@ describe("email settings routes", () => {
         method: "PUT",
       })
     );
+
     expect(putResponse.status).toBe(200);
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const saved = (await putResponse.json()) as {
       configured: boolean;
       passwordMasked: string | null;
     };
+
     expect(saved.configured).toBe(true);
     expect(saved.passwordMasked).not.toBe("secret-pass");
 
@@ -63,6 +69,7 @@ describe("email settings routes", () => {
         method: "PUT",
       })
     );
+
     expect(putWithoutPassword.status).toBe(200);
 
     const getSaved = await app.fetch(
@@ -70,10 +77,13 @@ describe("email settings routes", () => {
         headers: session.headers(),
       })
     );
+
+    // SAFETY: The test checks this response against the endpoint contract asserted below.
     const savedBody = (await getSaved.json()) as {
       smtpHost: string | null;
       passwordMasked: string | null;
     };
+
     expect(savedBody.smtpHost).toBe("smtp2.example.com");
     expect(savedBody.passwordMasked).toBeTruthy();
   });

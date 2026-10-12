@@ -10,6 +10,7 @@ describe("ThreadStore ownership", () => {
       const store = new ThreadStore(
         path.join(homeDir, ".nakama", "discord", "chat-threads.json")
       );
+
       await store.load();
 
       store.add("thread_a");
@@ -35,6 +36,7 @@ describe("ThreadStore ownership", () => {
         "discord",
         "chat-threads.json"
       );
+
       await mkdir(path.dirname(filePath), { recursive: true });
       await writeFile(
         filePath,
@@ -56,6 +58,7 @@ describe("ThreadStore ownership", () => {
         "discord",
         "chat-threads.json"
       );
+
       const store = new ThreadStore(filePath);
       await store.load();
       store.add("thread_a");

@@ -29,6 +29,7 @@ export function isMemberAuthoredSkillDirectory(options: {
   if (isGlobalSkillSourcePath(options.directory)) {
     return false;
   }
+
   return isPathWithinProfileSkillsDir(
     options.orgId,
     options.profileId,
@@ -59,6 +60,7 @@ export function resolveSkillCodeExecutionPolicy(options: {
   ) {
     return { executable: true, reason: null };
   }
+
   return { executable: false, reason: MEMBER_AUTHORED_SKILL_CODE_REFUSAL };
 }
 
@@ -74,6 +76,7 @@ export function createBlockedSkillCodeTool(options: {
   reason: string;
 }): ToolDefinition {
   const { description, name, reason } = options;
+
   return {
     description,
     name,

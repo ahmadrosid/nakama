@@ -6,19 +6,84 @@ import {
 import { AgentService } from "../../services/agent-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
-import { loginUserSession, seedOrgAdmin } from "../test-session-helpers";
+import {
+  loginUserSession,
+  seedOrgAdmin,
+  setupFreshInstallSession,
+} from "../test-session-helpers";
 
 setupTestConfigDir("nakama-rbac-mutations-test-");
 
 const ORG_ID = "org_test";
+
 const PASSWORD = "password123";
+
+test("automation run deletion is unavailable and preserves history", async () => {
+  const { app, databaseAdapter } = createMinimalHonoApp();
+  const admin = await setupFreshInstallSession(app, databaseAdapter);
+  const profile = await seedOrgDefaultProfile(databaseAdapter, admin.orgId!);
+  const now = new Date().toISOString();
+  await databaseAdapter.upsertAutomation({
+    createdAt: now,
+    definition: {},
+    enabled: true,
+    id: "automation_keep",
+    name: "Keep history",
+    orgId: admin.orgId!,
+    profileId: profile.id,
+    updatedAt: now,
+    version: 1,
+  });
+
+  const run = {
+    automationId: "automation_keep",
+    completedAt: now,
+    error: null,
+    id: "run_keep",
+    output: "Saved output",
+    startedAt: now,
+    status: "completed" as const,
+  };
+
+  await databaseAdapter.insertAutomationRun(run);
+
+  const response = await app.fetch(
+    new Request(
+      "http://localhost:4310/v1/automations/automation_keep/runs/run_keep",
+      {
+        headers: admin.headers({ "X-CSRF-Token": admin.csrfToken }),
+        method: "DELETE",
+      }
+    )
+  );
+
+  expect(response.status).toBe(404);
+  expect(
+    await databaseAdapter.getAutomationRun(run.automationId, run.id)
+  ).toMatchObject(run);
+
+  const specResponse = await app.fetch(
+    new Request("http://localhost:4310/openapi.json", {
+      headers: admin.headers(),
+    })
+  );
+
+  expect(specResponse.status).toBe(200);
+  const spec = await specResponse.json();
+  expect(
+    spec.paths["/v1/automations/{automationId}/runs/{runId}"]
+  ).toBeUndefined();
+});
 
 function createApp() {
   const calls: string[] = [];
+
   const record =
     (name: string) =>
     async (..._args: unknown[]) => {
       calls.push(name);
+
+      // SAFETY: This test controls the fixture shape at this boundary.
       return { id: "x", name: "x", prompt: "x" } as any;
     };
 
@@ -34,6 +99,7 @@ function createApp() {
       purgeSession: record("agent.purgeSession"),
       runAutomation: async () => {
         calls.push("agent.runAutomation");
+
         return { skipped: false };
       },
       transcribeAudio: record("agent.transcribeAudio"),
@@ -41,7 +107,6 @@ function createApp() {
     automationService: {
       create: record("automationService.create"),
       delete: record("automationService.delete"),
-      deleteRun: record("automationService.deleteRun"),
       get: async () => ({ id: "a", name: "a", prompt: "x" }),
       listRuns: async () => [{ id: "r", status: "ok" }],
       update: record("automationService.update"),
@@ -67,7 +132,6 @@ const MUTATING_ROUTES: Array<{ method: string; path: string; body?: unknown }> =
     { body: { name: "x" }, method: "PUT", path: "/v1/automations/a1" },
     { method: "DELETE", path: "/v1/automations/a1" },
     { method: "POST", path: "/v1/automations/a1/run" },
-    { method: "DELETE", path: "/v1/automations/a1/runs/r1" },
     {
       body: { channel: "web", profileId: "default" },
       method: "POST",
@@ -105,6 +169,7 @@ describe("RBAC: viewer cannot reach state-changing automation/session routes", (
         role: "viewer",
         userId: "user_viewer",
       });
+
       const viewer = await loginUserSession(
         app,
         "viewer@example.com",
@@ -133,10 +198,12 @@ describe("RBAC: admin can still reach the same routes (not a 403)", () => {
     async (role) => {
       const databaseAdapter = createInMemoryDatabaseAdapter();
       const agent = new AgentService(null, null, databaseAdapter);
+
       const { app, authService } = createMinimalHonoApp({
         agent,
         databaseAdapter,
       });
+
       const email = `${role}@example.com`;
       await seedOrgAdmin(databaseAdapter, {
         authService,
@@ -158,8 +225,11 @@ describe("RBAC: admin can still reach the same routes (not a 403)", () => {
             method: "POST",
           })
         );
+
         expect(response.status).toBe(role === "admin" ? 201 : 403);
+
         if (role === "admin") {
+          // SAFETY: This test controls the fixture shape at this boundary.
           const body = (await response.json()) as { sessionId: string };
           expect(
             await databaseAdapter.getSession(body.sessionId)
@@ -183,6 +253,7 @@ describe("RBAC: admin can still reach the same routes (not a 403)", () => {
       role: "admin",
       userId: "user_admin",
     });
+
     const admin = await loginUserSession(
       app,
       "admin@example.com",
@@ -200,4 +271,58 @@ describe("RBAC: admin can still reach the same routes (not a 403)", () => {
 
     expect(response.status).not.toBe(403);
   });
+});
+
+test("force deleting an MCP server requires a platform admin", async () => {
+  const calls: Array<[string, boolean]> = [];
+
+  const { app, authService, databaseAdapter } = createMinimalHonoApp({
+    mcpService: {
+      deleteServer: async (serverId: string, force: boolean) => {
+        calls.push([serverId, force]);
+      },
+    },
+  });
+
+  const platformAdmin = await setupFreshInstallSession(app, databaseAdapter);
+  const orgId = platformAdmin.orgId!;
+  await seedOrgAdmin(databaseAdapter, {
+    authService,
+    email: "org-admin@example.com",
+    orgId,
+    password: PASSWORD,
+    role: "admin",
+    userId: "user_org_admin",
+  });
+
+  const orgAdmin = await loginUserSession(
+    app,
+    "org-admin@example.com",
+    PASSWORD,
+    orgId
+  );
+
+  const url = "http://localhost:4310/v1/mcp/servers/mcp_test?force=true";
+
+  const denied = await app.fetch(
+    new Request(url, {
+      headers: orgAdmin.headers({ "X-CSRF-Token": orgAdmin.csrfToken }),
+      method: "DELETE",
+    })
+  );
+
+  expect(denied.status).toBe(403);
+  expect(calls).toEqual([]);
+
+  const allowed = await app.fetch(
+    new Request(url, {
+      headers: platformAdmin.headers({
+        "X-CSRF-Token": platformAdmin.csrfToken,
+      }),
+      method: "DELETE",
+    })
+  );
+
+  expect(allowed.status).toBe(204);
+  expect(calls).toEqual([["mcp_test", true]]);
 });

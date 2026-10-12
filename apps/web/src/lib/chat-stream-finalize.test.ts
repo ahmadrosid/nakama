@@ -8,13 +8,18 @@ describe("finalizeStreamingMessages", () => {
     (cancelled) => {
       let now = 1000;
       const clock = spyOn(Date, "now").mockImplementation(() => now);
+
       try {
         let messages: ChatListItem[] = [];
+
         const handlers = buildStreamHandlers((update) => {
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This test updater supports both direct values and React state updater functions.
           messages = typeof update === "function" ? update(messages) : update;
         });
+
         handlers.onToolStart?.({ input: {}, tool: "sample", toolCallId: "t1" });
         now = 9000;
+
         if (cancelled) {
           messages = finalizeStreamingMessages(messages);
         } else {
@@ -24,6 +29,7 @@ describe("finalizeStreamingMessages", () => {
             toolCallId: "t1",
           });
         }
+
         now = 100_000;
         expect(finalizeStreamingMessages(messages)[0]).toMatchObject({
           toolCompletedAt: 9000,

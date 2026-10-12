@@ -25,11 +25,15 @@ function profile(
 describe("profile id allocation", () => {
   test("a taken id is refused without touching the owner's row", async () => {
     const db = createSqliteMemoryAdapter();
+
     const owner = profile("shared", "org_a", {
+      acpAgent: { args: ["--stdio"], command: "agent" },
+      acpSettings: { effort: "high", model: "sonnet" },
       name: "Owner Bot",
       systemPrompt: "owner prompt",
       updatedAt: "2020-01-02T00:00:00.000Z",
     });
+
     expect(await db.createProfileIfAbsent(owner)).toBe(true);
 
     expect(
@@ -42,6 +46,8 @@ describe("profile id allocation", () => {
     ).toBe(false);
 
     expect(await db.getProfile("shared")).toMatchObject({
+      acpAgent: owner.acpAgent,
+      acpSettings: owner.acpSettings,
       name: "Owner Bot",
       orgId: "org_a",
       systemPrompt: "owner prompt",
@@ -51,11 +57,13 @@ describe("profile id allocation", () => {
 
   test("concurrent claims of one id leave exactly one owner", async () => {
     const db = createSqliteMemoryAdapter();
+
     const contenders = Array.from({ length: 12 }, (_unused, index) =>
       profile("contested", index % 2 === 0 ? "org_a" : "org_b", {
         systemPrompt: `prompt-${index}`,
       })
     );
+
     const claims = await Promise.all(
       contenders.map((record) => db.createProfileIfAbsent(record))
     );
@@ -63,6 +71,7 @@ describe("profile id allocation", () => {
     const winners = claims
       .map((created, index) => (created ? contenders[index] : null))
       .filter((record): record is StoredProfileRecord => record !== null);
+
     expect(winners).toHaveLength(1);
     expect(await db.getProfile("contested")).toMatchObject({
       name: winners[0]?.name,

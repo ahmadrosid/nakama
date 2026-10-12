@@ -1,0 +1,48 @@
+name: Issue link
+
+# No checkout and no toolchain: this only reads the event payload, so it is the
+# cheapest check here. `edited` is in the list because the fix is a body edit,
+# not a push, and without it the author would have to push an empty commit.
+on:
+  pull_request:
+    types: [opened, edited, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  issue-link:
+    runs-on: ubuntu-latest
+    # The maintainer decides direction, so an issue to himself buys nothing, and
+    # a gate that fires on every one of his PRs gets switched off within a day.
+    # Bots have no issue to link either.
+    if: >-
+      !contains(github.event.pull_request.labels.*.name, 'no-issue')
+      && github.event.pull_request.user.login != github.repository_owner
+      && !endsWith(github.event.pull_request.user.login, '[bot]')
+    steps:
+      - name: Require a linked issue
+        # Through env, never inline: a PR title is attacker-controlled text.
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          if printf '%s\n%s' "$TITLE" "$BODY" | grep -qE '(#[0-9]+|/issues/[0-9]+)'; then
+            echo 'Issue referenced.'
+            exit 0
+          fi
+          cat >&2 <<'MSG'
+          This PR does not reference an issue.
+
+          The issue is where direction gets settled, and it is much cheaper to
+          hear "we are not doing that" there than after the code is written.
+          CONTRIBUTING.md asks for `Fixes #123` in the body so the issue closes
+          on merge; `part of #123` counts too when the PR does not close it.
+
+          Edit the body to add it and this check re-runs on its own.
+
+          If the change genuinely has no issue, such as a typo or a release,
+          add the `no-issue` label.
+          MSG
+          exit 1

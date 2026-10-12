@@ -1,25 +1,29 @@
 import { MessageFlags } from "discord.js";
+import { z } from "zod";
+
+export const discordErrorSchema = z.object({ code: z.number() }).passthrough();
+
+export type DiscordErrorInput =
+  | Error
+  | z.infer<typeof discordErrorSchema>
+  | { code: string }
+  | null;
 
 /** Discord: Unknown interaction (expired or already handled). */
 const UNKNOWN_INTERACTION = 10_062;
+
 /** Discord: Interaction has already been acknowledged. */
 const ALREADY_ACKNOWLEDGED = 40_060;
 
-export function getDiscordErrorCode(error: unknown): number | null {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    typeof (error as { code: unknown }).code === "number"
-  ) {
-    return (error as { code: number }).code;
-  }
+export function getDiscordErrorCode(error: DiscordErrorInput): number | null {
+  const parsed = discordErrorSchema.safeParse(error);
 
-  return null;
+  return parsed.success ? parsed.data.code : null;
 }
 
-export function isIgnorableInteractionError(error: unknown): boolean {
+export function isIgnorableInteractionError(error: DiscordErrorInput): boolean {
   const code = getDiscordErrorCode(error);
+
   return code === UNKNOWN_INTERACTION || code === ALREADY_ACKNOWLEDGED;
 }
 
@@ -27,9 +31,9 @@ type SlashDeferInteraction = {
   commandName: string;
   deferReply: (options?: {
     flags: typeof MessageFlags.Ephemeral;
-  }) => Promise<unknown>;
-  reply: (options: { content: string }) => Promise<unknown>;
-  editReply: (options: { content: string }) => Promise<unknown>;
+  }) => Promise<void>;
+  reply: (options: { content: string }) => Promise<void>;
+  editReply: (options: { content: string }) => Promise<void>;
 };
 
 /**
@@ -45,16 +49,24 @@ export async function deferSlashInteraction(
         ? { flags: MessageFlags.Ephemeral }
         : undefined
     );
+
     return true;
   } catch (error) {
-    if (isIgnorableInteractionError(error)) {
+    const discordError =
+      error instanceof Error
+        ? error
+        : (discordErrorSchema.safeParse(error).data ?? null);
+
+    if (isIgnorableInteractionError(discordError)) {
       console.warn(
-        `Skipped stale /${interaction.commandName} interaction (${getDiscordErrorCode(error)}).`
+        `Skipped stale /${interaction.commandName} interaction (${getDiscordErrorCode(discordError)}).`
       );
+
       return false;
     }
 
     console.error("Failed to acknowledge slash command:", error);
+
     // Prefer reply when defer never landed; fall back to editReply if Discord
     // already acknowledged through another path.
     try {
@@ -66,6 +78,7 @@ export async function deferSlashInteraction(
         // Interaction is unusable — user already sees Discord's failure state.
       }
     }
+
     return false;
   }
 }

@@ -34,6 +34,7 @@ export async function sendTelegramArtifactDocument(
       ctx.chat.id,
       new InputFile(input.bytes, input.filename)
     );
+
     return { ok: true };
   } catch (error) {
     return {

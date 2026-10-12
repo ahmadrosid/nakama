@@ -4,7 +4,7 @@ import {
   resolveDefaultProfileId,
 } from "@/lib/chat-history";
 
-export const FILES_VIEW_MODE_STORAGE_KEY = "files-view-mode";
+const FILES_VIEW_MODE_STORAGE_KEY = "files-view-mode";
 
 export type FilesViewMode = "list" | "grid";
 
@@ -48,6 +48,7 @@ export function legacyArtifactProfileId(
   profiles: ReadonlyArray<Pick<ProfileSummary, "id">>
 ): string | null {
   const requested = new URLSearchParams(search).get("profile");
+
   return pickKnownProfileId(profiles, requested);
 }
 

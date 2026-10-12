@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { saveUserWebPublicUrl } from "@nakama/core";
 import {
   isLoopbackComposioCallbackBaseUrl,
   persistWebPublicUrl,
@@ -15,6 +16,7 @@ describe("composio-callback-url", () => {
     publicUrl: process.env.NAKAMA_PUBLIC_URL,
     webPublicUrl: process.env.NAKAMA_WEB_PUBLIC_URL,
   };
+
   let isolatedConfigDir = "";
 
   beforeEach(() => {
@@ -30,16 +32,19 @@ describe("composio-callback-url", () => {
 
   afterEach(() => {
     rmSync(isolatedConfigDir, { force: true, recursive: true });
+
     if (previous.configDir === undefined) {
       delete process.env.NAKAMA_CONFIG_DIR;
     } else {
       process.env.NAKAMA_CONFIG_DIR = previous.configDir;
     }
+
     if (previous.publicUrl === undefined) {
       delete process.env.NAKAMA_PUBLIC_URL;
     } else {
       process.env.NAKAMA_PUBLIC_URL = previous.publicUrl;
     }
+
     if (previous.webPublicUrl === undefined) {
       delete process.env.NAKAMA_WEB_PUBLIC_URL;
     } else {
@@ -123,6 +128,7 @@ describe("composio-callback-url", () => {
   test("caller headers off the configured URL are refused", () => {
     const previous = process.env.NAKAMA_WEB_PUBLIC_URL;
     process.env.NAKAMA_WEB_PUBLIC_URL = "https://deployed.example.com";
+
     const request = new Request(
       "http://127.0.0.1:4310/v1/composio/toolkits/gmail/connect",
       {
@@ -151,8 +157,50 @@ describe("composio-callback-url", () => {
     }
   });
 
+  test("the desktop app ignores a public URL restored from another install", async () => {
+    // A backup restored into the desktop app carries the web install's URL,
+    // but the desktop UI is only ever served on loopback.
+    await saveUserWebPublicUrl("https://nakama.example.com");
+    const previousDesktop = process.env.NAKAMA_DESKTOP;
+    process.env.NAKAMA_DESKTOP = "1";
+
+    const request = new Request(
+      "http://127.0.0.1:50839/v1/sessions/session-1/messages",
+      { headers: { Origin: "http://127.0.0.1:50839" }, method: "POST" }
+    );
+
+    try {
+      expect(resolveRequestClientOrigin(request)).toBe(
+        "http://127.0.0.1:50839"
+      );
+      expect(resolveComposioCallbackBaseUrl({ request })).toBe(
+        "http://127.0.0.1:50839"
+      );
+    } finally {
+      if (previousDesktop === undefined) {
+        delete process.env.NAKAMA_DESKTOP;
+      } else {
+        process.env.NAKAMA_DESKTOP = previousDesktop;
+      }
+    }
+  });
+
+  test("outside the desktop app a saved public URL still refuses loopback", async () => {
+    await saveUserWebPublicUrl("https://nakama.example.com");
+
+    const request = new Request(
+      "http://127.0.0.1:50839/v1/sessions/session-1/messages",
+      { headers: { Origin: "http://127.0.0.1:50839" }, method: "POST" }
+    );
+
+    expect(() => resolveRequestClientOrigin(request)).toThrow(
+      "Origin is not allowed."
+    );
+  });
+
   test("a saved loopback URL accepts the loopback origin on a new port", () => {
     process.env.NAKAMA_WEB_PUBLIC_URL = "http://127.0.0.1:4391";
+
     const request = new Request(
       "http://127.0.0.1:4392/v1/sessions/s1/messages",
       { headers: { Origin: "http://127.0.0.1:4392" }, method: "POST" }
@@ -174,6 +222,7 @@ describe("composio-callback-url", () => {
     const previousPublicUrl = process.env.NAKAMA_WEB_PUBLIC_URL;
     process.env.NAKAMA_CONFIG_DIR = configDir;
     delete process.env.NAKAMA_WEB_PUBLIC_URL;
+
     const request = new Request(
       "http://127.0.0.1:4310/v1/composio/toolkits/gmail/connect",
       { method: "POST" }
@@ -192,9 +241,11 @@ describe("composio-callback-url", () => {
       } else {
         process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
       }
+
       if (previousPublicUrl !== undefined) {
         process.env.NAKAMA_WEB_PUBLIC_URL = previousPublicUrl;
       }
+
       rmSync(configDir, { force: true, recursive: true });
     }
   });
@@ -206,9 +257,12 @@ describe("composio-callback-url", () => {
     process.env.NAKAMA_CONFIG_DIR = configDir;
 
     try {
-      expect(await persistWebPublicUrl("https://gateway.example.com/v1/")).toBe(
-        "https://gateway.example.com/v1"
-      );
+      expect(
+        await persistWebPublicUrl(
+          "https://gateway.example.com/v1/",
+          new Request("https://gateway.example.com/v1/system/web-public-url")
+        )
+      ).toBe("https://gateway.example.com/v1");
       expect(resolveComposioCallbackBaseUrl()).toBe(
         "https://gateway.example.com/v1"
       );
@@ -218,6 +272,49 @@ describe("composio-callback-url", () => {
       } else {
         process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
       }
+
+      rmSync(configDir, { force: true, recursive: true });
+    }
+  });
+
+  test("persistWebPublicUrl refuses a host the deployment does not serve", async () => {
+    const configDir = join(tmpdir(), `nakama-callback-url-host-${Date.now()}`);
+    mkdirSync(configDir, { recursive: true });
+    const previousConfigDir = process.env.NAKAMA_CONFIG_DIR;
+    const previousPublicUrl = process.env.NAKAMA_WEB_PUBLIC_URL;
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+    delete process.env.NAKAMA_WEB_PUBLIC_URL;
+
+    try {
+      await expect(
+        persistWebPublicUrl(
+          "https://attacker.example",
+          new Request("https://api.example.com/v1/system/web-public-url")
+        )
+      ).rejects.toThrow("webPublicUrl must use this deployment's own origin.");
+
+      // The env override is how a deployment that serves the web app from
+      // another host names it.
+      process.env.NAKAMA_WEB_PUBLIC_URL = "https://app.example.com";
+      expect(
+        await persistWebPublicUrl(
+          "https://app.example.com",
+          new Request("https://api.example.com/v1/system/web-public-url")
+        )
+      ).toBe("https://app.example.com");
+    } finally {
+      if (previousConfigDir === undefined) {
+        delete process.env.NAKAMA_CONFIG_DIR;
+      } else {
+        process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
+      }
+
+      if (previousPublicUrl === undefined) {
+        delete process.env.NAKAMA_WEB_PUBLIC_URL;
+      } else {
+        process.env.NAKAMA_WEB_PUBLIC_URL = previousPublicUrl;
+      }
+
       rmSync(configDir, { force: true, recursive: true });
     }
   });

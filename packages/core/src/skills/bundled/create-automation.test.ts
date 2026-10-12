@@ -43,6 +43,7 @@ describe("ensureBundledSkillFiles", () => {
       "create-automation",
       "SKILL.md"
     );
+
     await mkdir(join(configDir, "agent", "skills", "create-automation"), {
       recursive: true,
     });
@@ -65,6 +66,7 @@ describe("ensureBundledSkillFiles", () => {
       "manage-skills",
       "SKILL.md"
     );
+
     await mkdir(join(configDir, "agent", "skills", "manage-skills"), {
       recursive: true,
     });
@@ -102,6 +104,7 @@ describe("ensureBundledSkillFiles", () => {
       "skills",
       "archive-profile-memory"
     );
+
     const skillPath = join(directory, "SKILL.md");
     await mkdir(directory, { recursive: true });
     await Bun.write(skillPath, "outdated bundled skill");

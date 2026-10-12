@@ -5,21 +5,24 @@ import {
   readdir,
   readFile,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { getCustomToolsDir } from "@nakama/core";
+import { getCustomToolsDir, slugifyProfileName } from "@nakama/core";
 import {
   createInMemoryDatabaseAdapter,
   type DatabaseAdapter,
   type StoredProfileRecord,
 } from "@nakama/db";
 import { unzipSync, zipSync } from "fflate";
+import { AuthService } from "./auth-service";
 import {
   createNakamaDataExport,
   previewNakamaDataImport,
 } from "./data-portability";
+import { OrgService } from "./org-service";
 import {
   createProfilePackExport,
   importProfilePack,
@@ -27,11 +30,16 @@ import {
   previewProfilePackImport,
 } from "./profile-portability";
 import { ProfileService } from "./profile-service";
+import { SkillsService } from "./skills-service";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
+
 const ORG = "org_test";
+
 const DEST = "org_dest";
+
 const OTHER = "org_other";
+
 const OTHER_DEST = "org_other_dest";
 
 const CONTESTED_NAME = "Contested Bot";
@@ -44,33 +52,35 @@ const CONTESTED_NAME = "Contested Bot";
 function holdFirstClaimOf(db: DatabaseAdapter, id: string): DatabaseAdapter {
   let claims = 0;
   let releaseFirst: () => void = () => {};
+
   const firstMayClaim = new Promise<void>((resolve) => {
     releaseFirst = resolve;
   });
 
-  return new Proxy(db, {
-    get(target, property, receiver) {
-      if (property === "createProfileIfAbsent") {
-        return async (record: StoredProfileRecord) => {
-          if (record.id !== id) {
-            return target.createProfileIfAbsent(record);
-          }
-          claims += 1;
-          if (claims === 1) {
-            await firstMayClaim;
-            return target.createProfileIfAbsent(record);
-          }
-          const created = await target.createProfileIfAbsent(record);
-          releaseFirst();
-          return created;
-        };
+  return {
+    ...db,
+    async createProfileIfAbsent(record: StoredProfileRecord) {
+      if (record.id !== id) {
+        return db.createProfileIfAbsent(record);
       }
 
-      const value = Reflect.get(target, property, receiver);
-      return typeof value === "function" ? value.bind(target) : value;
+      claims += 1;
+
+      if (claims === 1) {
+        await firstMayClaim;
+
+        return db.createProfileIfAbsent(record);
+      }
+
+      const created = await db.createProfileIfAbsent(record);
+      releaseFirst();
+
+      return created;
     },
-  });
+  };
 }
+
+const VICTIM = "org_victim";
 
 describe("profile portability", () => {
   let root = "";
@@ -81,6 +91,7 @@ describe("profile portability", () => {
     } else {
       process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
     }
+
     if (root) {
       await rm(root, { force: true, recursive: true });
       root = "";
@@ -91,6 +102,7 @@ describe("profile portability", () => {
     root = await mkdtemp(path.join(os.tmpdir(), "nakama-profile-pack-"));
     process.env.NAKAMA_CONFIG_DIR = root;
     const db = createInMemoryDatabaseAdapter();
+
     return { db, service: new ProfileService(db) };
   }
 
@@ -98,6 +110,375 @@ describe("profile portability", () => {
     path.join(root, "orgs", orgId, "profiles", profileId);
 
   const now = () => new Date().toISOString();
+
+  test.each(["workspace", "avatar"] as const)(
+    "profile packs exclude parent bytes through a linked %s",
+    async (mode) => {
+      const { db, service } = await setup();
+
+      const { profile: parent } = await service.createProfile(ORG, {
+        name: "Parent",
+      });
+
+      const { profile: team } = await service.createProfile(DEST, {
+        name: "Team",
+      });
+
+      await writeFile(
+        path.join(soul(ORG, parent.id), "MEMORY.md"),
+        "parent_private"
+      );
+
+      if (mode === "workspace") {
+        await rm(soul(DEST, team.id), { force: true, recursive: true });
+        await symlink(soul(ORG, parent.id), soul(DEST, team.id), "dir");
+        await expect(
+          createProfilePackExport(db, DEST, team.id)
+        ).rejects.toMatchObject({ status: 400 });
+      } else {
+        await symlink(
+          path.join(soul(ORG, parent.id), "MEMORY.md"),
+          path.join(soul(DEST, team.id), "avatar.png")
+        );
+        const exported = await createProfilePackExport(db, DEST, team.id);
+        const entries = unzipSync(exported.data);
+        expect(entries["avatar.png"]).toBeUndefined();
+        expect(
+          Object.values(entries)
+            .map((entry) => Buffer.from(entry).toString())
+            .join("\n")
+        ).not.toContain("parent_private");
+      }
+
+      expect(await db.getProfileForOrg(team.id, DEST)).toMatchObject({
+        id: team.id,
+        orgId: DEST,
+      });
+      expect(
+        await readFile(path.join(soul(ORG, parent.id), "MEMORY.md"), "utf8")
+      ).toBe("parent_private");
+    }
+  );
+
+  test("shared packs retain references and require a valid destination publication", async () => {
+    const { db, service } = await setup();
+    const orgService = new OrgService(db, new AuthService());
+    service.setOrgService(orgService);
+    const timestamp = now();
+    const verifiedTeam = "org_verified";
+
+    for (const id of [ORG, DEST, VICTIM, verifiedTeam]) {
+      await db.upsertOrganization({
+        createdAt: timestamp,
+        id,
+        name: id,
+        parentOrgId: [DEST, verifiedTeam].includes(id) ? ORG : null,
+        slug: id,
+        updatedAt: timestamp,
+      });
+    }
+
+    const { profile: source } = await service.createProfile(ORG, {
+      name: "Shared source",
+      systemPrompt: "Published instructions",
+    });
+
+    const publication = await db.publishOrgSharedResource({
+      createdAt: timestamp,
+      id: "shared_pack_publication",
+      orgId: ORG,
+      resourceId: source.id,
+      resourceKind: "agent",
+      updatedAt: timestamp,
+    });
+
+    const instance = await db.createSharedAgentInstance(
+      DEST,
+      publication.id,
+      "shared_pack_instance",
+      timestamp
+    );
+
+    await mkdir(soul(DEST, instance.id), { recursive: true });
+    await writeFile(
+      path.join(soul(DEST, instance.id), "MEMORY.md"),
+      "Team memory"
+    );
+    const exported = await createProfilePackExport(db, DEST, instance.id);
+
+    const reference = {
+      publicationId: publication.id,
+      sourceOrgId: ORG,
+      sourceProfileId: source.id,
+    };
+
+    expect(exported.manifest.meta.sharedAgent).toEqual(reference);
+    await db.upsertTool({
+      createdAt: timestamp,
+      description: "Destination tool",
+      handlerConfig: {},
+      handlerType: "javascript",
+      id: "pack_destination_tool",
+      name: "pack_destination_tool",
+      orgId: VICTIM,
+      updatedAt: timestamp,
+    });
+
+    const crafted = repack(exported.data, {
+      "nakama-profile-export.json": JSON.stringify({
+        ...exported.manifest,
+        meta: {
+          ...exported.manifest.meta,
+          bundledSkillNames: ["missing_skill"],
+          composioToolkitSlugs: ["missing_toolkit"],
+          mcpServerNames: ["missing_server"],
+          orgId: ORG,
+          parentOrgId: ORG,
+          sharedResources: [
+            {
+              id: publication.id,
+              orgId: ORG,
+              resourceId: source.id,
+              resourceKind: "agent",
+            },
+          ],
+          toolNames: ["pack_destination_tool"],
+        },
+      }),
+    });
+
+    expect(
+      (await previewProfilePackImport(db, VICTIM, crafted)).skippedAssignments
+    ).toEqual([]);
+
+    const imported = await importProfilePack(db, VICTIM, crafted, {
+      confirm: true,
+    });
+
+    expect(imported.profileId).not.toBe(instance.id);
+    expect(
+      await db.getSharedAgentInstance(VICTIM, imported.profileId)
+    ).toMatchObject({
+      ...reference,
+      profileId: imported.profileId,
+      teamOrgId: VICTIM,
+    });
+    expect(
+      (await service.getProfile(VICTIM, imported.profileId)).profile.sharedAgent
+        ?.available
+    ).toBe(false);
+    await expect(
+      orgService.resolveSharedAgentProfile(VICTIM, imported.profileId)
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.updateProfile(VICTIM, imported.profileId, { name: "Local edit" })
+    ).rejects.toMatchObject({ status: 403 });
+    expect((await db.getOrganizationById(VICTIM))?.parentOrgId).toBeNull();
+    expect(await db.listOrgSharedResources(VICTIM)).toEqual([]);
+    expect(await db.listToolsForProfile(imported.profileId)).toEqual([]);
+    expect(
+      await readFile(
+        path.join(soul(VICTIM, imported.profileId), "MEMORY.md"),
+        "utf8"
+      )
+    ).toBe("Team memory");
+
+    const reexported = await createProfilePackExport(
+      db,
+      VICTIM,
+      imported.profileId
+    );
+
+    expect(reexported.manifest.meta.sharedAgent).toEqual(reference);
+
+    const verified = await importProfilePack(db, verifiedTeam, exported.data, {
+      confirm: true,
+    });
+
+    expect(
+      (await service.getProfile(verifiedTeam, verified.profileId)).profile
+        .sharedAgent?.available
+    ).toBe(true);
+    const profilesBefore = await db.listProfiles();
+
+    const linkBefore = await db.getSharedAgentInstance(
+      verifiedTeam,
+      verified.profileId
+    );
+
+    await expect(
+      importProfilePack(db, verifiedTeam, exported.data, { confirm: true })
+    ).rejects.toThrow();
+    expect(await db.listProfiles()).toEqual(profilesBefore);
+    expect(
+      await db.getSharedAgentInstance(verifiedTeam, verified.profileId)
+    ).toEqual(linkBefore);
+    await db.deleteOrgSharedResource(ORG, publication.id);
+    expect(
+      (await service.getProfile(verifiedTeam, verified.profileId)).profile
+        .sharedAgent?.available
+    ).toBe(false);
+    await expect(
+      orgService.resolveSharedAgentProfile(verifiedTeam, verified.profileId)
+    ).rejects.toMatchObject({ status: 404 });
+    expect(
+      await readFile(
+        path.join(soul(verifiedTeam, verified.profileId), "MEMORY.md"),
+        "utf8"
+      )
+    ).toBe("Team memory");
+  });
+
+  test("invalid shared pack references are rejected before creating profiles", async () => {
+    const { db, service } = await setup();
+
+    const { profile } = await service.createProfile(ORG, {
+      name: "Pack source",
+    });
+
+    const exported = await createProfilePackExport(db, ORG, profile.id);
+    const profilesBefore = await db.listProfiles();
+
+    for (const sharedAgent of [
+      null,
+      {},
+      { publicationId: "", sourceOrgId: ORG, sourceProfileId: profile.id },
+      { publicationId: 123, sourceOrgId: ORG, sourceProfileId: profile.id },
+      { publicationId: "pub", sourceOrgId: false, sourceProfileId: profile.id },
+      {
+        publicationId: "pub",
+        sourceOrgId: ORG,
+        sourceProfileId: "x".repeat(257),
+      },
+    ]) {
+      const crafted = repack(exported.data, {
+        "nakama-profile-export.json": JSON.stringify({
+          ...exported.manifest,
+          meta: { ...exported.manifest.meta, sharedAgent },
+        }),
+      });
+
+      await expect(
+        previewProfilePackImport(db, DEST, crafted)
+      ).rejects.toThrow();
+      await expect(
+        importProfilePack(db, DEST, crafted, { confirm: true })
+      ).rejects.toThrow();
+    }
+
+    expect(await db.listProfiles()).toEqual(profilesBefore);
+  });
+
+  test("pack provenance and name collisions cannot overwrite a shared instance or its source", async () => {
+    const { db, service } = await setup();
+    const timestamp = now();
+
+    for (const id of [ORG, DEST, VICTIM]) {
+      await db.upsertOrganization({
+        createdAt: timestamp,
+        id,
+        name: id,
+        parentOrgId: id === DEST ? ORG : null,
+        slug: id,
+        updatedAt: timestamp,
+      });
+    }
+
+    const { profile: source } = await service.createProfile(ORG, {
+      name: "Published template",
+      systemPrompt: "Source instructions",
+    });
+
+    const publication = await db.publishOrgSharedResource({
+      createdAt: timestamp,
+      id: "publication",
+      orgId: ORG,
+      resourceId: source.id,
+      resourceKind: "agent",
+      updatedAt: timestamp,
+    });
+
+    const name = "Shared instance";
+
+    const instance = await db.createSharedAgentInstance(
+      DEST,
+      publication.id,
+      slugifyProfileName(name),
+      timestamp
+    );
+
+    const link = await db.getSharedAgentInstance(DEST, instance.id);
+    const storedSource = await db.getProfile(source.id);
+    const teamDir = soul(DEST, instance.id);
+    await mkdir(teamDir, { recursive: true });
+
+    const files = [
+      "SOUL.md",
+      "STYLE.md",
+      "INSTRUCTIONS.md",
+      "MEMORY.md",
+      "USER.md",
+    ];
+
+    for (const file of files) {
+      await writeFile(path.join(teamDir, file), `Team ${file}`);
+    }
+
+    const { profile: local } = await service.createProfile(VICTIM, {
+      name: "Local pack",
+      soulFiles: { "SOUL.md": "Imported identity" },
+      systemPrompt: "Imported instructions",
+    });
+
+    const exported = await createProfilePackExport(db, VICTIM, local.id);
+
+    for (const revoked of [false, true]) {
+      if (revoked) {
+        await db.deleteOrgSharedResource(ORG, publication.id);
+      }
+
+      const crafted = repack(exported.data, {
+        "nakama-profile-export.json": JSON.stringify({
+          ...exported.manifest,
+          meta: {
+            ...exported.manifest.meta,
+            id: instance.id,
+            name,
+            orgId: ORG,
+          },
+          orgId: ORG,
+          parentOrgId: VICTIM,
+          sourceProfileId: revoked ? source.id : instance.id,
+        }),
+      });
+
+      const imported = await importProfilePack(db, DEST, crafted, {
+        confirm: true,
+      });
+
+      expect(imported.profileId).not.toBe(instance.id);
+      expect(imported.profileId).not.toBe(source.id);
+      expect(await db.getProfile(imported.profileId)).toMatchObject({
+        orgId: DEST,
+        systemPrompt: "Imported instructions",
+      });
+      expect(
+        await db.getSharedAgentInstance(DEST, imported.profileId)
+      ).toBeNull();
+      expect(await db.getProfile(instance.id)).toEqual(instance);
+      expect(await db.getProfile(source.id)).toEqual(storedSource);
+      expect(await db.getSharedAgentInstance(DEST, instance.id)).toEqual(link);
+      expect(await db.listProfileChangeEvents(DEST, instance.id)).toEqual([]);
+      expect((await db.getOrganizationById(DEST))?.parentOrgId).toBe(ORG);
+      expect(await db.listOrgSharedResources(DEST)).toEqual([]);
+
+      for (const file of files) {
+        expect(await readFile(path.join(teamDir, file), "utf8")).toBe(
+          `Team ${file}`
+        );
+      }
+    }
+  });
 
   async function writeSkill(
     db: ReturnType<typeof createInMemoryDatabaseAdapter>,
@@ -150,10 +531,12 @@ describe("profile portability", () => {
 
   test("export packs soul content and skips secrets, artifacts, and archives", async () => {
     const { db, service } = await setup();
+
     const { profile } = await service.createProfile(ORG, {
       name: "Research Bot",
       systemPrompt: "research",
     });
+
     const dir = soul(ORG, profile.id);
     await writeFile(path.join(dir, "MEMORY.md"), "- fact\n", "utf8");
     await mkdir(path.join(dir, "knowledge-base"), { recursive: true });
@@ -208,6 +591,7 @@ describe("profile portability", () => {
     const imported = await importProfilePack(db, DEST, exported.data, {
       confirm: true,
     });
+
     const dest = soul(DEST, imported.profileId);
     await expect(
       readFile(path.join(dest, "MEMORY.md"), "utf8")
@@ -222,11 +606,13 @@ describe("profile portability", () => {
 
   test("import creates a new profile and resolves tools by name", async () => {
     const { db, service } = await setup();
+
     const { profile } = await service.createProfile(ORG, {
       model: "anthropic:claude-sonnet-4-6",
       name: "Support Bot",
       systemPrompt: "help",
     });
+
     await db.upsertTool({
       createdAt: now(),
       description: "Custom",
@@ -257,9 +643,11 @@ describe("profile portability", () => {
     ).toBe(false);
 
     const before = (await db.listProfilesForOrg(DEST)).length;
+
     const imported = await importProfilePack(db, DEST, exported.data, {
       confirm: true,
     });
+
     expect(imported.profileId).not.toBe(profile.id);
     expect(await db.listProfilesForOrg(DEST)).toHaveLength(before + 1);
     expect((await db.getProfileForOrg(imported.profileId, DEST))?.model).toBe(
@@ -270,17 +658,93 @@ describe("profile portability", () => {
     ).toContain("tool_dest");
   });
 
+  test("import never assigns a tool owned by another organization", async () => {
+    const { db, service } = await setup();
+
+    const { profile } = await service.createProfile(ORG, {
+      name: "Scoped Tool Bot",
+    });
+
+    await db.upsertTool({
+      createdAt: now(),
+      description: "Source tool",
+      handlerConfig: {},
+      handlerType: "javascript",
+      id: "tool_source",
+      name: "victim_tool",
+      orgId: ORG,
+      updatedAt: now(),
+    });
+    await db.assignToolToProfile(profile.id, "tool_source");
+    const exported = await createProfilePackExport(db, ORG, profile.id);
+    expect(exported.manifest.meta.toolNames).toEqual(["victim_tool"]);
+
+    await db.deleteTool("tool_source");
+    await db.upsertTool({
+      createdAt: now(),
+      description: "Owned by another tenant",
+      handlerConfig: {},
+      handlerType: "javascript",
+      id: "tool_victim",
+      name: "victim_tool",
+      orgId: VICTIM,
+      updatedAt: now(),
+    });
+
+    const preview = await previewProfilePackImport(db, DEST, exported.data);
+    expect(
+      preview.skippedAssignments.some(
+        (item) => item.path === "tool:victim_tool"
+      )
+    ).toBe(true);
+
+    const imported = await importProfilePack(db, DEST, exported.data, {
+      confirm: true,
+    });
+
+    expect(
+      imported.skippedAssignments.some(
+        (item) => item.path === "tool:victim_tool"
+      )
+    ).toBe(true);
+    expect(await db.listToolsForProfile(imported.profileId)).toEqual([]);
+
+    // The importing organization's own tool of the same name still resolves.
+    await db.upsertTool({
+      createdAt: now(),
+      description: "Owned by the importing tenant",
+      handlerConfig: {},
+      handlerType: "javascript",
+      id: "tool_dest",
+      name: "victim_tool",
+      orgId: DEST,
+      updatedAt: now(),
+    });
+
+    const local = await importProfilePack(db, DEST, exported.data, {
+      confirm: true,
+    });
+
+    expect(
+      (await db.listToolsForProfile(local.profileId)).map((tool) => tool.id)
+    ).toEqual(["tool_dest"]);
+  });
+
   test("export packs assigned custom tool source and import restores it", async () => {
     const { db, service } = await setup();
+
     const { profile } = await service.createProfile(ORG, {
       name: "Tool Bot",
     });
-    const toolsDir = getCustomToolsDir();
+
+    const toolsDir = getCustomToolsDir(ORG);
     const modulePath = "portable-echo.js";
+
     const source = `export async function run(input, context) {
   return input;
 }
 `;
+
     await mkdir(toolsDir, { recursive: true });
     await writeFile(path.join(toolsDir, modulePath), source, "utf8");
     await db.upsertTool({
@@ -290,6 +754,7 @@ describe("profile portability", () => {
       handlerType: "javascript",
       id: "tool_portable",
       name: "portable_echo",
+      orgId: ORG,
       updatedAt: now(),
     });
     await db.assignToolToProfile(profile.id, "tool_portable");
@@ -297,6 +762,7 @@ describe("profile portability", () => {
     const exported = await createProfilePackExport(db, ORG, profile.id, {
       includeCustomTools: true,
     });
+
     expect(exported.manifest.meta.customTools).toEqual([
       expect.objectContaining({
         handlerType: "javascript",
@@ -310,22 +776,26 @@ describe("profile portability", () => {
 
     await rm(path.join(toolsDir, modulePath));
     const unprivilegedDb = createInMemoryDatabaseAdapter();
+
     const unprivilegedPreview = await previewProfilePackImport(
       unprivilegedDb,
       DEST,
       exported.data
     );
+
     expect(
       unprivilegedPreview.skippedAssignments.some((item) =>
         item.reason.includes("platform admin")
       )
     ).toBe(true);
+
     const unprivilegedImport = await importProfilePack(
       unprivilegedDb,
       DEST,
       exported.data,
       { confirm: true }
     );
+
     expect(await unprivilegedDb.getToolByName("portable_echo")).toBeNull();
     expect(
       await unprivilegedDb.listToolsForProfile(unprivilegedImport.profileId)
@@ -341,12 +811,14 @@ describe("profile portability", () => {
       name: "portable_echo",
       updatedAt: now(),
     });
+
     const conflictingPreview = await previewProfilePackImport(
       conflictingDb,
       DEST,
       exported.data,
       { restoreCustomTools: true }
     );
+
     expect(
       conflictingPreview.skippedAssignments.some((item) =>
         item.reason.includes("conflicts")
@@ -354,12 +826,14 @@ describe("profile portability", () => {
     ).toBe(true);
 
     const destinationDb = createInMemoryDatabaseAdapter();
+
     const preview = await previewProfilePackImport(
       destinationDb,
       DEST,
       exported.data,
       { restoreCustomTools: true }
     );
+
     expect(
       preview.skippedAssignments.some((item) =>
         item.path.includes("portable_echo")
@@ -372,10 +846,13 @@ describe("profile portability", () => {
       exported.data,
       { confirm: true, restoreCustomTools: true }
     );
+
     const restored = await destinationDb.getToolByName("portable_echo");
+
     if (!restored) {
       throw new Error("Expected imported custom tool");
     }
+
     expect(restored).toMatchObject({
       description: "Echo input",
       handlerConfig: { modulePath },
@@ -387,13 +864,14 @@ describe("profile portability", () => {
       )
     ).toContain(restored.id);
     await expect(
-      readFile(path.join(toolsDir, modulePath), "utf8")
+      readFile(path.join(getCustomToolsDir(DEST), modulePath), "utf8")
     ).resolves.toBe(source);
 
     const reused = await importProfilePack(destinationDb, DEST, exported.data, {
       confirm: true,
       restoreCustomTools: true,
     });
+
     expect(
       (await destinationDb.listToolsForProfile(reused.profileId)).map(
         (tool) => tool.id
@@ -401,16 +879,18 @@ describe("profile portability", () => {
     ).toContain(restored.id);
 
     await writeFile(
-      path.join(toolsDir, modulePath),
+      path.join(getCustomToolsDir(DEST), modulePath),
       "export async function run() { return 'changed'; }\n",
       "utf8"
     );
+
     const changedPreview = await previewProfilePackImport(
       destinationDb,
       DEST,
       exported.data,
       { restoreCustomTools: true }
     );
+
     expect(
       changedPreview.skippedAssignments.some((item) =>
         item.reason.includes("conflicts")
@@ -418,11 +898,117 @@ describe("profile portability", () => {
     ).toBe(true);
   });
 
+  test.each([false, true])(
+    "tenant export excludes parent tool source with publication=%s",
+    async (published) => {
+      const { db, service } = await setup();
+      const timestamp = now();
+
+      for (const id of [VICTIM, ORG]) {
+        await db.upsertOrganization({
+          createdAt: timestamp,
+          id,
+          name: id,
+          parentOrgId: id === ORG ? VICTIM : null,
+          slug: id,
+          updatedAt: timestamp,
+        });
+      }
+
+      const { profile } = await service.createProfile(ORG, {
+        name: "Team agent",
+      });
+
+      const { profile: source } = await service.createProfile(VICTIM, {
+        name: "Parent source",
+      });
+
+      const skill = (
+        await new SkillsService(db).createSkill(VICTIM, {
+          body: "parent-private-instructions",
+          description: "Parent notes",
+          name: "parent-only",
+          profileId: source.id,
+        })
+      ).skill;
+
+      await db.assignSkillToProfile(profile.id, skill.id);
+      await mkdir(getCustomToolsDir(), { recursive: true });
+      await writeFile(
+        path.join(getCustomToolsDir(), "parent.js"),
+        "export async function run() { return 'parent-private-source'; }\n"
+      );
+      await db.upsertTool({
+        createdAt: timestamp,
+        description: "Parent tool",
+        handlerConfig: { modulePath: "parent.js" },
+        handlerType: "javascript",
+        id: "parent_tool",
+        name: "parent_tool",
+        orgId: VICTIM,
+        updatedAt: timestamp,
+      });
+      await db.assignToolToProfile(profile.id, "parent_tool");
+
+      if (published) {
+        await db.publishOrgSharedResource({
+          createdAt: timestamp,
+          id: "published_tool",
+          orgId: VICTIM,
+          resourceId: "parent_tool",
+          resourceKind: "tool",
+          updatedAt: timestamp,
+        });
+      }
+
+      const exported = await createProfilePackExport(db, ORG, profile.id, {
+        includeCustomTools: true,
+      });
+
+      expect(exported.manifest.meta.toolNames).not.toContain("parent_tool");
+      expect(exported.manifest.meta.profileSkillNames).not.toContain(
+        "parent-only"
+      );
+      expect(exported.manifest.meta.bundledSkillNames).not.toContain(
+        "parent-only"
+      );
+      expect(exported.manifest.meta.customTools).toEqual([]);
+      const entries = unzipSync(new Uint8Array(exported.data));
+      expect(
+        Object.keys(entries).some((name) => name.startsWith("custom-tools/"))
+      ).toBe(false);
+      expect(
+        Object.values(entries).some((bytes) =>
+          Buffer.from(bytes).includes("parent-private-source")
+        )
+      ).toBe(false);
+      expect(
+        Object.values(entries).some((bytes) =>
+          Buffer.from(bytes).includes("parent-private-instructions")
+        )
+      ).toBe(false);
+      expect(
+        await readFile(path.join(getCustomToolsDir(), "parent.js"), "utf8")
+      ).toContain("parent-private-source");
+      expect(await db.listToolsForProfile(profile.id)).toHaveLength(1);
+
+      const imported = await importProfilePack(db, ORG, exported.data, {
+        confirm: true,
+        name: "Imported team agent",
+      });
+
+      expect(await db.listToolsForProfile(imported.profileId)).toEqual([]);
+      expect(await db.listSkillsForProfile(imported.profileId)).toEqual([]);
+    }
+  );
+
   test("custom tool source is omitted when export is not privileged", async () => {
     const { db, service } = await setup();
+
     const { profile } = await service.createProfile(ORG, {
       name: "Restricted Tool Bot",
     });
+
     const toolsDir = getCustomToolsDir();
     await mkdir(toolsDir, { recursive: true });
     await writeFile(
@@ -444,6 +1030,7 @@ describe("profile portability", () => {
     const exported = await createProfilePackExport(db, ORG, profile.id, {
       includeCustomTools: false,
     });
+
     expect(exported.manifest.meta.customTools).toBeUndefined();
     expect(
       Object.keys(unzipSync(new Uint8Array(exported.data))).some((name) =>
@@ -474,9 +1061,11 @@ describe("profile portability", () => {
     const exported = await createProfilePackExport(db, ORG, profile.id);
 
     const destDb = createInMemoryDatabaseAdapter();
+
     const skippedImport = await importProfilePack(destDb, DEST, exported.data, {
       confirm: true,
     });
+
     expect(
       skippedImport.skippedAssignments.some((item) =>
         item.path.includes("MissingServer")
@@ -489,24 +1078,104 @@ describe("profile portability", () => {
     const first = await importProfilePack(db, DEST, exported.data, {
       confirm: true,
     });
+
     expect(
       (await db.listSkillsForProfile(first.profileId)).map((s) => s.name)
     ).toContain("my-skill");
+
     const second = await importProfilePack(db, DEST, exported.data, {
       confirm: true,
     });
+
     expect(
       second.skippedAssignments.some((item) => item.reason.includes("my-skill"))
     ).toBe(true);
   });
 
+  test("pack import only attaches MCP servers granted to the importing org", async () => {
+    const { db, service } = await setup();
+
+    const { profile } = await service.createProfile(ORG, {
+      name: "Privileged Bot",
+    });
+
+    await db.upsertMcpServer({
+      cachedTools: [{ description: "drop db", inputSchema: {}, name: "drop" }],
+      config: {
+        env: { PROD_TOKEN: "shh" },
+        headers: { authorization: "Bearer prod" },
+      },
+      createdAt: now(),
+      enabled: true,
+      id: "mcp_prod",
+      lastError: null,
+      name: "Production Admin MCP",
+      status: "connected",
+      transport: "http",
+      updatedAt: now(),
+    });
+    await db.assignMcpServerToProfile(profile.id, "mcp_prod");
+
+    const exported = await createProfilePackExport(db, ORG, profile.id);
+    expect(exported.manifest.meta.mcpServerNames).toEqual([
+      "Production Admin MCP",
+    ]);
+
+    const preview = await previewProfilePackImport(db, DEST, exported.data);
+    expect(
+      preview.skippedAssignments.some(
+        (item) =>
+          item.path === "MCP server:Production Admin MCP" &&
+          item.reason.includes("not available to this organization")
+      )
+    ).toBe(true);
+
+    const imported = await importProfilePack(db, DEST, exported.data, {
+      confirm: true,
+    });
+
+    expect(
+      (await db.listMcpServersForProfile(imported.profileId)).map(
+        (server) => server.id
+      )
+    ).toEqual([]);
+
+    const adminImported = await importProfilePack(db, DEST, exported.data, {
+      confirm: true,
+      isPlatformAdmin: true,
+      name: "Platform Restored Bot",
+    });
+
+    expect(
+      (await db.listMcpServersForProfile(adminImported.profileId)).map(
+        (server) => server.id
+      )
+    ).toEqual(["mcp_prod"]);
+
+    const granted = await service.createProfile(DEST, { name: "Granted Host" });
+    await db.assignMcpServerToProfile(granted.profile.id, "mcp_prod");
+
+    const grantedImport = await importProfilePack(db, DEST, exported.data, {
+      confirm: true,
+      name: "Granted Bot",
+    });
+
+    expect(
+      (await db.listMcpServersForProfile(grantedImport.profileId)).map(
+        (server) => server.id
+      )
+    ).toEqual(["mcp_prod"]);
+  });
+
   test("guards: Super Bot, confirm, preview-only, and kind mismatch", async () => {
     const { db, service } = await setup();
     const normal = await service.createProfile(ORG, { name: "Bot" });
+
     const superBot = await service.createProfile(ORG, {
       isSuper: true,
       name: "Super Bot",
     });
+
     const exported = await createProfilePackExport(db, ORG, normal.profile.id);
 
     await expect(
@@ -520,6 +1189,31 @@ describe("profile portability", () => {
     await previewProfilePackImport(db, DEST, exported.data);
     expect(await db.listProfilesForOrg(DEST)).toHaveLength(before);
 
+    for (const handlerType of [null, 123, [], {}]) {
+      const invalid = repack(exported.data, {
+        "nakama-profile-export.json": JSON.stringify({
+          ...exported.manifest,
+          meta: {
+            ...exported.manifest.meta,
+            customTools: [
+              {
+                description: "Invalid tool",
+                handlerConfig: {},
+                handlerType,
+                name: "invalid_tool",
+              },
+            ],
+          },
+        }),
+      });
+
+      await expect(
+        previewProfilePackImport(db, DEST, invalid)
+      ).rejects.toThrow();
+    }
+
+    expect(await db.listProfilesForOrg(DEST)).toHaveLength(before);
+
     await expect(
       previewNakamaDataImport(exported.data, { rootDir: root })
     ).rejects.toThrow(/missing nakama export manifest/i);
@@ -531,9 +1225,11 @@ describe("profile portability", () => {
 
   test("failed import rolls back created skills and the profile", async () => {
     const { db, service } = await setup();
+
     const { profile } = await service.createProfile(ORG, {
       name: "Rollback Bot",
     });
+
     await writeSkill(db, ORG, profile.id, "rollback-skill");
     await db.upsertTool({
       createdAt: now(),
@@ -567,31 +1263,37 @@ describe("profile portability", () => {
 
   test("concurrent imports of the same name never take over each other's row", async () => {
     const { db, service } = await setup();
+
     const sourceA = await service.createProfile(ORG, {
       id: "source-a-bot",
       name: CONTESTED_NAME,
       systemPrompt: "prompt A",
     });
+
     const sourceB = await service.createProfile(OTHER, {
       id: "source-b-bot",
       name: CONTESTED_NAME,
       systemPrompt: "prompt B",
     });
+
     const packA = await createProfilePackExport(db, ORG, sourceA.profile.id);
     const packB = await createProfilePackExport(db, OTHER, sourceB.profile.id);
 
     const gated = holdFirstClaimOf(db, "contested-bot");
+
     const [first, second] = await Promise.all([
       importProfilePack(gated, DEST, packA.data, { confirm: true }),
       importProfilePack(gated, OTHER_DEST, packB.data, { confirm: true }),
     ]);
 
     expect(first.profileId).not.toBe(second.profileId);
+
     // Neither import may rewrite the other's row, settings included.
     const [rowA, rowB] = await Promise.all([
       db.getProfileForOrg(first.profileId, DEST),
       db.getProfileForOrg(second.profileId, OTHER_DEST),
     ]);
+
     expect(rowA?.systemPrompt).toBe("prompt A");
     expect(rowB?.systemPrompt).toBe("prompt B");
     expect(await db.listProfilesForOrg(DEST)).toHaveLength(1);
@@ -600,9 +1302,11 @@ describe("profile portability", () => {
 
   test("failed import rollback spares a profile that left the importing org", async () => {
     const { db, service } = await setup();
+
     const { profile } = await service.createProfile(ORG, {
       name: "Handoff Rollback Bot",
     });
+
     await db.upsertTool({
       createdAt: now(),
       description: "Boom",
@@ -622,9 +1326,11 @@ describe("profile portability", () => {
     db.assignToolToProfile = async (profileId: string) => {
       handedOff = profileId;
       const current = await db.getProfile(profileId);
+
       if (current) {
         await db.upsertProfile({ ...current, orgId: OTHER });
       }
+
       throw new Error("forced assignment failure");
     };
 
@@ -643,6 +1349,7 @@ describe("profile portability", () => {
     await writeSkill(db, ORG, profile.id, "my-skill");
     const exported = await createProfilePackExport(db, ORG, profile.id);
     const marker = path.join(root, "pwned.txt");
+
     const crafted = repack(exported.data, {
       "skills/my-skill/tool.js": exfiltratingTool(marker),
     });
@@ -659,6 +1366,7 @@ describe("profile portability", () => {
     expect(await db.listProfilesForOrg(DEST)).toEqual([]);
     expect(
       await readdir(path.join(root, "orgs", DEST, "profiles")).catch(
+        // SAFETY: The test fixture matches the contract used by this test.
         () => [] as string[]
       )
     ).toEqual([]);
@@ -718,6 +1426,7 @@ describe("profile portability", () => {
     const imported = await importProfilePack(db, DEST, exported.data, {
       confirm: true,
     });
+
     const [importedSkill] = await db.listSkillsForProfile(imported.profileId);
     expect(importedSkill?.name).toBe("my-skill");
     expect(importedSkill?.hasTool).toBe(false);

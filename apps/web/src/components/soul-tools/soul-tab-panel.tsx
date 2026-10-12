@@ -63,7 +63,13 @@ export function SoulTabPanel({
         Tap a file to view or edit
       </p>
 
-      <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+      <ul
+        className={
+          embedded
+            ? "grid gap-3 sm:grid-cols-2 [&>li]:overflow-hidden [&>li]:rounded-xl [&>li]:border [&>li]:border-border [&>li]:bg-card"
+            : "divide-y divide-border overflow-hidden rounded-xl border border-border bg-card"
+        }
+      >
         {SOUL_FILES.map((file) => (
           <FileStatusListItem
             description={file.description}

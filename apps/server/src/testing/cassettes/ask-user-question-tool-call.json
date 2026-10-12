@@ -1,113 +1,197 @@
 {
-  "version": 1,
   "name": "ask-user-question-tool-call",
-  "recordedAt": "2026-07-23T16:25:57.862Z",
+  "recordedAt": "2026-10-11T12:57:56.147Z",
   "request": {
-    "method": "POST",
-    "url": "https://api.openai.com/v1/chat/completions",
     "body": {
-      "model": "gpt-4o-mini",
-      "messages": [
+      "input": [
         {
-          "role": "system",
-          "content": "You are a helpful assistant. When you need information from the user, you must call the ask_user_question tool. Prefer 2-4 choices per question. Do not answer in plain text."
-        },
-        {
-          "role": "user",
-          "content": "Before you help me schedule anything, ask what timezone I am in. Use the ask_user_question tool with at most 4 choices."
+          "content": "Before you help me schedule anything, ask what timezone I am in. Use the ask_user_question tool with at most 4 choices.",
+          "role": "user"
         }
       ],
+      "instructions": "You are a helpful assistant. When you need information from the user, you must call the ask_user_question tool. Prefer 2-4 choices per question. Do not answer in plain text.",
+      "model": "gpt-5.6-luna",
+      "store": false,
+      "tools": [
+        {
+          "description": "Ask a short multiple-choice questionnaire when you need missing info before continuing.",
+          "name": "ask_user_question",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "questions": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "allowCustomAnswer": {
+                      "type": "boolean"
+                    },
+                    "choices": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "prompt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["prompt", "choices"],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": ["title", "questions"],
+            "type": "object"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    "method": "POST",
+    "url": "https://api.openai.com/v1/responses"
+  },
+  "response": {
+    "body": {
+      "id": "resp_06987463aba81bec016acb87d2524087d0b66c45ddc3e80cf1",
+      "object": "response",
+      "created_at": 1791723474,
+      "status": "completed",
+      "access_programs": null,
+      "background": false,
+      "billing": {
+        "payer": "developer"
+      },
+      "completed_at": 1791723476,
+      "error": null,
+      "frequency_penalty": 0,
+      "incomplete_details": null,
+      "instructions": "You are a helpful assistant. When you need information from the user, you must call the ask_user_question tool. Prefer 2-4 choices per question. Do not answer in plain text.",
+      "max_output_tokens": null,
+      "max_tool_calls": null,
+      "model": "gpt-5.6-luna",
+      "moderation": null,
+      "output": [
+        {
+          "id": "rs_06987463aba81bec016acb87d2e6f087d0b2b415da0a7b98d2",
+          "type": "reasoning",
+          "content": [],
+          "encrypted_content": "gAAAAABqy4fUt0VKnTDQPIK69EPbQlPGQpOosgD8FsgUIMOxxOva3j8RSzphZT5l2x7GZRZ3nB_17kgTn5PlHSauT3JGAKFid_HKSBmBEJ_OcDngznlpQqMbdmYmmvpTaZuU1cJkFhqdpsXTHlcwEvBG4V6ZbBq7xpfW3zR-kLx71Yq8-p-f6tIAS6zggHXZNge4Rbf918zp4KAY09o0dCL3XwzKH_MuXaqbvWF8Km0j_Pu8VSrQUndrp0nmlwubKTCwmKmX5wM7KUKL4SAXi9__pombiJPmZpKNg0LKfyIvErAPDhnPHWMAmKfzHK2OnzK0mCXQE8huM-Woo2t7QrGucNOfc_vBGd3L-lhWsoxbCOgG38vZBf_-bKbE5uIpcNAOpciz3DLI6ltG_1wgbDws6vHWd9ov2-1qqaA9IZJOzfM2ht5d_1YOJKoIx9TILhfq7-A-DC47dk_-BOFl7RXTYjEtF2WRrAYv7X3stem5s7TojESYFZsM5dmZsbUffJwjdAlGKJPJ5W5qK1pc-tuZNSFELmERaBXHUOuuCkqmlJy58ddKVh0lPMFZFF0klckU_HPdJfnJMd0EjyRXVRZ3xok7G_28WWBlKcJOnz5qm07OWTL6G3LDkpN-7xYfYl-8ERbf0xgYcO6JqsMa5WuuPGIssxEUJuht-qoBodl2ThGnKGV7whO7f7MrwFK2sBuLDhqmg0Vgv-B54RuoSUtP9m_aDKHxnR23L1M0VU2OSJuSG5Dfob2zQmfSXUfxxk5dMrM1GPvlpRbOOboCOxgJB_YUUZjedBH5FkxiJp1ZxpJi8oromsakyGfb5FjBDReH2q0XfVth5UiTR1Cj7dEqbITblVTpupsa3sRlLHuV0GZ5cGjs-d0tvolG9Sxy24_7VRRtXCKvczXMg2xDN3jYx-c7BJ5J1s-iWT2HvqUHbCiBSDvIj25S7chbgaOXzaj2OSBgJc24LrmZEvHTXUyMRJXNAC8zR2cLi9es28uW-TWknGiYQSAETKuOpr6j6PFlq8llB7S-UofH7exgFfSfXP_2Fs_VDU_zKPPcFK72l2BWQVD7wW_u_gUlnnjta3hPH6OsrGQvjgRcx4PVXauB7w83vPg2wTBycj0R9qB9ayt1KKAS2yMXz6xNapeYqTCPwXb_sgJJ7So2hYMeihQbo7l9XlFsN9OOE1U72hId5UWqppU076dmFyOrqiOBZDf39eF6YwDavqlHeerQchT5HbrDvpUFPPOXpZ9ysYvJ1nWwOXlclAjjC75PXQKWgC4XQP5cR7ZJ8HdlnDdEtwlyurtNkCeHh9cQQMZtnrsdboWoCaXUzzvtQtnVGKA_FmDc21PCnUGe_L_l1ZUnkMlpLi8pJdOLo8XYV8gLmct3Mv9fQaIqx1jGSkNrDCoOvCqntTrh6ibJvDK-ewODO6r9PyOyEGFGBunC0hFNFBuq7aqvyZ0nnLtc0N6VbsVZ52CbJxjUf3n4ciksYcjnesOsoMeOrBA1SJ6H60j6QCGzGUGwr0xncOnAItne2o0WBsC1K7aj33FK",
+          "summary": []
+        },
+        {
+          "id": "fc_06987463aba81bec016acb87d3145087d09e38070790a0ed8b",
+          "type": "function_call",
+          "status": "completed",
+          "arguments": "{\"questions\":[{\"allowCustomAnswer\":true,\"choices\":[\"Pacific Time (PT)\",\"Mountain Time (MT)\",\"Central Time (CT)\",\"Eastern Time (ET)\"],\"prompt\":\"What timezone are you in? Choose one, or enter a different timezone.\"}],\"title\":\"Timezone\"}",
+          "call_id": "call_tdY2s04Bs7Kjps2yNvkcqvwD",
+          "name": "ask_user_question"
+        }
+      ],
+      "parallel_tool_calls": true,
+      "presence_penalty": 0,
+      "previous_response_id": null,
+      "prompt_cache_key": null,
+      "prompt_cache_retention": "24h",
+      "reasoning": {
+        "context": "all_turns",
+        "effort": "medium",
+        "mode": "standard",
+        "summary": null
+      },
+      "safety_identifier": null,
+      "service_tier": "default",
+      "store": false,
+      "temperature": 1,
+      "text": {
+        "format": {
+          "type": "text"
+        },
+        "verbosity": "medium"
+      },
+      "tool_choice": "auto",
+      "tool_usage": {
+        "image_gen": {
+          "input_tokens": 0,
+          "input_tokens_details": {
+            "image_tokens": 0,
+            "text_tokens": 0
+          },
+          "output_tokens": 0,
+          "output_tokens_details": {
+            "image_tokens": 0,
+            "text_tokens": 0
+          },
+          "total_tokens": 0
+        },
+        "web_search": {
+          "num_requests": 0
+        }
+      },
       "tools": [
         {
           "type": "function",
-          "function": {
-            "name": "ask_user_question",
-            "description": "Ask a short multiple-choice questionnaire when you need missing info before continuing.",
-            "parameters": {
-              "type": "object",
-              "properties": {
-                "title": {
-                  "type": "string"
-                },
-                "questions": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "prompt": {
+          "description": "Ask a short multiple-choice questionnaire when you need missing info before continuing.",
+          "name": "ask_user_question",
+          "output_schema": null,
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "questions": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "allowCustomAnswer": {
+                      "type": "boolean"
+                    },
+                    "choices": {
+                      "items": {
                         "type": "string"
                       },
-                      "choices": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "allowCustomAnswer": {
-                        "type": "boolean"
-                      }
+                      "type": "array"
                     },
-                    "required": ["prompt", "choices"],
-                    "additionalProperties": false
-                  }
-                }
+                    "prompt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["allowCustomAnswer", "choices", "prompt"],
+                  "type": "object"
+                },
+                "type": "array"
               },
-              "required": ["title", "questions"],
-              "additionalProperties": false
-            }
-          }
-        }
-      ],
-      "tool_choice": "auto"
-    }
-  },
-  "response": {
-    "status": 200,
-    "body": {
-      "id": "chatcmpl-E4qX6b51AJTPFXcMCkKMUn6BWC2Zd",
-      "object": "chat.completion",
-      "created": 1784823956,
-      "model": "gpt-4o-mini-2024-07-18",
-      "choices": [
-        {
-          "index": 0,
-          "message": {
-            "role": "assistant",
-            "content": null,
-            "tool_calls": [
-              {
-                "id": "call_9T8GElrkTJ4tDegzLmjbLQ59",
-                "type": "function",
-                "function": {
-                  "name": "ask_user_question",
-                  "arguments": "{\"title\":\"What is your timezone?\",\"questions\":[{\"prompt\":\"Please select your timezone:\",\"choices\":[\"Pacific Standard Time (PST)\",\"Eastern Standard Time (EST)\",\"Central Standard Time (CST)\",\"Greenwich Mean Time (GMT)\"]}]}"
-                }
+              "title": {
+                "type": "string"
               }
-            ],
-            "refusal": null,
-            "annotations": []
+            },
+            "required": ["questions", "title"],
+            "type": "object"
           },
-          "logprobs": null,
-          "finish_reason": "tool_calls"
+          "strict": true
         }
       ],
+      "top_logprobs": 0,
+      "top_p": 0.98,
+      "truncation": "disabled",
       "usage": {
-        "prompt_tokens": 137,
-        "completion_tokens": 65,
-        "total_tokens": 202,
-        "prompt_tokens_details": {
-          "cached_tokens": 0,
-          "audio_tokens": 0
+        "input_tokens": 139,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
         },
-        "completion_tokens_details": {
-          "reasoning_tokens": 0,
-          "audio_tokens": 0,
-          "accepted_prediction_tokens": 0,
-          "rejected_prediction_tokens": 0
-        }
+        "output_tokens": 86,
+        "output_tokens_details": {
+          "reasoning_tokens": 10
+        },
+        "total_tokens": 225
       },
-      "service_tier": "default",
-      "system_fingerprint": "fp_db286bd4bf"
-    }
-  }
+      "user": null,
+      "metadata": {}
+    },
+    "status": 200
+  },
+  "version": 1
 }

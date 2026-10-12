@@ -1,3 +1,12 @@
+import { z } from "zod";
+import {
+  type AutomationDeliveryAccess,
+  assertDiscordBotCanPostToChannel,
+  assertTelegramBotCanPostToChat,
+  automationDeliveryDestinationForbidden,
+  canApproveAutomationDeliveryDestination,
+  isTelegramDeliveryChatAuthorized,
+} from "./automation-delivery-destination";
 import type {
   AutomationDelivery,
   AutomationDeliveryNotifyOn,
@@ -10,30 +19,41 @@ import { loadWhatsAppConfigFile } from "./whatsapp-config";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const AutomationDeliveryInputSchema = z.object({
+  channel: z.string(),
+  channelId: z.string().optional(),
+  chatId: z.number().optional(),
+  notifyOn: z.enum(["success", "failure", "both"]).optional(),
+  to: z.string().optional(),
+});
+
 export function normalizeAutomationDelivery(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This input boundary validates untrusted delivery values with AutomationDeliveryInputSchema.
   value: unknown
 ): AutomationDelivery | undefined {
   if (value === undefined || value === null) {
     return;
   }
 
-  if (typeof value !== "object" || value === null) {
-    throw new Error("delivery must be an object.");
+  const parsed = AutomationDeliveryInputSchema.safeParse(value);
+
+  if (!parsed.success) {
+    throw new Error("delivery must be an object with a valid channel.");
   }
 
-  const record = value as Record<string, unknown>;
-  const channel = record.channel;
+  const record = parsed.data;
 
-  if (
-    channel !== "telegram" &&
-    channel !== "whatsapp" &&
-    channel !== "email" &&
-    channel !== "discord"
-  ) {
+  const channelResult = z
+    .enum(["telegram", "whatsapp", "email", "discord"])
+    .safeParse(record.channel);
+
+  if (!channelResult.success) {
     throw new Error(
       'delivery.channel must be "telegram", "whatsapp", "email", or "discord".'
     );
   }
+
+  const channel = channelResult.data;
 
   const delivery: AutomationDelivery = { channel };
 
@@ -44,7 +64,7 @@ export function normalizeAutomationDelivery(
       );
     }
 
-    if (typeof record.to !== "string" || !record.to.trim()) {
+    if (!record.to?.trim()) {
       throw new Error("delivery.to must be a non-empty string.");
     }
 
@@ -58,11 +78,7 @@ export function normalizeAutomationDelivery(
       );
     }
 
-    if (
-      typeof record.chatId !== "number" ||
-      !Number.isInteger(record.chatId) ||
-      record.chatId <= 0
-    ) {
+    if (!Number.isInteger(record.chatId) || (record.chatId ?? 0) <= 0) {
       throw new Error("delivery.chatId must be a positive integer.");
     }
 
@@ -76,7 +92,7 @@ export function normalizeAutomationDelivery(
       );
     }
 
-    if (typeof record.channelId !== "string" || !record.channelId.trim()) {
+    if (!record.channelId?.trim()) {
       throw new Error("delivery.channelId must be a non-empty string.");
     }
 
@@ -95,16 +111,6 @@ export function normalizeAutomationDelivery(
   }
 
   if (record.notifyOn !== undefined) {
-    if (
-      record.notifyOn !== "success" &&
-      record.notifyOn !== "failure" &&
-      record.notifyOn !== "both"
-    ) {
-      throw new Error(
-        'delivery.notifyOn must be "success", "failure", or "both".'
-      );
-    }
-
     delivery.notifyOn = record.notifyOn;
   }
 
@@ -139,9 +145,28 @@ export function shouldDeliverForRun(
 }
 
 export interface ValidateAutomationDeliveryOptions {
+  access?: AutomationDeliveryAccess;
+  fetchImpl?: typeof fetch;
   isEmailConfigured?: () => Promise<boolean> | boolean;
   orgId: string;
+  /** Destination already stored for this automation, if any. */
+  previousDelivery?: AutomationDelivery;
   profileId?: string;
+}
+
+/**
+ * A destination an admin already approved stays approved, so a member editing
+ * an automation's name cannot be blocked by an override they never set.
+ */
+function hasSameDeliveryDestination(
+  delivery: AutomationDelivery,
+  previous: AutomationDelivery | undefined
+): boolean {
+  return (
+    previous?.channel === delivery.channel &&
+    previous.chatId === delivery.chatId &&
+    previous.channelId === delivery.channelId
+  );
 }
 
 export async function validateAutomationDelivery(
@@ -155,20 +180,48 @@ export async function validateAutomationDelivery(
   if (delivery.channel !== "email" && !options.profileId) {
     throw new Error("Choose an agent connection for delivery.");
   }
+
   const owner = { orgId: options.orgId, profileId: options.profileId! };
+  const isApprover = canApproveAutomationDeliveryDestination(options.access);
+
+  const mayOverrideDestination =
+    isApprover ||
+    hasSameDeliveryDestination(delivery, options.previousDelivery);
+
   if (delivery.channel === "telegram") {
     const config = await loadTelegramConfigFile(owner);
+    const botToken = config?.botToken.trim();
 
-    if (!config?.botToken.trim()) {
+    if (!(config && botToken)) {
       throw new Error(
         "Telegram is not configured. Set up Integrations → Telegram first."
       );
     }
 
-    if (config.pairedUserIds.length === 0 && delivery.chatId === undefined) {
-      throw new Error(
-        "Telegram is not paired. Link your account in Integrations → Telegram first."
-      );
+    if (delivery.chatId === undefined) {
+      if (config.pairedUserIds.length === 0) {
+        throw new Error(
+          "Telegram is not paired. Link your account in Integrations → Telegram first."
+        );
+      }
+
+      return;
+    }
+
+    // A member may only pin delivery to a chat the org already paired or
+    // allowlisted; anything else needs an admin plus a provider-side check.
+    if (!isTelegramDeliveryChatAuthorized(delivery.chatId, config)) {
+      if (!mayOverrideDestination) {
+        throw automationDeliveryDestinationForbidden("Telegram");
+      }
+
+      if (isApprover) {
+        await assertTelegramBotCanPostToChat({
+          botToken,
+          chatId: delivery.chatId,
+          fetchImpl: options.fetchImpl,
+        });
+      }
     }
 
     return;
@@ -194,17 +247,36 @@ export async function validateAutomationDelivery(
 
   if (delivery.channel === "discord") {
     const config = await loadDiscordConfigFile(owner);
+    const botToken = config?.botToken.trim();
 
-    if (!config?.botToken.trim()) {
+    if (!(config && botToken)) {
       throw new Error(
         "Discord is not configured. Set up Integrations → Discord first."
       );
     }
 
-    if (delivery.channelId === undefined && config.pairedUserIds.length === 0) {
-      throw new Error(
-        "Discord is not paired. Link your account in Integrations → Discord first."
-      );
+    if (delivery.channelId === undefined) {
+      if (config.pairedUserIds.length === 0) {
+        throw new Error(
+          "Discord is not paired. Link your account in Integrations → Discord first."
+        );
+      }
+
+      return;
+    }
+
+    // Discord keeps no per-channel allowlist, so any caller-chosen channel is
+    // an override: admins only, and only once the bot can post there.
+    if (!mayOverrideDestination) {
+      throw automationDeliveryDestinationForbidden("Discord");
+    }
+
+    if (isApprover) {
+      await assertDiscordBotCanPostToChannel({
+        botToken,
+        channelId: delivery.channelId,
+        fetchImpl: options.fetchImpl,
+      });
     }
 
     return;

@@ -13,27 +13,35 @@ import { AgentService } from "../../services/agent-service";
 import { setupTestConfigDir } from "../../test-config-dir";
 import type { ServerOptions } from "../context";
 import { createMinimalHonoApp } from "../test-app-helpers";
-import { loginUserSession, seedOrgAdmin } from "../test-session-helpers";
+import {
+  type AppFetch,
+  loginUserSession,
+  seedOrgAdmin,
+} from "../test-session-helpers";
 
 setupTestConfigDir("nakama-settings-rbac-test-");
+
+type SystemStatusStub = Pick<ServerOptions["systemStatus"], "getStatus">;
 
 test("WhatsApp HTTP settings, profiles, QR codes and reconnect are isolated by organization", async () => {
   const db = createInMemoryDatabaseAdapter();
   const service = new AgentService(null, null, db);
   const workerCalls: string[] = [];
+
   const { app, authService } = createMinimalHonoApp({
     databaseAdapter: db,
     agent: service,
     workerManager: {
       getWorkerStatus: async () => ({ managed: true, status: "online" }),
-      saveChannelConfig: async (
+      saveChannelConfig: async <T>(
         _name: string,
         owner: { orgId: string; profileId: string },
-        save: () => Promise<unknown>
+        save: () => Promise<T>
       ) => {
         workerCalls.push("stop:" + owner.orgId + ":" + owner.profileId);
         const result = await save();
         workerCalls.push("start:" + owner.orgId + ":" + owner.profileId);
+
         return result;
       },
       stopWorker: async (
@@ -50,6 +58,7 @@ test("WhatsApp HTTP settings, profiles, QR codes and reconnect are isolated by o
       },
     },
   });
+
   for (const id of ["a", "b"]) {
     await seedOrgAdmin(db, {
       authService,
@@ -60,8 +69,10 @@ test("WhatsApp HTTP settings, profiles, QR codes and reconnect are isolated by o
       profileId: "profile_wa_" + id,
     });
   }
+
   const a = await loginUserSession(app, "a@wa.test", "password123", "wa_a");
   const b = await loginUserSession(app, "b@wa.test", "password123", "wa_b");
+
   for (const [id, session] of [
     ["a", a],
     ["b", b],
@@ -74,19 +85,24 @@ test("WhatsApp HTTP settings, profiles, QR codes and reconnect are isolated by o
         allowedPhones: id === "a" ? "628111111111" : "628222222222",
       },
     });
+
     expect(saved.status).toBe(200);
   }
+
   const foreignProfile = await callRoute(app, a, {
     method: "PUT",
     path: "/v1/settings/whatsapp?profileId=profile_wa_b",
     body: { profileId: "profile_wa_b" },
   });
+
   expect(foreignProfile.status).toBe(404);
+
   const foreignOrg = await app.fetch(
     new Request("http://localhost:4310/v1/settings/whatsapp", {
       headers: a.headers({}, "wa_b"),
     })
   );
+
   expect(foreignOrg.status).toBe(404);
   await writeWhatsAppQrCode("qr-a", {
     orgId: "wa_a",
@@ -116,10 +132,12 @@ test("WhatsApp HTTP settings, profiles, QR codes and reconnect are isolated by o
     { ownerJid: "628222222222@s.whatsapp.net" },
     { orgId: "wa_b", profileId: "profile_wa_b" }
   );
+
   const reconnect = await callRoute(app, a, {
     method: "POST",
     path: "/v1/settings/whatsapp/reconnect?profileId=profile_wa_a",
   });
+
   expect(reconnect.status).toBe(200);
   expect(workerCalls).toEqual([
     "stop:wa_a:profile_wa_a",
@@ -141,10 +159,12 @@ test("WhatsApp HTTP settings, profiles, QR codes and reconnect are isolated by o
     (await loadWhatsAppConfigFile({ orgId: "wa_a", profileId: "profile_wa_a" }))
       ?.profileId
   ).toBe("profile_wa_a");
+
   const readB = await callRoute(app, b, {
     method: "GET",
     path: "/v1/settings/whatsapp?profileId=profile_wa_b",
   });
+
   expect(await readB.json()).toMatchObject({
     profileId: "profile_wa_b",
     allowedPhones: ["628222222222"],
@@ -152,6 +172,7 @@ test("WhatsApp HTTP settings, profiles, QR codes and reconnect are isolated by o
 });
 
 const ORG_ID = "org_settings_rbac";
+
 const PASSWORD = "password123";
 
 // These settings are install-wide: changing them affects every organization.
@@ -249,22 +270,29 @@ for (const role of ["member", "viewer"] as const) {
   }
 }
 
-function createApp() {
+function createApp(systemStatus?: SystemStatusStub) {
   const calls: string[] = [];
+
   const record =
     (name: string) =>
     async (..._args: unknown[]) => {
       calls.push(name);
+
+      // SAFETY: This test controls the fixture shape at this boundary.
       return {} as never;
     };
+
   const databaseAdapter = createInMemoryDatabaseAdapter();
+
   const { app, authService } = createMinimalHonoApp({
     agent: {
       configureProvider: record("configureProvider"),
       createProvider: record("createProvider"),
       deleteProvider: record("deleteProvider"),
       discoverModels: record("discoverModels"),
-      getProfile: async () => ({ profile: { id: "default" } }),
+      getProfile: async (_orgId: string, profileId: string) => ({
+        profile: { id: "default", isSuper: profileId === "super_bot" },
+      }),
       listProfiles: async () => ({ profiles: [{ id: "default" }] }),
       sendErrorTrackingTest: record("sendErrorTrackingTest"),
       setComposioSettings: record("setComposioSettings"),
@@ -281,19 +309,24 @@ function createApp() {
       testDiscordSettings: record("testDiscordSettings"),
       testTelegramSettings: record("testTelegramSettings"),
       updateProvider: record("updateProvider"),
-    } as unknown as ServerOptions["agent"],
+    },
     databaseAdapter,
     workerManager: {
       startWorker: record("startWorker"),
       stopWorker: record("stopWorker"),
-    } as unknown as ServerOptions["workerManager"],
+    },
+    systemStatus,
   });
 
   return { app, authService, calls, databaseAdapter };
 }
 
-async function login(role: OrgRole, isPlatformAdmin = false) {
-  const { app, authService, calls, databaseAdapter } = createApp();
+async function login(
+  role: OrgRole,
+  isPlatformAdmin = false,
+  systemStatus?: SystemStatusStub
+) {
+  const { app, authService, calls, databaseAdapter } = createApp(systemStatus);
   const suffix = isPlatformAdmin ? "_platform" : "";
   const email = `${role}${suffix}@example.com`;
   const userId = `user_${role}${suffix}`;
@@ -324,11 +357,12 @@ async function login(role: OrgRole, isPlatformAdmin = false) {
   });
 
   const session = await loginUserSession(app, email, PASSWORD, ORG_ID);
+
   return { app, calls, session };
 }
 
 async function callRoute(
-  app: { fetch: typeof fetch },
+  app: AppFetch,
   session: {
     headers: (extra?: Record<string, string>) => Record<string, string>;
     csrfToken: string;
@@ -363,6 +397,7 @@ describe("install-wide settings writes require a platform admin", () => {
 
   test("a platform admin who is only a viewer in the org still reaches them", async () => {
     const { app, calls, session } = await login("viewer", true);
+
     const response = await callRoute(app, session, {
       body: { baseUrl: "https://example.com/v1" },
       method: "PATCH",
@@ -373,8 +408,24 @@ describe("install-wide settings writes require a platform admin", () => {
     expect(calls).toEqual(["updateProvider"]);
   });
 
+  for (const channel of ["telegram", "discord", "whatsapp"]) {
+    test(`an admin cannot connect ${channel} to Super Bot`, async () => {
+      const { app, calls, session } = await login("admin", true);
+
+      const response = await callRoute(app, session, {
+        body: { botToken: "token" },
+        method: "PUT",
+        path: `/v1/settings/${channel}?profileId=super_bot`,
+      });
+
+      expect(response.status).toBe(400);
+      expect(calls).toEqual([]);
+    });
+  }
+
   test("an org admin can still change org-scoped Telegram settings", async () => {
     const { app, calls, session } = await login("admin");
+
     const response = await callRoute(app, session, {
       body: { botToken: "telegram-token" },
       method: "PUT",
@@ -389,8 +440,10 @@ describe("install-wide settings writes require a platform admin", () => {
 test("a platform admin completes Grok device sign-in through authenticated HTTP routes", async () => {
   const { app, session } = await login("admin", true);
   const originalFetch = globalThis.fetch;
+  // SAFETY: This test controls the fixture shape at this boundary.
   globalThis.fetch = (async (input) => {
     const url = String(input);
+
     if (url.endsWith("/device/code")) {
       return Response.json({
         device_code: "private-device",
@@ -400,6 +453,7 @@ test("a platform admin completes Grok device sign-in through authenticated HTTP 
         expires_in: 60,
       });
     }
+
     if (url.endsWith("/oauth2/token")) {
       return Response.json({
         access_token: "access",
@@ -407,34 +461,43 @@ test("a platform admin completes Grok device sign-in through authenticated HTTP 
         expires_in: 900,
       });
     }
+
     if (url.endsWith("/models-v2")) {
       return Response.json({ models: [{ id: "grok-4.6" }] });
     }
+
     throw new Error(`Unexpected request: ${url}`);
   }) as typeof fetch;
+
   try {
     const start = await callRoute(app, session, {
       method: "POST",
       path: "/v1/xai-oauth/device/start",
     });
+
     expect(start.status).toBe(200);
+    // SAFETY: This test controls the fixture shape at this boundary.
     const body = (await start.json()) as { sessionId: string };
+
     const result = await callRoute(app, session, {
       method: "POST",
       path: "/v1/xai-oauth/device/complete",
       body,
     });
+
     expect(result.status).toBe(200);
     expect(result.headers.get("Cache-Control")).toBe("no-store");
     expect(await result.json()).toMatchObject({
       xaiOAuth: { accessToken: "access", refreshToken: "refresh" },
       models: [{ id: "grok-4.6" }],
     });
+
     const replay = await callRoute(app, session, {
       method: "POST",
       path: "/v1/xai-oauth/device/complete",
       body,
     });
+
     expect(replay.status).toBe(400);
   } finally {
     globalThis.fetch = originalFetch;
@@ -443,15 +506,18 @@ test("a platform admin completes Grok device sign-in through authenticated HTTP 
 
 test("channel settings require an owner and keep sibling agents separate", async () => {
   const db = createInMemoryDatabaseAdapter();
+
   const { app, authService } = createMinimalHonoApp({
     databaseAdapter: db,
     agent: new AgentService(null, null, db),
   });
+
   const seeded = await seedOrgAdmin(db, {
     authService,
     orgId: "org_siblings",
     profileId: "agent_a",
   });
+
   const first = (await db.listProfilesForOrg(seeded.orgId))[0]!;
   await db.upsertProfile({
     ...first,
@@ -459,12 +525,14 @@ test("channel settings require an owner and keep sibling agents separate", async
     name: "Agent B",
     isDefault: false,
   });
+
   const session = await loginUserSession(
     app,
     seeded.email,
     seeded.password,
     seeded.orgId
   );
+
   for (const platform of ["telegram", "discord", "whatsapp"]) {
     expect(
       (
@@ -483,6 +551,7 @@ test("channel settings require an owner and keep sibling agents separate", async
       ).status
     ).toBe(404);
   }
+
   for (const [profileId, phone] of [
     ["agent_a", "628111111111"],
     ["agent_b", "628222222222"],
@@ -497,14 +566,17 @@ test("channel settings require an owner and keep sibling agents separate", async
       ).status
     ).toBe(200);
   }
+
   const a = await callRoute(app, session, {
     method: "GET",
     path: "/v1/settings/whatsapp?profileId=agent_a",
   });
+
   const b = await callRoute(app, session, {
     method: "GET",
     path: "/v1/settings/whatsapp?profileId=agent_b",
   });
+
   expect(await a.json()).toMatchObject({
     profileId: "agent_a",
     allowedPhones: ["628111111111"],
@@ -513,4 +585,34 @@ test("channel settings require an owner and keep sibling agents separate", async
     profileId: "agent_b",
     allowedPhones: ["628222222222"],
   });
+});
+
+describe("usage by agent and user is for admins only", () => {
+  for (const [role, isPlatformAdmin, expected] of [
+    ["admin", false, true],
+    ["member", true, true],
+    ["member", false, false],
+    ["viewer", false, false],
+  ] as const) {
+    test(`${role}${isPlatformAdmin ? " (platform admin)" : ""} -> ${expected}`, async () => {
+      const requested: unknown[] = [];
+
+      const { app, session } = await login(role, isPlatformAdmin, {
+        getStatus: async (_orgId, options) => {
+          requested.push(options);
+
+          // SAFETY: This route test reads authorization and call options only.
+          return {} as never;
+        },
+      });
+
+      const response = await callRoute(app, session, {
+        method: "GET",
+        path: "/v1/system/status",
+      });
+
+      expect(response.status).toBe(200);
+      expect(requested).toEqual([{ includeUsageByActor: expected }]);
+    });
+  }
 });

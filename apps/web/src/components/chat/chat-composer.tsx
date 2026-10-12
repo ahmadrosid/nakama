@@ -7,22 +7,31 @@ import type {
   ChatUsage,
   ProviderModelOption,
   SkillSummary,
-  ThinkingEffort,
 } from "@nakama/core/contract";
 import { MAX_IMAGE_BYTES } from "@nakama/core/message-content";
 import { Button } from "@nakama/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@nakama/ui/command";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@nakama/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
 import { toast } from "@nakama/ui/toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
 import {
   Add01Icon,
   Alert02Icon,
+  ArrowDown01Icon,
   ArrowUp02Icon,
   Cancel01Icon,
   File01Icon,
@@ -30,8 +39,10 @@ import {
   WifiOff01Icon,
 } from "hugeicons-react";
 import {
+  createContext,
   type ReactNode,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -42,11 +53,6 @@ import {
   PromptInputBody,
   PromptInputFooter,
   PromptInputHeader,
-  PromptInputSelect,
-  PromptInputSelectContent,
-  PromptInputSelectItem,
-  PromptInputSelectTrigger,
-  PromptInputSelectValue,
   PromptInputSubmit,
   PromptInputTextarea,
   usePromptInputAttachments,
@@ -59,7 +65,6 @@ import {
   type QueuedComposerMessage,
 } from "@/components/chat/ChatMessageQueuePanel";
 import { ChatAddCapabilitiesDialogs } from "@/components/chat/chat-add-capabilities-dialogs";
-import { composerActions } from "@/components/chat/chat-composer-actions";
 import { ChatContextUsageRing } from "@/components/chat/chat-context-usage";
 import { ChatSkillPicker } from "@/components/chat/chat-skill-picker";
 import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overlay";
@@ -74,6 +79,7 @@ import {
   filterComposerMentionSuggestions,
   filterComposerSlashSuggestions,
   findActiveSkillSlashRange,
+  getLeadingCommand,
   matchComposerAddCommand,
   matchComposerLearningLoopCommand,
   replaceSlashRangeWithReservedCommand,
@@ -105,6 +111,7 @@ import {
   isPastedTextDocument,
   LONG_PASTE_WORD_THRESHOLD,
 } from "@/lib/pasted-text";
+import { composerActions } from "./chat-composer.shared";
 import { ChatComposerError, ChatTips } from "./chat-tips";
 
 interface ChatComposerBaseProps {
@@ -136,7 +143,7 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
   headerNotice?: ReactNode;
   onConnectProvider?: () => void;
   onModelChange: (selection: string) => void;
-  onThinkingEffortChange?: (effort: ThinkingEffort) => void;
+  onThinkingEffortChange?: (effort: string) => void;
   primarySupportsVision?: boolean;
   profileId?: string | null;
   profileModelId?: string | null;
@@ -150,8 +157,10 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
   sessionUsage?: ChatUsage | null;
   showOfflineHint?: boolean;
   showTips?: boolean;
-  thinkingEffort?: ThinkingEffort;
+  thinkingEffort?: string;
   thinkingEffortDisabled?: boolean;
+  /** Overrides the built-in low/medium/high list, for ACP agents that offer their own levels. */
+  thinkingEffortOptions?: Array<{ label: string; value: string }>;
   thinkingEffortVisible?: boolean;
   variant?: "full";
 }
@@ -161,7 +170,9 @@ export type ChatComposerProps =
   | ChatComposerFullProps;
 
 const EMPTY_TODOS: AgentTodo[] = [];
+
 const EMPTY_QUEUED_MESSAGES: QueuedComposerMessage[] = [];
+
 const EMPTY_SKILLS: SkillSummary[] = [];
 
 function ChatComposerNotice({
@@ -176,12 +187,15 @@ function ChatComposerNotice({
   if (error) {
     return <ChatComposerError message={error} />;
   }
+
   if (headerNotice) {
     return headerNotice;
   }
+
   if (showTips) {
     return <ChatTips />;
   }
+
   return null;
 }
 
@@ -267,6 +281,7 @@ function ChatComposerWorkStack({
 
 const FULL_TEXTAREA_CLASS =
   "max-h-36 min-h-11 px-1 py-1.5 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-10 sm:text-sm";
+
 const MINIMAL_TEXTAREA_CLASS =
   "max-h-32 min-h-10 px-1 py-1.5 text-sm leading-relaxed placeholder:text-muted-foreground";
 
@@ -329,6 +344,7 @@ function ChatComposerStackedPrompt({
         prepareFiles={prepareChatUploadFiles}
         rimActive={busy}
       >
+        <ChatComposerCommandBanner availableSkills={availableSkills} />
         <ChatAttachmentHeader primarySupportsVision={primarySupportsVision} />
         <PromptInputBody>
           <ChatComposerTextarea
@@ -427,6 +443,7 @@ function ChatComposerBarePrompt({
         prepareFiles={isMinimal ? undefined : prepareChatUploadFiles}
         rimActive={busy}
       >
+        <ChatComposerCommandBanner availableSkills={availableSkills} />
         {isMinimal ? null : (
           <ChatAttachmentHeader primarySupportsVision={primarySupportsVision} />
         )}
@@ -494,9 +511,15 @@ function resolveChatComposerLayout(
   const questionnaire = props.questionnaire ?? null;
   const queuedMessages = props.queuedMessages ?? EMPTY_QUEUED_MESSAGES;
   const hasQuestionnaire = hasActiveAgentQuestionnaire(questionnaire);
+
   const showTodos =
     hasActiveAgentTodos(todos) && !hasQuestionnaire && !displayError;
+
   const hasQueuedMessages = queuedMessages.length > 0;
+
+  const queueStackEdge: ComposerStackEdge =
+    hasQuestionnaire || showTodos ? "continue" : "start";
+
   const availableSkills = isMinimal
     ? EMPTY_SKILLS
     : (props.availableSkills ?? EMPTY_SKILLS);
@@ -511,9 +534,7 @@ function resolveChatComposerLayout(
     placeholder: props.placeholder ?? "Do anything...",
     questionnaire,
     queuedMessages,
-    queueStackEdge: (hasQuestionnaire || showTodos
-      ? "continue"
-      : "start") as ComposerStackEdge,
+    queueStackEdge,
     showOfflineHint: !isMinimal && props.showOfflineHint === true,
     showStacked:
       (hasQuestionnaire || showTodos || hasQueuedMessages) && !isMinimal,
@@ -593,20 +614,69 @@ function ChatComposerMain({
   );
 }
 
+const CommandPrefixContext = createContext<{
+  prefix: string | null;
+  setPrefix: (prefix: string | null) => void;
+}>({ prefix: null, setPrefix: () => undefined });
+
+/** Strip above the input showing the selected leading command; its text lives outside the textarea. */
+function ChatComposerCommandBanner({
+  availableSkills,
+}: {
+  availableSkills: SkillSummary[];
+}) {
+  const { prefix, setPrefix } = useContext(CommandPrefixContext);
+  const command = prefix ? getLeadingCommand(prefix, availableSkills) : null;
+
+  if (!(prefix && command)) {
+    return null;
+  }
+
+  return (
+    <PromptInputHeader className="-mx-2.5 -mt-2.5 mb-1.5 w-auto flex-nowrap items-center gap-2 rounded-t-xl border-border border-b bg-muted/60 px-4 py-2 text-sm sm:-mx-3 sm:-mt-3">
+      <span className="shrink-0 font-semibold text-foreground">{prefix}</span>
+      <span className="min-w-0 flex-1 truncate text-muted-foreground">
+        {command.description}
+      </span>
+      <button
+        aria-label="Remove command"
+        className="shrink-0 rounded px-1 text-muted-foreground hover:text-foreground"
+        onClick={() => setPrefix(null)}
+        type="button"
+      >
+        ×
+      </button>
+    </PromptInputHeader>
+  );
+}
+
 export function ChatComposer(props: ChatComposerProps) {
   const { activeOrg, updateOrg, user } = useAuth();
   const { textInput } = usePromptInputController();
+
   const [addDialog, setAddDialog] = useState<ComposerAddCommandAction | null>(
     null
   );
+
+  const [commandPrefix, setCommandPrefix] = useState<string | null>(null);
+
+  const commandContext = useMemo(
+    () => ({ prefix: commandPrefix, setPrefix: setCommandPrefix }),
+    [commandPrefix]
+  );
+
   useEffect(() => {
-    storeComposerDraft(props.draftStorageKey ?? null, textInput.value);
-  }, [props.draftStorageKey, textInput.value]);
+    storeComposerDraft(
+      props.draftStorageKey ?? null,
+      commandPrefix ? `${commandPrefix} ${textInput.value}` : textInput.value
+    );
+  }, [commandPrefix, props.draftStorageKey, textInput.value]);
 
   function clearDraft() {
     if (!props.draftStorageKey) {
       return;
     }
+
     storeComposerDraft(props.draftStorageKey, "");
     textInput.clear();
   }
@@ -623,26 +693,40 @@ export function ChatComposer(props: ChatComposerProps) {
 
   const composerProps: ChatComposerProps = {
     ...props,
-    onSubmit: (text, files) => {
+    onSubmit: (typedText, files) => {
+      const text = commandPrefix
+        ? `${commandPrefix} ${typedText}`.trim()
+        : typedText;
+
+      setCommandPrefix(null);
+
       if (matchComposerLearningLoopCommand(text)) {
         clearDraft();
+
         if (!activeOrg) {
           toast("Select an organization before enabling the learning loop.");
+
           return;
         }
+
         void updateOrg(activeOrg.id, { skillsPostTurnReview: true })
           .then(() => toast("Learning loop activated."))
           .catch((error) => toast(formatError(error)));
+
         return;
       }
+
       const addCommand = canAddCapabilities
         ? matchComposerAddCommand(text)
         : null;
+
       if (addCommand) {
         clearDraft();
         openAddCommand(addCommand);
+
         return;
       }
+
       clearDraft();
       props.onSubmit(text, files);
     },
@@ -653,8 +737,10 @@ export function ChatComposer(props: ChatComposerProps) {
         }
       : undefined,
   };
+
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const displayError = props.error ?? attachmentError;
+
   const layout = resolveChatComposerLayout(
     composerProps,
     displayError,
@@ -667,39 +753,43 @@ export function ChatComposer(props: ChatComposerProps) {
       : null;
 
   return (
-    <div className={cn("w-full shrink-0", props.className)}>
-      {layout.showOfflineHint && isFullComposer(props) ? (
-        <ChatComposerOfflineHint onConnectProvider={props.onConnectProvider} />
-      ) : null}
-      <ChatComposerMain
-        displayError={displayError}
-        layout={layout}
-        onAddCommand={openAddCommand}
-        props={composerProps}
-        setAttachmentError={setAttachmentError}
-      />
-      {addProfileId ? (
-        <ChatAddCapabilitiesDialogs
-          mcpOpen={addDialog === "add-mcp"}
-          onMcpOpenChange={(open) => {
-            setAddDialog(open ? "add-mcp" : null);
-          }}
-          onPluginOpenChange={(open) =>
-            setAddDialog(open ? "add-plugin" : null)
-          }
-          onSkillOpenChange={(open) => {
-            setAddDialog(open ? "add-skill" : null);
-          }}
-          onToolOpenChange={(open) => {
-            setAddDialog(open ? "add-tool" : null);
-          }}
-          pluginOpen={addDialog === "add-plugin"}
-          profileId={addProfileId}
-          skillOpen={addDialog === "add-skill"}
-          toolOpen={addDialog === "add-tool"}
+    <CommandPrefixContext.Provider value={commandContext}>
+      <div className={cn("w-full shrink-0", props.className)}>
+        {layout.showOfflineHint && isFullComposer(props) ? (
+          <ChatComposerOfflineHint
+            onConnectProvider={props.onConnectProvider}
+          />
+        ) : null}
+        <ChatComposerMain
+          displayError={displayError}
+          layout={layout}
+          onAddCommand={openAddCommand}
+          props={composerProps}
+          setAttachmentError={setAttachmentError}
         />
-      ) : null}
-    </div>
+        {addProfileId ? (
+          <ChatAddCapabilitiesDialogs
+            mcpOpen={addDialog === "add-mcp"}
+            onMcpOpenChange={(open) => {
+              setAddDialog(open ? "add-mcp" : null);
+            }}
+            onPluginOpenChange={(open) =>
+              setAddDialog(open ? "add-plugin" : null)
+            }
+            onSkillOpenChange={(open) => {
+              setAddDialog(open ? "add-skill" : null);
+            }}
+            onToolOpenChange={(open) => {
+              setAddDialog(open ? "add-tool" : null);
+            }}
+            pluginOpen={addDialog === "add-plugin"}
+            profileId={addProfileId}
+            skillOpen={addDialog === "add-skill"}
+            toolOpen={addDialog === "add-tool"}
+          />
+        ) : null}
+      </div>
+    </CommandPrefixContext.Provider>
   );
 }
 
@@ -725,6 +815,7 @@ function ChatComposerTextarea({
 
   const mentionOpen =
     slashRange !== null && controller.textInput.value[slashRange.start] === "@";
+
   const suggestions = useMemo(() => {
     if (!slashRange) {
       return [];
@@ -736,7 +827,9 @@ function ChatComposerTextarea({
           enableAddCommands: onAddCommand != null,
         });
   }, [availableSkills, mentionOpen, onAddCommand, slashRange]);
+
   const pickerOpen = Boolean(slashRange && !disabled && suggestions.length > 0);
+
   const safeActiveIndex =
     suggestions.length === 0
       ? 0
@@ -755,6 +848,7 @@ function ChatComposerTextarea({
       const textarea = textareaRef.current;
       const value = controller.textInput.value;
       const cursorIndex = textarea?.selectionStart ?? value.length;
+
       const activeRange =
         slashRange ??
         findActiveSkillSlashRange(
@@ -769,6 +863,7 @@ function ChatComposerTextarea({
 
       const addAction =
         suggestion.kind === "command" ? suggestion.command.action : undefined;
+
       if (
         onAddCommand &&
         (addAction === "add-tool" ||
@@ -782,6 +877,7 @@ function ChatComposerTextarea({
         setSlashRange(null);
         setActiveIndex(0);
         onAddCommand(addAction);
+
         return;
       }
 
@@ -804,6 +900,7 @@ function ChatComposerTextarea({
                 activeRange,
                 suggestion.command
               );
+
       controller.textInput.setInput(next.value);
       setSlashRange(null);
       setActiveIndex(0);
@@ -819,11 +916,27 @@ function ChatComposerTextarea({
     [controller.textInput, onAddCommand, slashRange]
   );
 
+  const { prefix, setPrefix } = useContext(CommandPrefixContext);
+  const value = controller.textInput.value;
+  const setInput = controller.textInput.setInput;
+
+  // Move a finished leading command (`/learn `, `/skill name `) out of the text.
+  useEffect(() => {
+    const command = getLeadingCommand(value, availableSkills);
+    const next = command ? value[command.range.end] : undefined;
+
+    if (!(command && next && /\s/.test(next))) {
+      return;
+    }
+
+    setPrefix(value.slice(command.range.start, command.range.end));
+    setInput(value.slice(command.range.end).replace(/^[ \t]/, ""));
+  }, [availableSkills, setInput, setPrefix, value]);
+
   return (
     <div className="relative min-w-0 flex-1">
       <ChatSkillTokenOverlay
         className={className}
-        skills={availableSkills}
         value={controller.textInput.value}
       />
       {pickerOpen ? (
@@ -845,6 +958,11 @@ function ChatComposerTextarea({
         }}
         onKeyDown={(event) => {
           if (!pickerOpen) {
+            if (event.key === "Escape" && prefix) {
+              event.preventDefault();
+              setPrefix(null);
+            }
+
             return;
           }
 
@@ -853,6 +971,7 @@ function ChatComposerTextarea({
             setActiveIndex((current) =>
               suggestions.length === 0 ? 0 : (current + 1) % suggestions.length
             );
+
             return;
           }
 
@@ -863,6 +982,7 @@ function ChatComposerTextarea({
                 ? 0
                 : (current - 1 + suggestions.length) % suggestions.length
             );
+
             return;
           }
 
@@ -870,6 +990,7 @@ function ChatComposerTextarea({
             event.preventDefault();
             setSlashRange(null);
             setActiveIndex(0);
+
             return;
           }
 
@@ -879,6 +1000,7 @@ function ChatComposerTextarea({
           ) {
             event.preventDefault();
             const suggestion = suggestions[safeActiveIndex];
+
             if (suggestion) {
               selectSuggestion(suggestion);
             }
@@ -887,6 +1009,160 @@ function ChatComposerTextarea({
         placeholder={placeholder}
         ref={textareaRef}
       />
+    </div>
+  );
+}
+
+function ChatModelPicker({
+  props,
+  busy,
+  disabled,
+}: {
+  props: ChatComposerFullProps;
+  busy: boolean;
+  disabled: boolean;
+}) {
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [modelSearch, setModelSearch] = useState("");
+  const [showModelSearch, setShowModelSearch] = useState(false);
+  const [modelList, setModelList] = useState<HTMLDivElement | null>(null);
+
+  const closeModelPicker = () => {
+    setModelPickerOpen(false);
+    setModelSearch("");
+    setShowModelSearch(false);
+  };
+
+  const selectModel = (value: string) => {
+    void props.onModelChange(value);
+    closeModelPicker();
+  };
+
+  useEffect(() => {
+    if (!(modelPickerOpen && modelList)) {
+      return;
+    }
+
+    const showSearchForOverflow = () => {
+      if (modelList.scrollHeight > modelList.clientHeight + 1) {
+        setShowModelSearch(true);
+      }
+    };
+
+    const observer = new ResizeObserver(showSearchForOverflow);
+    observer.observe(modelList);
+
+    if (modelList.firstElementChild) {
+      observer.observe(modelList.firstElementChild);
+    }
+
+    showSearchForOverflow();
+
+    return () => observer.disconnect();
+  }, [modelPickerOpen, modelList]);
+
+  return (
+    <div className="min-w-[4.5rem] shrink overflow-hidden">
+      <Popover
+        onOpenChange={(open) => {
+          if (open) {
+            setModelPickerOpen(true);
+          } else {
+            closeModelPicker();
+          }
+        }}
+        open={modelPickerOpen}
+      >
+        <PopoverTrigger
+          aria-label="Select model"
+          className={cn(
+            composerSelectTriggerClass,
+            "flex max-w-full items-center justify-start overflow-hidden",
+            props.contextUsage && "pl-1"
+          )}
+          disabled={
+            busy ||
+            disabled ||
+            !props.providerModelGroups.some((group) => group.models.length > 0)
+          }
+          title={
+            props.currentModelSelection
+              ? (props.renderModelLabel(props.currentModelSelection) ??
+                undefined)
+              : undefined
+          }
+          type="button"
+        >
+          <span className="min-w-0 truncate">
+            {props.currentModelSelection
+              ? (props.renderModelLabel(props.currentModelSelection) ?? "Model")
+              : "Model"}
+          </span>
+          <ArrowDown01Icon aria-hidden className="size-3.5 shrink-0" />
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          className="max-w-[min(24rem,92vw)] overflow-hidden p-0"
+        >
+          <Command className="rounded-lg bg-transparent p-0">
+            {showModelSearch ? (
+              <div className="border-border/60 border-b p-2 [&_[data-slot=command-input-wrapper]]:p-0">
+                <CommandInput
+                  aria-label="Search models"
+                  autoFocus
+                  onValueChange={setModelSearch}
+                  placeholder="Search models…"
+                  value={modelSearch}
+                />
+              </div>
+            ) : null}
+            <CommandList className="max-h-72 p-1" ref={setModelList}>
+              <CommandEmpty>No model found.</CommandEmpty>
+              {props.profileModelId &&
+              !props.providerModelGroups.some((group) =>
+                group.models.some((model) => model.id === props.profileModelId)
+              ) ? (
+                <CommandItem
+                  data-checked={
+                    props.currentModelSelection ===
+                    encodeModelSelection("__unknown__", props.profileModelId)
+                  }
+                  onSelect={() =>
+                    selectModel(
+                      encodeModelSelection("__unknown__", props.profileModelId!)
+                    )
+                  }
+                  value={props.profileModelId}
+                >
+                  {props.profileModelId}
+                </CommandItem>
+              ) : null}
+              {props.providerModelGroups.map((group) => (
+                <CommandGroup
+                  heading={group.providerLabel}
+                  key={group.providerId}
+                >
+                  {group.models.map((model) => {
+                    const providerId = model.providerId ?? group.providerId;
+                    const value = encodeModelSelection(providerId, model.id);
+
+                    return (
+                      <CommandItem
+                        data-checked={props.currentModelSelection === value}
+                        key={`${providerId}:${model.id}`}
+                        onSelect={() => selectModel(value)}
+                        value={`${group.providerLabel} ${model.name} ${model.id}`}
+                      >
+                        {model.name}
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              ))}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
@@ -921,82 +1197,7 @@ function ChatComposerFullFooter({
         ) : null}
 
         {props.providerConfigured ? (
-          <div className="min-w-[4.5rem] shrink overflow-hidden">
-            <PromptInputSelect
-              disabled={
-                busy ||
-                disabled ||
-                !props.providerModelGroups.some(
-                  (group) => group.models.length > 0
-                )
-              }
-              onValueChange={(value) =>
-                void props.onModelChange(value == null ? "" : String(value))
-              }
-              value={props.currentModelSelection ?? ""}
-            >
-              <PromptInputSelectTrigger
-                className={cn(
-                  composerSelectTriggerClass,
-                  "max-w-full justify-start overflow-hidden",
-                  props.contextUsage && "pl-1"
-                )}
-                size="sm"
-                title={
-                  props.currentModelSelection
-                    ? (props.renderModelLabel(props.currentModelSelection) ??
-                      undefined)
-                    : undefined
-                }
-              >
-                <PromptInputSelectValue placeholder="Model">
-                  {props.renderModelLabel}
-                </PromptInputSelectValue>
-              </PromptInputSelectTrigger>
-              <PromptInputSelectContent
-                align="start"
-                alignItemWithTrigger={false}
-                className="w-max max-w-[min(24rem,92vw)] text-xs"
-              >
-                {props.profileModelId &&
-                !props.providerModelGroups.some((group) =>
-                  group.models.some(
-                    (model) => model.id === props.profileModelId
-                  )
-                ) ? (
-                  <PromptInputSelectItem
-                    label={props.profileModelId}
-                    value={encodeModelSelection(
-                      "__unknown__",
-                      props.profileModelId
-                    )}
-                  >
-                    {props.profileModelId}
-                  </PromptInputSelectItem>
-                ) : null}
-                {props.providerModelGroups.map((group) => (
-                  <div key={group.providerId}>
-                    <div className="px-2 py-1.5 font-medium text-2xs text-muted-foreground">
-                      {group.providerLabel}
-                    </div>
-                    {group.models.map((model) => {
-                      const providerId = model.providerId ?? group.providerId;
-
-                      return (
-                        <PromptInputSelectItem
-                          key={`${providerId}:${model.id}`}
-                          label={model.name}
-                          value={`${providerId}::${model.id}`}
-                        >
-                          {model.name}
-                        </PromptInputSelectItem>
-                      );
-                    })}
-                  </div>
-                ))}
-              </PromptInputSelectContent>
-            </PromptInputSelect>
-          </div>
+          <ChatModelPicker busy={busy} disabled={disabled} props={props} />
         ) : (
           <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/10 px-2.5 font-medium text-amber-800 text-xs dark:text-amber-200">
             <WifiOff01Icon aria-hidden className="size-3.5 shrink-0" />
@@ -1011,6 +1212,7 @@ function ChatComposerFullFooter({
             disabled={props.thinkingEffortDisabled}
             effort={props.thinkingEffort}
             onEffortChange={props.onThinkingEffortChange}
+            options={props.thinkingEffortOptions}
             visible
           />
         ) : null}
@@ -1047,6 +1249,7 @@ const composerAttachmentRemoveClassName = cn(
   composerHitTargetClass,
   "absolute top-1 right-1 flex size-7 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-[color,background-color,transform,opacity] hover:bg-background active:scale-[0.96]"
 );
+
 function ChatComposerSubmitButton({
   chatStatus,
   busy,
@@ -1062,9 +1265,13 @@ function ChatComposerSubmitButton({
 }) {
   const controller = usePromptInputController();
   const attachments = usePromptInputAttachments();
+  const { prefix: commandPrefix } = useContext(CommandPrefixContext);
+
   const hasContent =
     controller.textInput.value.trim().length > 0 ||
+    commandPrefix !== null ||
     attachments.files.length > 0;
+
   const { showStop, showSubmit } = composerActions({ canStop, hasContent });
 
   const stopButton = showStop ? (
@@ -1211,6 +1418,7 @@ function ChatAttachmentButton({ disabled }: { disabled: boolean }) {
 
     if (!input) {
       attachments.openFileDialog();
+
       return;
     }
 

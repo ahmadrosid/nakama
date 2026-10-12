@@ -1,8 +1,57 @@
 import { describe, expect, test } from "bun:test";
+import { generateSkillConsolidateMarkdown } from "./skill-consolidate";
 import {
   buildSkillPostTurnReviewPrompt,
   parseSkillPostTurnReviewResponse,
 } from "./skill-post-turn-review";
+import { createCapturingProvider } from "./test-helpers";
+
+describe("generateSkillConsolidateMarkdown", () => {
+  test("skips generation when provider creation returns null", async () => {
+    for (const mode of ["merge", "deslopify"] as const) {
+      await expect(
+        generateSkillConsolidateMarkdown({
+          mode,
+          provider: null,
+          winner: {
+            body: "Steps",
+            description: "Deploy steps",
+            name: "deploy",
+          },
+        })
+      ).resolves.toBeNull();
+    }
+  });
+
+  test.each([
+    { content: "  Steps  ", expected: "Steps" },
+    { content: "```markdown\nSteps\n```", expected: "Steps" },
+    { content: " \n ", expected: null },
+  ])("uses provider content: $expected", async ({ content, expected }) => {
+    const provider = {
+      ...createCapturingProvider({
+        assistantMessage: { content: "", role: "assistant" },
+        content: "",
+        toolCalls: [],
+      }),
+      generateText: async () => ({ content }),
+    };
+
+    for (const mode of ["merge", "deslopify"] as const) {
+      expect(
+        await generateSkillConsolidateMarkdown({
+          mode,
+          provider,
+          winner: {
+            body: "Steps",
+            description: "Deploy steps",
+            name: "deploy",
+          },
+        })
+      ).toBe(expected);
+    }
+  });
+});
 
 describe("parseSkillPostTurnReviewResponse", () => {
   const catalogNames = new Set(["deploy-checklist"]);
@@ -17,6 +66,7 @@ describe("parseSkillPostTurnReviewResponse", () => {
       }),
       { catalogNames }
     );
+
     expect(outcome).toEqual({
       action: "create",
       content:
@@ -35,6 +85,7 @@ describe("parseSkillPostTurnReviewResponse", () => {
       }),
       { catalogNames }
     );
+
     expect(outcome.action).toBe("patch");
   });
 
@@ -81,11 +132,12 @@ describe("buildSkillPostTurnReviewPrompt", () => {
         {
           content: "ok",
           role: "assistant",
-          toolCalls: [{ arguments: "{}", id: "1", name: "bash" }],
+          toolCalls: [{ arguments: {}, id: "1", name: "bash" }],
         },
         { content: '{"ok":true}', name: "bash", role: "tool", toolCallId: "1" },
       ],
     });
+
     expect(prompt).toContain("deploy-checklist");
     expect(prompt).toContain("bash");
     expect(prompt).toContain("deploy staging");

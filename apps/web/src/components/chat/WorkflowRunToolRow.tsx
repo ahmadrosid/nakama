@@ -100,6 +100,7 @@ function useLiveWorkflowRuns(workflowId: string | null, isRunning: boolean) {
 function useWorkflowRunCard(message: ChatListItem) {
   const workflowId = parseWorkflowId(message.toolInput);
   const isRunning = message.toolStatus === "running";
+
   return buildWorkflowRunCard({
     isRunning,
     parsed: parseRunWorkflowResult(message.toolResult),
@@ -112,9 +113,11 @@ function stepTitleTone(status: WorkflowStepView["status"]): string {
   if (status === "running") {
     return "todo-shimmer-text text-foreground";
   }
+
   if (status === "pending" || status === "skipped") {
     return "text-muted-foreground";
   }
+
   return "text-foreground";
 }
 
@@ -122,6 +125,7 @@ function stepMetaTone(status: WorkflowStepView["status"]): string {
   if (status === "failed") {
     return "text-red-600 dark:text-red-400";
   }
+
   return "text-emerald-600 dark:text-emerald-400";
 }
 
@@ -140,6 +144,7 @@ function renderStepMark(
 
   const completed = status === "completed";
   const Icon = completed ? CheckmarkCircle02Icon : DashedLineCircleIcon;
+
   return (
     <Icon
       aria-hidden

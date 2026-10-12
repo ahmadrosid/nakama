@@ -14,11 +14,13 @@ describe("detectMacOsTheme", () => {
 
   afterEach(async () => {
     clearMacOsThemeSessionCache();
+
     if (previousConfigDir === undefined) {
       delete process.env.NAKAMA_CONFIG_DIR;
     } else {
       process.env.NAKAMA_CONFIG_DIR = previousConfigDir;
     }
+
     if (configDir) {
       await rm(configDir, { force: true, recursive: true });
       configDir = "";
@@ -40,9 +42,11 @@ describe("detectMacOsTheme", () => {
       prefsMtimeMs: () => 1000,
       readDefaults: () => {
         reads += 1;
+
         return "dark";
       },
     });
+
     expect(first).toBe("dark");
     expect(reads).toBe(1);
 
@@ -53,13 +57,16 @@ describe("detectMacOsTheme", () => {
     });
 
     clearMacOsThemeSessionCache();
+
     const second = await detectMacOsTheme({
       prefsMtimeMs: () => 1000,
       readDefaults: () => {
         reads += 1;
+
         return "light";
       },
     });
+
     expect(second).toBe("dark");
     expect(reads).toBe(1);
   });
@@ -72,18 +79,22 @@ describe("detectMacOsTheme", () => {
       prefsMtimeMs: () => 1000,
       readDefaults: () => {
         reads += 1;
+
         return "dark";
       },
     });
 
     clearMacOsThemeSessionCache();
+
     const next = await detectMacOsTheme({
       prefsMtimeMs: () => 2000,
       readDefaults: () => {
         reads += 1;
+
         return "light";
       },
     });
+
     expect(next).toBe("light");
     expect(reads).toBe(2);
 
@@ -102,6 +113,7 @@ describe("detectMacOsTheme", () => {
       prefsMtimeMs: () => 1000,
       readDefaults: () => {
         reads += 1;
+
         return "dark";
       },
     });
@@ -112,9 +124,11 @@ describe("detectMacOsTheme", () => {
       },
       readDefaults: () => {
         reads += 1;
+
         return "light";
       },
     });
+
     expect(again).toBe("dark");
     expect(reads).toBe(1);
   });
@@ -127,9 +141,11 @@ describe("detectMacOsTheme", () => {
       prefsMtimeMs: () => null,
       readDefaults: () => {
         reads += 1;
+
         return "light";
       },
     });
+
     expect(theme).toBe("light");
     expect(reads).toBe(1);
 

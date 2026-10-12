@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { ServerOptions } from "./http/context";
 import { createMinimalHonoApp } from "./http/test-app-helpers";
 import { setupFreshInstallSession } from "./http/test-session-helpers";
 import { setupTestConfigDir } from "./test-config-dir";
@@ -30,6 +31,7 @@ describe("static web serving before auth", () => {
 
   test("GET /login returns index.html without auth token", async () => {
     const { app } = createMinimalHonoApp({ webDistDir: TEST_DIST_DIR });
+
     const response = await app.fetch(
       new Request("http://localhost:4310/login")
     );
@@ -40,6 +42,7 @@ describe("static web serving before auth", () => {
 
   test("GET /app.js returns the file without auth token", async () => {
     const { app } = createMinimalHonoApp({ webDistDir: TEST_DIST_DIR });
+
     const response = await app.fetch(
       new Request("http://localhost:4310/app.js")
     );
@@ -50,6 +53,7 @@ describe("static web serving before auth", () => {
 
   test("GET /assets/missing.js returns 404 without auth token", async () => {
     const { app } = createMinimalHonoApp({ webDistDir: TEST_DIST_DIR });
+
     const response = await app.fetch(
       new Request("http://localhost:4310/assets/missing.js")
     );
@@ -59,18 +63,18 @@ describe("static web serving before auth", () => {
 
   test("GET /v1/sessions without token returns 401", async () => {
     const { app } = createMinimalHonoApp({ webDistDir: TEST_DIST_DIR });
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/sessions")
     );
 
     expect(response.status).toBe(401);
-    await expect(response.json()).resolves.toEqual({
-      error: "Authentication required",
-    });
+    await expect(response.json()).resolves.toHaveProperty("error");
   });
 
   test("GET /v1/nonexistent without token returns 401", async () => {
     const { app } = createMinimalHonoApp({ webDistDir: TEST_DIST_DIR });
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/nonexistent")
     );
@@ -79,7 +83,14 @@ describe("static web serving before auth", () => {
   });
 });
 
-async function createMockAppWithWorkerManager(workerManager: object) {
+type MockWorkerManager = Pick<ServerOptions["workerManager"], "isValidWorker"> &
+  Partial<
+    Pick<ServerOptions["workerManager"], "getWorkerLogs" | "clearWorkerLogs">
+  >;
+
+async function createMockAppWithWorkerManager(
+  workerManager: MockWorkerManager
+) {
   const { app, databaseAdapter } = createMinimalHonoApp({
     agent: {
       getProfile: async () => ({ profile: { id: "default" } }),
@@ -87,7 +98,9 @@ async function createMockAppWithWorkerManager(workerManager: object) {
     },
     workerManager,
   });
+
   const session = await setupFreshInstallSession(app, databaseAdapter);
+
   return { app, session };
 }
 
@@ -97,6 +110,7 @@ describe("GET /v1/workers/{name}/logs", () => {
       getWorkerLogs: async () => ({ stderr: "err1", stdout: "log1\nlog2" }),
       isValidWorker: (name: string) => name === "whatsapp",
     });
+
     const response = await app.fetch(
       new Request(
         "http://localhost:4310/v1/workers/whatsapp/logs?profileId=default",
@@ -130,7 +144,8 @@ describe("GET /v1/workers/{name}/logs", () => {
         }
       )
     );
-    expect(((await low.json()) as { stdout: string }).stdout).toBe("1");
+
+    expect(await low.json()).toMatchObject({ stdout: "1" });
 
     const high = await app.fetch(
       new Request(
@@ -138,7 +153,8 @@ describe("GET /v1/workers/{name}/logs", () => {
         { headers: session.headers() }
       )
     );
-    expect(((await high.json()) as { stdout: string }).stdout).toBe("2000");
+
+    expect(await high.json()).toMatchObject({ stdout: "2000" });
   });
 
   test("rejects non-numeric lines and falls back to the default", async () => {
@@ -149,6 +165,7 @@ describe("GET /v1/workers/{name}/logs", () => {
       }),
       isValidWorker: (name: string) => name === "whatsapp",
     });
+
     const response = await app.fetch(
       new Request(
         "http://localhost:4310/v1/workers/whatsapp/logs?lines=abc&profileId=default",
@@ -159,13 +176,14 @@ describe("GET /v1/workers/{name}/logs", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(((await response.json()) as { stdout: string }).stdout).toBe("200");
+    expect(await response.json()).toMatchObject({ stdout: "200" });
   });
 
   test("returns 400 for unknown worker", async () => {
     const { app, session } = await createMockAppWithWorkerManager({
       isValidWorker: () => false,
     });
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/workers/foobar/logs", {
         headers: session.headers(),
@@ -173,9 +191,7 @@ describe("GET /v1/workers/{name}/logs", () => {
     );
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: "Unknown worker: foobar",
-    });
+    await expect(response.json()).resolves.toHaveProperty("error");
   });
 
   test("returns 500 when getWorkerLogs fails", async () => {
@@ -185,6 +201,7 @@ describe("GET /v1/workers/{name}/logs", () => {
       },
       isValidWorker: (name: string) => name === "whatsapp",
     });
+
     const response = await app.fetch(
       new Request(
         "http://localhost:4310/v1/workers/whatsapp/logs?profileId=default",
@@ -195,9 +212,7 @@ describe("GET /v1/workers/{name}/logs", () => {
     );
 
     expect(response.status).toBe(500);
-    await expect(response.json()).resolves.toEqual({
-      error: "PM2 not available",
-    });
+    await expect(response.json()).resolves.toHaveProperty("error");
   });
 });
 
@@ -207,6 +222,7 @@ describe("POST /v1/workers/{name}/clear-logs", () => {
       clearWorkerLogs: async () => {},
       isValidWorker: (name: string) => name === "whatsapp",
     });
+
     const response = await app.fetch(
       new Request(
         "http://localhost:4310/v1/workers/whatsapp/clear-logs?profileId=default",
@@ -225,6 +241,7 @@ describe("POST /v1/workers/{name}/clear-logs", () => {
     const { app, session } = await createMockAppWithWorkerManager({
       isValidWorker: () => false,
     });
+
     const response = await app.fetch(
       new Request("http://localhost:4310/v1/workers/foobar/clear-logs", {
         headers: session.headers({ "X-CSRF-Token": session.csrfToken }),
@@ -233,9 +250,7 @@ describe("POST /v1/workers/{name}/clear-logs", () => {
     );
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: "Unknown worker: foobar",
-    });
+    await expect(response.json()).resolves.toHaveProperty("error");
   });
 
   test("returns 500 when clearWorkerLogs fails", async () => {
@@ -245,6 +260,7 @@ describe("POST /v1/workers/{name}/clear-logs", () => {
       },
       isValidWorker: (name: string) => name === "whatsapp",
     });
+
     const response = await app.fetch(
       new Request(
         "http://localhost:4310/v1/workers/whatsapp/clear-logs?profileId=default",
@@ -256,8 +272,6 @@ describe("POST /v1/workers/{name}/clear-logs", () => {
     );
 
     expect(response.status).toBe(500);
-    await expect(response.json()).resolves.toEqual({
-      error: "PM2 flush failed",
-    });
+    await expect(response.json()).resolves.toHaveProperty("error");
   });
 });

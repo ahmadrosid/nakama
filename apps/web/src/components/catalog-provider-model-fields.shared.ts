@@ -24,5 +24,7 @@ export type CatalogShortlistProvider =
 export function isCatalogShortlistProvider(
   provider: SelectedProvider
 ): provider is CatalogShortlistProvider {
-  return (CATALOG_SHORTLIST_PROVIDERS as readonly string[]).includes(provider);
+  return CATALOG_SHORTLIST_PROVIDERS.some(
+    (candidate) => candidate === provider
+  );
 }

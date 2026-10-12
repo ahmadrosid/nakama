@@ -11,7 +11,7 @@ export function getBrowserTimezone(): string {
   }
 }
 
-export function getTimezoneEntries(
+function getTimezoneEntries(
   response: ListTimezonesResponse | undefined
 ): TimezoneCatalogEntry[] {
   if (!response) {
@@ -107,6 +107,7 @@ export function getFilteredTimezoneGroups(
 
   for (const group of response.groups) {
     const timezones = group.timezones.filter((entry) => matches.has(entry.id));
+
     if (timezones.length > 0) {
       groups.push({ ...group, timezones });
     }

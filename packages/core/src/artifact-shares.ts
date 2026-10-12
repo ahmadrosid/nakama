@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { z } from "zod";
 import { pathExists } from "./fs";
 import { assertConfigPathSegment, getArtifactSharesDir } from "./soul/resolve";
 
@@ -21,16 +22,20 @@ export async function writeArtifactShareSnapshot(input: {
   bytes: Buffer;
 }): Promise<string> {
   const sharesDir = getArtifactSharesDir(input.orgId);
+
   const shareDir = path.join(
     sharesDir,
     assertConfigPathSegment(input.shareId, "shareId")
   );
+
   await mkdir(shareDir, { recursive: true });
 
   const safeName =
     path.basename(input.filename).replace(/[^\w.\-()+ ]+/g, "_") || "artifact";
+
   const storagePath = path.join(shareDir, safeName);
   await writeFile(storagePath, input.bytes);
+
   return storagePath;
 }
 
@@ -46,6 +51,7 @@ function assertArtifactShareStoragePath(
 
   const root = path.resolve(getArtifactSharesDir(orgId));
   const resolved = path.resolve(storagePath);
+
   if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) {
     throw new Error(
       "Artifact share storage path escapes the org artifact-shares directory."
@@ -75,7 +81,9 @@ export async function deleteArtifactShareSnapshot(
   try {
     await unlink(storagePath);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+    const details = z.object({ code: z.string().optional() }).safeParse(error);
+
+    if (!details.success || details.data.code !== "ENOENT") {
       throw error;
     }
   }

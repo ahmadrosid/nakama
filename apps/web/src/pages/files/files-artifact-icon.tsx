@@ -18,6 +18,7 @@ export function ArtifactIcon({
     sizeBytes: 0,
     updatedAt: "",
   });
+
   const iconClass = cn("size-4 text-muted-foreground", className);
 
   if (kind === "image") {

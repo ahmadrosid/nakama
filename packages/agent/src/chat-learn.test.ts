@@ -27,7 +27,8 @@ describe("/learn provider expansion", () => {
     const providerUser = provider.lastInput?.messages.find(
       (message) => message.role === "user"
     );
-    expect(typeof providerUser?.content).toBe("string");
+
+    expect(Array.isArray(providerUser?.content)).toBe(false);
     expect(providerUser?.content).toContain("[/learn]");
     expect(providerUser?.content).toContain("filing an expense");
     expect(providerUser?.content).not.toBe(typed);

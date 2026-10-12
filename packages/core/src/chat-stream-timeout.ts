@@ -1,18 +1,22 @@
 import { readEnvValue } from "./config";
 
 export const DEFAULT_CHAT_STREAM_TIMEOUT_MS = 86_400_000;
+
 export const MIN_CHAT_STREAM_TIMEOUT_MS = 60_000;
+
 export const MAX_CHAT_STREAM_TIMEOUT_MS = 86_400_000;
 
 export function resolveChatStreamTimeoutMs(
   env: Record<string, string | undefined> = process.env
 ): number {
   const raw = readEnvValue(env, "NAKAMA_CHAT_STREAM_TIMEOUT_MS");
+
   if (!raw) {
     return DEFAULT_CHAT_STREAM_TIMEOUT_MS;
   }
 
   const parsed = Number(raw);
+
   if (!Number.isFinite(parsed)) {
     return DEFAULT_CHAT_STREAM_TIMEOUT_MS;
   }
@@ -37,17 +41,20 @@ export function resolveChatStreamTimeoutMs(
  * whose model really does think for minutes before emitting anything.
  */
 export const DEFAULT_CHAT_FIRST_TOKEN_TIMEOUT_MS = 120_000;
+
 export const MIN_CHAT_FIRST_TOKEN_TIMEOUT_MS = 5000;
 
 export function resolveChatFirstTokenTimeoutMs(
   env: Record<string, string | undefined> = process.env
 ): number {
   const raw = readEnvValue(env, "NAKAMA_CHAT_FIRST_TOKEN_TIMEOUT_MS");
+
   if (!raw) {
     return DEFAULT_CHAT_FIRST_TOKEN_TIMEOUT_MS;
   }
 
   const parsed = Number(raw);
+
   if (!Number.isFinite(parsed)) {
     return DEFAULT_CHAT_FIRST_TOKEN_TIMEOUT_MS;
   }

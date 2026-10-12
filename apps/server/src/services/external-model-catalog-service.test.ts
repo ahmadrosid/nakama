@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { asTestFetch } from "../providers/test-helpers";
 import {
   getExternalModelCatalog,
   isExternalModelCatalogId,
@@ -24,8 +25,12 @@ describe("isExternalModelCatalogId", () => {
 
 describe("getExternalModelCatalog", () => {
   test("fetches and returns catalog payload", async () => {
-    globalThis.fetch = async () =>
-      new Response(JSON.stringify({ openai: { models: {} } }), { status: 200 });
+    globalThis.fetch = asTestFetch(
+      async () =>
+        new Response(JSON.stringify({ openai: { models: {} } }), {
+          status: 200,
+        })
+    );
 
     await expect(getExternalModelCatalog("models-dev")).resolves.toEqual({
       openai: { models: {} },
@@ -33,7 +38,9 @@ describe("getExternalModelCatalog", () => {
   });
 
   test("throws when upstream request fails", async () => {
-    globalThis.fetch = async () => new Response("nope", { status: 502 });
+    globalThis.fetch = asTestFetch(
+      async () => new Response("nope", { status: 502 })
+    );
 
     await expect(getExternalModelCatalog("openrouter")).rejects.toThrow(
       "Failed to fetch model catalog (502)"

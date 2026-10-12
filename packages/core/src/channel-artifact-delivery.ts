@@ -46,26 +46,12 @@ export interface ListedArtifactCandidate {
   updatedAt: string;
 }
 
-const FRESHNESS_MARKERS =
-  "harian|hari\\s+ini|terbaru|today|daily|latest|yang\\s+baru|update|diperbarui";
-
-const FILENAME_TOKEN = /\S+\.[a-z0-9]{2,5}\b/gi;
-
-export function isFreshReportRequest(text: string): boolean {
-  // Filenames can carry a marker word (`daily-report.csv`, `update-harga.csv`)
-  // and those requests still want the file itself, not a fresh agent turn.
-  const normalized = text.trim().replace(FILENAME_TOKEN, " ");
-  if (!normalized) {
-    return false;
-  }
-
-  return new RegExp(String.raw`\b(?:${FRESHNESS_MARKERS})\b`, "i").test(
-    normalized
-  );
-}
+/** In-process document upload budget, not WhatsApp's absolute limit. */
+export const WHATSAPP_ARTIFACT_DOCUMENT_MAX_BYTES = 16 * 1024 * 1024;
 
 export function isAttachIntent(text: string): boolean {
   const normalized = text.trim();
+
   if (!normalized) {
     return false;
   }
@@ -91,11 +77,13 @@ export function resolveArtifactForAttach(input: {
   registry: DeliverableChannelArtifact[];
 }): DeliverableChannelArtifact | null {
   const fromRegistry = input.registry.at(-1);
+
   if (fromRegistry) {
     return fromRegistry;
   }
 
   const newestListed = input.listed[0];
+
   if (!newestListed) {
     return null;
   }
@@ -111,6 +99,7 @@ function listedCandidateToDeliverable(
   entry: ListedArtifactCandidate
 ): DeliverableChannelArtifact {
   const basename = entry.filename.split(/[\\/]/).pop() ?? entry.filename;
+
   return {
     filename: basename,
     mimeType: entry.mimeType,
@@ -122,20 +111,23 @@ function listedCandidateToDeliverable(
   };
 }
 
+interface ResolvedArtifactShare {
+  sharePath: string | null;
+  shareUrl: string | null;
+  webPublicUrlConfigured: boolean;
+}
+
 export function resolveShareUrlForPublish(
   response: PublishArtifactShareResult,
   cache: Record<string, string>,
   relativePath: string
-): {
-  shareUrl: string | null;
-  sharePath: string | null;
-  webPublicUrlConfigured: boolean;
-} {
+): ResolvedArtifactShare {
   if (response.shareUrl) {
     cache[relativePath] = response.shareUrl;
   }
 
   const shareUrl = response.shareUrl ?? cache[relativePath] ?? null;
+
   const sharePath =
     response.sharePath ||
     (shareUrl ? new URL(shareUrl, "http://localhost").pathname : null);
@@ -157,6 +149,7 @@ export function formatArtifactShareFooter(
 
   for (const artifact of artifacts) {
     const link = artifact.shareUrl ?? artifact.sharePath;
+
     if (!link) {
       continue;
     }
@@ -184,6 +177,7 @@ export function pushDeliverableArtifact(
 ): DeliverableChannelArtifact[] {
   const withoutPath = registry.filter((entry) => entry.path !== artifact.path);
   const next = [...withoutPath, artifact];
+
   return next.slice(-maxEntries);
 }
 
@@ -203,6 +197,7 @@ export async function mintDeliverableArtifacts(input: {
   for (const artifact of input.artifacts) {
     try {
       const response = await input.publish(artifact.path);
+
       const resolved = resolveShareUrlForPublish(
         response,
         input.shareUrlCache,
@@ -243,9 +238,11 @@ export async function deliverTurnArtifactShares(input: {
   };
 }): Promise<DeliverableChannelArtifact[]> {
   const messages = await input.session.getMessages();
+
   const paired = extractPairedTurnArtifacts(messages).filter(
     (artifact) => !isScratchArtifactPath(artifact.path)
   );
+
   if (paired.length === 0) {
     return [];
   }
@@ -253,12 +250,15 @@ export async function deliverTurnArtifactShares(input: {
   const shareUrlCache = input.sessionStore.getArtifactShareUrls(
     input.conversationKey
   );
+
   let webPublicUrlConfigured = true;
+
   const delivered = await mintDeliverableArtifacts({
     artifacts: paired,
     publish: async (path) => {
       const response = await input.publish(path);
       webPublicUrlConfigured = response.webPublicUrlConfigured;
+
       return response;
     },
     shareUrlCache,
@@ -271,6 +271,7 @@ export async function deliverTurnArtifactShares(input: {
   let registry = input.sessionStore.getDeliverableArtifacts(
     input.conversationKey
   );
+
   for (const artifact of delivered) {
     registry = pushDeliverableArtifact(registry, artifact);
   }

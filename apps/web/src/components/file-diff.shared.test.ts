@@ -8,6 +8,7 @@ describe("buildFileDiffRows", () => {
       '["bash","read_file","search_files"]',
       { formatJson: true }
     );
+
     expect(
       rows.filter((row) => row.type === "add").map((row) => row.text)
     ).toEqual(['  "bash",']);
@@ -59,9 +60,11 @@ describe("buildFileDiffRows", () => {
     const before = ["a0", "a1", "a2", "a3", "old", "b0", "b1", "b2", "b3"].join(
       "\n"
     );
+
     const after = ["a0", "a1", "a2", "a3", "new", "b0", "b1", "b2", "b3"].join(
       "\n"
     );
+
     const texts = buildFileDiffRows(before, after).map((row) => row.text);
 
     expect(texts).toEqual(["a1", "a2", "a3", "old", "new", "b0", "b1", "b2"]);

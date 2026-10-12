@@ -9,6 +9,7 @@ import {
   type ToolContext,
 } from "@nakama/core";
 import type { StoredToolRecord } from "@nakama/db";
+import { waitForExit, waitForPidFile } from "./coding-agent-test-fixtures";
 import {
   CUSTOM_TOOL_HANDLERS,
   getCustomToolHandler,
@@ -17,6 +18,7 @@ import {
   TOOL_RETRYABLE_EXIT_CODE,
   withToolRetries,
 } from "./custom-tool-handlers";
+import { spawnJsonTool } from "./custom-tool-subprocess";
 
 function ctx(signal?: AbortSignal): ToolContext {
   return { signal };
@@ -34,14 +36,18 @@ function makeRecord(
     handlerType: "python",
     id: "tool_flaky",
     name: "flaky",
+    orgId: "org_test",
     updatedAt: new Date().toISOString(),
     ...overrides,
   };
 }
 
 let reportedErrors: ErrorReport[] = [];
+
 let firstReport: Promise<ErrorReport>;
+
 let queueDir = "";
+
 const realConsoleError = console.error;
 
 beforeEach(async () => {
@@ -60,6 +66,7 @@ beforeEach(async () => {
   setErrorSink((report) => {
     reportedErrors.push(report);
     resolveFirst(report);
+
     return true;
   });
   // reportError logs the failure locally whatever the sink does.
@@ -68,11 +75,13 @@ beforeEach(async () => {
 
 afterEach(async () => {
   delete process.env.NAKAMA_ERROR_TRACKING_DSN;
+
   if (originalConfigDir === undefined) {
     delete process.env.NAKAMA_CONFIG_DIR;
   } else {
     process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
   }
+
   await refreshErrorTrackingEnabled();
   setErrorSink(null);
   console.error = realConsoleError;
@@ -82,8 +91,10 @@ afterEach(async () => {
 describe("withToolRetries", () => {
   test("succeeds on the first attempt without extra calls", async () => {
     let attempts = 0;
+
     const run = async () => {
       attempts += 1;
+
       return { ok: true };
     };
 
@@ -95,11 +106,14 @@ describe("withToolRetries", () => {
 
   test("retries at most twice and returns success when a later attempt succeeds", async () => {
     let attempts = 0;
+
     const run = async () => {
       attempts += 1;
+
       if (attempts < 3) {
         throw new RetryableToolError("transient");
       }
+
       return { ok: true };
     };
 
@@ -113,8 +127,10 @@ describe("withToolRetries", () => {
 
   test("stops after two retries and re-throws the last error unchanged", async () => {
     let attempts = 0;
+
     const message =
       "Python tool timed out after 8000ms (exit code null): (no stderr)";
+
     const run = async () => {
       attempts += 1;
       throw new RetryableToolError(message);
@@ -135,6 +151,7 @@ describe("withToolRetries", () => {
 
   test("does not retry arbitrary thrown errors by default", async () => {
     let attempts = 0;
+
     const run = async () => {
       attempts += 1;
       throw new Error("validation failed");
@@ -151,6 +168,7 @@ describe("withToolRetries", () => {
     let attempts = 0;
     const controller = new AbortController();
     const cancellation = { code: "cancelled" };
+
     const run = async () => {
       attempts += 1;
       controller.abort(cancellation);
@@ -169,8 +187,10 @@ describe("withToolRetries", () => {
     controller.abort();
     const cancellation = controller.signal.reason;
     let attempts = 0;
+
     const run = async () => {
       attempts += 1;
+
       return { ok: true };
     };
 
@@ -185,11 +205,14 @@ describe("withToolRetries", () => {
     let attempts = 0;
     const controller = new AbortController();
     const cancellation = new Error("cancelled");
+
     const run = async () => {
       attempts += 1;
+
       if (attempts === 1) {
         throw new RetryableToolError("transient");
       }
+
       return { ok: true };
     };
 
@@ -220,7 +243,7 @@ describe("getCustomToolHandler seam", () => {
   test("does not retry post-side-effect failures", async () => {
     const configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const toolsDir = path.join(configDir, "tools");
+    const toolsDir = path.join(configDir, "orgs", "org_test", "tools");
     const wsDir = path.join(configDir, "ws");
     await mkdir(toolsDir, { recursive: true });
     await mkdir(wsDir, { recursive: true });
@@ -254,11 +277,14 @@ export async function run() {
         })
       );
 
-      await expect(tool!.run({}, { workspaceRoot: wsDir })).rejects.toThrow();
+      await expect(
+        tool!.run({}, { orgId: "org_test", workspaceRoot: wsDir })
+      ).rejects.toThrow();
 
       const sideEffects = Number(
         (await Bun.file(path.join(wsDir, "side-effects.txt")).text()).trim()
       );
+
       expect(sideEffects).toBe(1);
       expect((await firstReport).source).toBe("tool:side_effect");
     } finally {
@@ -267,6 +293,7 @@ export async function run() {
       } else {
         process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
       }
+
       await rm(configDir, { force: true, recursive: true });
     }
   });
@@ -274,7 +301,7 @@ export async function run() {
   test("python handler failures are actually retried through the seam", async () => {
     const configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const toolsDir = path.join(configDir, "tools");
+    const toolsDir = path.join(configDir, "orgs", "org_test", "tools");
     const wsDir = path.join(configDir, "ws");
     await mkdir(toolsDir, { recursive: true });
     await mkdir(wsDir, { recursive: true });
@@ -311,7 +338,11 @@ if __name__ == "__main__":
       const tool = await handler!.load(makeRecord());
       expect(tool).not.toBeNull();
 
-      const result = (await tool!.run({}, { workspaceRoot: wsDir })) as {
+      // SAFETY: The test fixture matches the contract used by this test.
+      const result = (await tool!.run(
+        {},
+        { orgId: "org_test", workspaceRoot: wsDir }
+      )) as {
         ok: boolean;
         attempts: number;
       };
@@ -326,6 +357,7 @@ if __name__ == "__main__":
       } else {
         process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
       }
+
       await rm(configDir, { force: true, recursive: true });
     }
   });
@@ -333,7 +365,7 @@ if __name__ == "__main__":
   test("an exhausted tool reports under the record's own name", async () => {
     const configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const toolsDir = path.join(configDir, "tools");
+    const toolsDir = path.join(configDir, "orgs", "org_test", "tools");
     const wsDir = path.join(configDir, "ws");
     await mkdir(toolsDir, { recursive: true });
     await mkdir(wsDir, { recursive: true });
@@ -356,7 +388,9 @@ if __name__ == "__main__":
         })
       );
 
-      await expect(tool!.run({}, { workspaceRoot: wsDir })).rejects.toThrow();
+      await expect(
+        tool!.run({}, { orgId: "org_test", workspaceRoot: wsDir })
+      ).rejects.toThrow();
 
       // The seam passes definition.name, not the module path or the record id,
       // and only running it end to end says which one arrived.
@@ -367,6 +401,7 @@ if __name__ == "__main__":
       } else {
         process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
       }
+
       await rm(configDir, { force: true, recursive: true });
     }
   });
@@ -374,7 +409,7 @@ if __name__ == "__main__":
   test("javascript handler failures are actually retried through the seam", async () => {
     const configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const toolsDir = path.join(configDir, "tools");
+    const toolsDir = path.join(configDir, "orgs", "org_test", "tools");
     const wsDir = path.join(configDir, "ws");
     await mkdir(toolsDir, { recursive: true });
     await mkdir(wsDir, { recursive: true });
@@ -407,15 +442,21 @@ export async function run(input, context) {
     try {
       const handler = getCustomToolHandler("javascript");
       expect(handler).not.toBeNull();
+
       const tool = await handler!.load(
         makeRecord({
           handlerConfig: { modulePath: "flaky.js" },
           handlerType: "javascript",
         })
       );
+
       expect(tool).not.toBeNull();
 
-      const result = (await tool!.run({}, { workspaceRoot: wsDir })) as {
+      // SAFETY: The test fixture matches the contract used by this test.
+      const result = (await tool!.run(
+        {},
+        { orgId: "org_test", workspaceRoot: wsDir }
+      )) as {
         ok: boolean;
         attempts: number;
       };
@@ -430,7 +471,76 @@ export async function run(input, context) {
       } else {
         process.env.NAKAMA_CONFIG_DIR = originalConfigDir;
       }
+
       await rm(configDir, { force: true, recursive: true });
     }
   });
+});
+
+// Exercise real process groups, including a descendant that outlives its parent.
+describe("custom-tool process cleanup", () => {
+  for (const mode of ["abort", "timeout"] as const) {
+    test.skipIf(process.platform === "win32")(
+      `${mode} stops a descendant that ignores SIGTERM`,
+      async () => {
+        const dir = await mkdtemp(path.join(os.tmpdir(), "nakama-tool-tree-"));
+        const modulePath = path.join(dir, "spawn-child.js");
+        const pidFile = path.join(dir, "descendant.pid");
+
+        const descendantCode = [
+          'process.on("SIGTERM", () => {});',
+          `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
+          "setInterval(() => {}, 1000);",
+        ].join("\n");
+
+        await writeFile(
+          modulePath,
+          `
+const { spawn } = require("node:child_process");
+spawn(process.execPath, ["-e", ${JSON.stringify(descendantCode)}], { stdio: "ignore" });
+setInterval(() => {}, 1000);
+`
+        );
+        const controller = new AbortController();
+        let descendantPid: number | undefined;
+
+        const pending = spawnJsonTool({
+          args: [modulePath],
+          bin: process.execPath,
+          context: { signal: controller.signal },
+          cwd: dir,
+          input: {},
+          label: "process tree test",
+          transport: { timeoutMs: mode === "timeout" ? 1000 : 30_000 },
+        });
+
+        // Attach immediately: the parent can exit before the PID is read.
+        const outcome = pending.then(
+          () => false,
+          () => true
+        );
+
+        try {
+          descendantPid = await waitForPidFile(pidFile, 2000);
+
+          if (mode === "abort") {
+            controller.abort();
+          }
+
+          expect(await outcome).toBe(true);
+          expect(await waitForExit(descendantPid, 7000)).toBe(true);
+        } finally {
+          controller.abort();
+
+          if (descendantPid && !(await waitForExit(descendantPid, 100))) {
+            process.kill(descendantPid, "SIGKILL");
+          }
+
+          await outcome;
+          await rm(dir, { force: true, recursive: true });
+        }
+      },
+      15_000
+    );
+  }
 });

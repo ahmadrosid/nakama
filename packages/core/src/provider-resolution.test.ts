@@ -19,6 +19,7 @@ describe("parseProviderName", () => {
     expect(parseProviderName("openai_compatible")).toBe("openai_compatible");
     expect(parseProviderName("opencode_go")).toBe("opencode_go");
     expect(parseProviderName("deepseek")).toBe("deepseek");
+    expect(parseProviderName("netra")).toBe("netra");
     expect(parseProviderName("doubao")).toBe("doubao");
     expect(parseProviderName("mistral")).toBe("mistral");
     expect(parseProviderName("perplexity")).toBe("perplexity");
@@ -45,6 +46,9 @@ describe("parseProviderName", () => {
 });
 
 describe("apiKeyEnvVarForProvider", () => {
+  test("Netra uses its documented API key variable", () => {
+    expect(apiKeyEnvVarForProvider("netra")).toBe("NETRA_API_KEY");
+  });
   test("chatgpt uses OAuth, not an API key env var", () => {
     expect(apiKeyEnvVarForProvider("chatgpt")).toBeNull();
   });
@@ -254,6 +258,7 @@ describe("resolveProvider fireworks", () => {
 describe("isDiscoveryModelProvider", () => {
   test("includes providers whose models are discovered from /models", () => {
     expect(isDiscoveryModelProvider("openai_compatible")).toBe(true);
+    expect(isDiscoveryModelProvider("netra")).toBe(true);
     expect(isDiscoveryModelProvider("minimax")).toBe(true);
     expect(isDiscoveryModelProvider("minimax_cn")).toBe(true);
     expect(isDiscoveryModelProvider("zhipu")).toBe(true);

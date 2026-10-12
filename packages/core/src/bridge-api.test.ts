@@ -38,6 +38,32 @@ describe("bridge API contract", () => {
     });
   });
 
+  test("parseListProfilesResponse preserves profile chat fields", () => {
+    expect(
+      parseListProfilesResponse({
+        profiles: [
+          {
+            id: "super",
+            isDefault: false,
+            isSuper: true,
+            model: "local::research",
+            name: "Super Bot",
+          },
+        ],
+      })
+    ).toEqual({
+      profiles: [
+        {
+          id: "super",
+          isDefault: false,
+          isSuper: true,
+          model: "local::research",
+          name: "Super Bot",
+        },
+      ],
+    });
+  });
+
   test("parseListProfilesResponse rejects renamed fields", () => {
     expect(() => parseListProfilesResponse({ items: [] })).toThrow(
       /expected \{ profiles/

@@ -1,8 +1,8 @@
 import { join } from "node:path";
+import { z } from "zod";
 import { getUserConfigDir } from "./user-config";
 import {
   createWorkerHeartbeatStore,
-  isProcessAlive,
   type WorkerHeartbeatBase,
 } from "./worker-heartbeat";
 
@@ -27,27 +27,33 @@ const store = createWorkerHeartbeatStore<AutomationWorkerHeartbeat>({
   getDir: getAutomationConfigDir,
   isAliveExtra: (heartbeat) => heartbeat.running,
   parse: (value, base) => {
-    if (
-      typeof value.running !== "boolean" ||
-      typeof value.scheduledJobs !== "number"
-    ) {
+    const parsed = z
+      .object({
+        running: z.boolean(),
+        scheduledJobs: z.number(),
+      })
+      .safeParse(value);
+
+    if (!parsed.success) {
       return null;
     }
 
     return {
       ...base,
-      running: value.running,
-      scheduledJobs: value.scheduledJobs,
+      running: parsed.data.running,
+      scheduledJobs: parsed.data.scheduledJobs,
     };
   },
 });
 
-export const getAutomationWorkerHeartbeatPath = store.getPath;
 export const parseAutomationWorkerHeartbeat = store.parse;
+
 export const readAutomationWorkerHeartbeat = store.read;
+
 export const clearAutomationWorkerHeartbeat = store.clear;
+
 export const isAutomationWorkerRunning = store.isRunning;
-export const isAutomationProcessAlive = isProcessAlive;
+
 export const isAutomationHeartbeatAlive = store.isAlive;
 
 export async function writeAutomationWorkerHeartbeat(

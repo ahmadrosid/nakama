@@ -22,6 +22,7 @@ import {
 type NavIcon = typeof SharedWifiIcon;
 
 export type PageId =
+  | "google-meet"
   | "chat"
   | "customize"
   | "usage"
@@ -67,7 +68,7 @@ const navItem = (
   label,
 });
 
-export const NAV_GROUPS: NavGroup[] = [
+const NAV_GROUPS: NavGroup[] = [
   {
     id: "chat",
     items: [
@@ -82,6 +83,12 @@ export const NAV_GROUPS: NavGroup[] = [
         "Agent",
         "Manage bot configs and tool allowlists",
         UserSquareIcon
+      ),
+      navItem(
+        "google-meet",
+        "Google Meet",
+        "Capture and read meeting transcripts",
+        SharedWifiIcon
       ),
       navItem(
         "files",
@@ -154,7 +161,7 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
+const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 
 export const SIDEBAR_PAGE_IDS: readonly PageId[] = [
   "chat",
@@ -175,7 +182,7 @@ export const STANDALONE_PAGES: Partial<Record<PageId, NavItem>> = {
 
 export const SETUP_PATH = "/setup";
 
-export const PLATFORM_ADMIN_PAGE_IDS: ReadonlySet<PageId> = new Set([
+const PLATFORM_ADMIN_PAGE_IDS: ReadonlySet<PageId> = new Set([
   "files",
   "soul",
   "mcp",
@@ -194,6 +201,18 @@ export function canAccessIntegrationsPage(
   orgRole: string | undefined
 ): boolean {
   return orgRole === "admin" || orgRole === "member";
+}
+
+export function canAccessOrganizationPage(
+  isPlatformAdmin: boolean,
+  orgRole: string | undefined
+): boolean {
+  return (
+    isPlatformAdmin ||
+    orgRole === "admin" ||
+    orgRole === "member" ||
+    orgRole === "viewer"
+  );
 }
 
 export function canManagePluginReleases(isPlatformAdmin: boolean): boolean {
@@ -215,6 +234,17 @@ export function visibleNavGroups(access: {
 
   for (const group of NAV_GROUPS) {
     const items = group.items.filter((item) => {
+      if (item.id === "google-meet") {
+        return canAccessIntegrationsPage(access.orgRole);
+      }
+
+      if (item.id === "organization") {
+        return canAccessOrganizationPage(
+          access.isPlatformAdmin,
+          access.orgRole
+        );
+      }
+
       if (
         item.id === "usage" ||
         item.id === "plugin-management" ||
@@ -222,7 +252,6 @@ export function visibleNavGroups(access: {
         item.id === "tools" ||
         item.id === "soul" ||
         item.id === "profiles" ||
-        item.id === "organization" ||
         item.id === "workers"
       ) {
         return canAccessSystemPage(access.isPlatformAdmin, access.orgRole);
@@ -242,12 +271,12 @@ export function visibleNavGroups(access: {
 const queryPath = (path: string, params: Record<string, string>): string =>
   `${path}?${new URLSearchParams(params)}`;
 
-export const toolsTabPath = (): string => PAGE_PATHS.tools;
+const toolsTabPath = (): string => PAGE_PATHS.tools;
 
 export const pluginManagementPath = (): string =>
   PAGE_PATHS["plugin-management"];
 
-export const PLUGIN_PAGE_PREFIX = "/plugins";
+const PLUGIN_PAGE_PREFIX = "/plugins";
 
 export function pluginPagePath(pluginId: string): string {
   return `${PLUGIN_PAGE_PREFIX}/${encodeURIComponent(pluginId)}`;
@@ -266,6 +295,7 @@ export function pluginIdFromPath(pathname: string): string | null {
   }
 
   const rest = pathname.slice(PLUGIN_PAGE_PREFIX.length + 1);
+
   if (!rest || rest.includes("/")) {
     return null;
   }
@@ -309,9 +339,11 @@ export function enabledPluginNavEntries(
       const leftLabel = left.ui?.pageLabel ?? left.pluginId;
       const rightLabel = right.ui?.pageLabel ?? right.pluginId;
       const byLabel = leftLabel.localeCompare(rightLabel);
+
       if (byLabel !== 0) {
         return byLabel;
       }
+
       return left.pluginId.localeCompare(right.pluginId);
     })
     .map((plugin) => ({
@@ -329,6 +361,7 @@ export function skillDetailPath(
   options?: { profileId?: string }
 ): string {
   const path = `${PAGE_PATHS.profiles}/skills/${encodeURIComponent(skillId)}`;
+
   return options?.profileId
     ? queryPath(path, { profile: options.profileId })
     : path;
@@ -360,6 +393,7 @@ export function toolPlaygroundPath(
   options?: { fromProfileId?: string }
 ): string {
   const path = `${PAGE_PATHS.soul}/playground/${encodeURIComponent(toolId)}`;
+
   return options?.fromProfileId
     ? queryPath(path, { from: "profiles", profile: options.fromProfileId })
     : path;
@@ -383,10 +417,16 @@ export function orgSkillProposalsPath(profileId?: string): string {
   const params = new URLSearchParams({
     skillProposals: "proposals",
   });
+
   if (profileId) {
     params.set("profileId", profileId);
   }
+
   return `${PAGE_PATHS.organization}?${params.toString()}`;
+}
+
+export function teamDetailPath(teamId: string): string {
+  return `${PAGE_PATHS.organization}/teams/${encodeURIComponent(teamId)}`;
 }
 
 export const PAGE_PATHS: Record<PageId, string> = {
@@ -394,6 +434,7 @@ export const PAGE_PATHS: Record<PageId, string> = {
   chat: "/chat",
   customize: "/customize",
   files: "/files",
+  "google-meet": "/google-meet",
   mcp: "/customize/mcp",
   notifications: "/notifications",
   organization: "/organization",
@@ -413,6 +454,7 @@ const PREFIX_PAGE_IDS: readonly [string, PageId][] = [
   ["/customize/connections", "customize"],
   [PAGE_PATHS["plugin-management"], "plugin-management"],
   [PAGE_PATHS.chat, "chat"],
+  [PAGE_PATHS.organization, "organization"],
   [PAGE_PATHS.soul, "soul"],
   [PAGE_PATHS.profiles, "profiles"],
   [PAGE_PATHS.files, "files"],
@@ -429,9 +471,11 @@ export function navHrefForPage(
 ): string {
   if (pageId === "chat") {
     const params = new URLSearchParams({ new: "1" });
+
     if (chatProfileId) {
       params.set("profile", chatProfileId);
     }
+
     return `${PAGE_PATHS.chat}?${params.toString()}`;
   }
 
@@ -452,11 +496,13 @@ export function pageIdFromPath(pathname: string): PageId | null {
   const prefixPage = PREFIX_PAGE_IDS.find(
     ([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`)
   );
+
   if (prefixPage) {
     return prefixPage[1];
   }
 
   return (
+    // SAFETY: The enclosing parser checks the value before this conversion.
     (Object.entries(PAGE_PATHS) as [PageId, string][]).find(
       ([, path]) => pathname === path
     )?.[0] ?? null
@@ -501,9 +547,11 @@ export function visibleIntegrationSections(
     if (item.id === "composio") {
       return isPlatformAdmin || orgRole === "admin" || orgRole === "member";
     }
+
     if (item.id === "error-tracking") {
       return isPlatformAdmin;
     }
+
     return isPlatformAdmin || orgRole === "admin";
   });
 }

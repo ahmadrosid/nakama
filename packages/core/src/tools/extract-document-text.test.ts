@@ -16,6 +16,7 @@ process.env.NAKAMA_EMAIL_ATTACHMENT_SECRET ??=
   "test-email-attachment-secret-32-chars";
 
 const FIXTURES = join(import.meta.dir, "..", "__fixtures__");
+
 const SAMPLE_PDF = readFileSync(join(FIXTURES, "sample.pdf"));
 
 const completeConfig: EmailConfigFile = {
@@ -36,6 +37,7 @@ const context = {
   profileId: "profile_test",
   sessionId: "session_test",
 };
+
 const mailboxId = getMailboxIdentity(toMailboxConfig(completeConfig));
 
 function readerWith(
@@ -109,7 +111,10 @@ describe("extract_document_text tool", () => {
               }
             : null,
       },
-      { loadConfig: async () => ({}) as typeof completeConfig }
+      {
+        // SAFETY: This test loader uses only the configuration values checked by the tool.
+        loadConfig: async () => ({}) as typeof completeConfig,
+      }
     );
 
     expect(result).toMatchObject({
