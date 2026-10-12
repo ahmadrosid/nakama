@@ -51,7 +51,7 @@ type WorkflowActionResult = {
 
 type ActionResponses = {
   create_workflow: StoredWorkflow;
-  database: { preview?: WorkflowValue; tables: Array<{ name: string }> };
+  database: SavedData;
   delete_workflow: { deleted: boolean };
   get_workflow: StoredWorkflow | null;
   list_workflows: StoredWorkflow[];
@@ -204,6 +204,110 @@ function stepApp(kind: string, fields: Record<string, string>) {
   const { action, app } = toolParts(fields.tool ?? "");
 
   return app || action || "Choose an app";
+}
+
+type SavedRow = Record<string, WorkflowValue>;
+
+type SavedData = {
+  preview?: WorkflowValue;
+  tables: Array<{ name: string; rowCount?: number }>;
+};
+
+function readPreview(
+  value: WorkflowValue | undefined
+): { columns: string[]; rows: SavedRow[]; total: number } | null {
+  if (!(value && isWorkflowRecord(value))) {
+    return null;
+  }
+
+  const columns = Array.isArray(value.columns)
+    ? value.columns.map((column) => String(column))
+    : [];
+
+  const rows = Array.isArray(value.rows)
+    ? value.rows.filter((row) => isWorkflowRecord(row))
+    : [];
+
+  return {
+    columns,
+    rows,
+    total: value.total === Number(value.total) ? value.total : rows.length,
+  };
+}
+
+function isUrl(value: WorkflowValue | undefined) {
+  return value === String(value) && /^https?:\/\//.test(value);
+}
+
+function columnType(rows: SavedRow[], column: string) {
+  const values = rows.flatMap((row) => {
+    const value = row[column];
+
+    return value == null || value === "" ? [] : [value];
+  });
+
+  if (!values.length) {
+    return "";
+  }
+
+  if (values.every((value) => value === Number(value))) {
+    return "number";
+  }
+
+  if (values.every((value) => value === true || value === false)) {
+    return "boolean";
+  }
+
+  if (values.every(isUrl)) {
+    return "url";
+  }
+
+  if (
+    values.every(
+      (value) =>
+        value === String(value) &&
+        /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}|$)/.test(value)
+    )
+  ) {
+    return "datetime";
+  }
+
+  return values.every((value) => value === String(value)) ? "text" : "json";
+}
+
+function cellText(value: WorkflowValue | undefined, empty = "") {
+  if (value == null) {
+    return empty;
+  }
+
+  return value === String(value) ? value : JSON.stringify(value);
+}
+
+function writesTable(sql: string, table: string) {
+  const name = table.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  return new RegExp(
+    `\\b(insert(\\s+or\\s+\\w+)?\\s+into|replace\\s+into|update)\\s+["'\`[]?${name}\\b`,
+    "i"
+  ).test(sql);
+}
+
+function downloadCsv(table: string, columns: string[], rows: SavedRow[]) {
+  const quote = (value: string) =>
+    /[",\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
+
+  const csv = [
+    columns,
+    ...rows.map((row) => columns.map((c) => cellText(row[c]))),
+  ]
+    .map((line) => line.map(quote).join(","))
+    .join("\n");
+
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  link.download = `${table}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
 }
 
 function uniqueStepId(label: string, taken: string[]) {
@@ -783,6 +887,7 @@ export function apply(ctx: Context) {
       | "expand"
       | "close"
       | "collapse"
+      | "table"
       | "warning"
       | "workflow";
   }) {
@@ -794,6 +899,7 @@ export function apply(ctx: Context) {
       expand: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
       more: "M5 12h.01M12 12h.01M19 12h.01",
       play: "m8 5 11 7-11 7V5Z",
+      table: "M3 4h18v16H3V4ZM3 9h18M9 9v11",
       warning: "M12 3 2 21h20L12 3ZM12 9v5M12 17h.01",
       workflow: "M4 3h6v6H4V3ZM14 15h6v6h-6v-6ZM7 9v9h7M10 6h7v9",
     };
@@ -1580,6 +1686,10 @@ export function apply(ctx: Context) {
     const failedInARow = runs.findIndex((run) => run.status !== "failed");
     const needsLook = failedInARow === -1 ? runs.length : failedInARow;
 
+    const tableWriters = steps
+      .filter((step) => step.fields.tool === "sqlite")
+      .map((step) => ({ name: title(step.id), sql: step.fields.input ?? "" }));
+
     const allSteps = [
       ...steps.map((step) => ({
         app: stepApp(step.kind, step.fields),
@@ -1714,8 +1824,15 @@ export function apply(ctx: Context) {
               />
             )}
             {view === "data" && (
-              <section aria-label="Workflow data" className="workflow-scroll">
-                <DatabasePanel />
+              <section
+                aria-label="Workflow data"
+                className="workflow-data-page"
+              >
+                <DatabasePanel
+                  canRun={Boolean(workflow) && !dirty && enabled && !busy}
+                  onRun={() => runWorkflow()}
+                  writers={tableWriters}
+                />
               </section>
             )}
             <div className="workflow-scroll" hidden={view !== "workflow"}>
@@ -2058,7 +2175,13 @@ export function apply(ctx: Context) {
                       )}
                     </div>
                   )}
-                  {panelTab === "database" && <DatabasePanel />}
+                  {panelTab === "database" && (
+                    <DatabasePanel
+                      canRun={Boolean(workflow) && !dirty && enabled && !busy}
+                      onRun={() => runWorkflow()}
+                      writers={tableWriters}
+                    />
+                  )}
                   {panelTab === "test" &&
                     (() => {
                       const receipt = runs[0]?.steps?.find(
@@ -2471,25 +2594,38 @@ export function apply(ctx: Context) {
     );
   }
 
-  function DatabasePanel() {
+  function DatabasePanel({
+    canRun,
+    onRun,
+    writers,
+  }: {
+    canRun: boolean;
+    onRun: () => void;
+    writers: Array<{ name: string; sql: string }>;
+  }) {
     const [table, setTable] = React.useState("");
-
-    const [data, setData] = React.useState<{
-      tables: Array<{ name: string }>;
-      preview?: WorkflowValue;
-    } | null>(null);
-
+    const [view, setView] = React.useState<"rows" | "schema" | "json">("rows");
+    const [query, setQuery] = React.useState("");
+    const [picked, setPicked] = React.useState<number | null>(null);
+    const [data, setData] = React.useState<SavedData | null>(null);
     const [error, setError] = React.useState("");
     const [loading, setLoading] = React.useState(true);
     const [retry, setRetry] = React.useState(0);
+
     React.useEffect(() => {
       let active = true;
       setLoading(true);
       setError("");
       action("database", table ? { table } : {})
         .then((result) => {
-          if (active) {
-            setData(result);
+          if (!active) {
+            return;
+          }
+
+          setData(result);
+
+          if (!table && result.tables[0]) {
+            setTable(result.tables[0].name);
           }
         })
         .catch((error) => {
@@ -2508,57 +2644,314 @@ export function apply(ctx: Context) {
       };
     }, [table, retry]);
 
+    const pickTable = (name: string) => {
+      setTable(name);
+      setQuery("");
+      setPicked(null);
+    };
+
+    const preview = readPreview(data?.preview);
+    const columns = preview?.columns ?? [];
+    const rows = preview?.rows ?? [];
+
+    const types = Object.fromEntries(
+      columns.map((column) => [column, columnType(rows, column)])
+    );
+
+    const needle = query.trim().toLowerCase();
+
+    const shown = rows.flatMap((row, index) =>
+      !needle ||
+      Object.values(row).some((value) =>
+        cellText(value).toLowerCase().includes(needle)
+      )
+        ? [{ index, row }]
+        : []
+    );
+
+    const selected = picked == null ? null : (rows[picked] ?? null);
+    const keyColumn = columns.find((column) => column === "id") ?? columns[0];
+    const writer = writers.find((entry) => writesTable(entry.sql, table));
+    const total = preview?.total ?? 0;
+
+    if (error) {
+      return (
+        <div className="workflow-data-message">
+          <p role="alert">{error}</p>
+          <Button
+            onClick={() => setRetry((value) => value + 1)}
+            type="button"
+            variant="outline"
+          >
+            Retry
+          </Button>
+        </div>
+      );
+    }
+
+    if (!data && loading) {
+      return (
+        <p className="workflow-data-message workflow-empty" role="status">
+          Loading data…
+        </p>
+      );
+    }
+
+    if (!data?.tables.length) {
+      return (
+        <div className="workflow-data-message workflow-empty">
+          <p>No tables yet.</p>
+          <p>Add a database step and run it to store data here.</p>
+        </div>
+      );
+    }
+
     return (
-      <div aria-busy={loading} className="workflow-step-fields">
-        {error ? (
-          <div>
-            <p role="alert">{error}</p>
+      <div aria-busy={loading} className="workflow-data">
+        <nav aria-label="Tables" className="workflow-data-tables">
+          <p>Tables</p>
+          {data.tables.map((entry) => (
             <Button
-              onClick={() => setRetry((value) => value + 1)}
+              aria-current={entry.name === table ? "true" : undefined}
+              key={entry.name}
+              onClick={() => pickTable(entry.name)}
               type="button"
-              variant="outline"
+              variant="ghost"
             >
-              Retry
+              <Icon kind="table" />
+              <span className="workflow-data-table-name">{entry.name}</span>
+              <span className="workflow-data-count">
+                {entry.rowCount ?? ""}
+              </span>
             </Button>
-          </div>
-        ) : null}
-        {Boolean(data?.tables.length) && (
-          <Choice
-            disabled={loading}
-            label="Table"
-            onChange={setTable}
-            options={(data?.tables ?? []).map((entry) => ({
-              label: entry.name,
-              value: entry.name,
-            }))}
-            value={table}
-          />
-        )}
-        {loading ? (
-          <p className="workflow-empty" role="status">
-            Loading data…
-          </p>
-        ) : (
-          !error &&
-          (data?.tables.length ? (
-            table ? (
-              data.preview == null ? (
-                <p className="workflow-empty">No preview available.</p>
-              ) : (
-                <pre>{JSON.stringify(data.preview, null, 2)}</pre>
-              )
-            ) : (
-              <p className="workflow-empty">
-                Select a table to preview its data.
-              </p>
-            )
-          ) : (
-            <div className="workflow-empty">
-              <p>No tables yet.</p>
-              <p>Add a database step and run it to store data here.</p>
+          ))}
+        </nav>
+        <div className="workflow-data-main">
+          <header className="workflow-data-head">
+            <h2>{table}</h2>
+            <span className="workflow-empty">
+              {total} {total === 1 ? "row" : "rows"} · {columns.length} columns
+              {rows.length < total ? ` · showing first ${rows.length}` : ""}
+            </span>
+            <div
+              aria-label="Table view"
+              className="workflow-data-views"
+              role="tablist"
+            >
+              {(
+                [
+                  ["rows", "Rows"],
+                  ["schema", "Schema"],
+                  ["json", "JSON"],
+                ] as const
+              ).map(([id, label]) => (
+                <Button
+                  aria-selected={view === id}
+                  key={id}
+                  onClick={() => setView(id)}
+                  role="tab"
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  {label}
+                </Button>
+              ))}
             </div>
-          ))
-        )}
+          </header>
+
+          {view === "rows" && (
+            <>
+              <div className="workflow-data-toolbar">
+                <Input
+                  aria-label="Search rows"
+                  disabled={!rows.length}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search rows"
+                  type="search"
+                  value={query}
+                />
+                <Button
+                  disabled={!rows.length}
+                  onClick={() => downloadCsv(table, columns, rows)}
+                  type="button"
+                  variant="outline"
+                >
+                  Export CSV
+                </Button>
+              </div>
+              <div className="workflow-data-body">
+                <div className="workflow-data-grid">
+                  <div className="workflow-data-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          {columns.map((column) => (
+                            <th key={column} scope="col">
+                              {column}
+                              <span>{types[column]}</span>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {shown.map(({ index, row }) => (
+                          <tr
+                            aria-selected={picked === index}
+                            key={index}
+                            onClick={() => setPicked(index)}
+                          >
+                            {columns.map((column, at) => (
+                              <td data-type={types[column]} key={column}>
+                                {at === 0 ? (
+                                  <button
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setPicked(index);
+                                    }}
+                                    type="button"
+                                  >
+                                    {cellText(row[column])}
+                                  </button>
+                                ) : (
+                                  cellText(row[column])
+                                )}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {!rows.length && (
+                    <div className="workflow-data-empty">
+                      <Icon kind="table" />
+                      <h3>No rows yet</h3>
+                      <p>
+                        {writer
+                          ? `${writer.name} writes to this table. Run the workflow to fill it.`
+                          : "Run the workflow to fill this table."}
+                      </p>
+                      <Button disabled={!canRun} onClick={onRun} type="button">
+                        <Icon kind="play" />
+                        Try it now
+                      </Button>
+                    </div>
+                  )}
+                  {Boolean(rows.length) && !shown.length && (
+                    <p className="workflow-data-empty workflow-empty">
+                      No rows match your search.
+                    </p>
+                  )}
+                </div>
+                {selected && (
+                  <aside aria-label="Row details" className="workflow-data-row">
+                    <header>
+                      <h3>Row</h3>
+                      {keyColumn && (
+                        <span>
+                          {keyColumn} = {cellText(selected[keyColumn])}
+                        </span>
+                      )}
+                      <Button
+                        onClick={() =>
+                          void navigator.clipboard.writeText(
+                            JSON.stringify(selected, null, 2)
+                          )
+                        }
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        Copy JSON
+                      </Button>
+                      <Button
+                        aria-label="Close row details"
+                        onClick={() => setPicked(null)}
+                        size="icon-sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        <Icon kind="close" />
+                      </Button>
+                    </header>
+                    <dl>
+                      {columns.map((column) => (
+                        <div key={column}>
+                          <dt>
+                            <span>{column}</span>
+                            <span>{types[column]}</span>
+                          </dt>
+                          <dd
+                            data-empty={selected[column] == null || undefined}
+                            data-type={types[column]}
+                          >
+                            {types[column] === "url" &&
+                            isUrl(selected[column]) ? (
+                              <a
+                                href={String(selected[column])}
+                                rel="noreferrer"
+                                target="_blank"
+                              >
+                                {String(selected[column])}
+                              </a>
+                            ) : (
+                              cellText(selected[column], "null")
+                            )}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                    {writer && (
+                      <p className="workflow-data-writer">
+                        Written by {writer.name}
+                      </p>
+                    )}
+                  </aside>
+                )}
+              </div>
+            </>
+          )}
+
+          {view === "schema" && (
+            <div className="workflow-data-grid">
+              <div className="workflow-data-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Column</th>
+                      <th scope="col">Type</th>
+                      <th scope="col">Written by</th>
+                      <th scope="col">Last value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {columns.map((column) => (
+                      <tr key={column}>
+                        <td data-type="key">{column}</td>
+                        <td>
+                          <span className="workflow-data-type">
+                            {types[column] || "unknown"}
+                          </span>
+                        </td>
+                        <td>{writer?.name ?? "—"}</td>
+                        <td data-type="muted">
+                          {rows.length ? cellText(rows[0]?.[column]) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {view === "json" && (
+            <pre className="workflow-data-json">
+              {JSON.stringify(data.preview ?? null, null, 2)}
+            </pre>
+          )}
+        </div>
       </div>
     );
   }

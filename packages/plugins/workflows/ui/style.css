@@ -1061,4 +1061,346 @@
     font-weight: 600;
     color: var(--muted-foreground);
   }
+
+  .workflow-data-page {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+  .workflow-data-message {
+    padding: 24px 20px;
+  }
+  .workflow-data {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    min-width: 0;
+    min-height: 0;
+    container-type: inline-size;
+  }
+  .workflow-data-tables {
+    display: flex;
+    flex: 1 1 220px;
+    flex-direction: column;
+    gap: 2px;
+    max-width: 260px;
+    padding: 16px 12px;
+    overflow-y: auto;
+    background: color-mix(in srgb, var(--muted) 40%, var(--background));
+    border-right: 1px solid var(--border);
+  }
+  .workflow-data-tables > p {
+    margin: 0 8px 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted-foreground);
+  }
+  .workflow-data-tables [data-slot="button"] {
+    gap: 10px;
+    justify-content: flex-start;
+    height: auto;
+    min-height: 40px;
+    padding: 0 10px;
+    color: var(--foreground);
+  }
+  .workflow-data-tables [aria-current="true"] {
+    background: var(--muted);
+  }
+  .workflow-data-tables svg {
+    flex-shrink: 0;
+    color: var(--muted-foreground);
+  }
+  .workflow-data-table-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: monospace;
+    font-size: 13px;
+    text-align: left;
+  }
+  .workflow-data-count {
+    font-size: 12px;
+    color: var(--muted-foreground);
+  }
+  .workflow-data-main {
+    display: flex;
+    flex: 999 1 480px;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+    min-height: 0;
+    padding: 20px 24px;
+    overflow-y: auto;
+  }
+  .workflow-data-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    align-items: center;
+  }
+  .workflow-data-head h2 {
+    margin: 0;
+    font-family: monospace;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .workflow-data-head > .workflow-empty {
+    font-size: 13px;
+  }
+  .workflow-data-views {
+    display: flex;
+    gap: 4px;
+    padding: 3px;
+    margin-left: auto;
+    background: var(--muted);
+    border-radius: 10px;
+  }
+  .workflow-data-views [data-slot="button"] {
+    color: var(--muted-foreground);
+    border-radius: 7px;
+  }
+  .workflow-data-views [aria-selected="true"] {
+    color: var(--foreground);
+    background: var(--background);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 10%, transparent);
+  }
+  .workflow-data-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+  .workflow-data-toolbar [data-slot="input"] {
+    flex: 0 1 280px;
+    margin-right: auto;
+  }
+  .workflow-data-body {
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-start;
+    min-height: 0;
+  }
+  .workflow-data-grid {
+    display: flex;
+    flex: 999 1 420px;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .workflow-data-scroll {
+    max-height: 560px;
+    overflow: auto;
+  }
+  .workflow-data-grid table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .workflow-data-grid th {
+    position: sticky;
+    top: 0;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+    white-space: nowrap;
+    background: color-mix(in srgb, var(--muted) 40%, var(--background));
+    border-bottom: 1px solid var(--border);
+  }
+  .workflow-data-grid th > span {
+    display: block;
+    font-family: monospace;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--muted-foreground);
+  }
+  .workflow-data-grid td {
+    max-width: 320px;
+    height: 40px;
+    padding: 0 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  }
+  .workflow-data-grid td > button {
+    max-width: 100%;
+    padding: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    background: none;
+    border: 0;
+  }
+  .workflow-data-grid tbody tr {
+    cursor: pointer;
+  }
+  .workflow-data-grid tbody tr:hover {
+    background: color-mix(in srgb, var(--muted) 50%, transparent);
+  }
+  .workflow-data-grid tbody tr[aria-selected="true"] {
+    background: color-mix(in srgb, var(--primary) 12%, var(--background));
+  }
+  .workflow-data-grid [data-type="number"],
+  .workflow-data-grid [data-type="datetime"],
+  .workflow-data-grid [data-type="key"],
+  .workflow-data-row [data-type="number"],
+  .workflow-data-row [data-type="datetime"] {
+    font-family: monospace;
+    font-size: 13px;
+  }
+  .workflow-data-grid [data-type="muted"] {
+    color: var(--muted-foreground);
+  }
+  .workflow-data-type {
+    padding: 2px 8px;
+    font-size: 12px;
+    background: var(--muted);
+    border-radius: 6px;
+  }
+  .workflow-data-empty {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+    padding: 56px 24px;
+    text-align: center;
+  }
+  .workflow-data-empty > svg {
+    width: 36px;
+    height: 36px;
+    color: var(--primary);
+  }
+  .workflow-data-empty h3 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 600;
+  }
+  .workflow-data-empty p {
+    max-width: 420px;
+    margin: 0;
+    color: var(--muted-foreground);
+  }
+  .workflow-data-row {
+    display: flex;
+    flex: 1 1 280px;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 360px;
+    max-height: 640px;
+    padding: 16px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .workflow-data-row header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  .workflow-data-row h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .workflow-data-row header > span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+  }
+  .workflow-data-row dl {
+    margin: 0;
+  }
+  .workflow-data-row dl > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  }
+  .workflow-data-row dt {
+    display: flex;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted-foreground);
+  }
+  .workflow-data-row dt > span:first-child {
+    font-family: monospace;
+  }
+  .workflow-data-row dt > span:last-child {
+    margin-left: auto;
+    font-size: 11px;
+  }
+  .workflow-data-row dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+  .workflow-data-row a {
+    color: var(--primary);
+    text-decoration: underline;
+  }
+  .workflow-data-writer {
+    padding-top: 8px;
+    margin: 0;
+    font-size: 13px;
+    color: var(--muted-foreground);
+  }
+  .workflow-data-json {
+    max-height: 600px;
+    padding: 16px;
+    margin: 0;
+    overflow: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    background: color-mix(in srgb, var(--muted) 40%, var(--background));
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  @container (max-width: 760px) {
+    .workflow-data-tables {
+      max-width: none;
+      border-right: 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .workflow-data-row {
+      max-width: none;
+    }
+  }
+  @container (max-width: 1100px) {
+    .workflow-data-row {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 2;
+      width: min(360px, 100%);
+      max-width: none;
+      max-height: none;
+      background: var(--background);
+      border-width: 0 0 0 1px;
+      border-radius: 0;
+      box-shadow: -8px 0 24px
+        color-mix(in srgb, var(--foreground) 8%, transparent);
+    }
+  }
+  .workflow-data-main > .workflow-data-grid {
+    flex: none;
+  }
+  .workflow-data-row dd[data-empty] {
+    color: var(--muted-foreground);
+  }
 }

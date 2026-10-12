@@ -1062,6 +1062,348 @@ var style_default = `[data-plugin-id="workflows"] {
     font-weight: 600;
     color: var(--muted-foreground);
   }
+
+  .workflow-data-page {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+  .workflow-data-message {
+    padding: 24px 20px;
+  }
+  .workflow-data {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    min-width: 0;
+    min-height: 0;
+    container-type: inline-size;
+  }
+  .workflow-data-tables {
+    display: flex;
+    flex: 1 1 220px;
+    flex-direction: column;
+    gap: 2px;
+    max-width: 260px;
+    padding: 16px 12px;
+    overflow-y: auto;
+    background: color-mix(in srgb, var(--muted) 40%, var(--background));
+    border-right: 1px solid var(--border);
+  }
+  .workflow-data-tables > p {
+    margin: 0 8px 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted-foreground);
+  }
+  .workflow-data-tables [data-slot="button"] {
+    gap: 10px;
+    justify-content: flex-start;
+    height: auto;
+    min-height: 40px;
+    padding: 0 10px;
+    color: var(--foreground);
+  }
+  .workflow-data-tables [aria-current="true"] {
+    background: var(--muted);
+  }
+  .workflow-data-tables svg {
+    flex-shrink: 0;
+    color: var(--muted-foreground);
+  }
+  .workflow-data-table-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: monospace;
+    font-size: 13px;
+    text-align: left;
+  }
+  .workflow-data-count {
+    font-size: 12px;
+    color: var(--muted-foreground);
+  }
+  .workflow-data-main {
+    display: flex;
+    flex: 999 1 480px;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+    min-height: 0;
+    padding: 20px 24px;
+    overflow-y: auto;
+  }
+  .workflow-data-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    align-items: center;
+  }
+  .workflow-data-head h2 {
+    margin: 0;
+    font-family: monospace;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .workflow-data-head > .workflow-empty {
+    font-size: 13px;
+  }
+  .workflow-data-views {
+    display: flex;
+    gap: 4px;
+    padding: 3px;
+    margin-left: auto;
+    background: var(--muted);
+    border-radius: 10px;
+  }
+  .workflow-data-views [data-slot="button"] {
+    color: var(--muted-foreground);
+    border-radius: 7px;
+  }
+  .workflow-data-views [aria-selected="true"] {
+    color: var(--foreground);
+    background: var(--background);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 10%, transparent);
+  }
+  .workflow-data-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+  .workflow-data-toolbar [data-slot="input"] {
+    flex: 0 1 280px;
+    margin-right: auto;
+  }
+  .workflow-data-body {
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-start;
+    min-height: 0;
+  }
+  .workflow-data-grid {
+    display: flex;
+    flex: 999 1 420px;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .workflow-data-scroll {
+    max-height: 560px;
+    overflow: auto;
+  }
+  .workflow-data-grid table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .workflow-data-grid th {
+    position: sticky;
+    top: 0;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+    white-space: nowrap;
+    background: color-mix(in srgb, var(--muted) 40%, var(--background));
+    border-bottom: 1px solid var(--border);
+  }
+  .workflow-data-grid th > span {
+    display: block;
+    font-family: monospace;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--muted-foreground);
+  }
+  .workflow-data-grid td {
+    max-width: 320px;
+    height: 40px;
+    padding: 0 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  }
+  .workflow-data-grid td > button {
+    max-width: 100%;
+    padding: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    background: none;
+    border: 0;
+  }
+  .workflow-data-grid tbody tr {
+    cursor: pointer;
+  }
+  .workflow-data-grid tbody tr:hover {
+    background: color-mix(in srgb, var(--muted) 50%, transparent);
+  }
+  .workflow-data-grid tbody tr[aria-selected="true"] {
+    background: color-mix(in srgb, var(--primary) 12%, var(--background));
+  }
+  .workflow-data-grid [data-type="number"],
+  .workflow-data-grid [data-type="datetime"],
+  .workflow-data-grid [data-type="key"],
+  .workflow-data-row [data-type="number"],
+  .workflow-data-row [data-type="datetime"] {
+    font-family: monospace;
+    font-size: 13px;
+  }
+  .workflow-data-grid [data-type="muted"] {
+    color: var(--muted-foreground);
+  }
+  .workflow-data-type {
+    padding: 2px 8px;
+    font-size: 12px;
+    background: var(--muted);
+    border-radius: 6px;
+  }
+  .workflow-data-empty {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+    padding: 56px 24px;
+    text-align: center;
+  }
+  .workflow-data-empty > svg {
+    width: 36px;
+    height: 36px;
+    color: var(--primary);
+  }
+  .workflow-data-empty h3 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 600;
+  }
+  .workflow-data-empty p {
+    max-width: 420px;
+    margin: 0;
+    color: var(--muted-foreground);
+  }
+  .workflow-data-row {
+    display: flex;
+    flex: 1 1 280px;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 360px;
+    max-height: 640px;
+    padding: 16px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .workflow-data-row header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  .workflow-data-row h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .workflow-data-row header > span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+  }
+  .workflow-data-row dl {
+    margin: 0;
+  }
+  .workflow-data-row dl > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  }
+  .workflow-data-row dt {
+    display: flex;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted-foreground);
+  }
+  .workflow-data-row dt > span:first-child {
+    font-family: monospace;
+  }
+  .workflow-data-row dt > span:last-child {
+    margin-left: auto;
+    font-size: 11px;
+  }
+  .workflow-data-row dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+  .workflow-data-row a {
+    color: var(--primary);
+    text-decoration: underline;
+  }
+  .workflow-data-writer {
+    padding-top: 8px;
+    margin: 0;
+    font-size: 13px;
+    color: var(--muted-foreground);
+  }
+  .workflow-data-json {
+    max-height: 600px;
+    padding: 16px;
+    margin: 0;
+    overflow: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    background: color-mix(in srgb, var(--muted) 40%, var(--background));
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  @container (max-width: 760px) {
+    .workflow-data-tables {
+      max-width: none;
+      border-right: 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .workflow-data-row {
+      max-width: none;
+    }
+  }
+  @container (max-width: 1100px) {
+    .workflow-data-row {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 2;
+      width: min(360px, 100%);
+      max-width: none;
+      max-height: none;
+      background: var(--background);
+      border-width: 0 0 0 1px;
+      border-radius: 0;
+      box-shadow: -8px 0 24px
+        color-mix(in srgb, var(--foreground) 8%, transparent);
+    }
+  }
+  .workflow-data-main > .workflow-data-grid {
+    flex: none;
+  }
+  .workflow-data-row dd[data-empty] {
+    color: var(--muted-foreground);
+  }
 }
 `;
 
@@ -1151,6 +1493,66 @@ function stepApp(kind, fields) {
   }
   const { action, app } = toolParts(fields.tool ?? "");
   return app || action || "Choose an app";
+}
+function readPreview(value) {
+  if (!(value && isWorkflowRecord(value))) {
+    return null;
+  }
+  const columns = Array.isArray(value.columns) ? value.columns.map((column) => String(column)) : [];
+  const rows = Array.isArray(value.rows) ? value.rows.filter((row) => isWorkflowRecord(row)) : [];
+  return {
+    columns,
+    rows,
+    total: value.total === Number(value.total) ? value.total : rows.length
+  };
+}
+function isUrl(value) {
+  return value === String(value) && /^https?:\/\//.test(value);
+}
+function columnType(rows, column) {
+  const values = rows.flatMap((row) => {
+    const value = row[column];
+    return value == null || value === "" ? [] : [value];
+  });
+  if (!values.length) {
+    return "";
+  }
+  if (values.every((value) => value === Number(value))) {
+    return "number";
+  }
+  if (values.every((value) => value === true || value === false)) {
+    return "boolean";
+  }
+  if (values.every(isUrl)) {
+    return "url";
+  }
+  if (values.every((value) => value === String(value) && /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}|$)/.test(value))) {
+    return "datetime";
+  }
+  return values.every((value) => value === String(value)) ? "text" : "json";
+}
+function cellText(value, empty = "") {
+  if (value == null) {
+    return empty;
+  }
+  return value === String(value) ? value : JSON.stringify(value);
+}
+function writesTable(sql, table) {
+  const name = table.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b(insert(\\s+or\\s+\\w+)?\\s+into|replace\\s+into|update)\\s+["'\`[]?${name}\\b`, "i").test(sql);
+}
+function downloadCsv(table, columns, rows) {
+  const quote = (value) => /[",\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
+  const csv = [
+    columns,
+    ...rows.map((row) => columns.map((c) => cellText(row[c])))
+  ].map((line) => line.map(quote).join(",")).join(`
+`);
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  link.download = `${table}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
 }
 function uniqueStepId(label, taken) {
   const base = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "step";
@@ -1508,6 +1910,7 @@ function apply(ctx) {
       expand: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
       more: "M5 12h.01M12 12h.01M19 12h.01",
       play: "m8 5 11 7-11 7V5Z",
+      table: "M3 4h18v16H3V4ZM3 9h18M9 9v11",
       warning: "M12 3 2 21h20L12 3ZM12 9v5M12 17h.01",
       workflow: "M4 3h6v6H4V3ZM14 15h6v6h-6v-6ZM7 9v9h7M10 6h7v9"
     };
@@ -1993,6 +2396,7 @@ function apply(ctx) {
     const lastTimeline = runTimeline(lastRun);
     const failedInARow = runs.findIndex((run) => run.status !== "failed");
     const needsLook = failedInARow === -1 ? runs.length : failedInARow;
+    const tableWriters = steps.filter((step) => step.fields.tool === "sqlite").map((step) => ({ name: title(step.id), sql: step.fields.input ?? "" }));
     const allSteps = [
       ...steps.map((step) => ({
         app: stepApp(step.kind, step.fields),
@@ -2101,8 +2505,12 @@ function apply(ctx) {
       stepNames: Object.fromEntries(allSteps.map((step) => [step.id, title(step.id)]))
     }), view === "data" && /* @__PURE__ */ React.createElement("section", {
       "aria-label": "Workflow data",
-      className: "workflow-scroll"
-    }, /* @__PURE__ */ React.createElement(DatabasePanel, null)), /* @__PURE__ */ React.createElement("div", {
+      className: "workflow-data-page"
+    }, /* @__PURE__ */ React.createElement(DatabasePanel, {
+      canRun: Boolean(workflow) && !dirty && enabled && !busy,
+      onRun: () => runWorkflow(),
+      writers: tableWriters
+    })), /* @__PURE__ */ React.createElement("div", {
       className: "workflow-scroll",
       hidden: view !== "workflow"
     }, /* @__PURE__ */ React.createElement("div", {
@@ -2305,7 +2713,11 @@ function apply(ctx) {
       onChange: (event) => setSummary(event.target.value),
       rows: 8,
       value: summary
-    }))), panelTab === "database" && /* @__PURE__ */ React.createElement(DatabasePanel, null), panelTab === "test" && (() => {
+    }))), panelTab === "database" && /* @__PURE__ */ React.createElement(DatabasePanel, {
+      canRun: Boolean(workflow) && !dirty && enabled && !busy,
+      onRun: () => runWorkflow(),
+      writers: tableWriters
+    }), panelTab === "test" && (() => {
       const receipt = runs[0]?.steps?.find((step) => step.stepId === (selectedStep?.id ?? summaryStep?.id ?? "summary"));
       const attempt = selectedStep && tried?.key === selectedStep.key ? tried.result : null;
       return /* @__PURE__ */ React.createElement("div", {
@@ -2527,8 +2939,15 @@ function apply(ctx) {
       className: "workflow-history-result"
     }, /* @__PURE__ */ React.createElement("h4", null, "Result"), /* @__PURE__ */ React.createElement("p", null, run.output))));
   }
-  function DatabasePanel() {
+  function DatabasePanel({
+    canRun,
+    onRun,
+    writers
+  }) {
     const [table, setTable] = React.useState("");
+    const [view, setView] = React.useState("rows");
+    const [query, setQuery] = React.useState("");
+    const [picked, setPicked] = React.useState(null);
     const [data, setData] = React.useState(null);
     const [error, setError] = React.useState("");
     const [loading, setLoading] = React.useState(true);
@@ -2538,8 +2957,12 @@ function apply(ctx) {
       setLoading(true);
       setError("");
       action("database", table ? { table } : {}).then((result) => {
-        if (active) {
-          setData(result);
+        if (!active) {
+          return;
+        }
+        setData(result);
+        if (!table && result.tables[0]) {
+          setTable(result.tables[0].name);
         }
       }).catch((error2) => {
         if (active) {
@@ -2554,34 +2977,181 @@ function apply(ctx) {
         active = false;
       };
     }, [table, retry]);
+    const pickTable = (name) => {
+      setTable(name);
+      setQuery("");
+      setPicked(null);
+    };
+    const preview = readPreview(data?.preview);
+    const columns = preview?.columns ?? [];
+    const rows = preview?.rows ?? [];
+    const types = Object.fromEntries(columns.map((column) => [column, columnType(rows, column)]));
+    const needle = query.trim().toLowerCase();
+    const shown = rows.flatMap((row, index) => !needle || Object.values(row).some((value) => cellText(value).toLowerCase().includes(needle)) ? [{ index, row }] : []);
+    const selected = picked == null ? null : rows[picked] ?? null;
+    const keyColumn = columns.find((column) => column === "id") ?? columns[0];
+    const writer = writers.find((entry) => writesTable(entry.sql, table));
+    const total = preview?.total ?? 0;
+    if (error) {
+      return /* @__PURE__ */ React.createElement("div", {
+        className: "workflow-data-message"
+      }, /* @__PURE__ */ React.createElement("p", {
+        role: "alert"
+      }, error), /* @__PURE__ */ React.createElement(Button, {
+        onClick: () => setRetry((value) => value + 1),
+        type: "button",
+        variant: "outline"
+      }, "Retry"));
+    }
+    if (!data && loading) {
+      return /* @__PURE__ */ React.createElement("p", {
+        className: "workflow-data-message workflow-empty",
+        role: "status"
+      }, "Loading data…");
+    }
+    if (!data?.tables.length) {
+      return /* @__PURE__ */ React.createElement("div", {
+        className: "workflow-data-message workflow-empty"
+      }, /* @__PURE__ */ React.createElement("p", null, "No tables yet."), /* @__PURE__ */ React.createElement("p", null, "Add a database step and run it to store data here."));
+    }
     return /* @__PURE__ */ React.createElement("div", {
       "aria-busy": loading,
-      className: "workflow-step-fields"
-    }, error ? /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", {
-      role: "alert"
-    }, error), /* @__PURE__ */ React.createElement(Button, {
-      onClick: () => setRetry((value) => value + 1),
+      className: "workflow-data"
+    }, /* @__PURE__ */ React.createElement("nav", {
+      "aria-label": "Tables",
+      className: "workflow-data-tables"
+    }, /* @__PURE__ */ React.createElement("p", null, "Tables"), data.tables.map((entry) => /* @__PURE__ */ React.createElement(Button, {
+      "aria-current": entry.name === table ? "true" : undefined,
+      key: entry.name,
+      onClick: () => pickTable(entry.name),
+      type: "button",
+      variant: "ghost"
+    }, /* @__PURE__ */ React.createElement(Icon, {
+      kind: "table"
+    }), /* @__PURE__ */ React.createElement("span", {
+      className: "workflow-data-table-name"
+    }, entry.name), /* @__PURE__ */ React.createElement("span", {
+      className: "workflow-data-count"
+    }, entry.rowCount ?? "")))), /* @__PURE__ */ React.createElement("div", {
+      className: "workflow-data-main"
+    }, /* @__PURE__ */ React.createElement("header", {
+      className: "workflow-data-head"
+    }, /* @__PURE__ */ React.createElement("h2", null, table), /* @__PURE__ */ React.createElement("span", {
+      className: "workflow-empty"
+    }, total, " ", total === 1 ? "row" : "rows", " · ", columns.length, " columns", rows.length < total ? ` · showing first ${rows.length}` : ""), /* @__PURE__ */ React.createElement("div", {
+      "aria-label": "Table view",
+      className: "workflow-data-views",
+      role: "tablist"
+    }, [
+      ["rows", "Rows"],
+      ["schema", "Schema"],
+      ["json", "JSON"]
+    ].map(([id, label]) => /* @__PURE__ */ React.createElement(Button, {
+      "aria-selected": view === id,
+      key: id,
+      onClick: () => setView(id),
+      role: "tab",
+      size: "sm",
+      type: "button",
+      variant: "ghost"
+    }, label)))), view === "rows" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", {
+      className: "workflow-data-toolbar"
+    }, /* @__PURE__ */ React.createElement(Input, {
+      "aria-label": "Search rows",
+      disabled: !rows.length,
+      onChange: (event) => setQuery(event.target.value),
+      placeholder: "Search rows",
+      type: "search",
+      value: query
+    }), /* @__PURE__ */ React.createElement(Button, {
+      disabled: !rows.length,
+      onClick: () => downloadCsv(table, columns, rows),
       type: "button",
       variant: "outline"
-    }, "Retry")) : null, Boolean(data?.tables.length) && /* @__PURE__ */ React.createElement(Choice, {
-      disabled: loading,
-      label: "Table",
-      onChange: setTable,
-      options: (data?.tables ?? []).map((entry) => ({
-        label: entry.name,
-        value: entry.name
-      })),
-      value: table
-    }), loading ? /* @__PURE__ */ React.createElement("p", {
-      className: "workflow-empty",
-      role: "status"
-    }, "Loading data…") : !error && (data?.tables.length ? table ? data.preview == null ? /* @__PURE__ */ React.createElement("p", {
-      className: "workflow-empty"
-    }, "No preview available.") : /* @__PURE__ */ React.createElement("pre", null, JSON.stringify(data.preview, null, 2)) : /* @__PURE__ */ React.createElement("p", {
-      className: "workflow-empty"
-    }, "Select a table to preview its data.") : /* @__PURE__ */ React.createElement("div", {
-      className: "workflow-empty"
-    }, /* @__PURE__ */ React.createElement("p", null, "No tables yet."), /* @__PURE__ */ React.createElement("p", null, "Add a database step and run it to store data here."))));
+    }, "Export CSV")), /* @__PURE__ */ React.createElement("div", {
+      className: "workflow-data-body"
+    }, /* @__PURE__ */ React.createElement("div", {
+      className: "workflow-data-grid"
+    }, /* @__PURE__ */ React.createElement("div", {
+      className: "workflow-data-scroll"
+    }, /* @__PURE__ */ React.createElement("table", null, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, columns.map((column) => /* @__PURE__ */ React.createElement("th", {
+      key: column,
+      scope: "col"
+    }, column, /* @__PURE__ */ React.createElement("span", null, types[column]))))), /* @__PURE__ */ React.createElement("tbody", null, shown.map(({ index, row }) => /* @__PURE__ */ React.createElement("tr", {
+      "aria-selected": picked === index,
+      key: index,
+      onClick: () => setPicked(index)
+    }, columns.map((column, at) => /* @__PURE__ */ React.createElement("td", {
+      "data-type": types[column],
+      key: column
+    }, at === 0 ? /* @__PURE__ */ React.createElement("button", {
+      onClick: (event) => {
+        event.stopPropagation();
+        setPicked(index);
+      },
+      type: "button"
+    }, cellText(row[column])) : cellText(row[column])))))))), !rows.length && /* @__PURE__ */ React.createElement("div", {
+      className: "workflow-data-empty"
+    }, /* @__PURE__ */ React.createElement(Icon, {
+      kind: "table"
+    }), /* @__PURE__ */ React.createElement("h3", null, "No rows yet"), /* @__PURE__ */ React.createElement("p", null, writer ? `${writer.name} writes to this table. Run the workflow to fill it.` : "Run the workflow to fill this table."), /* @__PURE__ */ React.createElement(Button, {
+      disabled: !canRun,
+      onClick: onRun,
+      type: "button"
+    }, /* @__PURE__ */ React.createElement(Icon, {
+      kind: "play"
+    }), "Try it now")), Boolean(rows.length) && !shown.length && /* @__PURE__ */ React.createElement("p", {
+      className: "workflow-data-empty workflow-empty"
+    }, "No rows match your search.")), selected && /* @__PURE__ */ React.createElement("aside", {
+      "aria-label": "Row details",
+      className: "workflow-data-row"
+    }, /* @__PURE__ */ React.createElement("header", null, /* @__PURE__ */ React.createElement("h3", null, "Row"), keyColumn && /* @__PURE__ */ React.createElement("span", null, keyColumn, " = ", cellText(selected[keyColumn])), /* @__PURE__ */ React.createElement(Button, {
+      onClick: () => void navigator.clipboard.writeText(JSON.stringify(selected, null, 2)),
+      size: "sm",
+      type: "button",
+      variant: "outline"
+    }, "Copy JSON"), /* @__PURE__ */ React.createElement(Button, {
+      "aria-label": "Close row details",
+      onClick: () => setPicked(null),
+      size: "icon-sm",
+      type: "button",
+      variant: "outline"
+    }, /* @__PURE__ */ React.createElement(Icon, {
+      kind: "close"
+    }))), /* @__PURE__ */ React.createElement("dl", null, columns.map((column) => /* @__PURE__ */ React.createElement("div", {
+      key: column
+    }, /* @__PURE__ */ React.createElement("dt", null, /* @__PURE__ */ React.createElement("span", null, column), /* @__PURE__ */ React.createElement("span", null, types[column])), /* @__PURE__ */ React.createElement("dd", {
+      "data-empty": selected[column] == null || undefined,
+      "data-type": types[column]
+    }, types[column] === "url" && isUrl(selected[column]) ? /* @__PURE__ */ React.createElement("a", {
+      href: String(selected[column]),
+      rel: "noreferrer",
+      target: "_blank"
+    }, String(selected[column])) : cellText(selected[column], "null"))))), writer && /* @__PURE__ */ React.createElement("p", {
+      className: "workflow-data-writer"
+    }, "Written by ", writer.name)))), view === "schema" && /* @__PURE__ */ React.createElement("div", {
+      className: "workflow-data-grid"
+    }, /* @__PURE__ */ React.createElement("div", {
+      className: "workflow-data-scroll"
+    }, /* @__PURE__ */ React.createElement("table", null, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("th", {
+      scope: "col"
+    }, "Column"), /* @__PURE__ */ React.createElement("th", {
+      scope: "col"
+    }, "Type"), /* @__PURE__ */ React.createElement("th", {
+      scope: "col"
+    }, "Written by"), /* @__PURE__ */ React.createElement("th", {
+      scope: "col"
+    }, "Last value"))), /* @__PURE__ */ React.createElement("tbody", null, columns.map((column) => /* @__PURE__ */ React.createElement("tr", {
+      key: column
+    }, /* @__PURE__ */ React.createElement("td", {
+      "data-type": "key"
+    }, column), /* @__PURE__ */ React.createElement("td", null, /* @__PURE__ */ React.createElement("span", {
+      className: "workflow-data-type"
+    }, types[column] || "unknown")), /* @__PURE__ */ React.createElement("td", null, writer?.name ?? "—"), /* @__PURE__ */ React.createElement("td", {
+      "data-type": "muted"
+    }, rows.length ? cellText(rows[0]?.[column]) : "—"))))))), view === "json" && /* @__PURE__ */ React.createElement("pre", {
+      className: "workflow-data-json"
+    }, JSON.stringify(data.preview ?? null, null, 2))));
   }
   ctx.slots.register("tool:run_workflow", WorkflowRunCard);
   ctx.slots.register("page", WorkflowsPage);
