@@ -1388,7 +1388,7 @@ export class PluginService {
           );
 
           const { version } = await pacote.manifest(`${packageName}@latest`, {
-            ...REGISTRY_OPTIONS,
+            ...registryOptions(),
             signal: AbortSignal.timeout(10_000),
             timeout: 10_000,
           });
@@ -2489,6 +2489,20 @@ const REGISTRY_OPTIONS = {
   registry: "https://registry.npmjs.org/",
 } as const;
 
+/**
+ * The token key names the host, so pacote sends it to registry.npmjs.org and
+ * to nothing else.
+ */
+function registryOptions() {
+  const token = process.env.NAKAMA_PLUGIN_NPM_TOKEN?.trim();
+
+  if (!token) {
+    return REGISTRY_OPTIONS;
+  }
+
+  return { ...REGISTRY_OPTIONS, "//registry.npmjs.org/:_authToken": token };
+}
+
 async function inspectPluginPackage<T>(
   source: T,
   expectedIntegrity?: string
@@ -2510,7 +2524,7 @@ async function inspectPluginPackage<T>(
   const spec = `${identity.data.packageName}@${identity.data.version}`;
 
   const options = {
-    ...REGISTRY_OPTIONS,
+    ...registryOptions(),
     signal: AbortSignal.timeout(30_000),
     timeout: 30_000,
   } as const;

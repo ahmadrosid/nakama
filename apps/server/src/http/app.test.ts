@@ -941,6 +941,86 @@ describe("createHonoApp", () => {
     }
   });
 
+  test("local-token requests without X-Org-Id resolve only with a single membership", async () => {
+    const configDir = await mkdtemp(join(tmpdir(), "nakama-local-token-orgs-"));
+
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    try {
+      const token = await loadLocalAuthToken();
+      const options = createServerOptions();
+      await seedLocalClientUser(options.databaseAdapter);
+      const app = createHonoApp(options);
+      const url = "http://localhost:4310/v1/profiles";
+
+      // No membership: nothing to fall back to.
+      const none = await app.fetch(
+        new Request(url, { headers: { Authorization: `Bearer ${token}` } })
+      );
+
+      expect(none.status).toBe(400);
+
+      await expect(none.json()).resolves.toEqual({
+        error: "Organization context required",
+      });
+
+      // One membership: unambiguous fallback keeps single-org CLI working.
+      await seedOrgForUser(options.databaseAdapter, LOCAL_CLIENT_EMAIL);
+
+      const single = await app.fetch(
+        new Request(url, { headers: { Authorization: `Bearer ${token}` } })
+      );
+
+      expect(single.status).toBe(200);
+
+      // Two memberships: a silent pick would target an org the caller never
+      // chose, so the request must fail like a cookie session without an org.
+      // (seedOrgForUser cannot add a second org — its slug fallback resolves
+      // back to the first one — so seed this membership directly.)
+      const secondOrgAt = new Date().toISOString();
+
+      await options.databaseAdapter.upsertOrganization({
+        createdAt: secondOrgAt,
+        id: "org_test_second",
+        name: "Test Org Second",
+        slug: "test-org-second",
+        updatedAt: secondOrgAt,
+      });
+
+      await options.databaseAdapter.upsertOrgMember({
+        createdAt: secondOrgAt,
+        orgId: "org_test_second",
+        role: "admin",
+        userId: LOCAL_CLIENT_USER_ID,
+      });
+
+      const multi = await app.fetch(
+        new Request(url, { headers: { Authorization: `Bearer ${token}` } })
+      );
+
+      expect(multi.status).toBe(400);
+
+      await expect(multi.json()).resolves.toEqual({
+        error: "Organization context required",
+      });
+
+      // Explicit header keeps working across memberships.
+      const explicit = await app.fetch(
+        new Request(url, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "X-Org-Id": "org_test_second",
+          },
+        })
+      );
+
+      expect(explicit.status).toBe(200);
+    } finally {
+      delete process.env.NAKAMA_CONFIG_DIR;
+      await rm(configDir, { force: true, recursive: true });
+    }
+  });
+
   test("rejects local auth token rotation for non-platform-admin browser sessions", async () => {
     const configDir = await mkdtemp(
       join(tmpdir(), "nakama-rotate-auth-member-")

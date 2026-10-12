@@ -19,6 +19,7 @@ import {
   closePluginPackageRegistry,
   pluginPackage,
   pluginTarball,
+  publishPluginPackageVersion,
 } from "../testing/plugin-package-fixture";
 import { PluginService } from "./plugin-service";
 
@@ -357,6 +358,49 @@ describe("PluginService", () => {
     expect(existsSync(getPluginReleaseDir("notes", "1.0.0", configDir))).toBe(
       false
     );
+  });
+
+  test("reads a restricted package only with the npm token, and keeps the token on the registry host", async () => {
+    const db = createInMemoryDatabaseAdapter();
+    const service = new PluginService(db, configDir);
+    const source = validBundle({}, { token: "npm_fixture_token" });
+
+    await expect(service.previewPluginPackage(source)).rejects.toMatchObject({
+      code: "package_unavailable",
+    });
+
+    process.env.NAKAMA_PLUGIN_NPM_TOKEN = "npm_fixture_token";
+
+    try {
+      const preview = await service.previewPluginPackage(source);
+
+      const installed = await service.installPluginPackage(source, {
+        expectedDigest: preview.digest,
+      });
+
+      expect(installed.digest).toBe(preview.digest);
+      expect(
+        JSON.stringify(await db.getPluginRelease("notes", "1.0.0"))
+      ).not.toContain("npm_fixture_token");
+
+      publishPluginPackageVersion(source.packageName, "1.1.0");
+
+      expect(await service.listPluginUpdates()).toEqual([
+        {
+          packageName: source.packageName,
+          pluginId: "notes",
+          version: "1.1.0",
+        },
+      ]);
+
+      await expect(
+        service.previewPluginPackage(
+          validBundle({}, { tarball: "https://registry.example/notes.tgz" })
+        )
+      ).rejects.toMatchObject({ code: "invalid_package" });
+    } finally {
+      delete process.env.NAKAMA_PLUGIN_NPM_TOKEN;
+    }
   });
 
   test("requires bundled dependencies and matching package identity", async () => {

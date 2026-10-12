@@ -78,7 +78,9 @@ ui/assets/*
 migrations/*.sql
 ```
 
-Publish to the public npm registry. Put `nakama.plugin.json` beside `package.json`; their versions must match. Admins enter the npm package name and exact version. Tags, ranges, Git URLs, local paths, private registries, and archive uploads are not supported.
+Publish to the npm registry. Put `nakama.plugin.json` beside `package.json`; their versions must match. Admins enter the npm package name and exact version. Tags, ranges, Git URLs, local paths, other registries, and archive uploads are not supported.
+
+A restricted package installs when the server has `NAKAMA_PLUGIN_NPM_TOKEN` set. The token is sent to `registry.npmjs.org` only, for preview, install and the update check. It is one token for the whole install, so use a read-only granular token limited to the plugin packages. Without it, a restricted package fails preview like a package that does not exist.
 
 Preview records the package digest and registry SHA-512 integrity. Installation rechecks both before publishing the release.
 
