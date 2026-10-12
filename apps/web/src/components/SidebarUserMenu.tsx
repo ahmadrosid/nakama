@@ -104,10 +104,10 @@ export function SidebarUserMenu() {
                   side="right"
                   sideOffset={8}
                 >
-                  <div className="flex items-center gap-3 px-4 py-4">
+                  <div className="flex items-center gap-2.5 px-3.5 py-3">
                     <span
                       aria-hidden="true"
-                      className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground text-sm"
+                      className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground text-xs"
                     >
                       {initials}
                     </span>
@@ -125,7 +125,7 @@ export function SidebarUserMenu() {
 
                   <div className="p-1">
                     <DropdownMenuItem
-                      className="px-3 py-2.5"
+                      className="px-2.5 py-1.5"
                       onClick={() => {
                         setProfileOpen(true);
                       }}
@@ -134,7 +134,7 @@ export function SidebarUserMenu() {
                       Profile
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      className="px-3 py-2.5"
+                      className="px-2.5 py-1.5"
                       onClick={() => {
                         setPersonalisationOpen(true);
                       }}
@@ -147,7 +147,7 @@ export function SidebarUserMenu() {
                       activeOrg?.role
                     ) && (
                       <DropdownMenuItem
-                        className="px-3 py-2.5"
+                        className="px-2.5 py-1.5"
                         render={<Link to={PAGE_PATHS.organization} />}
                       >
                         <Building03Icon
@@ -161,11 +161,11 @@ export function SidebarUserMenu() {
 
                   <div className="h-px bg-border" />
 
-                  <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+                  <div className="flex items-center justify-between gap-3 px-3.5 py-2">
                     <span className="text-muted-foreground text-sm">Theme</span>
                     <div
                       aria-label="Color theme"
-                      className="flex gap-0.5 rounded-lg bg-muted p-1"
+                      className="flex gap-0.5 rounded-md bg-muted p-0.5"
                       role="group"
                     >
                       {THEME_OPTIONS.map((option) => {
@@ -177,7 +177,7 @@ export function SidebarUserMenu() {
                             aria-label={option.label}
                             aria-pressed={selected}
                             className={cn(
-                              "rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:text-foreground",
+                              "rounded-sm px-2 py-1 text-muted-foreground transition-colors hover:text-foreground",
                               selected &&
                                 "bg-background text-foreground shadow-sm"
                             )}
@@ -189,7 +189,7 @@ export function SidebarUserMenu() {
                           >
                             <Icon
                               aria-hidden="true"
-                              className="size-4"
+                              className="size-3.5"
                               strokeWidth={1.75}
                             />
                           </button>
@@ -202,7 +202,7 @@ export function SidebarUserMenu() {
 
                   <div className="p-1">
                     <DropdownMenuItem
-                      className="px-3 py-2.5"
+                      className="px-2.5 py-1.5"
                       onClick={() => {
                         void logout();
                       }}
