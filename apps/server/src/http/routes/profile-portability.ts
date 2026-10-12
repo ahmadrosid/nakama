@@ -174,6 +174,7 @@ export function registerProfilePortabilityRoutes(
     const auth = await requireProfileManageFromContext(c, options.agent, {
       allowOrgAdmin: true,
     });
+
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const db = requireDatabase(options);

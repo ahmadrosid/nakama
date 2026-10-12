@@ -69,6 +69,7 @@ describe("ACP MCP tools", () => {
       method: "tools/list",
     });
 
+    // SAFETY: The tools/list reply carries { result: { tools } } once its kind is "reply".
     const names =
       list.kind === "reply" &&
       (list.body as { result: { tools: { name: string }[] } }).result.tools.map(

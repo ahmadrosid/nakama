@@ -657,6 +657,7 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
     const auth = await requireProfileManageFromContext(c, agent, {
       allowOrgAdmin: true,
     });
+
     const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson(c.req.raw, assignToolSchema);
 
@@ -683,6 +684,7 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
     const auth = await requireProfileManageFromContext(c, agent, {
       allowOrgAdmin: true,
     });
+
     const orgId = requireActiveOrgIdFromContext(c);
 
     return json<ProfileResponse>(

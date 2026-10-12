@@ -648,6 +648,7 @@ export function registerSkillRoutes(
     const auth = await requireProfileManageFromContext(c, agent, {
       allowOrgAdmin: true,
     });
+
     const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson(c.req.raw, assignSkillSchema);
 
@@ -665,6 +666,7 @@ export function registerSkillRoutes(
     const auth = await requireProfileManageFromContext(c, agent, {
       allowOrgAdmin: true,
     });
+
     const orgId = requireActiveOrgIdFromContext(c);
 
     return json<ProfileResponse>(
