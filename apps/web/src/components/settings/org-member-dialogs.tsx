@@ -400,33 +400,55 @@ export function OrgMemberEditDialog({
 }) {
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Edit member</DialogTitle>
         </DialogHeader>
         <form className="space-y-4" onSubmit={onSubmit}>
-          <div>
-            <label
-              className="mb-1 block font-medium text-sm"
-              htmlFor="edit-name"
-            >
-              Name
-            </label>
-            <Input
-              id="edit-name"
-              onChange={(event) => onEditNameChange(event.target.value)}
-              placeholder="Jane Doe"
-              value={editName}
-            />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label
+                className="mb-1.5 block font-medium text-sm"
+                htmlFor="edit-name"
+              >
+                Name
+              </label>
+              <Input
+                className="h-10 rounded-xl"
+                id="edit-name"
+                onChange={(event) => onEditNameChange(event.target.value)}
+                placeholder="Jane Doe"
+                value={editName}
+              />
+            </div>
+            <div>
+              <label
+                className="mb-1.5 block font-medium text-sm"
+                htmlFor="edit-phone"
+              >
+                Phone{" "}
+                <span className="font-normal text-muted-foreground">
+                  (optional)
+                </span>
+              </label>
+              <Input
+                className="h-10 rounded-xl"
+                id="edit-phone"
+                onChange={(event) => onEditPhoneChange(event.target.value)}
+                placeholder="+1234567890"
+                value={editPhone}
+              />
+            </div>
           </div>
           <div>
             <label
-              className="mb-1 block font-medium text-sm"
+              className="mb-1.5 block font-medium text-sm"
               htmlFor="edit-email"
             >
               Email
             </label>
             <Input
+              className="h-10 rounded-xl"
               disabled
               id="edit-email"
               readOnly
@@ -435,32 +457,20 @@ export function OrgMemberEditDialog({
             />
           </div>
           <div>
-            <label
-              className="mb-1 block font-medium text-sm"
-              htmlFor="edit-phone"
-            >
-              Phone
-            </label>
-            <Input
-              id="edit-phone"
-              onChange={(event) => onEditPhoneChange(event.target.value)}
-              placeholder="+1234567890"
-              value={editPhone}
-            />
-          </div>
-          <div>
-            <label
-              className="mb-1 block font-medium text-sm"
-              htmlFor="edit-role"
-            >
-              Role
-            </label>
-            <OrgMemberRoleSelect onChange={onEditRoleChange} value={editRole} />
+            <p className="mb-1.5 font-medium text-sm">Role</p>
+            <OrgMemberRoleCards onChange={onEditRoleChange} value={editRole} />
           </div>
           {formError ? (
             <p className="text-destructive text-sm">{formError}</p>
           ) : null}
           <DialogFooter>
+            <Button
+              onClick={() => onOpenChange(false)}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
             <Button disabled={pending} type="submit">
               {pending ? "Saving…" : "Save changes"}
             </Button>
