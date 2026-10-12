@@ -375,7 +375,7 @@ export function createSuperBotTools(
           description: { description: "What the tool does.", type: "string" },
           handlerConfig: {
             additionalProperties: true,
-            description: `Write the module with write_file using an absolute path under ${getCustomToolsDir()} before registering; omit cwd. modulePath: filename relative to that directory, ending in .js or .py. JavaScript (preferred): export async function run(input, context). Python: def run(input, context) plus a __main__ harness reading JSON from sys.stdin and writing JSON to sys.stdout. parameters: input JSON schema with properties and required fields; exported JS parameters are ignored. Validate inputs; return JSON-serializable results; log only to stderr. Profile files: context.workspaceRoot (JS) or NAKAMA_WORKSPACE_ROOT (Python). requiresApiKey: true only if needed; read NAKAMA_TOOL_API_KEY at runtime, never put keys in inputs/source/output. env: for other settings (base URL, account id, extra keys), list [{ name: "UPPER_SNAKE_CASE", secret: true|false }] and read process.env[name] (JS) or os.environ[name] (Python); names may not start with NAKAMA_, NODE_, PYTHON, LD_ or be PATH/HOME. An admin fills env values in the tool playground Configuration card. Direct users to the web chat Configure card, then retry.`,
+            description: `Write the module with write_file using an absolute path under ${getCustomToolsDir("{orgId}")} (substitute your organization id; a missing-module error from this tool states the exact path) before registering; omit cwd. modulePath: filename relative to that directory, ending in .js or .py. JavaScript (preferred): export async function run(input, context). Python: def run(input, context) plus a __main__ harness reading JSON from sys.stdin and writing JSON to sys.stdout. parameters: input JSON schema with properties and required fields; exported JS parameters are ignored. Validate inputs; return JSON-serializable results; log only to stderr. Profile files: context.workspaceRoot (JS) or NAKAMA_WORKSPACE_ROOT (Python). requiresApiKey: true only if needed; read NAKAMA_TOOL_API_KEY at runtime, never put keys in inputs/source/output. env: for other settings (base URL, account id, extra keys), list [{ name: "UPPER_SNAKE_CASE", secret: true|false }] and read process.env[name] (JS) or os.environ[name] (Python); names may not start with NAKAMA_, NODE_, PYTHON, LD_ or be PATH/HOME. An admin fills env values in the tool playground Configuration card. Direct users to the web chat Configure card, then retry.`,
             type: "object",
           },
           handlerType: {
@@ -454,21 +454,19 @@ export function createSuperBotTools(
 
         if (!modulePath?.endsWith(handler.extension)) {
           throw new Error(
-            `${handlerType} tools require handlerConfig.modulePath ending in "${handler.extension}". Write the module with write_file to ${getCustomToolsDir()} first.`
+            `${handlerType} tools require handlerConfig.modulePath ending in "${handler.extension}". Write the module with write_file to ${getCustomToolsDir(requireOrgId(context))} first.`
           );
         }
 
-        await handler.validateModule(modulePath);
+        await handler.validateModule(modulePath, requireOrgId(context));
 
         const tool = setup?.toolId
           ? (await profileService.getTool(setup.toolId, requireOrgId(context)))
               .tool
-          : await profileService.createTool({
-              description,
-              handlerConfig,
-              handlerType,
-              name,
-            });
+          : await profileService.createTool(
+              { description, handlerConfig, handlerType, name },
+              requireOrgId(context)
+            );
 
         sessionState.markToolCreated(context.sessionId, tool.id);
 

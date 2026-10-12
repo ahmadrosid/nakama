@@ -439,7 +439,10 @@ export function registerToolRoutes(app: HonoApp, options: ServerOptions): void {
     requirePlatformAdminFromContext(c);
     const body = await readJson(c.req.raw, createToolSchema);
 
-    return json(await agent.createTool(body), 201);
+    return json(
+      await agent.createTool(body, requireActiveOrgIdFromContext(c)),
+      201
+    );
   });
 
   const credentialStatusSchema = z.object({

@@ -166,11 +166,42 @@ describe("file builtin tools", () => {
     );
   });
 
-  test("write_file allows custom tool modules outside profile workspace", async () => {
+  test("write_file refuses other orgs' and install-global tool directories", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-write-"));
     configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const toolsDir = path.join(configDir, "tools");
+
+    for (const toolsDir of [
+      path.join(configDir, "orgs", "org_other", "tools"),
+      path.join(configDir, "tools"),
+    ]) {
+      await mkdir(toolsDir, { recursive: true });
+
+      await expect(
+        runWriteFile(
+          {
+            content: "export async function run() { return null; }",
+            path: path.join(toolsDir, "echo.js"),
+          },
+          PROFILE_CONTEXT,
+          { workspaceRoot: tempDir }
+        )
+      ).rejects.toThrow(PathGuardError);
+    }
+  });
+
+  test("write_file allows the org's own custom tool modules outside profile workspace", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-write-"));
+    configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
+    process.env.NAKAMA_CONFIG_DIR = configDir;
+
+    const toolsDir = path.join(
+      configDir,
+      "orgs",
+      PROFILE_CONTEXT.orgId,
+      "tools"
+    );
+
     await mkdir(toolsDir, { recursive: true });
 
     const targetPath = path.join(toolsDir, "echo.js");
@@ -1112,7 +1143,14 @@ describe("file builtin tools", () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "nakama-read-"));
     configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
     process.env.NAKAMA_CONFIG_DIR = configDir;
-    const toolsDir = path.join(configDir, "tools");
+
+    const toolsDir = path.join(
+      configDir,
+      "orgs",
+      PROFILE_CONTEXT.orgId,
+      "tools"
+    );
+
     await mkdir(toolsDir, { recursive: true });
 
     const targetPath = path.join(toolsDir, "echo.js");

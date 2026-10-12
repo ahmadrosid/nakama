@@ -150,7 +150,7 @@ async function readCustomToolSource(
   let resolvedPath: string;
 
   try {
-    resolvedPath = handler.resolveModulePath(modulePath);
+    resolvedPath = handler.resolveModulePath(modulePath, record.orgId);
   } catch (error) {
     throw new NakamaApiError(
       error instanceof Error ? error.message : String(error),

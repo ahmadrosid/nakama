@@ -748,13 +748,13 @@ async function collectPackedCustomTools(
     let absolutePath: string;
 
     try {
-      absolutePath = handler.resolveModulePath(storedModulePath);
+      absolutePath = handler.resolveModulePath(storedModulePath, orgId);
     } catch {
       skipped.push(customToolSkip(tool.name, "has an invalid module path"));
       continue;
     }
 
-    const modulePath = portableCustomToolModulePath(absolutePath);
+    const modulePath = portableCustomToolModulePath(absolutePath, orgId);
 
     if (!(modulePath && modulePath.endsWith(handler.extension))) {
       skipped.push(customToolSkip(tool.name, "has an invalid module path"));
@@ -862,6 +862,7 @@ async function restoreToolAssignments(
       handlerType: packed.definition.handlerType,
       id: createId("tool"),
       name,
+      orgId,
       updatedAt: now,
     };
 
@@ -877,7 +878,7 @@ async function restoreToolAssignments(
     }
 
     try {
-      await handler.validateModule(modulePath);
+      await handler.validateModule(modulePath, orgId);
     } catch (error) {
       await rm(packed.absolutePath, { force: true });
       skipped.push(
@@ -915,7 +916,7 @@ async function resolveToolAssignment(
   // Never resolve tools another organization owns: an unscoped name lookup
   // would let a pack attach a foreign tenant's tool to this profile.
   const existing = await db.getToolByNameForOrg(orgId, name);
-  const packed = findPackedCustomTool(manifest, name);
+  const packed = findPackedCustomTool(manifest, name, orgId);
 
   if (!packed) {
     if (hasPackedCustomToolNamed(manifest, name)) {
@@ -992,14 +993,14 @@ async function existingToolMatchesPack(
   let absolutePath: string;
 
   try {
-    absolutePath = handler.resolveModulePath(modulePath);
+    absolutePath = handler.resolveModulePath(modulePath, existing.orgId);
   } catch {
     return false;
   }
 
   const normalizedConfig = {
     ...existing.handlerConfig,
-    modulePath: portableCustomToolModulePath(absolutePath),
+    modulePath: portableCustomToolModulePath(absolutePath, existing.orgId),
   };
 
   if (
@@ -1030,7 +1031,8 @@ function hasPackedCustomToolNamed(
 
 function findPackedCustomTool(
   manifest: ProfilePackManifest,
-  name: string
+  name: string,
+  orgId: string
 ): ValidPackedCustomTool | null {
   const definitions: unknown = manifest.meta.customTools;
 
@@ -1064,12 +1066,12 @@ function findPackedCustomTool(
   let absolutePath: string;
 
   try {
-    absolutePath = handler.resolveModulePath(modulePath);
+    absolutePath = handler.resolveModulePath(modulePath, orgId);
   } catch {
     return null;
   }
 
-  const portableModulePath = portableCustomToolModulePath(absolutePath);
+  const portableModulePath = portableCustomToolModulePath(absolutePath, orgId);
   const sourcePath = `${CUSTOM_TOOLS_ARCHIVE_DIR}/${portableModulePath}`;
 
   if (!portableModulePath) {
@@ -1089,8 +1091,13 @@ function findPackedCustomTool(
   };
 }
 
-function portableCustomToolModulePath(absolutePath: string): string | null {
-  const modulePath = toZipPath(relative(getCustomToolsDir(), absolutePath));
+function portableCustomToolModulePath(
+  absolutePath: string,
+  orgId?: string | null
+): string | null {
+  const modulePath = toZipPath(
+    relative(getCustomToolsDir(orgId ?? undefined), absolutePath)
+  );
 
   if (
     !modulePath ||

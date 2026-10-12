@@ -18,6 +18,7 @@ import type { DatabaseAdapter, StoredToolRecord } from "@nakama/db";
 import { type BashInput, bashTool, runBash } from "../tools/bash";
 import { enrichCodingAgentBashInput } from "./coding-agent-bash-env";
 import { getCustomToolHandler } from "./custom-tool-handlers";
+import type { CustomToolRecord } from "./custom-tool-shared";
 import type { OrgService } from "./org-service";
 import type { PluginService } from "./plugin-service";
 import { actorMayInvoke, PluginHostError } from "./plugin-service";
@@ -50,7 +51,7 @@ export function omitUnavailableBuiltinTools(
 }
 
 export async function resolveProfileStoredTools(
-  records: StoredToolRecord[],
+  records: CustomToolRecord[],
   db?: DatabaseAdapter,
   builtinOverrides: ToolDefinition[] = [],
   options: ResolveStoredToolsOptions = {}
@@ -75,7 +76,7 @@ export async function resolveProfileStoredTools(
 }
 
 export async function resolveToolsFromStorage(
-  records: StoredToolRecord[],
+  records: CustomToolRecord[],
   db?: DatabaseAdapter,
   builtinOverrides: ToolDefinition[] = [],
   options: ResolveStoredToolsOptions = {}
@@ -116,7 +117,7 @@ export async function resolveToolsFromStorage(
 }
 
 async function resolveStoredTool(
-  record: StoredToolRecord,
+  record: CustomToolRecord,
   builtinMap: Map<string, ToolDefinition>,
   serverTools: Map<string, ToolDefinition>,
   pluginService?: PluginService | null,

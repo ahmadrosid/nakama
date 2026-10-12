@@ -4047,8 +4047,8 @@ export class AgentService {
     return this.profileService.getToolSource(toolId, orgId);
   }
 
-  async createTool(request: CreateToolRequest) {
-    const tool = await this.profileService.createTool(request);
+  async createTool(request: CreateToolRequest, orgId: string) {
+    const tool = await this.profileService.createTool(request, orgId);
 
     return { tool };
   }
@@ -4096,7 +4096,11 @@ export class AgentService {
     await this.publishedToolRevisionForRecords(context.orgId, [record]);
 
     const loaded = await handler.load(
-      { ...record, orgId: inherited ? context.orgId : record.orgId },
+      {
+        ...record,
+        moduleOrgId: record.orgId,
+        orgId: inherited ? context.orgId : record.orgId,
+      },
       inherited ? toolContext : undefined
     );
 
@@ -5019,6 +5023,7 @@ export class AgentService {
                 [
                   {
                     ...record,
+                    moduleOrgId: record.orgId,
                     orgId:
                       inherited && record.orgId ? profile.orgId : record.orgId,
                   },
@@ -5097,7 +5102,13 @@ export class AgentService {
             }
 
             const [definition] = await resolveProfileStoredTools(
-              [{ ...assigned, orgId: assigned.orgId ? context.orgId : null }],
+              [
+                {
+                  ...assigned,
+                  moduleOrgId: assigned.orgId,
+                  orgId: assigned.orgId ? context.orgId : null,
+                },
+              ],
               this.db,
               [],
               {

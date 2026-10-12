@@ -330,10 +330,11 @@ function buildFileGuardOptions(
   options: FileToolRunOptions = {}
 ): PathGuardOptions {
   const workspaceRoot = fileToolWorkspaceRoot(context, options);
+  const { orgId } = requireProfileScope(context);
 
   return {
     ...defaultGuardOptions,
-    allowedDirs: [workspaceRoot, getCustomToolsDir()],
+    allowedDirs: [workspaceRoot, getCustomToolsDir(orgId)],
     cwd: workspaceRoot,
   };
 }

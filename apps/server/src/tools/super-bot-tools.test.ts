@@ -171,9 +171,11 @@ describe("super bot create_tool", () => {
       await expect(
         create.run(input, { ...context, orgId: "other" })
       ).rejects.toThrow();
-      await mkdir(path.join(tempConfigDir, "tools"), { recursive: true });
+      await mkdir(path.join(tempConfigDir, "orgs", ORG_ID, "tools"), {
+        recursive: true,
+      });
       await writeFile(
-        path.join(tempConfigDir, "tools", "echo.js"),
+        path.join(tempConfigDir, "orgs", ORG_ID, "tools", "echo.js"),
         "export async function run(input) { return input; }"
       );
       await expect(create.run(input, context)).rejects.toThrow(
@@ -219,9 +221,11 @@ describe("super bot create_tool", () => {
       toolId: "parent_tool_id",
     });
     await approveToolSetup(ORG_ID, setupId, { apiKey: "team-key" });
-    await mkdir(path.join(tempConfigDir, "tools"), { recursive: true });
+    await mkdir(path.join(tempConfigDir, "orgs", ORG_ID, "tools"), {
+      recursive: true,
+    });
     await writeFile(
-      path.join(tempConfigDir, "tools", "echo.js"),
+      path.join(tempConfigDir, "orgs", ORG_ID, "tools", "echo.js"),
       "export async function run(input) { return input; }"
     );
     let reads = 0;
@@ -261,7 +265,7 @@ describe("super bot create_tool", () => {
         path.join(os.tmpdir(), "nakama-super-tool-")
       );
       process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
-      const toolsDir = path.join(tempConfigDir, "tools");
+      const toolsDir = path.join(tempConfigDir, "orgs", ORG_ID, "tools");
       await runWriteFile(
         {
           content: "export async function run(input) { return input; }",
@@ -348,7 +352,7 @@ describe("super bot create_tool", () => {
   test("registers python tools when handlerType is python", async () => {
     tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-super-tool-"));
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
-    const toolsDir = path.join(tempConfigDir, "tools");
+    const toolsDir = path.join(tempConfigDir, "orgs", ORG_ID, "tools");
     await mkdir(toolsDir, { recursive: true });
 
     await writeFile(
@@ -391,7 +395,7 @@ if __name__ == "__main__":
         handlerType: "python",
         name: "echo_py",
       },
-      { sessionId: SESSION_ID }
+      { orgId: ORG_ID, sessionId: SESSION_ID }
     );
 
     expect(capturedRequests[0]?.handlerType).toBe("python");
@@ -410,7 +414,7 @@ if __name__ == "__main__":
   test("rejects python tools that lack a stdin/stdout harness", async () => {
     tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-super-tool-"));
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
-    const toolsDir = path.join(tempConfigDir, "tools");
+    const toolsDir = path.join(tempConfigDir, "orgs", ORG_ID, "tools");
     await mkdir(toolsDir, { recursive: true });
 
     await writeFile(
@@ -438,7 +442,7 @@ if __name__ == "__main__":
           handlerType: "python",
           name: "noharness",
         },
-        { sessionId: SESSION_ID }
+        { orgId: ORG_ID, sessionId: SESSION_ID }
       )
     );
 
@@ -464,7 +468,7 @@ if __name__ == "__main__":
           handlerType: "custom",
           name: "bad-tool",
         },
-        { sessionId: SESSION_ID }
+        { orgId: ORG_ID, sessionId: SESSION_ID }
       )
     );
 
@@ -475,7 +479,7 @@ if __name__ == "__main__":
   test("rejects missing javascript modules before storing the tool", async () => {
     tempConfigDir = await mkdtemp(path.join(os.tmpdir(), "nakama-super-tool-"));
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
-    const toolsDir = path.join(tempConfigDir, "tools");
+    const toolsDir = path.join(tempConfigDir, "orgs", ORG_ID, "tools");
     await mkdir(toolsDir, { recursive: true });
 
     let createToolCalled = false;
@@ -494,7 +498,7 @@ if __name__ == "__main__":
           handlerConfig: { modulePath: "missing.js" },
           name: "missing",
         },
-        { sessionId: SESSION_ID }
+        { orgId: ORG_ID, sessionId: SESSION_ID }
       )
     );
 

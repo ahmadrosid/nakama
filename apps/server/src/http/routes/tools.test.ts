@@ -7,6 +7,7 @@ import {
   NakamaApiError,
 } from "@nakama/core";
 import { AgentService } from "../../services/agent-service";
+import { claimLegacyCustomTools } from "../../services/custom-tool-handlers";
 import {
   loadToolApiKey,
   loadToolSetup,
@@ -108,7 +109,7 @@ describe("tool playground routes", () => {
         role: "admin",
         createdAt: now,
       });
-      await mkdir(getCustomToolsDir(), { recursive: true });
+      await mkdir(getCustomToolsDir(parentOrgId), { recursive: true });
       const profileId = "playground_team";
       await db.upsertProfile({
         id: profileId,
@@ -125,7 +126,7 @@ describe("tool playground routes", () => {
       await mkdir(workspace, { recursive: true });
 
       const modulePath = join(
-        getCustomToolsDir(),
+        getCustomToolsDir(parentOrgId),
         handlerType === "python" ? "published-http.py" : "published-http.js"
       );
 
@@ -1029,5 +1030,150 @@ describe("tool playground routes", () => {
     await expect(response.json()).resolves.toEqual({
       error: "Tool not found.",
     });
+  });
+});
+
+describe("custom tool tenant isolation (#1091)", () => {
+  async function setup() {
+    const { databaseAdapter: db } = createApp();
+    const service = new ProfileService(db);
+    const now = new Date().toISOString();
+
+    for (const id of ["iso_org_a", "iso_org_b"]) {
+      await db.upsertOrganization({
+        id,
+        name: id,
+        slug: id,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await mkdir(getCustomToolsDir(id), { recursive: true });
+    }
+
+    return { db, service };
+  }
+
+  const MODULE = "export async function run() { return 'org-a-secret'; }";
+
+  test("org B cannot read source or details of org A's tool", async () => {
+    const { service } = await setup();
+    await writeFile(
+      join(getCustomToolsDir("iso_org_a"), "iso-secret.js"),
+      MODULE
+    );
+
+    const { id } = await service.createTool(
+      {
+        description: "A tool",
+        handlerConfig: { modulePath: "iso-secret.js" },
+        handlerType: "javascript",
+        name: "iso_secret",
+      },
+      "iso_org_a"
+    );
+
+    await expect(service.getToolSource(id, "iso_org_a")).resolves.toMatchObject(
+      { content: MODULE }
+    );
+    await expect(service.getToolSource(id, "iso_org_b")).rejects.toThrow();
+    await expect(service.getTool(id, "iso_org_b")).rejects.toThrow();
+  });
+
+  test("org B cannot register a tool over org A's module file", async () => {
+    const { service } = await setup();
+    await writeFile(
+      join(getCustomToolsDir("iso_org_a"), "iso-a-module.js"),
+      MODULE
+    );
+
+    await expect(
+      service.createTool(
+        {
+          description: "B",
+          handlerConfig: {
+            modulePath: join(getCustomToolsDir("iso_org_a"), "iso-a-module.js"),
+          },
+          handlerType: "javascript",
+          name: "iso_b",
+        },
+        "iso_org_b"
+      )
+    ).rejects.toThrow();
+  });
+
+  test("an ownerless custom tool is hidden from every org", async () => {
+    const { db, service } = await setup();
+    const now = new Date().toISOString();
+    await db.upsertTool({
+      createdAt: now,
+      description: "legacy",
+      handlerConfig: { modulePath: "legacy.js" },
+      handlerType: "javascript",
+      id: "iso_legacy",
+      name: "iso_legacy",
+      updatedAt: now,
+    });
+
+    const { tools } = await service.listTools("iso_org_b");
+
+    expect(tools.some((tool) => tool.id === "iso_legacy")).toBe(false);
+    await expect(
+      service.getToolSource("iso_legacy", "iso_org_b")
+    ).rejects.toThrow();
+  });
+
+  test("legacy tools are claimed by the one org that uses them", async () => {
+    const { db, service } = await setup();
+    const now = new Date().toISOString();
+    await mkdir(getCustomToolsDir(), { recursive: true });
+
+    for (const file of ["legacy-one.js", "legacy-shared.js"]) {
+      await writeFile(join(getCustomToolsDir(), file), MODULE);
+    }
+
+    for (const id of ["iso_legacy_one", "iso_legacy_shared"]) {
+      await db.upsertTool({
+        createdAt: now,
+        description: id,
+        handlerConfig: {
+          modulePath: `${id.replace("iso_", "").replace("_", "-")}.js`,
+        },
+        handlerType: "javascript",
+        id,
+        name: id,
+        updatedAt: now,
+      });
+    }
+
+    for (const [profileId, orgId] of [
+      ["iso_profile_a", "iso_org_a"],
+      ["iso_profile_b", "iso_org_b"],
+    ] as const) {
+      await db.upsertProfile({
+        createdAt: now,
+        id: profileId,
+        isDefault: false,
+        isSuper: false,
+        model: null,
+        name: profileId,
+        orgId,
+        systemPrompt: "",
+        updatedAt: now,
+      });
+    }
+
+    await db.assignToolToProfile("iso_profile_a", "iso_legacy_one");
+    await db.assignToolToProfile("iso_profile_a", "iso_legacy_shared");
+    await db.assignToolToProfile("iso_profile_b", "iso_legacy_shared");
+
+    await claimLegacyCustomTools(db);
+
+    await expect(
+      service.getToolSource("iso_legacy_one", "iso_org_a")
+    ).resolves.toMatchObject({ content: MODULE });
+    await expect(
+      service.getToolSource("iso_legacy_one", "iso_org_b")
+    ).rejects.toThrow();
+    expect((await db.getTool("iso_legacy_shared"))?.orgId).toBeFalsy();
   });
 });

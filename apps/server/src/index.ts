@@ -68,6 +68,7 @@ import { AutomationRunner } from "./services/automation-runner";
 import { AutomationService } from "./services/automation-service";
 import { resolveComposioCallbackBaseUrl } from "./services/composio-callback-url";
 import { ComposioService } from "./services/composio-service";
+import { claimLegacyCustomTools } from "./services/custom-tool-handlers";
 import { retireAppUserData } from "./services/data-portability";
 import { GoogleMeetService } from "./services/google-meet/service";
 import { LlmUsageTracker } from "./services/llm-usage-tracker";
@@ -136,6 +137,8 @@ const database = await createDatabase(config.databaseUrl, {
 const MAX_AUTOMATION_RUN_RESUMES = 2;
 
 await seedDatabase(database.adapter);
+
+await claimLegacyCustomTools(database.adapter);
 
 await retireAppUserData(
   getUserConfigDir(),

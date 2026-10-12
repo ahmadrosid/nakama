@@ -597,18 +597,27 @@ export function readOptionalString(
   return value || undefined;
 }
 
+/**
+ * A tool published to a team is loaded with `orgId` rewritten to the consumer
+ * so credentials and the ownership guard use the consumer; `moduleOrgId` keeps
+ * the owner, whose directory still holds the module.
+ */
+export type CustomToolRecord = StoredToolRecord & {
+  moduleOrgId?: string | null;
+};
+
 /** Shared load path for javascript/python subprocess tools. */
 export async function loadCustomSubprocessTool(options: {
   allowParallelSafe?: boolean;
-  record: StoredToolRecord;
-  resolveModulePath: (modulePath: string) => string;
+  record: CustomToolRecord;
+  resolveModulePath: (modulePath: string, orgId?: string | null) => string;
   run: (
     modulePath: string,
     input: JsonValue,
     context: ToolContext,
     env?: Record<string, string>
   ) => Promise<JsonValue | undefined>;
-  validateModule: (modulePath: string) => Promise<void>;
+  validateModule: (modulePath: string, orgId?: string | null) => Promise<void>;
 }): Promise<ToolDefinition | null> {
   const { allowParallelSafe, record, resolveModulePath, run, validateModule } =
     options;
@@ -625,7 +634,10 @@ export async function loadCustomSubprocessTool(options: {
   let modulePath: string;
 
   try {
-    modulePath = resolveModulePath(config.modulePath);
+    modulePath = resolveModulePath(
+      config.modulePath,
+      record.moduleOrgId ?? record.orgId
+    );
   } catch (error) {
     return createErrorTool(
       record,
@@ -635,7 +647,7 @@ export async function loadCustomSubprocessTool(options: {
 
   // validateModule owns the missing-file check so load does not pathExists twice.
   try {
-    await validateModule(config.modulePath);
+    await validateModule(config.modulePath, record.moduleOrgId ?? record.orgId);
   } catch (error) {
     return createErrorTool(
       record,
@@ -650,7 +662,7 @@ export async function loadCustomSubprocessTool(options: {
     async run(input, context) {
       const toolInput = z.record(z.string(), JsonValueSchema).parse(input);
 
-      if (record.orgId && record.orgId !== context.orgId) {
+      if (!record.orgId || record.orgId !== context.orgId) {
         throw new Error("Tool not available in this organization.");
       }
 
@@ -745,9 +757,16 @@ export async function loadCustomSubprocessTool(options: {
           ? result
           : redactResult(result);
       } catch (error) {
-        throw new Error(
+        const redacted = new Error(
           redact(error instanceof Error ? error.message : String(error))
         );
+
+        // Retry classification reads these off the thrown error.
+        if (error instanceof Object && "retryable" in error) {
+          Object.assign(redacted, { retryable: error.retryable });
+        }
+
+        throw redacted;
       }
     },
   };
@@ -802,8 +821,11 @@ export function readHandlerModulePath(
   return HandlerConfigSchema.safeParse(handlerConfig).data?.modulePath ?? null;
 }
 
-export function resolveCustomToolModulePath(modulePath: string): string {
-  const toolsDir = path.resolve(getCustomToolsDir());
+export function resolveCustomToolModulePath(
+  modulePath: string,
+  orgId?: string | null
+): string {
+  const toolsDir = path.resolve(getCustomToolsDir(orgId ?? undefined));
 
   const resolved = path.isAbsolute(modulePath)
     ? path.resolve(modulePath)

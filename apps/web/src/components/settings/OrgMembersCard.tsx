@@ -3,6 +3,7 @@ import { Button } from "@nakama/ui/button";
 import { Card, CardContent } from "@nakama/ui/card";
 import { Input } from "@nakama/ui/input";
 import { toast } from "@nakama/ui/toast";
+import { Cancel01Icon } from "hugeicons-react";
 import { useReducer, useState } from "react";
 import {
   type OrgMemberAddCredentials,
@@ -272,16 +273,6 @@ export function OrgMembersCard() {
     );
   }
 
-  function handleRoleChange(userId: string, role: OrgRole) {
-    updateMemberMutation.mutate(
-      { request: { role }, userId },
-      {
-        onError: (err) =>
-          dispatch({ type: "patch", values: { formError: formatError(err) } }),
-      }
-    );
-  }
-
   function handleEditSubmit(event: React.FormEvent) {
     event.preventDefault();
 
@@ -405,15 +396,10 @@ export function OrgMembersCard() {
                   updateOrg(activeOrg.id, { allowedInviteDomains: domains })
                 }
               />
-              <details className="group">
-                <summary className="cursor-pointer px-4 py-3 text-muted-foreground text-sm hover:text-foreground">
-                  Advanced
-                </summary>
-                <OrgIdRow
-                  isTeam={Boolean(activeOrg.parentOrgId)}
-                  orgId={activeOrg.id}
-                />
-              </details>
+              <OrgIdRow
+                isTeam={Boolean(activeOrg.parentOrgId)}
+                orgId={activeOrg.id}
+              />
             </>
           ) : (
             <>
@@ -432,7 +418,6 @@ export function OrgMembersCard() {
                   members={members}
                   onEdit={(member) => dispatch({ member, type: "open-edit" })}
                   onRemove={handleRemove}
-                  onRoleChange={handleRoleChange}
                   removePending={removeMutation.isPending}
                   updatePending={updateMemberMutation.isPending}
                 />
@@ -510,58 +495,65 @@ function InviteDomainsForm({
   }
 
   return (
-    <div className="space-y-3 px-4 py-3">
-      <p className="font-medium text-foreground text-sm">Who can join</p>
-      <div className="flex flex-wrap items-center gap-2">
-        {allowedDomains.length === 0 ? (
-          <span className="text-muted-foreground text-sm">
-            Anyone can be invited
+    <div className="space-y-2 px-4 py-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-medium text-foreground text-sm">Who can join</p>
+        {allowedDomains.length > 0 && (
+          <span className="text-muted-foreground text-sm tabular-nums">
+            {allowedDomains.length}{" "}
+            {allowedDomains.length === 1 ? "domain" : "domains"}
           </span>
-        ) : (
-          allowedDomains.map((domain) => (
-            <span
-              className="inline-flex items-center gap-1 rounded-full bg-muted py-0.5 pr-1 pl-2.5 text-muted-foreground text-xs"
-              key={domain}
-            >
-              {domain}
-              <button
-                aria-label={`Remove ${domain}`}
-                className="rounded-full px-1.5 hover:bg-background hover:text-foreground disabled:opacity-50"
-                disabled={saving}
-                onClick={() =>
-                  void save(allowedDomains.filter((entry) => entry !== domain))
-                }
-                type="button"
-              >
-                ×
-              </button>
-            </span>
-          ))
         )}
       </div>
-      <div className="flex items-center gap-2">
-        <Input
-          aria-label="Add email domain"
-          className="min-w-0 flex-1"
-          disabled={saving}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              void addDraft();
-            }
-          }}
-          placeholder="Add a domain, e.g. acme.com"
-          value={draft}
-        />
-        <Button
-          disabled={saving || draft.trim() === ""}
-          onClick={() => void addDraft()}
-          type="button"
-          variant="outline"
-        >
-          Add
-        </Button>
+      <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+        {allowedDomains.length === 0 && (
+          <p className="px-4 py-3 text-muted-foreground text-sm">
+            Anyone can be invited
+          </p>
+        )}
+        {allowedDomains.map((domain) => (
+          <div
+            className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
+            key={domain}
+          >
+            <span className="min-w-0 break-all">{domain}</span>
+            <Button
+              aria-label={`Remove ${domain}`}
+              disabled={saving}
+              onClick={() =>
+                void save(allowedDomains.filter((entry) => entry !== domain))
+              }
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <Cancel01Icon aria-hidden className="size-4" />
+            </Button>
+          </div>
+        ))}
+        <div className="flex items-center gap-2 bg-background p-2">
+          <Input
+            aria-label="Add email domain"
+            className="min-w-0 flex-1"
+            disabled={saving}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void addDraft();
+              }
+            }}
+            placeholder="Add a domain, e.g. acme.com"
+            value={draft}
+          />
+          <Button
+            disabled={saving || draft.trim() === ""}
+            onClick={() => void addDraft()}
+            type="button"
+          >
+            Add
+          </Button>
+        </div>
       </div>
       {error ? (
         <p className="text-destructive text-sm" role="alert">

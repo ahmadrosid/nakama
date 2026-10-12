@@ -2489,8 +2489,13 @@ describe("OrgService shared agent selection", () => {
       systemPrompt: "",
       updatedAt: now,
     });
-    const modulePath = join(getCustomToolsDir(), "published-details.js");
-    await mkdir(getCustomToolsDir(), { recursive: true });
+
+    const modulePath = join(
+      getCustomToolsDir("org_parent"),
+      "published-details.js"
+    );
+
+    await mkdir(getCustomToolsDir("org_parent"), { recursive: true });
     await writeFile(
       modulePath,
       'export const parameters = {type: "object", properties: {value: {type: "string"}}}; export async function run(input) {return input;}'
@@ -2612,17 +2617,14 @@ describe("OrgService shared agent selection", () => {
       (await service.getToolSource(record.id, "org_parent")).content
     ).toContain("export async function run");
     await db.upsertTool({ ...record, id: "detail_global", orgId: null });
-    expect(
-      (await service.getTool("detail_global", "org_team_a")).tool.scope
-    ).toBeUndefined();
-    await service.assignTool("org_team_a", "local_agent", {
-      toolId: "detail_global",
-    });
-    expect(
-      (await service.listProfileTools("org_team_a", "local_agent")).tools.map(
-        (tool) => tool.id
-      )
-    ).toEqual(["detail_global"]);
+    await expect(
+      service.getTool("detail_global", "org_team_a")
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.assignTool("org_team_a", "local_agent", {
+        toolId: "detail_global",
+      })
+    ).rejects.toMatchObject({ status: 404 });
   });
   test("team tool catalogs show current published sources without parent paths or secrets", async () => {
     const { orgService, databaseAdapter: db } = createOrgService();
@@ -2697,15 +2699,13 @@ describe("OrgService shared agent selection", () => {
     expect(JSON.stringify(shared)).not.toContain("parent-secret");
     expect(
       catalog.tools.filter((tool) => tool.name === "Same name")
-    ).toHaveLength(3);
+    ).toHaveLength(2);
+    expect(catalog.tools.some((tool) => tool.id === "global_tool")).toBe(false);
     expect(
       catalog.tools.some(
         (tool) => tool.id === "private_tool" || tool.id === "foreign_tool"
       )
     ).toBe(false);
-    expect(
-      catalog.tools.filter((tool) => tool.id === "global_tool")
-    ).toHaveLength(1);
     await db.upsertTool({ ...record, name: "Renamed" });
     expect(
       (await service.listTools("org_team_a")).tools.find(
@@ -2731,7 +2731,7 @@ describe("OrgService shared agent selection", () => {
       (await service.listTools("org_team_a")).tools.some(
         (tool) => tool.id === "global_tool"
       )
-    ).toBe(true);
+    ).toBe(false);
     await orgService.publishSharedResource(
       "org_parent",
       { resourceId: record.id, resourceKind: "tool" },
@@ -3011,9 +3011,9 @@ describe("OrgService shared agent selection", () => {
 
       const assignmentProfileId = local ? profile.id : "profile_template";
       const now = new Date().toISOString();
-      await mkdir(getCustomToolsDir(), { recursive: true });
+      await mkdir(getCustomToolsDir("org_parent"), { recursive: true });
       const filename = handlerType === "javascript" ? "shared.js" : "shared.py";
-      const modulePath = join(getCustomToolsDir(), filename);
+      const modulePath = join(getCustomToolsDir("org_parent"), filename);
 
       const source =
         handlerType === "javascript"

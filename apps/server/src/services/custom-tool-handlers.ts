@@ -1,3 +1,6 @@
+import { constants } from "node:fs";
+import { copyFile, mkdir } from "node:fs/promises";
+import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type {
   ToolContext,
@@ -5,8 +8,13 @@ import type {
   ToolSourceResponse,
 } from "@nakama/core";
 import { reportError } from "@nakama/core";
-import type { StoredToolRecord } from "@nakama/db";
-import { resolveCustomToolModulePath } from "./custom-tool-shared";
+import type { DatabaseAdapter } from "@nakama/db";
+import { z } from "zod";
+import {
+  type CustomToolRecord,
+  readHandlerModulePath,
+  resolveCustomToolModulePath,
+} from "./custom-tool-shared";
 import {
   loadJavascriptTool,
   validateJavascriptToolModule,
@@ -21,11 +29,11 @@ export interface CustomToolHandler {
   /** Language tag returned by tool-source for this handler type. */
   language: ToolSourceResponse["language"];
   load(
-    record: StoredToolRecord,
+    record: CustomToolRecord,
     sharedContext?: ToolContext
   ): Promise<ToolDefinition | null>;
-  resolveModulePath(modulePath: string): string;
-  validateModule(modulePath: string): Promise<void>;
+  resolveModulePath(modulePath: string, orgId?: string | null): string;
+  validateModule(modulePath: string, orgId?: string | null): Promise<void>;
 }
 
 export const CUSTOM_TOOL_HANDLERS = {
@@ -207,4 +215,67 @@ export function isCustomToolType(
 /** Human-readable list of supported handler types, e.g. "javascript or python". */
 export function customToolTypesLabel(): string {
   return Object.keys(CUSTOM_TOOL_HANDLERS).join(" or ");
+}
+
+/**
+ * Custom tools created before org ownership have no `org_id` and keep their
+ * module in the install-global tools directory. Claim each one for the single
+ * org whose profiles use it and copy its module into that org's directory.
+ * A tool used by several orgs, or by none, stays unowned and is hidden from
+ * every org rather than silently shared.
+ */
+export async function claimLegacyCustomTools(
+  db: DatabaseAdapter
+): Promise<void> {
+  const profiles = await db.listProfiles();
+  const orgsByTool = new Map<string, Set<string>>();
+
+  for (const profile of profiles) {
+    for (const tool of await db.listToolsForProfile(profile.id)) {
+      const orgs = orgsByTool.get(tool.id) ?? new Set<string>();
+
+      if (profile.orgId) {
+        orgs.add(profile.orgId);
+      }
+
+      orgsByTool.set(tool.id, orgs);
+    }
+  }
+
+  for (const tool of await db.listTools()) {
+    const orgs = orgsByTool.get(tool.id);
+    const modulePath = readHandlerModulePath(tool.handlerConfig);
+
+    if (tool.orgId || !modulePath || orgs?.size !== 1) {
+      continue;
+    }
+
+    if (!isCustomToolType(tool.handlerType)) {
+      continue;
+    }
+
+    const [orgId] = orgs;
+
+    if (!orgId) {
+      continue;
+    }
+
+    try {
+      const source = resolveCustomToolModulePath(modulePath);
+      const target = resolveCustomToolModulePath(path.basename(source), orgId);
+      await mkdir(path.dirname(target), { recursive: true });
+      await copyFile(source, target, constants.COPYFILE_EXCL);
+      await db.upsertTool({
+        ...tool,
+        handlerConfig: {
+          ...z.record(z.string(), z.json()).parse(tool.handlerConfig),
+          modulePath: path.basename(source),
+        },
+        orgId,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch {
+      // Leave the tool unowned; it stays hidden until an operator fixes it.
+    }
+  }
 }

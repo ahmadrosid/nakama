@@ -61,7 +61,7 @@ describe("profile service createTool", () => {
       path.join(os.tmpdir(), "nakama-profile-tool-")
     );
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
-    const toolsDir = path.join(tempConfigDir, "tools");
+    const toolsDir = path.join(tempConfigDir, "orgs", "org_test", "tools");
     await mkdir(toolsDir, { recursive: true });
 
     await writeFile(
@@ -75,11 +75,14 @@ describe("profile service createTool", () => {
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
 
-    const tool = await service.createTool({
-      description: "Echo input",
-      handlerConfig: { modulePath: "echo.js" },
-      name: "echo",
-    });
+    const tool = await service.createTool(
+      {
+        description: "Echo input",
+        handlerConfig: { modulePath: "echo.js" },
+        name: "echo",
+      },
+      "org_test"
+    );
 
     expect(tool.handlerType).toBe("javascript");
   });
@@ -89,19 +92,22 @@ describe("profile service createTool", () => {
       path.join(os.tmpdir(), "nakama-profile-tool-")
     );
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
-    const toolsDir = path.join(tempConfigDir, "tools");
+    const toolsDir = path.join(tempConfigDir, "orgs", "org_test", "tools");
     await mkdir(toolsDir, { recursive: true });
 
     await writeFile(path.join(toolsDir, "echo.py"), PYTHON_ECHO_TOOL);
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
 
-    const tool = await service.createTool({
-      description: "Echo input",
-      handlerConfig: { modulePath: "echo.py" },
-      handlerType: "python",
-      name: "echo_py",
-    });
+    const tool = await service.createTool(
+      {
+        description: "Echo input",
+        handlerConfig: { modulePath: "echo.py" },
+        handlerType: "python",
+        name: "echo_py",
+      },
+      "org_test"
+    );
 
     expect(tool.handlerType).toBe("python");
   });
@@ -111,7 +117,7 @@ describe("profile service createTool", () => {
       path.join(os.tmpdir(), "nakama-profile-tool-")
     );
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
-    const toolsDir = path.join(tempConfigDir, "tools");
+    const toolsDir = path.join(tempConfigDir, "orgs", "org_test", "tools");
     await mkdir(toolsDir, { recursive: true });
 
     await writeFile(path.join(toolsDir, "echo.py"), PYTHON_ECHO_TOOL);
@@ -124,16 +130,19 @@ describe("profile service createTool", () => {
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
 
-    const tool = await service.createTool({
-      description: "Echo input",
-      handlerConfig: {
-        modulePath: "echo.py",
-        parameters,
-        requiresApiKey: true,
+    const tool = await service.createTool(
+      {
+        description: "Echo input",
+        handlerConfig: {
+          modulePath: "echo.py",
+          parameters,
+          requiresApiKey: true,
+        },
+        handlerType: "python",
+        name: "echo_py",
       },
-      handlerType: "python",
-      name: "echo_py",
-    });
+      "org_test"
+    );
 
     expect(tool.handlerConfig).toEqual({
       modulePath: "echo.py",
@@ -156,19 +165,22 @@ describe("profile service createTool", () => {
       path.join(os.tmpdir(), "nakama-profile-tool-")
     );
     process.env.NAKAMA_CONFIG_DIR = tempConfigDir;
-    const toolsDir = path.join(tempConfigDir, "tools");
+    const toolsDir = path.join(tempConfigDir, "orgs", "org_test", "tools");
     await mkdir(toolsDir, { recursive: true });
 
     await writeFile(path.join(toolsDir, "echo.py"), PYTHON_ECHO_TOOL);
 
     const service = new ProfileService(createInMemoryDatabaseAdapter());
 
-    const tool = await service.createTool({
-      description: "Echo input",
-      handlerConfig: { modulePath: "echo.py" },
-      handlerType: "python",
-      name: "echo_py",
-    });
+    const tool = await service.createTool(
+      {
+        description: "Echo input",
+        handlerConfig: { modulePath: "echo.py" },
+        handlerType: "python",
+        name: "echo_py",
+      },
+      "org_test"
+    );
 
     expect(tool.handlerConfig).toEqual({ modulePath: "echo.py" });
     expect(tool.parameters).toEqual({
@@ -182,12 +194,15 @@ describe("profile service createTool", () => {
 
     for (const parameters of [["message"], "message", null]) {
       await expect(
-        service.createTool({
-          description: "Bad params",
-          handlerConfig: { modulePath: "echo.py", parameters },
-          handlerType: "python",
-          name: "bad_params",
-        })
+        service.createTool(
+          {
+            description: "Bad params",
+            handlerConfig: { modulePath: "echo.py", parameters },
+            handlerType: "python",
+            name: "bad_params",
+          },
+          "org_test"
+        )
       ).rejects.toThrow();
     }
   });
@@ -196,12 +211,15 @@ describe("profile service createTool", () => {
     const service = new ProfileService(createInMemoryDatabaseAdapter());
 
     await expect(
-      service.createTool({
-        description: "Bad tool",
-        handlerConfig: { modulePath: "bad-tool.js" },
-        handlerType: "custom",
-        name: "bad-tool",
-      })
+      service.createTool(
+        {
+          description: "Bad tool",
+          handlerConfig: { modulePath: "bad-tool.js" },
+          handlerType: "custom",
+          name: "bad-tool",
+        },
+        "org_test"
+      )
     ).rejects.toThrow(/javascript or python tools can be created/i);
   });
 });

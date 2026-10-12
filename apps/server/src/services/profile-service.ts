@@ -775,7 +775,12 @@ export class ProfileService {
     await ensureBuiltinToolDefinitions(this.db);
 
     const records = await this.db.listTools();
-    const tools = records.filter((tool) => !tool.orgId || tool.orgId === orgId);
+
+    // Custom modules are org-owned; an ownerless one is unclaimed, not shared.
+    const tools = records.filter((tool) =>
+      tool.orgId ? tool.orgId === orgId : !isCustomToolType(tool.handlerType)
+    );
+
     const details = tools.map(toToolDetail);
 
     return {
@@ -926,7 +931,10 @@ export class ProfileService {
     }
   }
 
-  async createTool(request: CreateToolRequest): Promise<ToolDetail> {
+  async createTool(
+    request: CreateToolRequest,
+    orgId: string
+  ): Promise<ToolDetail> {
     const name = request.name.trim();
     const description = request.description.trim();
 
@@ -938,7 +946,7 @@ export class ProfileService {
       throw new Error("Tool description is required.");
     }
 
-    const existing = await this.db.getToolByName(name);
+    const existing = await this.db.getToolByNameForOrg(orgId, name);
 
     if (existing) {
       throw new Error(`Tool already exists: ${name}`);
@@ -960,7 +968,8 @@ export class ProfileService {
     );
 
     await CUSTOM_TOOL_HANDLERS[handlerType].validateModule(
-      handlerConfig.modulePath
+      handlerConfig.modulePath,
+      orgId
     );
 
     const now = new Date().toISOString();
@@ -972,6 +981,7 @@ export class ProfileService {
       handlerType,
       id: createId("tool"),
       name,
+      orgId,
       updatedAt: now,
     };
 

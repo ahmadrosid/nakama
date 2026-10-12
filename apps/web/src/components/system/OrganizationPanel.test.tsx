@@ -379,7 +379,7 @@ test.each(["team", "parent", "standalone"] as const)(
     }
 
     await openTab("Settings");
-    const label = context === "team" ? "Team" : "Organization";
+    const label = context === "team" ? "Team ID" : "Organization ID";
     expect(
       [...container.querySelectorAll("span")].some(
         (entry) => entry.textContent === label

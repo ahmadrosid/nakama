@@ -4,9 +4,15 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { getUserConfigDir } from "../user-config";
 
-/** Agent-authored tool modules live under {configDir}/tools/. */
-export function getCustomToolsDir(): string {
-  return path.join(getUserConfigDir(), "tools");
+/**
+ * Agent-authored tool modules live under {configDir}/orgs/{orgId}/tools/.
+ * Without an org this is the legacy install-global {configDir}/tools/, which
+ * only holds modules of tools that predate org ownership.
+ */
+export function getCustomToolsDir(orgId?: string): string {
+  return orgId
+    ? path.join(getUserConfigDir(), "orgs", orgId, "tools")
+    : path.join(getUserConfigDir(), "tools");
 }
 
 // ---------------------------------------------------------------------------

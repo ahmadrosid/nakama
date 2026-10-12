@@ -691,7 +691,7 @@ describe("profile portability", () => {
       name: "Tool Bot",
     });
 
-    const toolsDir = getCustomToolsDir();
+    const toolsDir = getCustomToolsDir(ORG);
     const modulePath = "portable-echo.js";
 
     const source = `export async function run(input, context) {
@@ -708,6 +708,7 @@ describe("profile portability", () => {
       handlerType: "javascript",
       id: "tool_portable",
       name: "portable_echo",
+      orgId: ORG,
       updatedAt: now(),
     });
     await db.assignToolToProfile(profile.id, "tool_portable");
@@ -817,7 +818,7 @@ describe("profile portability", () => {
       )
     ).toContain(restored.id);
     await expect(
-      readFile(path.join(toolsDir, modulePath), "utf8")
+      readFile(path.join(getCustomToolsDir(DEST), modulePath), "utf8")
     ).resolves.toBe(source);
 
     const reused = await importProfilePack(destinationDb, DEST, exported.data, {
@@ -832,7 +833,7 @@ describe("profile portability", () => {
     ).toContain(restored.id);
 
     await writeFile(
-      path.join(toolsDir, modulePath),
+      path.join(getCustomToolsDir(DEST), modulePath),
       "export async function run() { return 'changed'; }\n",
       "utf8"
     );

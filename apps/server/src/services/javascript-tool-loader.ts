@@ -8,9 +8,9 @@ import type {
   ToolDefinition,
 } from "@nakama/core";
 import { pathExists } from "@nakama/core";
-import type { StoredToolRecord } from "@nakama/db";
 import { z } from "zod";
 import {
+  type CustomToolRecord,
   loadCustomSubprocessTool,
   readOptionalString,
   resolveCustomToolModulePath,
@@ -28,7 +28,7 @@ const RUNNER_PATH = fileURLToPath(
 );
 
 export async function loadJavascriptTool(
-  record: StoredToolRecord,
+  record: CustomToolRecord,
   sharedContext?: ToolContext
 ): Promise<ToolDefinition | null> {
   return loadCustomSubprocessTool({
@@ -108,9 +108,10 @@ export async function loadJavascriptSkillTool(
 }
 
 export async function validateJavascriptToolModule(
-  modulePath: string
+  modulePath: string,
+  orgId?: string | null
 ): Promise<void> {
-  const resolvedPath = resolveCustomToolModulePath(modulePath);
+  const resolvedPath = resolveCustomToolModulePath(modulePath, orgId);
 
   if (!(await pathExists(resolvedPath))) {
     throw new Error(`Tool module not found: ${modulePath}`);

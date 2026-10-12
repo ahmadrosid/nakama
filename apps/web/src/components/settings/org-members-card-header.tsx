@@ -29,38 +29,40 @@ export function OrgIdRow({
   }
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2 px-4 py-3">
-      <span className="shrink-0 font-normal text-foreground text-sm leading-none">
-        {isTeam ? "Team" : "Organization"}
+    <div className="space-y-2 px-4 pt-2 pb-4">
+      <span className="block font-medium text-foreground text-sm">
+        {isTeam ? "Team ID" : "Organization ID"}
       </span>
-      <code className="inline-flex h-7 max-w-[14rem] items-center truncate rounded border border-border bg-muted/30 px-1.5 font-mono text-2xs text-foreground leading-none sm:max-w-xs">
-        {orgId}
-      </code>
-      <Button
-        aria-label={
-          isTeam
-            ? copiedOrgId
-              ? "Copied team ID"
-              : "Copy team ID"
-            : copiedOrgId
-              ? "Copied org ID"
-              : "Copy org ID"
-        }
-        className="size-7 shrink-0"
-        onClick={() => void handleCopyOrgId()}
-        size="icon-sm"
-        type="button"
-        variant="ghost"
-      >
-        {copiedOrgId ? (
-          <CheckmarkCircle01Icon
-            aria-hidden
-            className="size-3.5 text-emerald-600 dark:text-emerald-400"
-          />
-        ) : (
-          <Copy01Icon aria-hidden className="size-3.5" />
-        )}
-      </Button>
+      <div className="flex items-center justify-between gap-3 rounded-xl bg-muted/60 py-2 pr-2 pl-4">
+        <code className="min-w-0 truncate font-mono text-foreground text-sm">
+          {orgId}
+        </code>
+        <Button
+          aria-label={
+            isTeam
+              ? copiedOrgId
+                ? "Copied team ID"
+                : "Copy team ID"
+              : copiedOrgId
+                ? "Copied org ID"
+                : "Copy org ID"
+          }
+          className="shrink-0"
+          onClick={() => void handleCopyOrgId()}
+          type="button"
+          variant="outline"
+        >
+          {copiedOrgId ? (
+            <CheckmarkCircle01Icon
+              aria-hidden
+              className="size-4 text-emerald-600 dark:text-emerald-400"
+            />
+          ) : (
+            <Copy01Icon aria-hidden className="size-4" />
+          )}
+          {copiedOrgId ? "Copied" : "Copy"}
+        </Button>
+      </div>
     </div>
   );
 }

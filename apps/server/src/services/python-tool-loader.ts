@@ -3,9 +3,9 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { ToolContext, ToolDefinition } from "@nakama/core";
 import { pathExists } from "@nakama/core";
-import type { StoredToolRecord } from "@nakama/db";
 import { z } from "zod";
 import {
+  type CustomToolRecord,
   loadCustomSubprocessTool,
   readOptionalString,
   resolveCustomToolModulePath,
@@ -159,7 +159,7 @@ export function resolvePythonBin(
 }
 
 export async function loadPythonTool(
-  record: StoredToolRecord,
+  record: CustomToolRecord,
   sharedContext?: ToolContext
 ): Promise<ToolDefinition | null> {
   return loadCustomSubprocessTool({
@@ -172,9 +172,10 @@ export async function loadPythonTool(
 }
 
 export async function validatePythonToolModule(
-  modulePath: string
+  modulePath: string,
+  orgId?: string | null
 ): Promise<void> {
-  const resolvedPath = resolveCustomToolModulePath(modulePath);
+  const resolvedPath = resolveCustomToolModulePath(modulePath, orgId);
 
   if (!(await pathExists(resolvedPath))) {
     throw new Error(`Tool module not found: ${modulePath}`);

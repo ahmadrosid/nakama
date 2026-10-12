@@ -3,13 +3,15 @@ import os from "node:os";
 import path from "node:path";
 import type { StoredToolRecord } from "@nakama/db";
 
+const CUSTOM_TOOL_TEST_ORG = "org_a";
+
 export async function setupCustomToolsDir(): Promise<{
   configDir: string;
   toolsDir: string;
 }> {
   const configDir = await mkdtemp(path.join(os.tmpdir(), "nakama-config-"));
   process.env.NAKAMA_CONFIG_DIR = configDir;
-  const toolsDir = path.join(configDir, "tools");
+  const toolsDir = path.join(configDir, "orgs", CUSTOM_TOOL_TEST_ORG, "tools");
   await mkdir(toolsDir, { recursive: true });
 
   return { configDir, toolsDir };
@@ -25,6 +27,7 @@ export function makeCustomToolRecord(
     handlerType: "javascript",
     id: "tool_echo",
     name: "echo",
+    orgId: CUSTOM_TOOL_TEST_ORG,
     updatedAt: new Date().toISOString(),
     ...overrides,
   };
