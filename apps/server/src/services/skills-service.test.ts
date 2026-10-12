@@ -1177,6 +1177,7 @@ if __name__ == "__main__":
       const { app, authService } = createMinimalHonoApp({
         agent: {
           assignSkill: profiles.assignSkill.bind(profiles),
+          getProfile: profiles.getProfile.bind(profiles),
           unassignSkill: profiles.unassignSkill.bind(profiles),
         },
         databaseAdapter: db,
