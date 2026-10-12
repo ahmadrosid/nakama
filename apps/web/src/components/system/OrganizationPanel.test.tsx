@@ -819,22 +819,22 @@ test("team changes discard open details from the previous organization", async (
 
 async function fillTeamForm(adminUserId = "creator") {
   await act(async () => {
-    for (const [field, value] of [
-      ["name", "Support"],
-      ["slug", "support"],
-      ["admin", adminUserId],
-    ]) {
-      const input = document.querySelector<HTMLInputElement>(
-        `input[id$="-${field}"]`
-      );
+    const input =
+      document.querySelector<HTMLInputElement>('input[id$="-name"]');
 
-      expect(input).not.toBeNull();
-      Object.getOwnPropertyDescriptor(
-        Object.getPrototypeOf(input),
-        "value"
-      )?.set?.call(input, value);
-      input?.dispatchEvent(new window.Event("input", { bubbles: true }));
-    }
+    expect(input).not.toBeNull();
+    Object.getOwnPropertyDescriptor(
+      Object.getPrototypeOf(input),
+      "value"
+    )?.set?.call(input, "Support");
+    input?.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  await act(async () => {
+    document
+      .querySelector<HTMLInputElement>(
+        `input[name="team-admin"][value="${adminUserId}"]`
+      )
+      ?.click();
   });
 }
 
@@ -864,6 +864,16 @@ test.each(["creator", "another-user"])(
     const data = overview("parent");
     data.canManageOrganization = true;
     data.teams = [];
+    queries.setQueryData(queryKeys.orgMembers("parent"), {
+      members: ["creator", "another-user"].map((userId) => ({
+        createdAt: "2026-10-12T00:00:00Z",
+        email: `${userId}@example.com`,
+        name: userId,
+        phone: null,
+        role: "admin" as const,
+        userId,
+      })),
+    });
     queries.setQueryData(
       queryKeys.organizationOverview("parent", "parent"),
       data
@@ -892,7 +902,9 @@ test.each(["creator", "another-user"])(
       await settle();
     });
     expect(
-      document.querySelector<HTMLInputElement>('input[id$="-admin"]')?.value
+      document.querySelector<HTMLInputElement>(
+        'input[name="team-admin"]:checked'
+      )?.value
     ).toBe("creator");
     await fillTeamForm(adminUserId);
     await submitTeamForm();
@@ -925,6 +937,16 @@ test("failed team creation retains its request ID across dialog close and retry"
   const data = overview("parent");
   data.canManageOrganization = true;
   data.teams = [];
+  queries.setQueryData(queryKeys.orgMembers("parent"), {
+    members: ["creator", "another-user"].map((userId) => ({
+      createdAt: "2026-10-12T00:00:00Z",
+      email: `${userId}@example.com`,
+      name: userId,
+      phone: null,
+      role: "admin" as const,
+      userId,
+    })),
+  });
   queries.setQueryData(
     queryKeys.organizationOverview("parent", "parent"),
     data
@@ -986,6 +1008,16 @@ test("failed session refresh retries without creating a second team", async () =
   const data = overview("parent");
   data.canManageOrganization = true;
   data.teams = [];
+  queries.setQueryData(queryKeys.orgMembers("parent"), {
+    members: ["creator", "another-user"].map((userId) => ({
+      createdAt: "2026-10-12T00:00:00Z",
+      email: `${userId}@example.com`,
+      name: userId,
+      phone: null,
+      role: "admin" as const,
+      userId,
+    })),
+  });
   queries.setQueryData(
     queryKeys.organizationOverview("parent", "parent"),
     data
@@ -1047,6 +1079,16 @@ test("team creation blocks repeated submissions and keeps pending input fixed", 
   const data = overview("parent");
   data.canManageOrganization = true;
   data.teams = [];
+  queries.setQueryData(queryKeys.orgMembers("parent"), {
+    members: ["creator", "another-user"].map((userId) => ({
+      createdAt: "2026-10-12T00:00:00Z",
+      email: `${userId}@example.com`,
+      name: userId,
+      phone: null,
+      role: "admin" as const,
+      userId,
+    })),
+  });
   queries.setQueryData(
     queryKeys.organizationOverview("parent", "parent"),
     data
@@ -1124,6 +1166,16 @@ async function mountKnowledgeManager() {
   const data = overview("parent");
   data.canManageOrganization = true;
   data.teams = [];
+  queries.setQueryData(queryKeys.orgMembers("parent"), {
+    members: ["creator", "another-user"].map((userId) => ({
+      createdAt: "2026-10-12T00:00:00Z",
+      email: `${userId}@example.com`,
+      name: userId,
+      phone: null,
+      role: "admin" as const,
+      userId,
+    })),
+  });
   queries.setQueryData(
     queryKeys.organizationOverview("parent", "parent"),
     structuredClone(data)

@@ -1,6 +1,7 @@
 import type {
   CreateTeamRequest,
   OrganizationOverviewResponse,
+  OrgMemberSummary,
   OrgSharedResourceKind,
   OrgSharedResourceSummary,
 } from "@nakama/core/contract";
@@ -28,7 +29,9 @@ import {
   ArrowRight01Icon,
   BookOpen01Icon,
   ComputerTerminal01Icon,
+  Search01Icon,
   TaskEdit01Icon,
+  Tick02Icon,
   UserGroupIcon,
 } from "hugeicons-react";
 import { type FormEvent, useId, useRef, useState } from "react";
@@ -46,6 +49,7 @@ import { useAppNavigation } from "@/hooks/use-app-navigation";
 import {
   useCreateTeam,
   useOrganizationOverview,
+  useOrgMembers,
   useOrgPublicationMutation,
 } from "@/hooks/use-org-members";
 import { client, formatError } from "@/lib/client";
@@ -817,6 +821,120 @@ function ResourcePublicationDialog({
   );
 }
 
+function slugifyTeamName(name: string) {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+}
+
+const ROLE_NAMES: Record<OrgMemberSummary["role"], string> = {
+  admin: "Org admin",
+  member: "Member",
+  viewer: "Viewer",
+};
+
+function memberInitials(member: OrgMemberSummary) {
+  const source = member.name?.trim() || member.email;
+
+  return source
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+}
+
+function TeamAdminPicker({
+  orgId,
+  value,
+  disabled,
+  onChange,
+}: {
+  orgId: string;
+  value: string;
+  disabled: boolean;
+  onChange: (userId: string) => void;
+}) {
+  const members = useOrgMembers(orgId);
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+
+  const visible = (members.data?.members ?? []).filter(
+    (member) =>
+      !needle ||
+      member.email.toLowerCase().includes(needle) ||
+      (member.name ?? "").toLowerCase().includes(needle)
+  );
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-border">
+      <div className="flex items-center gap-2 border-border border-b bg-muted/50 px-3">
+        <Search01Icon aria-hidden className="size-4 text-muted-foreground" />
+        <input
+          aria-label="Search members"
+          className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
+          disabled={disabled}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search members"
+          value={query}
+        />
+      </div>
+      <div className="max-h-56 divide-y divide-border overflow-y-auto">
+        {members.isLoading && (
+          <p className="px-4 py-3 text-muted-foreground text-sm">
+            Loading members…
+          </p>
+        )}
+        {visible.map((member) => {
+          const selected = member.userId === value;
+
+          return (
+            <label
+              className={`flex cursor-pointer items-center gap-3 px-3 py-2.5 ${
+                selected ? "bg-primary/10" : "bg-background"
+              }`}
+              key={member.userId}
+            >
+              <input
+                checked={selected}
+                className="sr-only"
+                disabled={disabled}
+                name="team-admin"
+                onChange={() => onChange(member.userId)}
+                type="radio"
+                value={member.userId}
+              />
+              <span
+                aria-hidden
+                className={`flex size-8 shrink-0 items-center justify-center rounded-full font-medium text-xs ${
+                  selected
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {memberInitials(member)}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium text-sm">
+                  {member.name?.trim() || member.email}
+                </span>
+                <span className="block truncate text-muted-foreground text-xs">
+                  {member.email} · {ROLE_NAMES[member.role]}
+                </span>
+              </span>
+              {selected && (
+                <Tick02Icon aria-hidden className="size-4 text-primary" />
+              )}
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function AddTeamDialog({
   orgId,
   creatorId,
@@ -829,13 +947,15 @@ function AddTeamDialog({
   const formId = useId();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
+  const [slugOverride, setSlugOverride] = useState<string | null>(null);
+  const [editingSlug, setEditingSlug] = useState(false);
   const [adminUserId, setAdminUserId] = useState(creatorId);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState(false);
   const running = useRef(false);
   const request = useRef<CreateTeamRequest | null>(null);
+  const slug = slugOverride ?? slugifyTeamName(name);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -857,7 +977,7 @@ function AddTeamDialog({
         /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.slug)
       )
     ) {
-      setError("Enter a team name, valid slug, and existing admin user ID.");
+      setError("Enter a team name, valid slug, and first admin.");
 
       return;
     }
@@ -884,7 +1004,8 @@ function AddTeamDialog({
       await refreshSession();
       setOpen(false);
       setName("");
-      setSlug("");
+      setSlugOverride(null);
+      setEditingSlug(false);
       setAdminUserId(creatorId);
       request.current = null;
       setCreated(false);
@@ -910,7 +1031,7 @@ function AddTeamDialog({
       >
         Add team
       </DialogTrigger>
-      <DialogContent showCloseButton={!pending}>
+      <DialogContent className="sm:max-w-lg" showCloseButton={!pending}>
         <DialogHeader>
           <DialogTitle>Add team</DialogTitle>
         </DialogHeader>
@@ -919,34 +1040,58 @@ function AddTeamDialog({
           id={formId}
           onSubmit={(event) => void submit(event)}
         >
-          <div className="space-y-2">
-            <label htmlFor={`${formId}-name`}>Team name</label>
+          <div className="space-y-1.5">
+            <label
+              className="block font-medium text-sm"
+              htmlFor={`${formId}-name`}
+            >
+              Team name
+            </label>
             <Input
+              className="h-10 rounded-xl"
               disabled={pending || created}
               id={`${formId}-name`}
               onChange={(event) => setName(event.target.value)}
               required
               value={name}
             />
+            <div className="flex items-center gap-2 pt-1 text-sm">
+              <span className="text-muted-foreground">Slug</span>
+              {editingSlug ? (
+                <Input
+                  aria-label="Slug"
+                  className="h-8 max-w-56 rounded-lg"
+                  disabled={pending || created}
+                  id={`${formId}-slug`}
+                  onChange={(event) => setSlugOverride(event.target.value)}
+                  pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                  required
+                  value={slug}
+                />
+              ) : (
+                <>
+                  <span className="font-medium">{slug || "—"}</span>
+                  <button
+                    className="font-medium text-primary hover:underline disabled:opacity-50"
+                    disabled={pending || created}
+                    onClick={() => {
+                      setSlugOverride(slug);
+                      setEditingSlug(true);
+                    }}
+                    type="button"
+                  >
+                    Edit
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-          <div className="space-y-2">
-            <label htmlFor={`${formId}-slug`}>Slug</label>
-            <Input
+          <div className="space-y-1.5">
+            <p className="font-medium text-sm">First admin</p>
+            <TeamAdminPicker
               disabled={pending || created}
-              id={`${formId}-slug`}
-              onChange={(event) => setSlug(event.target.value)}
-              pattern="[a-z0-9]+(-[a-z0-9]+)*"
-              required
-              value={slug}
-            />
-          </div>
-          <div className="space-y-2">
-            <label htmlFor={`${formId}-admin`}>First admin user ID</label>
-            <Input
-              disabled={pending || created}
-              id={`${formId}-admin`}
-              onChange={(event) => setAdminUserId(event.target.value)}
-              required
+              onChange={setAdminUserId}
+              orgId={orgId}
               value={adminUserId}
             />
           </div>
@@ -957,6 +1102,14 @@ function AddTeamDialog({
           )}
         </form>
         <DialogFooter>
+          <Button
+            disabled={pending}
+            onClick={() => setOpen(false)}
+            type="button"
+            variant="outline"
+          >
+            Cancel
+          </Button>
           <Button disabled={pending} form={formId} type="submit">
             {pending ? "Creating…" : "Create team"}
           </Button>
