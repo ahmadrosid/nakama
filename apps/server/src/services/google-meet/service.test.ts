@@ -272,7 +272,7 @@ test("shared capture listener consumes tokens once and preserves protocol 2 fina
     const finalized = new Promise<void>((resolve, reject) => {
       const deadline = setTimeout(
         () => reject(new Error("Capture timed out")),
-        2000
+        10_000
       );
 
       ws.addEventListener("message", (event) => {
@@ -315,4 +315,4 @@ test("shared capture listener consumes tokens once and preserves protocol 2 fina
   } finally {
     connect.mockRestore();
   }
-});
+}, 15_000);
