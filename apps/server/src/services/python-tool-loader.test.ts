@@ -1,13 +1,18 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { resolveCustomToolModulePath } from "./custom-tool-shared";
+import { createInMemoryDatabaseAdapter } from "@nakama/db";
+import {
+  resolveCustomToolModulePath,
+  setToolSecrets,
+} from "./custom-tool-shared";
 import {
   makeCustomToolRecord,
   setupCustomToolsDir,
 } from "./custom-tool-test-helpers";
+import { ManagedSecrets } from "./managed-secrets";
 import { loadPythonTool, resolvePythonBin } from "./python-tool-loader";
 
 const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
@@ -15,6 +20,15 @@ const originalConfigDir = process.env.NAKAMA_CONFIG_DIR;
 const originalPythonBin = process.env.NAKAMA_PYTHON_BIN;
 
 const setupToolsDir = setupCustomToolsDir;
+
+beforeEach(() => {
+  setToolSecrets(
+    new ManagedSecrets(
+      createInMemoryDatabaseAdapter(),
+      Buffer.alloc(32, 1).toString("base64")
+    )
+  );
+});
 
 const makeRecord = (overrides = {}) =>
   makeCustomToolRecord({
