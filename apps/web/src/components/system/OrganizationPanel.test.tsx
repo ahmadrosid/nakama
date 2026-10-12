@@ -526,9 +526,9 @@ test("renders all published resource kinds and stored team counts", async () => 
     container.querySelectorAll("dl")[0].querySelectorAll("dt")
   ).toHaveLength(5);
   expect(container.querySelectorAll("li")).toHaveLength(1);
-  expect(container.querySelector("li p")?.textContent).toContain("14");
+  expect(container.querySelector("li button")?.textContent).toContain("14");
 
-  const teamSummary = container.querySelector("li p")?.textContent ?? "";
+  const teamSummary = container.querySelector("li button")?.textContent ?? "";
 
   for (const count of ["3", "5", "4", "2"]) {
     expect(teamSummary).toContain(count);
@@ -570,7 +570,7 @@ test("long organization, resource, and team names retain accessible detail actio
   }
 
   const team = container.querySelector<HTMLButtonElement>("li button")!;
-  expect(team.textContent).toBe(data.teams[0].name);
+  expect(team.textContent).toContain(data.teams[0].name);
   expect(team.getAttribute("aria-label")).toBe(`View ${data.teams[0].name}`);
   await act(async () => team.focus());
   expect(document.activeElement).toBe(team);

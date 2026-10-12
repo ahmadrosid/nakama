@@ -1153,91 +1153,91 @@ function OrganizationTeamRow({
   }
 
   return (
-    <li className="flex items-center justify-between gap-3 px-5 py-3">
-      <div className="min-w-0 space-y-0.5">
-        <Dialog
-          onOpenChange={(nextOpen) => {
-            if (!running.current) {
-              setError(null);
-              setOpen(nextOpen);
-            }
-          }}
-          open={open}
+    <li>
+      <Dialog
+        onOpenChange={(nextOpen) => {
+          if (!running.current) {
+            setError(null);
+            setOpen(nextOpen);
+          }
+        }}
+        open={open}
+      >
+        <DialogTrigger
+          render={
+            <button
+              aria-label={`View ${team.name}`}
+              className="flex w-full cursor-pointer items-center justify-between gap-3 px-5 py-3 text-left outline-none hover:bg-muted/40 focus-visible:bg-muted/40"
+              type="button"
+            />
+          }
         >
-          <div className="flex flex-wrap items-center gap-2">
-            <DialogTrigger
-              render={
-                <Button
-                  aria-label={`View ${team.name}`}
-                  className="h-auto max-w-full justify-start whitespace-normal break-words px-0 py-0 text-left font-medium text-foreground no-underline hover:no-underline"
-                  variant="link"
-                />
-              }
-            >
-              {team.name}
-            </DialogTrigger>
-            {team.id === activeOrgId && (
-              <span className="rounded-full bg-orange-50 px-2 py-0.5 text-orange-700 text-xs dark:bg-orange-950 dark:text-orange-300">
-                Current
-              </span>
-            )}
-          </div>
-          <DialogContent showCloseButton={!pending}>
-            <DialogHeader>
-              <DialogTitle className="break-words">{team.name}</DialogTitle>
-            </DialogHeader>
-            <dl className="space-y-2">
-              <div>
-                <dt className="text-muted-foreground">Team ID</dt>
-                <dd className="break-all font-mono text-xs">{team.id}</dd>
+          <span className="min-w-0 space-y-0.5">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="break-words font-medium">{team.name}</span>
+              {team.id === activeOrgId && (
+                <span className="rounded-full bg-orange-50 px-2 py-0.5 text-orange-700 text-xs dark:bg-orange-950 dark:text-orange-300">
+                  Current
+                </span>
+              )}
+            </span>
+            <span className="block text-muted-foreground text-xs tabular-nums">
+              {[
+                `${team.memberCount} members`,
+                ...Object.entries(team.localResourceCounts).map(
+                  ([kind, count]) => `${count} ${kind}`
+                ),
+              ].join(" · ")}
+            </span>
+          </span>
+          <span className="flex shrink-0 items-center gap-3">
+            <span className="rounded-md bg-muted px-2 py-0.5 text-muted-foreground text-xs">
+              Shared foundation
+            </span>
+            <ArrowRight01Icon
+              aria-hidden
+              className="size-4 text-muted-foreground"
+            />
+          </span>
+        </DialogTrigger>
+        <DialogContent showCloseButton={!pending}>
+          <DialogHeader>
+            <DialogTitle className="break-words">{team.name}</DialogTitle>
+          </DialogHeader>
+          <dl className="space-y-2">
+            <div>
+              <dt className="text-muted-foreground">Team ID</dt>
+              <dd className="break-all font-mono text-xs">{team.id}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Slug</dt>
+              <dd className="break-words">{team.slug}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Members</dt>
+              <dd className="tabular-nums">{team.memberCount}</dd>
+            </div>
+            {Object.entries(team.localResourceCounts).map(([kind, count]) => (
+              <div className="flex gap-2" key={kind}>
+                <dt className="text-muted-foreground">{kind}</dt>
+                <dd className="tabular-nums">{count}</dd>
               </div>
-              <div>
-                <dt className="text-muted-foreground">Slug</dt>
-                <dd className="break-words">{team.slug}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Members</dt>
-                <dd className="tabular-nums">{team.memberCount}</dd>
-              </div>
-              {Object.entries(team.localResourceCounts).map(([kind, count]) => (
-                <div className="flex gap-2" key={kind}>
-                  <dt className="text-muted-foreground">{kind}</dt>
-                  <dd className="tabular-nums">{count}</dd>
-                </div>
-              ))}
-            </dl>
-            {error && (
-              <p className="text-destructive" role="alert">
-                {error}
-              </p>
-            )}
-            {team.canSwitch && team.id !== activeOrgId && (
-              <DialogFooter>
-                <Button disabled={pending} onClick={() => void handleSwitch()}>
-                  {pending ? "Switching…" : "Switch to team"}
-                </Button>
-              </DialogFooter>
-            )}
-          </DialogContent>
-        </Dialog>
-        <p className="text-muted-foreground text-xs tabular-nums">
-          {[
-            `${team.memberCount} members`,
-            ...Object.entries(team.localResourceCounts).map(
-              ([kind, count]) => `${count} ${kind}`
-            ),
-          ].join(" · ")}
-        </p>
-      </div>
-      <div className="flex shrink-0 items-center gap-3">
-        <span className="rounded-md bg-muted px-2 py-0.5 text-muted-foreground text-xs">
-          Shared foundation
-        </span>
-        <ArrowRight01Icon
-          aria-hidden
-          className="size-4 text-muted-foreground"
-        />
-      </div>
+            ))}
+          </dl>
+          {error && (
+            <p className="text-destructive" role="alert">
+              {error}
+            </p>
+          )}
+          {team.canSwitch && team.id !== activeOrgId && (
+            <DialogFooter>
+              <Button disabled={pending} onClick={() => void handleSwitch()}>
+                {pending ? "Switching…" : "Switch to team"}
+              </Button>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
     </li>
   );
 }
