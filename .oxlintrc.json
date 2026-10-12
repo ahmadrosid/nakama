@@ -118,7 +118,6 @@
         "apps/server/src/services/python-tool-loader.test.ts",
         "apps/server/src/services/skills-service-member-skill-code.test.ts",
         "apps/server/src/services/skills-service-org-scope.test.ts",
-        "apps/server/src/services/skills-service.test.ts",
         "apps/server/src/services/telegram-managed-bot-pairing.test.ts",
         "apps/server/src/services/worker-manager-service.test.ts",
         "apps/server/src/tools/ask-user-question-tool.test.ts",

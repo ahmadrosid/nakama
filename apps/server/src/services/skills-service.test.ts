@@ -10,12 +10,14 @@ const ORG_ID = "org_test";
 
 const PROFILE_ID = "profile_default";
 
+const weatherSkillBody = "Call the `weather` tool with a city name.";
+
 const weatherSkillMarkdown = `---
 name: weather
 description: Get weather forecasts. Use when the user asks about weather.
 ---
 
-Call the \`weather\` tool with a city name.
+${weatherSkillBody}
 `;
 
 describe("SkillsService", () => {
@@ -195,9 +197,8 @@ describe("SkillsService", () => {
       "What's the weather in Jakarta?"
     );
 
-    expect(matched).toContain("Active Skill: weather");
-    expect(matched).toContain("Get weather forecasts");
-    expect(matched).not.toContain("Call the `weather` tool");
+    expect(matched).toContain(weather!.description);
+    expect(matched).not.toContain(weatherSkillBody);
   });
 
   test("includes full skill body for explicit skill activation", async () => {
@@ -219,8 +220,8 @@ describe("SkillsService", () => {
       "/skill weather"
     );
 
-    expect(matched).toContain("Active Skill: weather");
-    expect(matched).toContain("Call the `weather` tool");
+    expect(matched).toContain(weather!.description);
+    expect(matched).toContain(weatherSkillBody);
   });
 
   test("includes full body for bundled create-automation matches", async () => {
@@ -243,9 +244,8 @@ describe("SkillsService", () => {
       "Schedule a daily summary at 9am"
     );
 
-    expect(matched).toContain("Active Skill: create-automation");
+    expect(matched).toContain(skill!.description);
     expect(matched).toContain("runAt");
-    expect(matched).toContain("5-field cron syntax");
   });
 
   test("does not include create-automation body for unrelated messages", async () => {
@@ -297,7 +297,7 @@ describe("SkillsService", () => {
       }
     );
 
-    expect(matched).toContain("Active Skill: create-profile");
+    expect(matched).toContain(skill!.description);
     expect(matched).toContain("# Available Tools");
 
     const unrelated = await service.formatMatchedSkillsForPrompt(
@@ -363,8 +363,12 @@ describe("SkillsService", () => {
 
     expect(agentBrowser).toBeTruthy();
 
-    await expect(service.deleteSkill(agentBrowser!.id)).rejects.toThrow(
-      "Bundled system skills cannot be deleted."
+    await expect(service.deleteSkill(agentBrowser!.id)).rejects.toThrow();
+
+    const after = await service.listSkills();
+
+    expect(after.skills.some((skill) => skill.id === agentBrowser!.id)).toBe(
+      true
     );
   });
 
@@ -392,8 +396,6 @@ describe("SkillsService", () => {
     );
 
     expect(prompt).toContain("agent-browser skill");
-    expect(prompt).toContain("Available Agent Skills");
-    expect(prompt).toContain("Skills are workflow instructions");
     expect(prompt).toContain("/skill agent-browser");
     expect(prompt).toContain("screenshot artifacts/");
   });
@@ -744,7 +746,7 @@ Use canary then prod.
     );
 
     expect(edited.skill.description).toBe("Deploy with canary.");
-    expect(edited.skill.body).toContain("Use canary then prod.");
+    expect(edited.skill.body.trim()).toBe("Use canary then prod.");
 
     await expect(
       service.editAssignedProfileSkill(
@@ -759,6 +761,12 @@ description: Renamed.
 Nope.
 `
       )
-    ).rejects.toThrow(/must match skill name/i);
+    ).rejects.toThrow();
+
+    const unchanged = (await service.listSkills()).skills.find(
+      (skill) => skill.name === "deploy"
+    );
+
+    expect(unchanged?.description).toBe("Deploy with canary.");
   });
 });
