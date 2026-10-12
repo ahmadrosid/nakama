@@ -269,15 +269,19 @@ describe("tool playground routes", () => {
       expect(await after.json()).toEqual({ configured: true });
       const ran = await run();
       expect(ran.status).toBe(200);
-      expect(await ran.json()).toMatchObject({
+      const response = await ran.json();
+
+      expect(response).toMatchObject({
         ok: true,
         result: {
           keyIsTeam: true,
           workspace,
-          cwd: await realpath(workspace),
           config: null,
         },
       });
+      expect(await realpath(response.result.cwd)).toBe(
+        await realpath(workspace)
+      );
       expect(await readFile(join(workspace, "playground.marker"), "utf8")).toBe(
         "team"
       );

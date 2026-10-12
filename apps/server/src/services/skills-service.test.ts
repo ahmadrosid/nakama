@@ -429,20 +429,24 @@ export async function run(input, context) {
       });
       expect(process.env.NAKAMA_SHARED_JS_CHILD).toBe(originalChild);
       await expect(readFile(join(root, "executed.marker"))).rejects.toThrow();
-      expect(
-        await tool.run(
-          { message: "hello" },
-          { ...context, workspaceRoot: skill.sourcePath }
-        )
-      ).toMatchObject({
+
+      const result = await tool.run(
+        { message: "hello" },
+        { ...context, workspaceRoot: skill.sourcePath }
+      );
+
+      expect(result).toMatchObject({
         config: null,
-        cwd: await realpath(root),
         message: "hello",
         orgId: "team_a",
         profileId: "profile_team_a",
         value: "original",
         workspace: root,
       });
+      // SAFETY: The fixture returns process.cwd(), a string.
+      expect(await realpath((result as { cwd: string }).cwd)).toBe(
+        await realpath(root)
+      );
       expect(process.env.NAKAMA_SHARED_JS_CHILD).toBe(originalChild);
       expect(await readFile(join(root, "executed.marker"), "utf8")).toBe(
         "team"
@@ -575,10 +579,13 @@ if __name__ == "__main__":
 
       expect(result).toMatchObject({
         config: null,
-        cwd: await realpath(teamRoot),
         value: "original",
         workspace: teamRoot,
       });
+      // SAFETY: The fixture returns os.getcwd(), a string.
+      expect(await realpath((result as { cwd: string }).cwd)).toBe(
+        await realpath(teamRoot)
+      );
       expect(await readFile(join(teamRoot, "executed.marker"), "utf8")).toBe(
         "team"
       );
@@ -842,7 +849,10 @@ if __name__ == "__main__":
     ).rejects.toMatchObject({ status: 403 });
 
     const word = await readFile(
-      join(process.cwd(), "packages/core/src/__fixtures__/sample.docx")
+      new URL(
+        "../../../../packages/core/src/__fixtures__/sample.docx",
+        import.meta.url
+      )
     );
 
     await writeFile(join(skill.sourcePath, "report.docx"), word);

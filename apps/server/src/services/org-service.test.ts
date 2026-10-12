@@ -3173,15 +3173,22 @@ if __name__ == "__main__":
       });
       await expect(readFile(join(teamDir, "tool.marker"))).rejects.toThrow();
       await saveToolApiKey("org_team_a", record.id, "team-key");
-      expect(
-        await tool.run({}, { ...context, workspaceRoot: parentDir })
-      ).toMatchObject({
+
+      const result = await tool.run(
+        {},
+        { ...context, workspaceRoot: parentDir }
+      );
+
+      expect(result).toMatchObject({
         config: null,
-        cwd: await realpath(teamDir),
         keyIsTeam: true,
         version: "first",
         workspace: teamDir,
       });
+      // SAFETY: Both tool fixtures return their working directory as a string.
+      expect(await realpath((result as { cwd: string }).cwd)).toBe(
+        await realpath(teamDir)
+      );
       expect(await readFile(join(teamDir, "tool.marker"), "utf8")).toBe("team");
       await expect(readFile(join(parentDir, "tool.marker"))).rejects.toThrow();
       expect(
