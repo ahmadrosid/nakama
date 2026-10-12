@@ -130,61 +130,29 @@ function orgMembersReducer(
   }
 }
 
-export function OrgMembersCard() {
-  const { user, activeOrg, updateOrg } = useAuth();
-  const orgId = activeOrg?.id ?? null;
+function useOrgMemberActions(
+  orgId: string,
+  state: OrgMembersState,
+  dispatch: React.Dispatch<OrgMembersAction>
+) {
+  const inviteMutation = useInviteOrgMember(orgId);
+  const addMutation = useAddOrgMember(orgId);
+  const updateMemberMutation = useUpdateOrgMember(orgId);
+  const removeMutation = useRemoveOrgMember(orgId);
 
-  const {
-    data,
-    isLoading,
-    error: loadError,
-  } = useOrgMembers(activeOrg?.role === "admin" ? orgId : null);
+  async function copyWithHint(
+    value: string,
+    key: "secretHint" | "addCopyHint"
+  ) {
+    let hint = "Copied to clipboard.";
 
-  const inviteMutation = useInviteOrgMember(orgId ?? "");
-  const addMutation = useAddOrgMember(orgId ?? "");
-  const updateMemberMutation = useUpdateOrgMember(orgId ?? "");
-  const removeMutation = useRemoveOrgMember(orgId ?? "");
-
-  const [tab, setTab] = useState<"members" | "settings">("members");
-  const [state, dispatch] = useReducer(
-    orgMembersReducer,
-    initialOrgMembersState
-  );
-
-  if (!activeOrg || activeOrg.role !== "admin") {
-    return null;
-  }
-
-  const members = data?.members ?? [];
-
-  async function copySecret(value: string) {
     try {
       await navigator.clipboard.writeText(value);
-      dispatch({
-        type: "patch",
-        values: { secretHint: "Copied to clipboard." },
-      });
     } catch {
-      dispatch({
-        type: "patch",
-        values: { secretHint: "Could not copy — select and copy manually." },
-      });
+      hint = "Could not copy — select and copy manually.";
     }
-  }
 
-  async function copyAddCredential(value: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      dispatch({
-        type: "patch",
-        values: { addCopyHint: "Copied to clipboard." },
-      });
-    } catch {
-      dispatch({
-        type: "patch",
-        values: { addCopyHint: "Could not copy — select and copy manually." },
-      });
-    }
+    dispatch({ type: "patch", values: { [key]: hint } });
   }
 
   function handleInviteSubmit(event: React.FormEvent) {
@@ -322,6 +290,58 @@ export function OrgMembersCard() {
     });
   }
 
+  return {
+    addMutation,
+    copyWithHint,
+    handleAddSubmit,
+    handleEditSubmit,
+    handleInviteSubmit,
+    handleRemove,
+    handleRemoveConfirm,
+    inviteMutation,
+    removeMutation,
+    updateMemberMutation,
+  };
+}
+
+export function OrgMembersCard() {
+  const { user, activeOrg, updateOrg } = useAuth();
+  const orgId = activeOrg?.id ?? null;
+
+  const {
+    data,
+    isLoading,
+    error: loadError,
+  } = useOrgMembers(activeOrg?.role === "admin" ? orgId : null);
+
+  const [tab, setTab] = useState<"members" | "settings">("members");
+
+  const [state, dispatch] = useReducer(
+    orgMembersReducer,
+    initialOrgMembersState
+  );
+
+  const actions = useOrgMemberActions(orgId ?? "", state, dispatch);
+
+  if (!activeOrg || activeOrg.role !== "admin") {
+    return null;
+  }
+
+  const {
+    addMutation,
+    inviteMutation,
+    removeMutation,
+    updateMemberMutation,
+    copyWithHint,
+    handleAddSubmit,
+    handleEditSubmit,
+    handleInviteSubmit,
+    handleRemove,
+    handleRemoveConfirm,
+  } = actions;
+
+  const members = data?.members ?? [];
+
   const statusLine =
     state.formError ?? (loadError ? formatError(loadError) : null);
 
@@ -334,26 +354,7 @@ export function OrgMembersCard() {
             className="flex items-center justify-between gap-3 px-4 py-2"
             role="tablist"
           >
-            <div className="flex gap-1">
-              {(
-                [
-                  ["members", "Members"],
-                  ["settings", "Settings"],
-                ] as const
-              ).map(([value, label]) => (
-                <Button
-                  aria-selected={tab === value}
-                  key={value}
-                  onClick={() => setTab(value)}
-                  role="tab"
-                  size="sm"
-                  type="button"
-                  variant={tab === value ? "secondary" : "ghost"}
-                >
-                  {label}
-                </Button>
-              ))}
-            </div>
+            <OrgMembersTabs onChange={setTab} value={tab} />
             {tab === "members" ? (
               <OrgMembersActions
                 inviteEmail={state.inviteEmail}
@@ -405,7 +406,9 @@ export function OrgMembersCard() {
             <>
               {state.secretValue ? (
                 <OrgMembersSecretBanner
-                  onCopy={() => void copySecret(state.secretValue!)}
+                  onCopy={() =>
+                    void copyWithHint(state.secretValue!, "secretHint")
+                  }
                   secretHint={state.secretHint}
                   secretValue={state.secretValue}
                 />
@@ -440,7 +443,7 @@ export function OrgMembersCard() {
         addPending={addMutation.isPending}
         dispatch={dispatch}
         onAddSubmit={handleAddSubmit}
-        onCopyAddCredential={copyAddCredential}
+        onCopyAddCredential={(value) => copyWithHint(value, "addCopyHint")}
         onEditSubmit={handleEditSubmit}
         onRemoveConfirm={handleRemoveConfirm}
         orgName={activeOrg.name}
@@ -449,6 +452,37 @@ export function OrgMembersCard() {
         updatePending={updateMemberMutation.isPending}
       />
     </>
+  );
+}
+
+function OrgMembersTabs({
+  value,
+  onChange,
+}: {
+  value: "members" | "settings";
+  onChange: (tab: "members" | "settings") => void;
+}) {
+  return (
+    <div className="flex gap-1">
+      {(
+        [
+          ["members", "Members"],
+          ["settings", "Settings"],
+        ] as const
+      ).map(([tab, label]) => (
+        <Button
+          aria-selected={value === tab}
+          key={tab}
+          onClick={() => onChange(tab)}
+          role="tab"
+          size="sm"
+          type="button"
+          variant={value === tab ? "secondary" : "ghost"}
+        >
+          {label}
+        </Button>
+      ))}
+    </div>
   );
 }
 
@@ -470,9 +504,11 @@ function InviteDomainsForm({
     try {
       await onSave(next);
       toast("Invite settings saved.");
+
       return true;
     } catch (err) {
       setError(formatError(err));
+
       return false;
     } finally {
       setSaving(false);

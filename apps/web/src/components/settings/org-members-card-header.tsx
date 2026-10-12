@@ -1,11 +1,6 @@
 import type { OrgRole } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
-import {
-  CheckmarkCircle01Icon,
-  Copy01Icon,
-  UserAdd01Icon,
-} from "hugeicons-react";
+import { CheckmarkCircle01Icon, Copy01Icon } from "hugeicons-react";
 import { useState } from "react";
 import { OrgMemberInvitePopover } from "@/components/settings/org-member-dialogs";
 
@@ -91,7 +86,7 @@ export function OrgMembersActions({
   onAddMember: () => void;
 }) {
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-2">
       <OrgMemberInvitePopover
         formError={inviteFormError}
         inviteEmail={inviteEmail}
@@ -103,24 +98,14 @@ export function OrgMembersActions({
         open={inviteOpen}
         pending={invitePending}
       />
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              aria-label="Add member"
-              onClick={onAddMember}
-              size="icon-sm"
-              type="button"
-              variant="outline"
-            >
-              <UserAdd01Icon aria-hidden className="size-3.5" />
-            </Button>
-          }
-        />
-        <TooltipContent side="top" sideOffset={8}>
-          Add member
-        </TooltipContent>
-      </Tooltip>
+      <Button
+        aria-label="Add member"
+        onClick={onAddMember}
+        type="button"
+        variant="outline"
+      >
+        Add member
+      </Button>
     </div>
   );
 }

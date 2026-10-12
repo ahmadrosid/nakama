@@ -11,14 +11,10 @@ import {
 import { Input } from "@nakama/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@nakama/ui/popover";
 import { Spinner } from "@nakama/ui/spinner";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { useQuery } from "@tanstack/react-query";
-import { Copy01Icon, Mail01Icon } from "hugeicons-react";
+import { Copy01Icon } from "hugeicons-react";
 import { Link } from "react-router-dom";
-import {
-  OrgMemberRoleCards,
-  OrgMemberRoleSelect,
-} from "@/components/settings/org-member-role-select";
+import { OrgMemberRoleCards } from "@/components/settings/org-member-role-select";
 import { emailSettingsQueryOptions } from "@/hooks/use-app-queries";
 
 export type OrgMemberAddCredentials = {
@@ -33,6 +29,7 @@ function OrgMemberInviteForm({
   pending,
   onInviteEmailChange,
   onInviteRoleChange,
+  onCancel,
   onSubmit,
 }: {
   inviteEmail: string;
@@ -41,6 +38,7 @@ function OrgMemberInviteForm({
   pending: boolean;
   onInviteEmailChange: (value: string) => void;
   onInviteRoleChange: (role: OrgRole) => void;
+  onCancel: () => void;
   onSubmit: (event: React.FormEvent) => void;
 }) {
   const { data: emailSettings, isLoading: emailSettingsLoading } = useQuery(
@@ -50,28 +48,29 @@ function OrgMemberInviteForm({
   const emailConfigured = emailSettings?.configured === true;
 
   return (
-    <>
-      {emailSettingsLoading || emailConfigured ? null : (
-        <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-muted-foreground text-sm">
-          Email is not configured. You can still create an invite and share its
-          token manually.{" "}
-          <Link
-            className="font-medium text-foreground underline-offset-4 hover:underline"
-            to="/customize/tools"
-          >
-            Configure in Customize → Tools
-          </Link>
-        </p>
-      )}
-      <form className="space-y-4" onSubmit={onSubmit}>
+    <form onSubmit={onSubmit}>
+      <div className="space-y-4 p-4">
+        {emailSettingsLoading || emailConfigured ? null : (
+          <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-muted-foreground text-sm">
+            Email is not configured. You can still create an invite and share
+            its token manually.{" "}
+            <Link
+              className="font-medium text-foreground underline-offset-4 hover:underline"
+              to="/customize/tools"
+            >
+              Configure in Customize → Tools
+            </Link>
+          </p>
+        )}
         <div>
           <label
-            className="mb-1 block font-medium text-sm"
+            className="mb-1.5 block font-medium text-sm"
             htmlFor="invite-email"
           >
             Email
           </label>
           <Input
+            className="h-10 rounded-xl"
             id="invite-email"
             onChange={(event) => onInviteEmailChange(event.target.value)}
             placeholder="colleague@example.com"
@@ -81,13 +80,8 @@ function OrgMemberInviteForm({
           />
         </div>
         <div>
-          <label
-            className="mb-1 block font-medium text-sm"
-            htmlFor="invite-role"
-          >
-            Role
-          </label>
-          <OrgMemberRoleSelect
+          <p className="mb-1.5 font-medium text-sm">Role</p>
+          <OrgMemberRoleCards
             onChange={onInviteRoleChange}
             value={inviteRole}
           />
@@ -95,16 +89,16 @@ function OrgMemberInviteForm({
         {formError ? (
           <p className="text-destructive text-sm">{formError}</p>
         ) : null}
-        <Button
-          className="w-full sm:w-auto"
-          disabled={pending}
-          size="sm"
-          type="submit"
-        >
+      </div>
+      <div className="flex justify-end gap-2 border-t bg-muted/50 p-4">
+        <Button onClick={onCancel} type="button" variant="outline">
+          Cancel
+        </Button>
+        <Button disabled={pending} type="submit">
           {pending ? "Sending…" : "Send invite"}
         </Button>
-      </form>
-    </>
+      </div>
+    </form>
   );
 }
 
@@ -131,32 +125,16 @@ export function OrgMemberInvitePopover({
 }) {
   return (
     <Popover onOpenChange={onOpenChange} open={open}>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <span className="inline-flex">
-              <PopoverTrigger
-                render={
-                  <Button
-                    aria-label="Invite by email"
-                    size="icon-sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    <Mail01Icon aria-hidden className="size-3.5" />
-                  </Button>
-                }
-              />
-            </span>
-          }
-        />
-        <TooltipContent side="top" sideOffset={8}>
-          Invite by email
-        </TooltipContent>
-      </Tooltip>
+      <PopoverTrigger
+        render={
+          <Button aria-label="Invite by email" type="button" variant="outline">
+            Invite by email
+          </Button>
+        }
+      />
       <PopoverContent
         align="end"
-        className="w-80 overflow-hidden p-0"
+        className="w-96 overflow-hidden p-0"
         sideOffset={4}
       >
         <div className="space-y-1 border-border border-b px-4 py-3">
@@ -166,17 +144,16 @@ export function OrgMemberInvitePopover({
             organization.
           </p>
         </div>
-        <div className="space-y-4 p-4">
-          <OrgMemberInviteForm
-            formError={formError}
-            inviteEmail={inviteEmail}
-            inviteRole={inviteRole}
-            onInviteEmailChange={onInviteEmailChange}
-            onInviteRoleChange={onInviteRoleChange}
-            onSubmit={onSubmit}
-            pending={pending}
-          />
-        </div>
+        <OrgMemberInviteForm
+          formError={formError}
+          inviteEmail={inviteEmail}
+          inviteRole={inviteRole}
+          onCancel={() => onOpenChange(false)}
+          onInviteEmailChange={onInviteEmailChange}
+          onInviteRoleChange={onInviteRoleChange}
+          onSubmit={onSubmit}
+          pending={pending}
+        />
       </PopoverContent>
     </Popover>
   );

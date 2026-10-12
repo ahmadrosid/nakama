@@ -527,10 +527,13 @@ test("renders all published resource kinds and stored team counts", async () => 
   ).toHaveLength(5);
   expect(container.querySelectorAll("li")).toHaveLength(1);
   expect(container.querySelector("li p")?.textContent).toContain("14");
+
   const teamSummary = container.querySelector("li p")?.textContent ?? "";
+
   for (const count of ["3", "5", "4", "2"]) {
     expect(teamSummary).toContain(count);
   }
+
   expect(container.querySelectorAll("dd button")).toHaveLength(2);
 });
 
