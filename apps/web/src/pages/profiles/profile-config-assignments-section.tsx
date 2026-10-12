@@ -18,6 +18,45 @@ import { ProfileComposioSection } from "@/pages/profiles/profile-composio-sectio
 import { ProfileToolsSection } from "@/pages/profiles/profile-tools-section";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 
+function ProfileCapabilityTabs({
+  appsConfigured,
+  isOrgAdmin,
+  pendingCount,
+}: {
+  appsConfigured: boolean;
+  isOrgAdmin: boolean;
+  pendingCount: number;
+}) {
+  return (
+    <Tabs.List
+      aria-label="Profile capabilities"
+      className="no-scrollbar flex min-w-0 flex-1 gap-0.5 overflow-x-auto rounded-xl bg-muted p-[3px]"
+    >
+      {[
+        { label: "Tools", value: "tools" },
+        { label: "Plugins", value: "plugins" },
+        ...(appsConfigured ? [{ label: "Apps", value: "apps" }] : []),
+        ...(isOrgAdmin
+          ? [
+              {
+                label: `Proposals${pendingCount ? ` (${pendingCount})` : ""}`,
+                value: "proposals",
+              },
+            ]
+          : []),
+      ].map(({ value, label }) => (
+        <Tabs.Tab
+          className="shrink-0 rounded-lg px-3.5 py-1.5 font-medium text-muted-foreground text-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm"
+          key={value}
+          value={value}
+        >
+          {label}
+        </Tabs.Tab>
+      ))}
+    </Tabs.List>
+  );
+}
+
 export function ProfileConfigAssignmentsSection({
   state,
 }: {
@@ -71,34 +110,11 @@ export function ProfileConfigAssignmentsSection({
       value={activeCapability}
     >
       <div className="flex items-center gap-2">
-        <Tabs.List
-          aria-label="Profile capabilities"
-          className="no-scrollbar flex min-w-0 flex-1 gap-0.5 overflow-x-auto rounded-xl bg-muted p-[3px]"
-        >
-          {[
-            { label: "Tools", value: "tools" },
-            { label: "Plugins", value: "plugins" },
-            ...(composioToolkitsData?.configured
-              ? [{ label: "Apps", value: "apps" }]
-              : []),
-            ...(isOrgAdmin
-              ? [
-                  {
-                    label: `Proposals${proposals?.pendingCount ? ` (${proposals.pendingCount})` : ""}`,
-                    value: "proposals",
-                  },
-                ]
-              : []),
-          ].map(({ value, label }) => (
-            <Tabs.Tab
-              className="shrink-0 rounded-lg px-3.5 py-1.5 font-medium text-muted-foreground text-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm"
-              key={value}
-              value={value}
-            >
-              {label}
-            </Tabs.Tab>
-          ))}
-        </Tabs.List>
+        <ProfileCapabilityTabs
+          appsConfigured={composioToolkitsData?.configured === true}
+          isOrgAdmin={isOrgAdmin}
+          pendingCount={proposals?.pendingCount ?? 0}
+        />
         {activeCapability === "tools" && toolsToAdd.length > 0 ? (
           <Button
             aria-label="Add tool"

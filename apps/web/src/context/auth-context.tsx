@@ -63,7 +63,7 @@ async function loadSessionState(): Promise<{
   }
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+function useAuthSession() {
   const [user, setUser] = useState<AuthUserResponse | null>(null);
   const [orgs, setOrgs] = useState<UserOrgSummary[]>([]);
   const [platformOrgs, setPlatformOrgs] = useState<OrganizationSummary[]>([]);
@@ -235,19 +235,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resetQueryCache();
   }, []);
 
-  const switchOrg = useCallback(async (orgId: string) => {
-    const revision = ++authRevision.current;
-    const nextUser = await client.setActiveOrg(orgId);
+  return {
+    activeOrg,
+    authRevision,
+    isLoading,
+    login,
+    logout,
+    orgs,
+    platformOrgs,
+    platformOrgsError,
+    refreshPlatformOrgs,
+    refreshSession,
+    sessionRequestRevision,
+    setIsLoading,
+    setOrgs,
+    setPlatformOrgs,
+    setUser,
+    setup,
+    user,
+  };
+}
 
-    if (revision !== authRevision.current) {
-      return;
-    }
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const {
+    activeOrg,
+    authRevision,
+    sessionRequestRevision,
+    user,
+    setUser,
+    orgs,
+    setOrgs,
+    platformOrgs,
+    setPlatformOrgs,
+    platformOrgsError,
+    isLoading,
+    setIsLoading,
+    refreshPlatformOrgs,
+    refreshSession,
+    setup,
+    login,
+    logout,
+  } = useAuthSession();
 
-    authRevision.current += 1;
-    setUser(nextUser);
-    setIsLoading(false);
-    resetQueryCache();
-  }, []);
+  const switchOrg = useCallback(
+    async (orgId: string) => {
+      const revision = ++authRevision.current;
+      const nextUser = await client.setActiveOrg(orgId);
+
+      if (revision !== authRevision.current) {
+        return;
+      }
+
+      authRevision.current += 1;
+      setUser(nextUser);
+      setIsLoading(false);
+      resetQueryCache();
+    },
+    [authRevision, setIsLoading, setUser]
+  );
 
   const archiveOrg = useCallback(
     async (orgId: string) => {
@@ -305,7 +350,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
       resetQueryCache();
     },
-    [user?.isPlatformAdmin]
+    [
+      authRevision,
+      sessionRequestRevision,
+      setIsLoading,
+      setOrgs,
+      setPlatformOrgs,
+      setUser,
+      user?.isPlatformAdmin,
+    ]
   );
 
   const createOrg = useCallback(
@@ -344,7 +397,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
       resetQueryCache();
     },
-    [user?.isPlatformAdmin]
+    [
+      authRevision,
+      sessionRequestRevision,
+      setIsLoading,
+      setOrgs,
+      setPlatformOrgs,
+      setUser,
+      user?.isPlatformAdmin,
+    ]
   );
 
   const updateOrg = useCallback(
@@ -402,7 +463,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         resetQueryCache();
       }
     },
-    [orgs, platformOrgs, refreshPlatformOrgs, user?.isPlatformAdmin]
+    [
+      authRevision,
+      orgs,
+      platformOrgs,
+      refreshPlatformOrgs,
+      sessionRequestRevision,
+      setOrgs,
+      user?.isPlatformAdmin,
+    ]
   );
 
   const value = useMemo<AuthContextValue>(
