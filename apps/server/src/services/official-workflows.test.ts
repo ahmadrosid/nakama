@@ -228,12 +228,12 @@ test("official workflow install imports once, executes through IPC, isolates org
     service.invokePluginAction({
       access: "ui",
       actionKey: "list_workflows",
-      actor: { id: "viewer", role: "viewer" },
+      actor: { id: "member", role: "member" },
       input: {},
       orgId: "org_a",
       pluginId: "workflows",
     })
-  ).rejects.toThrow();
+  ).resolves.toBeDefined();
   const install = await db.getOrgPlugin("org_a", "workflows");
   await service.disableOrgPlugin("org_a", "workflows", install!.revision);
   await expect(invoke("list_workflows")).rejects.toThrow();

@@ -172,7 +172,7 @@ describe("skill_manage tool", () => {
 
     try {
       for (const context of [
-        memberContext({ orgRole: "viewer" }),
+        memberContext({ orgRole: undefined }),
         memberContext({ channel: "telegram" }),
       ]) {
         await expect(
@@ -554,17 +554,6 @@ Profile body.
         memberContext()
       )
     ).rejects.toThrow(/different source path/);
-  });
-
-  test("refuses viewer role", async () => {
-    const { tool } = await setup();
-
-    await expect(
-      tool.run(
-        { action: "create", content: researchSkillMarkdown },
-        memberContext({ orgRole: "viewer" })
-      )
-    ).rejects.toThrow("Viewers cannot manage skills.");
   });
 
   test("refuses missing orgRole", async () => {

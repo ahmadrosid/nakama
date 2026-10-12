@@ -431,7 +431,10 @@ export class OrgService {
       throw new NakamaApiError("Not found", 404);
     }
 
-    if (!membership || membership.role === "viewer") {
+    if (
+      !membership ||
+      (membership.role !== "admin" && membership.role !== "member")
+    ) {
       throw new NakamaApiError("Forbidden", 403);
     }
 

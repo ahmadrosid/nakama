@@ -216,12 +216,6 @@ describe("plugin HTTP API", () => {
       userId: "user_member",
     });
     await seedUser(databaseAdapter, authService, {
-      email: "viewer@example.com",
-      orgId,
-      role: "viewer",
-      userId: "user_viewer",
-    });
-    await seedUser(databaseAdapter, authService, {
       email: "outsider@example.com",
       userId: "user_outsider",
     });
@@ -257,13 +251,6 @@ describe("plugin HTTP API", () => {
     const member = await loginUserSession(
       app,
       "member@example.com",
-      PASSWORD,
-      orgId
-    );
-
-    const viewer = await loginUserSession(
-      app,
-      "viewer@example.com",
       PASSWORD,
       orgId
     );
@@ -309,7 +296,6 @@ describe("plugin HTTP API", () => {
 
     expect((await jsonRequest(app, "/v1/plugins", admin)).status).toBe(200);
     expect((await jsonRequest(app, "/v1/plugins", member)).status).toBe(200);
-    expect((await jsonRequest(app, "/v1/plugins", viewer)).status).toBe(403);
     expect(
       (await jsonRequest(app, "/v1/plugins", outsider, {}, orgId)).status
     ).toBe(404);
@@ -340,7 +326,7 @@ describe("plugin HTTP API", () => {
     ).toBe(403);
     expect(
       (
-        await jsonRequest(app, "/v1/plugins/notes/enable", viewer, {
+        await jsonRequest(app, "/v1/plugins/notes/enable", member, {
           body: JSON.stringify({ expectedRevision: added.revision }),
           method: "POST",
         })
@@ -375,16 +361,16 @@ describe("plugin HTTP API", () => {
     expect(enabled.status).toBe(200);
 
     expect(
-      (await jsonRequest(app, `/v1/plugins/ui/${orgId}/notes/`, viewer)).status
-    ).toBe(403);
+      (await jsonRequest(app, `/v1/plugins/ui/${orgId}/notes/`, member)).status
+    ).toBe(200);
     expect(
       (
-        await jsonRequest(app, "/v1/plugins/notes/actions/list", viewer, {
+        await jsonRequest(app, "/v1/plugins/notes/actions/list", member, {
           body: JSON.stringify({ input: {} }),
           method: "POST",
         })
       ).status
-    ).toBe(403);
+    ).toBe(200);
   }, 30_000);
 
   test("crafted UI paths cannot leave the enabled UI directory and require auth", async () => {

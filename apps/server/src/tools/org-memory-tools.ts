@@ -5,7 +5,7 @@ import {
   type KnowledgeBaseDocument,
   listKnowledgeBaseDocuments,
   listOrganizationKnowledgeBaseDocuments,
-  requireToolNotViewer,
+  requireToolOrgMember,
   type ToolContext,
   type ToolDefinition,
 } from "@nakama/core";
@@ -35,13 +35,13 @@ function requireOrgId(context: ToolContext): string {
 }
 
 /**
- * Deny-by-default role gate for org-memory tools. Viewers are blocked; an
+ * Deny-by-default role gate for org-memory tools. Membership is required; an
  * undefined role (no user context) also blocks. Automation/task runners pass
  * an explicit `orgRole: "member"`; sub-agents inherit the parent role.
  */
 function requireOrgMemoryAccess(context: ToolContext) {
   const orgId = requireOrgId(context);
-  requireToolNotViewer(context);
+  requireToolOrgMember(context);
 
   return { orgId };
 }

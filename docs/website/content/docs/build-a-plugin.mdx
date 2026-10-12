@@ -78,7 +78,7 @@ Add `nakama.plugin.json`:
 
 The two package versions must match. Keep `id` stable across updates. Set `minNakamaVersion` to the oldest release you actually support; the value above is the current development baseline, not a guarantee that every build of that version supports tool renderers.
 
-`access` controls who can invoke the action: `member` allows members and admins; `admin` requires an org admin. Viewers cannot invoke plugin actions. Use `effect: "write"` for actions that change data. Setting `exposeAsTool` creates the agent tool `plugin_greeting__greet`; assignment to a profile is still required.
+`access` controls who can invoke the action: `member` allows members and admins; `admin` requires an org admin. Use `effect: "write"` for actions that change data. Setting `exposeAsTool` creates the agent tool `plugin_greeting__greet`; assignment to a profile is still required.
 
 ## 3. Implement the action
 

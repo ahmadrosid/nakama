@@ -15,7 +15,6 @@ import { client, formatError } from "@/lib/client";
 const roles: Array<{ label: string; value: OrgRole }> = [
   { label: "Admins", value: "admin" },
   { label: "Members", value: "member" },
-  { label: "Viewers", value: "viewer" },
 ];
 
 export function PlatformMfaSettingsCard() {

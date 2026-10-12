@@ -191,7 +191,7 @@ import {
   rehydrateAttachmentRefsInContent,
   removeTelegramAccessRequest,
   replaceImagePartsWithDescriptions,
-  requireToolNotViewer,
+  requireToolOrgMember,
   resolveDiscordApplicationId,
   resolveOllamaHostMode,
   saveComposioConfig,
@@ -4979,7 +4979,7 @@ export class AgentService {
   private async resolveProfileTools(
     profile: StoredProfileRecord,
     options: {
-      actorRole?: "admin" | "member" | "viewer" | null;
+      actorRole?: "admin" | "member" | null;
       includeAutomationTools?: boolean;
       includeTodoTools?: boolean;
       includeQuestionTools?: boolean;
@@ -5064,7 +5064,7 @@ export class AgentService {
           // The source can replace its handler after the caller selects a batch.
           parallelSafe: false,
           run: async (input, context) => {
-            requireToolNotViewer(context);
+            requireToolOrgMember(context);
 
             if (
               !context.orgId ||
@@ -5169,7 +5169,7 @@ export class AgentService {
             ).map<ToolDefinition>((tool) => ({
               ...tool,
               run: async (input, context) => {
-                requireToolNotViewer(context);
+                requireToolOrgMember(context);
 
                 if (
                   !context.orgId ||
@@ -5365,9 +5365,7 @@ export class AgentService {
 
     let tools = await this.resolveProfileTools(profile, {
       actorRole:
-        pluginOrgRole === "admin" ||
-        pluginOrgRole === "member" ||
-        pluginOrgRole === "viewer"
+        pluginOrgRole === "admin" || pluginOrgRole === "member"
           ? pluginOrgRole
           : undefined,
       includeMemoryWriteTools: !cognito,
@@ -5899,16 +5897,8 @@ export class AgentService {
       }
     }
 
-    if (orgRole !== "viewer") {
-      const orgMemorySummary =
-        await this.getOrgMemoryService().getSummary(orgId);
-
-      systemPrompt = appendOrgMemorySection(
-        systemPrompt,
-        orgMemorySummary,
-        orgRole
-      );
-    }
+    const orgMemorySummary = await this.getOrgMemoryService().getSummary(orgId);
+    systemPrompt = appendOrgMemorySection(systemPrompt, orgMemorySummary);
 
     return {
       soulActive: Boolean(stack),

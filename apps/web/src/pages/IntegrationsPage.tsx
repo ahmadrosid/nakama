@@ -112,9 +112,7 @@ export function IntegrationsPage() {
       </Link>
       <h1 className="font-medium text-xl">{selected.label}</h1>
       <IntegrationSectionPanel
-        canUseOrgIntegrations={Boolean(
-          activeOrg && activeOrg.role !== "viewer"
-        )}
+        canUseOrgIntegrations={Boolean(activeOrg)}
         isPlatformAdmin={isPlatformAdmin}
         section={selected.id}
       />

@@ -785,7 +785,7 @@ describe("OrgService", () => {
       email: "guest@acme.com",
       invitedByUserId: "user_platform",
       orgId: created.organization.id,
-      role: "viewer",
+      role: "member",
     });
 
     expect(invite.delivered).toBe(true);
@@ -796,7 +796,7 @@ describe("OrgService", () => {
     expect(sent[0]?.text).toContain(
       "https://nakama.example.com/accept-invite?token="
     );
-    expect(sent[0]?.text).toContain("join Acme as viewer");
+    expect(sent[0]?.text).toContain("join Acme as member");
   });
 
   test("returns the invite token when email delivery fails", async () => {
@@ -1084,31 +1084,31 @@ describe("OrgService", () => {
     });
 
     const added = await orgService.addMember({
-      email: "viewer@acme.com",
-      name: "Viewer One",
+      email: "member@acme.com",
+      name: "Member One",
       orgId: created.organization.id,
       phone: "+628111111111",
-      role: "viewer",
+      role: "member",
     });
 
     const listed = await orgService.listMembers(created.organization.id);
     expect(listed.members).toHaveLength(2);
     expect(listed.members.map((member) => member.email).sort()).toEqual([
       "admin@acme.com",
-      "viewer@acme.com",
+      "member@acme.com",
     ]);
 
     const updated = await orgService.updateMember(
       created.organization.id,
       added.member.userId,
       {
-        name: "Viewer Prime",
+        name: "Member Prime",
         phone: "+628222333444",
         role: "member",
       }
     );
 
-    expect(updated.member.name).toBe("Viewer Prime");
+    expect(updated.member.name).toBe("Member Prime");
     expect(updated.member.phone).toBe("+628222333444");
     expect(updated.member.role).toBe("member");
 
@@ -1756,10 +1756,10 @@ describe("OrgService", () => {
     const updated = await orgService.updateMember(
       active.organization.id,
       added.member.userId,
-      { role: "viewer" }
+      { role: "member" }
     );
 
-    expect(updated.member.role).toBe("viewer");
+    expect(updated.member.role).toBe("member");
     await orgService.removeMember(active.organization.id, added.member.userId);
     const listed = await orgService.listMembers(active.organization.id);
     expect(
@@ -1781,7 +1781,7 @@ async function seedTeamParent(db: DatabaseAdapter) {
     });
   }
 
-  for (const id of ["user_creator", "user_other", "user_viewer"]) {
+  for (const id of ["user_creator", "user_other", "user_secondary_member"]) {
     await db.createUser({
       createdAt: now,
       email: `${id}@example.com`,
@@ -1800,8 +1800,8 @@ async function seedTeamParent(db: DatabaseAdapter) {
   await db.upsertOrgMember({
     createdAt: now,
     orgId: "org_parent",
-    role: "viewer",
-    userId: "user_viewer",
+    role: "member",
+    userId: "user_secondary_member",
   });
 
   return { name: "Team", requestId: "team-request", slug: "team" };
@@ -1834,8 +1834,8 @@ async function seedSharedAgentSelection(
   await db.upsertOrgMember({
     createdAt: now,
     orgId: "org_team_a",
-    role: "viewer",
-    userId: "user_viewer",
+    role: "member",
+    userId: "user_secondary_member",
   });
   await db.upsertProfile({
     createdAt: now,
@@ -2071,7 +2071,7 @@ describe("OrgService shared agent selection", () => {
     );
   });
   test.each([false, true])(
-    "HTTP shared sessions deny revoked turns and viewer writes for cognito=%s",
+    "HTTP shared sessions deny revoked turns for cognito=%s",
     async (cognito) => {
       const {
         orgService,
@@ -2089,7 +2089,7 @@ describe("OrgService shared agent selection", () => {
 
       const passwordHash = await authService.hashPassword("password123");
 
-      for (const userId of ["user_other", "user_viewer"]) {
+      for (const userId of ["user_other", "user_secondary_member"]) {
         await db.updateUserPassword(
           userId,
           passwordHash,
@@ -2133,21 +2133,9 @@ describe("OrgService shared agent selection", () => {
         "org_team_a"
       );
 
-      const viewer = await loginUserSession(
-        app,
-        "user_viewer@example.com",
-        "password123",
-        "org_team_a"
-      );
-
       const memberHeaders = member.headers({
         "Content-Type": "application/json",
         "X-CSRF-Token": member.csrfToken,
-      });
-
-      const viewerHeaders = viewer.headers({
-        "Content-Type": "application/json",
-        "X-CSRF-Token": viewer.csrfToken,
       });
 
       const create = await app.fetch(
@@ -2169,23 +2157,6 @@ describe("OrgService shared agent selection", () => {
       await session.send("Saved team turn");
       const history = [...session.getHistory()];
       expect(providerCalls).toBe(1);
-
-      for (const path of ["/v1/sessions", `/v1/sessions/${id}/messages`]) {
-        const response = await app.fetch(
-          new Request(`http://localhost:4310${path}`, {
-            body: JSON.stringify({
-              channel: "web",
-              cognito,
-              message: "Viewer turn",
-              profileId: profile.id,
-            }),
-            headers: viewerHeaders,
-            method: "POST",
-          })
-        );
-
-        expect(response.status).toBe(403);
-      }
 
       await orgService.unpublishSharedResource(
         "org_parent",
@@ -2879,12 +2850,12 @@ describe("OrgService shared agent selection", () => {
         ]);
 
         for (const denied of [
-          { ...context, orgRole: "viewer" as const },
+          { ...context, orgRole: undefined },
           { ...context, orgId: "org_team_b" },
           { ...context, profileId: "profile_template" },
         ]) {
           await expect(tool.run({}, denied)).rejects.toMatchObject({
-            status: denied.orgRole === "viewer" ? 403 : 404,
+            status: denied.orgRole ? 404 : 403,
           });
         }
 
@@ -3199,12 +3170,12 @@ if __name__ == "__main__":
       ).toHaveProperty("content", "Team note");
 
       for (const denied of [
-        { ...context, orgRole: "viewer" as const },
+        { ...context, orgRole: undefined },
         { ...context, orgId: "org_team_b" },
         { ...context, profileId: "profile_template" },
       ]) {
         await expect(tool.run({}, denied)).rejects.toMatchObject({
-          status: denied.orgRole === "viewer" ? 403 : 404,
+          status: denied.orgRole ? 404 : 403,
         });
       }
 
@@ -4238,7 +4209,6 @@ if __name__ == "__main__":
 
     for (const [userId, status] of [
       ["user_creator", 404],
-      ["user_viewer", 403],
       ["missing", 404],
     ] as const) {
       await expect(
@@ -4888,7 +4858,11 @@ describe("OrgService shared resource publications", () => {
       orgService.publishSharedResource("org_parent", request, "user_creator")
     ).rejects.toMatchObject({ status: 400 });
     await expect(
-      orgService.publishSharedResource("org_parent", request, "user_viewer")
+      orgService.publishSharedResource(
+        "org_parent",
+        request,
+        "user_secondary_member"
+      )
     ).rejects.toMatchObject({ status: 403 });
   });
 
@@ -4984,7 +4958,7 @@ describe("OrgService shared resource publications", () => {
           resourceId: first.resourceId,
           resourceKind: "model",
         },
-        "user_viewer"
+        "user_secondary_member"
       )
     ).rejects.toMatchObject({ status: 403 });
     expect(await db.listOrgSharedResources("org_parent")).toHaveLength(2);
@@ -5085,7 +5059,7 @@ describe("OrgService shared resource publications", () => {
       orgService.publishSharedResource(
         "org_parent",
         { resourceId: "tool_org_parent", resourceKind: "tool" },
-        "user_viewer"
+        "user_secondary_member"
       )
     ).rejects.toMatchObject({ status: 403 });
     expect(await db.listOrgSharedResources("org_parent")).toEqual([]);
@@ -5497,7 +5471,7 @@ describe("OrgService shared resource publications", () => {
     expect(republished.id).not.toBe(publication.id);
   });
 
-  test("parent members, viewers, unrelated users, and team admins cannot publish or remove parent documents", async () => {
+  test("parent members, unrelated users, and team admins cannot publish or remove parent documents", async () => {
     const { orgService, databaseAdapter: db } = createOrgService();
     await seedTeamParent(db);
     const now = new Date().toISOString();
@@ -5538,7 +5512,11 @@ describe("OrgService shared resource publications", () => {
       "user_creator"
     );
 
-    for (const actor of ["user_viewer", "user_other", "user_missing"]) {
+    for (const actor of [
+      "user_secondary_member",
+      "user_other",
+      "user_missing",
+    ]) {
       await expect(
         orgService.publishSharedResource("org_parent", request, actor)
       ).rejects.toMatchObject({ status: 403 });
@@ -5897,7 +5875,7 @@ describe("OrgService team setup", () => {
       ).id
     ).toBe(created.organization.id);
 
-    for (const actor of ["user_viewer", "user_other", "missing"]) {
+    for (const actor of ["user_secondary_member", "user_other", "missing"]) {
       await expect(
         orgService.createTeam(
           "org_parent",

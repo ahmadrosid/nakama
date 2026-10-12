@@ -14,7 +14,7 @@ const BridgeClientSchema = z
 const BridgeOrganizationSchema = z.object({
   id: z.string(),
   name: z.string(),
-  role: z.enum(["admin", "member", "viewer"]),
+  role: z.enum(["admin", "member"]),
   slug: z.string(),
 });
 

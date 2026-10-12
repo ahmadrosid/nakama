@@ -19,8 +19,8 @@ import {
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireNotViewerFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
+  requireOrgMemberFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
 import { type getRequestAuth, json, readJson } from "../shared";
@@ -47,7 +47,7 @@ export function registerPluginRoutes(
   options: ServerOptions
 ): void {
   app.get("/v1/plugins/official", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
 
     return json({
       plugins: await requirePluginService(options).listOfficialPlugins(),
@@ -510,7 +510,7 @@ export function registerPluginRoutes(
   });
 
   app.get("/v1/plugins", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const plugins = requirePluginService(options);
 
@@ -520,7 +520,7 @@ export function registerPluginRoutes(
   });
 
   app.get("/v1/plugins/:pluginId", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const plugins = requirePluginService(options);
 
@@ -700,7 +700,7 @@ export function registerPluginRoutes(
   });
 
   app.post("/v1/plugins/:pluginId/actions/:actionKey", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const plugins = requirePluginService(options);
     const body = await readJson(c.req.raw, invokeRequestSchema);
@@ -738,7 +738,7 @@ async function servePluginUi(
   >,
   options: ServerOptions
 ) {
-  requireNotViewerFromContext(c);
+  requireOrgMemberFromContext(c);
   const orgId = requireActiveOrgIdFromContext(c);
   const pathOrgId = decodeURIComponent(c.req.param("orgId"));
 
@@ -781,13 +781,11 @@ function pluginActor(
 ): PluginExecutionActor {
   const role = auth.orgRole;
 
-  return {
-    id: auth.user.id,
-    role:
-      role === "admin" || role === "member" || role === "viewer"
-        ? role
-        : "viewer",
-  };
+  if (role !== "admin" && role !== "member") {
+    throw new NakamaApiError("Forbidden", 403);
+  }
+
+  return { id: auth.user.id, role };
 }
 
 function pluginUiAssetPath(

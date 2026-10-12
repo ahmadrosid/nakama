@@ -15,9 +15,9 @@ import type {
 import { OrgUsageQuotaService } from "../../services/org-usage-quota-service";
 import type { ServerOptions } from "../context";
 import {
-  requireNotViewer,
   requireOrgAdminFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
+  requireOrgMember,
 } from "../org-guards";
 import { errorResponse, getRequestAuth, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
@@ -41,14 +41,14 @@ export function registerOrgMemberRoutes(
       email: z.string(),
       name: z.string(),
       phone: z.string().optional(),
-      role: z.enum(["admin", "member", "viewer"]),
+      role: z.enum(["admin", "member"]),
     })
     .openapi("AddOrgMemberRequest");
 
   const inviteOrgMemberSchema = z
     .object({
       email: z.string(),
-      role: z.enum(["admin", "member", "viewer"]),
+      role: z.enum(["admin", "member"]),
     })
     .openapi("InviteOrgMemberRequest");
 
@@ -76,7 +76,7 @@ export function registerOrgMemberRoutes(
     .object({
       name: z.string().nullable().optional(),
       phone: z.string().nullable().optional(),
-      role: z.enum(["admin", "member", "viewer"]).optional(),
+      role: z.enum(["admin", "member"]).optional(),
     })
     .openapi("UpdateOrgMemberRequest");
 
@@ -181,7 +181,7 @@ export function registerOrgMemberRoutes(
         return errorResponse("Not found", 404);
       }
 
-      requireNotViewer(auth);
+      requireOrgMember(auth);
 
       if (!orgService) {
         return errorResponse("Organization service not configured", 500);
@@ -455,7 +455,7 @@ export function registerOrgMemberRoutes(
           member: z
             .object({
               userId: z.string(),
-              role: z.enum(["admin", "member", "viewer"]),
+              role: z.enum(["admin", "member"]),
             })
             .passthrough(),
           temporaryPassword: z.string().nullable(),

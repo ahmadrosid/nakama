@@ -459,7 +459,7 @@ export async function run(input, context) {
       await approve();
       expect(await tool.run({}, context)).toMatchObject({ value: "updated" });
       await expect(
-        tool.run({}, { ...context, orgRole: "viewer" })
+        tool.run({}, { ...context, orgRole: undefined })
       ).rejects.toMatchObject({ status: 403 });
       await expect(
         tool.run({}, { ...context, orgId: "team_b" })
@@ -597,13 +597,12 @@ if __name__ == "__main__":
       ).not.toContain(skill.sourcePath);
 
       for (const denied of [
-        { ...context, orgRole: "viewer" as const },
         { ...context, orgRole: undefined },
         { ...context, orgId: "team_b" },
         { ...context, profileId: "profile_team_b" },
       ]) {
         await expect(tool.run({}, denied)).rejects.toMatchObject({
-          status: denied.orgRole === "viewer" || !denied.orgRole ? 403 : 404,
+          status: denied.orgRole ? 404 : 403,
         });
       }
 
@@ -1171,7 +1170,7 @@ if __name__ == "__main__":
     ).toEqual([]);
   });
 
-  test.each(["admin", "member", "viewer"] as const)(
+  test.each(["admin", "member"] as const)(
     "%s can change skill assignments only with the team admin role",
     async (role) => {
       const { db, skill, privateSkill } = await setupPublishedSkill();
@@ -1488,7 +1487,7 @@ if __name__ == "__main__":
     expect(JSON.stringify(catalog.publishedSkills)).not.toContain(alias);
   });
 
-  test.each(["member", "viewer"] as const)(
+  test.each(["member"] as const)(
     "%s reads shared skill content through either sibling without parent membership",
     async (role) => {
       const { db, service, skill, privateSkill, publication } =
@@ -1866,7 +1865,7 @@ if __name__ == "__main__":
       expect(response.status).toBe(403);
     }
 
-    for (const role of ["member", "viewer"] as const) {
+    for (const role of ["member"] as const) {
       await db.upsertOrgMember({
         createdAt: now,
         orgId: "parent",
@@ -2562,8 +2561,8 @@ Original body.
       profileId: PROFILE_ID,
       proposedByUserId: null,
       relativePath: null,
+      resecondaryMemberUserId: null,
       reviewedAt: null,
-      reviewerUserId: null,
       sessionId: null,
       skillName: "notes",
       status: "pending",

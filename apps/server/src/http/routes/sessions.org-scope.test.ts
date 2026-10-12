@@ -188,16 +188,16 @@ describe("session routes are scoped to the caller's active org", () => {
     });
 
     await seedOrgAdmin(databaseAdapter, {
-      email: "viewer@example.com",
+      email: "member@example.com",
       orgId: VICTIM_ORG,
       password: PASSWORD,
-      role: "viewer",
-      userId: "user_viewer",
+      role: "member",
+      userId: "user_secondary_member",
     });
 
-    const viewer = await loginUserSession(
+    const member = await loginUserSession(
       app,
-      "viewer@example.com",
+      "member@example.com",
       PASSWORD,
       VICTIM_ORG
     );
@@ -212,7 +212,7 @@ describe("session routes are scoped to the caller's active org", () => {
     const url = `http://localhost:4310/v1/attachments/${saved.attachmentId}/content`;
 
     const response = await app.fetch(
-      new Request(url, { headers: { Cookie: viewer.cookieHeader } })
+      new Request(url, { headers: { Cookie: member.cookieHeader } })
     );
 
     expect(response.status).toBe(200);
@@ -231,7 +231,7 @@ describe("session routes are scoped to the caller's active org", () => {
       saved.attachmentId
     );
     expect(
-      (await app.fetch(new Request(url, { headers: viewer.headers() }))).status
+      (await app.fetch(new Request(url, { headers: member.headers() }))).status
     ).toBe(404);
   });
 

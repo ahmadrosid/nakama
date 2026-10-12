@@ -172,12 +172,12 @@ describe("notification destination routes", () => {
       ).toBeNull();
     });
 
-    test(`viewers cannot manage ${channel} destinations`, async () => {
+    test(`members cannot manage ${channel} destinations`, async () => {
       const { app, databaseAdapter } = createApp();
 
       const user = await seedOrgAdmin(databaseAdapter, {
         profileId: "agent_1",
-        role: "viewer",
+        role: "member",
       });
 
       const session = await loginUserSession(

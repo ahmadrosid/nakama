@@ -11,7 +11,7 @@ import { AGENT_CHANNELS } from "@nakama/core";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireNotViewerFromContext,
+  requireOrgMemberFromContext,
 } from "../org-guards";
 import {
   errorResponse,
@@ -368,7 +368,7 @@ export function registerAutomationRoutes(
   );
 
   app.post("/v1/automations/draft", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const body = await readJson(c.req.raw, draftAutomationSchema);
 
     const automation = await agent.draftAutomation(
@@ -389,7 +389,7 @@ export function registerAutomationRoutes(
   });
 
   app.post("/v1/automations", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const body = await readJson(c.req.raw, createAutomationSchema);
 
@@ -422,7 +422,7 @@ export function registerAutomationRoutes(
   });
 
   app.put("/v1/automations/:automationId", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const automationId = decodeURIComponent(c.req.param("automationId"));
     const body = await readJson(c.req.raw, updateAutomationSchema);
@@ -465,7 +465,7 @@ export function registerAutomationRoutes(
   });
 
   app.delete("/v1/automations/:automationId", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
 
     const deleted = await automationService.delete(
@@ -481,7 +481,7 @@ export function registerAutomationRoutes(
   });
 
   app.post("/v1/automations/:automationId/run", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const auth = getRequestAuth(c);
     const automationId = decodeURIComponent(c.req.param("automationId"));

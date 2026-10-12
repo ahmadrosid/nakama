@@ -18,7 +18,7 @@ Teams use the same identity and configuration while keeping their conversations,
 2. Open **System → Organization**.
 3. Select a ready agent in the **Agents** row under **Shared with every team**.
 
-Team admins and members can select shared agents. Viewers cannot start agent turns.
+Team admins and members can select shared agents.
 The first selection creates a team-owned agent and opens a new chat.
 Repeated selection reuses that team's agent.
 Parent history, memory, credentials, and workspace files are not copied.
@@ -89,7 +89,7 @@ When a chat runs with a profile, Nakama builds the agent context in this order:
 2. If soul files exist, compose them into the main system prompt
 3. Append the assigned skills catalog
 4. Append the knowledge base catalog
-5. Append org memory summary for non-viewers (see [Org memory](/org-memory))
+5. Append org memory summary for organization members (see [Org memory](/org-memory))
 6. Expose only the tools allowed for that profile
 
 So a profile is not just a name. It controls both:
@@ -184,7 +184,7 @@ Memory writes and archives use bundled skills (`update-profile-memory`, `archive
 
 | Store | Loaded into chat | How agents write |
 |-------|------------------|------------------|
-| Org memory | Yes (appended as `## Org Memory` for non-viewers) | Org admins via Settings or API — see [Org memory](/org-memory) |
+| Org memory | Yes (appended as `## Org Memory` for organization members) | Org admins via Settings or API — see [Org memory](/org-memory) |
 | `MEMORY.md` | Yes (via soul stack) | `update-profile-memory` skill + `read_file` / `edit_file` / `write_file` |
 | `memory-archive/` | No | `archive-profile-memory` skill + file tools |
 | `artifacts/` | No (**Browse Files → Artifacts**, download API, web chat preview) | `save-artifact` skill + `write_file` or `write_docx` |

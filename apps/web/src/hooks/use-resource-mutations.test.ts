@@ -1112,7 +1112,7 @@ for (const kind of ["add", "invite", "update", "remove"] as const) {
                 })
               : kind === "update"
                 ? updateMutation.mutateAsync({
-                    request: { role: "viewer" },
+                    request: { role: "member" },
                     userId: member.userId,
                   })
                 : removeMutation.mutateAsync(member.userId);
@@ -1159,7 +1159,7 @@ for (const kind of ["add", "invite", "update", "remove"] as const) {
           });
         } else if (kind === "update") {
           expect(update).toHaveBeenCalledWith("team", member.userId, {
-            role: "viewer",
+            role: "member",
           });
         } else {
           expect(remove).toHaveBeenCalledWith("team", member.userId);

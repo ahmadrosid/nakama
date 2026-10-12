@@ -584,12 +584,7 @@ describe("createHonoApp", () => {
       });
       expect((await request("meetings")).status).toBe(200);
       expect((await request("configure", { enabled: false })).status).toBe(403);
-      await options.databaseAdapter.upsertOrgMember({
-        createdAt: new Date().toISOString(),
-        orgId: session.orgId,
-        role: "viewer",
-        userId: user!.id,
-      });
+      await options.databaseAdapter.deleteOrgMember(session.orgId, user!.id);
       expect((await request("meetings")).status).toBe(403);
       expect(
         (await request("upload", { content: "YQ==", filename: "notes.md" }))
@@ -2174,55 +2169,6 @@ describe("createHonoApp", () => {
       );
 
       expect(response.status).toBe(200);
-    });
-
-    test("returns 403 when viewers mutate protected routes", async () => {
-      const options = createServerOptions();
-      const app = createHonoApp(options);
-
-      const session = await setupFreshInstallSession(
-        app,
-        options.databaseAdapter,
-        "viewer@example.com",
-        "viewer"
-      );
-
-      const response = await app.fetch(
-        new Request("http://localhost:4310/v1/workers/automation/start", {
-          headers: session.headers({
-            "X-CSRF-Token": session.csrfToken,
-          }),
-          method: "POST",
-        })
-      );
-
-      expect(response.status).toBe(403);
-      await expect(response.json()).resolves.toEqual({ error: "Forbidden" });
-    });
-
-    test("returns 403 when viewers send session messages", async () => {
-      const options = createServerOptions();
-      const app = createHonoApp(options);
-
-      const session = await setupFreshInstallSession(
-        app,
-        options.databaseAdapter,
-        "viewer@example.com",
-        "viewer"
-      );
-
-      const response = await app.fetch(
-        new Request("http://localhost:4310/v1/sessions/session_1/messages", {
-          body: JSON.stringify({ message: "hello" }),
-          headers: session.headers({
-            "X-CSRF-Token": session.csrfToken,
-          }),
-          method: "POST",
-        })
-      );
-
-      expect(response.status).toBe(403);
-      await expect(response.json()).resolves.toEqual({ error: "Forbidden" });
     });
   });
 

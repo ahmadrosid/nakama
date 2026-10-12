@@ -77,7 +77,7 @@ test("settings are admin-only, credentials never returned, meetings are scoped t
       await expect(
         run(
           { meetingId: meeting.id },
-          { ...context, actionKey, actor: { id: "a", role: "viewer" } }
+          { ...context, actionKey, actor: { id: "", role: "member" } }
         )
       ).rejects.toThrow();
     }
@@ -97,7 +97,7 @@ test("settings are admin-only, credentials never returned, meetings are scoped t
 
     for (const denied of [
       { ...deletion, actor: { id: "b", role: "member" as const } },
-      { ...deletion, actor: { id: "a", role: "viewer" as const } },
+      { ...deletion, actor: { id: "", role: "member" as const } },
       { ...deletion, profileId: "other" },
     ]) {
       await expect(run({ meetingId: meeting.id }, denied)).rejects.toThrow();
@@ -201,7 +201,7 @@ test("uploads preserve Markdown and use Nakama's host for audio without plugin c
     await expect(
       run(
         { content: audio, filename: "notes.md" },
-        { ...context, actor: { id: "a", role: "viewer" } }
+        { ...context, actor: { id: "", role: "member" } }
       )
     ).rejects.toThrow();
     host.mockRejectedValueOnce(new Error("Provider unavailable"));

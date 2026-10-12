@@ -411,7 +411,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
     .object({
       email: z.string(),
       orgId: z.string(),
-      role: z.enum(["admin", "member", "viewer"]),
+      role: z.enum(["admin", "member"]),
     })
     .openapi("AcceptOrgInviteResponse");
 
@@ -1298,7 +1298,7 @@ export function registerAuthRoutes(app: HonoApp, options: ServerOptions): void {
 
     const body = await readJson<{
       enabled?: boolean;
-      enforcedRoles?: Array<"admin" | "member" | "viewer">;
+      enforcedRoles?: Array<"admin" | "member">;
       required?: boolean;
     }>(
       c.req.raw,

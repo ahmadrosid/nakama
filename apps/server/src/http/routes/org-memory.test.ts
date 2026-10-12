@@ -243,67 +243,6 @@ describe("org memory routes (v1)", () => {
     expect(putResp.status).toBe(403);
   });
 
-  test("viewer is blocked from read and search", async () => {
-    const { app, authService, databaseAdapter } = createApp();
-
-    const adminSession = await setupFreshInstallSession(
-      app,
-      databaseAdapter,
-      "admin3@org.com"
-    );
-
-    const orgId = adminSession.orgId!;
-
-    const addViewerResp = await app.fetch(
-      new Request(`${BASE}/v1/orgs/${orgId}/members`, {
-        body: JSON.stringify({
-          email: "viewer3@org.com",
-          name: "Viewer",
-          phone: "+628123456789",
-          role: "viewer",
-        }),
-        headers: adminSession.headers(
-          { "X-CSRF-Token": adminSession.csrfToken },
-          orgId
-        ),
-        method: "POST",
-      })
-    );
-
-    // SAFETY: This test controls the fixture shape at this boundary.
-    const viewerProvisioned = (await addViewerResp.json()) as {
-      temporaryPassword: string;
-    };
-
-    const viewerSession = await loginUserSession(
-      app,
-      "viewer3@org.com",
-      viewerProvisioned.temporaryPassword,
-      orgId
-    );
-
-    const getResp = await app.fetch(
-      new Request(`${BASE}/v1/orgs/${orgId}/memory`, {
-        headers: viewerSession.headers({}, orgId),
-      })
-    );
-
-    expect(getResp.status).toBe(403);
-
-    const searchResp = await app.fetch(
-      new Request(`${BASE}/v1/orgs/${orgId}/memory/search`, {
-        body: JSON.stringify({ query: "x" }),
-        headers: viewerSession.headers(
-          { "X-CSRF-Token": viewerSession.csrfToken },
-          orgId
-        ),
-        method: "POST",
-      })
-    );
-
-    expect(searchResp.status).toBe(403);
-  });
-
   test("PUT oversized body is rejected; cross-org is 404", async () => {
     const { app, authService, databaseAdapter } = createApp();
 

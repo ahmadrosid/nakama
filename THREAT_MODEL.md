@@ -80,8 +80,7 @@ flowchart LR
 - Platform admins are trusted across organizations. Org admins are trusted to
   configure their organization, assign powerful capabilities, and invite
   members, but they are not trusted with another organization's data.
-- Members can invoke assigned agents and capabilities. Viewers are read-only
-  and cannot invoke agents or perform mutations.
+- Members can invoke assigned agents and capabilities.
 - External providers receive the data required by the feature. Their retention,
   training, regional processing, and breach controls are outside Nakama.
 - LLM output and remote tool output are untrusted input even when returned by a
@@ -101,7 +100,7 @@ and the residual risk that still needs an operator decision or future work.
 | Repudiation | A user denies a membership, invite, plugin, or other security-relevant change. | Request IDs connect responses to HTTP logs. Audit middleware records a fixed set of security events, including invite lifecycle events; audit rows reject update and delete. | Not every read or tool execution is an audit event. Define event coverage before claiming full administrative auditability. |
 | Information disclosure | Errors, logs, unauthenticated routes, or cross-org lookups reveal credentials or tenant existence. | HTTP logs omit URLs, bodies, and credentials. Org access failures use not-found. Public routes are explicit. Error tracking scrubs known secret shapes before sending. | Local process and tool logs are not a universal scrubber. Debug logs and third-party error retention remain operator concerns. |
 | Denial of service | Login attempts, large requests, streaming turns, or expensive provider calls exhaust CPU, memory, database capacity, or provider quota. | Request/body limits, tool/provider deadlines, streaming cancellation, and selected rate limits bound some paths. Health and readiness endpoints expose local service state. | A single host and shared provider quotas remain common failure domains. Apply proxy rate limits and container/provider budgets. |
-| Elevation of privilege | A viewer invokes an agent; a member performs an admin/platform mutation; an org admin reaches platform routes. | `requireNotViewer`, org-admin, org-admin-or-platform-admin, and platform-admin guards separate those authorities. | A compromised platform admin is a full-control event. Keep platform-admin accounts rare and test guard placement during review. |
+| Elevation of privilege | A nonmember invokes an agent; a member performs an admin/platform mutation; an org admin reaches platform routes. | `requireOrgMember`, org-admin, org-admin-or-platform-admin, and platform-admin guards separate those authorities. | A compromised platform admin is a full-control event. Keep platform-admin accounts rare and test guard placement during review. |
 
 Evidence anchors: `apps/server/src/http/app.ts`,
 `apps/server/src/http/org-middleware.ts`, `apps/server/src/http/org-guards.ts`,
@@ -132,7 +131,7 @@ Evidence anchors: `packages/db/sql/schema.sql`,
 | Repudiation | A generated action cannot be connected to its prompt or tool call. | Session messages and tool call/results are persisted; automation runs retain outcomes. | Child-process side effects and remote SaaS audit logs must be correlated separately. |
 | Information disclosure | Prompts, files, memory, or tool output are sent to the wrong provider or arbitrary URL. | Profiles resolve an explicit provider and assigned tools. The outbound inventory documents each boundary. `web_fetch` blocks private/reserved targets, revalidates redirects, and pins verified DNS addresses. | Users and agents can intentionally send data to public sites, model providers, browsers, or custom endpoints. Review profile assignments and provider retention. |
 | Denial of service | Infinite tool loops, stalled streams, huge documents, or repeated model calls consume resources and quota. | Provider fetch deadlines, tool-loop bounds, output pruning, size limits, cancellation, and automation state limit individual paths. | Cost and concurrency across orgs still need operational monitoring and provider-side budgets. |
-| Elevation of privilege | An agent invokes `bash`, browser, email, MCP, or another capability not intended for that profile. | Tool resolution is profile-scoped; viewers cannot invoke agents; unavailable tools are not included in the model's tool set. | Assignment grants meaningful authority. Host `bash`, custom code, browser sessions, and coding agents are not tenant sandboxes. |
+| Elevation of privilege | An agent invokes `bash`, browser, email, MCP, or another capability not intended for that profile. | Tool resolution is profile-scoped; organization membership is required to invoke agents; unavailable tools are not included in the model's tool set. | Assignment grants meaningful authority. Host `bash`, custom code, browser sessions, and coding agents are not tenant sandboxes. |
 
 Evidence anchors: `apps/server/src/services/agent-service.ts`,
 `packages/agent/src/tool-loop.ts`, `packages/core/src/tools/`,
@@ -165,7 +164,7 @@ Evidence anchors: `apps/server/src/services/mcp-client-manager.ts`,
 | Repudiation | A channel action lacks a human identity or delivery receipt. | Platform user/chat identifiers and session messages preserve the transport identity; automation runs store status and delivery results. | Shared channel accounts weaken attribution. Use individual accounts and upstream audit features where available. |
 | Information disclosure | Messages, attachments, artifact links, or typing state go to the wrong chat or platform. | Delivery adapters require configured destination IDs; artifact sharing publishes a snapshot only after an explicit action. | Public share links are bearer capabilities and channel providers receive message content and metadata. Verify destinations before enabling automations. |
 | Denial of service | Message floods, reconnect loops, or a stuck automation consume workers and provider quota. | Chat locks, reconnect backoff, worker state, run status, and provider/tool deadlines limit individual loops. | Upstream floods and shared quotas still need platform-side limits and host monitoring. |
-| Elevation of privilege | A channel user invokes an agent/profile they were not meant to use. | Pairing and org/profile mappings choose the accessible profile; server-side org and viewer guards still apply to API work. | A permissive allowed-user configuration is an operator-granted escalation. Review it after channel ownership changes. |
+| Elevation of privilege | A channel user invokes an agent/profile they were not meant to use. | Pairing and org/profile mappings choose the accessible profile; server-side organization membership guards still apply to API work. | A permissive allowed-user configuration is an operator-granted escalation. Review it after channel ownership changes. |
 
 Evidence anchors: `apps/platform/{telegram,whatsapp,discord,slack}/src/`,
 `apps/platform/automation/src/`, `packages/core/src/channels/`,

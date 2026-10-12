@@ -806,7 +806,7 @@ describe("AgentService sub-agent roles", () => {
       resolveProfileTools: () => Promise.resolve([tool]),
     });
 
-    for (const orgRole of ["admin", "member", "viewer", undefined] as const) {
+    for (const orgRole of ["admin", "member", undefined] as const) {
       const result = await service.runSubAgentPrompt({
         agentDepth: 1,
         orgId: ORG_ID,

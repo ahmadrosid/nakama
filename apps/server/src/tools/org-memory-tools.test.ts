@@ -36,14 +36,6 @@ describe("org memory tools", () => {
     expect(spy.query).toBe("Bun");
   });
 
-  test("org_memory_search as viewer throws", async () => {
-    const service = new OrgMemoryService();
-    const [searchTool] = createOrgMemoryTools(service);
-    await expect(
-      searchTool.run({ query: "x" }, context("org_a", "viewer"))
-    ).rejects.toMatchObject({ status: 403 });
-  });
-
   test("org_memory_search with undefined orgRole throws (deny-by-default)", async () => {
     const service = new OrgMemoryService();
     const [searchTool] = createOrgMemoryTools(service);
@@ -90,14 +82,6 @@ describe("org memory tools", () => {
     );
 
     expect(result).toMatchObject({ outcome: "created" });
-  });
-
-  test("propose_org_memory as viewer throws", async () => {
-    const service = new OrgMemoryService(createInMemoryDatabaseAdapter());
-    const proposeTool = createOrgMemoryTools(service)[2];
-    await expect(
-      proposeTool.run({ bullet: "fact" }, context("org_a", "viewer"))
-    ).rejects.toMatchObject({ status: 403 });
   });
 
   describe("propose_org_memory source documents", () => {

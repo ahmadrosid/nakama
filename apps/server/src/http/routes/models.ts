@@ -66,9 +66,9 @@ import { streamAgentBrowserInstall } from "../coding-harness-install-stream";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireNotViewerFromContext,
   requireOrgAdminFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
+  requireOrgMemberFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
 import {
@@ -1927,7 +1927,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/audio/transcribe", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const body = await readJson(c.req.raw, transcribeAudioRequestSchema);
 
     try {
@@ -1975,7 +1975,7 @@ export function registerModelRoutes(
   });
 
   app.post("/v1/images/generate", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const body = await readJson(c.req.raw, generateImageRequestSchema);
 
     const auth = getRequestAuth(c);
@@ -2524,7 +2524,7 @@ export function registerModelRoutes(
 
   app.put("/v1/settings/error-tracking", async (c) => {
     // Workspace-global config, so there is no org to scope it to and a role guard is
-    // the only thing standing between a viewer and the whole install's error routing.
+    // the only thing standing between an org member and the whole install's error routing.
     requirePlatformAdminFromContext(c);
     const body = await readJson(c.req.raw, updateErrorTrackingRequestSchema);
 

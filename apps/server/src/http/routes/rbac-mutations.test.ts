@@ -116,7 +116,7 @@ function createApp() {
   return { ...result, calls };
 }
 
-// State-changing routes a viewer must not be able to reach.
+// State-changing routes require organization membership.
 const MUTATING_ROUTES: Array<{ method: string; path: string; body?: unknown }> =
   [
     {
@@ -157,35 +157,37 @@ const MUTATING_ROUTES: Array<{ method: string; path: string; body?: unknown }> =
     },
   ];
 
-describe("RBAC: viewer cannot reach state-changing automation/session routes", () => {
+describe("RBAC: removed member cannot reach state-changing automation/session routes", () => {
   for (const route of MUTATING_ROUTES) {
-    test(`${route.method} ${route.path} -> 403 for viewer`, async () => {
+    test(`${route.method} ${route.path} -> 404 for removed member`, async () => {
       const { app, databaseAdapter, authService, calls } = createApp();
       await seedOrgAdmin(databaseAdapter, {
         authService,
-        email: "viewer@example.com",
+        email: "member@example.com",
         orgId: ORG_ID,
         password: PASSWORD,
-        role: "viewer",
-        userId: "user_viewer",
+        role: "member",
+        userId: "user_secondary_member",
       });
 
-      const viewer = await loginUserSession(
+      const member = await loginUserSession(
         app,
-        "viewer@example.com",
+        "member@example.com",
         PASSWORD,
         ORG_ID
       );
 
+      await databaseAdapter.deleteOrgMember(ORG_ID, "user_secondary_member");
+
       const response = await app.fetch(
         new Request(`http://localhost:4310${route.path}`, {
           body: route.body ? JSON.stringify(route.body) : undefined,
-          headers: viewer.headers({ "X-CSRF-Token": viewer.csrfToken }),
+          headers: member.headers({ "X-CSRF-Token": member.csrfToken }),
           method: route.method,
         })
       );
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(404);
       // Guard must reject before any service/agent side effect runs.
       expect(calls).toEqual([]);
     });

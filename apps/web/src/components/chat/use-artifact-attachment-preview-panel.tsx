@@ -236,8 +236,7 @@ export function useArtifactAttachmentPreviewPanel({
   const downloadLabel = downloadActionLabel(mimeType);
 
   const canEdit =
-    ((isMarkdown && !isWordDocument) || isSpreadsheet) &&
-    activeOrg?.role !== "viewer";
+    ((isMarkdown && !isWordDocument) || isSpreadsheet) && Boolean(activeOrg);
 
   const {
     loading,

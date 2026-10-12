@@ -3,7 +3,6 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  AGENT_CHANNELS,
   getDiscordConfigDir,
   getDiscordConfigPath,
   getTelegramConfigDir,
@@ -73,120 +72,6 @@ function getDeleteAutomationTool(
 
   return tool;
 }
-
-describe("viewer automation mutation access", () => {
-  for (const channel of AGENT_CHANNELS) {
-    test(`rejects create_automation from a viewer ${channel} session`, async () => {
-      const db = await createTestDb();
-
-      const service = new AutomationService(db, {
-        getUserTimezone: async () => "UTC",
-      });
-
-      // SAFETY: This fake agent service implements only the method exercised by this test.
-      const runner = new AutomationRunner(service, {
-        runAutomationPrompt: async () => "unused",
-      } as never);
-
-      const tool = getCreateAutomationTool(service, runner);
-
-      await expect(
-        tool.run(
-          {
-            description: "Viewer digest",
-            name: "Forbidden digest",
-            prompt: "Summarize news",
-            trigger: { type: "manual" },
-          },
-          { ...TOOL_CONTEXT, channel, orgRole: "viewer" }
-        )
-      ).rejects.toMatchObject({ status: 403 });
-      expect((await service.listForOrg(ORG_ID)).automations).toEqual([]);
-    });
-
-    test(`rejects delete_automation from a viewer ${channel} session`, async () => {
-      const db = await createTestDb();
-
-      const service = new AutomationService(db, {
-        getUserTimezone: async () => "UTC",
-      });
-
-      const automation = await service.create(
-        ORG_ID,
-        {
-          description: "Existing digest",
-          name: "Protected digest",
-          prompt: "Summarize news",
-          trigger: { type: "manual" },
-        },
-        PROFILE_ID
-      );
-
-      // SAFETY: This fake agent service implements only the method exercised by this test.
-      const runner = new AutomationRunner(service, {
-        runAutomationPrompt: async () => "unused",
-      } as never);
-
-      const tool = getDeleteAutomationTool(service, runner);
-
-      await expect(
-        tool.run(
-          { automationId: automation.id },
-          {
-            ...TOOL_CONTEXT,
-            channel,
-            orgRole: "viewer",
-          }
-        )
-      ).rejects.toMatchObject({ status: 403 });
-      expect(await service.get(automation.id, ORG_ID)).not.toBeNull();
-    });
-
-    test(`rejects run_automation from a viewer ${channel} session`, async () => {
-      const db = await createTestDb();
-
-      const service = new AutomationService(db, {
-        getUserTimezone: async () => "UTC",
-      });
-
-      const automation = await service.create(
-        ORG_ID,
-        {
-          description: "Existing digest",
-          name: "Protected digest",
-          prompt: "Summarize news",
-          trigger: { type: "manual" },
-        },
-        PROFILE_ID
-      );
-
-      let runCount = 0;
-
-      // SAFETY: This fake agent service implements only the method exercised by this test.
-      const runner = new AutomationRunner(service, {
-        runAutomationPrompt: async () => {
-          runCount += 1;
-
-          return "Done";
-        },
-      } as never);
-
-      const tool = getRunAutomationTool(service, runner);
-
-      await expect(
-        tool.run(
-          { automationId: automation.id },
-          {
-            ...TOOL_CONTEXT,
-            channel,
-            orgRole: "viewer",
-          }
-        )
-      ).rejects.toMatchObject({ status: 403 });
-      expect(runCount).toBe(0);
-    });
-  }
-});
 
 function getPreviousAutomationRunsTool(service: AutomationService) {
   const tool = createAutomationRunHistoryTools(service).find(

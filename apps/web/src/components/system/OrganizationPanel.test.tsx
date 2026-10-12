@@ -172,7 +172,7 @@ function mount(
   };
 }
 
-for (const role of ["member", "viewer"] as const) {
+for (const role of ["member"] as const) {
   for (const context of ["team", "root"] as const) {
     test(`${context} ${role} can read the page without admin requests`, async () => {
       const queries = new QueryClient({
@@ -247,7 +247,7 @@ test.each([true, false])(
       ...organization("root"),
       name: "Shared name",
       parentOrgId: null,
-      role: "viewer" as const,
+      role: "member" as const,
     };
 
     const switchOrg = mock(async (_id: string) => undefined);
@@ -445,7 +445,7 @@ test.each(["team", "parent", "standalone"] as const)(
       await settle();
     });
     expect(write).toHaveBeenLastCalledWith(next.id);
-    await render({ ...next, role: "viewer" });
+    await render({ ...next, role: "member" });
     expect(container.querySelector("code")).toBeNull();
     expect(
       container.querySelector('button[aria-label="Add member"]')
@@ -491,7 +491,7 @@ test("admin settings remain available and disappear after a role change", async 
     read.mockClear();
   }
 
-  await render({ ...org, role: "viewer" }, true);
+  await render({ ...org, role: "member" }, true);
   expect(container.querySelectorAll("h2")).toHaveLength(1);
   expect(container.querySelector("dl")?.querySelectorAll("dt")).toHaveLength(5);
 
@@ -1947,7 +1947,7 @@ function publishedSkill(
 }
 
 async function mountResourceReader(
-  role: "admin" | "member" | "viewer" = "member",
+  role: "admin" | "member" = "member",
   isPlatformAdmin = false
 ) {
   const queries = new QueryClient({
@@ -1988,7 +1988,7 @@ async function openSharedSkill(container: HTMLElement) {
   });
 }
 
-test.each(["admin", "member", "viewer"] as const)(
+test.each(["admin", "member"] as const)(
   "shared skill details use active tenant and remain read-only for %s",
   async (role) => {
     const read = spyOn(client, "getPublishedSkill").mockResolvedValue(
@@ -2103,8 +2103,7 @@ test("late shared skill response cannot replace another team's details", async (
 test.each([
   { dialog: true, link: false, platform: false, role: "admin" },
   { dialog: false, link: false, platform: false, role: "member" },
-  { dialog: false, link: false, platform: false, role: "viewer" },
-  { dialog: false, link: true, platform: true, role: "viewer" },
+  { dialog: false, link: true, platform: true, role: "member" },
 ] as const)(
   "root skill actions keep role gates and published scope %#",
   async ({ dialog, link, platform, role }) => {
@@ -2274,7 +2273,7 @@ function observeDocumentDownloads() {
   return { click, createUrl, downloads, revokeUrl };
 }
 
-test.each(["admin", "member", "viewer"] as const)(
+test.each(["admin", "member"] as const)(
   "shared knowledge preview and download use active tenant for %s",
   async (role) => {
     const original = {
@@ -2331,8 +2330,7 @@ test.each(["admin", "member", "viewer"] as const)(
 test.each([
   { actionable: true, platform: false, role: "admin" },
   { actionable: false, platform: false, role: "member" },
-  { actionable: false, platform: false, role: "viewer" },
-  { actionable: true, platform: true, role: "viewer" },
+  { actionable: true, platform: true, role: "member" },
 ] as const)(
   "root knowledge actions use parent context and existing permissions %#",
   async ({ actionable, platform, role }) => {
@@ -3728,16 +3726,6 @@ test.each(["admin", "member"] as const)(
   }
 );
 
-test("viewers cannot select shared agents", async () => {
-  const { create, list } = observeAgentSelection();
-  const { container } = await mountResourceReader("viewer");
-  expect(
-    container.querySelector('button[aria-label^="Open shared agent"]')
-  ).toBeNull();
-  expect(create).not.toHaveBeenCalled();
-  expect(list).not.toHaveBeenCalled();
-});
-
 test("agent creation failure retains the selection and permits retry", async () => {
   const { create, list } = observeAgentSelection();
   create.mockRejectedValueOnce(new Error("Selection denied"));
@@ -4019,7 +4007,7 @@ test.each([
   }
 );
 
-test.each(["member", "viewer"] as const)(
+test.each(["member"] as const)(
   "%s sees static tool chips without admin detail requests",
   async (role) => {
     const read = spyOn(client, "getTool");
@@ -4193,7 +4181,7 @@ async function openSharedModel(container: HTMLElement) {
   });
 }
 
-test.each(["admin", "member", "viewer"] as const)(
+test.each(["admin", "member"] as const)(
   "model details recheck publication and distinguish provider instances for %s",
   async (role) => {
     const { models, publications } = observeSharedModel();
@@ -4249,7 +4237,7 @@ test.each(["admin", "member", "viewer"] as const)(
 
 test("platform admins retain provider management", async () => {
   observeSharedModel();
-  const { container } = await mountResourceReader("viewer", true);
+  const { container } = await mountResourceReader("member", true);
   await openSharedModel(container);
 
   const actions = [
@@ -4432,8 +4420,7 @@ test("unavailable model chips remain static", async () => {
 test.each([
   { agents: 1, platform: false, role: "admin", skills: 0 },
   { agents: 0, platform: false, role: "member", skills: 0 },
-  { agents: 0, platform: false, role: "viewer", skills: 0 },
-  { agents: 1, platform: true, role: "viewer", skills: 1 },
+  { agents: 1, platform: true, role: "member", skills: 1 },
 ] as const)(
   "root source links use existing permissions and stable IDs %#",
   async ({ role, platform, agents, skills }) => {

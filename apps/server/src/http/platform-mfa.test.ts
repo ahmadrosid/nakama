@@ -37,7 +37,7 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
   expect(policyResponse.status).toBe(200);
   expect(await policyResponse.json()).toMatchObject({
     enabled: true,
-    enforcedRoles: ["admin", "member", "viewer"],
+    enforcedRoles: ["admin", "member"],
     keyConfigured: true,
     required: true,
   });
@@ -127,16 +127,16 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
 
   await seedOrgAdmin(databaseAdapter, {
     authService,
-    email: "viewer@example.com",
+    email: "member@example.com",
     orgId: session.orgId,
-    role: "viewer",
-    userId: "user_mfa_viewer",
+    role: "member",
+    userId: "user_mfa_secondaryMember",
   });
 
-  const viewerLogin = await app.fetch(
+  const secondaryMemberLogin = await app.fetch(
     new Request("http://localhost:4310/v1/auth/login", {
       body: JSON.stringify({
-        email: "viewer@example.com",
+        email: "member@example.com",
         password: "password123",
       }),
       headers: { "Content-Type": "application/json" },
@@ -144,8 +144,8 @@ test("platform admin configures MFA and login requires the user's TOTP", async (
     })
   );
 
-  expect(await viewerLogin.json()).toMatchObject({
-    mfaRequired: false,
+  expect(await secondaryMemberLogin.json()).toMatchObject({
+    mfaRequired: true,
   });
 
   // The setup user is a platform admin, so the required policy covers it even

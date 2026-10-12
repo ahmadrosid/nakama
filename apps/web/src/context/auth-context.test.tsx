@@ -39,7 +39,7 @@ for (const operation of ["create", "archive", "archive empty"] as const) {
         const orgs: UserOrgSummary[] = [ORG_A, ORG_B].map((org) => ({
           ...org,
           createdAt: "2026-10-12T00:00:00Z",
-          role: org.id === ORG_B.id ? "viewer" : "admin",
+          role: org.id === ORG_B.id ? "member" : "admin",
           updatedAt: "2026-10-12T00:00:00Z",
         }));
 
@@ -328,7 +328,7 @@ for (const operation of [
       const orgs: UserOrgSummary[] = [ORG_A, ORG_B].map((org) => ({
         ...org,
         createdAt: "2026-10-12T00:00:00Z",
-        role: org.id === ORG_B.id ? "viewer" : "admin",
+        role: org.id === ORG_B.id ? "member" : "admin",
         updatedAt: "2026-10-12T00:00:00Z",
       }));
 
@@ -562,7 +562,7 @@ for (const action of ["login", "setup"] as const) {
       const orgs: UserOrgSummary[] = [ORG_A, ORG_B].map((org) => ({
         ...org,
         createdAt: "2026-10-12T00:00:00Z",
-        role: org.id === ORG_B.id ? "viewer" : "admin",
+        role: org.id === ORG_B.id ? "member" : "admin",
         updatedAt: "2026-10-12T00:00:00Z",
       }));
 
@@ -666,7 +666,7 @@ for (const action of ["login", "setup"] as const) {
           mode === "logout" ? undefined : ORG_B.id
         );
         expect(auth.activeOrg?.role).toBe(
-          mode === "logout" ? undefined : "viewer"
+          mode === "logout" ? undefined : "member"
         );
         expect(auth.isLoading).toBe(false);
         expect(getMe).toHaveBeenCalledTimes(
@@ -734,7 +734,7 @@ test.each([
     ].map((org) => ({
       ...org,
       createdAt: "2026-10-12T00:00:00Z",
-      role: org.id === "team-c" ? "viewer" : "admin",
+      role: org.id === "team-c" ? "member" : "admin",
       updatedAt: "2026-10-12T00:00:00Z",
     }));
 
@@ -857,7 +857,7 @@ test.each([
       if (expected) {
         expect(auth.activeOrg?.id).toBe(expected.activeOrgId);
         expect(auth.activeOrg?.role).toBe(
-          mode === "read during switch" ? "admin" : "viewer"
+          mode === "read during switch" ? "admin" : "member"
         );
       } else {
         expect(auth.orgs).toEqual([]);

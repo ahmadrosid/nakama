@@ -67,7 +67,7 @@ import {
   pickPreferredSkillSourcePath,
   readUploadedSkillBundle,
   removeProfileSkillSupportingFile,
-  requireToolNotViewer,
+  requireToolOrgMember,
   resolveProfileSkillDirectory,
   resolveProfileSkillSupportingFilePath,
   resolveSkillCodeExecutionPolicy,
@@ -1752,7 +1752,7 @@ export class SkillsService {
         tools.push({
           ...tool,
           run: async (input, context) => {
-            requireToolNotViewer(context);
+            requireToolOrgMember(context);
 
             if (context.orgId !== orgId || context.profileId !== profileId) {
               throw new NakamaApiError("Skill is unavailable.", 404);

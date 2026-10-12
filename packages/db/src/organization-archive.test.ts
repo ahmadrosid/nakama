@@ -753,7 +753,7 @@ async function seedTeamCreation(
   const now = "2026-10-11T00:00:00.000Z";
   await seedTwoActiveOrgs(db, now);
 
-  for (const id of ["creator", "admin", "viewer"]) {
+  for (const id of ["creator", "admin", "member"]) {
     await db.createUser({
       createdAt: now,
       email: `${id}@example.com`,
@@ -772,8 +772,8 @@ async function seedTeamCreation(
   await db.upsertOrgMember({
     createdAt: now,
     orgId: "org_a",
-    role: "viewer",
-    userId: "viewer",
+    role: "member",
+    userId: "member",
   });
 
   return {
@@ -867,7 +867,7 @@ describe("atomic team creation records", () => {
     const db = createSqliteMemoryAdapter();
     const input = await seedTeamCreation(db);
     await expect(
-      db.beginOrgTeamCreation({ ...input, creatorUserId: "viewer" })
+      db.beginOrgTeamCreation({ ...input, creatorUserId: "member" })
     ).rejects.toThrow();
     await expect(
       db.beginOrgTeamCreation({ ...input, adminUserId: "missing" })

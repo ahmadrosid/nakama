@@ -70,7 +70,7 @@ describe("skill suggestion routes (v1)", () => {
     expect(response.status).toBe(400);
   });
 
-  test("admin can list and apply suggestions; member can too; viewer is forbidden", async () => {
+  test("admin can list and apply suggestions; member can list", async () => {
     const { app, databaseAdapter, skillSuggestionService } = createApp();
 
     const adminSession = await setupFreshInstallSession(
@@ -136,9 +136,9 @@ describe("skill suggestion routes (v1)", () => {
     const memberResp = await app.fetch(
       new Request(`${BASE}/v1/orgs/${orgId}/members`, {
         body: JSON.stringify({
-          email: "viewer@org.com",
-          name: "Viewer",
-          role: "viewer",
+          email: "member@org.com",
+          name: "Member",
+          role: "member",
         }),
         headers: adminSession.headers(
           { "X-CSRF-Token": adminSession.csrfToken },
@@ -149,24 +149,24 @@ describe("skill suggestion routes (v1)", () => {
     );
 
     // SAFETY: This test controls the fixture shape at this boundary.
-    const viewerProvisioned = (await memberResp.json()) as {
+    const secondaryMemberProvisioned = (await memberResp.json()) as {
       temporaryPassword: string;
     };
 
-    const viewerSession = await loginUserSession(
+    const secondaryMemberSession = await loginUserSession(
       app,
-      "viewer@org.com",
-      viewerProvisioned.temporaryPassword,
+      "member@org.com",
+      secondaryMemberProvisioned.temporaryPassword,
       orgId
     );
 
-    const viewerListResp = await app.fetch(
+    const secondaryMemberListResp = await app.fetch(
       new Request(`${BASE}/v1/orgs/${orgId}/skill-suggestions`, {
-        headers: viewerSession.headers({}, orgId),
+        headers: secondaryMemberSession.headers({}, orgId),
       })
     );
 
-    expect(viewerListResp.status).toBe(403);
+    expect(secondaryMemberListResp.status).toBe(200);
   });
 
   test("apply suggestion from wrong org returns 404", async () => {

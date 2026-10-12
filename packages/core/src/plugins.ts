@@ -179,7 +179,7 @@ export type PluginInstanceValidationResult =
   | { ok: true }
   | { code: "invalid_input"; ok: false };
 
-export type PluginActorRole = "admin" | "member" | "viewer";
+export type PluginActorRole = "admin" | "member";
 
 export interface PluginExecutionActor {
   id: string;

@@ -42,7 +42,7 @@ function createApp() {
 }
 
 describe("GET /v1/profiles/:profileId/history", () => {
-  test("org admin can read history; viewer gets 403", async () => {
+  test("org admin can read history; member gets 403", async () => {
     const { app, authService, databaseAdapter, profileService } = createApp();
 
     const platform = await setupFreshInstallSession(
@@ -82,28 +82,28 @@ describe("GET /v1/profiles/:profileId/history", () => {
     const now = new Date().toISOString();
     await databaseAdapter.createUser({
       createdAt: now,
-      email: "viewer-history@example.com",
-      id: "user_viewer_history",
+      email: "member-history@example.com",
+      id: "user_secondary_member_history",
       passwordHash: await authService.hashPassword("password123"),
       updatedAt: now,
     });
     await databaseAdapter.upsertOrgMember({
       createdAt: now,
       orgId,
-      role: "viewer",
-      userId: "user_viewer_history",
+      role: "member",
+      userId: "user_secondary_member_history",
     });
 
-    const viewer = await loginUserSession(
+    const member = await loginUserSession(
       app,
-      "viewer-history@example.com",
+      "member-history@example.com",
       "password123",
       orgId
     );
 
     const denied = await app.fetch(
       new Request(`${BASE}/v1/profiles/${profileId}/history`, {
-        headers: viewer.headers({}, orgId),
+        headers: member.headers({}, orgId),
       })
     );
 

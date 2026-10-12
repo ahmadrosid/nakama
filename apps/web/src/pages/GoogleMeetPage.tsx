@@ -858,7 +858,7 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
 export function GoogleMeetPage() {
   const { activeOrg } = useAuth();
 
-  if (!activeOrg || activeOrg.role === "viewer") {
+  if (!activeOrg) {
     return <p role="alert">Member access required</p>;
   }
 

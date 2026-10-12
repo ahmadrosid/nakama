@@ -170,7 +170,7 @@ test("skill catalog permits tenant admins without exposing private tenant skills
 
   expect(write.status).toBe(403);
 
-  for (const role of ["member", "viewer"] as const) {
+  for (const role of ["member"] as const) {
     await databaseAdapter.upsertOrgMember({
       createdAt: now,
       orgId: admin.orgId,

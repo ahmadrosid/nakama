@@ -7,8 +7,8 @@ import type {
 } from "@nakama/core/contract";
 import type { ServerOptions } from "../context";
 import {
-  requireNotViewerFromContext,
   requireOrgAdminFromContext,
+  requireOrgMemberFromContext,
 } from "../org-guards";
 import {
   json,
@@ -123,7 +123,7 @@ export function registerOrgMemoryRoutes(
   );
 
   app.get("/v1/orgs/:orgId/memory", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
     const content = await service.getMemory(orgId);
@@ -283,7 +283,7 @@ export function registerOrgMemoryRoutes(
   );
 
   app.post("/v1/orgs/:orgId/memory/search", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
     const body = await readJson(c.req.raw, orgMemorySearchSchema);

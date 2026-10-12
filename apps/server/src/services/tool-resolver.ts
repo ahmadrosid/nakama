@@ -1,6 +1,7 @@
 import {
   builtinTools,
   type JsonSchema,
+  NakamaApiError,
   type PluginActorRole,
   type PluginExecutionActor,
   type ToolContext,
@@ -277,11 +278,11 @@ export function pluginActorFromContext(
 function pluginActorRoleFromOrgRole(
   role: ToolContext["orgRole"]
 ): PluginActorRole {
-  if (role === "admin" || role === "member" || role === "viewer") {
+  if (role === "admin" || role === "member") {
     return role;
   }
 
-  return "viewer";
+  throw new NakamaApiError("Forbidden", 403);
 }
 
 function isJsonSchema<T>(value: T): value is T & JsonSchema {

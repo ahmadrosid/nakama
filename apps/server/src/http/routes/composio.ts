@@ -11,8 +11,8 @@ import { NakamaApiError } from "@nakama/core";
 import { resolveComposioCallbackBaseUrl } from "../../services/composio-callback-url";
 import type { ServerOptions } from "../context";
 import {
-  requireNotViewerFromContext,
   requireOrgAdminFromContext,
+  requireOrgMemberFromContext,
 } from "../org-guards";
 import {
   errorResponse,
@@ -86,7 +86,7 @@ export function registerComposioRoutes(
   }
 
   app.get("/v1/composio/toolkits", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
 
     return json<ListComposioToolkitsResponse>(
       await service.listToolkits(auth.activeOrgId!, auth.user.id)
@@ -137,7 +137,7 @@ export function registerComposioRoutes(
   });
 
   app.post("/v1/composio/toolkits/:toolkitSlug/connect", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
 
     try {
       const body = await readOptionalJson<ComposioConnectRequest>(
@@ -169,7 +169,7 @@ export function registerComposioRoutes(
   });
 
   app.post("/v1/composio/toolkits/:toolkitSlug/disconnect", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
 
     try {
       return json<ComposioToolkitSummary>(
@@ -192,7 +192,7 @@ export function registerComposioRoutes(
   });
 
   app.post("/v1/composio/toolkits/:toolkitSlug/sync", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
 
     try {
       return json<ComposioToolkitSummary>(

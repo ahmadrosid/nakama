@@ -531,7 +531,7 @@ async function setupPublishedKnowledge() {
     await db.upsertOrgMember({
       orgId,
       userId: "user_reader",
-      role: "viewer",
+      role: "member",
       createdAt: now,
     });
   }
@@ -859,7 +859,7 @@ describe("published parent knowledge reads", () => {
     ).toEqual(["parent"]);
   });
 
-  test("viewers in sibling teams can download and preview published parent bytes without parent membership", async () => {
+  test("members in sibling teams can download and preview published parent bytes without parent membership", async () => {
     const { db, read } = await setupPublishedKnowledge();
     expect(await db.getOrgMember("org_parent", "user_reader")).toBeNull();
 
@@ -1199,7 +1199,7 @@ describe("organization knowledge base routes", () => {
       expect(response.status).toBe(404);
     }
 
-    for (const role of ["member", "viewer"] as const) {
+    for (const role of ["member"] as const) {
       await databaseAdapter.upsertOrgMember({
         createdAt: now,
         orgId: admin.orgId,

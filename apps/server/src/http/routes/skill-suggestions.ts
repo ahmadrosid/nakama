@@ -9,7 +9,7 @@ import {
   toSkillSuggestion,
 } from "../../services/skill-suggestion-service";
 import type { ServerOptions } from "../context";
-import { requireNotViewerFromContext } from "../org-guards";
+import { requireOrgMemberFromContext } from "../org-guards";
 import { json, parseOptionalQueryEnum } from "../shared";
 import type { HonoApp } from "../types";
 
@@ -97,7 +97,7 @@ export function registerSkillSuggestionRoutes(
   );
 
   app.get("/v1/orgs/:orgId/skill-suggestions", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
     const sessionId = c.req.query("sessionId");
@@ -164,7 +164,7 @@ export function registerSkillSuggestionRoutes(
   app.post(
     "/v1/orgs/:orgId/skill-suggestions/:suggestionId/apply",
     async (c) => {
-      const auth = requireNotViewerFromContext(c);
+      const auth = requireOrgMemberFromContext(c);
       const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
       const suggestionId = decodeURIComponent(c.req.param("suggestionId"));
       const service = requireService();

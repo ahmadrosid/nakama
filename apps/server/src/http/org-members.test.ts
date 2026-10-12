@@ -35,6 +35,7 @@ import { createMinimalHonoApp } from "./test-app-helpers";
 import {
   loginPlatformAdminSession,
   loginUserSession,
+  setupFreshInstallSession,
 } from "./test-session-helpers";
 
 setupTestConfigDir("nakama-org-members-test-");
@@ -233,10 +234,10 @@ test("shared agent selection returns stable team profiles and enforces invocatio
   await db.upsertOrgMember({
     createdAt: now,
     orgId: "org_team_a",
-    role: "viewer",
+    role: "member",
     userId: "user_reader",
   });
-  expect((await post()).status).toBe(403);
+  expect((await post()).status).toBe(200);
   await db.upsertOrgMember({
     createdAt: now,
     orgId: "org_team_a",
@@ -366,7 +367,7 @@ test("organization overview filters teams, counts local additions, and preserves
 
   for (const [orgId, userId, role] of [
     ["org_team_a", "user_reader", "member"],
-    ["org_team_a", "user_other_member", "viewer"],
+    ["org_team_a", "user_other_member", "member"],
     ["org_team_b", "user_other_member", "admin"],
     ["org_parent", "user_parent_admin", "admin"],
   ] as const) {
@@ -569,7 +570,7 @@ test("organization overview filters teams, counts local additions, and preserves
   ).rejects.toMatchObject({ status: 404 });
   expect(await db.getOrganizationResourceCounts("org_missing")).toBeNull();
 
-  for (const role of ["admin", "viewer"] as const) {
+  for (const role of ["admin"] as const) {
     await db.upsertOrgMember({
       createdAt: now,
       orgId: "org_team_a",
@@ -582,7 +583,7 @@ test("organization overview filters teams, counts local additions, and preserves
   await db.upsertOrgMember({
     createdAt: now,
     orgId: "org_team_b",
-    role: "viewer",
+    role: "member",
     userId: "user_reader",
   });
 
@@ -603,7 +604,7 @@ test("organization overview filters teams, counts local additions, and preserves
   await db.upsertOrgMember({
     createdAt: now,
     orgId: "org_parent",
-    role: "viewer",
+    role: "member",
     userId: "user_reader",
   });
 
@@ -991,7 +992,7 @@ test("publication lists derive the active team's parent and enforce read access"
     await db.upsertOrgMember({
       createdAt: now,
       orgId,
-      role: "viewer",
+      role: "member",
       userId: "user_reader",
     });
   }
@@ -1078,7 +1079,7 @@ test("publication lists derive the active team's parent and enforce read access"
     orgService.listSharedResources("org_team_a", "user_missing")
   ).rejects.toMatchObject({ status: 404 });
 
-  for (const role of ["member", "viewer"] as const) {
+  for (const role of ["member"] as const) {
     await db.upsertOrgMember({
       createdAt: now,
       orgId: "org_parent",
@@ -1157,7 +1158,7 @@ test("publication lists derive the active team's parent and enforce read access"
   ).toEqual(["ready", "requires_setup", "unavailable"]);
 });
 
-test("publication HTTP mutations deny team admins, members, viewers, and wrong tenant context", async () => {
+test("publication HTTP mutations deny team admins, members, and wrong tenant context", async () => {
   const { app, authService, databaseAdapter: db } = createMinimalHonoApp();
   const now = new Date().toISOString();
 
@@ -1258,7 +1259,7 @@ test("publication HTTP mutations deny team admins, members, viewers, and wrong t
   ).toBe(204);
   expect((await send("POST", "org_other", "org_other")).status).toBe(404);
 
-  for (const role of ["member", "viewer"] as const) {
+  for (const role of ["member"] as const) {
     await db.upsertOrgMember({
       createdAt: now,
       orgId: "org_parent",
@@ -1575,7 +1576,7 @@ test("team creation rejects invalid bodies, roles, contexts, and nested teams", 
       .status
   ).toBe(403);
 
-  for (const role of ["member", "viewer"] as const) {
+  for (const role of ["member"] as const) {
     await db.upsertOrgMember({
       createdAt: now,
       orgId: "org_parent",
@@ -1632,7 +1633,48 @@ test("team creation rejects invalid bodies, roles, contexts, and nested teams", 
 });
 
 describe("org member management (AE2)", () => {
-  test("viewer can read org data but not list or manage members", async () => {
+  test("removed viewer role cannot create members, invites, or role changes", async () => {
+    const { app, databaseAdapter } = createMinimalHonoApp();
+    const session = await setupFreshInstallSession(app, databaseAdapter);
+    const orgId = session.orgId!;
+    const before = await databaseAdapter.listOrgMembers(orgId);
+
+    for (const [method, path] of [
+      ["POST", `/v1/orgs/${orgId}/members`],
+      ["POST", `/v1/orgs/${orgId}/invites`],
+      ["PATCH", `/v1/orgs/${orgId}/members/${before[0]!.userId}`],
+      ["POST", `/v1/platform/orgs/${orgId}/invites`],
+    ]) {
+      const response = await app.fetch(
+        new Request(`http://localhost:4310${path}`, {
+          body: JSON.stringify({
+            email: "removed-role@example.com",
+            name: "Removed role",
+            role: "viewer",
+          }),
+          headers: session.headers({
+            "Content-Type": "application/json",
+            "X-CSRF-Token": session.csrfToken,
+          }),
+          method,
+        })
+      );
+      expect(response.status).toBe(400);
+    }
+
+    expect(await databaseAdapter.listOrgMembers(orgId)).toEqual(before);
+    expect(
+      await databaseAdapter.getUserByEmail("removed-role@example.com")
+    ).toBeNull();
+    expect(
+      await databaseAdapter.getPendingOrgInvite(
+        orgId,
+        "removed-role@example.com"
+      )
+    ).toBeNull();
+  });
+
+  test("member can read org data but not list or manage members", async () => {
     const { app, authService, databaseAdapter } = createMinimalHonoApp();
 
     const platformSession = await loginPlatformAdminSession(
@@ -1675,13 +1717,13 @@ describe("org member management (AE2)", () => {
       created.adminMember.temporaryPassword
     );
 
-    const addViewerResponse = await app.fetch(
+    const addSecondaryMemberResponse = await app.fetch(
       new Request(`http://localhost:4310/v1/orgs/${orgId}/members`, {
         body: JSON.stringify({
-          email: "viewer@acme.com",
-          name: "Viewer One",
+          email: "member@acme.com",
+          name: "Member One",
           phone: "+628111111111",
-          role: "viewer",
+          role: "member",
         }),
         headers: adminSession.headers(
           {
@@ -1693,22 +1735,23 @@ describe("org member management (AE2)", () => {
       })
     );
 
-    expect(addViewerResponse.status).toBe(201);
+    expect(addSecondaryMemberResponse.status).toBe(201);
 
     // SAFETY: The test checks this response against the endpoint contract asserted below.
-    const viewerProvisioned = (await addViewerResponse.json()) as {
-      temporaryPassword: string;
-    };
+    const secondaryMemberProvisioned =
+      (await addSecondaryMemberResponse.json()) as {
+        temporaryPassword: string;
+      };
 
-    const viewerSession = await loginUserSession(
+    const secondaryMemberSession = await loginUserSession(
       app,
-      "viewer@acme.com",
-      viewerProvisioned.temporaryPassword
+      "member@acme.com",
+      secondaryMemberProvisioned.temporaryPassword
     );
 
     const profilesResponse = await app.fetch(
       new Request("http://localhost:4310/v1/profiles", {
-        headers: viewerSession.headers({}, orgId),
+        headers: secondaryMemberSession.headers({}, orgId),
       })
     );
 
@@ -1716,7 +1759,7 @@ describe("org member management (AE2)", () => {
 
     const listMembersResponse = await app.fetch(
       new Request(`http://localhost:4310/v1/orgs/${orgId}/members`, {
-        headers: viewerSession.headers({}, orgId),
+        headers: secondaryMemberSession.headers({}, orgId),
       })
     );
 
@@ -1730,9 +1773,9 @@ describe("org member management (AE2)", () => {
           phone: "+628222222222",
           role: "member",
         }),
-        headers: viewerSession.headers(
+        headers: secondaryMemberSession.headers(
           {
-            "X-CSRF-Token": viewerSession.csrfToken,
+            "X-CSRF-Token": secondaryMemberSession.csrfToken,
           },
           orgId
         ),
@@ -1790,7 +1833,7 @@ describe("org member management (AE2)", () => {
           email: "member-mgmt@acme.com",
           name: "Member One",
           phone: "+628987654321",
-          role: "viewer",
+          role: "member",
         }),
         headers: adminSession.headers(
           {

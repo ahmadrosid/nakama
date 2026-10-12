@@ -37,9 +37,9 @@ import { ArtifactShareService } from "../../services/artifact-share-service";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
-  requireNotViewerFromContext,
   requireOrgAdmin,
   requireOrgAdminOrPlatformAdminFromContext,
+  requireOrgMemberFromContext,
   requirePlatformAdminFromContext,
 } from "../org-guards";
 import { getRequestAuth, json, readJson, readOptionalJson } from "../shared";
@@ -815,7 +815,7 @@ export function registerProfileRoutes(
           description: "Error",
         },
       },
-      summary: "Save markdown artifact content (org members except viewers)",
+      summary: "Save markdown artifact content (org members)",
       tags: ["Profiles"],
     })
   );
@@ -1601,7 +1601,7 @@ export function registerProfileRoutes(
   });
 
   app.put("/v1/profiles/:profileId/artifacts/content", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const artifactPath = c.req.query("path");
@@ -1994,7 +1994,7 @@ export function registerProfileRoutes(
   });
 
   app.put("/v1/profiles/:profileId/acp-settings/:configId", async (c) => {
-    requireNotViewerFromContext(c);
+    requireOrgMemberFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
     const profileId = decodeURIComponent(c.req.param("profileId"));
     const configId = decodeURIComponent(c.req.param("configId"));

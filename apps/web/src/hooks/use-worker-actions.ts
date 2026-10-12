@@ -48,7 +48,7 @@ export function usePluginWorkers() {
   const orgId = activeOrg?.id;
 
   return useQuery({
-    enabled: Boolean(orgId) && activeOrg?.role !== "viewer",
+    enabled: Boolean(orgId),
     queryFn: () => client.listPluginWorkers(orgId),
     queryKey: ["plugin-workers", orgId],
     refetchInterval: 5000,

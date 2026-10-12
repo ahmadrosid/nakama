@@ -347,9 +347,9 @@ describe("cross-destination authorization for automation delivery", () => {
 
   test("only admins may approve a destination", () => {
     expect(canApproveAutomationDeliveryDestination(undefined)).toBe(false);
-    expect(canApproveAutomationDeliveryDestination({ orgRole: "viewer" })).toBe(
-      false
-    );
+    expect(
+      canApproveAutomationDeliveryDestination({ orgRole: undefined })
+    ).toBe(false);
     expect(canApproveAutomationDeliveryDestination({ orgRole: "admin" })).toBe(
       true
     );

@@ -10,8 +10,8 @@ import {
 } from "../../services/skill-proposal-service";
 import type { ServerOptions } from "../context";
 import {
-  requireNotViewerFromContext,
   requireOrgAdminFromContext,
+  requireOrgMemberFromContext,
 } from "../org-guards";
 import { json, parseOptionalQueryEnum } from "../shared";
 import type { HonoApp } from "../types";
@@ -100,7 +100,7 @@ export function registerSkillProposalRoutes(
   );
 
   app.get("/v1/orgs/:orgId/skill-proposals", async (c) => {
-    const auth = requireNotViewerFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = resolveOrgId(c, auth.activeOrgId ?? "");
     const service = requireService();
 

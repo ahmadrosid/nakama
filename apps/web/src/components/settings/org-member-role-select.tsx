@@ -3,15 +3,13 @@ import type { OrgRole } from "@nakama/core/contract";
 const ROLE_LABELS: Record<OrgRole, string> = {
   admin: "Admin",
   member: "Member",
-  viewer: "Viewer",
 };
 
-const ROLES: OrgRole[] = ["admin", "member", "viewer"];
+const ROLES: OrgRole[] = ["admin", "member"];
 
 const ROLE_HINTS: Record<OrgRole, string> = {
   admin: "Manages members and settings",
   member: "Chats and uses agents",
-  viewer: "Read only",
 };
 
 export function OrgMemberRoleCards({

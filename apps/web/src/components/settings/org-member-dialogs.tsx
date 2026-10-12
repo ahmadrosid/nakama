@@ -21,7 +21,6 @@ import { emailSettingsQueryOptions } from "@/hooks/use-app-queries";
 const ROLE_NAMES: Record<OrgMemberSummary["role"], string> = {
   admin: "Org admin",
   member: "Member",
-  viewer: "Viewer",
 };
 
 function memberInitials(member: OrgMemberSummary) {

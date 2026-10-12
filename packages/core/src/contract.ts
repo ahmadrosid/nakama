@@ -599,7 +599,7 @@ export interface UpdateAuthProfileRequest {
   phone?: string | null;
 }
 
-export type OrgRole = "admin" | "member" | "viewer";
+export type OrgRole = "admin" | "member";
 
 export type ChannelType = "telegram" | "whatsapp" | "discord";
 

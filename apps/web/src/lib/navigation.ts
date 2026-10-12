@@ -207,12 +207,7 @@ export function canAccessOrganizationPage(
   isPlatformAdmin: boolean,
   orgRole: string | undefined
 ): boolean {
-  return (
-    isPlatformAdmin ||
-    orgRole === "admin" ||
-    orgRole === "member" ||
-    orgRole === "viewer"
-  );
+  return isPlatformAdmin || orgRole === "admin" || orgRole === "member";
 }
 
 export function canManagePluginReleases(isPlatformAdmin: boolean): boolean {

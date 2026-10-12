@@ -90,7 +90,7 @@ describe("sub_agent tool", () => {
   });
 
   test("inherits the trusted parent role, not a role supplied in tool arguments", async () => {
-    for (const orgRole of ["admin", "member", "viewer", undefined] as const) {
+    for (const orgRole of ["admin", "member", undefined] as const) {
       let captured: unknown;
 
       const agent = createMockAgentService(async (input) => {

@@ -53,7 +53,7 @@ export function registerPlatformOrgRoutes(
   const inviteOrgMemberSchema = z
     .object({
       email: z.string(),
-      role: z.enum(["admin", "member", "viewer"]),
+      role: z.enum(["admin", "member"]),
     })
     .openapi("InviteOrgMemberRequest");
 

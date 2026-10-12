@@ -128,7 +128,7 @@ function textInput(input: Input, kind: Kind) {
 }
 
 export async function run(input: Input, context: Context): Promise<JsonValue> {
-  if (context.actor.role === "viewer") {
+  if (context.actor.role !== "admin" && context.actor.role !== "member") {
     throw new Error("Member access required");
   }
 

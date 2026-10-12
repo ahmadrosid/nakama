@@ -90,8 +90,7 @@ export const SKILL_MANAGE_CHANNELS = {
 } as const satisfies Record<AgentChannel, boolean>;
 
 /**
- * Deny-by-default role gate for skill_manage. Viewers are blocked; an undefined
- * role also blocks — same pattern as org-memory tools.
+ * Deny-by-default membership gate for skill_manage.
  */
 function requireSkillManageAccess(context: ToolContext) {
   if (context.automationId?.trim()) {
@@ -114,8 +113,8 @@ function requireSkillManageAccess(context: ToolContext) {
     throw new Error("skill_manage requires an organization role.");
   }
 
-  if (role === "viewer") {
-    throw new Error("Viewers cannot manage skills.");
+  if (role !== "admin" && role !== "member") {
+    throw new Error("Organization membership required.");
   }
 
   return { orgId, profileId };

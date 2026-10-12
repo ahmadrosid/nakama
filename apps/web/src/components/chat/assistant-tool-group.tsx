@@ -330,9 +330,7 @@ function PluginToolRow({ message }: { message: ChatListItem }) {
   const fallback = <ToolTimelineItem message={message} />;
 
   if (
-    !(match && activeOrg) ||
-    activeOrg.role === "viewer" ||
-    !plugin?.ui ||
+    !(match && activeOrg && plugin?.ui) ||
     plugin.lifecycleState !== "enabled"
   ) {
     return fallback;

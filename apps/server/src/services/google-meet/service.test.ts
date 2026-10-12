@@ -148,7 +148,7 @@ test("agent tools require current assignment and hide page captures without a pr
   await expect(tool.run({}, context)).rejects.toThrow();
 });
 
-test("members cannot read another user's or another organization's meeting; viewers cannot read or write", async () => {
+test("members cannot read another user's or another organization's meeting; missing actors cannot read or write", async () => {
   const meeting = await service.invoke(
     "a",
     "upload",
@@ -171,14 +171,14 @@ test("members cannot read another user's or another organization's meeting; view
     service.invoke("b", "transcript", { meetingId: meeting.id }, admin)
   ).rejects.toThrow();
   await expect(
-    service.invoke("a", "meetings", {}, { id: "alice", role: "viewer" })
+    service.invoke("a", "meetings", {}, { id: "", role: "member" })
   ).rejects.toThrow();
   await expect(
     service.invoke(
       "a",
       "delete",
       { meetingId: meeting.id },
-      { id: "alice", role: "viewer" }
+      { id: "", role: "member" }
     )
   ).rejects.toThrow();
   const own = await service.invoke("a", "meetings", {}, admin);
